@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skerry — Mobile Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200&display=block" rel="stylesheet" />
+<style>
+  :root {
+    /* Skerry v2 palette — same tokens as desktop prototype */
+    --deep: #0E2230;
+    --deep-2: #0A1A26;
+    --night-sea: #07141E;
+    --night-sea-soft: #0B1A26;
+
+    --cyan: #2BBDEE;
+    --cyan-soft: rgba(43,189,238,0.10);
+    --cyan-dim: rgba(43,189,238,0.20);
+    --cyan-bright: #5FD1F4;
+
+    --amber: #F2A65A;
+    --amber-soft: rgba(242,166,90,0.14);
+
+    --moss: #5DCE9E;
+    --sunset: #E07A5F;
+    --storm: #E94B4B;
+
+    --line: rgba(43,189,238,0.06);
+    --line-strong: rgba(43,189,238,0.14);
+    --text: #E6ECEF;
+    --text-dim: #8FA3B0;
+    --text-faint: #5A7080;
+    --terminal-bg: #050E16;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #04090E;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 28px 16px 80px;
+  }
+  .material-symbols-outlined { user-select: none; }
+
+  /* ====== PHONE FRAME ====== */
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: var(--night-sea);
+    border: 1px solid rgba(43,189,238,0.18);
+    border-radius: 44px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.7), inset 0 0 0 6px #020608;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  /* iOS-like status bar */
+  .status-strip {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 26px 0 30px;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 5;
+  }
+  .status-strip .right { display: flex; align-items: center; gap: 5px; }
+  .status-strip .material-symbols-outlined { font-size: 15px; }
+
+  /* ====== SCREENS ====== */
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    background: var(--night-sea);
+  }
+  .screen.active { display: flex; }
+
+  /* App bar */
+  .appbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 16px 12px;
+    flex-shrink: 0;
+  }
+  .appbar h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    flex: 1;
+  }
+  .appbar .logo { width: 24px; height: 24px; }
+  .appbar .logo svg { width: 100%; height: 100%; display: block; }
+  .appbar-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .appbar-btn:active { background: var(--cyan-soft); color: var(--cyan); }
+  .appbar-btn .material-symbols-outlined { font-size: 19px; }
+
+  .scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 14px 110px;
+  }
+  .scroll-area::-webkit-scrollbar { width: 0; }
+
+  /* ====== HOSTS SCREEN ====== */
+  .m-search {
+    position: relative;
+    margin: 2px 2px 14px;
+  }
+  .m-search input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px 12px 40px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+  }
+  .m-search input::placeholder { color: var(--text-faint); }
+  .m-search input:focus { border-color: var(--cyan); background: var(--cyan-soft); }
+  .m-search .material-symbols-outlined {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 18px;
+    color: var(--text-faint);
+    pointer-events: none;
+  }
+
+  .m-section-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--text-faint);
+    padding: 14px 6px 8px;
+  }
+
+  .m-group {
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .m-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .m-group-header .chev { font-size: 18px; transition: transform 0.15s; color: var(--text-faint); }
+  .m-group-header.collapsed .chev { transform: rotate(-90deg); }
+  .m-group-header .count {
+    margin-left: auto;
+    font-size: 10.5px;
+    color: var(--text-faint);
+    background: rgba(255,255,255,0.05);
+    padding: 1px 8px;
+    border-radius: 9px;
+    font-weight: 500;
+  }
+  .m-group-body.collapsed { display: none; }
+
+  .m-host {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--line);
+    cursor: pointer;
+  }
+  .m-host:active { background: var(--cyan-soft); }
+  .m-host .host-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(43,189,238,0.08);
+    border: 1px solid var(--line-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cyan);
+    flex-shrink: 0;
+    position: relative;
+  }
+  .m-host .host-icon .material-symbols-outlined { font-size: 18px; }
+  .m-host .host-icon .dot {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--night-sea-soft);
+  }
+  .dot.on { background: var(--moss); }
+  .dot.off { background: var(--text-faint); }
+  .dot.warn { background: var(--sunset); }
+  .m-host .info { flex: 1; min-width: 0; }
+  .m-host .info .name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .m-host .info .addr {
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .m-host .trail { display: flex; align-items: center; gap: 8px; }
+  .m-host .trail .material-symbols-outlined { font-size: 18px; color: var(--text-faint); }
+
+  /* FAB */
+  .fab {
+    position: absolute;
+    right: 18px;
+    bottom: 104px;
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+    background: var(--cyan);
+    color: var(--deep-2);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 10px 28px rgba(43,189,238,0.35);
+    z-index: 8;
+  }
+  .fab .material-symbols-outlined { font-size: 26px; }
+  .fab:active { background: var(--cyan-bright); }
+
+  /* ====== TAB BAR ====== */
+  .tabbar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 86px;
+    background: rgba(7,17,26,0.92);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 8px 0;
+    z-index: 10;
+  }
+  .tabbar .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-faint);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    padding-top: 2px;
+    position: relative;
+  }
+  .tabbar .tab-item .material-symbols-outlined { font-size: 22px; }
+  .tabbar .tab-item.active { color: var(--cyan); }
+  .tabbar .tab-item .badge {
+    position: absolute;
+    top: -2px;
+    right: calc(50% - 22px);
+    background: var(--moss);
+    color: var(--deep-2);
+    font-size: 8.5px;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 0 4px;
+    min-width: 13px;
+    text-align: center;
+  }
+
+  /* ====== TERMINAL SCREEN ====== */
+  .term-appbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 12px 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--night-sea-soft);
+    flex-shrink: 0;
+  }
+  .term-appbar .back {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .term-appbar .back .material-symbols-outlined { font-size: 18px; }
+  .term-appbar .session {
+    flex: 1;
+    min-width: 0;
+  }
+  .term-appbar .session .host {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .term-appbar .session .meta {
+    font-size: 10px;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 1px;
+  }
+  .term-appbar .session .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .session-chips {
+    display: flex;
+    gap: 6px;
+  }
+  .session-chip {
+    height: 30px;
+    min-width: 30px;
+    padding: 0 8px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+  }
+  .session-chip .material-symbols-outlined { font-size: 16px; }
+  .session-chip.sessions-count { color: var(--cyan); border-color: var(--line-strong); }
+
+  .m-terminal {
+    flex: 1;
+    background: var(--terminal-bg);
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #C9D6DE;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .t-prompt { color: var(--cyan); font-weight: 600; }
+  .t-host { color: var(--cyan-bright); }
+  .t-path { color: var(--moss); }
+  .t-cmd { color: #FFFFFF; }
+  .t-out { color: #B7C5CC; }
+  .t-dim { color: var(--text-faint); }
+  .t-warn { color: var(--sunset); }
+  .t-err { color: var(--storm); }
+  .t-ok { color: var(--moss); }
+  .m-cursor {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--cyan);
+    vertical-align: middle;
+    margin-left: 2px;
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Snippets row */
+  .snippet-row {
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--night-sea-soft);
+    border-top: 1px solid var(--line);
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .snippet-row::-webkit-scrollbar { height: 0; }
+  .snippet-chip {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .snippet-chip .material-symbols-outlined { font-size: 13px; color: var(--text-faint); }
+  .snippet-chip:active { background: var(--cyan-soft); color: var(--cyan); border-color: var(--cyan); }
+
+  /* Special keys bar — the heart of mobile SSH UX */
+  .keybar {
+    background: #0A1722;
+    border-top: 1px solid var(--line-strong);
+    padding: 8px 8px 10px;
+    flex-shrink: 0;
+  }
+  .keybar-row {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+  .keybar-row:last-child { margin-bottom: 0; }
+  .kbtn {
+    flex: 1;
+    height: 38px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.07);
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s;
+  }
+  .kbtn .material-symbols-outlined { font-size: 17px; }
+  .kbtn:active { background: var(--cyan-soft); color: var(--cyan); border-color: var(--cyan); }
+  .kbtn.mod.locked {
+    background: var(--cyan);
+    color: var(--deep-2);
+    border-color: var(--cyan);
+  }
+  .kbtn.kbd-toggle { flex: 0 0 46px; color: var(--text-faint); }
+
+  /* Fake keyboard placeholder */
+  .kbd-placeholder {
+    height: 220px;
+    background: #0D1822;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-faint);
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
+    gap: 6px;
+  }
+  .kbd-placeholder .material-symbols-outlined { font-size: 16px; }
+
+  /* ====== SFTP SCREEN ====== */
+  .sftp-path {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 16px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    overflow-x: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .sftp-path .seg { color: var(--text-dim); cursor: pointer; }
+  .sftp-path .seg.current { color: var(--cyan); font-weight: 600; }
+  .sftp-path .sep { color: var(--text-faint); opacity: 0.5; }
+
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .file-row:active { background: var(--cyan-soft); }
+  .file-row .f-icon {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .file-row .f-icon.dir { background: rgba(43,189,238,0.10); color: var(--cyan); }
+  .file-row .f-icon.file { background: rgba(255,255,255,0.04); color: var(--text-dim); }
+  .file-row .f-icon.archive { background: rgba(242,166,90,0.10); color: var(--amber); }
+  .file-row .f-icon .material-symbols-outlined { font-size: 18px; }
+  .file-row .f-info { flex: 1; min-width: 0; }
+  .file-row .f-info .f-name {
+    font-size: 13.5px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .file-row .f-info .f-meta {
+    font-size: 10.5px;
+    color: var(--text-faint);
+    margin-top: 2px;
+  }
+  .file-row .f-more { color: var(--text-faint); }
+  .file-row .f-more .material-symbols-outlined { font-size: 18px; }
+
+  .transfer-card {
+    margin: 6px 2px 12px;
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+  .transfer-card .t-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .transfer-card .t-head .material-symbols-outlined { font-size: 16px; color: var(--cyan); }
+  .transfer-card .t-head .pct { margin-left: auto; color: var(--cyan); font-family: 'JetBrains Mono', monospace; }
+  .progress {
+    height: 5px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    margin-top: 9px;
+    overflow: hidden;
+  }
+  .progress .bar {
+    height: 100%;
+    width: 64%;
+    background: linear-gradient(90deg, var(--cyan), var(--cyan-bright));
+    border-radius: 3px;
+  }
+  .transfer-card .t-meta {
+    font-size: 10.5px;
+    color: var(--text-faint);
+    margin-top: 7px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ====== KEYS SCREEN ====== */
+  .key-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 13px 14px;
+    margin-bottom: 9px;
+    cursor: pointer;
+  }
+  .key-card:active { border-color: var(--cyan); background: var(--cyan-soft); }
+  .key-card .k-icon {
+    width: 38px; height: 38px;
+    border-radius: 11px;
+    background: rgba(43,189,238,0.08);
+    border: 1px solid var(--line-strong);
+    color: var(--cyan);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .key-card .k-icon .material-symbols-outlined { font-size: 19px; }
+  .key-card .k-info { flex: 1; min-width: 0; }
+  .key-card .k-info .k-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .key-card .k-info .k-meta {
+    font-size: 10.5px;
+    color: var(--text-faint);
+    margin-top: 3px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .key-card .k-tag {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .k-tag.ed { background: rgba(93,206,158,0.14); color: var(--moss); }
+  .k-tag.rsa { background: rgba(242,166,90,0.14); color: var(--amber); }
+  .k-tag.hw { background: rgba(43,189,238,0.14); color: var(--cyan); }
+
+  .big-action {
+    width: 100%;
+    background: var(--cyan);
+    color: var(--deep-2);
+    border: none;
+    border-radius: 13px;
+    padding: 14px;
+    font-size: 13.5px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 6px 0 10px;
+  }
+  .big-action.secondary {
+    background: rgba(255,255,255,0.05);
+    color: var(--text);
+    border: 1px solid var(--line-strong);
+    font-weight: 600;
+  }
+  .big-action .material-symbols-outlined { font-size: 18px; }
+
+  /* ====== SETTINGS SCREEN ====== */
+  .set-group {
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .set-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    border-top: 1px solid var(--line);
+    cursor: pointer;
+  }
+  .set-row:first-child { border-top: none; }
+  .set-row .s-icon {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    background: rgba(43,189,238,0.08);
+    color: var(--cyan);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .set-row .s-icon.amber { background: var(--amber-soft); color: var(--amber); }
+  .set-row .s-icon .material-symbols-outlined { font-size: 17px; }
+  .set-row .s-info { flex: 1; min-width: 0; }
+  .set-row .s-info .s-label { font-size: 13.5px; font-weight: 500; }
+  .set-row .s-info .s-desc { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; line-height: 1.4; }
+  .set-row .s-value {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .set-row .s-value.ok { color: var(--moss); }
+  .set-row > .material-symbols-outlined { font-size: 17px; color: var(--text-faint); }
+  .phase-tag {
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    background: var(--amber-soft);
+    color: var(--amber);
+    padding: 2px 6px;
+    border-radius: 4px;
+    vertical-align: 2px;
+    margin-left: 6px;
+  }
+
+  .m-toggle {
+    width: 42px;
+    height: 24px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .m-toggle.on { background: var(--cyan); }
+  .m-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: white;
+    transition: left 0.15s;
+  }
+  .m-toggle.on::after { left: 18px; }
+
+  .sync-status {
+    margin: 2px 2px 14px;
+    background: rgba(93,206,158,0.06);
+    border: 1px solid rgba(93,206,158,0.2);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    cursor: pointer;
+  }
+  .sync-status .material-symbols-outlined { font-size: 20px; color: var(--moss); }
+  .sync-status .s-text { flex: 1; }
+  .sync-status .s-text .t1 { font-size: 12.5px; font-weight: 600; color: var(--moss); }
+  .sync-status .s-text .t2 { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+
+  /* ====== LOCK SCREEN ====== */
+  .m-lock {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 32px;
+    background: radial-gradient(ellipse at center top, #122332 0%, var(--night-sea) 70%);
+  }
+  .m-lock .lock-logo { width: 64px; height: 64px; margin-bottom: 26px; }
+  .m-lock .lock-logo svg { width: 100%; height: 100%; }
+  .m-lock h1 { font-size: 21px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.3px; }
+  .m-lock p { font-size: 12.5px; color: var(--text-dim); margin: 0 0 30px; text-align: center; }
+  .m-lock .lock-field {
+    position: relative;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  .m-lock .lock-field input {
+    width: 100%;
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line-strong);
+    border-radius: 13px;
+    padding: 14px 14px 14px 44px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+  }
+  .m-lock .lock-field input:focus { border-color: var(--cyan); background: var(--cyan-soft); }
+  .m-lock .lock-field .material-symbols-outlined {
+    position: absolute;
+    left: 14px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 19px;
+    color: var(--text-faint);
+  }
+  .m-lock .big-action { max-width: 100%; }
+  .m-lock .bio {
+    margin-top: 22px;
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: rgba(255,255,255,0.03);
+    color: var(--cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .m-lock .bio .material-symbols-outlined { font-size: 30px; }
+  .m-lock .footnote {
+    margin-top: 26px;
+    font-size: 10.5px;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .m-lock .footnote .material-symbols-outlined { font-size: 13px; }
+
+  /* ====== NEW CONNECTION SHEET ====== */
+  .sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(4,10,16,0.6);
+    backdrop-filter: blur(4px);
+    z-index: 20;
+    display: none;
+    align-items: flex-end;
+  }
+  .sheet-backdrop.show { display: flex; }
+  .sheet {
+    width: 100%;
+    max-height: 86%;
+    background: var(--deep);
+    border: 1px solid var(--line-strong);
+    border-bottom: none;
+    border-radius: 24px 24px 0 0;
+    padding: 10px 20px 28px;
+    overflow-y: auto;
+  }
+  .sheet::-webkit-scrollbar { width: 0; }
+  .sheet .grip {
+    width: 38px; height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    margin: 4px auto 16px;
+  }
+  .sheet h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; }
+  .sheet .sub { font-size: 11.5px; color: var(--text-dim); margin: 0 0 18px; line-height: 1.5; }
+  .sheet label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-faint);
+    margin: 14px 2px 6px;
+  }
+  .sheet input, .sheet select {
+    width: 100%;
+    background: var(--night-sea);
+    border: 1px solid var(--line-strong);
+    border-radius: 11px;
+    padding: 12px 13px;
+    color: var(--text);
+    font-size: 13.5px;
+    font-family: inherit;
+    outline: none;
+  }
+  .sheet input:focus, .sheet select:focus { border-color: var(--cyan); background: var(--cyan-soft); }
+  .sheet .row2 { display: grid; grid-template-columns: 1fr 96px; gap: 10px; }
+  .sheet .note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    color: var(--text-faint);
+    margin-top: 16px;
+  }
+  .sheet .note .material-symbols-outlined { font-size: 14px; color: var(--moss); }
+
+  /* ====== PROTO NAV ====== */
+  .proto-nav {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--deep);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 9px 10px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    z-index: 300;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .proto-nav .proto-label {
+    padding-right: 8px;
+    color: var(--text-faint);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-size: 9.5px;
+    border-right: 1px solid var(--line);
+    margin-right: 4px;
+  }
+  .proto-nav button {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    padding: 6px 11px;
+    border-radius: 7px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .proto-nav button:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .proto-nav button.active { background: var(--cyan); color: var(--deep-2); border-color: var(--cyan); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position: absolute;">
+  <symbol id="skerry-logo" viewBox="0 0 32 32">
+    <path d="M 4 26 L 8 18 L 12 22 L 16 14 L 20 20 L 24 16 L 28 26 Z" fill="#0E2230" stroke="#2BBDEE" stroke-width="1.2" stroke-linejoin="round"/>
+    <rect x="14.5" y="6" width="3" height="10" fill="#0E2230" stroke="#2BBDEE" stroke-width="1"/>
+    <circle cx="16" cy="5" r="2" fill="#F2A65A"/>
+    <path d="M 10 5 L 22 5" stroke="#F2A65A" stroke-width="0.6" stroke-dasharray="0.5 1.5" opacity="0.7"/>
+  </symbol>
+</svg>
+
+<div class="phone">
+
+  <!-- ============ LOCK ============ -->
+  <div class="screen active" id="scr-lock">
+    <div class="status-strip"><span>9:41</span><span class="right"><span class="material-symbols-outlined">signal_cellular_alt</span><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="m-lock">
+      <div class="lock-logo"><svg><use href="#skerry-logo"/></svg></div>
+      <h1>Skerry is locked</h1>
+      <p>Unlock with biometrics or master password</p>
+      <div class="lock-field">
+        <span class="material-symbols-outlined">lock</span>
+        <input type="password" placeholder="Master password" />
+      </div>
+      <button class="big-action" style="margin-top:4px" onclick="showScreen('hosts')">Unlock</button>
+      <div class="bio" onclick="showScreen('hosts')" title="Face ID / fingerprint">
+        <span class="material-symbols-outlined">fingerprint</span>
+      </div>
+      <div class="footnote">
+        <span class="material-symbols-outlined">shield_lock</span>
+        Master password never leaves this device
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HOSTS ============ -->
+  <div class="screen" id="scr-hosts">
+    <div class="status-strip"><span>9:41</span><span class="right"><span class="material-symbols-outlined">signal_cellular_alt</span><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="appbar">
+      <div class="logo"><svg><use href="#skerry-logo"/></svg></div>
+      <h1>Hosts</h1>
+      <div class="appbar-btn" onclick="showScreen('lock')" title="Lock"><span class="material-symbols-outlined">lock</span></div>
+      <div class="appbar-btn" title="Sort / view"><span class="material-symbols-outlined">sort</span></div>
+    </div>
+    <div class="scroll-area">
+      <div class="m-search">
+        <span class="material-symbols-outlined">search</span>
+        <input type="text" placeholder="Search hosts, addresses, tags…" />
+      </div>
+
+      <div class="m-group">
+        <div class="m-group-header" onclick="toggleGroup(this)">
+          <span class="material-symbols-outlined chev">expand_more</span>
+          Production
+          <span class="count">3</span>
+        </div>
+        <div class="m-group-body">
+          <div class="m-host" onclick="showScreen('terminal')">
+            <div class="host-icon"><span class="material-symbols-outlined">dns</span><span class="dot on"></span></div>
+            <div class="info">
+              <div class="name">prod-web-01</div>
+              <div class="addr">root@192.168.1.45:22 · ed25519</div>
+            </div>
+            <div class="trail"><span class="material-symbols-outlined">chevron_right</span></div>
+          </div>
+          <div class="m-host" onclick="showScreen('terminal')">
+            <div class="host-icon"><span class="material-symbols-outlined">dns</span><span class="dot on"></span></div>
+            <div class="info">
+              <div class="name">prod-web-02</div>
+              <div class="addr">root@192.168.1.46:22 · ed25519</div>
+            </div>
+            <div class="trail"><span class="material-symbols-outlined">chevron_right</span></div>
+          </div>
+          <div class="m-host" onclick="showScreen('terminal')">
+            <div class="host-icon"><span class="material-symbols-outlined">database</span><span class="dot on"></span></div>
+            <div class="info">
+              <div class="name">db-master</div>
+              <div class="addr">admin@10.0.2.11:22 · via jump-01</div>
+            </div>
+            <div class="trail"><span class="material-symbols-outlined">chevron_right</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="m-group">
+        <div class="m-group-header" onclick="toggleGroup(this)">
+          <span class="material-symbols-outlined chev">expand_more</span>
+          Homelab
+          <span class="count">4</span>
+        </div>
+        <div class="m-group-body">
+          <div class="m-host" onclick="showScreen('terminal')">
+            <div class="host-icon"><span class="material-symbols-outlined">memory</span><span class="dot on"></span></div>
+            <div class="info">
+              <div class="name">homelab-pi</div>
+              <div class="addr">pi@10.0.0.20:22</div>
+            </div>
+            <div class="trail"><span class="material-symbols-outlined">chevron_right</span></div>
+          </div>
+          <div class="m-host" onclick="showScreen('terminal')">
+            <div class="host-icon"><span class="material-symbols-outlined">storage</span><span class="dot warn"></span></div>
+            <div class="info">
+              <div class="name">nas-truenas</div>
+              <div class="addr">admin@10.0.0.30:22 · ⚠ key changed</div>
+            </div>
+            <div class="trail"><span class="material-symbols-outlined">chevron_right</span></div>
+          </div>
+          <div class="m-host" onclick="showScreen('terminal')">
+            <div class="host-icon"><span class="material-symbols-outlined">router</span><span class="dot off"></span></div>
+            <div class="info">
+              <div class="name">router-opnsense</div>
+              <div class="addr">root@10.0.0.1:22</div>
+            </div>
+            <div class="trail"><span class="material-symbols-outlined">chevron_right</span></div>
+          </div>
+          <div class="m-host" onclick="showScreen('terminal')">
+            <div class="host-icon"><span class="material-symbols-outlined">hub</span><span class="dot off"></span></div>
+            <div class="info">
+              <div class="name">k3s-control</div>
+              <div class="addr">ubuntu@10.0.0.50:22</div>
+            </div>
+            <div class="trail"><span class="material-symbols-outlined">chevron_right</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="m-section-label">Recent</div>
+      <div class="m-group">
+        <div class="m-host" onclick="showScreen('terminal')" style="border-top:none">
+          <div class="host-icon"><span class="material-symbols-outlined">history</span><span class="dot off"></span></div>
+          <div class="info">
+            <div class="name">user@vps.example.com</div>
+            <div class="addr">quick connect · 2 days ago</div>
+          </div>
+          <div class="trail"><span class="material-symbols-outlined">chevron_right</span></div>
+        </div>
+      </div>
+    </div>
+
+    <button class="fab" onclick="openSheet()" title="New connection">
+      <span class="material-symbols-outlined">add</span>
+    </button>
+  </div>
+
+  <!-- ============ TERMINAL ============ -->
+  <div class="screen" id="scr-terminal">
+    <div class="status-strip" style="background: var(--night-sea-soft);"><span>9:41</span><span class="right"><span class="material-symbols-outlined">signal_cellular_alt</span><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="term-appbar">
+      <div class="back" onclick="showScreen('hosts')"><span class="material-symbols-outlined">arrow_back_ios_new</span></div>
+      <div class="session">
+        <div class="host"><span class="dot on"></span>prod-web-01</div>
+        <div class="meta">SSHv2 · aes256-gcm · 42 ms · 04:12</div>
+      </div>
+      <div class="session-chips">
+        <div class="session-chip" title="SFTP for this host" onclick="showScreen('sftp')"><span class="material-symbols-outlined">folder</span></div>
+        <div class="session-chip" title="Port forwarding"><span class="material-symbols-outlined">cable</span></div>
+        <div class="session-chip sessions-count" title="Active sessions">2</div>
+      </div>
+    </div>
+
+    <div class="m-terminal">
+<span class="t-dim">Last login: Thu Jun 11 09:38:02 2026 from 10.0.0.15</span>
+<span class="t-prompt">root@prod-web-01</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">#</span> <span class="t-cmd">systemctl status nginx</span>
+<span class="t-ok">● nginx.service - A high performance web server</span>
+<span class="t-out">   Loaded: loaded (/lib/systemd/system/nginx.service)</span>
+<span class="t-out">   Active: </span><span class="t-ok">active (running)</span><span class="t-out"> since Thu 2026-06-11</span>
+<span class="t-out">   Memory: 14.2M</span>
+
+<span class="t-prompt">root@prod-web-01</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">#</span> <span class="t-cmd">df -h /</span>
+<span class="t-out">Filesystem   Size  Used Avail Use% Mounted on</span>
+<span class="t-out">/dev/sda1     50G   42G  </span><span class="t-warn">5.2G  87%</span><span class="t-out"> /</span>
+
+<span class="t-prompt">root@prod-web-01</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">#</span> <span class="m-cursor"></span>
+    </div>
+
+    <!-- Snippets (Phase 2 — shown for layout) -->
+    <div class="snippet-row">
+      <div class="snippet-chip"><span class="material-symbols-outlined">bolt</span>df -h</div>
+      <div class="snippet-chip"><span class="material-symbols-outlined">bolt</span>docker ps</div>
+      <div class="snippet-chip"><span class="material-symbols-outlined">bolt</span>journalctl -xe</div>
+      <div class="snippet-chip"><span class="material-symbols-outlined">bolt</span>tail -f /var/log/…</div>
+      <div class="snippet-chip"><span class="material-symbols-outlined">add</span>snippet</div>
+    </div>
+
+    <!-- Special keys bar -->
+    <div class="keybar">
+      <div class="keybar-row">
+        <button class="kbtn">Esc</button>
+        <button class="kbtn mod" onclick="this.classList.toggle('locked')">Ctrl</button>
+        <button class="kbtn mod" onclick="this.classList.toggle('locked')">Alt</button>
+        <button class="kbtn">Tab</button>
+        <button class="kbtn"><span class="material-symbols-outlined">keyboard_arrow_up</span></button>
+        <button class="kbtn"><span class="material-symbols-outlined">keyboard_arrow_down</span></button>
+        <button class="kbtn"><span class="material-symbols-outlined">keyboard_arrow_left</span></button>
+        <button class="kbtn"><span class="material-symbols-outlined">keyboard_arrow_right</span></button>
+      </div>
+      <div class="keybar-row">
+        <button class="kbtn">~</button>
+        <button class="kbtn">/</button>
+        <button class="kbtn">|</button>
+        <button class="kbtn">-</button>
+        <button class="kbtn">"</button>
+        <button class="kbtn">Home</button>
+        <button class="kbtn">End</button>
+        <button class="kbtn kbd-toggle"><span class="material-symbols-outlined">keyboard_hide</span></button>
+      </div>
+    </div>
+
+    <div class="kbd-placeholder">
+      <span class="material-symbols-outlined">keyboard</span>
+      system keyboard
+    </div>
+  </div>
+
+  <!-- ============ SFTP ============ -->
+  <div class="screen" id="scr-sftp">
+    <div class="status-strip"><span>9:41</span><span class="right"><span class="material-symbols-outlined">signal_cellular_alt</span><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="appbar">
+      <h1>Files</h1>
+      <div class="appbar-btn" title="Upload"><span class="material-symbols-outlined">upload</span></div>
+      <div class="appbar-btn" title="New folder"><span class="material-symbols-outlined">create_new_folder</span></div>
+    </div>
+    <div class="sftp-path">
+      <span class="material-symbols-outlined" style="font-size:14px;">dns</span>
+      <span class="seg">prod-web-01</span><span class="sep">/</span>
+      <span class="seg">var</span><span class="sep">/</span>
+      <span class="seg">www</span><span class="sep">/</span>
+      <span class="seg current">app</span>
+    </div>
+    <div class="scroll-area">
+      <div class="transfer-card">
+        <div class="t-head">
+          <span class="material-symbols-outlined">download</span>
+          backup-2026-06-11.tar.gz
+          <span class="pct">64%</span>
+        </div>
+        <div class="progress"><div class="bar"></div></div>
+        <div class="t-meta">128 MB / 200 MB · 4.2 MB/s · ~17 s left</div>
+      </div>
+
+      <div class="file-row">
+        <div class="f-icon dir"><span class="material-symbols-outlined">folder</span></div>
+        <div class="f-info"><div class="f-name">..</div><div class="f-meta">parent directory</div></div>
+      </div>
+      <div class="file-row">
+        <div class="f-icon dir"><span class="material-symbols-outlined">folder</span></div>
+        <div class="f-info"><div class="f-name">static</div><div class="f-meta">drwxr-xr-x · Jun 09 14:21</div></div>
+        <div class="f-more"><span class="material-symbols-outlined">more_vert</span></div>
+      </div>
+      <div class="file-row">
+        <div class="f-icon dir"><span class="material-symbols-outlined">folder</span></div>
+        <div class="f-info"><div class="f-name">releases</div><div class="f-meta">drwxr-xr-x · Jun 11 02:00</div></div>
+        <div class="f-more"><span class="material-symbols-outlined">more_vert</span></div>
+      </div>
+      <div class="file-row">
+        <div class="f-icon file"><span class="material-symbols-outlined">description</span></div>
+        <div class="f-info"><div class="f-name">.env.production</div><div class="f-meta">-rw------- · 1.2 KB · Jun 10 18:44</div></div>
+        <div class="f-more"><span class="material-symbols-outlined">more_vert</span></div>
+      </div>
+      <div class="file-row">
+        <div class="f-icon file"><span class="material-symbols-outlined">data_object</span></div>
+        <div class="f-info"><div class="f-name">config.json</div><div class="f-meta">-rw-r--r-- · 4.8 KB · Jun 10 18:44</div></div>
+        <div class="f-more"><span class="material-symbols-outlined">more_vert</span></div>
+      </div>
+      <div class="file-row">
+        <div class="f-icon archive"><span class="material-symbols-outlined">folder_zip</span></div>
+        <div class="f-info"><div class="f-name">backup-2026-06-11.tar.gz</div><div class="f-meta">-rw-r--r-- · 200 MB · Jun 11 02:05</div></div>
+        <div class="f-more"><span class="material-symbols-outlined">more_vert</span></div>
+      </div>
+      <div class="file-row">
+        <div class="f-icon file"><span class="material-symbols-outlined">terminal</span></div>
+        <div class="f-info"><div class="f-name">deploy.sh</div><div class="f-meta">-rwxr-xr-x · 2.1 KB · Jun 08 11:02</div></div>
+        <div class="f-more"><span class="material-symbols-outlined">more_vert</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ KEYS ============ -->
+  <div class="screen" id="scr-keys">
+    <div class="status-strip"><span>9:41</span><span class="right"><span class="material-symbols-outlined">signal_cellular_alt</span><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="appbar">
+      <h1>Keychain</h1>
+      <div class="appbar-btn" title="Import"><span class="material-symbols-outlined">download</span></div>
+    </div>
+    <div class="scroll-area">
+      <button class="big-action"><span class="material-symbols-outlined">add</span>Generate new key</button>
+      <button class="big-action secondary"><span class="material-symbols-outlined">qr_code_scanner</span>Import from another device</button>
+
+      <div class="m-section-label">SSH keys</div>
+      <div class="key-card">
+        <div class="k-icon"><span class="material-symbols-outlined">key</span></div>
+        <div class="k-info">
+          <div class="k-name">id_main</div>
+          <div class="k-meta">SHA256:xK3m…9fQw · used by 5 hosts</div>
+        </div>
+        <span class="k-tag ed">ED25519</span>
+      </div>
+      <div class="key-card">
+        <div class="k-icon"><span class="material-symbols-outlined">key</span></div>
+        <div class="k-info">
+          <div class="k-name">id_homelab</div>
+          <div class="k-meta">SHA256:7Yt2…mQa1 · used by 4 hosts</div>
+        </div>
+        <span class="k-tag ed">ED25519</span>
+      </div>
+      <div class="key-card">
+        <div class="k-icon"><span class="material-symbols-outlined">key</span></div>
+        <div class="k-info">
+          <div class="k-name">legacy-ci</div>
+          <div class="k-meta">SHA256:Pq8r…2Wse · used by 1 host</div>
+        </div>
+        <span class="k-tag rsa">RSA 4096</span>
+      </div>
+      <div class="key-card">
+        <div class="k-icon"><span class="material-symbols-outlined">memory</span></div>
+        <div class="k-info">
+          <div class="k-name">yubikey-5c</div>
+          <div class="k-meta">FIDO2 resident key · sk-ssh-ed25519</div>
+        </div>
+        <span class="k-tag hw">HARDWARE</span>
+      </div>
+
+      <div class="m-section-label">Known hosts</div>
+      <div class="set-group">
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">verified_user</span></div>
+          <div class="s-info">
+            <div class="s-label">Verified host fingerprints</div>
+            <div class="s-desc">11 hosts pinned · 1 changed fingerprint needs review</div>
+          </div>
+          <span class="material-symbols-outlined">chevron_right</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div class="screen" id="scr-settings">
+    <div class="status-strip"><span>9:41</span><span class="right"><span class="material-symbols-outlined">signal_cellular_alt</span><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="appbar">
+      <h1>Settings</h1>
+    </div>
+    <div class="scroll-area">
+      <div class="sync-status">
+        <span class="material-symbols-outlined">cloud_done</span>
+        <div class="s-text">
+          <div class="t1">Sync up to date</div>
+          <div class="t2">self-hosted · sync.mylab.dev · E2E encrypted · 2 min ago</div>
+        </div>
+        <span class="material-symbols-outlined" style="color: var(--text-faint); font-size:16px;">chevron_right</span>
+      </div>
+
+      <div class="m-section-label">Sync &amp; security</div>
+      <div class="set-group">
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">sync</span></div>
+          <div class="s-info">
+            <div class="s-label">Sync server</div>
+            <div class="s-desc">Your own server. Only encrypted blobs leave this device.</div>
+          </div>
+          <span class="s-value ok">connected</span>
+        </div>
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">fingerprint</span></div>
+          <div class="s-info">
+            <div class="s-label">Unlock with biometrics</div>
+            <div class="s-desc">Face ID / fingerprint instead of master password</div>
+          </div>
+          <div class="m-toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">timer</span></div>
+          <div class="s-info">
+            <div class="s-label">Auto-lock</div>
+            <div class="s-desc">Lock vault when app goes to background</div>
+          </div>
+          <span class="s-value">1 min</span>
+          <span class="material-symbols-outlined">chevron_right</span>
+        </div>
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">shield_lock</span></div>
+          <div class="s-info">
+            <div class="s-label">Master password</div>
+            <div class="s-desc">Change password, export recovery kit</div>
+          </div>
+          <span class="material-symbols-outlined">chevron_right</span>
+        </div>
+      </div>
+
+      <div class="m-section-label">Terminal</div>
+      <div class="set-group">
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">palette</span></div>
+          <div class="s-info">
+            <div class="s-label">Theme</div>
+          </div>
+          <span class="s-value">Night Sea</span>
+          <span class="material-symbols-outlined">chevron_right</span>
+        </div>
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">text_fields</span></div>
+          <div class="s-info">
+            <div class="s-label">Font</div>
+          </div>
+          <span class="s-value">JetBrains Mono · 12</span>
+          <span class="material-symbols-outlined">chevron_right</span>
+        </div>
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">keyboard</span></div>
+          <div class="s-info">
+            <div class="s-label">Keys bar layout</div>
+            <div class="s-desc">Customize special keys rows</div>
+          </div>
+          <span class="material-symbols-outlined">chevron_right</span>
+        </div>
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">vibration</span></div>
+          <div class="s-info">
+            <div class="s-label">Haptic feedback on keys</div>
+          </div>
+          <div class="m-toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+
+      <div class="m-section-label">Coming next</div>
+      <div class="set-group">
+        <div class="set-row" style="opacity: 0.65;">
+          <div class="s-icon amber"><span class="material-symbols-outlined">auto_awesome</span></div>
+          <div class="s-info">
+            <div class="s-label">AI assistant<span class="phase-tag">PHASE 2</span></div>
+            <div class="s-desc">Per-host policies (Strict / Balanced / Off), BYOK or your own endpoint. Designed in, not yet shipped.</div>
+          </div>
+        </div>
+        <div class="set-row" style="opacity: 0.65;">
+          <div class="s-icon amber"><span class="material-symbols-outlined">bolt</span></div>
+          <div class="s-info">
+            <div class="s-label">Snippets &amp; variables<span class="phase-tag">PHASE 2</span></div>
+            <div class="s-desc">Reusable commands synced across devices</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="m-section-label">About</div>
+      <div class="set-group">
+        <div class="set-row">
+          <div class="s-icon"><span class="material-symbols-outlined">info</span></div>
+          <div class="s-info">
+            <div class="s-label">Skerry 0.1.0</div>
+            <div class="s-desc">GPL-3.0 · open source SSH client · single Kotlin Multiplatform core</div>
+          </div>
+          <span class="material-symbols-outlined">open_in_new</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ NEW CONNECTION SHEET ============ -->
+  <div class="sheet-backdrop" id="sheetBackdrop" onclick="if(event.target===this)closeSheet()">
+    <div class="sheet">
+      <div class="grip"></div>
+      <h2>New connection</h2>
+      <p class="sub">Credentials are encrypted with your master password and synced E2E to your own server.</p>
+      <label>Name</label>
+      <input type="text" placeholder="e.g. prod-web-03" />
+      <div class="row2">
+        <div>
+          <label>Host address</label>
+          <input type="text" placeholder="192.168.1.45 or example.com" />
+        </div>
+        <div>
+          <label>Port</label>
+          <input type="text" value="22" />
+        </div>
+      </div>
+      <label>Username</label>
+      <input type="text" placeholder="root or username" />
+      <label>Authentication</label>
+      <select>
+        <option>id_main · ED25519</option>
+        <option>id_homelab · ED25519</option>
+        <option>yubikey-5c · hardware</option>
+        <option>Password</option>
+      </select>
+      <label>Group</label>
+      <select>
+        <option>Production</option>
+        <option>Staging</option>
+        <option>Homelab</option>
+        <option>+ Create new group…</option>
+      </select>
+      <button class="big-action" style="margin-top:22px" onclick="closeSheet(); showScreen('terminal')">
+        <span class="material-symbols-outlined">add_link</span>Save &amp; connect
+      </button>
+      <div class="note">
+        <span class="material-symbols-outlined">shield_lock</span>
+        Encrypted with dataKey · server only sees ciphertext
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TAB BAR ============ -->
+  <div class="tabbar" id="tabbar">
+    <div class="tab-item active" data-target="hosts" onclick="showScreen('hosts')">
+      <span class="material-symbols-outlined">dns</span>Hosts
+    </div>
+    <div class="tab-item" data-target="terminal" onclick="showScreen('terminal')">
+      <span class="badge">2</span>
+      <span class="material-symbols-outlined">terminal</span>Terminals
+    </div>
+    <div class="tab-item" data-target="sftp" onclick="showScreen('sftp')">
+      <span class="material-symbols-outlined">folder</span>Files
+    </div>
+    <div class="tab-item" data-target="keys" onclick="showScreen('keys')">
+      <span class="material-symbols-outlined">key</span>Keys
+    </div>
+    <div class="tab-item" data-target="settings" onclick="showScreen('settings')">
+      <span class="material-symbols-outlined">tune</span>Settings
+    </div>
+  </div>
+
+</div>
+
+<!-- Prototype quick-nav (not part of the product) -->
+<div class="proto-nav">
+  <span class="proto-label">Prototype</span>
+  <button data-target="lock" onclick="showScreen('lock')" class="active">Lock</button>
+  <button data-target="hosts" onclick="showScreen('hosts')">Hosts</button>
+  <button data-target="terminal" onclick="showScreen('terminal')">Terminal</button>
+  <button data-target="sftp" onclick="showScreen('sftp')">SFTP</button>
+  <button data-target="keys" onclick="showScreen('keys')">Keys</button>
+  <button data-target="settings" onclick="showScreen('settings')">Settings</button>
+  <button onclick="showScreen('hosts'); openSheet()">+ Connection</button>
+</div>
+
+<script>
+  const TABBAR_SCREENS = ['hosts', 'sftp', 'keys', 'settings'];
+
+  function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('scr-' + name).classList.add('active');
+
+    // tab bar lives on top-level screens; terminal & lock are immersive
+    const tabbar = document.getElementById('tabbar');
+    tabbar.style.display = TABBAR_SCREENS.includes(name) ? 'flex' : 'none';
+    document.querySelectorAll('.tabbar .tab-item').forEach(t =>
+      t.classList.toggle('active', t.dataset.target === name));
+
+    document.querySelectorAll('.proto-nav button[data-target]').forEach(b =>
+      b.classList.toggle('active', b.dataset.target === name));
+  }
+
+  function openSheet() { document.getElementById('sheetBackdrop').classList.add('show'); }
+  function closeSheet() { document.getElementById('sheetBackdrop').classList.remove('show'); }
+
+  function toggleGroup(el) {
+    el.classList.toggle('collapsed');
+    el.nextElementSibling.classList.toggle('collapsed');
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+  // initial state: lock screen, no tabbar
+  document.getElementById('tabbar').style.display = 'none';
+</script>
+
+</body>
+</html>

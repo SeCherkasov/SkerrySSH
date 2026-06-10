@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skerry Sync — Server Admin Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200&display=block" rel="stylesheet" />
+<style>
+  :root {
+    /* Skerry v2 palette — same tokens as app prototypes */
+    --deep: #0E2230;
+    --deep-2: #0A1A26;
+    --night-sea: #07141E;
+    --night-sea-soft: #0B1A26;
+
+    --cyan: #2BBDEE;
+    --cyan-soft: rgba(43,189,238,0.10);
+    --cyan-dim: rgba(43,189,238,0.20);
+    --cyan-bright: #5FD1F4;
+
+    --amber: #F2A65A;
+    --amber-soft: rgba(242,166,90,0.14);
+
+    --moss: #5DCE9E;
+    --sunset: #E07A5F;
+    --storm: #E94B4B;
+
+    --line: rgba(43,189,238,0.06);
+    --line-strong: rgba(43,189,238,0.14);
+    --text: #E6ECEF;
+    --text-dim: #8FA3B0;
+    --text-faint: #5A7080;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--night-sea);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 90px;
+  }
+  .material-symbols-outlined { user-select: none; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ====== ADMIN LAYOUT ====== */
+  .admin {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .admin-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 22px 0 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .admin-header .logo { width: 30px; height: 30px; }
+  .admin-header .logo svg { width: 100%; height: 100%; }
+  .admin-header h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.2px; }
+  .admin-header h1 .dim { color: var(--text-faint); font-weight: 500; }
+  .admin-header .server-pill {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(93,206,158,0.08);
+    border: 1px solid rgba(93,206,158,0.25);
+    color: var(--moss);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .admin-header .server-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); }
+  .admin-header .ver {
+    color: var(--text-faint);
+    font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .zk-banner {
+    margin-top: 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--cyan-soft);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .zk-banner .material-symbols-outlined { font-size: 22px; color: var(--cyan); flex-shrink: 0; }
+  .zk-banner strong { color: var(--text); }
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 28px 0 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-faint);
+  }
+  .section-title .material-symbols-outlined { font-size: 15px; }
+
+  /* Stat cards */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .stat {
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    padding: 15px 16px;
+  }
+  .stat .k {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stat .k .material-symbols-outlined { font-size: 15px; color: var(--cyan); }
+  .stat .v {
+    font-size: 24px;
+    font-weight: 700;
+    margin-top: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -0.5px;
+  }
+  .stat .sub { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+  .stat .v .unit { font-size: 13px; color: var(--text-dim); font-weight: 500; }
+
+  /* Tables */
+  .card {
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th {
+    text-align: left;
+    padding: 11px 16px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text-dim);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.015); }
+  td .dev {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-weight: 500;
+  }
+  td .dev .material-symbols-outlined { font-size: 18px; color: var(--cyan); }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 3px 8px;
+    border-radius: 5px;
+  }
+  .badge.ok { background: rgba(93,206,158,0.12); color: var(--moss); }
+  .badge.stale { background: rgba(242,166,90,0.12); color: var(--amber); }
+  .badge.current { background: var(--cyan-soft); color: var(--cyan); }
+  .revoke {
+    background: transparent;
+    border: 1px solid rgba(233,75,75,0.3);
+    color: var(--storm);
+    border-radius: 7px;
+    padding: 5px 11px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .revoke:hover { background: rgba(233,75,75,0.1); }
+
+  /* Two-column area */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+
+  /* What the server sees */
+  .sees { padding: 16px; }
+  .sees .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    font-size: 12.5px;
+    border-bottom: 1px solid var(--line);
+  }
+  .sees .row:last-child { border-bottom: none; }
+  .sees .row .material-symbols-outlined { font-size: 17px; flex-shrink: 0; }
+  .sees .row.yes .material-symbols-outlined { color: var(--moss); }
+  .sees .row.no .material-symbols-outlined { color: var(--storm); }
+  .sees .row .what { color: var(--text); min-width: 165px; font-weight: 500; }
+  .sees .row .how { color: var(--text-faint); font-size: 11.5px; font-family: 'JetBrains Mono', monospace; }
+
+  /* Blob inspector */
+  .blob-box { padding: 16px; }
+  .blob-box .lbl { font-size: 11px; color: var(--text-faint); font-weight: 600; margin-bottom: 8px; }
+  .blob-hex {
+    background: rgba(0,0,0,0.35);
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--text-faint);
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+  .blob-hex .meta { color: var(--cyan); }
+  .blob-note {
+    margin-top: 10px;
+    display: flex;
+    gap: 7px;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .blob-note .material-symbols-outlined { font-size: 15px; color: var(--moss); flex-shrink: 0; margin-top: 1px; }
+
+  /* ====== PAIRING SCREEN ====== */
+  .pair-wrap {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    align-items: stretch;
+  }
+  .pair-card {
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .pair-card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
+  .pair-card p { margin: 0 0 18px; font-size: 12px; color: var(--text-dim); line-height: 1.55; max-width: 380px; }
+  .qr {
+    width: 190px; height: 190px;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 6px, rgba(230,236,239,0.92) 6px 12px),
+      repeating-linear-gradient(90deg, transparent 0 6px, rgba(230,236,239,0.92) 6px 12px);
+    background-color: #0A1722;
+    border-radius: 12px;
+    border: 1px solid var(--line-strong);
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .qr::after {
+    content: '';
+    position: absolute;
+    inset: 35%;
+    background: var(--night-sea);
+    border: 2px solid var(--cyan);
+    border-radius: 8px;
+  }
+  .qr .logo-c {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+  }
+  .qr .logo-c svg { width: 34px; height: 34px; }
+  .pair-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--cyan);
+    background: var(--cyan-soft);
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    padding: 9px 18px;
+    margin-bottom: 12px;
+  }
+  .pair-ttl {
+    font-size: 11px;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .pair-ttl .material-symbols-outlined { font-size: 14px; color: var(--amber); }
+
+  .pair-steps { text-align: left; width: 100%; }
+  .pair-step {
+    display: flex;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .pair-step:last-child { border-bottom: none; }
+  .pair-step .n {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--cyan-soft);
+    border: 1px solid var(--line-strong);
+    color: var(--cyan);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .pair-step strong { color: var(--text); }
+
+  /* ====== KEY HIERARCHY (crypto scheme) ====== */
+  .crypto-flow {
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    padding: 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .cnode {
+    border: 1px solid var(--line-strong);
+    border-radius: 11px;
+    padding: 12px 22px;
+    text-align: center;
+    background: var(--night-sea);
+    min-width: 320px;
+  }
+  .cnode .t { font-size: 13.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+  .cnode .d { font-size: 11px; color: var(--text-faint); margin-top: 3px; line-height: 1.45; }
+  .cnode.device { border-color: rgba(93,206,158,0.35); }
+  .cnode.device .t { color: var(--moss); }
+  .cnode.secret { border-color: var(--cyan); background: var(--cyan-soft); }
+  .cnode.secret .t { color: var(--cyan-bright); }
+  .cnode.server { border-color: rgba(242,166,90,0.4); }
+  .cnode.server .t { color: var(--amber); }
+  .carrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    color: var(--text-faint);
+    font-size: 10.5px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .carrow .material-symbols-outlined { font-size: 18px; color: var(--text-faint); }
+  .czone {
+    width: 100%;
+    border: 1px dashed rgba(93,206,158,0.3);
+    border-radius: 14px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    margin-bottom: 22px;
+  }
+  .czone.server-zone { border-color: rgba(242,166,90,0.35); margin-bottom: 0; }
+  .czone .zlabel {
+    position: absolute;
+    top: -9px;
+    left: 18px;
+    background: var(--night-sea-soft);
+    padding: 0 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+  }
+  .czone .zlabel.dev { color: var(--moss); }
+  .czone.server-zone .zlabel { color: var(--amber); }
+
+  /* ====== ACTIVITY LOG ====== */
+  .log-line td { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+  .log-line .ev-ok { color: var(--moss); }
+  .log-line .ev-warn { color: var(--amber); }
+  .log-line .ev-info { color: var(--cyan); }
+
+  /* ====== PROTO NAV ====== */
+  .proto-nav {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--deep);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 9px 10px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    z-index: 300;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .proto-nav .proto-label {
+    padding-right: 8px;
+    color: var(--text-faint);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-size: 9.5px;
+    border-right: 1px solid var(--line);
+    margin-right: 4px;
+  }
+  .proto-nav button {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    padding: 6px 11px;
+    border-radius: 7px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .proto-nav button:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .proto-nav button.active { background: var(--cyan); color: var(--deep-2); border-color: var(--cyan); font-weight: 600; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position: absolute;">
+  <symbol id="skerry-logo" viewBox="0 0 32 32">
+    <path d="M 4 26 L 8 18 L 12 22 L 16 14 L 20 20 L 24 16 L 28 26 Z" fill="#0E2230" stroke="#2BBDEE" stroke-width="1.2" stroke-linejoin="round"/>
+    <rect x="14.5" y="6" width="3" height="10" fill="#0E2230" stroke="#2BBDEE" stroke-width="1"/>
+    <circle cx="16" cy="5" r="2" fill="#F2A65A"/>
+    <path d="M 10 5 L 22 5" stroke="#F2A65A" stroke-width="0.6" stroke-dasharray="0.5 1.5" opacity="0.7"/>
+  </symbol>
+</svg>
+
+<div class="admin">
+
+  <div class="admin-header">
+    <div class="logo"><svg><use href="#skerry-logo"/></svg></div>
+    <h1>Skerry Sync <span class="dim">· server admin</span></h1>
+    <div class="server-pill"><span class="dot"></span>sync.mylab.dev</div>
+    <span class="ver">v0.2.0 · AGPL-3.0</span>
+  </div>
+
+  <div class="zk-banner">
+    <span class="material-symbols-outlined">visibility_off</span>
+    <div><strong>Zero-knowledge:</strong> this server stores only ciphertext. Master passwords, data keys, host names and credentials are never visible to the server — even to you, its administrator.</div>
+  </div>
+
+  <!-- ============ VIEW: DASHBOARD ============ -->
+  <div class="view active" id="v-dash">
+    <div class="section-title"><span class="material-symbols-outlined">monitoring</span>Overview</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="k"><span class="material-symbols-outlined">person</span>Accounts</div>
+        <div class="v">1</div>
+        <div class="sub">single-user instance</div>
+      </div>
+      <div class="stat">
+        <div class="k"><span class="material-symbols-outlined">devices</span>Paired devices</div>
+        <div class="v">3</div>
+        <div class="sub">all synced within 24 h</div>
+      </div>
+      <div class="stat">
+        <div class="k"><span class="material-symbols-outlined">database</span>Vault records</div>
+        <div class="v">128</div>
+        <div class="sub">hosts, identities, known hosts</div>
+      </div>
+      <div class="stat">
+        <div class="k"><span class="material-symbols-outlined">hard_drive</span>Encrypted storage</div>
+        <div class="v">412 <span class="unit">KB</span></div>
+        <div class="sub">ciphertext blobs + tombstones</div>
+      </div>
+    </div>
+
+    <div class="section-title"><span class="material-symbols-outlined">devices</span>Devices</div>
+    <div class="card">
+      <table>
+        <tr><th>Device</th><th>Platform</th><th>Last sync</th><th>Sync version</th><th>Status</th><th></th></tr>
+        <tr>
+          <td><span class="dev"><span class="material-symbols-outlined">computer</span>fedora-workstation</span></td>
+          <td>Linux · desktop 0.1.0</td>
+          <td class="mono">2 min ago</td>
+          <td class="mono">v1284</td>
+          <td><span class="badge current">THIS DEVICE</span></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td><span class="dev"><span class="material-symbols-outlined">smartphone</span>pixel-9</span></td>
+          <td>Android · 0.1.0</td>
+          <td class="mono">18 min ago</td>
+          <td class="mono">v1284</td>
+          <td><span class="badge ok">UP TO DATE</span></td>
+          <td><button class="revoke">Revoke</button></td>
+        </tr>
+        <tr>
+          <td><span class="dev"><span class="material-symbols-outlined">tablet_mac</span>ipad-pro</span></td>
+          <td>iPadOS · 0.1.0</td>
+          <td class="mono">6 days ago</td>
+          <td class="mono">v1190</td>
+          <td><span class="badge stale">STALE</span></td>
+          <td><button class="revoke">Revoke</button></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section-title"><span class="material-symbols-outlined">policy</span>Privacy boundary</div>
+    <div class="cols">
+      <div class="card sees">
+        <div class="row yes"><span class="material-symbols-outlined">check_circle</span><span class="what">Record IDs &amp; types</span><span class="how">host / identity / group…</span></div>
+        <div class="row yes"><span class="material-symbols-outlined">check_circle</span><span class="what">Sync versions &amp; timestamps</span><span class="how">Lamport counter, ISO-8601</span></div>
+        <div class="row yes"><span class="material-symbols-outlined">check_circle</span><span class="what">Device names &amp; platforms</span><span class="how">user-editable labels</span></div>
+        <div class="row no"><span class="material-symbols-outlined">cancel</span><span class="what">Master password</span><span class="how">never transmitted (SRP)</span></div>
+        <div class="row no"><span class="material-symbols-outlined">cancel</span><span class="what">dataKey</span><span class="how">stored wrapped, opaque</span></div>
+        <div class="row no"><span class="material-symbols-outlined">cancel</span><span class="what">Host names, IPs, credentials</span><span class="how">inside encrypted blobs</span></div>
+        <div class="row no"><span class="material-symbols-outlined">cancel</span><span class="what">Private keys</span><span class="how">wrapped; hardware keys never sync</span></div>
+      </div>
+      <div class="card blob-box">
+        <div class="lbl">WHAT A VAULT RECORD LOOKS LIKE TO THIS SERVER</div>
+        <div class="blob-hex"><span class="meta">id:</span> 8f3a2c1e-77b4-4f0e-9a12-d65f08c4e991
+<span class="meta">type:</span> host · <span class="meta">version:</span> 1284 · <span class="meta">deleted:</span> false
+<span class="meta">blob (XChaCha20-Poly1305):</span>
+9c4e 1f8a 02bd 77e3 5a90 cc41 e8d2 0b6f
+33a7 91fe 4c05 b8d6 1e92 a4f0 7d38 c5e1
+06bb f249 8e17 d3a0 52c8 …  (208 bytes)</div>
+        <div class="blob-note">
+          <span class="material-symbols-outlined">shield_lock</span>
+          <span>Without dataKey this is irreversible noise. Even a full database dump reveals only structure, never content.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title"><span class="material-symbols-outlined">receipt_long</span>Recent activity (metadata only)</div>
+    <div class="card">
+      <table>
+        <tr class="log-line"><td class="mono">09:39:12</td><td><span class="ev-ok">sync.push</span></td><td>fedora-workstation</td><td>2 records · v1283 → v1284</td></tr>
+        <tr class="log-line"><td class="mono">09:39:13</td><td><span class="ev-info">ws.notify</span></td><td>pixel-9, ipad-pro</td><td>change notification sent</td></tr>
+        <tr class="log-line"><td class="mono">09:21:44</td><td><span class="ev-ok">sync.pull</span></td><td>pixel-9</td><td>delta since v1280 · 4 records</td></tr>
+        <tr class="log-line"><td class="mono">08:02:10</td><td><span class="ev-ok">auth.srp</span></td><td>pixel-9</td><td>login ok · token TTL 1 h</td></tr>
+        <tr class="log-line"><td class="mono">Jun 05</td><td><span class="ev-warn">device.stale</span></td><td>ipad-pro</td><td>no sync for 6 days</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ VIEW: PAIRING ============ -->
+  <div class="view" id="v-pair">
+    <div class="section-title"><span class="material-symbols-outlined">qr_code_2</span>Pair a new device</div>
+    <div class="pair-wrap">
+      <div class="pair-card">
+        <h3>Scan from the new device</h3>
+        <p>Open Skerry on the new device → <strong>Keychain → Import from another device</strong> and scan this code. The dataKey is transferred end-to-end encrypted with a one-time key — the server relays only ciphertext.</p>
+        <div class="qr"><div class="logo-c"><svg><use href="#skerry-logo"/></svg></div></div>
+        <div class="pair-code">H7K2-MNP4-Q9TX</div>
+        <div class="pair-ttl"><span class="material-symbols-outlined">timer</span>Expires in 4:32 · single use</div>
+      </div>
+      <div class="pair-card" style="text-align:left; align-items:stretch;">
+        <h3 style="text-align:center;">How pairing works</h3>
+        <div class="pair-steps">
+          <div class="pair-step"><span class="n">1</span><span>This device generates a one-time <strong>transferKey</strong> and shows it as QR + code. The key itself never reaches the server.</span></div>
+          <div class="pair-step"><span class="n">2</span><span>The new device scans the QR (or you type the code) and derives the same transferKey locally.</span></div>
+          <div class="pair-step"><span class="n">3</span><span>dataKey is encrypted with transferKey and relayed through <span class="mono">sync.mylab.dev</span> — the server sees only ciphertext with a 5-minute TTL.</span></div>
+          <div class="pair-step"><span class="n">4</span><span>The new device decrypts dataKey, registers itself, and pulls the full vault. <strong>Hardware-backed keys are not transferred</strong> — re-enroll them on the new device.</span></div>
+          <div class="pair-step"><span class="n">5</span><span>Alternative: simply log in with your <strong>master password</strong> on the new device — SRP login, then the wrapped dataKey is fetched and unwrapped locally.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VIEW: CRYPTO SCHEME ============ -->
+  <div class="view" id="v-crypto">
+    <div class="section-title"><span class="material-symbols-outlined">key_visualizer</span>Key hierarchy — zero-knowledge scheme</div>
+    <div class="crypto-flow">
+      <div class="czone">
+        <span class="zlabel dev">ON DEVICE ONLY</span>
+        <div class="cnode device">
+          <div class="t">master password</div>
+          <div class="d">known only to the user; never transmitted, never stored</div>
+        </div>
+        <div class="carrow"><span class="material-symbols-outlined">south</span>Argon2id · m=64MiB · t=3 · salt=accountId</div>
+        <div class="cnode device">
+          <div class="t">masterKey · 256 bit</div>
+          <div class="d">exists only in device memory while unlocked</div>
+        </div>
+        <div class="carrow"><span class="material-symbols-outlined">call_split</span>HKDF "skerry-auth" / unwrap</div>
+        <div style="display:flex; gap:14px; flex-wrap:wrap; justify-content:center;">
+          <div class="cnode device" style="min-width:240px;">
+            <div class="t">authKey</div>
+            <div class="d">SRP proof of login — the password itself is never sent</div>
+          </div>
+          <div class="cnode secret" style="min-width:240px;">
+            <div class="t">dataKey · 256 bit</div>
+            <div class="d">random; encrypts every vault record (XChaCha20-Poly1305)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="carrow" style="padding:0 0 8px;"><span class="material-symbols-outlined">south</span>only wrapped / derived artifacts cross this line</div>
+
+      <div class="czone server-zone">
+        <span class="zlabel">ON SERVER (sync.mylab.dev)</span>
+        <div style="display:flex; gap:14px; flex-wrap:wrap; justify-content:center;">
+          <div class="cnode server" style="min-width:200px;">
+            <div class="t">SRP verifier</div>
+            <div class="d">cannot be reversed to the password</div>
+          </div>
+          <div class="cnode server" style="min-width:200px;">
+            <div class="t">wrapped dataKey</div>
+            <div class="d">opaque blob; unwrap requires masterKey</div>
+          </div>
+          <div class="cnode server" style="min-width:200px;">
+            <div class="t">encrypted records</div>
+            <div class="d">ciphertext + sync metadata only</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="zk-banner" style="margin-top:14px;">
+      <span class="material-symbols-outlined">password</span>
+      <div>Changing the master password re-wraps only <strong>dataKey</strong> — the vault itself is not re-encrypted. Losing the master password without a recovery kit makes the vault unrecoverable <strong>by design</strong>.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Prototype quick-nav (not part of the product) -->
+<div class="proto-nav">
+  <span class="proto-label">Prototype · Sync server</span>
+  <button data-v="v-dash" class="active" onclick="showView('v-dash', this)">Dashboard</button>
+  <button data-v="v-pair" onclick="showView('v-pair', this)">Pair device</button>
+  <button data-v="v-crypto" onclick="showView('v-crypto', this)">Crypto scheme</button>
+</div>
+
+<script>
+  function showView(id, btn) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.proto-nav button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Kotlin/Native, KMP
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+local.properties
+
+# Xcode / iOS
+*.xcworkspace/xcuserdata/
+**/xcuserdata/
+iosApp/Pods/
+DerivedData/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Логи и временные файлы
+*.log
+*.hprof

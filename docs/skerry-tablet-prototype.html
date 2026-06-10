@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skerry — Tablet / iPad Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200&display=block" rel="stylesheet" />
+<style>
+  :root {
+    /* Skerry v2 palette — same tokens as desktop & mobile prototypes */
+    --deep: #0E2230;
+    --deep-2: #0A1A26;
+    --night-sea: #07141E;
+    --night-sea-soft: #0B1A26;
+
+    --cyan: #2BBDEE;
+    --cyan-soft: rgba(43,189,238,0.10);
+    --cyan-dim: rgba(43,189,238,0.20);
+    --cyan-bright: #5FD1F4;
+
+    --amber: #F2A65A;
+    --amber-soft: rgba(242,166,90,0.14);
+
+    --moss: #5DCE9E;
+    --sunset: #E07A5F;
+    --storm: #E94B4B;
+
+    --line: rgba(43,189,238,0.06);
+    --line-strong: rgba(43,189,238,0.14);
+    --text: #E6ECEF;
+    --text-dim: #8FA3B0;
+    --text-faint: #5A7080;
+    --terminal-bg: #050E16;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #04090E;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 26px 16px 84px;
+    overflow-x: auto;
+  }
+  .material-symbols-outlined { user-select: none; }
+
+  /* ====== TABLET FRAME (iPad Pro 11" landscape) ====== */
+  .tablet {
+    width: 1194px;
+    height: 834px;
+    background: var(--night-sea);
+    border: 1px solid rgba(43,189,238,0.18);
+    border-radius: 34px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.7), inset 0 0 0 8px #020608;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .status-strip {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 26px;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .status-strip .right { display: flex; align-items: center; gap: 6px; }
+  .status-strip .material-symbols-outlined { font-size: 14px; }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+  }
+  .screen.active { display: flex; }
+
+  /* ====== WORKSPACE LAYOUT (sidebar + content) ====== */
+  .workspace {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+
+  /* Sidebar — persistent on tablet, like desktop */
+  .t-sidebar {
+    width: 272px;
+    background: var(--night-sea-soft);
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    transition: margin-left 0.18s ease;
+  }
+  .t-sidebar.hidden { margin-left: -272px; }
+
+  .sb-search {
+    padding: 12px 12px 10px;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+  .sb-search input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px 10px 36px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+  }
+  .sb-search input::placeholder { color: var(--text-faint); }
+  .sb-search input:focus { border-color: var(--cyan); background: var(--cyan-soft); }
+  .sb-search .material-symbols-outlined {
+    position: absolute;
+    left: 23px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 17px;
+    color: var(--text-faint);
+    pointer-events: none;
+  }
+
+  .sb-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 8px 12px;
+  }
+  .sb-list::-webkit-scrollbar { width: 5px; }
+  .sb-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+  .sb-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--text-faint);
+  }
+  .sb-label .add {
+    width: 20px; height: 20px;
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: var(--text-faint);
+  }
+  .sb-label .add:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+  .sb-label .add .material-symbols-outlined { font-size: 15px; }
+
+  .sb-group-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 9px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .sb-group-header:hover { background: rgba(255,255,255,0.03); color: var(--text); }
+  .sb-group-header .chev { font-size: 17px; transition: transform 0.15s; color: var(--text-faint); }
+  .sb-group-header.collapsed .chev { transform: rotate(-90deg); }
+  .sb-group-header .count {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-faint);
+    background: rgba(255,255,255,0.04);
+    padding: 1px 7px;
+    border-radius: 8px;
+  }
+  .sb-conns { padding-left: 14px; }
+  .sb-conns.collapsed { display: none; }
+
+  .sb-conn {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 12.5px;
+  }
+  .sb-conn:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .sb-conn.active { background: var(--cyan-soft); color: var(--cyan-bright); }
+  .sb-conn .status { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .status.on { background: var(--moss); box-shadow: 0 0 6px rgba(93,206,158,0.4); }
+  .status.off { background: var(--text-faint); }
+  .status.warn { background: var(--sunset); }
+  .sb-conn .name {
+    flex: 1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sb-conn .material-symbols-outlined { font-size: 15px; color: var(--text-faint); }
+
+  .sb-footer {
+    border-top: 1px solid var(--line);
+    padding: 12px;
+  }
+  .sb-newconn {
+    width: 100%;
+    background: var(--cyan);
+    color: var(--deep-2);
+    border: none;
+    padding: 11px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 12.5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-family: inherit;
+  }
+  .sb-newconn:hover { background: var(--cyan-bright); }
+  .sb-newconn .material-symbols-outlined { font-size: 17px; }
+
+  /* ====== CONTENT (right of sidebar) ====== */
+  .t-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* Session tabs row */
+  .tabs-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px 0;
+    background: var(--night-sea-soft);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .sidebar-toggle {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 8px;
+  }
+  .sidebar-toggle:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .sidebar-toggle .material-symbols-outlined { font-size: 19px; }
+
+  .s-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px 9px 14px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 9px 9px 0 0;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 12.5px;
+    font-weight: 500;
+    max-width: 210px;
+  }
+  .s-tab:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .s-tab.active {
+    background: var(--terminal-bg);
+    border-color: var(--line-strong);
+    color: var(--text);
+  }
+  .s-tab .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); flex-shrink: 0; }
+  .s-tab .dot.idle { background: var(--text-faint); }
+  .s-tab .name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .s-tab .close { color: var(--text-faint); display: flex; }
+  .s-tab .close .material-symbols-outlined { font-size: 15px; }
+  .new-tab {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 6px;
+  }
+  .new-tab:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+  .new-tab .material-symbols-outlined { font-size: 19px; }
+
+  .tabs-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .tabs-actions .act {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 10px;
+    border-radius: 9px;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-family: inherit;
+  }
+  .tabs-actions .act:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .tabs-actions .act.on { background: var(--cyan-soft); color: var(--cyan); border-color: var(--cyan); }
+  .tabs-actions .act .material-symbols-outlined { font-size: 17px; }
+
+  /* Terminal panes */
+  .panes {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    background: var(--terminal-bg);
+  }
+  .pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pane + .pane { border-left: 1px solid var(--line-strong); }
+  .pane.focused { box-shadow: inset 0 2px 0 var(--cyan); }
+
+  .pane-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    font-size: 10.5px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,0.015);
+    flex-shrink: 0;
+  }
+  .pane-head .host { color: var(--text-dim); font-weight: 600; }
+  .pane-head .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .pane-head .pane-acts { margin-left: auto; display: flex; gap: 2px; }
+  .pane-head .pane-acts .material-symbols-outlined {
+    font-size: 15px;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+  }
+  .pane-head .pane-acts .material-symbols-outlined:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+
+  .term {
+    flex: 1;
+    padding: 12px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: #C9D6DE;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .term::-webkit-scrollbar { width: 6px; }
+  .term::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+  .t-prompt { color: var(--cyan); font-weight: 600; }
+  .t-host { color: var(--cyan-bright); }
+  .t-path { color: var(--moss); }
+  .t-cmd { color: #FFFFFF; }
+  .t-out { color: #B7C5CC; }
+  .t-dim { color: var(--text-faint); }
+  .t-warn { color: var(--sunset); }
+  .t-err { color: var(--storm); }
+  .t-ok { color: var(--moss); }
+  .cursor {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--cyan);
+    vertical-align: middle;
+    margin-left: 2px;
+    animation: blink 1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Touch key bar — single compact row on tablet */
+  .keybar {
+    background: #0A1722;
+    border-top: 1px solid var(--line-strong);
+    padding: 7px 10px;
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .kbtn {
+    flex: 1;
+    max-width: 86px;
+    height: 36px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.07);
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .kbtn .material-symbols-outlined { font-size: 16px; }
+  .kbtn:active { background: var(--cyan-soft); color: var(--cyan); border-color: var(--cyan); }
+  .kbtn.mod.locked { background: var(--cyan); color: var(--deep-2); border-color: var(--cyan); }
+  .keybar .spacer { flex: 2; }
+  .keybar .hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-faint);
+    font-size: 10.5px;
+    padding: 0 8px;
+    white-space: nowrap;
+  }
+  .keybar .hint .material-symbols-outlined { font-size: 14px; }
+
+  /* Status bar */
+  .statusbar {
+    height: 26px;
+    background: var(--deep-2);
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    font-size: 10.5px;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+  }
+  .statusbar .l, .statusbar .r { display: flex; align-items: center; gap: 16px; }
+  .statusbar .item { display: flex; align-items: center; gap: 5px; }
+  .statusbar .item .material-symbols-outlined { font-size: 13px; }
+  .statusbar .item.ok { color: var(--moss); }
+
+  /* ====== SFTP DUAL-PANE SCREEN ====== */
+  .sftp-wrap {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    background: var(--night-sea);
+  }
+  .sftp-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .sftp-pane + .sftp-pane { border-left: 1px solid var(--line-strong); }
+  .sftp-pane-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--night-sea-soft);
+    flex-shrink: 0;
+  }
+  .sftp-pane-head .where {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .sftp-pane-head .where .material-symbols-outlined { font-size: 17px; color: var(--cyan); }
+  .sftp-pane-head .path {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sftp-cols {
+    display: grid;
+    grid-template-columns: 1fr 78px 130px;
+    padding: 7px 16px;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-faint);
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+  .sftp-files { flex: 1; overflow-y: auto; padding: 4px 6px; }
+  .sftp-files::-webkit-scrollbar { width: 5px; }
+  .sftp-files::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+  .f-row {
+    display: grid;
+    grid-template-columns: 1fr 78px 130px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12.5px;
+  }
+  .f-row:hover { background: rgba(255,255,255,0.03); }
+  .f-row.selected { background: var(--cyan-soft); }
+  .f-row .nm {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .f-row .nm .material-symbols-outlined { font-size: 17px; flex-shrink: 0; }
+  .f-row .nm .ic-dir { color: var(--cyan); }
+  .f-row .nm .ic-file { color: var(--text-faint); }
+  .f-row .nm .ic-arch { color: var(--amber); }
+  .f-row .sz, .f-row .dt {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Transfer queue strip (bottom) */
+  .transfer-strip {
+    border-top: 1px solid var(--line-strong);
+    background: var(--night-sea-soft);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .transfer-strip .material-symbols-outlined { font-size: 18px; color: var(--cyan); }
+  .transfer-strip .t-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .transfer-strip .progress {
+    flex: 1;
+    height: 5px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .transfer-strip .progress .bar {
+    height: 100%;
+    width: 64%;
+    background: linear-gradient(90deg, var(--cyan), var(--cyan-bright));
+    border-radius: 3px;
+  }
+  .transfer-strip .t-meta {
+    font-size: 10.5px;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+  }
+
+  /* ====== LOCK SCREEN ====== */
+  .t-lock {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center top, #122332 0%, var(--night-sea) 70%);
+  }
+  .t-lock .logo { width: 64px; height: 64px; margin-bottom: 26px; }
+  .t-lock .logo svg { width: 100%; height: 100%; }
+  .t-lock h1 { font-size: 22px; font-weight: 700; margin: 0 0 6px; }
+  .t-lock p { font-size: 13px; color: var(--text-dim); margin: 0 0 30px; }
+  .t-lock .form { width: 360px; display: flex; flex-direction: column; gap: 12px; }
+  .t-lock .field { position: relative; }
+  .t-lock .field input {
+    width: 100%;
+    background: var(--night-sea-soft);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 13px 14px 13px 44px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+  }
+  .t-lock .field input:focus { border-color: var(--cyan); background: var(--cyan-soft); }
+  .t-lock .field .material-symbols-outlined {
+    position: absolute;
+    left: 14px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 18px;
+    color: var(--text-faint);
+  }
+  .t-lock .actions { display: flex; gap: 9px; }
+  .t-lock .unlock {
+    flex: 1;
+    background: var(--cyan);
+    color: var(--deep-2);
+    border: none;
+    padding: 12px;
+    border-radius: 11px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .t-lock .unlock:hover { background: var(--cyan-bright); }
+  .t-lock .bio {
+    width: 50px;
+    border-radius: 11px;
+    border: 1px solid var(--line-strong);
+    background: rgba(255,255,255,0.03);
+    color: var(--cyan);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .t-lock .bio .material-symbols-outlined { font-size: 22px; }
+  .t-lock .footnote {
+    margin-top: 26px;
+    font-size: 11px;
+    color: var(--text-faint);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .t-lock .footnote .material-symbols-outlined { font-size: 13px; }
+
+  /* ====== SETTINGS POPOVER ====== */
+  .settings-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(4,10,16,0.55);
+    backdrop-filter: blur(5px);
+    z-index: 40;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .settings-backdrop.show { display: flex; }
+  .settings-pop {
+    width: 760px;
+    height: 560px;
+    background: var(--deep);
+    border: 1px solid var(--line-strong);
+    border-radius: 18px;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  }
+  .set-nav {
+    background: rgba(0,0,0,0.2);
+    border-right: 1px solid var(--line);
+    padding: 18px 10px;
+  }
+  .set-nav .title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--text-faint);
+    padding: 0 10px 12px;
+  }
+  .set-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .set-nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .set-nav-item.active { background: var(--cyan-soft); color: var(--cyan-bright); }
+  .set-nav-item .material-symbols-outlined { font-size: 17px; }
+  .set-body { padding: 24px 28px; overflow-y: auto; }
+  .set-body h3 { margin: 0 0 4px; font-size: 17px; font-weight: 700; }
+  .set-body > p { margin: 0 0 18px; font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+  .set-row2 {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 0;
+    border-top: 1px solid var(--line);
+  }
+  .set-row2:first-of-type { border-top: none; }
+  .set-row2 .lbl { font-size: 13.5px; font-weight: 500; margin-bottom: 3px; }
+  .set-row2 .dsc { font-size: 11.5px; color: var(--text-dim); line-height: 1.45; max-width: 360px; }
+  .toggle {
+    width: 40px; height: 22px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 11px;
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .toggle.on { background: var(--cyan); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: white;
+    transition: left 0.15s;
+  }
+  .toggle.on::after { left: 20px; }
+  .val {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .val.ok { color: var(--moss); }
+
+  /* ====== PROTO NAV ====== */
+  .proto-nav {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--deep);
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 9px 10px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    z-index: 300;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .proto-nav .proto-label {
+    padding-right: 8px;
+    color: var(--text-faint);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-size: 9.5px;
+    border-right: 1px solid var(--line);
+    margin-right: 4px;
+  }
+  .proto-nav button {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    padding: 6px 11px;
+    border-radius: 7px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .proto-nav button:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .proto-nav button.active { background: var(--cyan); color: var(--deep-2); border-color: var(--cyan); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position: absolute;">
+  <symbol id="skerry-logo" viewBox="0 0 32 32">
+    <path d="M 4 26 L 8 18 L 12 22 L 16 14 L 20 20 L 24 16 L 28 26 Z" fill="#0E2230" stroke="#2BBDEE" stroke-width="1.2" stroke-linejoin="round"/>
+    <rect x="14.5" y="6" width="3" height="10" fill="#0E2230" stroke="#2BBDEE" stroke-width="1"/>
+    <circle cx="16" cy="5" r="2" fill="#F2A65A"/>
+    <path d="M 10 5 L 22 5" stroke="#F2A65A" stroke-width="0.6" stroke-dasharray="0.5 1.5" opacity="0.7"/>
+  </symbol>
+</svg>
+
+<div class="tablet">
+
+  <!-- ============ LOCK ============ -->
+  <div class="screen" id="scr-lock">
+    <div class="status-strip"><span>9:41 · Thu Jun 11</span><span class="right"><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="t-lock">
+      <div class="logo"><svg><use href="#skerry-logo"/></svg></div>
+      <h1>Skerry is locked</h1>
+      <p>Unlock with Face ID or master password</p>
+      <div class="form">
+        <div class="field">
+          <span class="material-symbols-outlined">lock</span>
+          <input type="password" placeholder="Master password" />
+        </div>
+        <div class="actions">
+          <button class="unlock" onclick="showScreen('terminal')">Unlock</button>
+          <button class="bio" onclick="showScreen('terminal')" title="Face ID">
+            <span class="material-symbols-outlined">familiar_face_and_zone</span>
+          </button>
+        </div>
+      </div>
+      <div class="footnote">
+        <span class="material-symbols-outlined">shield_lock</span>
+        Master password never leaves this device
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TERMINAL WORKSPACE ============ -->
+  <div class="screen active" id="scr-terminal">
+    <div class="status-strip"><span>9:41 · Thu Jun 11</span><span class="right"><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="workspace">
+
+      <!-- Sidebar -->
+      <aside class="t-sidebar" id="sidebar">
+        <div class="sb-search">
+          <span class="material-symbols-outlined">search</span>
+          <input type="text" placeholder="Search hosts… ⌘K" />
+        </div>
+        <div class="sb-list">
+          <div class="sb-label">Connections<span class="add"><span class="material-symbols-outlined">create_new_folder</span></span></div>
+
+          <div class="sb-group-header" onclick="toggleGroup(this)">
+            <span class="material-symbols-outlined chev">expand_more</span>
+            <span class="material-symbols-outlined" style="font-size:16px;">folder_open</span>
+            Production
+            <span class="count">3</span>
+          </div>
+          <div class="sb-conns">
+            <div class="sb-conn active"><span class="status on"></span><span class="name">prod-web-01</span></div>
+            <div class="sb-conn"><span class="status on"></span><span class="name">prod-web-02</span></div>
+            <div class="sb-conn"><span class="status on"></span><span class="name">db-master</span><span class="material-symbols-outlined" title="via jump host">alt_route</span></div>
+          </div>
+
+          <div class="sb-group-header" onclick="toggleGroup(this)">
+            <span class="material-symbols-outlined chev">expand_more</span>
+            <span class="material-symbols-outlined" style="font-size:16px;">folder_open</span>
+            Homelab
+            <span class="count">4</span>
+          </div>
+          <div class="sb-conns">
+            <div class="sb-conn"><span class="status on"></span><span class="name">homelab-pi</span></div>
+            <div class="sb-conn"><span class="status warn"></span><span class="name">nas-truenas</span><span class="material-symbols-outlined" title="key changed">warning</span></div>
+            <div class="sb-conn"><span class="status off"></span><span class="name">router-opnsense</span></div>
+            <div class="sb-conn"><span class="status off"></span><span class="name">k3s-control</span></div>
+          </div>
+
+          <div class="sb-label" style="margin-top:8px;">Recent</div>
+          <div class="sb-conns">
+            <div class="sb-conn"><span class="material-symbols-outlined" style="font-size:14px;">history</span><span class="name">user@vps.example.com</span></div>
+          </div>
+        </div>
+        <div class="sb-footer">
+          <button class="sb-newconn"><span class="material-symbols-outlined">add_link</span>New connection</button>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="t-content">
+        <div class="tabs-row">
+          <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
+            <span class="material-symbols-outlined">dock_to_right</span>
+          </button>
+          <div class="s-tab active">
+            <span class="dot"></span><span class="name">prod-web-01</span>
+            <span class="close"><span class="material-symbols-outlined">close</span></span>
+          </div>
+          <div class="s-tab">
+            <span class="dot"></span><span class="name">db-master</span>
+            <span class="close"><span class="material-symbols-outlined">close</span></span>
+          </div>
+          <div class="s-tab">
+            <span class="dot idle"></span><span class="name">homelab-pi</span>
+            <span class="close"><span class="material-symbols-outlined">close</span></span>
+          </div>
+          <button class="new-tab"><span class="material-symbols-outlined">add</span></button>
+          <div class="tabs-actions">
+            <button class="act" id="splitBtn" onclick="toggleSplit()" title="Split view">
+              <span class="material-symbols-outlined">splitscreen_right</span>Split
+            </button>
+            <button class="act" onclick="showScreen('sftp')" title="SFTP">
+              <span class="material-symbols-outlined">folder</span>
+            </button>
+            <button class="act" title="Port forwarding">
+              <span class="material-symbols-outlined">cable</span>
+            </button>
+            <button class="act" onclick="openSettings()" title="Settings">
+              <span class="material-symbols-outlined">tune</span>
+            </button>
+            <button class="act" onclick="showScreen('lock')" title="Lock">
+              <span class="material-symbols-outlined">lock</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="panes">
+          <!-- Pane 1 -->
+          <div class="pane focused">
+            <div class="pane-head">
+              <span class="dot status on"></span>
+              <span class="host">root@prod-web-01</span>
+              <span>192.168.1.45:22 · aes256-gcm · 42 ms</span>
+              <span class="pane-acts">
+                <span class="material-symbols-outlined" title="SFTP">folder</span>
+                <span class="material-symbols-outlined" title="Disconnect">power_settings_new</span>
+              </span>
+            </div>
+            <div class="term">
+<span class="t-dim">Last login: Thu Jun 11 09:38:02 2026 from 10.0.0.15</span>
+<span class="t-prompt">root@prod-web-01</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">#</span> <span class="t-cmd">docker ps</span>
+<span class="t-out">CONTAINER ID  IMAGE          STATUS         PORTS                NAMES</span>
+<span class="t-out">f3a91c2e8b10  nginx:1.27     Up 12 days     0.0.0.0:80->80/tcp   web</span>
+<span class="t-out">7c44d0a1f9e2  app:2.4.1      Up 12 days     127.0.0.1:8000       api</span>
+<span class="t-out">b81e6f3a2c55  redis:7        Up 12 days     127.0.0.1:6379       cache</span>
+
+<span class="t-prompt">root@prod-web-01</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">#</span> <span class="t-cmd">df -h /</span>
+<span class="t-out">Filesystem   Size  Used Avail Use% Mounted on</span>
+<span class="t-out">/dev/sda1     50G   42G  </span><span class="t-warn">5.2G  87%</span><span class="t-out"> /</span>
+
+<span class="t-prompt">root@prod-web-01</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">#</span> <span class="cursor"></span>
+            </div>
+          </div>
+
+          <!-- Pane 2 (split view) -->
+          <div class="pane" id="pane2" style="display:none;">
+            <div class="pane-head">
+              <span class="dot status on"></span>
+              <span class="host">admin@db-master</span>
+              <span>10.0.2.11:22 · via jump-01 · 58 ms</span>
+              <span class="pane-acts">
+                <span class="material-symbols-outlined" title="SFTP">folder</span>
+                <span class="material-symbols-outlined" title="Disconnect">power_settings_new</span>
+              </span>
+            </div>
+            <div class="term">
+<span class="t-prompt">admin@db-master</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">$</span> <span class="t-cmd">pg_isready</span>
+<span class="t-out">/var/run/postgresql:5432 - </span><span class="t-ok">accepting connections</span>
+
+<span class="t-prompt">admin@db-master</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">$</span> <span class="t-cmd">psql -c "SELECT count(*) FROM pg_stat_activity;"</span>
+<span class="t-out"> count</span>
+<span class="t-out">-------</span>
+<span class="t-out">    47</span>
+<span class="t-out">(1 row)</span>
+
+<span class="t-prompt">admin@db-master</span><span class="t-host">:</span><span class="t-path">~</span><span class="t-host">$</span> <span class="cursor"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Touch key bar (visible when on-screen keyboard active; compact single row) -->
+        <div class="keybar">
+          <button class="kbtn">Esc</button>
+          <button class="kbtn mod" onclick="this.classList.toggle('locked')">Ctrl</button>
+          <button class="kbtn mod" onclick="this.classList.toggle('locked')">Alt</button>
+          <button class="kbtn">Tab</button>
+          <button class="kbtn"><span class="material-symbols-outlined">keyboard_arrow_up</span></button>
+          <button class="kbtn"><span class="material-symbols-outlined">keyboard_arrow_down</span></button>
+          <button class="kbtn"><span class="material-symbols-outlined">keyboard_arrow_left</span></button>
+          <button class="kbtn"><span class="material-symbols-outlined">keyboard_arrow_right</span></button>
+          <button class="kbtn">~</button>
+          <button class="kbtn">/</button>
+          <button class="kbtn">|</button>
+          <div class="spacer"></div>
+          <div class="hint">
+            <span class="material-symbols-outlined">keyboard_external_input</span>
+            hardware keyboard detected — bar auto-hides
+          </div>
+        </div>
+
+        <div class="statusbar">
+          <div class="l">
+            <span class="item ok"><span class="material-symbols-outlined">circle</span>Connected</span>
+            <span class="item"><span class="material-symbols-outlined">network_ping</span>42 ms</span>
+            <span class="item"><span class="material-symbols-outlined">arrow_upward</span>1.2 KB/s</span>
+            <span class="item"><span class="material-symbols-outlined">arrow_downward</span>8.4 KB/s</span>
+          </div>
+          <div class="r">
+            <span class="item"><span class="material-symbols-outlined">cloud_done</span>sync 2 min ago</span>
+            <span class="item">SSH-2.0-OpenSSH_8.9p1</span>
+            <span class="item">UTF-8</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SFTP DUAL-PANE ============ -->
+  <div class="screen" id="scr-sftp">
+    <div class="status-strip"><span>9:41 · Thu Jun 11</span><span class="right"><span class="material-symbols-outlined">wifi</span><span class="material-symbols-outlined">battery_5_bar</span></span></div>
+    <div class="workspace">
+      <div class="t-content">
+        <div class="tabs-row">
+          <button class="sidebar-toggle" onclick="showScreen('terminal')" title="Back to terminal">
+            <span class="material-symbols-outlined">arrow_back</span>
+          </button>
+          <div class="s-tab active">
+            <span class="dot"></span><span class="name">SFTP · prod-web-01</span>
+            <span class="close"><span class="material-symbols-outlined">close</span></span>
+          </div>
+          <div class="tabs-actions">
+            <button class="act"><span class="material-symbols-outlined">upload</span>Upload</button>
+            <button class="act"><span class="material-symbols-outlined">create_new_folder</span></button>
+            <button class="act"><span class="material-symbols-outlined">sync</span></button>
+          </div>
+        </div>
+
+        <div class="sftp-wrap">
+          <!-- Local pane -->
+          <div class="sftp-pane">
+            <div class="sftp-pane-head">
+              <span class="where"><span class="material-symbols-outlined">tablet_mac</span>This iPad</span>
+              <span class="path">On My iPad / Downloads</span>
+            </div>
+            <div class="sftp-cols"><span>Name</span><span>Size</span><span>Modified</span></div>
+            <div class="sftp-files">
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-dir">folder</span>..</span><span class="sz"></span><span class="dt"></span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-dir">folder</span>configs</span><span class="sz">—</span><span class="dt">Jun 10 21:14</span></div>
+              <div class="f-row selected"><span class="nm"><span class="material-symbols-outlined ic-arch">folder_zip</span>release-2.4.2.tar.gz</span><span class="sz">84 MB</span><span class="dt">Jun 11 08:55</span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-file">description</span>notes.md</span><span class="sz">3.1 KB</span><span class="dt">Jun 09 17:40</span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-file">image</span>diagram.png</span><span class="sz">412 KB</span><span class="dt">Jun 08 12:03</span></div>
+            </div>
+          </div>
+
+          <!-- Remote pane -->
+          <div class="sftp-pane">
+            <div class="sftp-pane-head">
+              <span class="where"><span class="material-symbols-outlined">dns</span>prod-web-01</span>
+              <span class="path">/var/www/app</span>
+            </div>
+            <div class="sftp-cols"><span>Name</span><span>Size</span><span>Modified</span></div>
+            <div class="sftp-files">
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-dir">folder</span>..</span><span class="sz"></span><span class="dt"></span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-dir">folder</span>static</span><span class="sz">—</span><span class="dt">Jun 09 14:21</span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-dir">folder</span>releases</span><span class="sz">—</span><span class="dt">Jun 11 02:00</span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-file">description</span>.env.production</span><span class="sz">1.2 KB</span><span class="dt">Jun 10 18:44</span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-file">data_object</span>config.json</span><span class="sz">4.8 KB</span><span class="dt">Jun 10 18:44</span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-arch">folder_zip</span>backup-2026-06-11.tar.gz</span><span class="sz">200 MB</span><span class="dt">Jun 11 02:05</span></div>
+              <div class="f-row"><span class="nm"><span class="material-symbols-outlined ic-file">terminal</span>deploy.sh</span><span class="sz">2.1 KB</span><span class="dt">Jun 08 11:02</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="transfer-strip">
+          <span class="material-symbols-outlined">upload</span>
+          <span class="t-name">release-2.4.2.tar.gz → prod-web-01:/var/www/app/releases</span>
+          <div class="progress"><div class="bar"></div></div>
+          <span class="t-meta">54 / 84 MB · 6.1 MB/s · ~5 s</span>
+        </div>
+
+        <div class="statusbar">
+          <div class="l">
+            <span class="item ok"><span class="material-symbols-outlined">circle</span>SFTP session active</span>
+            <span class="item"><span class="material-symbols-outlined">swap_vert</span>1 transfer in queue</span>
+          </div>
+          <div class="r">
+            <span class="item"><span class="material-symbols-outlined">cloud_done</span>sync 2 min ago</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS POPOVER ============ -->
+  <div class="settings-backdrop" id="settingsBackdrop" onclick="if(event.target===this)closeSettings()">
+    <div class="settings-pop">
+      <div class="set-nav">
+        <div class="title">Settings</div>
+        <div class="set-nav-item"><span class="material-symbols-outlined">person</span>Account</div>
+        <div class="set-nav-item active"><span class="material-symbols-outlined">sync</span>Sync</div>
+        <div class="set-nav-item"><span class="material-symbols-outlined">shield_lock</span>Security</div>
+        <div class="set-nav-item"><span class="material-symbols-outlined">keyboard</span>Keyboard</div>
+        <div class="set-nav-item"><span class="material-symbols-outlined">terminal</span>Terminal</div>
+        <div class="set-nav-item"><span class="material-symbols-outlined">palette</span>Appearance</div>
+        <div class="set-nav-item" style="opacity:0.6;"><span class="material-symbols-outlined">auto_awesome</span>AI · Phase 2</div>
+        <div class="set-nav-item"><span class="material-symbols-outlined">info</span>About</div>
+      </div>
+      <div class="set-body">
+        <h3>Sync</h3>
+        <p>End-to-end encrypted sync with your own server. The server only ever stores ciphertext — your master password never leaves this device.</p>
+        <div class="set-row2">
+          <div>
+            <div class="lbl">Sync server</div>
+            <div class="dsc">Self-hosted endpoint (Docker). Change requires re-pairing devices.</div>
+          </div>
+          <span class="val ok">sync.mylab.dev · connected</span>
+        </div>
+        <div class="set-row2">
+          <div>
+            <div class="lbl">Sync hosts &amp; groups</div>
+            <div class="dsc">Host entries, groups, ports, tags</div>
+          </div>
+          <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="set-row2">
+          <div>
+            <div class="lbl">Sync identities &amp; keys</div>
+            <div class="dsc">Private keys are wrapped with dataKey before upload. Hardware-backed keys (Secure Enclave, YubiKey) never sync — they are re-enrolled per device.</div>
+          </div>
+          <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="set-row2">
+          <div>
+            <div class="lbl">Sync known hosts</div>
+            <div class="dsc">Pinned server fingerprints, so a changed key warns on every device</div>
+          </div>
+          <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="set-row2">
+          <div>
+            <div class="lbl">Paired devices</div>
+            <div class="dsc">fedora-workstation · pixel-9 · this iPad</div>
+          </div>
+          <span class="val">3 devices</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Prototype quick-nav (not part of the product) -->
+<div class="proto-nav">
+  <span class="proto-label">Prototype · iPad 11″</span>
+  <button data-target="lock" onclick="showScreen('lock')">Lock</button>
+  <button data-target="terminal" onclick="showScreen('terminal')" class="active">Terminal</button>
+  <button onclick="showScreen('terminal'); setSplit(true)">Split view</button>
+  <button data-target="sftp" onclick="showScreen('sftp')">SFTP dual-pane</button>
+  <button onclick="showScreen('terminal'); openSettings()">Settings</button>
+</div>
+
+<script>
+  let split = false;
+
+  function showScreen(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('scr-' + name).classList.add('active');
+    document.querySelectorAll('.proto-nav button[data-target]').forEach(b =>
+      b.classList.toggle('active', b.dataset.target === name));
+  }
+
+  function setSplit(on) {
+    split = on;
+    document.getElementById('pane2').style.display = on ? 'flex' : 'none';
+    document.getElementById('splitBtn').classList.toggle('on', on);
+  }
+  function toggleSplit() { setSplit(!split); }
+
+  function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('hidden');
+  }
+
+  function toggleGroup(el) {
+    el.classList.toggle('collapsed');
+    el.nextElementSibling.classList.toggle('collapsed');
+  }
+
+  function openSettings() { document.getElementById('settingsBackdrop').classList.add('show'); }
+  function closeSettings() { document.getElementById('settingsBackdrop').classList.remove('show'); }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
+</script>
+
+</body>
+</html>
