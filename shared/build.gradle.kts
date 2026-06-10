@@ -45,5 +45,10 @@ kotlin {
                 implementation(libs.sshj)
             }
         }
+        val desktopTest by getting {
+            dependencies {
+                implementation(libs.sshd.core)
+            }
+        }
     }
 }
