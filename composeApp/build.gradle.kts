@@ -47,6 +47,9 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
         }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
