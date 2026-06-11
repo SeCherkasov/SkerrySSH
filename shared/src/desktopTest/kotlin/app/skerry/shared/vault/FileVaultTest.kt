@@ -197,6 +197,29 @@ class FileVaultTest {
     }
 
     @Test
+    fun `aad binds id and type with a separator so adjacent slots cannot collide`() {
+        // Без разделителя слоты ("aKNOWN_", HOST) и ("a", KNOWN_HOST) дают одинаковый AAD
+        // ("aKNOWN_HOST"), и blob одного слота прошёл бы AEAD в другом.
+        vault().apply {
+            create("master".toCharArray())
+            put("aKNOWN_", RecordType.HOST, "host-payload".encodeToByteArray())
+            lock()
+        }
+
+        val body = json.decodeFromString<VaultFileBody>(Files.readString(file))
+        val host = body.records.first { it.id == "aKNOWN_" }
+        val forged = host.copy(id = "a", type = RecordType.KNOWN_HOST)
+        Files.writeString(file, json.encodeToString(body.copy(records = body.records + forged)))
+
+        val v = vault()
+        assertEquals(UnlockResult.Success, v.unlock("master".toCharArray()))
+        // Подлинный слот по-прежнему расшифровывается...
+        assertContentEquals("host-payload".encodeToByteArray(), v.openPayload("aKNOWN_"))
+        // ...а blob того же слота под AAD соседнего ("a", KNOWN_HOST) — тег не проходит.
+        assertNull(v.openPayload("a"))
+    }
+
+    @Test
     fun `changePassword re-wraps the data key and keeps records`() {
         val v = vault().apply {
             create("old-pass".toCharArray())

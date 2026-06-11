@@ -6,7 +6,10 @@ import app.skerry.shared.host.FileHostStore
 import app.skerry.shared.ssh.FileKnownHostsStore
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
+import app.skerry.shared.vault.FileVault
+import app.skerry.shared.vault.LibsodiumVaultCrypto
 import app.skerry.ui.host.HostManagerController
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 
@@ -19,18 +22,35 @@ private fun configDir(): Path {
     return base.resolve("skerry")
 }
 
+/**
+ * Стабильный идентификатор устройства для записей vault (provenance + LWW будущего sync).
+ * Генерируется один раз и персистится в `device_id`, чтобы переживать перезапуски.
+ */
+private fun deviceId(dir: Path): String {
+    val file = dir.resolve("device_id")
+    if (Files.exists(file)) return Files.readString(file).trim()
+    Files.createDirectories(dir)
+    val id = UUID.randomUUID().toString()
+    Files.writeString(file, id)
+    return id
+}
+
 fun main() = application {
+    val dir = configDir()
     // TOFU: первый ключ хоста запоминается в known_hosts, при смене ключа — отказ.
     // Интерактивное подтверждение отпечатка появится с UI менеджера хостов.
-    val knownHosts = FileKnownHostsStore(configDir().resolve("known_hosts"))
+    val knownHosts = FileKnownHostsStore(dir.resolve("known_hosts"))
     val transport = SshjTransport(TofuHostKeyVerifier(knownHosts))
     // Менеджер хостов: профили в hosts.json рядом с known_hosts; id — случайный UUID.
-    val hostStore = FileHostStore(configDir().resolve("hosts.json"))
+    val hostStore = FileHostStore(dir.resolve("hosts.json"))
     val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
+    // Локальный зашифрованный vault: пока в граф добавлен, UI мастер-пароля — следующий шаг.
+    val vault = FileVault(dir.resolve("vault.json"), LibsodiumVaultCrypto(), deviceId(dir))
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault)
     Window(
         onCloseRequest = ::exitApplication,
         title = "Skerry",
     ) {
-        App(transport, hosts)
+        App(deps)
     }
 }
