@@ -47,7 +47,19 @@ AI under policy (вывод сервера = недоверенный источ
 
 ## Следующий шаг (с него начинать новую сессию)
 
-Интерактивный терминал на desktop: shell-канал с PTY в `SshTransport`/`SshjTransport`
-(сейчас есть только одноразовый exec), привязка к `TerminalSession`, минимальный
-терминальный UI в composeApp (JetBrains Mono через compose-resources, фон `terminalBg`).
-Следом — менеджер хостов с персистентным known-hosts (интерфейс `HostKeyVerifier` уже готов).
+Сделано и запушено: интерактивный терминал (PTY-канал + `TerminalSession` + UI, проводка к
+живому SSH через экран подключения), персистентный TOFU known-hosts, менеджер хостов
+(`Host`/`HostStore` + `FileHostStore` + desktop UI), а также **криптоядро vault** —
+контракт `VaultCrypto` (`commonMain`) + libsodium-реализация `LibsodiumVaultCrypto`
+(`desktopMain`, lazysodium-java): Argon2id(m=64MiB, t=3) → `MasterKey`, обёртка `DataKey`,
+XChaCha20-Poly1305 nonce-prefix; покрыто TDD (`desktopTest`).
+
+Высокоуровневый `Vault`-стор тоже готов: контракт `Vault` + `UnlockResult` + модель
+`VaultRecord`/`RecordType` (`commonMain`), файловый `FileVault` (`desktopMain`) — жизненный
+цикл create/unlock/lock, CRUD на открытом payload (seal/open с AAD=`id‖type` внутри, `dataKey`
+наружу не отдаётся), tombstone-удаление и `changePassword`; атомарность через commit-after-persist;
+покрыто TDD (16 тестов) + два ревью (`ecc:kotlin-reviewer`, `ecc:security-reviewer`).
+
+Дальше: UI мастер-пароля (экран создать/разблокировать vault), затем хранение паролей/ключей
+хостов в vault вместо ввода при коннекте (увязать `Host`/менеджер хостов с `Vault`/`VaultRecord`).
+Биометрия и паритет мобильных таргетов (`VaultCrypto`/`Vault` под Android/iOS) — следом.

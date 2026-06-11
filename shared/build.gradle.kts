@@ -47,6 +47,8 @@ kotlin {
         val desktopMain by getting {
             dependencies {
                 implementation(libs.sshj)
+                implementation(libs.lazysodium.java)
+                implementation(libs.jna)
             }
         }
         val desktopTest by getting {
