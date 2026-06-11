@@ -1,12 +1,11 @@
 package app.skerry.shared.vault
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.TestResult
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
-import java.nio.file.Files
-import java.nio.file.Path
-import kotlin.io.path.writeText
-import kotlin.test.AfterTest
-import kotlin.test.BeforeTest
+import okio.Path
+import okio.Path.Companion.toPath
+import okio.fakefilesystem.FakeFileSystem
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -17,31 +16,28 @@ import kotlin.test.assertTrue
 
 /**
  * Тесты файлового vault используют настоящий [IonspinVaultCrypto] (Argon2id), а не фейк —
- * это честная интеграция стора и крипто. Деривация дорогая, поэтому пароли короткие, а число
- * unlock/create в каждом тесте минимально.
+ * это честная интеграция стора и крипто. I/O идёт через in-memory [FakeFileSystem], поэтому
+ * тесты общие для всех таргетов (commonTest) и не трогают реальную ФС. Деривация дорогая,
+ * поэтому пароли короткие, а число unlock/create в каждом тесте минимально. libsodium требует
+ * асинхронной инициализации до первого вызова — каждый тест обёрнут в [vaultTest].
  */
 class FileVaultTest {
 
     private val crypto: VaultCrypto = IonspinVaultCrypto()
-    private val tempDir: Path = Files.createTempDirectory("skerry-vault")
-    private val file: Path get() = tempDir.resolve("vault.json")
+    private val fs = FakeFileSystem()
+    private val file: Path = "/vault.json".toPath()
     private val json = Json { ignoreUnknownKeys = true }
 
-    private fun vault() = FileVault(file, crypto, deviceId = "device-1")
+    private fun vault() = FileVault(file, crypto, deviceId = "device-1", fileSystem = fs, now = { TS })
 
-    @BeforeTest
-    fun initCrypto() {
-        // libsodium (ionspin) требует асинхронной инициализации до использования крипто; идемпотентна
-        runBlocking { initializeVaultCrypto() }
-    }
-
-    @AfterTest
-    fun cleanup() {
-        Files.walk(tempDir).sorted(Comparator.reverseOrder()).forEach(Files::delete)
+    /** Гарантирует инициализацию libsodium перед телом теста; init идемпотентен. */
+    private fun vaultTest(block: suspend () -> Unit): TestResult = runTest {
+        initializeVaultCrypto()
+        block()
     }
 
     @Test
-    fun `create writes a file and leaves the vault unlocked`() {
+    fun `create writes a file and leaves the vault unlocked`() = vaultTest {
         val v = vault()
         assertFalse(v.exists())
 
@@ -52,28 +48,28 @@ class FileVaultTest {
     }
 
     @Test
-    fun `unlock with the correct password succeeds on a fresh instance`() {
+    fun `unlock with the correct password succeeds on a fresh instance`() = vaultTest {
         vault().create("master".toCharArray())
 
         assertEquals(UnlockResult.Success, vault().unlock("master".toCharArray()))
     }
 
     @Test
-    fun `unlock with a wrong password is rejected`() {
+    fun `unlock with a wrong password is rejected`() = vaultTest {
         vault().create("master".toCharArray())
 
         assertEquals(UnlockResult.WrongPassword, vault().unlock("nope".toCharArray()))
     }
 
     @Test
-    fun `unlock of a corrupted file reports Corrupted`() {
-        file.writeText("{ this is not valid vault json")
+    fun `unlock of a corrupted file reports Corrupted`() = vaultTest {
+        fs.write(file) { writeUtf8("{ this is not valid vault json") }
 
         assertEquals(UnlockResult.Corrupted, vault().unlock("master".toCharArray()))
     }
 
     @Test
-    fun `crud throws while the vault is locked`() {
+    fun `crud throws while the vault is locked`() = vaultTest {
         val v = vault()
         v.create("master".toCharArray())
         v.lock()
@@ -85,7 +81,7 @@ class FileVaultTest {
     }
 
     @Test
-    fun `put then openPayload round-trips and persists across lock`() {
+    fun `put then openPayload round-trips and persists across lock`() = vaultTest {
         val payload = "192.168.1.45 root".encodeToByteArray()
         vault().apply {
             create("master".toCharArray())
@@ -99,7 +95,7 @@ class FileVaultTest {
     }
 
     @Test
-    fun `put with an existing id upserts and bumps version`() {
+    fun `put with an existing id upserts and bumps version`() = vaultTest {
         val v = vault().apply { create("master".toCharArray()) }
 
         v.put("host-1", RecordType.HOST, "v1".encodeToByteArray())
@@ -111,14 +107,14 @@ class FileVaultTest {
     }
 
     @Test
-    fun `openPayload of an unknown id is null`() {
+    fun `openPayload of an unknown id is null`() = vaultTest {
         val v = vault().apply { create("master".toCharArray()) }
 
         assertNull(v.openPayload("ghost"))
     }
 
     @Test
-    fun `remove leaves a tombstone with a bumped version`() {
+    fun `remove leaves a tombstone with a bumped version`() = vaultTest {
         val v = vault().apply {
             create("master".toCharArray())
             put("host-1", RecordType.HOST, "data".encodeToByteArray())
@@ -132,7 +128,20 @@ class FileVaultTest {
     }
 
     @Test
-    fun `remove of an already-deleted id does not bump version again`() {
+    fun `openPayload of a removed id is null`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("host-1", RecordType.HOST, "data".encodeToByteArray())
+        }
+
+        v.remove("host-1")
+
+        // tombstone сохраняет зашифрованный blob для sync, но открытым его не выдаёт.
+        assertNull(v.openPayload("host-1"))
+    }
+
+    @Test
+    fun `remove of an already-deleted id does not bump version again`() = vaultTest {
         val v = vault().apply {
             create("master".toCharArray())
             put("host-1", RecordType.HOST, "data".encodeToByteArray())
@@ -146,7 +155,7 @@ class FileVaultTest {
     }
 
     @Test
-    fun `put after remove resurrects the record`() {
+    fun `put after remove resurrects the record`() = vaultTest {
         val v = vault().apply {
             create("master".toCharArray())
             put("host-1", RecordType.HOST, "v1".encodeToByteArray())
@@ -162,7 +171,7 @@ class FileVaultTest {
     }
 
     @Test
-    fun `changePassword throws while the vault is locked`() {
+    fun `changePassword throws while the vault is locked`() = vaultTest {
         val v = vault().apply { create("master".toCharArray()); lock() }
 
         assertFailsWith<IllegalStateException> {
@@ -171,7 +180,7 @@ class FileVaultTest {
     }
 
     @Test
-    fun `remove of an unknown id is a no-op`() {
+    fun `remove of an unknown id is a no-op`() = vaultTest {
         val v = vault().apply {
             create("master".toCharArray())
             put("host-1", RecordType.HOST, "data".encodeToByteArray())
@@ -183,7 +192,7 @@ class FileVaultTest {
     }
 
     @Test
-    fun `swapping record blobs on disk is rejected by AAD binding`() {
+    fun `swapping record blobs on disk is rejected by AAD binding`() = vaultTest {
         vault().apply {
             create("master".toCharArray())
             put("a", RecordType.HOST, "payload-A".encodeToByteArray())
@@ -191,11 +200,11 @@ class FileVaultTest {
             lock()
         }
 
-        val body = json.decodeFromString<VaultFileBody>(Files.readString(file))
+        val body = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() })
         val a = body.records.first { it.id == "a" }
         val b = body.records.first { it.id == "b" }
         val tampered = body.copy(records = listOf(a.copy(blob = b.blob), b.copy(blob = a.blob)))
-        Files.writeString(file, json.encodeToString(tampered))
+        fs.write(file) { writeUtf8(json.encodeToString(tampered)) }
 
         val v = vault()
         assertEquals(UnlockResult.Success, v.unlock("master".toCharArray()))
@@ -205,7 +214,7 @@ class FileVaultTest {
     }
 
     @Test
-    fun `aad binds id and type with a separator so adjacent slots cannot collide`() {
+    fun `aad binds id and type with a separator so adjacent slots cannot collide`() = vaultTest {
         // Без разделителя слоты ("aKNOWN_", HOST) и ("a", KNOWN_HOST) дают одинаковый AAD
         // ("aKNOWN_HOST"), и blob одного слота прошёл бы AEAD в другом.
         vault().apply {
@@ -214,10 +223,10 @@ class FileVaultTest {
             lock()
         }
 
-        val body = json.decodeFromString<VaultFileBody>(Files.readString(file))
+        val body = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() })
         val host = body.records.first { it.id == "aKNOWN_" }
         val forged = host.copy(id = "a", type = RecordType.KNOWN_HOST)
-        Files.writeString(file, json.encodeToString(body.copy(records = body.records + forged)))
+        fs.write(file) { writeUtf8(json.encodeToString(body.copy(records = body.records + forged))) }
 
         val v = vault()
         assertEquals(UnlockResult.Success, v.unlock("master".toCharArray()))
@@ -228,7 +237,7 @@ class FileVaultTest {
     }
 
     @Test
-    fun `changePassword re-wraps the data key and keeps records`() {
+    fun `changePassword re-wraps the data key and keeps records`() = vaultTest {
         val v = vault().apply {
             create("old-pass".toCharArray())
             put("host-1", RecordType.HOST, "data".encodeToByteArray())
@@ -244,9 +253,13 @@ class FileVaultTest {
     }
 
     @Test
-    fun `changePassword with a wrong old password fails`() {
+    fun `changePassword with a wrong old password fails`() = vaultTest {
         val v = vault().apply { create("old-pass".toCharArray()) }
 
         assertFalse(v.changePassword("wrong".toCharArray(), "new-pass".toCharArray()))
+    }
+
+    private companion object {
+        const val TS = "2026-06-12T00:00:00Z"
     }
 }

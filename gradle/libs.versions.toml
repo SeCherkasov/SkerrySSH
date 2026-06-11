@@ -20,6 +20,10 @@ sshj = "0.40.0"
 sshd = "2.18.0"
 # мультиплатформенный libsodium-биндинг (KMP, Argon2id + XChaCha20-Poly1305) для единого VaultCrypto
 ionspin-libsodium = "0.9.5"
+# okio — кроссплатформенный файловый I/O за FileSystem (FileVault в commonMain, FakeFileSystem в тестах)
+okio = "3.17.0"
+# atomicfu — мультиплатформенные локи (kotlinx.atomicfu.locks) вместо JVM-only @Synchronized
+atomicfu = "0.32.1"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
@@ -41,6 +45,9 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
 sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }
 ionspin-libsodium = { module = "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings", version.ref = "ionspin-libsodium" }
+okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okio" }
+kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

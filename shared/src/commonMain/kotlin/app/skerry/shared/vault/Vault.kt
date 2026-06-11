@@ -41,7 +41,7 @@ interface Vault {
     /** Метаданные всех записей, включая tombstone (`deleted=true`); вызывающий фильтрует сам. */
     fun records(): List<VaultRecord>
 
-    /** Расшифрованный payload записи; `null` если записи нет или blob не проходит AEAD. */
+    /** Расшифрованный payload записи; `null` если записи нет, она удалена (tombstone) или blob не проходит AEAD. */
     fun openPayload(id: String): ByteArray?
 
     /**

@@ -13,8 +13,11 @@ import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import kotlinx.coroutines.runBlocking
+import okio.FileSystem
+import okio.Path.Companion.toPath
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -53,7 +56,12 @@ fun main() {
         val hostStore = FileHostStore(dir.resolve("hosts.json"))
         val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
         // Локальный зашифрованный vault: гейт мастер-пароля (App → VaultGate) закрывает им весь UI.
-        val vault = FileVault(dir.resolve("vault.json"), IonspinVaultCrypto(), deviceId(dir))
+        val vault = FileVault(
+            dir.resolve("vault.json").toString().toPath(),
+            IonspinVaultCrypto(),
+            deviceId(dir),
+            FileSystem.SYSTEM,
+        ) { Instant.now().toString() }
         // Переиспользуемые секреты (identity) хранятся в том же vault как записи IDENTITY.
         val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
         val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities)

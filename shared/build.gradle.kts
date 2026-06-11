@@ -41,10 +41,16 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             // единый VaultCrypto на всех таргетах (Argon2id + XChaCha20-Poly1305)
             implementation(libs.ionspin.libsodium)
+            // api: okio.Path/FileSystem — в публичном конструкторе FileVault (commonMain)
+            api(libs.okio)
+            // мультиплатформенные локи вместо JVM-only @Synchronized (деталь реализации FileVault)
+            implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+            // in-memory FileSystem для тестов FileVault без реальной ФС
+            implementation(libs.okio.fakefilesystem)
         }
         val desktopMain by getting {
             dependencies {

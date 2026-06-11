@@ -1,11 +1,12 @@
 package app.skerry.shared.vault
 
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardCopyOption
-import java.time.Instant
+import okio.FileSystem
+import okio.Path
+import okio.Path.Companion.toPath
 
 /** Открытая часть файла vault: версия формата и материал для деривации/обёртки dataKey. */
 @Serializable
@@ -23,34 +24,39 @@ internal data class VaultFileBody(
 )
 
 /**
- * Файловый [Vault] (desktop). По образцу [app.skerry.shared.host.FileHostStore]: in-memory кеш
- * записей, файл переписывается целиком атомарно (tmp + ATOMIC_MOVE); битый файл при unlock —
- * [UnlockResult.Corrupted]. Жизненный цикл добавляет `dataKey` в памяти — он есть только между
- * [unlock]/[create] и [lock] и наружу не выходит.
+ * Файловый [Vault] на okio — один и тот же код для desktop (JVM), Android и iOS: I/O спрятан за
+ * [FileSystem] (десктоп/мобайл подают `FileSystem.SYSTEM`, тесты — `FakeFileSystem`). По образцу
+ * [app.skerry.shared.host.FileHostStore]: in-memory кеш записей, файл переписывается целиком
+ * атомарно (tmp + [FileSystem.atomicMove]); битый файл при unlock — [UnlockResult.Corrupted].
+ * Жизненный цикл добавляет `dataKey` в памяти — он есть только между [unlock]/[create] и [lock] и
+ * наружу не выходит. Метку времени записей даёт [now] (инжектится — нет привязки к платформенным
+ * часам в commonMain; тесты передают детерминированную заглушку).
  *
  * Атомарность состояния: мутаторы сначала записывают новый снимок на диск ([writeFile]) и лишь
  * **после** успеха коммитят его в поля. Если запись упала — кеш, `meta` и `dataKey` остаются
  * прежними, файл не рассинхронизируется. Все публичные методы синхронизированы (vault зовут из
- * UI-корутины и потенциально из фонового sync). Переданные пароли затираются.
+ * UI-корутины и потенциально из фонового sync) через мультиплатформенный [SynchronizedObject].
+ * Переданные пароли затираются.
  */
 class FileVault(
     private val path: Path,
     private val crypto: VaultCrypto,
     private val deviceId: String,
+    private val fileSystem: FileSystem,
+    private val now: () -> String,
 ) : Vault {
 
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    private val lock = SynchronizedObject()
     private var dataKey: DataKey? = null
     private var meta: VaultMeta? = null
     private val records = mutableListOf<VaultRecord>()
 
-    override fun exists(): Boolean = Files.exists(path)
+    override fun exists(): Boolean = fileSystem.exists(path)
 
-    @get:Synchronized
-    override val isUnlocked: Boolean get() = dataKey != null
+    override val isUnlocked: Boolean get() = synchronized(lock) { dataKey != null }
 
-    @Synchronized
-    override fun create(password: CharArray) {
+    override fun create(password: CharArray): Unit = synchronized(lock) {
         try {
             val salt = crypto.newSalt()
             val masterKey = crypto.deriveMasterKey(password, salt)
@@ -73,49 +79,47 @@ class FileVault(
         }
     }
 
-    @Synchronized
-    override fun unlock(password: CharArray): UnlockResult {
+    override fun unlock(password: CharArray): UnlockResult = synchronized(lock) {
         try {
-            val body = runCatching { json.decodeFromString<VaultFileBody>(Files.readString(path)) }
-                .getOrElse { return UnlockResult.Corrupted }
+            val body = runCatching {
+                json.decodeFromString<VaultFileBody>(fileSystem.read(path) { readUtf8() })
+            }.getOrElse { return@synchronized UnlockResult.Corrupted }
             val masterKey = crypto.deriveMasterKey(password, body.meta.salt)
             val unwrapped = crypto.unwrapDataKey(masterKey, body.meta.wrappedDataKey)
             masterKey.bytes.fill(0)
-            if (unwrapped == null) return UnlockResult.WrongPassword
+            if (unwrapped == null) return@synchronized UnlockResult.WrongPassword
             dataKey?.bytes?.fill(0) // повторный unlock не должен осиротить прежний ключ
             dataKey = unwrapped
             meta = body.meta
             records.clear()
             records.addAll(body.records)
-            return UnlockResult.Success
+            UnlockResult.Success
         } finally {
             password.fill(' ')
         }
     }
 
-    @Synchronized
-    override fun lock() {
+    override fun lock(): Unit = synchronized(lock) {
         dataKey?.bytes?.fill(0)
         dataKey = null
         meta = null
         records.clear()
     }
 
-    @Synchronized
-    override fun records(): List<VaultRecord> {
+    override fun records(): List<VaultRecord> = synchronized(lock) {
         requireUnlocked()
-        return records.toList()
+        records.toList()
     }
 
-    @Synchronized
-    override fun openPayload(id: String): ByteArray? {
+    override fun openPayload(id: String): ByteArray? = synchronized(lock) {
         val key = requireUnlocked()
-        val record = records.firstOrNull { it.id == id } ?: return null
-        return crypto.open(key, record.blob, aad(record.id, record.type))
+        val record = records.firstOrNull { it.id == id } ?: return@synchronized null
+        // tombstone не отдаёт payload: blob удалённой записи сохранён для sync, но наружу не выходит.
+        if (record.deleted) return@synchronized null
+        crypto.open(key, record.blob, aad(record.id, record.type))
     }
 
-    @Synchronized
-    override fun put(id: String, type: RecordType, payload: ByteArray) {
+    override fun put(id: String, type: RecordType, payload: ByteArray): Unit = synchronized(lock) {
         val key = requireUnlocked()
         val currentMeta = meta ?: error("unlocked vault has no metadata")
         val blob = crypto.seal(key, payload, aad(id, type))
@@ -129,22 +133,22 @@ class FileVault(
         records.clear(); records.addAll(updated)
     }
 
-    @Synchronized
-    override fun remove(id: String) {
+    override fun remove(id: String): Unit = synchronized(lock) {
         requireUnlocked()
         val currentMeta = meta ?: error("unlocked vault has no metadata")
         val index = records.indexOfFirst { it.id == id }
-        if (index < 0) return
+        if (index < 0) return@synchronized
         val current = records[index]
-        if (current.deleted) return
+        if (current.deleted) return@synchronized
+        // blob сохраняется в tombstone намеренно: ciphertext нужен LWW-sync, чтобы донести удаление
+        // до других устройств (открытым он всё равно не выдаётся — см. openPayload). Не очищать.
         val tombstone = current.copy(deleted = true, version = current.version + 1, updatedAt = now())
         val updated = records.toMutableList().also { it[index] = tombstone }
         writeFile(currentMeta, updated)
         records.clear(); records.addAll(updated)
     }
 
-    @Synchronized
-    override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean {
+    override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = synchronized(lock) {
         try {
             val currentMeta = meta
             val key = dataKey
@@ -152,7 +156,7 @@ class FileVault(
             val oldMaster = crypto.deriveMasterKey(oldPassword, currentMeta.salt)
             val verified = crypto.unwrapDataKey(oldMaster, currentMeta.wrappedDataKey)
             oldMaster.bytes.fill(0)
-            if (verified == null) return false
+            if (verified == null) return@synchronized false
             verified.bytes.fill(0) // нужна была только проверка старого пароля
             val newSalt = crypto.newSalt()
             val newMaster = crypto.deriveMasterKey(newPassword, newSalt)
@@ -161,7 +165,7 @@ class FileVault(
             val newMeta = currentMeta.copy(salt = newSalt, wrappedDataKey = newWrapped)
             writeFile(newMeta, records.toList()) // упадёт — meta не подменяется
             meta = newMeta
-            return true
+            true
         } finally {
             oldPassword.fill(' ')
             newPassword.fill(' ')
@@ -171,22 +175,32 @@ class FileVault(
     private fun requireUnlocked(): DataKey =
         dataKey ?: throw IllegalStateException("vault is locked")
 
-    /** Атомарно записать снимок vault. Чистая функция от аргументов — поля не читает и не пишет. */
+    /**
+     * Атомарно записать снимок vault. Чистая функция от аргументов — поля не читает и не пишет.
+     * [FileSystem.atomicMove] заменяет существующую цель на всех таргетах Skerry (okio: NIO —
+     * `ATOMIC_MOVE+REPLACE_EXISTING`; legacy/native POSIX `rename(2)`; `FakeFileSystem`), поэтому
+     * отдельного «move с перезаписью» не нужно. Если move не поддержан — исключение всплывает, а
+     * поля остаются прежними (коммит идёт после persist): данные не теряются, ошибка видна выше.
+     */
     private fun writeFile(meta: VaultMeta, records: List<VaultRecord>) {
-        path.parent?.let { Files.createDirectories(it) }
-        val tmp = path.resolveSibling("${path.fileName}.tmp")
-        Files.writeString(tmp, json.encodeToString(VaultFileBody(meta, records)))
-        runCatching { Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE) }
-            .onFailure { Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING) }
+        path.parent?.let { fileSystem.createDirectories(it) }
+        val tmp = path.parent?.resolve("${path.name}.tmp") ?: "${path.name}.tmp".toPath()
+        fileSystem.write(tmp) { writeUtf8(json.encodeToString(VaultFileBody(meta, records))) }
+        fileSystem.atomicMove(tmp, path)
     }
 
-    /** Стабильный AAD слота записи: `id␟type` (␟ = U+001F). Привязывает blob к id/типу. */
+    /**
+     * Стабильный AAD слота записи: `id` + [AAD_SEP] + `type.name`. Привязывает blob к id/типу,
+     * чтобы запись нельзя было подставить в чужой слот (и наоборот). Разделитель вынесен в
+     * константу с явным escape, чтобы он был виден в исходнике и не потерялся при правке.
+     */
     private fun aad(id: String, type: RecordType): ByteArray =
-        "$id${type.name}".encodeToByteArray()
-
-    private fun now(): String = Instant.now().toString()
+        "$id$AAD_SEP${type.name}".encodeToByteArray()
 
     private companion object {
         const val FORMAT_VERSION = 1
+
+        /** Unit Separator (U+001F) между id и типом в AAD. Явный escape — управляющий байт 0x1F. */
+        const val AAD_SEP = ""
     }
 }
