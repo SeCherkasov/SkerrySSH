@@ -3,6 +3,7 @@ package app.skerry.ui
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.Vault
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.identity.IdentityManagerController
 
 /**
  * Граф зависимостей приложения, собираемый платформенной точкой входа и подаваемый в [App].
@@ -16,4 +17,5 @@ data class AppDependencies(
     val transport: SshTransport? = null,
     val hosts: HostManagerController? = null,
     val vault: Vault? = null,
+    val identities: IdentityManagerController? = null,
 )

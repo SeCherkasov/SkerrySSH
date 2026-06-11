@@ -6,6 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.skerry.shared.platformName
@@ -41,10 +42,12 @@ fun App(deps: AppDependencies = AppDependencies()) {
 
 @Composable
 private fun MainContent(deps: AppDependencies, onLock: (() -> Unit)?) {
+    // Сюда попадаем уже за гейтом (vault разблокирован) — подгружаем секреты из vault.
+    LaunchedEffect(deps.identities) { deps.identities?.reload() }
     val transport = deps.transport
     val hosts = deps.hosts
     if (transport != null && hosts != null) {
-        HostManagerScreen(transport, hosts, onLock = onLock)
+        HostManagerScreen(transport, hosts, identities = deps.identities, onLock = onLock)
     } else if (transport != null) {
         ConnectionScreen(transport)
     } else {

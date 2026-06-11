@@ -63,7 +63,7 @@ class ConnectionController(
     private var connection: SshConnection? = null
     private var sessionScope: CoroutineScope? = null
 
-    fun connect(target: SshTarget, password: String) {
+    fun connect(target: SshTarget, auth: SshAuth) {
         // Стартуем только из формы: пока идёт подключение или есть открытая сессия,
         // повторный connect игнорируется — иначе можно утечь scope и соединение.
         if (uiState !is ConnectionUiState.Form) return
@@ -71,7 +71,7 @@ class ConnectionController(
         connectJob = scope.launch {
             var conn: SshConnection? = null
             try {
-                conn = transport.connect(target, SshAuth.Password(password))
+                conn = transport.connect(target, auth)
                 ensureActive()
                 val channel = conn.openShell()
                 ensureActive()

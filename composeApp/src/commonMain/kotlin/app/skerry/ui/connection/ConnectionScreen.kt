@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.ui.terminal.TerminalScreen
@@ -46,7 +47,7 @@ fun ConnectionScreen(transport: SshTransport, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         when (val state = controller.uiState) {
             is ConnectionUiState.Form -> ConnectionForm(
-                onConnect = { target, password -> controller.connect(target, password) },
+                onConnect = { target, password -> controller.connect(target, SshAuth.Password(password)) },
             )
 
             is ConnectionUiState.Connecting -> ConnectingIndicator()

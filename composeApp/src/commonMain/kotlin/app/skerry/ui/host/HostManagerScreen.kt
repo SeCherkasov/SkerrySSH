@@ -21,6 +21,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -43,10 +45,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vault.Identity
+import app.skerry.shared.vault.IdentityAuth
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.identity.IdentityManagerController
+import app.skerry.ui.identity.IdentityManagerPanel
+import app.skerry.ui.identity.kindLabel
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.theme.SkerryColors
 
@@ -65,6 +73,7 @@ fun HostManagerScreen(
     transport: SshTransport,
     hosts: HostManagerController,
     modifier: Modifier = Modifier,
+    identities: IdentityManagerController? = null,
     onLock: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -78,6 +87,7 @@ fun HostManagerScreen(
     var selectedId by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<HostDraft?>(null) }
     var activeHostId by remember { mutableStateOf<String?>(null) }
+    var managingIdentities by remember { mutableStateOf(false) }
 
     val state = connection.uiState
     val sessionBusy = state is ConnectionUiState.Connecting || state is ConnectionUiState.Connected
@@ -88,13 +98,18 @@ fun HostManagerScreen(
             selectedId = selectedId,
             activeHostId = activeHostId,
             enabled = !sessionBusy,
-            onSelect = { id -> selectedId = id; editing = null },
-            onNew = { selectedId = null; editing = HostDraft(label = "", address = "", username = "") },
+            onSelect = { id -> selectedId = id; editing = null; managingIdentities = false },
+            onNew = { selectedId = null; editing = HostDraft(label = "", address = "", username = ""); managingIdentities = false },
+            onManageIdentities = identities?.let { { managingIdentities = true } },
             onLock = onLock,
         )
         Box(Modifier.fillMaxHeight().width(1.dp).background(SkerryColors.lineStrong))
 
         Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+            if (managingIdentities && identities != null) {
+                IdentityManagerPanel(identities, onClose = { managingIdentities = false })
+                return@Box
+            }
             when (state) {
                 is ConnectionUiState.Connecting -> ConnectingIndicator()
 
@@ -121,6 +136,7 @@ fun HostManagerScreen(
                     when {
                         draft != null -> HostEditor(
                             draft = draft,
+                            identities = identities?.identities ?: emptyList(),
                             onSave = { saved ->
                                 selectedId = hosts.save(saved)
                                 editing = null
@@ -137,9 +153,10 @@ fun HostManagerScreen(
 
                         selected != null -> HostConnectPanel(
                             host = selected,
-                            onConnect = { password ->
+                            identity = identities?.find(selected.identityId),
+                            onConnect = { auth ->
                                 activeHostId = selected.id
-                                connection.connect(selected.toTarget(), password)
+                                connection.connect(selected.toTarget(), auth)
                             },
                             onEdit = { editing = selected.toDraft() },
                             onDelete = {
@@ -176,6 +193,7 @@ private fun HostSidebar(
     enabled: Boolean,
     onSelect: (String) -> Unit,
     onNew: () -> Unit,
+    onManageIdentities: (() -> Unit)?,
     onLock: (() -> Unit)?,
 ) {
     Column(Modifier.width(248.dp).fillMaxHeight().background(SkerryColors.deep2)) {
@@ -221,6 +239,16 @@ private fun HostSidebar(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
             Text("+ Новый хост")
+        }
+        // Управление переиспользуемыми секретами доступно, только когда vault подключён.
+        if (onManageIdentities != null) {
+            TextButton(
+                onClick = onManageIdentities,
+                enabled = enabled,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text("Ключи и пароли", color = SkerryColors.textDim)
+            }
         }
         // Кнопка ручной блокировки vault видна только когда гейт активен (onLock != null).
         // Заблокировать можно и при живой сессии — teardown сделает DisposableEffect content.
@@ -271,7 +299,8 @@ private fun HostRow(
 @Composable
 private fun HostConnectPanel(
     host: Host,
-    onConnect: (String) -> Unit,
+    identity: Identity?,
+    onConnect: (SshAuth) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -286,20 +315,43 @@ private fun HostConnectPanel(
             style = MaterialTheme.typography.bodyMedium,
             color = SkerryColors.textDim,
         )
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Пароль") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(
-            onClick = { onConnect(password) },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Подключиться")
+        if (identity != null) {
+            // Секрет привязан в редакторе хоста — подключаемся без ввода.
+            Text(
+                "Секрет: ${identity.label} · ${identity.auth.kindLabel()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = SkerryColors.textDim,
+            )
+            Button(onClick = { onConnect(identity.toSshAuth()) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Подключиться")
+            }
+        } else {
+            // identityId был привязан, но секрет в vault не найден (удалён) — предупреждаем,
+            // не выдавая молча форму пароля как будто секрет и не настраивали.
+            if (host.identityId != null) {
+                Text(
+                    "Привязанный секрет не найден — удалён из хранилища. Введите пароль или " +
+                        "переназначьте секрет в редакторе хоста.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Пароль") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = { onConnect(SshAuth.Password(password)) },
+                enabled = password.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Подключиться")
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) { Text("Изменить") }
@@ -308,9 +360,15 @@ private fun HostConnectPanel(
     }
 }
 
+private fun Identity.toSshAuth(): SshAuth = when (val a = auth) {
+    is IdentityAuth.Password -> SshAuth.Password(a.password)
+    is IdentityAuth.PrivateKey -> SshAuth.PublicKey(a.privateKeyPem, a.passphrase)
+}
+
 @Composable
 private fun HostEditor(
     draft: HostDraft,
+    identities: List<Identity>,
     onSave: (HostDraft) -> Unit,
     onCancel: () -> Unit,
     onDelete: (() -> Unit)?,
@@ -320,6 +378,7 @@ private fun HostEditor(
     var port by remember(draft) { mutableStateOf(draft.port.toString()) }
     var username by remember(draft) { mutableStateOf(draft.username) }
     var group by remember(draft) { mutableStateOf(draft.group ?: "") }
+    var identityId by remember(draft) { mutableStateOf(draft.identityId) }
 
     val portNumber = port.toIntOrNull()?.takeIf { it in 1..65535 }
     val canSave = label.isNotBlank() && address.isNotBlank() && username.isNotBlank() && portNumber != null
@@ -370,6 +429,7 @@ private fun HostEditor(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        IdentityPicker(identities = identities, selectedId = identityId, onPick = { identityId = it })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = {
@@ -381,6 +441,7 @@ private fun HostEditor(
                                 port = portNumber,
                                 username = username.trim(),
                                 group = group.trim().ifBlank { null },
+                                identityId = identityId,
                             ),
                         )
                     }
@@ -395,6 +456,33 @@ private fun HostEditor(
         if (onDelete != null) {
             TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
                 Text("Удалить", color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+@Composable
+private fun IdentityPicker(identities: List<Identity>, selectedId: String?, onPick: (String?) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = identities.firstOrNull { it.id == selectedId }?.label?.ifBlank { "(без имени)" }
+        ?: "Пароль при подключении"
+    Column(Modifier.fillMaxWidth()) {
+        Text("Секрет", style = MaterialTheme.typography.labelSmall, color = SkerryColors.textFaint)
+        Box {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(selectedLabel, color = SkerryColors.text)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("Пароль при подключении") },
+                    onClick = { onPick(null); expanded = false },
+                )
+                identities.forEach { identity ->
+                    DropdownMenuItem(
+                        text = { Text(identity.label.ifBlank { "(без имени)" }) },
+                        onClick = { onPick(identity.id); expanded = false },
+                    )
+                }
             }
         }
     }

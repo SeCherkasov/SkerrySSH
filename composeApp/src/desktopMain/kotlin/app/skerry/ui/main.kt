@@ -7,8 +7,10 @@ import app.skerry.shared.ssh.FileKnownHostsStore
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.FileVault
+import app.skerry.shared.vault.IdentityStore
 import app.skerry.shared.vault.LibsodiumVaultCrypto
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.identity.IdentityManagerController
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -46,7 +48,9 @@ fun main() = application {
     val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
     // Локальный зашифрованный vault: гейт мастер-пароля (App → VaultGate) закрывает им весь UI.
     val vault = FileVault(dir.resolve("vault.json"), LibsodiumVaultCrypto(), deviceId(dir))
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault)
+    // Переиспользуемые секреты (identity) хранятся в том же vault как записи IDENTITY.
+    val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities)
     Window(
         onCloseRequest = ::exitApplication,
         title = "Skerry",

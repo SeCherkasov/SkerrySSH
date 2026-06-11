@@ -50,7 +50,7 @@ class ConnectionControllerTest {
         val channel = FakeShellChannel()
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(channel)))
 
-        controller.connect(target, "pw")
+        controller.connect(target, SshAuth.Password("pw"))
 
         val state = controller.uiState
         assertIs<ConnectionUiState.Connected>(state)
@@ -64,7 +64,7 @@ class ConnectionControllerTest {
         val transport = FakeSshTransport(error = SshAuthenticationException("нет доступа"))
         val (controller, scope) = controllerWith(transport)
 
-        controller.connect(target, "pw")
+        controller.connect(target, SshAuth.Password("pw"))
 
         val state = controller.uiState
         assertIs<ConnectionUiState.Error>(state)
@@ -77,7 +77,7 @@ class ConnectionControllerTest {
         val gate = CompletableDeferred<Unit>()
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel()), gate = gate))
 
-        controller.connect(target, "pw")
+        controller.connect(target, SshAuth.Password("pw"))
         assertEquals(ConnectionUiState.Connecting, controller.uiState)
 
         gate.complete(Unit)
@@ -89,7 +89,7 @@ class ConnectionControllerTest {
     fun `disconnect returns to Form and disconnects connection`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, "pw")
+        controller.connect(target, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         controller.disconnect()
@@ -105,12 +105,12 @@ class ConnectionControllerTest {
         val conn = CountingSshConnection(firstChannel)
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
 
-        controller.connect(target, "pw")
+        controller.connect(target, SshAuth.Password("pw"))
         val connected = controller.uiState
         assertIs<ConnectionUiState.Connected>(connected)
 
         // Повторный connect из Connected не должен открывать второй shell/сессию.
-        controller.connect(target, "pw")
+        controller.connect(target, SshAuth.Password("pw"))
 
         assertEquals(connected, controller.uiState)
         assertEquals(1, conn.openShellCalls)
@@ -120,7 +120,7 @@ class ConnectionControllerTest {
     @Test
     fun `dismissError returns to Form`() = runTest {
         val (controller, scope) = controllerWith(FakeSshTransport(error = SshAuthenticationException("x")))
-        controller.connect(target, "pw")
+        controller.connect(target, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Error>(controller.uiState)
 
         controller.dismissError()
