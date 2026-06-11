@@ -19,6 +19,7 @@ data class HostDraft(
     val port: Int = 22,
     val username: String,
     val group: String? = null,
+    val identityId: String? = null,
 )
 
 /**
@@ -55,6 +56,7 @@ class HostManagerController(
                 port = draft.port,
                 username = draft.username,
                 group = draft.group,
+                identityId = draft.identityId,
             ),
         )
         hosts = store.all()

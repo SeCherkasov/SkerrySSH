@@ -165,6 +165,7 @@ private fun Host.toDraft() = HostDraft(
     port = port,
     username = username,
     group = group,
+    identityId = identityId,
 )
 
 @Composable
