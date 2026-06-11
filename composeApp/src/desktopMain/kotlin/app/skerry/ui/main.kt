@@ -8,9 +8,11 @@ import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IdentityStore
-import app.skerry.shared.vault.LibsodiumVaultCrypto
+import app.skerry.shared.vault.IonspinVaultCrypto
+import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
+import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -37,24 +39,29 @@ private fun deviceId(dir: Path): String {
     return id
 }
 
-fun main() = application {
-    val dir = configDir()
-    // TOFU: первый ключ хоста запоминается в known_hosts, при смене ключа — отказ.
-    // Интерактивное подтверждение отпечатка появится с UI менеджера хостов.
-    val knownHosts = FileKnownHostsStore(dir.resolve("known_hosts"))
-    val transport = SshjTransport(TofuHostKeyVerifier(knownHosts))
-    // Менеджер хостов: профили в hosts.json рядом с known_hosts; id — случайный UUID.
-    val hostStore = FileHostStore(dir.resolve("hosts.json"))
-    val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
-    // Локальный зашифрованный vault: гейт мастер-пароля (App → VaultGate) закрывает им весь UI.
-    val vault = FileVault(dir.resolve("vault.json"), LibsodiumVaultCrypto(), deviceId(dir))
-    // Переиспользуемые секреты (identity) хранятся в том же vault как записи IDENTITY.
-    val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities)
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = "Skerry",
-    ) {
-        App(deps)
+fun main() {
+    // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
+    // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
+    runBlocking { initializeVaultCrypto() }
+    application {
+        val dir = configDir()
+        // TOFU: первый ключ хоста запоминается в known_hosts, при смене ключа — отказ.
+        // Интерактивное подтверждение отпечатка появится с UI менеджера хостов.
+        val knownHosts = FileKnownHostsStore(dir.resolve("known_hosts"))
+        val transport = SshjTransport(TofuHostKeyVerifier(knownHosts))
+        // Менеджер хостов: профили в hosts.json рядом с known_hosts; id — случайный UUID.
+        val hostStore = FileHostStore(dir.resolve("hosts.json"))
+        val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
+        // Локальный зашифрованный vault: гейт мастер-пароля (App → VaultGate) закрывает им весь UI.
+        val vault = FileVault(dir.resolve("vault.json"), IonspinVaultCrypto(), deviceId(dir))
+        // Переиспользуемые секреты (identity) хранятся в том же vault как записи IDENTITY.
+        val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
+        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities)
+        Window(
+            onCloseRequest = ::exitApplication,
+            title = "Skerry",
+        ) {
+            App(deps)
+        }
     }
 }

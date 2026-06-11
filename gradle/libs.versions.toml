@@ -18,9 +18,8 @@ logback = "1.5.18"
 sshj = "0.40.0"
 # встроенный SSH-сервер только для тестов SshjTransport; 3.x ещё в milestone
 sshd = "2.18.0"
-# libsodium-биндинг (Argon2id + XChaCha20-Poly1305) для vault на desktop; нативка в jar
-lazysodium = "5.1.4"
-jna = "5.14.0"
+# мультиплатформенный libsodium-биндинг (KMP, Argon2id + XChaCha20-Poly1305) для единого VaultCrypto
+ionspin-libsodium = "0.9.5"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
@@ -41,8 +40,7 @@ ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref 
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
 sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }
-lazysodium-java = { module = "com.goterl:lazysodium-java", version.ref = "lazysodium" }
-jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+ionspin-libsodium = { module = "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings", version.ref = "ionspin-libsodium" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

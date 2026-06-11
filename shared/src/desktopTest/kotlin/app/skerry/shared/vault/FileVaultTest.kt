@@ -1,10 +1,12 @@
 package app.skerry.shared.vault
 
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.writeText
 import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -14,18 +16,24 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Тесты файлового vault используют настоящий [LibsodiumVaultCrypto] (Argon2id), а не фейк —
+ * Тесты файлового vault используют настоящий [IonspinVaultCrypto] (Argon2id), а не фейк —
  * это честная интеграция стора и крипто. Деривация дорогая, поэтому пароли короткие, а число
  * unlock/create в каждом тесте минимально.
  */
 class FileVaultTest {
 
-    private val crypto: VaultCrypto = LibsodiumVaultCrypto()
+    private val crypto: VaultCrypto = IonspinVaultCrypto()
     private val tempDir: Path = Files.createTempDirectory("skerry-vault")
     private val file: Path get() = tempDir.resolve("vault.json")
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun vault() = FileVault(file, crypto, deviceId = "device-1")
+
+    @BeforeTest
+    fun initCrypto() {
+        // libsodium (ionspin) требует асинхронной инициализации до использования крипто; идемпотентна
+        runBlocking { initializeVaultCrypto() }
+    }
 
     @AfterTest
     fun cleanup() {

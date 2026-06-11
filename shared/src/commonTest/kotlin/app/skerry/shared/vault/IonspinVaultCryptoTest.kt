@@ -1,5 +1,7 @@
 package app.skerry.shared.vault
 
+import kotlinx.coroutines.test.TestResult
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -14,13 +16,23 @@ import kotlin.test.assertTrue
  * равенство masterKey/dataKey доказывается тем, что обёртка/запись, созданная одним
  * экземпляром ключа, расшифровывается другим. Это держит [MasterKey]/[DataKey]
  * непрозрачными и одновременно проверяет zero-knowledge-инварианты.
+ *
+ * Тесты общие для всех таргетов (commonTest): на desktop идут на JUnit5, на iOS/Android —
+ * на родных раннерах. libsodium требует асинхронной инициализации до первого вызова, поэтому
+ * каждый тест обёрнут в [cryptoTest] (runTest + идемпотентный [initializeVaultCrypto]).
  */
-class LibsodiumVaultCryptoTest {
+class IonspinVaultCryptoTest {
 
-    private val crypto: VaultCrypto = LibsodiumVaultCrypto()
+    private val crypto: VaultCrypto = IonspinVaultCrypto()
+
+    /** Гарантирует инициализацию libsodium перед телом теста; init идемпотентен. */
+    private fun cryptoTest(block: suspend () -> Unit): TestResult = runTest {
+        initializeVaultCrypto()
+        block()
+    }
 
     @Test
-    fun `seal then open round-trips the plaintext`() {
+    fun `seal then open round-trips the plaintext`() = cryptoTest {
         val key = crypto.newDataKey()
         val message = "192.168.1.45 root".encodeToByteArray()
 
@@ -31,7 +43,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `seal does not leak the plaintext`() {
+    fun `seal does not leak the plaintext`() = cryptoTest {
         val key = crypto.newDataKey()
         val message = "secret-host-name".encodeToByteArray()
 
@@ -43,7 +55,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `seal uses a fresh nonce each call`() {
+    fun `seal uses a fresh nonce each call`() = cryptoTest {
         val key = crypto.newDataKey()
         val message = "same plaintext".encodeToByteArray()
 
@@ -56,7 +68,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `open returns null when the ciphertext is tampered`() {
+    fun `open returns null when the ciphertext is tampered`() = cryptoTest {
         val key = crypto.newDataKey()
         val sealed = crypto.seal(key, "payload".encodeToByteArray())
 
@@ -66,14 +78,14 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `open returns null with a different data key`() {
+    fun `open returns null with a different data key`() = cryptoTest {
         val sealed = crypto.seal(crypto.newDataKey(), "payload".encodeToByteArray())
 
         assertNull(crypto.open(crypto.newDataKey(), sealed))
     }
 
     @Test
-    fun `open binds ciphertext to its associated data`() {
+    fun `open binds ciphertext to its associated data`() = cryptoTest {
         val key = crypto.newDataKey()
         val payload = "host password".encodeToByteArray()
         val sealed = crypto.seal(key, payload, associatedData = "host-42".encodeToByteArray())
@@ -87,7 +99,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `seal and open round-trips empty plaintext`() {
+    fun `seal and open round-trips empty plaintext`() = cryptoTest {
         val key = crypto.newDataKey()
 
         val opened = crypto.open(key, crypto.seal(key, ByteArray(0)))
@@ -97,7 +109,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `open throws on a blob too short to hold a nonce and tag`() {
+    fun `open throws on a blob too short to hold a nonce and tag`() = cryptoTest {
         // contract VaultCrypto: структурно некорректный вход — программная ошибка, не null
         assertFailsWith<IllegalArgumentException> {
             crypto.open(crypto.newDataKey(), ByteArray(39)) // NPUB(24)+ABYTES(16)-1
@@ -105,7 +117,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `wrap then unwrap recovers a working data key`() {
+    fun `wrap then unwrap recovers a working data key`() = cryptoTest {
         val salt = crypto.newSalt()
         val masterKey = crypto.deriveMasterKey("correct horse".toCharArray(), salt)
         val dataKey = crypto.newDataKey()
@@ -120,7 +132,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `unwrapDataKey returns null when the wrapped blob is tampered`() {
+    fun `unwrapDataKey returns null when the wrapped blob is tampered`() = cryptoTest {
         val salt = crypto.newSalt()
         val masterKey = crypto.deriveMasterKey("pass".toCharArray(), salt)
         val wrapped = crypto.wrapDataKey(masterKey, crypto.newDataKey())
@@ -131,7 +143,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `unwrapDataKey returns null for a wrong master password`() {
+    fun `unwrapDataKey returns null for a wrong master password`() = cryptoTest {
         val salt = crypto.newSalt()
         val right = crypto.deriveMasterKey("right".toCharArray(), salt)
         val wrong = crypto.deriveMasterKey("wrong".toCharArray(), salt)
@@ -141,7 +153,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `deriveMasterKey is deterministic for the same password and salt`() {
+    fun `deriveMasterKey is deterministic for the same password and salt`() = cryptoTest {
         val salt = crypto.newSalt()
         val k1 = crypto.deriveMasterKey("master".toCharArray(), salt)
         val k2 = crypto.deriveMasterKey("master".toCharArray(), salt)
@@ -153,7 +165,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `deriveMasterKey differs for a different salt`() {
+    fun `deriveMasterKey differs for a different salt`() = cryptoTest {
         val masterKey1 = crypto.deriveMasterKey("master".toCharArray(), crypto.newSalt())
         val masterKey2 = crypto.deriveMasterKey("master".toCharArray(), crypto.newSalt())
         val wrapped = crypto.wrapDataKey(masterKey1, crypto.newDataKey())
@@ -163,7 +175,7 @@ class LibsodiumVaultCryptoTest {
     }
 
     @Test
-    fun `newSalt has the libsodium salt length and is random`() {
+    fun `newSalt has the libsodium salt length and is random`() = cryptoTest {
         val a = crypto.newSalt()
         val b = crypto.newSalt()
 

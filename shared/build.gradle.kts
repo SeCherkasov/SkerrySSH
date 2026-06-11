@@ -39,6 +39,8 @@ kotlin {
             // api: Flow участвует в публичном контракте ssh (ShellChannel.output)
             api(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
+            // единый VaultCrypto на всех таргетах (Argon2id + XChaCha20-Poly1305)
+            implementation(libs.ionspin.libsodium)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -47,8 +49,6 @@ kotlin {
         val desktopMain by getting {
             dependencies {
                 implementation(libs.sshj)
-                implementation(libs.lazysodium.java)
-                implementation(libs.jna)
             }
         }
         val desktopTest by getting {
