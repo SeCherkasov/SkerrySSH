@@ -142,6 +142,10 @@ private class FakeVault : Vault {
 
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = true
 
+    // Биометрия в тестах IdentityStore не задействована — стабы.
+    override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
+    override fun exportDataKey(): DataKey? = null
+
     private companion object {
         val SEALED = "sealed".encodeToByteArray()
     }

@@ -1,5 +1,6 @@
 package app.skerry.ui.identity
 
+import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.Identity
 import app.skerry.shared.vault.IdentityAuth
 import app.skerry.shared.vault.IdentityStore
@@ -116,4 +117,8 @@ private class FakeVault : Vault {
     }
 
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = true
+
+    // Биометрия в тестах identity-менеджера не задействована — стабы.
+    override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
+    override fun exportDataKey(): DataKey? = null
 }

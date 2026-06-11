@@ -99,6 +99,25 @@ class FileVault(
         }
     }
 
+    override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = synchronized(lock) {
+        val body = runCatching {
+            json.decodeFromString<VaultFileBody>(fileSystem.read(path) { readUtf8() })
+        }.getOrElse {
+            dataKey.bytes.fill(0) // присвоить нечего — не оставлять переданный ключ висеть в памяти
+            return@synchronized UnlockResult.Corrupted
+        }
+        this.dataKey?.bytes?.fill(0) // повторный unlock не должен осиротить прежний ключ
+        this.dataKey = dataKey // присваиваем переданный ключ — вызывающий его не затирает (см. контракт)
+        meta = body.meta
+        records.clear()
+        records.addAll(body.records)
+        UnlockResult.Success
+    }
+
+    override fun exportDataKey(): DataKey? = synchronized(lock) {
+        dataKey?.let { DataKey(it.bytes.copyOf()) } // копия: вызывающий затрёт её, не тронув живой ключ
+    }
+
     override fun lock(): Unit = synchronized(lock) {
         dataKey?.bytes?.fill(0)
         dataKey = null

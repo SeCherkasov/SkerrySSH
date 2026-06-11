@@ -1,5 +1,6 @@
 package app.skerry.ui.vault
 
+import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
@@ -203,4 +204,8 @@ private class FakeVault(
     override fun put(id: String, type: RecordType, payload: ByteArray) = Unit
     override fun remove(id: String) = Unit
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = false
+
+    // Путь биометрии гейтом не тестируется — стабы.
+    override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
+    override fun exportDataKey(): DataKey? = null
 }
