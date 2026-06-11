@@ -2,8 +2,12 @@ package app.skerry.shared.ssh
 
 import kotlinx.coroutines.test.runTest
 import org.apache.sshd.server.SshServer
+import org.apache.sshd.server.auth.pubkey.PublickeyAuthenticator
 import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
 import org.apache.sshd.server.shell.ProcessShellCommandFactory
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.util.Base64
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -22,6 +26,9 @@ class SshjTransportTest {
 
     private lateinit var server: SshServer
 
+    // Ключ, который сервер считает авторизованным; приватная часть подаётся клиенту как PEM.
+    private val authorizedKey: KeyPair = generateRsaKeyPair()
+
     @BeforeTest
     fun startServer() {
         server = SshServer.setUpDefaultServer().apply {
@@ -29,6 +36,9 @@ class SshjTransportTest {
             port = 0 // свободный порт выбирает ОС
             keyPairProvider = SimpleGeneratorHostKeyProvider()
             setPasswordAuthenticator { user, password, _ -> user == USER && password == PASSWORD }
+            publickeyAuthenticator = PublickeyAuthenticator { user, key, _ ->
+                user == USER && key.encoded.contentEquals(authorizedKey.public.encoded)
+            }
             commandFactory = ProcessShellCommandFactory.INSTANCE
             start()
         }
@@ -56,6 +66,22 @@ class SshjTransportTest {
     fun `rejects invalid password`() = runTest {
         assertFailsWith<SshAuthenticationException> {
             SshjTransport(acceptAllKeys).connect(target(), SshAuth.Password("wrong"))
+        }
+    }
+
+    @Test
+    fun `connects with an authorized private key`() = runTest {
+        val connection = SshjTransport(acceptAllKeys)
+            .connect(target(), SshAuth.PublicKey(pkcs8Pem(authorizedKey)))
+        assertTrue(connection.isConnected)
+        connection.disconnect()
+    }
+
+    @Test
+    fun `rejects an unauthorized private key`() = runTest {
+        assertFailsWith<SshAuthenticationException> {
+            SshjTransport(acceptAllKeys)
+                .connect(target(), SshAuth.PublicKey(pkcs8Pem(generateRsaKeyPair())))
         }
     }
 
@@ -109,4 +135,13 @@ class SshjTransportTest {
             "fingerprint в формате OpenSSH, получено: $seenFingerprint",
         )
     }
+}
+
+private fun generateRsaKeyPair(): KeyPair =
+    KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+
+/** Приватный ключ в неэшифрованном PKCS#8 PEM — формат, который sshj распознаёт из содержимого. */
+private fun pkcs8Pem(keyPair: KeyPair): String {
+    val body = Base64.getMimeEncoder(64, "\n".encodeToByteArray()).encodeToString(keyPair.private.encoded)
+    return "-----BEGIN PRIVATE KEY-----\n$body\n-----END PRIVATE KEY-----\n"
 }

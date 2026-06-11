@@ -16,6 +16,7 @@ import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.userauth.UserAuthException
+import net.schmizz.sshj.userauth.password.PasswordUtils
 
 /** Desktop-реализация [SshTransport] поверх sshj (JVM). */
 class SshjTransport(
@@ -58,6 +59,13 @@ class SshjTransport(
             try {
                 when (auth) {
                     is SshAuth.Password -> client.authPassword(target.username, auth.secret)
+                    is SshAuth.PublicKey -> {
+                        // loadKeys трактует строки как содержимое ключа (не путь); passphrase —
+                        // одноразовый PasswordFinder. Формат (OpenSSH/PKCS) sshj определяет сам.
+                        val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
+                        val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
+                        client.authPublickey(target.username, keys)
+                    }
                 }
             } catch (e: UserAuthException) {
                 client.close()
