@@ -11,7 +11,10 @@ plugins {
 kotlin {
     jvmToolchain(21)
 
-    jvm("desktop")
+    jvm("desktop") {
+        // kotlin("test") выбирает бэкенд по конфигурации Test-задачи: это включает JUnit 5
+        testRuns["test"].executionTask.configure { useJUnitPlatform() }
+    }
 
     listOf(
         iosArm64(),

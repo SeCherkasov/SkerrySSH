@@ -5,11 +5,16 @@ import java.security.MessageDigest
 import java.security.PublicKey
 import java.util.Base64
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
+import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.userauth.UserAuthException
 
 /** Desktop-реализация [SshTransport] поверх sshj (JVM). */
@@ -86,12 +91,82 @@ private class SshjConnection(private val client: SSHClient) : SshConnection {
         }
     }
 
+    override suspend fun openShell(size: PtySize, term: String): ShellChannel =
+        withContext(Dispatchers.IO) {
+            try {
+                val session = client.startSession()
+                session.allocatePTY(term, size.cols, size.rows, size.widthPx, size.heightPx, emptyMap())
+                SshjShellChannel(session, session.startShell())
+            } catch (e: IOException) {
+                throw SshConnectionException("Не удалось открыть shell-канал", e)
+            }
+        }
+
     override suspend fun disconnect() = withContext(Dispatchers.IO) {
         client.disconnect()
     }
 
     private companion object {
         const val EXEC_TIMEOUT_SECONDS = 30L
+    }
+}
+
+private class SshjShellChannel(
+    private val session: Session,
+    private val shell: Session.Shell,
+) : ShellChannel {
+
+    private val outputClaimed = AtomicBoolean(false)
+
+    override val isOpen: Boolean
+        get() = session.isOpen
+
+    override val output: Flow<ByteArray> = flow {
+        check(outputClaimed.compareAndSet(false, true)) {
+            "ShellChannel.output поддерживает только одного сборщика"
+        }
+        val stream = shell.inputStream
+        val buffer = ByteArray(BUFFER_SIZE)
+        while (true) {
+            // runInterruptible: блокирующий read должен прерываться отменой корутины,
+            // иначе IO-поток виснет в read навсегда и держит runBlocking. EOF либо
+            // прерывание потока (close() закрывает stream) роняют read как IOException.
+            val read = try {
+                runInterruptible(Dispatchers.IO) { stream.read(buffer) }
+            } catch (_: IOException) {
+                break
+            }
+            if (read < 0) break
+            if (read > 0) emit(buffer.copyOf(read))
+        }
+    }
+
+    override suspend fun write(data: ByteArray) = withContext(Dispatchers.IO) {
+        try {
+            shell.outputStream.write(data)
+            shell.outputStream.flush()
+        } catch (e: IOException) {
+            throw SshConnectionException("Запись в shell-канал не удалась", e)
+        }
+    }
+
+    override suspend fun resize(size: PtySize) = withContext(Dispatchers.IO) {
+        try {
+            shell.changeWindowDimensions(size.cols, size.rows, size.widthPx, size.heightPx)
+        } catch (e: IOException) {
+            throw SshConnectionException("Не удалось изменить размер PTY", e)
+        }
+    }
+
+    override suspend fun close() = withContext(Dispatchers.IO) {
+        // Закрываем входной поток первым, чтобы разблокировать read в output;
+        // только потом рвём сам канал.
+        runCatching { shell.inputStream.close() }
+        session.close()
+    }
+
+    private companion object {
+        const val BUFFER_SIZE = 8192
     }
 }
 

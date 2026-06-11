@@ -1,5 +1,7 @@
 package app.skerry.shared.ssh
 
+import kotlinx.coroutines.flow.Flow
+
 /**
  * Транспортный контракт SSH-ядра. Платформенные реализации подставляются снаружи:
  * на desktop — sshj (JVM), на мобильных — своя реализация позже.
@@ -37,10 +39,42 @@ fun interface HostKeyVerifier {
 interface SshConnection {
     val isConnected: Boolean
 
-    /** Одноразовый exec-канал; интерактивный shell появится с терминалом. */
+    /** Одноразовый exec-канал для неинтерактивных команд. */
     suspend fun exec(command: String): ExecResult
 
+    /**
+     * Интерактивный shell с PTY.
+     * @throws SshConnectionException канал открыть не удалось
+     */
+    suspend fun openShell(size: PtySize = PtySize(), term: String = "xterm-256color"): ShellChannel
+
     suspend fun disconnect()
+}
+
+/** Размер PTY; пиксельные размеры опциональны (0 — не сообщать). */
+data class PtySize(
+    val cols: Int = 80,
+    val rows: Int = 24,
+    val widthPx: Int = 0,
+    val heightPx: Int = 0,
+)
+
+interface ShellChannel {
+    val isOpen: Boolean
+
+    /**
+     * Сырой вывод PTY (stdout и stderr слиты, как в реальном терминале).
+     * Холодный flow с единственным разрешённым сборщиком: повторный collect
+     * бросает [IllegalStateException]. Завершается на EOF канала.
+     */
+    val output: Flow<ByteArray>
+
+    /** @throws SshConnectionException канал закрыт или обрыв транспорта */
+    suspend fun write(data: ByteArray)
+
+    suspend fun resize(size: PtySize)
+
+    suspend fun close()
 }
 
 data class ExecResult(
