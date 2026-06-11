@@ -18,15 +18,22 @@ import kotlinx.coroutines.launch
  * Ввод и ресайз проксируются в сессию.
  *
  * Это минимальный экран: ANSI/VT-управляющие последовательности пока показываются
- * как есть (полноценный эмулятор — отдельный шаг), а scrollback-буфер не ограничен.
- * Декодирование всего буфера на каждый чанк — O(n) на чанк; для интерактивных сессий
- * приемлемо, а инкрементальный (построчный) декод придёт вместе с VT-эмулятором.
+ * как есть (полноценный эмулятор — отдельный шаг). Сырой буфер ограничен [maxBufferBytes]:
+ * при переполнении отбрасываются старейшие байты (усечение scrollback), поэтому память
+ * не растёт без предела, а копирование/декод на каждый чанк ограничены этим потолком.
+ * Декод всего буфера сохраняет корректность UTF-8 на границе чанков; инкрементальный
+ * (построчный) декод придёт вместе с VT-эмулятором.
  */
 @Stable
 class TerminalScreenState(
     private val session: TerminalSession,
     private val scope: CoroutineScope,
+    private val maxBufferBytes: Int = DEFAULT_MAX_BUFFER_BYTES,
 ) {
+    init {
+        require(maxBufferBytes > 0) { "maxBufferBytes должен быть положительным" }
+    }
+
     private var raw = ByteArray(0)
 
     /** Накопленный декодированный вывод PTY; Compose-state — перерисовка на изменении. */
@@ -38,10 +45,36 @@ class TerminalScreenState(
     init {
         scope.launch {
             session.output.collect { chunk ->
-                raw += chunk
+                raw = appendBounded(raw, chunk)
                 output = raw.decodeToString()
             }
         }
+    }
+
+    /**
+     * Добавляет [chunk] к [current], удерживая итог в пределах [maxBufferBytes]: при
+     * переполнении сохраняется только хвост (новейшие байты). Усечение по байтам может
+     * оставить «обрубленный» многобайтовый символ в начале — он отрисуется как U+FFFD;
+     * для отброшенного scrollback это приемлемо.
+     */
+    private fun appendBounded(current: ByteArray, chunk: ByteArray): ByteArray {
+        if (chunk.size >= maxBufferBytes) {
+            return chunk.copyOfRange(chunk.size - maxBufferBytes, chunk.size)
+        }
+        val total = current.size + chunk.size
+        if (total <= maxBufferBytes) {
+            return current + chunk
+        }
+        val result = ByteArray(maxBufferBytes)
+        val keptFromCurrent = maxBufferBytes - chunk.size
+        current.copyInto(result, destinationOffset = 0, startIndex = current.size - keptFromCurrent)
+        chunk.copyInto(result, destinationOffset = keptFromCurrent)
+        return result
+    }
+
+    private companion object {
+        /** Потолок scrollback по умолчанию (1 МиБ сырых байтов). */
+        const val DEFAULT_MAX_BUFFER_BYTES = 1 shl 20
     }
 
     /** Отправить введённый текст в PTY (fire-and-forget в [scope]). */
