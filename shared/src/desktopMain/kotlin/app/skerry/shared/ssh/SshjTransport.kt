@@ -25,7 +25,9 @@ class SshjTransport(
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection =
         withContext(Dispatchers.IO) {
             val client = SSHClient()
-            var hostKeyRejected = false
+            // verify() вызывается из IO-потока sshj, а читаем флаг из корутины после
+            // connect() — нужна потокобезопасная видимость, поэтому AtomicBoolean.
+            val hostKeyRejected = AtomicBoolean(false)
             client.addHostKeyVerifier(object : net.schmizz.sshj.transport.verification.HostKeyVerifier {
                 override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
                     val trusted = hostKeyVerifier.verify(
@@ -34,7 +36,7 @@ class SshjTransport(
                         keyType = KeyType.fromKey(key).toString(),
                         fingerprint = opensshFingerprint(key),
                     )
-                    if (!trusted) hostKeyRejected = true
+                    if (!trusted) hostKeyRejected.set(true)
                     return trusted
                 }
 
@@ -45,7 +47,7 @@ class SshjTransport(
                 client.connect(target.host, target.port)
             } catch (e: IOException) {
                 client.close()
-                if (hostKeyRejected) {
+                if (hostKeyRejected.get()) {
                     throw SshHostKeyRejectedException(
                         "Ключ хоста ${target.host}:${target.port} отвергнут верификатором",
                     )
@@ -117,6 +119,7 @@ private class SshjShellChannel(
 ) : ShellChannel {
 
     private val outputClaimed = AtomicBoolean(false)
+    private val closed = AtomicBoolean(false)
 
     override val isOpen: Boolean
         get() = session.isOpen
@@ -159,10 +162,16 @@ private class SshjShellChannel(
     }
 
     override suspend fun close() = withContext(Dispatchers.IO) {
+        // Идемпотентно: повторный close() (например, из close-обработчика и из
+        // EOF-пути одновременно) не должен повторно дёргать teardown.
+        if (!closed.compareAndSet(false, true)) return@withContext
         // Закрываем входной поток первым, чтобы разблокировать read в output;
-        // только потом рвём сам канал.
+        // только потом рвём сам канал. Цикл сбора в output читает лишь shell.inputStream
+        // и не обращается к session, поэтому session.close() безопасен даже до того,
+        // как read разблокировался. runCatching — teardown не должен бросать наружу.
         runCatching { shell.inputStream.close() }
-        session.close()
+        runCatching { session.close() }
+        Unit
     }
 
     private companion object {
