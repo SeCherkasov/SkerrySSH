@@ -9,6 +9,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -124,6 +125,20 @@ class TerminalSessionTest {
     }
 
     @Test
+    fun `transport error closes session without crashing the scope`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val channel = ThrowingShellChannel()
+        val session = ShellTerminalSession(channel, scope)
+
+        // Сбор вывода стартует в init; обрыв транспорта (не отмена) должен перевести
+        // сессию в Closed, но не уронить scope, в котором живёт сбор.
+        assertEquals(TerminalState.Closed, session.state.value)
+        assertTrue(scope.isActive, "обрыв транспорта не должен отменять scope")
+        scope.cancel()
+    }
+
+    @Test
     fun `send after close fails with connection exception`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
@@ -178,4 +193,13 @@ private class FakeShellChannel : ShellChannel {
         closed = true
         emissions.close()
     }
+}
+
+/** Канал, чей вывод сразу падает с ошибкой транспорта — имитирует обрыв соединения. */
+private class ThrowingShellChannel : ShellChannel {
+    override val isOpen: Boolean get() = false
+    override val output: Flow<ByteArray> = flow { throw SshConnectionException("transport down") }
+    override suspend fun write(data: ByteArray) {}
+    override suspend fun resize(size: PtySize) {}
+    override suspend fun close() {}
 }

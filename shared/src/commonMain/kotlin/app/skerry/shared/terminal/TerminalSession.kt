@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Жизненный цикл сессии. Closed — канал закрыт (EOF, обрыв или [TerminalSession.close]). */
 enum class TerminalState { Open, Closed }
@@ -59,6 +60,12 @@ class ShellTerminalSession(
         scope.launch {
             try {
                 channel.output.collect { _output.emit(it) }
+            } catch (e: CancellationException) {
+                // Отмена scope должна корректно сворачивать сессию — пробрасываем.
+                throw e
+            } catch (_: Exception) {
+                // Обрыв транспорта завершает сессию (см. finally), но не должен ронять
+                // scope, в котором живёт сбор вывода.
             } finally {
                 _state.value = TerminalState.Closed
             }
