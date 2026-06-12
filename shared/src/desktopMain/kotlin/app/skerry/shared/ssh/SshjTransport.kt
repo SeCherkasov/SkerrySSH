@@ -1,5 +1,7 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.sftp.SshjSftpClient
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.PublicKey
@@ -111,6 +113,14 @@ private class SshjConnection(private val client: SSHClient) : SshConnection {
                 throw SshConnectionException("Не удалось открыть shell-канал", e)
             }
         }
+
+    override suspend fun openSftp(): SftpClient = withContext(Dispatchers.IO) {
+        try {
+            SshjSftpClient(client.newSFTPClient())
+        } catch (e: IOException) {
+            throw SshConnectionException("Не удалось открыть SFTP-подсистему", e)
+        }
+    }
 
     override suspend fun disconnect() = withContext(Dispatchers.IO) {
         client.disconnect()
