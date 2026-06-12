@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -21,7 +22,7 @@ import app.skerry.ui.theme.SkerryColors
  */
 enum class SkerryIconKind {
     Chevron, Close, Add, Search, Lock, LockOpen, Tune, MoreVert,
-    Folder, Info, Power, Terminal, Key, Refresh,
+    Folder, Info, Power, Terminal, Key, Refresh, Ai,
 }
 
 /**
@@ -54,6 +55,7 @@ fun SkerryIcon(
             SkerryIconKind.Terminal -> terminal(tint, stroke)
             SkerryIconKind.Key -> key(tint, stroke, w)
             SkerryIconKind.Refresh -> refresh(tint, stroke)
+            SkerryIconKind.Ai -> ai(tint)
         }
     }
 }
@@ -182,4 +184,29 @@ private fun DrawScope.refresh(c: Color, st: Stroke) {
     )
     drawLine(c, p(0.72f, 0.3f), p(0.78f, 0.42f), st.width, st.cap)
     drawLine(c, p(0.78f, 0.42f), p(0.86f, 0.32f), st.width, st.cap)
+}
+
+/** Искра (4-конечная звезда) + маленькая рядом — знак AI/lighthouse-момента. */
+private fun DrawScope.ai(c: Color) {
+    fourStar(c, cxF = 0.42f, cyF = 0.47f, outerF = 0.30f, innerF = 0.12f)
+    fourStar(c, cxF = 0.75f, cyF = 0.25f, outerF = 0.13f, innerF = 0.05f)
+}
+
+private fun DrawScope.fourStar(c: Color, cxF: Float, cyF: Float, outerF: Float, innerF: Float) {
+    val cx = size.width * cxF
+    val cy = size.height * cyF
+    val o = size.minDimension * outerF
+    val i = size.minDimension * innerF * 0.707f // внутренние вершины на диагонали
+    val path = Path().apply {
+        moveTo(cx, cy - o)
+        lineTo(cx + i, cy - i)
+        lineTo(cx + o, cy)
+        lineTo(cx + i, cy + i)
+        lineTo(cx, cy + o)
+        lineTo(cx - i, cy + i)
+        lineTo(cx - o, cy)
+        lineTo(cx - i, cy - i)
+        close()
+    }
+    drawPath(path, c)
 }

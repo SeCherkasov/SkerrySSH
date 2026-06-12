@@ -209,6 +209,46 @@ fun DesktopSessionBar(
     }
 }
 
+/**
+ * AI-бар под терминалом (по desktop-прототипу) — поле AI-ассистента, НЕ командная строка
+ * (команды печатаются прямо в терминал). AI — это Phase 2, поэтому бар пока неинтерактивный
+ * плейсхолдер: amber-искра + подсказка + метка «Phase 2». Фокус не забирает — он у терминала.
+ */
+@Composable
+fun AiBar(modifier: Modifier = Modifier, mono: FontFamily) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .background(SkerryColors.nightSeaSoft)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(SkerryColors.amberSoft),
+            contentAlignment = Alignment.Center,
+        ) {
+            SkerryIcon(SkerryIconKind.Ai, tint = SkerryColors.amber, size = 16.dp)
+        }
+        Text(
+            "Спросить Skerry: «найди файлы больше 100 МБ»",
+            color = SkerryColors.textFaint,
+            fontSize = 13.sp,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(SkerryColors.amberSoft)
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        ) {
+            Text("AI · Phase 2", color = SkerryColors.amber, fontFamily = mono, fontSize = 10.5.sp)
+        }
+    }
+}
+
 /** Нижний statusbar. [ok] подсвечивает левую точку (moss), иначе faint. Без вымышленных метрик. */
 @Composable
 fun DesktopStatusBar(

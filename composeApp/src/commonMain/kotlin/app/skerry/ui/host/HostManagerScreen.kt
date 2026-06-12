@@ -62,6 +62,7 @@ import app.skerry.shared.vault.Identity
 import app.skerry.shared.vault.IdentityAuth
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.desktop.AiBar
 import app.skerry.ui.desktop.BrandLogo
 import app.skerry.ui.desktop.ChromeIconButton
 import app.skerry.ui.desktop.DesktopSessionBar
@@ -534,6 +535,8 @@ private fun MainArea(
                         )
                         Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
                         TerminalScreen(state.terminal, Modifier.weight(1f))
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
+                        AiBar(mono = mono)
                     }
 
                     is ConnectionUiState.Error -> ConnectionError(message = state.message, onBack = onCloseActive)
