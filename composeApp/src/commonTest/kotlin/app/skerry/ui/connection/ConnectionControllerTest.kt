@@ -1,5 +1,6 @@
 package app.skerry.ui.connection
 
+import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.ssh.ShellChannel
@@ -150,6 +151,7 @@ private class FakeSshConnection(private val channel: ShellChannel) : SshConnecti
     override val isConnected: Boolean get() = !disconnected
     override suspend fun exec(command: String): ExecResult = throw UnsupportedOperationException()
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = channel
+    override suspend fun openSftp(): SftpClient = throw UnsupportedOperationException()
     override suspend fun disconnect() {
         disconnected = true
     }
@@ -166,6 +168,8 @@ private class CountingSshConnection(private val channel: ShellChannel) : SshConn
         openShellCalls++
         return channel
     }
+
+    override suspend fun openSftp(): SftpClient = throw UnsupportedOperationException()
 
     override suspend fun disconnect() {}
 }

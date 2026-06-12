@@ -55,6 +55,13 @@ interface SshConnection {
      */
     suspend fun openShell(size: PtySize = PtySize(), term: String = "xterm-256color"): ShellChannel
 
+    /**
+     * Открыть SFTP-подсистему поверх этого соединения. Каждый вызов — отдельный канал;
+     * закрывать через [app.skerry.shared.sftp.SftpClient.close]. Соединение остаётся открытым.
+     * @throws SshConnectionException SFTP-подсистему открыть не удалось
+     */
+    suspend fun openSftp(): app.skerry.shared.sftp.SftpClient
+
     suspend fun disconnect()
 }
 

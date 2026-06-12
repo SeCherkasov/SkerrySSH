@@ -64,6 +64,8 @@ kotlin {
         val desktopTest by getting {
             dependencies {
                 implementation(libs.sshd.core)
+                // SFTP-подсистема встроенного сервера для интеграционных тестов SshjSftpClient
+                implementation(libs.sshd.sftp)
             }
         }
     }
