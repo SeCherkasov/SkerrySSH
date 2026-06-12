@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.PtySize
+import app.skerry.shared.terminal.TermCell
+import app.skerry.shared.terminal.TerminalEmulator
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import kotlinx.coroutines.CoroutineScope
@@ -12,69 +14,46 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Состояние терминального экрана поверх [TerminalSession]. Подписывается на вывод
- * сессии в [scope], накапливает сырые байты и декодирует их в [output] для отрисовки;
- * декодирование идёт по всему буферу, поэтому UTF-8 на границе чанков не бьётся.
- * Ввод и ресайз проксируются в сессию.
+ * Состояние терминального экрана поверх [TerminalSession]. Сырые байты PTY проходят через
+ * [TerminalEmulator] (парсер ANSI/VT + модель экрана), результат публикуется как [screen] —
+ * сетка ячеек с цветом/жирностью — плюс позиция курсора. Ввод и ресайз проксируются в сессию.
  *
- * Это минимальный экран: ANSI/VT-управляющие последовательности пока показываются
- * как есть (полноценный эмулятор — отдельный шаг). Сырой буфер ограничен [maxBufferBytes]:
- * при переполнении отбрасываются старейшие байты (усечение scrollback), поэтому память
- * не растёт без предела, а копирование/декод на каждый чанк ограничены этим потолком.
- * Декод всего буфера сохраняет корректность UTF-8 на границе чанков; инкрементальный
- * (построчный) декод придёт вместе с VT-эмулятором.
+ * Эмулятор держит scrollback и парсер-состояние сам, поэтому здесь нет ни сырого байтового буфера,
+ * ни ручного декода UTF-8: каждый чанк просто скармливается, а снимок экрана кладётся в Compose-
+ * state ([screen]/[cursorRow]/[cursorCol]) для перерисовки.
  */
 @Stable
 class TerminalScreenState(
     private val session: TerminalSession,
     private val scope: CoroutineScope,
-    private val maxBufferBytes: Int = DEFAULT_MAX_BUFFER_BYTES,
 ) {
-    init {
-        require(maxBufferBytes > 0) { "maxBufferBytes должен быть положительным" }
-    }
+    private val emulator = TerminalEmulator()
 
-    private var raw = ByteArray(0)
-
-    /** Накопленный декодированный вывод PTY; Compose-state — перерисовка на изменении. */
-    var output by mutableStateOf("")
+    /** Снимок экрана (строки сверху вниз) для отрисовки. */
+    var screen: List<List<TermCell>> by mutableStateOf(emptyList())
         private set
+
+    var cursorRow: Int by mutableStateOf(0)
+        private set
+
+    var cursorCol: Int by mutableStateOf(0)
+        private set
+
+    /** Плоский текст экрана — для тестов и простых проверок (рендер использует [screen]). */
+    val output: String
+        get() = screen.joinToString("\n") { row -> buildString { row.forEach { append(it.char) } } }
 
     val state: StateFlow<TerminalState> get() = session.state
 
     init {
         scope.launch {
             session.output.collect { chunk ->
-                raw = appendBounded(raw, chunk)
-                output = raw.decodeToString()
+                emulator.feed(chunk)
+                screen = emulator.lines.map { it.toList() }
+                cursorRow = emulator.cursorRow
+                cursorCol = emulator.cursorCol
             }
         }
-    }
-
-    /**
-     * Добавляет [chunk] к [current], удерживая итог в пределах [maxBufferBytes]: при
-     * переполнении сохраняется только хвост (новейшие байты). Усечение по байтам может
-     * оставить «обрубленный» многобайтовый символ в начале — он отрисуется как U+FFFD;
-     * для отброшенного scrollback это приемлемо.
-     */
-    private fun appendBounded(current: ByteArray, chunk: ByteArray): ByteArray {
-        if (chunk.size >= maxBufferBytes) {
-            return chunk.copyOfRange(chunk.size - maxBufferBytes, chunk.size)
-        }
-        val total = current.size + chunk.size
-        if (total <= maxBufferBytes) {
-            return current + chunk
-        }
-        val result = ByteArray(maxBufferBytes)
-        val keptFromCurrent = maxBufferBytes - chunk.size
-        current.copyInto(result, destinationOffset = 0, startIndex = current.size - keptFromCurrent)
-        chunk.copyInto(result, destinationOffset = keptFromCurrent)
-        return result
-    }
-
-    private companion object {
-        /** Потолок scrollback по умолчанию (1 МиБ сырых байтов). */
-        const val DEFAULT_MAX_BUFFER_BYTES = 1 shl 20
     }
 
     /** Отправить введённый текст в PTY (fire-and-forget в [scope]). */

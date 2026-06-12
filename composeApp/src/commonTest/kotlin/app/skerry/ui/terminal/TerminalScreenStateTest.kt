@@ -50,34 +50,6 @@ class TerminalScreenStateTest {
     }
 
     @Test
-    fun `output is bounded to maxBufferBytes keeping newest bytes`() = runTest {
-        val dispatcher = UnconfinedTestDispatcher(testScheduler)
-        val scope = CoroutineScope(dispatcher)
-        val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope, maxBufferBytes = 4)
-
-        session.emit("abcd".encodeToByteArray())
-        session.emit("ef".encodeToByteArray())
-
-        // буфер ограничен 4 байтами: старейшее ("ab") отброшено, остаётся хвост
-        assertEquals("cdef", state.output)
-        scope.cancel()
-    }
-
-    @Test
-    fun `output keeps only the newest bytes when a single chunk overflows the buffer`() = runTest {
-        val dispatcher = UnconfinedTestDispatcher(testScheduler)
-        val scope = CoroutineScope(dispatcher)
-        val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope, maxBufferBytes = 3)
-
-        session.emit("abcdef".encodeToByteArray())
-
-        assertEquals("def", state.output)
-        scope.cancel()
-    }
-
-    @Test
     fun `send forwards encoded input to session`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
