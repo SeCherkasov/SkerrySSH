@@ -2,8 +2,10 @@ package app.skerry.ui.terminal
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,10 +16,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -27,9 +33,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -72,9 +82,11 @@ fun rememberJetBrainsMono(): FontFamily = FontFamily(
  * ([mapTerminalKey]); эхо рисует сам shell. Командной строки под терминалом НЕТ — нижняя строка
  * окна отведена под AI-ассистента (Phase 2).
  *
- * Выделение мышью: перетаскивание тянет линейный диапазон ([TerminalSelection]) поверх сетки,
- * подсвечивается полупрозрачным cyan; `Ctrl+Shift+C` копирует его в буфер обмена. Клик снимает
- * выделение и возвращает фокус; печать тоже снимает (как в обычных терминалах).
+ * Выделение: на мыши — перетаскивание сразу тянет линейный диапазон ([TerminalSelection]) поверх
+ * сетки (одиночный клик снимает выделение, фокус возвращается); на таче обычный drag отдаётся
+ * прокрутке, а выделение начинается после long-press. Диапазон подсвечивается полупрозрачным cyan.
+ * Копирование: `Ctrl+Shift+C` (desktop) и системное текстовое меню «Copy» над выделением, которое
+ * всплывает по окончании тач-выделения ([LocalTextToolbar]). Печать снимает выделение и меню.
  */
 @Composable
 fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
@@ -92,6 +104,8 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
     val scroll = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
     val clipboard = LocalClipboardManager.current
+    val textToolbar = LocalTextToolbar.current
+    var layoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     // Размер моноширинной ячейки в пикселях — для перевода координат мыши в ячейку.
     val density = LocalDensity.current
@@ -116,6 +130,29 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
 
     fun cellAt(x: Float, y: Float) = cellAtOffset(x, y, metrics)
 
+    fun copySelection() {
+        state.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
+    }
+
+    // Системное текстовое меню «Copy» над выделением — тач-аффорданс копирования (на мыши Ctrl+Shift+C).
+    fun showCopyMenu() {
+        val sel = state.selection ?: return
+        if (state.selectedText() == null) return
+        val coords = layoutCoords ?: return
+        if (!coords.isAttached) return
+        val local = selectionAnchorRect(sel, metrics)
+        val topLeft = coords.localToWindow(Offset(local.left, local.top))
+        val bottomRight = coords.localToWindow(Offset(local.right, local.bottom))
+        textToolbar.showMenu(
+            rect = Rect(topLeft, bottomRight),
+            onCopyRequested = {
+                copySelection()
+                state.clearSelection()
+                textToolbar.hide()
+            },
+        )
+    }
+
     Text(
         text = rendered,
         style = textStyle,
@@ -130,12 +167,13 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
                 if (event.type != KeyEventType.KeyDown || closed) return@onPreviewKeyEvent false
                 // Ctrl+Shift+C — копирование выделения (Ctrl+C остаётся SIGINT для shell).
                 if (event.isCtrlPressed && event.isShiftPressed && event.key == Key.C) {
-                    state.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
+                    copySelection()
                     return@onPreviewKeyEvent true
                 }
                 val bytes = mapTerminalKey(event.key, event.isCtrlPressed, event.utf16CodePoint)
                 if (bytes != null) {
                     state.clearSelection()
+                    textToolbar.hide()
                     state.send(bytes)
                     true
                 } else {
@@ -143,22 +181,32 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
                 }
             }
             .focusable()
+            .onGloballyPositioned { layoutCoords = it }
             .pointerInput(metrics) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        focusRequester.requestFocus()
-                        state.beginSelection(cellAt(offset.x, offset.y))
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        state.extendSelection(cellAt(change.position.x, change.position.y))
-                    },
-                )
-            }
-            .pointerInput(Unit) {
-                detectTapGestures {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
                     focusRequester.requestFocus()
-                    state.clearSelection()
+                    textToolbar.hide()
+                    if (down.type == PointerType.Mouse) {
+                        // Мышь: выделение сразу по перетаскиванию; одиночный клик — снять выделение.
+                        state.beginSelection(cellAt(down.position.x, down.position.y))
+                        val dragged = drag(down.id) { change ->
+                            change.consume()
+                            state.extendSelection(cellAt(change.position.x, change.position.y))
+                        }
+                        if (!dragged || state.selection?.isEmpty != false) state.clearSelection()
+                    } else {
+                        // Тач: обычный drag отдаём прокрутке; выделение — только после long-press,
+                        // по окончании показываем системное меню «Copy».
+                        val held = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
+                        state.beginSelection(cellAt(held.position.x, held.position.y))
+                        drag(held.id) { change ->
+                            change.consume()
+                            state.extendSelection(cellAt(change.position.x, change.position.y))
+                        }
+                        // Пустое выделение (long-press без протяжки или отмена) — снять; иначе меню «Copy».
+                        if (state.selection?.isEmpty != false) state.clearSelection() else showCopyMenu()
+                    }
                 }
             },
     )
