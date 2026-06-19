@@ -1,6 +1,7 @@
 package app.skerry.ui.terminal
 
 import app.skerry.shared.ssh.PtySize
+import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import kotlinx.coroutines.CoroutineScope
@@ -83,6 +84,53 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         assertEquals(TerminalState.Open, state.state.value)
+        scope.cancel()
+    }
+
+    @Test
+    fun `selection over screen yields the spanned text`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello world".encodeToByteArray())
+        state.beginSelection(TerminalPos(0, 0))
+        state.extendSelection(TerminalPos(0, 5))
+
+        assertEquals("hello", state.selectedText())
+        scope.cancel()
+    }
+
+    @Test
+    fun `clearing selection drops the highlight and text`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello".encodeToByteArray())
+        state.beginSelection(TerminalPos(0, 0))
+        state.extendSelection(TerminalPos(0, 3))
+        state.clearSelection()
+
+        assertEquals(null, state.selection)
+        assertEquals(null, state.selectedText())
+        scope.cancel()
+    }
+
+    @Test
+    fun `empty selection produces no copyable text`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello".encodeToByteArray())
+        state.beginSelection(TerminalPos(0, 2))
+        // фокус не сдвигали — выделять нечего
+
+        assertEquals(null, state.selectedText())
         scope.cancel()
     }
 }

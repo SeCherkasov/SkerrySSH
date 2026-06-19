@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TerminalEmulator
+import app.skerry.shared.terminal.TerminalPos
+import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +41,10 @@ class TerminalScreenState(
     var cursorCol: Int by mutableStateOf(0)
         private set
 
+    /** Текущее выделение мышью (или `null`, если ничего не выделено). Рендер подсвечивает его. */
+    var selection: TerminalSelection? by mutableStateOf(null)
+        private set
+
     /** Плоский текст экрана — для тестов и простых проверок (рендер использует [screen]). */
     val output: String
         get() = screen.joinToString("\n") { row -> buildString { row.forEach { append(it.char) } } }
@@ -55,6 +61,27 @@ class TerminalScreenState(
             }
         }
     }
+
+    /** Начать выделение в позиции [pos] (нажатие мыши): якорь и фокус совпадают — пока пусто. */
+    fun beginSelection(pos: TerminalPos) {
+        selection = TerminalSelection(anchor = pos, focus = pos)
+    }
+
+    /** Протянуть выделение до [pos] (перетаскивание): двигаем фокус, якорь на месте. */
+    fun extendSelection(pos: TerminalPos) {
+        selection = selection?.copy(focus = pos)
+    }
+
+    /** Снять выделение (клик/новый ввод). */
+    fun clearSelection() {
+        selection = null
+    }
+
+    /** Текст текущего выделения для копирования или `null`, если выделять нечего. */
+    fun selectedText(): String? = selection
+        ?.takeIf { !it.isEmpty }
+        ?.extract(screen)
+        ?.takeIf { it.isNotEmpty() }
 
     /** Отправить введённый текст в PTY (fire-and-forget в [scope]). */
     fun send(text: String) {
