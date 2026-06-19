@@ -4,6 +4,10 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import app.skerry.shared.host.FileHostStore
+import app.skerry.shared.ssh.FileKnownHostsStore
+import app.skerry.shared.ssh.SshjTransport
+import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.AndroidBiometricKeyStore
 import app.skerry.shared.vault.FileBioArtifactStore
 import app.skerry.shared.vault.FileVault
@@ -11,8 +15,9 @@ import app.skerry.shared.vault.IdentityStore
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.initializeVaultCrypto
-import app.skerry.ui.App
 import app.skerry.ui.AppDependencies
+import app.skerry.ui.mobile.MobileApp
+import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
@@ -38,7 +43,7 @@ class MainActivity : FragmentActivity() {
         runBlocking { initializeVaultCrypto() }
 
         val deps = buildDependencies()
-        setContent { App(deps) }
+        setContent { MobileApp(deps) }
     }
 
     private fun buildDependencies(): AppDependencies {
@@ -51,6 +56,13 @@ class MainActivity : FragmentActivity() {
             FileSystem.SYSTEM,
         ) { System.currentTimeMillis().toString() }
         val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
+        // SSH-транспорт (sshj, общий JVM source set). TOFU: первый ключ хоста запоминается в
+        // known_hosts, при смене — отказ. Менеджер хостов: профили в hosts.json рядом.
+        val knownHosts = FileKnownHostsStore(dir.resolve("known_hosts").toPath())
+        val transport = SshjTransport(TofuHostKeyVerifier(knownHosts))
+        val hosts = HostManagerController(FileHostStore(dir.resolve("hosts.json").toPath())) {
+            UUID.randomUUID().toString()
+        }
         // Биометрия: ключ в AndroidKeyStore, промпт хостит эта Activity. Слабая ссылка — стор не
         // удерживает Activity и при пересоздании отдаёт null, а не уничтоженную (промпт тогда NoActivity).
         val activityRef = WeakReference(this)
@@ -60,7 +72,13 @@ class MainActivity : FragmentActivity() {
             artifacts = FileBioArtifactStore(dir.resolve("vault.bio").absolutePath.toPath(), FileSystem.SYSTEM),
             deviceId = deviceId(dir),
         )
-        return AppDependencies(vault = vault, identities = identities, biometrics = biometrics)
+        return AppDependencies(
+            transport = transport,
+            hosts = hosts,
+            vault = vault,
+            identities = identities,
+            biometrics = biometrics,
+        )
     }
 
     /** Стабильный идентификатор устройства для записей vault (provenance + LWW будущего sync). */

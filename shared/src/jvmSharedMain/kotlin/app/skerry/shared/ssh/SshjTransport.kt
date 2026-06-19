@@ -5,9 +5,11 @@ import app.skerry.shared.sftp.SshjSftpClient
 import java.io.IOException
 import java.security.MessageDigest
 import java.security.PublicKey
+import java.security.Security
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -27,6 +29,7 @@ class SshjTransport(
 
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection =
         withContext(Dispatchers.IO) {
+            ensureCryptoProvider()
             val client = SSHClient()
             // verify() вызывается из IO-потока sshj, а читаем флаг из корутины после
             // connect() — нужна потокобезопасная видимость, поэтому AtomicBoolean.
@@ -81,6 +84,28 @@ class SshjTransport(
 
             SshjConnection(client)
         }
+}
+
+/** Один раз на процесс: регистрация полного BouncyCastle (см. [ensureCryptoProvider]). */
+private val cryptoProviderReady = AtomicBoolean(false)
+
+/**
+ * sshj полагается на полный BouncyCastle. На Android в провайдере «BC» по умолчанию сидит урезанный
+ * системный BouncyCastle (класс `com.android.org.bouncycastle…`), которому не хватает шифров и
+ * обмена ключами, нужных sshj, — из-за этого `connect()` падает на этапе KEX с обычным `IOException`
+ * («Не удалось подключиться к host:port»). Подменяем «BC» на полноценный провайдер из bcprov,
+ * который бандлится с sshj. На desktop JVM проблемы нет — guard по наличию `android.os.Build`
+ * делает функцию no-op, так что рабочее поведение desktop не меняется. Идемпотентно.
+ */
+private fun ensureCryptoProvider() {
+    if (!cryptoProviderReady.compareAndSet(false, true)) return
+    val onAndroid = runCatching { Class.forName("android.os.Build") }.isSuccess
+    if (!onAndroid) return
+    val existing = Security.getProvider("BC")
+    if (existing == null || existing.javaClass != BouncyCastleProvider::class.java) {
+        Security.removeProvider("BC")
+        Security.insertProviderAt(BouncyCastleProvider(), 1)
+    }
 }
 
 private class SshjConnection(private val client: SSHClient) : SshConnection {

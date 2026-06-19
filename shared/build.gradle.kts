@@ -34,6 +34,19 @@ kotlin {
         }
     }
 
+    // Дефолтный шаблон иерархии + общий JVM-узел jvmShared (desktop JVM + Android) под commonMain.
+    // Кастомизация шаблона (а не ручные dependsOn) сохраняет apple/iosMain-группировку.
+    applyDefaultHierarchyTemplate {
+        common {
+            group("jvmShared") {
+                withJvm()
+                // withAndroidTarget() матчит только старый KotlinAndroidTarget; target нового
+                // плагина com.android.kotlin.multiplatform.library ловим предикатом по имени.
+                withCompilations { it.target.name == "android" }
+            }
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             // api: Flow участвует в публичном контракте ssh (ShellChannel.output)
@@ -52,14 +65,19 @@ kotlin {
             // in-memory FileSystem для тестов FileVault без реальной ФС
             implementation(libs.okio.fakefilesystem)
         }
+        // Общий JVM source set (создан шаблоном выше): чистый JVM/Java API для desktop и Android —
+        // sshj-транспорт, SFTP-клиент, файловые сторы host/known-hosts.
+        val jvmSharedMain by getting {
+            dependencies {
+                implementation(libs.sshj)
+                // Явно: транзитивный bcprov sshj не виден на compile classpath, а SshjTransport
+                // ссылается на BouncyCastleProvider для подмены урезанного системного «BC» на Android.
+                implementation(libs.bouncycastle.prov)
+            }
+        }
         androidMain.dependencies {
             // BiometricPrompt + CryptoObject для AndroidBiometricKeyStore (Keystore-огороженный ключ)
             implementation(libs.androidx.biometric)
-        }
-        val desktopMain by getting {
-            dependencies {
-                implementation(libs.sshj)
-            }
         }
         val desktopTest by getting {
             dependencies {
