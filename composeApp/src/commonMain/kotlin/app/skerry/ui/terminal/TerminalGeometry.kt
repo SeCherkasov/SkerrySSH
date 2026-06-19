@@ -1,6 +1,8 @@
 package app.skerry.ui.terminal
 
+import androidx.compose.ui.geometry.Rect
 import app.skerry.shared.terminal.TerminalPos
+import app.skerry.shared.terminal.TerminalSelection
 
 /**
  * Размеры моноширинной ячейки терминала в пикселях. Замеряются один раз на стороне UI
@@ -24,4 +26,16 @@ fun cellAtOffset(x: Float, y: Float, metrics: TerminalMetrics): TerminalPos {
     val col = (x / metrics.cellWidth).toInt().coerceAtLeast(0)
     val row = (y / metrics.cellHeight).toInt().coerceAtLeast(0)
     return TerminalPos(row, col)
+}
+
+/**
+ * Прямоугольник стартовой ячейки выделения в пикселях контента — якорь для системного текстового
+ * меню (`LocalTextToolbar.showMenu` ждёт rect, над которым показать «Copy»). Берётся нормализованная
+ * верхняя-левая граница [TerminalSelection.start], UI мапит этот rect в координаты окна.
+ */
+fun selectionAnchorRect(selection: TerminalSelection, metrics: TerminalMetrics): Rect {
+    val s = selection.start
+    val left = s.col * metrics.cellWidth
+    val top = s.row * metrics.cellHeight
+    return Rect(left = left, top = top, right = left + metrics.cellWidth, bottom = top + metrics.cellHeight)
 }
