@@ -42,14 +42,15 @@ class FileHostStore(private val path: Path) : HostStore {
     private fun persist() {
         path.parent?.let { Files.createDirectories(it) }
         val tmp = path.resolveSibling("${path.fileName}.tmp")
-        Files.writeString(tmp, json.encodeToString(entries.toList()))
+        // Files.writeString/readString требуют Android API 33+; пишем байтами (UTF-8) ради minSdk 26.
+        Files.write(tmp, json.encodeToString(entries.toList()).toByteArray())
         runCatching { Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE) }
             .onFailure { Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING) }
     }
 
     private fun load() {
         if (!Files.exists(path)) return
-        runCatching { json.decodeFromString<List<Host>>(Files.readString(path)) }
+        runCatching { json.decodeFromString<List<Host>>(Files.readAllBytes(path).decodeToString()) }
             .onSuccess { entries += it }
     }
 }

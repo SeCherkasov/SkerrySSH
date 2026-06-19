@@ -3,7 +3,9 @@ agp = "9.0.1"
 # AGP 9.0 по умолчанию требует build-tools 36.0.0, которых нет в локальном SDK
 android-buildTools = "36.1.0"
 android-compileSdk = "36"
-android-minSdk = "24"
+# minSdk 26 (Android 8.0): java.nio.file доступен с API 26 — общий JVM source set (sshj-транспорт,
+# файловые сторы) разделяется desktop/Android без переписывания на okio
+android-minSdk = "26"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
 androidx-lifecycle = "2.10.0"
@@ -20,6 +22,9 @@ kotlinx-serialization = "1.9.0"
 ktor = "3.4.3"
 logback = "1.5.18"
 sshj = "0.40.0"
+# полный BouncyCastle: транзитив sshj (как implementation, на compile classpath не виден),
+# подключаем явно — на Android системный «BC» урезан и его подменяет SshjTransport.ensureCryptoProvider
+bouncycastle = "1.80.2"
 # встроенный SSH-сервер только для тестов SshjTransport; 3.x ещё в milestone
 sshd = "2.18.0"
 # мультиплатформенный libsodium-биндинг (KMP, Argon2id + XChaCha20-Poly1305) для единого VaultCrypto
@@ -49,6 +54,7 @@ ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor"
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
+bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }
 sshd-sftp = { module = "org.apache.sshd:sshd-sftp", version.ref = "sshd" }
 ionspin-libsodium = { module = "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings", version.ref = "ionspin-libsodium" }

@@ -6,10 +6,14 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.drag
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +29,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -39,13 +44,19 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -87,9 +98,13 @@ fun rememberJetBrainsMono(): FontFamily = FontFamily(
  * прокрутке, а выделение начинается после long-press. Диапазон подсвечивается полупрозрачным cyan.
  * Копирование: `Ctrl+Shift+C` (desktop) и системное текстовое меню «Copy» над выделением, которое
  * всплывает по окончании тач-выделения ([LocalTextToolbar]). Печать снимает выделение и меню.
+ *
+ * [imeInput] включает мобильный путь ввода: софт-клавиатура не шлёт key-события в
+ * [onPreviewKeyEvent], поэтому ввод снимается со скрытого `BasicTextField` ([imeDeltaToPty]).
+ * На desktop оставлен `false` — там работает физическая клавиатура через [mapTerminalKey].
  */
 @Composable
-fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
+fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, imeInput: Boolean = false) {
     val mono = rememberJetBrainsMono()
     val textStyle = remember(mono) {
         TextStyle(
@@ -103,8 +118,15 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
     val closed = sessionState == TerminalState.Closed
     val scroll = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
+    // Скрытое IME-поле (тач-ввод): держит фокус/клавиатуру, всегда сброшено к якорю.
+    val imeFocusRequester = remember { FocusRequester() }
+    val imeBaseline = remember { TextFieldValue(ANCHOR, selection = TextRange(ANCHOR.length)) }
+    var imeValue by remember { mutableStateOf(imeBaseline) }
     val clipboard = LocalClipboardManager.current
     val textToolbar = LocalTextToolbar.current
+    // Контроллер софт-клавиатуры: на таче поднимаем её явно, т.к. requestFocus() на уже
+    // сфокусированном скрытом поле — no-op (после скрытия фокус остаётся, клавиатура не всплывает).
+    val keyboard = LocalSoftwareKeyboardController.current
     var layoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     // Размер моноширинной ячейки в пикселях — для перевода координат мыши в ячейку.
@@ -118,8 +140,9 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
         )
     }
 
-    // Активная сессия забирает фокус, чтобы можно было сразу печатать.
-    LaunchedEffect(state) { if (!closed) focusRequester.requestFocus() }
+    // Активная сессия забирает фокус, чтобы можно было сразу печатать. На таче фокус держит
+    // скрытое IME-поле (оно же поднимает софт-клавиатуру), на desktop — сам терминал.
+    LaunchedEffect(state) { if (!closed) (if (imeInput) imeFocusRequester else focusRequester).requestFocus() }
 
     // Автоскролл вниз по мере нового вывода (новый снимок экрана на каждый чанк).
     LaunchedEffect(state.screen) { scroll.scrollTo(scroll.maxValue) }
@@ -153,10 +176,11 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
         )
     }
 
-    Text(
+    Box(modifier) {
+      Text(
         text = rendered,
         style = textStyle,
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .background(SkerryColors.terminalBg)
             .verticalScroll(scroll)
@@ -185,10 +209,11 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
             .pointerInput(metrics) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    focusRequester.requestFocus()
                     textToolbar.hide()
                     if (down.type == PointerType.Mouse) {
-                        // Мышь: выделение сразу по перетаскиванию; одиночный клик — снять выделение.
+                        // Мышь: фокус сразу (desktop-ввод с клавиатуры), выделение по перетаскиванию,
+                        // одиночный клик — снять выделение.
+                        focusRequester.requestFocus()
                         state.beginSelection(cellAt(down.position.x, down.position.y))
                         val dragged = drag(down.id) { change ->
                             change.consume()
@@ -196,20 +221,59 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier) {
                         }
                         if (!dragged || state.selection?.isEmpty != false) state.clearSelection()
                     } else {
-                        // Тач: обычный drag отдаём прокрутке; выделение — только после long-press,
-                        // по окончании показываем системное меню «Copy».
-                        val held = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
-                        state.beginSelection(cellAt(held.position.x, held.position.y))
-                        drag(held.id) { change ->
-                            change.consume()
-                            state.extendSelection(cellAt(change.position.x, change.position.y))
+                        // Тач: разводим жесты, чтобы тап-для-клавиатуры и long-press-для-выделения
+                        // не дрались. Long-press → режим выделения (клавиатуру НЕ поднимаем);
+                        // короткий тап → клавиатура; движение пальцем уходит в прокрутку.
+                        val held = awaitLongPressOrCancellation(down.id)
+                        if (held != null) {
+                            state.clearSelection()
+                            state.beginSelection(cellAt(held.position.x, held.position.y))
+                            drag(held.id) { change ->
+                                change.consume()
+                                state.extendSelection(cellAt(change.position.x, change.position.y))
+                            }
+                            // Пустое выделение (удержание без протяжки) — снять; иначе меню «Copy».
+                            if (state.selection?.isEmpty != false) state.clearSelection() else showCopyMenu()
+                        } else if (imeInput) {
+                            // Не long-press: если палец уже отпущен — это тап, поднимаем клавиатуру;
+                            // если ещё на экране (жест забрала прокрутка) — не трогаем.
+                            val released = currentEvent.changes.none { it.id == down.id && it.pressed }
+                            if (released) {
+                                imeFocusRequester.requestFocus()
+                                keyboard?.show()
+                            }
                         }
-                        // Пустое выделение (long-press без протяжки или отмена) — снять; иначе меню «Copy».
-                        if (state.selection?.isEmpty != false) state.clearSelection() else showCopyMenu()
                     }
                 }
             },
-    )
+      )
+
+      // Тач-ввод: невидимое поле снимает символы софт-клавиатуры. Диффим против якоря
+      // ([imeDeltaToPty]) и сразу сбрасываем — поле служит лишь «воронкой» в PTY, не хранит текст.
+      if (imeInput && !closed) {
+          BasicTextField(
+              value = imeValue,
+              onValueChange = { nv ->
+                  val out = imeDeltaToPty(ANCHOR, nv.text)
+                  if (out.isNotEmpty()) {
+                      state.clearSelection()
+                      textToolbar.hide()
+                      state.send(out)
+                  }
+                  imeValue = imeBaseline
+              },
+              modifier = Modifier.size(1.dp).focusRequester(imeFocusRequester),
+              textStyle = TextStyle(color = Color.Transparent),
+              cursorBrush = SolidColor(Color.Transparent),
+              keyboardOptions = KeyboardOptions(
+                  capitalization = KeyboardCapitalization.None,
+                  autoCorrectEnabled = false,
+                  keyboardType = KeyboardType.Ascii,
+                  imeAction = ImeAction.None,
+              ),
+          )
+      }
+    }
 }
 
 /** Цвет курсора-блока и цвет символа под ним (контраст на cyan). */
