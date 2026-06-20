@@ -69,3 +69,17 @@ compose.desktop {
         }
     }
 }
+
+// Офскрин-рендер дизайна в PNG (визуальная проверка без окна). См. design/Screenshot.kt.
+// Параметры: -Dskerry.screenshot.{out,view,overlay}. Не входит в дистрибутив.
+tasks.register<JavaExec>("screenshotDesign") {
+    group = "verification"
+    description = "Render DesktopDesignApp to a PNG via ImageComposeScene"
+    val desktopMainComp = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    dependsOn(desktopMainComp.compileTaskProvider)
+    classpath(desktopMainComp.output.allOutputs, desktopMainComp.runtimeDependencyFiles)
+    mainClass.set("app.skerry.ui.design.ScreenshotKt")
+    systemProperty("skerry.screenshot.out", providers.systemProperty("skerry.screenshot.out").getOrElse("/tmp/skerry_design.png"))
+    systemProperty("skerry.screenshot.view", providers.systemProperty("skerry.screenshot.view").getOrElse("Terminal"))
+    systemProperty("skerry.screenshot.overlay", providers.systemProperty("skerry.screenshot.overlay").getOrElse(""))
+}
