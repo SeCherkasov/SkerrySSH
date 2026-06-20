@@ -72,12 +72,14 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.identity.kindLabel
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.sftp.RemoteSftpPane
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.rememberJetBrainsMono
 import app.skerry.ui.theme.SkerryColors
 import app.skerry.ui.theme.SkerryTheme
 import app.skerry.ui.vault.VaultGate
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -158,7 +160,7 @@ private fun MobileRoot(deps: AppDependencies, onLock: (() -> Unit)?) {
                         onLock = onLock,
                     )
                     MobileTab.Terminal -> TerminalTab(sessions, onGoHosts = { tab = MobileTab.Hosts })
-                    MobileTab.Files -> FilesScreen()
+                    MobileTab.Files -> FilesTab(sessions, scope, onGoHosts = { tab = MobileTab.Hosts })
                     MobileTab.Keys -> KeysScreen(deps.identities)
                     MobileTab.Settings -> SettingsScreen(deps, onLock)
                 }
@@ -438,11 +440,66 @@ private fun KeyBtn(label: String, modifier: Modifier = Modifier, onClick: () -> 
 
 // ===================== FILES / KEYS / SETTINGS =====================
 
+/**
+ * Вкладка Files: живая SFTP-панель активной сессии. Канал поднимает [RemoteSftpPane] через
+ * `ConnectionController.openSftp()` (как desktop) — отдельный от терминального. [scope] — долгоживущий
+ * scope [MobileRoot]: закрытие канала в `onDispose` панели идёт под `NonCancellable` и должно пережить
+ * уход с вкладки. Без активной/подключённой сессии — пустое состояние.
+ */
 @Composable
-private fun FilesScreen() {
+private fun FilesTab(sessions: SessionsController?, scope: CoroutineScope, onGoHosts: () -> Unit) {
+    val active = sessions?.active
+    if (sessions == null || active == null) {
+        EmptyCenter(SkerryIconKind.Folder, "Нет активных сессий", "Подключитесь к хосту, чтобы открыть файлы")
+        return
+    }
+    val mono = rememberJetBrainsMono()
     Column(Modifier.fillMaxSize()) {
-        SimpleAppBar("Files")
-        EmptyCenter(SkerryIconKind.Folder, "SFTP скоро", "Файловый менеджер подключим следующим шагом")
+        Row(
+            Modifier.fillMaxWidth().background(SkerryColors.nightSeaSoft).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onGoHosts), contentAlignment = Alignment.Center) {
+                SkerryIcon(SkerryIconKind.Chevron, tint = SkerryColors.textDim, size = 18.dp, modifier = Modifier.rotate(90f))
+            }
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(statusColor(active.controller.uiState)))
+                    Text(active.title.ifBlank { "сессия" }, color = SkerryColors.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Text(active.subtitle, color = SkerryColors.textFaint, fontSize = 10.sp, fontFamily = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
+
+        when (val st = active.controller.uiState) {
+            is ConnectionUiState.Connecting -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    CircularProgressIndicator(color = SkerryColors.cyan)
+                    Text("Подключение…", color = SkerryColors.textDim)
+                }
+            }
+            is ConnectionUiState.Connected -> {
+                // Стабилизируем bound-reference: иначе новая лямбда на каждой рекомпозиции меняла бы
+                // ключ produceState в RemoteSftpPane и переоткрывала бы SFTP-канал.
+                val openSftp = remember(active.controller) { active.controller::openSftp }
+                RemoteSftpPane(
+                    openSftp = openSftp,
+                    scope = scope,
+                    mono = mono,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            }
+            is ConnectionUiState.Error -> Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Не удалось подключиться", color = SkerryColors.storm, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(st.message, color = SkerryColors.textDim, fontSize = 13.sp)
+                    Button(onClick = onGoHosts) { Text("К хостам") }
+                }
+            }
+            is ConnectionUiState.Form -> Box(Modifier.weight(1f))
+        }
     }
 }
 

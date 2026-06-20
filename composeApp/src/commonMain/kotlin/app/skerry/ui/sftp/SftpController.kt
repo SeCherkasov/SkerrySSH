@@ -114,47 +114,58 @@ class SftpController(
     }
 
     /**
-     * Скачать файл [entry] в локальный путь [localPath] потоково. Прогресс и ошибка идут в [transfer]
-     * (не в [state]), чтобы неудачная передача не стирала листинг. Каталоги отвергаются клиентом.
+     * Скачать файл [entry] в локальную цель [target] потоково. SFTP-клиент пишет в `target.stagingPath`;
+     * по успеху вызывается `target.finalize()` (на Android — копирование staging→Uri), при любой ошибке
+     * или отмене — `target.discard()` (очистка staging). Прогресс и ошибка идут в [transfer] (не в
+     * [state]), чтобы неудачная передача не стирала листинг. Каталоги отвергаются клиентом.
      *
      * Колбэк прогресса вызывается реализацией синхронно по ходу передачи (внутри suspend-вызова), до
      * его возврата — поэтому запись `Active` всегда предшествует финальному `Idle` без гонки, а сама
      * запись Compose-стейта потокобезопасна (snapshot-модель), даже если колбэк пришёл из IO-потока.
-     * Ловим [Exception] (а не только [SftpException]): иначе нежданная ошибка из sshj оставила бы
-     * баннер навсегда в `Active` без кнопки закрытия.
+     * Ловим [Exception] (а не только [SftpException]): иначе нежданная ошибка из sshj (или [finalize])
+     * оставила бы баннер навсегда в `Active` без кнопки закрытия. `discard()` обёрнут в [runCatching],
+     * чтобы сбой очистки не подменил исходную ошибку.
      */
-    fun download(entry: SftpEntry, localPath: String) = op {
+    fun download(entry: SftpEntry, target: DownloadTarget) = op {
         transfer = SftpTransferState.Active(entry.name, TransferDirection.Download, 0, entry.size)
         try {
-            sftp.download(entry.path, localPath) { transferred, total ->
+            sftp.download(entry.path, target.stagingPath) { transferred, total ->
                 transfer = SftpTransferState.Active(entry.name, TransferDirection.Download, transferred, total)
             }
+            target.finalize()
             transfer = SftpTransferState.Idle
         } catch (e: CancellationException) {
+            runCatching { target.discard() }
             throw e
         } catch (e: Exception) {
+            runCatching { target.discard() }
             transfer = SftpTransferState.Failed(entry.name, e.message ?: "Ошибка передачи")
         }
     }
 
     /**
-     * Загрузить локальный файл [localPath] в текущий каталог под именем [name] потоково. По успеху —
-     * перечитать каталог, чтобы показать новый файл. Прогресс/ошибка — в [transfer]. См. оговорку про
-     * синхронность колбэка и широкий catch в [download].
+     * Загрузить локальный источник [source] в текущий каталог под именем `source.name` потоково.
+     * SFTP-клиент читает из `source.stagingPath`; по завершении (успех или ошибка) вызывается
+     * `source.cleanup()` (на Android — удаление временного файла). По успеху — перечитать каталог,
+     * чтобы показать новый файл. Прогресс/ошибка — в [transfer]. См. оговорку про синхронность
+     * колбэка и широкий catch в [download].
      */
-    fun upload(localPath: String, name: String) = op {
-        val remote = childPath(name)
-        transfer = SftpTransferState.Active(name, TransferDirection.Upload, 0, 0)
+    fun upload(source: UploadSource) = op {
+        val remote = childPath(source.name)
+        transfer = SftpTransferState.Active(source.name, TransferDirection.Upload, 0, 0)
         try {
-            sftp.upload(localPath, remote) { transferred, total ->
-                transfer = SftpTransferState.Active(name, TransferDirection.Upload, transferred, total)
+            sftp.upload(source.stagingPath, remote) { transferred, total ->
+                transfer = SftpTransferState.Active(source.name, TransferDirection.Upload, transferred, total)
             }
         } catch (e: CancellationException) {
+            runCatching { source.cleanup() }
             throw e
         } catch (e: Exception) {
-            transfer = SftpTransferState.Failed(name, e.message ?: "Ошибка передачи")
+            runCatching { source.cleanup() }
+            transfer = SftpTransferState.Failed(source.name, e.message ?: "Ошибка передачи")
             return@op
         }
+        runCatching { source.cleanup() }
         transfer = SftpTransferState.Idle
         reload()
     }

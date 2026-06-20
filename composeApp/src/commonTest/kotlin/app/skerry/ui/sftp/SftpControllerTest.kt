@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -20,6 +21,38 @@ private fun seededFake(): FakeSftpClient = FakeSftpClient(startDir = HOME).apply
     seedDir("$HOME/alpha")
     seedFile("$HOME/readme.txt", size = 11)
     seedFile("$HOME/build.log", size = 200)
+}
+
+/** Handle цели скачивания для тестов: пишет staging, помнит вызовы finalize/discard. */
+private class FakeDownloadTarget(
+    override val displayName: String,
+    override val stagingPath: String,
+) : DownloadTarget {
+    var finalized = false
+        private set
+    var discarded = false
+        private set
+
+    override suspend fun finalize() {
+        finalized = true
+    }
+
+    override suspend fun discard() {
+        discarded = true
+    }
+}
+
+/** Handle источника загрузки для тестов: помнит вызов cleanup. */
+private class FakeUploadSource(
+    override val name: String,
+    override val stagingPath: String,
+) : UploadSource {
+    var cleanedUp = false
+        private set
+
+    override suspend fun cleanup() {
+        cleanedUp = true
+    }
 }
 
 class SftpControllerTest {
@@ -151,18 +184,21 @@ class SftpControllerTest {
     }
 
     @Test
-    fun `download records the call and returns transfer to Idle`() = runTest {
+    fun `download records the call finalizes the target and returns transfer to Idle`() = runTest {
         val fake = seededFake()
         val controller = controllerOn(fake)
         controller.start()
         advanceUntilIdle()
 
         val file = (controller.state as SftpPaneState.Loaded).entries.first { it.name == "readme.txt" }
-        controller.download(file, "/local/readme.txt")
+        val target = FakeDownloadTarget("readme.txt", "/local/readme.txt")
+        controller.download(file, target)
         advanceUntilIdle()
 
         assertEquals(SftpTransferState.Idle, controller.transfer)
         assertEquals("$HOME/readme.txt" to "/local/readme.txt", fake.lastDownload)
+        assertTrue(target.finalized)
+        assertFalse(target.discarded)
     }
 
     @Test
@@ -175,7 +211,7 @@ class SftpControllerTest {
         advanceUntilIdle()
 
         val file = (controller.state as SftpPaneState.Loaded).entries.first { it.name == "readme.txt" }
-        controller.download(file, "/local/readme.txt")
+        controller.download(file, FakeDownloadTarget("readme.txt", "/local/readme.txt"))
         advanceUntilIdle() // дойдёт до приостановки на шлюзе — после первого колбэка прогресса
 
         val active = assertIs<SftpTransferState.Active>(controller.transfer)
@@ -189,33 +225,55 @@ class SftpControllerTest {
     }
 
     @Test
-    fun `download of a directory surfaces a Failed transfer without changing the listing`() = runTest {
+    fun `download of a directory discards the target and surfaces Failed without changing the listing`() = runTest {
         val controller = controllerOn(seededFake())
         controller.start()
         advanceUntilIdle()
 
         val dir = (controller.state as SftpPaneState.Loaded).entries.first { it.name == "alpha" }
-        controller.download(dir, "/local/alpha")
+        val target = FakeDownloadTarget("alpha", "/local/alpha")
+        controller.download(dir, target)
         advanceUntilIdle()
 
         assertIs<SftpTransferState.Failed>(controller.transfer)
+        assertTrue(target.discarded)
+        assertFalse(target.finalized)
         // Листинг не должен превратиться в Error из-за неудачной передачи.
         assertIs<SftpPaneState.Loaded>(controller.state)
     }
 
     @Test
-    fun `upload creates the remote file shows it in the listing and ends Idle`() = runTest {
+    fun `upload creates the remote file cleans up the source shows it in the listing and ends Idle`() = runTest {
         val fake = seededFake().apply { uploadSize = 8 }
         val controller = controllerOn(fake)
         controller.start()
         advanceUntilIdle()
 
-        controller.upload("/local/new.bin", "new.bin")
+        val source = FakeUploadSource("new.bin", "/local/new.bin")
+        controller.upload(source)
         advanceUntilIdle()
 
         assertEquals(SftpTransferState.Idle, controller.transfer)
         assertEquals("/local/new.bin" to "$HOME/new.bin", fake.lastUpload)
+        assertTrue(source.cleanedUp)
         assertTrue((controller.state as SftpPaneState.Loaded).entries.any { it.name == "new.bin" })
+    }
+
+    @Test
+    fun `upload cleans up the source and surfaces Failed when the transfer fails`() = runTest {
+        val fake = seededFake().apply { uploadError = "диск переполнен" }
+        val controller = controllerOn(fake)
+        controller.start()
+        advanceUntilIdle()
+
+        val source = FakeUploadSource("new.bin", "/local/new.bin")
+        controller.upload(source)
+        advanceUntilIdle()
+
+        assertIs<SftpTransferState.Failed>(controller.transfer)
+        assertTrue(source.cleanedUp)
+        // Листинг не должен превратиться в Error из-за неудачной передачи.
+        assertIs<SftpPaneState.Loaded>(controller.state)
     }
 
     @Test

@@ -92,7 +92,11 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
         emitProgress(onProgress, entry.size)
     }
 
+    /** Если задан, следующий [upload] бросит [SftpException] с этим текстом (тест cleanup при сбое). */
+    var uploadError: String? = null
+
     override suspend fun upload(localPath: String, remotePath: String, onProgress: SftpProgress) {
+        uploadError?.let { throw SftpException(it) }
         val norm = realpathSync(remotePath)
         if (children[parentOf(norm)] == null) throw SftpException("Нет родителя для $remotePath")
         lastUpload = localPath to remotePath

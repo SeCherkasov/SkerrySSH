@@ -3,6 +3,7 @@ package app.skerry.android
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
 import app.skerry.shared.host.FileHostStore
 import app.skerry.shared.ssh.FileKnownHostsStore
@@ -17,6 +18,8 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.mobile.MobileApp
+import app.skerry.ui.sftp.SafBridge
+import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import kotlinx.coroutines.runBlocking
@@ -37,6 +40,25 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Контекст для проверки keyguard: авто-лок при уходе в фон должен срабатывать только при
+        // реально заблокированном устройстве, а не при открытии системного пикера (см. deviceMandatesAutoLock).
+        AndroidLockContext.appContext = applicationContext
+
+        // SAF-пикеры SFTP: launcher'ы регистрируем в onCreate (требование ActivityResult API — до
+        // STARTED) и отдаём в SafBridge как лямбды запуска, чтобы общий UI-код не зависел от Activity.
+        // octet-stream — нейтральный MIME для произвольного бинарного скачивания; "*/*" — любой upload.
+        val createDocument = registerForActivityResult(
+            ActivityResultContracts.CreateDocument("application/octet-stream"),
+        ) { uri -> SafBridge.onCreateResult(uri) }
+        val openDocument = registerForActivityResult(
+            ActivityResultContracts.OpenDocument(),
+        ) { uri -> SafBridge.onOpenResult(uri) }
+        SafBridge.install(
+            applicationContext,
+            launchCreate = { name -> createDocument.launch(name) },
+            launchOpen = { openDocument.launch(arrayOf("*/*")) },
+        )
 
         // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
         // на старте делаем это блокирующе, как desktop, чтобы граф строился уже готовым.

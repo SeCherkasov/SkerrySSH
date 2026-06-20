@@ -150,12 +150,9 @@ fun SftpScreen(
             onNewFolder = { creating = true },
             onUpload = {
                 uiScope.launch {
-                    pickUploadSource()?.let { local ->
-                        // Имя файла из локального пути: режем оба разделителя — на Windows AWT
-                        // вернёт путь с `\`, на POSIX — с `/`.
-                        val name = local.substringAfterLast('/').substringAfterLast('\\')
-                        controller.upload(local, name)
-                    }
+                    // Имя файла и staging-путь инкапсулированы в источнике: desktop отдаёт реальный
+                    // путь, Android — копию выбранного Uri во временном файле.
+                    pickUploadSource()?.let { source -> controller.upload(source) }
                 }
             },
         )
@@ -188,8 +185,8 @@ fun SftpScreen(
                                     onOpen = { controller.open(entry) },
                                     onDownload = {
                                         uiScope.launch {
-                                            pickDownloadTarget(entry.name)?.let { local ->
-                                                controller.download(entry, local)
+                                            pickDownloadTarget(entry.name)?.let { target ->
+                                                controller.download(entry, target)
                                             }
                                         }
                                     },

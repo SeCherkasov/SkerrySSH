@@ -63,6 +63,15 @@ private val UNLOCK_PROMPT = BiometricPrompt(
 )
 
 /**
+ * Нужно ли запирать vault при уходе приложения в фон (`ON_STOP`) — платформенная политика.
+ * Desktop: всегда (как раньше). Android: только если устройство реально заблокировано (keyguard) —
+ * переключение на системный пикер/шторку фон vault не запирает, иначе выбор файла рвал бы сессию.
+ * Простой по таймеру ([AUTO_LOCK_IDLE_MS]) и завершение процесса (свежий старт всегда заперт)
+ * закрывают остальные случаи.
+ */
+expect fun deviceMandatesAutoLock(): Boolean
+
+/**
  * Гейт мастер-пароля: пока [Vault] заблокирован, показывает форму создания или разблокировки;
  * после разблокировки рендерит [content] (остальной UI приложения). Контроллер живёт на время
  * композиции (привязан к идентичности [vault]/[biometrics]).
@@ -94,7 +103,8 @@ fun VaultGate(
             // посреди аутентификации потеряла бы её успешный результат (см. biometricInFlight).
             if (event == Lifecycle.Event.ON_STOP &&
                 controller.state == VaultGateState.Unlocked &&
-                !controller.biometricInFlight
+                !controller.biometricInFlight &&
+                deviceMandatesAutoLock()
             ) {
                 controller.lock()
             }
