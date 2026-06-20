@@ -37,8 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import app.skerry.shared.vault.BiometricAvailability
-import app.skerry.shared.vault.BiometricEnableResult
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
@@ -225,11 +223,15 @@ private fun UnlockVaultForm(
  */
 @Composable
 fun VaultBiometricSettings(
+    vault: Vault,
     biometrics: VaultBiometrics,
     onLock: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    if (biometrics.availability() != BiometricAvailability.Available) {
+    // Тумблер ходит через тот же контроллер, что и разблокировка: включение/выключение и
+    // реактивное состояние биометрии живут в VaultGateController, UI их только отображает.
+    val controller = remember(vault, biometrics) { VaultGateController(vault, biometrics) }
+    if (!controller.canEnableBiometric()) {
         // Биометрия недоступна — показываем только ручной lock (если он есть).
         if (onLock != null) {
             Column(modifier.padding(24.dp)) {
@@ -239,8 +241,6 @@ fun VaultBiometricSettings(
         return
     }
 
-    var enabled by remember { mutableStateOf(biometrics.isEnabled()) }
-    var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Column(
@@ -258,22 +258,12 @@ fun VaultBiometricSettings(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Switch(
-                checked = enabled,
-                enabled = !busy,
+                checked = controller.biometricEnabled,
+                enabled = !controller.biometricInFlight,
                 onCheckedChange = { wantOn ->
-                    if (busy) return@Switch
-                    busy = true
+                    if (controller.biometricInFlight) return@Switch
                     scope.launch {
-                        try {
-                            if (wantOn) {
-                                if (enableBiometric(biometrics)) enabled = true
-                            } else {
-                                biometrics.disable()
-                                enabled = false
-                            }
-                        } finally {
-                            busy = false
-                        }
+                        if (wantOn) controller.enableBiometric(ENABLE_PROMPT) else controller.disableBiometric()
                     }
                 },
             )
@@ -283,10 +273,6 @@ fun VaultBiometricSettings(
         }
     }
 }
-
-/** Включить биометрию с промптом; вынесено, чтобы держать строки промпта рядом с гейтом. */
-private suspend fun enableBiometric(biometrics: VaultBiometrics): Boolean =
-    biometrics.enable(ENABLE_PROMPT) == BiometricEnableResult.Enabled
 
 @Composable
 private fun VaultFormScaffold(

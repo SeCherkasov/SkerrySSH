@@ -41,12 +41,6 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
         register(SftpEntry(nameOf(norm), norm, SftpEntryType.File, size, modifiedEpochSeconds, 0b110_100_100))
     }
 
-    /** Засеять симлинк [path] (тип Symlink, на цель не смотрим — как lstat). */
-    fun seedSymlink(path: String, size: Long = 0) {
-        val norm = realpathSync(path)
-        register(SftpEntry(nameOf(norm), norm, SftpEntryType.Symlink, size, 0, 0b111_111_111))
-    }
-
     override suspend fun list(path: String): List<SftpEntry> {
         val dir = children[realpathSync(path)] ?: throw SftpException("Нет каталога $path")
         return dir.values.toList()
