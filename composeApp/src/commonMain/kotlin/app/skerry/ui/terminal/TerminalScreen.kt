@@ -1,5 +1,6 @@
 package app.skerry.ui.terminal
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -30,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -48,6 +50,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.TextRange
@@ -64,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermColor
 import app.skerry.shared.terminal.TermStyle
+import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.generated.resources.Res
@@ -75,6 +79,10 @@ import org.jetbrains.compose.resources.Font
 private const val FONT_SIZE_SP = 13
 private const val LINE_HEIGHT_SP = 18
 private const val PADDING_DP = 14
+
+/** Радиус «капли» тач-маркера выделения и радиус зоны попадания пальца по нему. */
+private const val HANDLE_RADIUS_DP = 7
+private const val HANDLE_TOUCH_RADIUS_DP = 22
 
 /**
  * Моноширинное семейство Skerry — JetBrains Mono из compose-resources.
@@ -129,7 +137,9 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, im
     val keyboard = LocalSoftwareKeyboardController.current
     var layoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    // Размер моноширинной ячейки в пикселях — для перевода координат мыши в ячейку.
+    // Размер моноширинной ячейки в пикселях — фолбэк-перевод координат мыши в ячейку до того, как
+    // придёт реальный лэйаут текста ([layout]). Точные позиции (подсветка/маркеры/хит-тест) берём
+    // из самого [TextLayoutResult], чтобы совпадать с рендером при любом шрифте и системном масштабе.
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val metrics = remember(textStyle, density) {
@@ -139,6 +149,9 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, im
             cellHeight = with(density) { LINE_HEIGHT_SP.sp.toPx() },
         )
     }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val handleRadiusPx = with(density) { HANDLE_RADIUS_DP.dp.toPx() }
+    val handleTouchRadiusPx = with(density) { HANDLE_TOUCH_RADIUS_DP.dp.toPx() }
 
     // Активная сессия забирает фокус, чтобы можно было сразу печатать. На таче фокус держит
     // скрытое IME-поле (оно же поднимает софт-клавиатуру), на desktop — сам терминал.
@@ -152,6 +165,53 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, im
     }
 
     fun cellAt(x: Float, y: Float) = cellAtOffset(x, y, metrics)
+
+    // Координата указателя (содержимое, со скроллом) → ячейка через фактический лэйаут: совпадает с
+    // подсветкой и маркерами. До прихода лэйаута — фолбэк на арифметику [cellAt].
+    fun posAt(x: Float, y: Float): TerminalPos {
+        val l = layout ?: return cellAt(x, y)
+        val screen = state.screen
+        if (screen.isEmpty()) return cellAt(x, y)
+        var rem = l.getOffsetForPosition(Offset(x, y))
+        var row = 0
+        while (row < screen.lastIndex) {
+            var len = screen[row].size
+            if (!closed && row == state.cursorRow && state.cursorCol >= screen[row].size) len += 1
+            if (rem <= len) break
+            rem -= len + 1
+            row++
+        }
+        return TerminalPos(row, rem.coerceIn(0, screen[row].size))
+    }
+
+    // Линейный индекс ячейки (row, col) в строке [rendered]: суммируем длины предыдущих строк
+    // (+1 на '\n'), плюс «хвостовой» пробел курсора, который renderScreen дорисовывает в конце
+    // строки курсора. Нужен, чтобы спросить у TextLayoutResult точную пиксельную позицию.
+    fun lineOffset(pos: TerminalPos): Int {
+        val screen = state.screen
+        if (screen.isEmpty()) return 0
+        val row = pos.row.coerceIn(0, screen.lastIndex)
+        var off = 0
+        for (r in 0 until row) {
+            off += screen[r].size
+            if (!closed && r == state.cursorRow && state.cursorCol >= screen[r].size) off += 1
+            off += 1 // '\n'
+        }
+        return off + pos.col.coerceIn(0, screen[row].size)
+    }
+
+    // Пиксельная позиция границы выделения (содержимое, без скролла) из фактического лэйаута —
+    // совпадает с подсветкой, которую рисует Text. null, пока лэйаут не пришёл.
+    fun handleAnchor(pos: TerminalPos): Offset? {
+        val l = layout ?: return null
+        if (state.screen.isEmpty()) return null
+        val off = lineOffset(pos)
+        val line = l.getLineForOffset(off)
+        return Offset(
+            x = l.getHorizontalPosition(off, usePrimaryDirection = true),
+            y = l.getLineBottom(line),
+        )
+    }
 
     fun copySelection() {
         state.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
@@ -180,6 +240,7 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, im
       Text(
         text = rendered,
         style = textStyle,
+        onTextLayout = { layout = it },
         modifier = Modifier
             .fillMaxSize()
             .background(SkerryColors.terminalBg)
@@ -214,25 +275,51 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, im
                         // Мышь: фокус сразу (desktop-ввод с клавиатуры), выделение по перетаскиванию,
                         // одиночный клик — снять выделение.
                         focusRequester.requestFocus()
-                        state.beginSelection(cellAt(down.position.x, down.position.y))
+                        state.beginSelection(posAt(down.position.x, down.position.y))
                         val dragged = drag(down.id) { change ->
                             change.consume()
-                            state.extendSelection(cellAt(change.position.x, change.position.y))
+                            state.extendSelection(posAt(change.position.x, change.position.y))
                         }
                         if (!dragged || state.selection?.isEmpty != false) state.clearSelection()
                     } else {
-                        // Тач: разводим жесты, чтобы тап-для-клавиатуры и long-press-для-выделения
+                        // Тач: сначала — попал ли палец в маркер уже существующего выделения.
+                        // Если да, перетаскиваем эту границу (вторую держим) — корректировка краёв,
+                        // как в мессенджерах; по окончании обновляем меню «Copy».
+                        val sel = state.selection
+                        val handle = if (sel != null && !sel.isEmpty) {
+                            val s = handleAnchor(sel.start)
+                            val e = handleAnchor(sel.end)
+                            val ds = s?.let { (down.position - it).getDistance() } ?: Float.MAX_VALUE
+                            val de = e?.let { (down.position - it).getDistance() } ?: Float.MAX_VALUE
+                            when {
+                                ds <= handleTouchRadiusPx && ds <= de -> SelectionHandle.START
+                                de <= handleTouchRadiusPx -> SelectionHandle.END
+                                else -> null
+                            }
+                        } else null
+                        if (handle != null) {
+                            drag(down.id) { change ->
+                                change.consume()
+                                val pos = posAt(change.position.x, change.position.y)
+                                if (handle == SelectionHandle.START) state.moveSelectionStart(pos)
+                                else state.moveSelectionEnd(pos)
+                            }
+                            if (state.selection?.isEmpty != false) state.clearSelection() else showCopyMenu()
+                            return@awaitEachGesture
+                        }
+                        // Иначе разводим жесты, чтобы тап-для-клавиатуры и long-press-для-выделения
                         // не дрались. Long-press → режим выделения (клавиатуру НЕ поднимаем);
                         // короткий тап → клавиатура; движение пальцем уходит в прокрутку.
                         val held = awaitLongPressOrCancellation(down.id)
                         if (held != null) {
-                            state.clearSelection()
-                            state.beginSelection(cellAt(held.position.x, held.position.y))
+                            // По зажатию сразу выделяем СЛОВО под пальцем (как в мессенджерах) —
+                            // выделение и маркеры видны мгновенно, без необходимости двигать палец.
+                            // Дальнейший drag тянет границу от слова; меню «Copy» поднимаем в конце.
+                            state.selectWordAt(posAt(held.position.x, held.position.y))
                             drag(held.id) { change ->
                                 change.consume()
-                                state.extendSelection(cellAt(change.position.x, change.position.y))
+                                state.extendSelection(posAt(change.position.x, change.position.y))
                             }
-                            // Пустое выделение (удержание без протяжки) — снять; иначе меню «Copy».
                             if (state.selection?.isEmpty != false) state.clearSelection() else showCopyMenu()
                         } else if (imeInput) {
                             // Не long-press: если палец уже отпущен — это тап, поднимаем клавиатуру;
@@ -247,6 +334,22 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, im
                 }
             },
       )
+
+      // Тач-маркеры выделения («капли» по краям). Рисуем только на мобильном пути ([imeInput]):
+      // оверлей внутри того же padding, что и текст, со сдвигом по вертикали на текущую прокрутку,
+      // чтобы маркеры держались на границах выделения при скролле. На мыши (desktop) их нет.
+      if (imeInput && !closed) {
+          val sel = state.selection
+          val startAnchor = sel?.takeIf { !it.isEmpty }?.let { handleAnchor(it.start) }
+          val endAnchor = sel?.takeIf { !it.isEmpty }?.let { handleAnchor(it.end) }
+          if (startAnchor != null && endAnchor != null) {
+              Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
+                  val dy = -scroll.value.toFloat()
+                  drawSelectionHandle(startAnchor.copy(y = startAnchor.y + dy), handleRadiusPx, metrics.cellHeight, SelectionHandle.START)
+                  drawSelectionHandle(endAnchor.copy(y = endAnchor.y + dy), handleRadiusPx, metrics.cellHeight, SelectionHandle.END)
+              }
+          }
+      }
 
       // Тач-ввод: невидимое поле снимает символы софт-клавиатуры. Диффим против якоря
       // ([imeDeltaToPty]) и сразу сбрасываем — поле служит лишь «воронкой» в PTY, не хранит текст.
@@ -282,6 +385,30 @@ private val cursorFg = SkerryColors.terminalBg
 
 /** Полупрозрачная подсветка выделения — поверх собственного фона ячейки. */
 private val selectionBg = SkerryColors.cyan.copy(alpha = 0.3f)
+
+/** Цвет тач-маркеров выделения. */
+private val handleColor = SkerryColors.cyan
+
+/**
+ * Рисует один тач-маркер выделения: вертикальную «ножку» вдоль границы ячейки (высотой в строку)
+ * и «каплю»-кружок под якорем, смещённый наружу от текста (start — влево, end — вправо), как в
+ * системных хэндлах выделения. [anchor] — угловая точка границы в координатах канвы.
+ */
+private fun DrawScope.drawSelectionHandle(
+    anchor: Offset,
+    radius: Float,
+    cellHeight: Float,
+    which: SelectionHandle,
+) {
+    drawLine(
+        color = handleColor,
+        start = Offset(anchor.x, anchor.y - cellHeight),
+        end = anchor,
+        strokeWidth = radius * 0.5f,
+    )
+    val cx = anchor.x + if (which == SelectionHandle.START) -radius else radius
+    drawCircle(color = handleColor, radius = radius, center = Offset(cx, anchor.y + radius))
+}
 
 /**
  * Собирает [AnnotatedString] из сетки ячеек: для каждой ячейки считается эффективный стиль

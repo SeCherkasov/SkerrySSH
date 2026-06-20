@@ -120,6 +120,81 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `selecting a word grabs the whole run under the position`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello world".encodeToByteArray())
+        state.selectWordAt(TerminalPos(0, 8)) // палец на "world"
+
+        assertEquals("world", state.selectedText())
+        scope.cancel()
+    }
+
+    @Test
+    fun `selecting a word from its first char still grabs the whole word`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello world".encodeToByteArray())
+        state.selectWordAt(TerminalPos(0, 0)) // палец на "h"
+
+        assertEquals("hello", state.selectedText())
+        scope.cancel()
+    }
+
+    @Test
+    fun `moving the end handle extends the selection keeping the start`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello world".encodeToByteArray())
+        state.beginSelection(TerminalPos(0, 0))
+        state.extendSelection(TerminalPos(0, 5)) // "hello"
+        state.moveSelectionEnd(TerminalPos(0, 11))
+
+        assertEquals("hello world", state.selectedText())
+        scope.cancel()
+    }
+
+    @Test
+    fun `moving the start handle shrinks the selection keeping the end`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello world".encodeToByteArray())
+        state.beginSelection(TerminalPos(0, 0))
+        state.extendSelection(TerminalPos(0, 11)) // "hello world"
+        state.moveSelectionStart(TerminalPos(0, 6))
+
+        assertEquals("world", state.selectedText())
+        scope.cancel()
+    }
+
+    @Test
+    fun `moving a handle with no selection is a no-op`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello".encodeToByteArray())
+        state.moveSelectionStart(TerminalPos(0, 1))
+        state.moveSelectionEnd(TerminalPos(0, 3))
+
+        assertEquals(null, state.selection)
+        scope.cancel()
+    }
+
+    @Test
     fun `empty selection produces no copyable text`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

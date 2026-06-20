@@ -11,6 +11,7 @@ import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.shared.terminal.wordSelectionAt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -70,6 +71,30 @@ class TerminalScreenState(
     /** Протянуть выделение до [pos] (перетаскивание): двигаем фокус, якорь на месте. */
     fun extendSelection(pos: TerminalPos) {
         selection = selection?.copy(focus = pos)
+    }
+
+    /**
+     * Выделить целое слово под [pos] — для long-press: непрерывный пробег непробельных (или
+     * пробельных) ячеек на строке ([wordSelectionAt]). Пустой пробег выделения не ставит.
+     */
+    fun selectWordAt(pos: TerminalPos) {
+        selection = wordSelectionAt(screen, pos).takeIf { !it.isEmpty }
+    }
+
+    /**
+     * Сдвинуть верхнюю-левую границу выделения в [pos] (перетаскивание start-маркера): держим
+     * нижнюю-правую границу как якорь, новая позиция становится фокусом. No-op без выделения.
+     */
+    fun moveSelectionStart(pos: TerminalPos) {
+        selection = selection?.let { TerminalSelection(anchor = it.end, focus = pos) }
+    }
+
+    /**
+     * Сдвинуть нижнюю-правую границу выделения в [pos] (перетаскивание end-маркера): держим
+     * верхнюю-левую границу как якорь, новая позиция становится фокусом. No-op без выделения.
+     */
+    fun moveSelectionEnd(pos: TerminalPos) {
+        selection = selection?.let { TerminalSelection(anchor = it.start, focus = pos) }
     }
 
     /** Снять выделение (клик/новый ввод). */
