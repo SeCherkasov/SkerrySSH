@@ -12,6 +12,8 @@ import net.schmizz.sshj.sftp.RemoteResourceInfo
 import net.schmizz.sshj.sftp.Response
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.sftp.SFTPException
+import net.schmizz.sshj.common.StreamCopier
+import net.schmizz.sshj.xfer.TransferListener
 
 /**
  * Desktop-реализация [SftpClient] поверх sshj `SFTPClient` (один SFTP-канал на экземпляр).
@@ -76,6 +78,23 @@ internal class SshjSftpClient(
         }
     }
 
+    override suspend fun download(
+        remotePath: String,
+        localPath: String,
+        onProgress: SftpProgress,
+    ): Unit = io("Не удалось скачать файл $remotePath") {
+        // sshj.get тянет файл потоком на диск; прогресс — через TransferListener канала передачи.
+        withTransferListener(onProgress) { sftp.get(remotePath, localPath) }
+    }
+
+    override suspend fun upload(
+        localPath: String,
+        remotePath: String,
+        onProgress: SftpProgress,
+    ): Unit = io("Не удалось загрузить файл в $remotePath") {
+        withTransferListener(onProgress) { sftp.put(localPath, remotePath) }
+    }
+
     override suspend fun mkdir(path: String): Unit = io("Не удалось создать каталог $path") {
         sftp.mkdir(path)
     }
@@ -114,6 +133,33 @@ internal class SshjSftpClient(
 
     private suspend inline fun <T> io(message: String, crossinline block: () -> T): T =
         withContext(Dispatchers.IO) { ioBody(message, block) }
+
+    /**
+     * Выставить листенер прогресса на общий канал передачи sshj на время [block] и снять после —
+     * чтобы листенер прошлой передачи не висел на разделяемом `fileTransfer` (операции сериализованы
+     * выше по стеку, но глобальное состояние канала лучше не оставлять «грязным»).
+     */
+    private inline fun <T> withTransferListener(onProgress: SftpProgress, block: () -> T): T {
+        sftp.fileTransfer.transferListener = progressListener(onProgress)
+        try {
+            return block()
+        } finally {
+            sftp.fileTransfer.transferListener = progressListener(SftpProgress { _, _ -> })
+        }
+    }
+
+    /**
+     * Адаптер прогресса sshj → [SftpProgress]. Иерархический [TransferListener] для одиночного
+     * файла сводится к листенеру байтов: `file(name, size)` отдаёт полный размер, а его
+     * `reportProgress` приходит с накопленным числом переданных байт. Вложенных каталогов в
+     * передаче файла нет, поэтому `directory` просто возвращает себя.
+     */
+    private fun progressListener(onProgress: SftpProgress): TransferListener =
+        object : TransferListener {
+            override fun directory(name: String): TransferListener = this
+            override fun file(name: String, size: Long): StreamCopier.Listener =
+                StreamCopier.Listener { transferred -> onProgress.onProgress(transferred, size) }
+        }
 
     private companion object {
         /** Потолок чтения по умолчанию для [read] (64 MiB) — секреты/конфиги MVP заведомо меньше. */

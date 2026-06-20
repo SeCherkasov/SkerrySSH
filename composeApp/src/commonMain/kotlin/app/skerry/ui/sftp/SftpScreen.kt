@@ -18,6 +18,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -29,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -121,9 +123,10 @@ fun RemoteSftpPane(
 }
 
 /**
- * Рендер одной [SftpController]: тулбар (вверх/обновить/новый каталог) с текущим путём и список
- * записей (каталоги первыми). Клик по каталогу — вход внутрь; меню записи — переименовать/удалить.
- * Загрузка файла (download) появится со стримингом — пока клик по файлу no-op (как в контроллере).
+ * Рендер одной [SftpController]: тулбар (вверх/обновить/загрузить/новый каталог) с текущим путём и
+ * список записей (каталоги первыми). Клик по каталогу — вход внутрь; меню записи —
+ * скачать (для файлов)/переименовать/удалить. Передача файлов идёт потоком с прогресс-баннером;
+ * локальный путь выбирается нативным диалогом ([pickUploadSource]/[pickDownloadTarget]).
  */
 @Composable
 fun SftpScreen(
@@ -134,6 +137,9 @@ fun SftpScreen(
     var creating by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<SftpEntry?>(null) }
     var deleting by remember { mutableStateOf<SftpEntry?>(null) }
+    // UI-scope для модальных диалогов выбора файла: их отмена при уходе с панели безопасна
+    // (сама передача живёт на scope контроллера и переживёт закрытие диалога).
+    val uiScope = rememberCoroutineScope()
 
     Column(modifier.fillMaxSize().background(SkerryColors.nightSea)) {
         SftpToolbar(
@@ -142,8 +148,19 @@ fun SftpScreen(
             onUp = controller::goUp,
             onRefresh = controller::refresh,
             onNewFolder = { creating = true },
+            onUpload = {
+                uiScope.launch {
+                    pickUploadSource()?.let { local ->
+                        // Имя файла из локального пути: режем оба разделителя — на Windows AWT
+                        // вернёт путь с `\`, на POSIX — с `/`.
+                        val name = local.substringAfterLast('/').substringAfterLast('\\')
+                        controller.upload(local, name)
+                    }
+                }
+            },
         )
         Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
+        TransferBanner(controller.transfer, mono, onDismiss = controller::clearTransfer)
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when (val state = controller.state) {
@@ -169,6 +186,13 @@ fun SftpScreen(
                                     entry = entry,
                                     mono = mono,
                                     onOpen = { controller.open(entry) },
+                                    onDownload = {
+                                        uiScope.launch {
+                                            pickDownloadTarget(entry.name)?.let { local ->
+                                                controller.download(entry, local)
+                                            }
+                                        }
+                                    },
                                     onRename = { renaming = entry },
                                     onDelete = { deleting = entry },
                                 )
@@ -220,6 +244,7 @@ private fun SftpToolbar(
     onUp: () -> Unit,
     onRefresh: () -> Unit,
     onNewFolder: () -> Unit,
+    onUpload: () -> Unit,
 ) {
     Row(
         Modifier
@@ -245,8 +270,70 @@ private fun SftpToolbar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
         )
+        ChromeIconButton(SkerryIconKind.Upload, onClick = onUpload)
         ChromeIconButton(SkerryIconKind.Refresh, onClick = onRefresh)
         ChromeIconButton(SkerryIconKind.Add, onClick = onNewFolder, tint = SkerryColors.cyan)
+    }
+}
+
+/**
+ * Полоса состояния передачи под тулбаром: прогресс при [SftpTransferState.Active] (детерминированный
+ * бар, если известен размер, иначе бесконечный) и ошибка при [SftpTransferState.Failed] с кнопкой
+ * закрытия. При [SftpTransferState.Idle] не рисует ничего.
+ */
+@Composable
+private fun TransferBanner(
+    transfer: SftpTransferState,
+    mono: FontFamily,
+    onDismiss: () -> Unit,
+) {
+    when (transfer) {
+        SftpTransferState.Idle -> Unit
+
+        is SftpTransferState.Active -> Column(
+            Modifier.fillMaxWidth().background(SkerryColors.nightSeaSoft).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            val verb = if (transfer.direction == TransferDirection.Download) "Скачивание" else "Загрузка"
+            val tail = if (transfer.total > 0) {
+                " — ${formatSize(transfer.transferred)} / ${formatSize(transfer.total)}"
+            } else {
+                ""
+            }
+            Text(
+                "$verb «${transfer.name}»$tail",
+                color = SkerryColors.text,
+                fontFamily = mono,
+                fontSize = 11.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (transfer.total > 0) {
+                LinearProgressIndicator(
+                    progress = { (transfer.transferred.toFloat() / transfer.total).coerceIn(0f, 1f) },
+                    color = SkerryColors.cyan,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                LinearProgressIndicator(color = SkerryColors.cyan, modifier = Modifier.fillMaxWidth())
+            }
+        }
+
+        is SftpTransferState.Failed -> Row(
+            Modifier.fillMaxWidth().background(SkerryColors.nightSeaSoft).padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "Не удалось передать «${transfer.name}»: ${transfer.message}",
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 11.5.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            ChromeIconButton(SkerryIconKind.Close, onClick = onDismiss)
+        }
     }
 }
 
@@ -255,6 +342,7 @@ private fun SftpRow(
     entry: SftpEntry,
     mono: FontFamily,
     onOpen: () -> Unit,
+    onDownload: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -284,16 +372,23 @@ private fun SftpRow(
         if (!isDir) {
             Text(formatSize(entry.size), color = SkerryColors.textFaint, fontSize = 11.sp)
         }
-        SftpRowMenu(onRename = onRename, onDelete = onDelete)
+        // Скачивание только для файлов: каталоги рекурсивно качать пока не умеем.
+        SftpRowMenu(onDownload = onDownload.takeUnless { isDir }, onRename = onRename, onDelete = onDelete)
     }
 }
 
 @Composable
-private fun SftpRowMenu(onRename: () -> Unit, onDelete: () -> Unit) {
+private fun SftpRowMenu(onDownload: (() -> Unit)?, onRename: () -> Unit, onDelete: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         ChromeIconButton(SkerryIconKind.MoreVert, onClick = { expanded = true })
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (onDownload != null) {
+                DropdownMenuItem(
+                    text = { Text("Скачать") },
+                    onClick = { expanded = false; onDownload() },
+                )
+            }
             DropdownMenuItem(
                 text = { Text("Переименовать") },
                 onClick = { expanded = false; onRename() },

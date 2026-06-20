@@ -2,6 +2,7 @@ package app.skerry.ui.connection
 
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
+import app.skerry.shared.sftp.SftpProgress
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.ssh.ShellChannel
@@ -193,6 +194,8 @@ private class RecordingSftpClient : SftpClient {
     override suspend fun realpath(path: String): String = path
     override suspend fun read(path: String): ByteArray = ByteArray(0)
     override suspend fun write(path: String, data: ByteArray) = Unit
+    override suspend fun download(remotePath: String, localPath: String, onProgress: SftpProgress) = Unit
+    override suspend fun upload(localPath: String, remotePath: String, onProgress: SftpProgress) = Unit
     override suspend fun mkdir(path: String) = Unit
     override suspend fun remove(path: String) = Unit
     override suspend fun rmdir(path: String) = Unit

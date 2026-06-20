@@ -23,6 +23,7 @@ import app.skerry.ui.theme.SkerryColors
 enum class SkerryIconKind {
     Chevron, Close, Add, Search, Lock, LockOpen, Tune, MoreVert,
     Folder, File, Info, Power, Terminal, Key, Refresh, Ai,
+    Download, Upload,
 }
 
 /**
@@ -57,6 +58,8 @@ fun SkerryIcon(
             SkerryIconKind.Key -> key(tint, stroke, w)
             SkerryIconKind.Refresh -> refresh(tint, stroke)
             SkerryIconKind.Ai -> ai(tint)
+            SkerryIconKind.Download -> trayArrow(tint, stroke, down = true)
+            SkerryIconKind.Upload -> trayArrow(tint, stroke, down = false)
         }
     }
 }
@@ -201,6 +204,22 @@ private fun DrawScope.refresh(c: Color, st: Stroke) {
     )
     drawLine(c, p(0.72f, 0.3f), p(0.78f, 0.42f), st.width, st.cap)
     drawLine(c, p(0.78f, 0.42f), p(0.86f, 0.32f), st.width, st.cap)
+}
+
+/**
+ * Стрелка к опорной линии снизу: вниз — скачать (download), вверх — загрузить (upload).
+ * Стержень + наконечник + «полка» внизу, как у привычных иконок передачи файлов.
+ */
+private fun DrawScope.trayArrow(c: Color, st: Stroke, down: Boolean) {
+    drawLine(c, p(0.5f, 0.22f), p(0.5f, 0.6f), st.width, st.cap)
+    if (down) {
+        drawLine(c, p(0.36f, 0.46f), p(0.5f, 0.6f), st.width, st.cap)
+        drawLine(c, p(0.64f, 0.46f), p(0.5f, 0.6f), st.width, st.cap)
+    } else {
+        drawLine(c, p(0.36f, 0.36f), p(0.5f, 0.22f), st.width, st.cap)
+        drawLine(c, p(0.64f, 0.36f), p(0.5f, 0.22f), st.width, st.cap)
+    }
+    drawLine(c, p(0.3f, 0.74f), p(0.7f, 0.74f), st.width, st.cap)
 }
 
 /** Искра (4-конечная звезда) + маленькая рядом — знак AI/lighthouse-момента. */

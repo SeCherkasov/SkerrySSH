@@ -4,6 +4,8 @@ import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpEntryType
 import app.skerry.shared.sftp.SftpException
+import app.skerry.shared.sftp.SftpProgress
+import kotlinx.coroutines.CompletableDeferred
 
 /**
  * In-memory [SftpClient] для тестов UI-контроллера: моделирует дерево каталогов/файлов и
@@ -61,6 +63,54 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
     override suspend fun read(path: String): ByteArray = throw UnsupportedOperationException()
 
     override suspend fun write(path: String, data: ByteArray): Unit = throw UnsupportedOperationException()
+
+    /** Последний вызов download: (remotePath, localPath). Для ассертов в тестах контроллера. */
+    var lastDownload: Pair<String, String>? = null
+        private set
+
+    /** Последний вызов upload: (localPath, remotePath). */
+    var lastUpload: Pair<String, String>? = null
+        private set
+
+    /** Все события прогресса последней передачи: (transferred, total). */
+    val progressEvents = mutableListOf<Pair<Long, Long>>()
+
+    /** Размер, который «передаётся» при upload (локального файла фейк не видит). */
+    var uploadSize: Long = 0
+
+    /**
+     * Если выставлен, передача приостанавливается после первого (половинного) колбэка прогресса
+     * до завершения этого Deferred — тест успевает наблюдать промежуточное состояние контроллера.
+     */
+    var transferGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun download(remotePath: String, localPath: String, onProgress: SftpProgress) {
+        val norm = realpathSync(remotePath)
+        val entry = children[parentOf(norm)]?.get(nameOf(norm)) ?: throw SftpException("Нет файла $remotePath")
+        if (entry.type == SftpEntryType.Directory) throw SftpException("$remotePath — каталог, не файл")
+        lastDownload = remotePath to localPath
+        emitProgress(onProgress, entry.size)
+    }
+
+    override suspend fun upload(localPath: String, remotePath: String, onProgress: SftpProgress) {
+        val norm = realpathSync(remotePath)
+        if (children[parentOf(norm)] == null) throw SftpException("Нет родителя для $remotePath")
+        lastUpload = localPath to remotePath
+        emitProgress(onProgress, uploadSize)
+        seedFile(remotePath, size = uploadSize)
+    }
+
+    /** Сымитировать потоковую передачу: половина → (опц. шлюз) → полностью; total=0 → один нулевой колбэк. */
+    private suspend fun emitProgress(onProgress: SftpProgress, total: Long) {
+        progressEvents.clear()
+        if (total > 0) {
+            progressEvents += (total / 2) to total
+            onProgress.onProgress(total / 2, total)
+            transferGate?.await()
+        }
+        progressEvents += total to total
+        onProgress.onProgress(total, total)
+    }
 
     override suspend fun mkdir(path: String) {
         val norm = realpathSync(path)

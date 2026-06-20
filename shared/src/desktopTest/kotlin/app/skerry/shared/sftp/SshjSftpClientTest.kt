@@ -150,6 +150,58 @@ class SshjSftpClientTest {
     }
 
     @Test
+    fun `download streams a remote file to a local path and reports progress`() = runTest {
+        val dest = Files.createTempDirectory("skerry-sftp-dl").resolve("readme.txt")
+        try {
+            val progress = mutableListOf<Pair<Long, Long>>()
+            withSftp { sftp ->
+                sftp.download("/readme.txt", dest.toString()) { transferred, total ->
+                    progress += transferred to total
+                }
+            }
+            assertEquals(README_BODY, Files.readString(dest))
+            assertTrue(progress.isNotEmpty(), "ожидали хотя бы один колбэк прогресса")
+            val (lastTransferred, lastTotal) = progress.last()
+            assertEquals(README_BODY.length.toLong(), lastTransferred)
+            assertEquals(README_BODY.length.toLong(), lastTotal)
+        } finally {
+            dest.parent.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `upload streams a local file to the remote and reports progress`() = runTest {
+        val payload = "uploaded by skerry stream\n"
+        val src = Files.createTempDirectory("skerry-sftp-ul").resolve("payload.txt")
+        src.writeText(payload)
+        try {
+            val progress = mutableListOf<Pair<Long, Long>>()
+            withSftp { sftp ->
+                sftp.upload(src.toString(), "/uploaded.txt") { transferred, total ->
+                    progress += transferred to total
+                }
+                assertContentEquals(payload.encodeToByteArray(), sftp.read("/uploaded.txt"))
+            }
+            assertTrue(progress.isNotEmpty(), "ожидали хотя бы один колбэк прогресса")
+            assertEquals(payload.length.toLong(), progress.last().first)
+        } finally {
+            src.parent.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `download of a missing remote file throws SftpException`() = runTest {
+        val dest = Files.createTempDirectory("skerry-sftp-dl-miss").resolve("out.bin")
+        try {
+            withSftp { sftp ->
+                assertFailsWith<SftpException> { sftp.download("/nope.txt", dest.toString()) }
+            }
+        } finally {
+            dest.parent.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun `mkdir then stat shows the new directory`() = runTest {
         withSftp { sftp ->
             sftp.mkdir("/created")

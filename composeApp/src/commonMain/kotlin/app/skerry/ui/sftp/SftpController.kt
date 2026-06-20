@@ -10,6 +10,7 @@ import app.skerry.shared.sftp.SftpEntryType
 import app.skerry.shared.sftp.SftpException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Состояние одной SFTP-панели (удалённый каталог). */
 sealed interface SftpPaneState {
@@ -21,6 +22,26 @@ sealed interface SftpPaneState {
 
     /** Последняя операция/загрузка не удалась; [message] для показа пользователю. */
     data class Error(val message: String) : SftpPaneState
+}
+
+/** Направление передачи файла. */
+enum class TransferDirection { Download, Upload }
+
+/** Состояние текущей передачи файла (download/upload) в панели. */
+sealed interface SftpTransferState {
+    /** Передачи нет. */
+    data object Idle : SftpTransferState
+
+    /** Идёт передача [name]; [transferred] из [total] байт ([total] = 0, если размер неизвестен). */
+    data class Active(
+        val name: String,
+        val direction: TransferDirection,
+        val transferred: Long,
+        val total: Long,
+    ) : SftpTransferState
+
+    /** Передача [name] не удалась; [message] для показа пользователю. */
+    data class Failed(val name: String, val message: String) : SftpTransferState
 }
 
 /**
@@ -42,6 +63,10 @@ class SftpController(
         private set
 
     var state: SftpPaneState by mutableStateOf(SftpPaneState.Loading)
+        private set
+
+    /** Состояние текущей передачи файла (отдельно от листинга, чтобы её ошибка не стирала каталог). */
+    var transfer: SftpTransferState by mutableStateOf(SftpTransferState.Idle)
         private set
 
     private var busy = false
@@ -86,6 +111,60 @@ class SftpController(
     fun rename(entry: SftpEntry, newName: String) = op {
         sftp.rename(entry.path, childPath(newName))
         reload()
+    }
+
+    /**
+     * Скачать файл [entry] в локальный путь [localPath] потоково. Прогресс и ошибка идут в [transfer]
+     * (не в [state]), чтобы неудачная передача не стирала листинг. Каталоги отвергаются клиентом.
+     *
+     * Колбэк прогресса вызывается реализацией синхронно по ходу передачи (внутри suspend-вызова), до
+     * его возврата — поэтому запись `Active` всегда предшествует финальному `Idle` без гонки, а сама
+     * запись Compose-стейта потокобезопасна (snapshot-модель), даже если колбэк пришёл из IO-потока.
+     * Ловим [Exception] (а не только [SftpException]): иначе нежданная ошибка из sshj оставила бы
+     * баннер навсегда в `Active` без кнопки закрытия.
+     */
+    fun download(entry: SftpEntry, localPath: String) = op {
+        transfer = SftpTransferState.Active(entry.name, TransferDirection.Download, 0, entry.size)
+        try {
+            sftp.download(entry.path, localPath) { transferred, total ->
+                transfer = SftpTransferState.Active(entry.name, TransferDirection.Download, transferred, total)
+            }
+            transfer = SftpTransferState.Idle
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            transfer = SftpTransferState.Failed(entry.name, e.message ?: "Ошибка передачи")
+        }
+    }
+
+    /**
+     * Загрузить локальный файл [localPath] в текущий каталог под именем [name] потоково. По успеху —
+     * перечитать каталог, чтобы показать новый файл. Прогресс/ошибка — в [transfer]. См. оговорку про
+     * синхронность колбэка и широкий catch в [download].
+     */
+    fun upload(localPath: String, name: String) = op {
+        val remote = childPath(name)
+        transfer = SftpTransferState.Active(name, TransferDirection.Upload, 0, 0)
+        try {
+            sftp.upload(localPath, remote) { transferred, total ->
+                transfer = SftpTransferState.Active(name, TransferDirection.Upload, transferred, total)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            transfer = SftpTransferState.Failed(name, e.message ?: "Ошибка передачи")
+            return@op
+        }
+        transfer = SftpTransferState.Idle
+        reload()
+    }
+
+    /**
+     * Закрыть баннер передачи (сбросить в [SftpTransferState.Idle]). Идущую передачу ([Active]) не
+     * трогает — иначе следующий колбэк прогресса тут же вернул бы баннер, дав мигание.
+     */
+    fun clearTransfer() {
+        if (transfer !is SftpTransferState.Active) transfer = SftpTransferState.Idle
     }
 
     /** Перечитать [path] и положить отсортированный листинг в [state]; ошибку — в [SftpPaneState.Error]. */
