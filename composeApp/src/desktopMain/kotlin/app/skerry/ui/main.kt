@@ -70,10 +70,11 @@ fun main() {
             title = "Skerry",
         ) {
             // Десктопный UI — точная реализация макета docs/new/Skerry.html (визуальный слой).
-            // Живые SSH/SFTP/vault из `deps` подключаются к экранам отдельным слоем; пока deps
-            // остаётся построенным (инициализация крипты), а UI рендерит воспроизведённый дизайн.
+            // Живой vault подключён: весь chrome закрыт гейтом мастер-пароля (создать/разблокировать
+            // в стиле макета), чип «Unlocked» реально запирает хранилище. Остальные бэкенды
+            // (SSH/SFTP/forward/known-hosts из `deps`) подключаются к экранам следующими слайсами.
             app.skerry.ui.theme.SkerryTheme {
-                app.skerry.ui.design.DesktopDesignApp()
+                app.skerry.ui.design.DesktopDesignApp(vault = deps.vault, biometrics = deps.biometrics)
             }
         }
     }

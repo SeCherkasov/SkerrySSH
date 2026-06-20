@@ -29,44 +29,73 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.vault.VaultGate
 
 /**
  * Корень десктопного макета `docs/new/Skerry.html`, воспроизведённого 1:1. Поставляет шрифты
  * через [LocalFonts], держит [DesktopDesignState] и собирает структуру: titlebar (44dp) →
  * rail (62dp) + viewport → statusbar (26dp). Поверх — оверлеи lock / new-connection / settings.
  *
- * Это визуальный перенос прототипа: данные мок-статичные ([DesktopMockData]), демо-терминал и
- * переключатели — заглушки; живые SSH/SFTP/vault подключаются отдельным слоем.
+ * Живой слой подключается через [vault]: если передан, весь chrome закрыт гейтом мастер-пароля
+ * ([app.skerry.ui.vault.VaultGate]) поверх [app.skerry.ui.vault.VaultGateController] — экраны
+ * создания/разблокировки рисуются в стиле макета ([DesktopCreateScreen]/[DesktopUnlockScreen]),
+ * а чип «Unlocked» в titlebar реально запирает vault. Без [vault] (путь скриншота/превью) данные
+ * остаются мок-статичными ([DesktopMockData]), а блокировка — заглушка ([DesktopDesignState]).
  */
 @Composable
-fun DesktopDesignApp(state: DesktopDesignState = remember { DesktopDesignState() }) {
+fun DesktopDesignApp(
+    state: DesktopDesignState = remember { DesktopDesignState() },
+    vault: Vault? = null,
+    biometrics: VaultBiometrics? = null,
+) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
     CompositionLocalProvider(LocalFonts provides fonts) {
-        Box(Modifier.fillMaxSize().background(D.bg)) {
-            Column(Modifier.fillMaxSize()) {
-                TitleBar(state)
-                HLine()
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    IconRail(state)
-                    VLine(D.line)
-                    Box(Modifier.weight(1f).fillMaxHeight()) { Viewport(state) }
-                }
-                HLine()
-                StatusBar()
-            }
-            if (state.modalOpen) NewConnectionModal(state)
-            if (state.settingsOpen) SettingsPanel(state)
-            if (state.locked) LockScreen(state)
+        if (vault != null) {
+            VaultGate(
+                vault = vault,
+                biometrics = biometrics,
+                createForm = { error, onCreate -> DesktopCreateScreen(error, onCreate) },
+                unlockForm = { error, canBio, onUnlock, onBio -> DesktopUnlockScreen(error, canBio, onUnlock, onBio) },
+            ) { onLock -> DesktopChrome(state, onLock) }
+        } else {
+            DesktopChrome(state, onLock = null)
         }
     }
 }
 
+/**
+ * Основной chrome макета (titlebar → rail+viewport → statusbar) и оверлеи. [onLock] != null —
+ * живой путь за гейтом: чип «Unlocked» запирает vault. null — мок-путь: блокировку рисует
+ * заглушечный [LockScreen] по [DesktopDesignState.locked].
+ */
 @Composable
-private fun TitleBar(state: DesktopDesignState) {
+private fun DesktopChrome(state: DesktopDesignState, onLock: (() -> Unit)?) {
+    Box(Modifier.fillMaxSize().background(D.bg)) {
+        Column(Modifier.fillMaxSize()) {
+            TitleBar(state, onLock)
+            HLine()
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                IconRail(state)
+                VLine(D.line)
+                Box(Modifier.weight(1f).fillMaxHeight()) { Viewport(state) }
+            }
+            HLine()
+            StatusBar()
+        }
+        if (state.modalOpen) NewConnectionModal(state)
+        if (state.settingsOpen) SettingsPanel(state)
+        if (onLock == null && state.locked) LockScreen(state)
+    }
+}
+
+@Composable
+private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -96,7 +125,7 @@ private fun TitleBar(state: DesktopDesignState) {
                     .clip(RoundedCornerShape(6.dp))
                     .background(D.cyan08)
                     .border(1.dp, D.cyan20, RoundedCornerShape(6.dp))
-                    .clickable(onClick = state::lock)
+                    .clickable(onClick = onLock ?: state::lock)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),

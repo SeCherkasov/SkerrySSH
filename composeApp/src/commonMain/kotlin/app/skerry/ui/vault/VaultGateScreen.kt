@@ -87,6 +87,21 @@ fun VaultGate(
     vault: Vault,
     biometrics: VaultBiometrics? = null,
     modifier: Modifier = Modifier,
+    createForm: @Composable (error: VaultGateError?, onCreate: (CharArray, CharArray) -> Unit) -> Unit =
+        { error, onCreate ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CreateVaultForm(error, onCreate) }
+        },
+    unlockForm: @Composable (
+        error: VaultGateError?,
+        canUseBiometric: Boolean,
+        onUnlock: (CharArray) -> Unit,
+        onBiometric: () -> Unit,
+    ) -> Unit =
+        { error, canUseBiometric, onUnlock, onBiometric ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                UnlockVaultForm(error, canUseBiometric, onUnlock, onBiometric)
+            }
+        },
     content: @Composable (onLock: () -> Unit) -> Unit,
 ) {
     val controller = remember(vault, biometrics) { VaultGateController(vault, biometrics) }
@@ -123,18 +138,16 @@ fun VaultGate(
     // чтобы введённый пароль не пережил переход в slot-table (например, после lock()).
     key(controller.state) {
         when (controller.state) {
-            VaultGateState.NeedsCreate -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CreateVaultForm(controller.error) { password, confirm -> controller.create(password, confirm) }
-            }
+            VaultGateState.NeedsCreate ->
+                createForm(controller.error) { password, confirm -> controller.create(password, confirm) }
 
-            VaultGateState.NeedsUnlock -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                UnlockVaultForm(
-                    error = controller.error,
-                    canUseBiometric = controller.canUnlockWithBiometric(),
-                    onUnlock = { password -> controller.unlock(password) },
-                    onBiometric = { scope.launch { controller.unlockWithBiometric(UNLOCK_PROMPT) } },
+            VaultGateState.NeedsUnlock ->
+                unlockForm(
+                    controller.error,
+                    controller.canUnlockWithBiometric(),
+                    { password -> controller.unlock(password) },
+                    { scope.launch { controller.unlockWithBiometric(UNLOCK_PROMPT) } },
                 )
-            }
 
             // lock() переводит гейт в NeedsUnlock; key(state) рушит поддерево content, чей
             // DisposableEffect рвёт живую SSH-сессию — блокировка заодно закрывает сессии.
@@ -289,7 +302,7 @@ private fun VaultFormScaffold(
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         fields()
         if (error != null) {
-            Text(error.message(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Text(vaultGateErrorMessage(error), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -307,7 +320,12 @@ private fun PasswordField(label: String, value: String, imeAction: ImeAction, on
     )
 }
 
-private fun VaultGateError.message(): String = when (this) {
+/**
+ * Локализованное сообщение об ошибке гейта. `internal` (не `private`), потому что переиспользуется
+ * дизайн-слоем (`ui/design`) поверх того же [VaultGateController]; зафиксировано
+ * [app.skerry.ui.vault.VaultGateErrorMessageTest].
+ */
+internal fun vaultGateErrorMessage(error: VaultGateError): String = when (error) {
     VaultGateError.PasswordTooShort -> "Пароль слишком короткий — минимум $MIN_MASTER_PASSWORD_LENGTH символов."
     VaultGateError.PasswordMismatch -> "Пароли не совпадают."
     VaultGateError.WrongPassword -> "Неверный мастер-пароль."
