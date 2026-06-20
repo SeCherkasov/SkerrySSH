@@ -14,16 +14,6 @@ kotlin {
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "SkerryShared"
-            isStatic = true
-        }
-    }
-
     androidLibrary {
         namespace = "app.skerry.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -35,7 +25,7 @@ kotlin {
     }
 
     // Дефолтный шаблон иерархии + общий JVM-узел jvmShared (desktop JVM + Android) под commonMain.
-    // Кастомизация шаблона (а не ручные dependsOn) сохраняет apple/iosMain-группировку.
+    // Кастомизация шаблона (а не ручные dependsOn) совместима с дефолтной группировкой таргетов.
     applyDefaultHierarchyTemplate {
         common {
             group("jvmShared") {

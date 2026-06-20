@@ -39,7 +39,7 @@ sealed interface BiometricResult<out T> {
     /**
      * `bioKey` безвозвратно инвалидирован платформой (изменился набор биометрии). Оркестрация
      * обязана удалить артефакт `vault.bio` и потребовать мастер-пароль. См. `setInvalidatedBy
-     * BiometricEnrollment` (Android) / `.biometryCurrentSet` (iOS) в `docs/skerry-biometric-design.md`.
+     * BiometricEnrollment` (Android) в `docs/skerry-biometric-design.md`.
      */
     data object KeyInvalidated : BiometricResult<Nothing>
 }
@@ -56,8 +56,8 @@ data class BiometricPrompt(
 
 /**
  * Платформенное защищённое биометрией хранилище ключа `bioKey`. Реализация платформенная
- * (Android Keystore + `androidx.biometric`; iOS Keychain + Secure Enclave + LocalAuthentication;
- * desktop — `NoHardware`-заглушка), поэтому контракт живёт в ядре, а железо за интерфейсом
+ * (Android Keystore + `androidx.biometric`; desktop — `NoHardware`-заглушка), поэтому
+ * контракт живёт в ядре, а железо за интерфейсом
  * (по `architecture-discipline`). `bioKey` неизвлекаем: наружу выходит только обёртка `dataKey`.
  *
  * `wrap`/`unwrap` — `suspend`, потому что показывают системный промпт и ждут пользователя; их

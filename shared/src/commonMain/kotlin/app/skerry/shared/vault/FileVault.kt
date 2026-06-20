@@ -24,7 +24,7 @@ internal data class VaultFileBody(
 )
 
 /**
- * Файловый [Vault] на okio — один и тот же код для desktop (JVM), Android и iOS: I/O спрятан за
+ * Файловый [Vault] на okio — один и тот же код для desktop (JVM) и Android: I/O спрятан за
  * [FileSystem] (десктоп/мобайл подают `FileSystem.SYSTEM`, тесты — `FakeFileSystem`). По образцу
  * [app.skerry.shared.host.FileHostStore]: in-memory кеш записей, файл переписывается целиком
  * атомарно (tmp + [FileSystem.atomicMove]); битый файл при unlock — [UnlockResult.Corrupted].

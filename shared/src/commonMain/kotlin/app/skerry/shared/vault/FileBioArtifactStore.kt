@@ -6,7 +6,7 @@ import okio.Path
 import okio.Path.Companion.toPath
 
 /**
- * Файловый [BioArtifactStore] на okio — один код для desktop/Android/iOS (как [FileVault]): I/O за
+ * Файловый [BioArtifactStore] на okio — один код для desktop/Android (как [FileVault]): I/O за
  * [FileSystem] (`FileSystem.SYSTEM` в проде, `FakeFileSystem` в тестах). Файл переписывается целиком
  * атомарно (tmp + [FileSystem.atomicMove]); битый/отсутствующий файл при [read] — `null`, не throw
  * (включённость биометрии не должна валить запуск). Кладётся рядом с `vault.json` под именем
