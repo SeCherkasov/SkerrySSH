@@ -1,0 +1,130 @@
+package app.skerry.ui.files
+
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import app.skerry.shared.files.FileItem
+import app.skerry.shared.files.FileItemType
+import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.sftp.SftpProgress
+import app.skerry.ui.sftp.TransferDirection
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
+
+/** Состояние пакетной передачи между панелями для нижней полосы переноса. */
+sealed interface TransferState {
+    /** Передачи нет. */
+    data object Idle : TransferState
+
+    /**
+     * Идёт передача файла [name] ([fileIndex] из [fileCount] в пакете), [transferred] из [total]
+     * байт ([total] = 0, если размер неизвестен).
+     */
+    data class Active(
+        val name: String,
+        val direction: TransferDirection,
+        val fileIndex: Int,
+        val fileCount: Int,
+        val transferred: Long,
+        val total: Long,
+    ) : TransferState
+
+    /** Передача [name] не удалась; [message] для показа пользователю. */
+    data class Failed(val name: String, val message: String) : TransferState
+}
+
+/**
+ * Координатор передачи файлов между [local]- и [remote]-панелями поверх одного удалённого
+ * [SftpClient]. В двухпанельном режиме передача всегда идёт между локальной ФС и SFTP, что ложится
+ * на готовые `SftpClient.download`/`upload` — отдельный транспорт не нужен. Координатор берёт
+ * выделение панели-источника, гонит файлы по очереди в текущий каталог панели-приёмника, обновляет
+ * [transfer] для прогресс-полосы, по завершении перечитывает приёмник и снимает выделение источника.
+ * Каталоги в выделении пропускаются (рекурсивная передача — позже). Одновременно идёт не более одной
+ * передачи (сериализация флагом [busy]).
+ */
+@Stable
+class TransferCoordinator(
+    private val sftp: SftpClient,
+    val local: FilePaneController,
+    val remote: FilePaneController,
+    private val scope: CoroutineScope,
+) {
+    var transfer: TransferState by mutableStateOf(TransferState.Idle)
+        private set
+
+    /**
+     * Сериализует передачи: проверка-и-взведение [busy] не атомарны, но безопасны — `uploadSelection`/
+     * `downloadSelection` зовутся из UI-обработчиков на главном потоке, а `scope` панели наследует тот
+     * же главный диспетчер, так что повторный тап в том же фрейме увидит уже взведённый флаг (как в
+     * [FilePaneController]).
+     */
+    private var busy = false
+
+    /** Загрузить выделенные локальные файлы в текущий каталог удалённой панели. */
+    fun uploadSelection() = transferAll(
+        files = local.selectedItems().filter { it.type == FileItemType.File },
+        direction = TransferDirection.Upload,
+        targetDir = remote.path,
+        receiver = remote,
+        source = local,
+    ) { item, target, onProgress -> sftp.upload(item.path, target, onProgress) }
+
+    /** Скачать выделенные удалённые файлы в текущий каталог локальной панели. */
+    fun downloadSelection() = transferAll(
+        files = remote.selectedItems().filter { it.type == FileItemType.File },
+        direction = TransferDirection.Download,
+        targetDir = local.path,
+        receiver = local,
+        source = remote,
+    ) { item, target, onProgress -> sftp.download(item.path, target, onProgress) }
+
+    /** Закрыть полосу передачи (сбросить в [TransferState.Idle]); идущую передачу не трогает. */
+    fun clearTransfer() {
+        if (transfer !is TransferState.Active) transfer = TransferState.Idle
+    }
+
+    /**
+     * Передать [files] по очереди в [targetDir], обновляя [transfer] на каждом файле и его прогрессе.
+     * По успеху — перечитать [receiver] (показать новые файлы) и снять выделение [source]. Ошибка
+     * любого файла останавливает пакет и переводит в [TransferState.Failed]. [CancellationException]
+     * пробрасывается. Колбэк прогресса приходит синхронно изнутри [transferOne]; запись snapshot-стейта
+     * потокобезопасна.
+     */
+    private fun transferAll(
+        files: List<FileItem>,
+        direction: TransferDirection,
+        targetDir: String,
+        receiver: FilePaneController,
+        source: FilePaneController,
+        transferOne: suspend (item: FileItem, target: String, onProgress: SftpProgress) -> Unit,
+    ) {
+        if (busy || files.isEmpty()) return
+        busy = true
+        scope.launch {
+            try {
+                files.forEachIndexed { index, item ->
+                    val target = childPath(targetDir, item.name)
+                    transfer = TransferState.Active(item.name, direction, index + 1, files.size, 0, item.size)
+                    transferOne(item, target) { transferred, total ->
+                        transfer = TransferState.Active(item.name, direction, index + 1, files.size, transferred, total)
+                    }
+                }
+                transfer = TransferState.Idle
+                receiver.refresh()
+                source.clearSelection()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val name = (transfer as? TransferState.Active)?.name ?: "файл"
+                transfer = TransferState.Failed(name, e.message ?: "Ошибка передачи")
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    /** Путь дочернего объекта [name] в каталоге [dir] (без двойного `/` в корне). */
+    private fun childPath(dir: String, name: String): String = if (dir == "/") "/$name" else "$dir/$name"
+}
