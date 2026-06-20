@@ -69,7 +69,12 @@ fun main() {
             onCloseRequest = ::exitApplication,
             title = "Skerry",
         ) {
-            App(deps)
+            // Десктопный UI — точная реализация макета docs/new/Skerry.html (визуальный слой).
+            // Живые SSH/SFTP/vault из `deps` подключаются к экранам отдельным слоем; пока deps
+            // остаётся построенным (инициализация крипты), а UI рендерит воспроизведённый дизайн.
+            app.skerry.ui.theme.SkerryTheme {
+                app.skerry.ui.design.DesktopDesignApp()
+            }
         }
     }
 }

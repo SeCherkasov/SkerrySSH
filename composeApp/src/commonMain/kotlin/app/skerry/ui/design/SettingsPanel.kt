@@ -1,0 +1,406 @@
+package app.skerry.ui.design
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+/** Панель настроек (модалка 760×560): nav 200dp + контент с 8 секциями (AI/Appearance/…/About). */
+@Composable
+fun SettingsPanel(state: DesktopDesignState) {
+    val noop = remember { MutableInteractionSource() }
+    Box(
+        Modifier.fillMaxSize().background(Color(0xA6060E16)).clickable(interactionSource = noop, indication = null, onClick = state::closeSettings),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .width(760.dp)
+                .height(560.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(D.surfaceDeep)
+                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .clickable(interactionSource = noop, indication = null, onClick = {}),
+        ) {
+            Column(Modifier.width(200.dp).fillMaxHeight().background(Color(0x33000000)).padding(horizontal = 8.dp, vertical = 16.dp)) {
+                Txt("SETTINGS", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+                SETTINGS_NAV.forEach { item ->
+                    NavRow(item, active = state.settingsTab == item.tab, onClick = { state.showSettingsTab(item.tab) })
+                }
+            }
+            VLine(D.line)
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 26.dp, vertical = 22.dp)) {
+                when (state.settingsTab) {
+                    SettingsTab.AI -> AiSection(state)
+                    SettingsTab.Appearance -> AppearanceSection()
+                    SettingsTab.Terminal -> TerminalSection()
+                    SettingsTab.Account -> AccountSection()
+                    SettingsTab.Sync -> SyncSection()
+                    SettingsTab.Security -> SecuritySection()
+                    SettingsTab.Keyboard -> KeyboardSection()
+                    SettingsTab.About -> AboutSection()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NavRow(item: SettingsNavItem, active: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 1.dp).clip(RoundedCornerShape(6.dp)).background(if (active) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Sym(item.icon, size = 16.sp, color = if (active) D.cyanBright else D.dim)
+        Txt(item.name, color = if (active) D.cyanBright else D.dim, size = 12.5.sp)
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, subtitle: String) {
+    Txt(title, color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+    Txt(subtitle, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 18.dp))
+}
+
+@Composable
+private fun SettingToggleRow(title: String, desc: String, on: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            if (desc.isNotEmpty()) Txt(desc, color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        Toggle(on, onToggle, Modifier.padding(top = 2.dp))
+    }
+}
+
+// ───────────────────────── AI ─────────────────────────
+
+@Composable
+private fun AiSection(state: DesktopDesignState) {
+    SectionTitle("AI", "Configure where AI runs. The default is on this device — your commands never leave Skerry. Each connection can override these settings.")
+    Txt("Default AI provider", color = D.text, size = 13.sp, weight = FontWeight.Medium)
+    Txt("Used for connections without a specific override.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+    ProviderCard("lock", "On this device", "Qwen 2.5 Coder 1.5B · 982 MB · ready. No data leaves your machine.", selected = true, badge = "PRIVATE")
+    Box(Modifier.height(8.dp))
+    ProviderCard("cloud", "Custom endpoint", "Connect to your own Ollama or OpenAI-compatible server.", selected = false)
+    Box(Modifier.height(8.dp))
+    ProviderCard("key", "My API key (BYOK)", "Use your OpenAI, Anthropic, or OpenRouter key. You pay the provider directly.", selected = false)
+    Box(Modifier.padding(top = 18.dp)); HLine(); Box(Modifier.height(6.dp))
+    SettingToggleRow("Sanitize secrets before sending", "Strip obvious passwords, tokens and keys from prompts before they reach external providers.", state.sanitize, state::toggleSanitize)
+    SettingToggleRow("Preview prompt before sending", "Show the exact text sent externally, with redactions highlighted. Edit or cancel before transmission.", state.preview, state::togglePreview)
+    SettingToggleRow("Confirm before running AI suggestions", "Every AI-suggested command requires a deliberate click. Mitigates prompt injection from compromised servers.", state.confirm, state::toggleConfirm)
+}
+
+@Composable
+private fun ProviderCard(icon: String, title: String, desc: String, selected: Boolean, badge: String? = null) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) D.cyan10 else Color.Transparent)
+            .border(1.dp, if (selected) D.cyan else D.cyan08, RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(7.dp)).background(if (selected) D.cyan.copy(alpha = 0.2f) else Color(0x0DFFFFFF)), contentAlignment = Alignment.Center) {
+            Sym(icon, size = 18.sp, color = if (selected) D.cyan else D.dim)
+        }
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
+                if (badge != null) Badge(badge, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp)
+            }
+            Txt(desc, color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        Box(
+            Modifier.padding(top = 2.dp).size(18.dp).clip(CircleShape).background(if (selected) D.cyan else Color.Transparent).border(1.5.dp, if (selected) D.cyan else D.faint, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Sym("check", size = 12.sp, color = Color(0xFF0A1A26))
+        }
+    }
+}
+
+// ───────────────────────── Appearance ─────────────────────────
+
+@Composable
+private fun AppearanceSection() {
+    val mono = LocalFonts.current.mono
+    SectionTitle("Appearance", "Pick a terminal theme. Themes apply per-connection or globally.")
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ThemeCard("Night Sea", active = true, mono = mono, modifier = Modifier.weight(1f))
+        ThemeCard("Tokyo Night", active = false, mono = mono, modifier = Modifier.weight(1f))
+    }
+    Box(Modifier.height(10.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ThemeCard("Gruvbox Dark", active = false, mono = mono, modifier = Modifier.weight(1f))
+        ThemeCard("Solarized Light", active = false, mono = mono, modifier = Modifier.weight(1f))
+    }
+    Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.weight(1f)) {
+            Txt("Font", color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
+            SettingsSelect("JetBrains Mono")
+        }
+        Column(Modifier.weight(1f)) {
+            Txt("Font size", color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
+                Txt("13 px", color = D.text, size = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeCard(name: String, active: Boolean, mono: FontFamily, modifier: Modifier = Modifier) {
+    Column(modifier.clip(RoundedCornerShape(8.dp)).border(1.dp, if (active) D.cyan else D.cyan08, RoundedCornerShape(8.dp))) {
+        Column(Modifier.fillMaxWidth().background(D.terminalBg).padding(10.dp)) {
+            Row { Txt("~ ", color = D.moss, size = 10.sp, font = mono); Txt("ls -la", color = D.white, size = 10.sp, font = mono) }
+            Row { Txt("drwxr-xr-x ", color = D.cyanBright, size = 10.sp, font = mono); Txt("src", color = D.textMid, size = 10.sp, font = mono) }
+            Row { Txt("-rw-r--r-- ", color = D.dim, size = 10.sp, font = mono); Txt(".env", color = D.amber, size = 10.sp, font = mono) }
+        }
+        Row(
+            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Txt(name, color = D.text, size = 11.5.sp, weight = FontWeight.Medium)
+            if (active) Badge("ACTIVE", bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 9.sp)
+        }
+    }
+}
+
+// ───────────────────────── Terminal ─────────────────────────
+
+@Composable
+private fun TerminalSection() {
+    SectionTitle("Terminal", "Shell behaviour, scrollback and bell.")
+    SettingValueRow("Scrollback buffer", "Lines kept per session.", "10 000")
+    HLine()
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) { Txt("Cursor style", color = D.text, size = 13.sp, weight = FontWeight.Medium) }
+        Box(Modifier.width(160.dp)) { SettingsSelect("Block (blink)") }
+    }
+    HLine()
+    SettingValueRow("Copy on select", "", "On")
+}
+
+// ───────────────────────── Account ─────────────────────────
+
+@Composable
+private fun AccountSection() {
+    SectionTitle("Account", "Your Skerry profile and the devices signed in to it.")
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(40.dp).clip(CircleShape).background(D.cyan), contentAlignment = Alignment.Center) {
+            Txt("MK", color = Color(0xFF0A1A26), size = 14.sp, weight = FontWeight.SemiBold)
+        }
+        Column(Modifier.weight(1f)) {
+            Txt("Maya Kovac", color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
+            Txt("maya@skerry.dev", color = D.faint, size = 11.5.sp)
+        }
+        Badge("PRO · LIFETIME", bg = D.amber.copy(alpha = 0.14f), fg = D.amber, radius = 4, size = 10.sp)
+    }
+    Txt("SIGNED-IN DEVICES", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
+    DeviceRow("laptop_mac", "MacBook Pro 16″", "Sausalito · last active now", trailing = "macOS 15.4", thisDevice = true)
+    DeviceRow("smartphone", "iPhone 16 Pro", "last active 2 h ago", revoke = true)
+    DeviceRow("tablet_mac", "iPad Air", "last active Jun 14", revoke = true)
+    Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        GhostButton("Manage billing", onClick = {})
+        GhostButton("Sign out", onClick = {}, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f))
+    }
+}
+
+@Composable
+private fun DeviceRow(icon: String, name: String, sub: String, trailing: String? = null, revoke: Boolean = false, thisDevice: Boolean = false) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Sym(icon, size = 18.sp, color = D.dim)
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Txt(name, color = D.text, size = 13.sp, weight = FontWeight.Medium)
+                if (thisDevice) Txt("● this device", color = D.moss, size = 10.sp)
+            }
+            Txt(sub, color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        if (trailing != null) Txt(trailing, color = D.faint, size = 11.sp)
+        if (revoke) Box(Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Txt("Revoke", color = D.dim, size = 11.5.sp)
+        }
+    }
+}
+
+// ───────────────────────── Sync ─────────────────────────
+
+@Composable
+private fun SyncSection() {
+    SectionTitle("Sync", "End-to-end encrypted sync across your devices. Skerry never sees your data in plaintext.")
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Sym("cloud_done", size = 20.sp, color = D.moss)
+        Column(Modifier.weight(1f)) {
+            Txt("Synced 2 minutes ago", color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt("9 hosts · 4 snippets · 3 keys · 2 vaults", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        GhostButton("Sync now", onClick = {})
+    }
+    Txt("WHAT SYNCS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+    SettingToggleRow("Hosts & groups", "", on = true, onToggle = {})
+    SettingToggleRow("Snippets", "", on = true, onToggle = {})
+    SettingToggleRow("SSH keys · re-encrypted on device", "", on = true, onToggle = {})
+    SettingToggleRow("Terminal history", "Off by default for privacy.", on = false, onToggle = {})
+}
+
+// ───────────────────────── Security ─────────────────────────
+
+@Composable
+private fun SecuritySection() {
+    SectionTitle("Security", "Master password, auto-lock and two-factor authentication protect your vault.")
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Txt("Master password", color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt("Last changed 84 days ago.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        GhostButton("Change", onClick = {})
+    }
+    HLine()
+    SettingToggleRow("Unlock with Touch ID", "Use biometrics instead of typing the master password.", on = true, onToggle = {})
+    HLine()
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Txt("Auto-lock", color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt("Lock Skerry after inactivity.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        Box(Modifier.width(170.dp)) { SettingsSelect("After 5 minutes") }
+    }
+    HLine()
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Txt("Two-factor authentication", color = D.text, size = 13.sp, weight = FontWeight.Medium)
+                Txt("● enabled", color = D.moss, size = 10.sp)
+            }
+            Txt("TOTP via authenticator app.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        GhostButton("Manage", onClick = {})
+    }
+    Txt("RECENT SECURITY EVENTS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+    listOf(
+        "Unlocked with Touch ID · today 09:02",
+        "Key deploy_ci accessed · Jun 20 18:44",
+        "New device paired: iPhone 16 Pro · Jun 18",
+    ).forEach {
+        Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Txt("●", color = D.moss, size = 9.sp)
+            Txt(it, color = D.dim, size = 12.sp)
+        }
+    }
+}
+
+// ───────────────────────── Keyboard ─────────────────────────
+
+@Composable
+private fun KeyboardSection() {
+    SectionTitle("Keyboard", "Shortcuts. Click any binding to rebind it.")
+    val shortcuts = listOf(
+        "New connection" to "⌘N",
+        "Command palette / search" to "⌘K",
+        "Split terminal" to "⌘D",
+        "Next / previous tab" to "⌃Tab",
+        "Focus AI bar" to "⌃/",
+        "Open SFTP" to "⌘⇧F",
+        "Lock Skerry" to "⌘L",
+    )
+    val mono = LocalFonts.current.mono
+    shortcuts.forEach { (label, key) ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Txt(label, color = D.textBright, size = 12.5.sp)
+            Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x0AFFFFFF)).border(1.dp, D.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                Txt(key, color = D.dim, size = 11.sp, font = mono)
+            }
+        }
+        HLine()
+    }
+}
+
+// ───────────────────────── About ─────────────────────────
+
+@Composable
+private fun AboutSection() {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.padding(top = 20.dp).size(72.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF0A141B)), contentAlignment = Alignment.Center) {
+            BrandMark(size = 72.dp)
+        }
+        Txt("Skerry", color = D.text, size = 20.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp))
+        Txt("Version 2.4.0 · build 2026.06.21", color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        Txt("A private-first SSH client. Local AI, end-to-end encrypted sync, and a terminal that respects your secrets.", color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 12.dp, start = 20.dp, end = 20.dp))
+        Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GhostButton("What's new", onClick = {})
+            GhostButton("Documentation", onClick = {})
+            GhostButton("Open-source licenses", onClick = {})
+        }
+        Txt("Built on the open seas · © 2026 Skerry", color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 20.dp))
+    }
+}
+
+// ───────────────────────── helpers ─────────────────────────
+
+@Composable
+private fun SettingValueRow(title: String, desc: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            if (desc.isNotEmpty()) Txt(desc, color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        Txt(value, color = D.textBright, size = 12.5.sp)
+    }
+}
+
+@Composable
+private fun SettingsSelect(value: String) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Txt(value, color = D.text, size = 12.5.sp)
+        Sym("expand_more", size = 16.sp, color = D.faint)
+    }
+}
