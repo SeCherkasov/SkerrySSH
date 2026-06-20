@@ -78,7 +78,7 @@ import app.skerry.ui.identity.IdentityManagerPanel
 import app.skerry.ui.identity.kindLabel
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionsController
-import app.skerry.ui.sftp.RemoteSftpPane
+import app.skerry.ui.files.RemoteDualSftpPane
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.rememberJetBrainsMono
 import app.skerry.ui.theme.SkerryColors
@@ -555,8 +555,9 @@ private fun MainArea(
                             val openSftp = remember(activeSession.controller) {
                                 activeSession.controller::openSftp
                             }
-                            RemoteSftpPane(
+                            RemoteDualSftpPane(
                                 openSftp = openSftp,
+                                hostLabel = activeSession.subtitle,
                                 scope = sftpScope,
                                 mono = mono,
                                 modifier = Modifier.weight(1f),
