@@ -16,16 +16,6 @@ kotlin {
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "SkerryUi"
-            isStatic = true
-        }
-    }
-
     androidLibrary {
         namespace = "app.skerry.ui"
         compileSdk = libs.versions.android.compileSdk.get().toInt()

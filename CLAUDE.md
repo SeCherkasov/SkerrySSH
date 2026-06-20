@@ -6,8 +6,10 @@
 
 ## Зафиксированные решения (не пересматривать без запроса пользователя)
 
-- **Стек**: Kotlin Multiplatform, UI — Compose Multiplatform на всех платформах (Android, iOS, Desktop JVM).
-- **Платформы**: все сразу, паритет фич с первого релиза (Linux/Windows/macOS/Android/iOS+iPadOS).
+- **Стек**: Kotlin Multiplatform, UI — Compose Multiplatform (Android, Desktop JVM).
+- **Платформы**: активны Desktop (Linux/Windows/macOS) + Android, паритет фич между ними.
+  **iOS/iPadOS ОТЛОЖЕН** (исключён из проекта 2026-06-21, вернёмся позже — таргеты и `iosMain`
+  удалены; крипта/стор остаются мультиплатформенно-готовыми, чтобы возврат был дешёвым).
 - **MVP (Phase 1)**: SSH + SFTP + port forwarding, менеджер хостов/ключей, терминал, мастер-пароль + биометрия, локальное зашифрованное хранилище.
 - **Phase 2**: self-hosted sync (модель Vaultwarden, E2E, zero-knowledge), сниппеты, AI-ассистент (BYOK/свой endpoint, политики per-host: Strict/Balanced/Permissive/Off).
 - **Phase 3**: Mosh, Telnet, serial, autocomplete, локальная AI-модель на desktop.
@@ -18,7 +20,7 @@
 
 ```
 shared/        # ядро KMP: ssh/, sftp/, vault/, sync/, terminal/, ai/ (интерфейсы)
-composeApp/    # весь UI один раз: commonMain + androidMain/iosMain/desktopMain
+composeApp/    # весь UI один раз: commonMain + androidMain/desktopMain
 server/        # self-hosted sync-сервер (Ktor, AGPL-3.0)
 docs/          # прототипы и проектные документы (источник правды по UX и протоколу)
 ```
@@ -62,4 +64,4 @@ XChaCha20-Poly1305 nonce-prefix; покрыто TDD (`desktopTest`).
 
 Дальше: UI мастер-пароля (экран создать/разблокировать vault), затем хранение паролей/ключей
 хостов в vault вместо ввода при коннекте (увязать `Host`/менеджер хостов с `Vault`/`VaultRecord`).
-Биометрия и паритет мобильных таргетов (`VaultCrypto`/`Vault` под Android/iOS) — следом.
+Биометрия и паритет мобильных таргетов (`VaultCrypto`/`Vault` под Android) — следом.

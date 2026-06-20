@@ -17,8 +17,8 @@ import kotlin.test.assertTrue
  * экземпляром ключа, расшифровывается другим. Это держит [MasterKey]/[DataKey]
  * непрозрачными и одновременно проверяет zero-knowledge-инварианты.
  *
- * Тесты общие для всех таргетов (commonTest): на desktop идут на JUnit5, на iOS/Android —
- * на родных раннерах. libsodium требует асинхронной инициализации до первого вызова, поэтому
+ * Тесты общие для всех таргетов (commonTest): на desktop идут на JUnit5, на Android —
+ * на родном раннере. libsodium требует асинхронной инициализации до первого вызова, поэтому
  * каждый тест обёрнут в [cryptoTest] (runTest + идемпотентный [initializeVaultCrypto]).
  */
 class IonspinVaultCryptoTest {

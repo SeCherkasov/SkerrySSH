@@ -27,7 +27,7 @@ suspend fun initializeVaultCrypto() {
 
 /**
  * Единая реализация [VaultCrypto] на ionspin multiplatform-crypto-libsodium-bindings — один
- * и тот же код для desktop (JVM), Android и iOS (Kotlin/Native). Соответствует иерархии ключей
+ * и тот же код для desktop (JVM) и Android. Соответствует иерархии ключей
  * из `docs/skerry-sync-design.md`: Argon2id(m=64MiB, t=3) → masterKey; XChaCha20-Poly1305 с
  * 24-байтным nonce в префиксе для обёртки dataKey и для каждой записи.
  *

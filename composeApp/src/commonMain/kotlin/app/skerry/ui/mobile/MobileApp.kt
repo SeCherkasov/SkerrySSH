@@ -85,7 +85,7 @@ import kotlinx.coroutines.launch
  * таб-баром (Hosts / Terminals / Files / Keys / Settings), в отличие от двухпанельного
  * desktop-каркаса [app.skerry.ui.host.HostManagerScreen]. Граф зависимостей тот же [AppDependencies]:
  * экраны связаны с теми же контроллерами ([HostManagerController], [SessionsController] и т.д.).
- * Платформенная точка входа (Android `MainActivity`, позже iOS) вызывает [MobileApp] вместо `App`.
+ * Платформенная точка входа (Android `MainActivity`) вызывает [MobileApp] вместо `App`.
  */
 @Composable
 fun MobileApp(deps: AppDependencies = AppDependencies()) {
