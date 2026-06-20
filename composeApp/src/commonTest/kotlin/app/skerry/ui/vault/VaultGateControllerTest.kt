@@ -1,13 +1,22 @@
 package app.skerry.ui.vault
 
+import app.skerry.shared.vault.BioArtifact
+import app.skerry.shared.vault.BioArtifactStore
+import app.skerry.shared.vault.BiometricAvailability
+import app.skerry.shared.vault.BiometricKeyStore
+import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.shared.vault.BiometricResult
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.VaultRecord
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -157,7 +166,64 @@ class VaultGateControllerTest {
         assertEquals(VaultGateState.NeedsUnlock, controller.state)
         assertEquals(1, vault.lockCalls)
     }
+
+    // --- Биометрия: тумблер настроек ходит через контроллер (canEnable/enable/disable) ---
+
+    @Test
+    fun `canEnableBiometric reflects device availability`() {
+        val available = VaultGateController(FakeVault(exists = true), biometrics(BiometricAvailability.Available))
+        val noHardware = VaultGateController(FakeVault(exists = true), biometrics(BiometricAvailability.NoHardware))
+
+        assertTrue(available.canEnableBiometric())
+        assertFalse(noHardware.canEnableBiometric())
+    }
+
+    @Test
+    fun `controller without biometrics cannot enable and disable is a no-op`() = runTest {
+        val controller = VaultGateController(FakeVault(exists = true))
+
+        assertFalse(controller.canEnableBiometric())
+        assertFalse(controller.enableBiometric(PROMPT))
+        controller.disableBiometric() // не должно падать
+        assertFalse(controller.biometricEnabled)
+    }
+
+    @Test
+    fun `enableBiometric on a locked vault returns false and leaves biometricEnabled off`() = runTest {
+        // Vault заблокирован → exportDataKey == null → VaultBiometrics.enable == VaultLocked.
+        // Путь enable-успеха требует живого dataKey (DataKey-конструктор internal в :shared) и
+        // покрыт там же, в shared VaultBiometricsTest; здесь проверяем делегирование контроллера.
+        val controller = VaultGateController(FakeVault(exists = true), biometrics(BiometricAvailability.Available))
+        assertFalse(controller.biometricEnabled)
+
+        assertFalse(controller.enableBiometric(PROMPT))
+        assertFalse(controller.biometricEnabled)
+    }
+
+    @Test
+    fun `disableBiometric clears the artifact and biometricEnabled`() = runTest {
+        // Предзасеянный артефакт делает биометрию «включённой» на старте — без пути enable.
+        val artifacts = FakeArtifacts().apply {
+            write(BioArtifact(formatVersion = 1, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
+        }
+        val controller = VaultGateController(FakeVault(exists = true), biometrics(BiometricAvailability.Available, artifacts))
+        assertTrue(controller.biometricEnabled)
+
+        controller.disableBiometric()
+
+        assertFalse(controller.biometricEnabled)
+        assertFalse(artifacts.exists())
+    }
 }
+
+private val PROMPT = BiometricPrompt(title = "Включить биометрию", cancelLabel = "Отмена")
+
+/** Собрать реальный [VaultBiometrics] поверх фейков железа/артефакта — контракт `commonMain`. */
+private fun biometrics(
+    availability: BiometricAvailability,
+    artifacts: BioArtifactStore = FakeArtifacts(),
+    vault: Vault = FakeVault(exists = true),
+): VaultBiometrics = VaultBiometrics(vault, FakeKeyStore(availability), artifacts, deviceId = "test-device")
 
 /**
  * In-memory [Vault] для тестов гейта: моделирует жизненный цикл create/unlock/lock и затирание
@@ -205,7 +271,29 @@ private class FakeVault(
     override fun remove(id: String) = Unit
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = false
 
-    // Путь биометрии гейтом не тестируется — стабы.
+    // Путь биометрии с живым dataKey покрыт в shared (DataKey-конструктор internal в :shared) — стабы.
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
     override fun exportDataKey(): DataKey? = null
+}
+
+/** Фейк secure-enclave: [availability] управляет доступностью, wrap/unwrap — тождественны. */
+private class FakeKeyStore(
+    private val availability: BiometricAvailability,
+) : BiometricKeyStore {
+    override fun availability(): BiometricAvailability = availability
+    override suspend fun ensureKey(alias: String): Boolean = availability == BiometricAvailability.Available
+    override suspend fun wrap(alias: String, plaintext: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray> =
+        BiometricResult.Success(plaintext.copyOf())
+    override suspend fun unwrap(alias: String, wrapped: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray> =
+        BiometricResult.Success(wrapped.copyOf())
+    override fun deleteKey(alias: String) = Unit
+}
+
+/** Фейк персистентности `vault.bio` — хранит артефакт в памяти. */
+private class FakeArtifacts : BioArtifactStore {
+    private var artifact: BioArtifact? = null
+    override fun exists(): Boolean = artifact != null
+    override fun read(): BioArtifact? = artifact
+    override fun write(artifact: BioArtifact) { this.artifact = artifact }
+    override fun clear() { artifact = null }
 }

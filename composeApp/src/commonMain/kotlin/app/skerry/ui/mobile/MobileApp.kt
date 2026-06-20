@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
-import app.skerry.shared.vault.BiometricEnableResult
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.Identity
 import app.skerry.shared.vault.IdentityAuth
@@ -89,6 +88,7 @@ import app.skerry.ui.terminal.rememberJetBrainsMono
 import app.skerry.ui.theme.SkerryColors
 import app.skerry.ui.theme.SkerryTheme
 import app.skerry.ui.vault.VaultGate
+import app.skerry.ui.vault.VaultGateController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -739,36 +739,36 @@ private fun SettingsScreen(deps: AppDependencies, onLock: (() -> Unit)?) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
             SectionLabel("Безопасность")
             SettingsGroup {
+                val vault = deps.vault
                 val biometrics = deps.biometrics
-                if (biometrics != null) {
-                    var enabled by remember { mutableStateOf(biometrics.isEnabled()) }
-                    var busy by remember { mutableStateOf(false) }
-                    val scope = rememberCoroutineScope()
-                    SettingsRow(SkerryIconKind.Lock, "Разблокировка биометрией", "Отпечаток / лицо вместо мастер-пароля") {
-                        Switch(
-                            checked = enabled,
-                            enabled = !busy,
-                            onCheckedChange = { wantOn ->
-                                if (busy) return@Switch
-                                busy = true
-                                scope.launch {
-                                    try {
+                if (vault != null && biometrics != null) {
+                    // Тот же контроллер, что и за гейтом: включение/выключение и реактивное
+                    // состояние биометрии живут в VaultGateController, UI их только отображает.
+                    val controller = remember(vault, biometrics) { VaultGateController(vault, biometrics) }
+                    if (controller.canEnableBiometric()) {
+                        val scope = rememberCoroutineScope()
+                        SettingsRow(SkerryIconKind.Lock, "Разблокировка биометрией", "Отпечаток / лицо вместо мастер-пароля") {
+                            Switch(
+                                checked = controller.biometricEnabled,
+                                enabled = !controller.biometricInFlight,
+                                onCheckedChange = { wantOn ->
+                                    if (controller.biometricInFlight) return@Switch
+                                    scope.launch {
                                         if (wantOn) {
-                                            val ok = biometrics.enable(
+                                            controller.enableBiometric(
                                                 BiometricPrompt(
                                                     title = "Включить биометрию",
                                                     cancelLabel = "Отмена",
                                                     subtitle = "Подтвердите биометрию, чтобы привязать разблокировку",
                                                 ),
-                                            ) == BiometricEnableResult.Enabled
-                                            if (ok) enabled = true
+                                            )
                                         } else {
-                                            biometrics.disable(); enabled = false
+                                            controller.disableBiometric()
                                         }
-                                    } finally { busy = false }
-                                }
-                            },
-                        )
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
                 SettingsRow(SkerryIconKind.Lock, "Мастер-пароль", "Сменить пароль (скоро)") {

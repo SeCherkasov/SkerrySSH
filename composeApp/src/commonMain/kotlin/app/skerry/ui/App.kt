@@ -67,7 +67,7 @@ private fun MainContent(deps: AppDependencies, onLock: (() -> Unit)?) {
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.headlineMedium,
             )
-            deps.biometrics?.let { VaultBiometricSettings(it, onLock) }
+            deps.vault?.let { v -> deps.biometrics?.let { b -> VaultBiometricSettings(v, b, onLock) } }
         }
     }
 }
