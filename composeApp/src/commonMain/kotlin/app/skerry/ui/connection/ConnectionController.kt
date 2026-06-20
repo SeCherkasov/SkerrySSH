@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
@@ -92,6 +93,15 @@ class ConnectionController(
             }
         }
     }
+
+    /**
+     * Открыть SFTP-канал поверх живого соединения этой сессии. Канал — собственность вызывающего
+     * (экран SFTP): закрывать через [app.skerry.shared.sftp.SftpClient.close] в dispose. Само
+     * SSH-соединение остаётся за контроллером и [disconnect] его закроет.
+     * @throws IllegalStateException сессия не подключена (нет живого соединения)
+     */
+    suspend fun openSftp(): SftpClient =
+        (connection ?: error("Нет активного соединения для SFTP")).openSftp()
 
     /** Закрыть сессию (если есть) и вернуться к форме. */
     fun disconnect() {

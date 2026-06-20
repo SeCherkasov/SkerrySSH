@@ -78,9 +78,11 @@ import app.skerry.ui.identity.IdentityManagerPanel
 import app.skerry.ui.identity.kindLabel
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.sftp.RemoteSftpPane
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.rememberJetBrainsMono
 import app.skerry.ui.theme.SkerryColors
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Desktop-экран Skerry по `docs/skerry-prototype-desktop.html`. Каркас [DesktopShell] из четырёх
@@ -118,6 +120,9 @@ fun HostManagerScreen(
     var editing by remember { mutableStateOf<HostDraft?>(null) }
     var managingIdentities by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(true) }
+    // SFTP-панель активной сессии вместо терминала; сбрасывается при смене/открытии сессии,
+    // чтобы вид не «перетекал» на другую вкладку.
+    var showSftp by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
 
     val mono = rememberJetBrainsMono()
@@ -133,9 +138,11 @@ fun HostManagerScreen(
                     sessions.activate(id)
                     showCatalog = false
                     managingIdentities = false
+                    showSftp = false
                 },
                 onCloseTab = { id ->
                     sessions.close(id)
+                    showSftp = false
                     if (sessions.sessions.isEmpty()) showCatalog = true
                 },
                 onNewTab = {
@@ -187,6 +194,9 @@ fun HostManagerScreen(
                 editing = editing,
                 selectedHost = selectedId?.let(hosts::find),
                 mono = mono,
+                showSftp = showSftp,
+                onToggleSftp = { showSftp = !showSftp },
+                sftpScope = scope,
                 onCloseActive = {
                     // То же поведение, что и закрытие вкладки крестиком: уходим к соседней сессии,
                     // а если открытых не осталось — показываем каталог.
@@ -211,6 +221,7 @@ fun HostManagerScreen(
                     )
                     showCatalog = false
                     managingIdentities = false
+                    showSftp = false
                 },
                 onEditHost = { host -> editing = host.toDraft() },
                 onDeleteHost = { host -> hosts.delete(host.id); selectedId = null },
@@ -512,6 +523,9 @@ private fun MainArea(
     editing: HostDraft?,
     selectedHost: Host?,
     mono: FontFamily,
+    showSftp: Boolean,
+    onToggleSftp: () -> Unit,
+    sftpScope: CoroutineScope,
     onCloseActive: () -> Unit,
     onCloseIdentities: () -> Unit,
     onSaveDraft: (HostDraft) -> Unit,
@@ -529,14 +543,29 @@ private fun MainArea(
                     is ConnectionUiState.Connected -> Column(Modifier.fillMaxSize()) {
                         DesktopSessionBar(
                             title = activeSession.subtitle,
-                            meta = "SSH · интерактивный shell",
+                            meta = if (showSftp) "SFTP · передача файлов" else "SSH · интерактивный shell",
                             onDisconnect = onCloseActive,
                             mono = mono,
+                            onSftp = onToggleSftp,
                         )
                         Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
-                        TerminalScreen(state.terminal, Modifier.weight(1f))
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
-                        AiBar(mono = mono)
+                        if (showSftp) {
+                            // Стабилизируем ссылку: bound-reference не имеет equals(), иначе каждая
+                            // рекомпозиция меняла бы ключ produceState и переоткрывала SFTP-канал.
+                            val openSftp = remember(activeSession.controller) {
+                                activeSession.controller::openSftp
+                            }
+                            RemoteSftpPane(
+                                openSftp = openSftp,
+                                scope = sftpScope,
+                                mono = mono,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            TerminalScreen(state.terminal, Modifier.weight(1f))
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
+                            AiBar(mono = mono)
+                        }
                     }
 
                     is ConnectionUiState.Error -> ConnectionError(message = state.message, onBack = onCloseActive)

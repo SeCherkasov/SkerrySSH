@@ -22,7 +22,7 @@ import app.skerry.ui.theme.SkerryColors
  */
 enum class SkerryIconKind {
     Chevron, Close, Add, Search, Lock, LockOpen, Tune, MoreVert,
-    Folder, Info, Power, Terminal, Key, Refresh, Ai,
+    Folder, File, Info, Power, Terminal, Key, Refresh, Ai,
 }
 
 /**
@@ -50,6 +50,7 @@ fun SkerryIcon(
             SkerryIconKind.Tune -> tune(tint, stroke, w)
             SkerryIconKind.MoreVert -> moreVert(tint, w)
             SkerryIconKind.Folder -> folder(tint, stroke)
+            SkerryIconKind.File -> file(tint, stroke)
             SkerryIconKind.Info -> info(tint, stroke, w)
             SkerryIconKind.Power -> power(tint, stroke)
             SkerryIconKind.Terminal -> terminal(tint, stroke)
@@ -136,6 +137,22 @@ private fun DrawScope.folder(c: Color, st: Stroke) {
     drawLine(c, Offset(l, top), Offset(l, bottom), st.width, st.cap)
     drawLine(c, Offset(r, top + size.height * 0.06f), Offset(r, bottom), st.width, st.cap)
     drawLine(c, Offset(l, bottom), Offset(r, bottom), st.width, st.cap)
+}
+
+private fun DrawScope.file(c: Color, st: Stroke) {
+    // Лист с загнутым уголком: контур страницы + диагональ уголка справа сверху.
+    val l = size.width * 0.30f
+    val r = size.width * 0.70f
+    val top = size.height * 0.26f
+    val bottom = size.height * 0.74f
+    val fold = size.width * 0.18f // размер уголка
+    drawLine(c, Offset(l, top), Offset(r - fold, top), st.width, st.cap)
+    drawLine(c, Offset(r - fold, top), Offset(r, top + fold), st.width, st.cap)
+    drawLine(c, Offset(r, top + fold), Offset(r, bottom), st.width, st.cap)
+    drawLine(c, Offset(r, bottom), Offset(l, bottom), st.width, st.cap)
+    drawLine(c, Offset(l, bottom), Offset(l, top), st.width, st.cap)
+    drawLine(c, Offset(r - fold, top), Offset(r - fold, top + fold), st.width, st.cap)
+    drawLine(c, Offset(r - fold, top + fold), Offset(r, top + fold), st.width, st.cap)
 }
 
 private fun DrawScope.info(c: Color, st: Stroke, w: Float) {

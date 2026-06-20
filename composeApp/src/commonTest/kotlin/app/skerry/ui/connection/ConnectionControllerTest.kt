@@ -1,6 +1,7 @@
 package app.skerry.ui.connection
 
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.ssh.ShellChannel
@@ -21,7 +22,9 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -119,6 +122,29 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `openSftp opens a channel on the live connection`() = runTest {
+        val sftp = RecordingSftpClient()
+        val conn = FakeSshConnection(FakeShellChannel(), sftp = sftp)
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(target, SshAuth.Password("pw"))
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        val opened = controller.openSftp()
+
+        assertSame(sftp, opened)
+        scope.cancel()
+    }
+
+    @Test
+    fun `openSftp without a live connection fails`() = runTest {
+        val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))
+        assertEquals(ConnectionUiState.Form, controller.uiState)
+
+        assertFailsWith<IllegalStateException> { controller.openSftp() }
+        scope.cancel()
+    }
+
+    @Test
     fun `dismissError returns to Form`() = runTest {
         val (controller, scope) = controllerWith(FakeSshTransport(error = SshAuthenticationException("x")))
         controller.connect(target, SshAuth.Password("pw"))
@@ -144,17 +170,34 @@ private class FakeSshTransport(
     }
 }
 
-private class FakeSshConnection(private val channel: ShellChannel) : SshConnection {
+private class FakeSshConnection(
+    private val channel: ShellChannel,
+    private val sftp: SftpClient? = null,
+) : SshConnection {
     var disconnected = false
         private set
 
     override val isConnected: Boolean get() = !disconnected
     override suspend fun exec(command: String): ExecResult = throw UnsupportedOperationException()
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = channel
-    override suspend fun openSftp(): SftpClient = throw UnsupportedOperationException()
+    override suspend fun openSftp(): SftpClient = sftp ?: throw UnsupportedOperationException()
     override suspend fun disconnect() {
         disconnected = true
     }
+}
+
+/** Заглушка SFTP-клиента: важна только идентичность объекта (что openSftp вернул именно его). */
+private class RecordingSftpClient : SftpClient {
+    override suspend fun list(path: String): List<SftpEntry> = emptyList()
+    override suspend fun stat(path: String): SftpEntry? = null
+    override suspend fun realpath(path: String): String = path
+    override suspend fun read(path: String): ByteArray = ByteArray(0)
+    override suspend fun write(path: String, data: ByteArray) = Unit
+    override suspend fun mkdir(path: String) = Unit
+    override suspend fun remove(path: String) = Unit
+    override suspend fun rmdir(path: String) = Unit
+    override suspend fun rename(from: String, to: String) = Unit
+    override suspend fun close() = Unit
 }
 
 /** Считает вызовы openShell — для проверки, что повторный connect не открывает второй shell. */
