@@ -186,6 +186,7 @@ fun DesktopSessionBar(
     mono: FontFamily,
     modifier: Modifier = Modifier,
     onSftp: (() -> Unit)? = null,
+    onForward: (() -> Unit)? = null,
     onInfo: (() -> Unit)? = null,
 ) {
     Row(
@@ -201,8 +202,9 @@ fun DesktopSessionBar(
             Text(meta, color = SkerryColors.textFaint, fontSize = 11.5.sp)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-            // SFTP/Инфо пока отключены — экран SFTP отложен по договорённости; кнопки видимы, но gray.
             ChromeIconButton(SkerryIconKind.Folder, onClick = { onSftp?.invoke() }, enabled = onSftp != null)
+            // Проброс портов (-L/-R); cable-иконки нет — используем Tune.
+            ChromeIconButton(SkerryIconKind.Tune, onClick = { onForward?.invoke() }, enabled = onForward != null)
             ChromeIconButton(SkerryIconKind.Info, onClick = { onInfo?.invoke() }, enabled = onInfo != null)
             ChromeIconButton(SkerryIconKind.Power, onClick = onDisconnect, tint = SkerryColors.sunset)
         }
