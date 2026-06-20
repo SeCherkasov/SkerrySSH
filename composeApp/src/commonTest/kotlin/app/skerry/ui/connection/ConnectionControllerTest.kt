@@ -149,6 +149,31 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `openPortForwards returns the same controller for one session`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(target, SshAuth.Password("pw"))
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        // Кэш на соединение: туннели должны пережить переключение вкладок UI, поэтому каждый
+        // openPortForwards возвращает один и тот же контроллер, а не новый.
+        val first = controller.openPortForwards(scope)
+        val second = controller.openPortForwards(scope)
+
+        assertSame(first, second)
+        scope.cancel()
+    }
+
+    @Test
+    fun `openPortForwards without a live connection fails`() = runTest {
+        val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))
+        assertEquals(ConnectionUiState.Form, controller.uiState)
+
+        assertFailsWith<IllegalStateException> { controller.openPortForwards(scope) }
+        scope.cancel()
+    }
+
+    @Test
     fun `dismissError returns to Form`() = runTest {
         val (controller, scope) = controllerWith(FakeSshTransport(error = SshAuthenticationException("x")))
         controller.connect(target, SshAuth.Password("pw"))

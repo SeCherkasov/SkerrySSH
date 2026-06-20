@@ -23,7 +23,7 @@ import app.skerry.ui.theme.SkerryColors
 enum class SkerryIconKind {
     Chevron, Close, Add, Search, Lock, LockOpen, Tune, MoreVert,
     Folder, File, Info, Power, Terminal, Key, Refresh, Ai,
-    Download, Upload,
+    Download, Upload, Forward,
 }
 
 /**
@@ -60,6 +60,7 @@ fun SkerryIcon(
             SkerryIconKind.Ai -> ai(tint)
             SkerryIconKind.Download -> trayArrow(tint, stroke, down = true)
             SkerryIconKind.Upload -> trayArrow(tint, stroke, down = false)
+            SkerryIconKind.Forward -> forward(tint, stroke)
         }
     }
 }
@@ -79,6 +80,18 @@ private fun DrawScope.close(c: Color, st: Stroke) {
 private fun DrawScope.add(c: Color, st: Stroke) {
     drawLine(c, p(0.5f, 0.26f), p(0.5f, 0.74f), st.width, st.cap)
     drawLine(c, p(0.26f, 0.5f), p(0.74f, 0.5f), st.width, st.cap)
+}
+
+/** Проброс портов: две встречные горизонтальные стрелки (туннель в обе стороны). */
+private fun DrawScope.forward(c: Color, st: Stroke) {
+    // Верхняя стрелка вправо.
+    drawLine(c, p(0.24f, 0.38f), p(0.72f, 0.38f), st.width, st.cap)
+    drawLine(c, p(0.62f, 0.29f), p(0.72f, 0.38f), st.width, st.cap)
+    drawLine(c, p(0.62f, 0.47f), p(0.72f, 0.38f), st.width, st.cap)
+    // Нижняя стрелка влево.
+    drawLine(c, p(0.76f, 0.62f), p(0.28f, 0.62f), st.width, st.cap)
+    drawLine(c, p(0.38f, 0.53f), p(0.28f, 0.62f), st.width, st.cap)
+    drawLine(c, p(0.38f, 0.71f), p(0.28f, 0.62f), st.width, st.cap)
 }
 
 private fun DrawScope.search(c: Color, st: Stroke, w: Float) {

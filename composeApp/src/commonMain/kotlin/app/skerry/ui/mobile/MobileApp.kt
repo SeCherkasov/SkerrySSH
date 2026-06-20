@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,6 +70,13 @@ import app.skerry.ui.desktop.BrandLogo
 import app.skerry.ui.desktop.SkerryIcon
 import app.skerry.ui.desktop.SkerryIconKind
 import app.skerry.ui.desktop.statusColor
+import app.skerry.ui.forward.ForwardDirection
+import app.skerry.ui.forward.ForwardEntry
+import app.skerry.ui.forward.ForwardRequest
+import app.skerry.ui.forward.ForwardStatus
+import app.skerry.ui.forward.PortForwardController
+import app.skerry.ui.forward.forwardRouteText
+import app.skerry.ui.forward.parseForwardInput
 import app.skerry.ui.host.HostDraft
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
@@ -107,6 +117,7 @@ private enum class MobileTab(val label: String, val icon: SkerryIconKind) {
     Hosts("Hosts", SkerryIconKind.Power),
     Terminal("Terminals", SkerryIconKind.Terminal),
     Files("Files", SkerryIconKind.Folder),
+    Forwards("Forwards", SkerryIconKind.Forward),
     Keys("Keys", SkerryIconKind.Key),
     Settings("Settings", SkerryIconKind.Tune),
 }
@@ -161,6 +172,7 @@ private fun MobileRoot(deps: AppDependencies, onLock: (() -> Unit)?) {
                     )
                     MobileTab.Terminal -> TerminalTab(sessions, onGoHosts = { tab = MobileTab.Hosts })
                     MobileTab.Files -> FilesTab(sessions, scope, onGoHosts = { tab = MobileTab.Hosts })
+                    MobileTab.Forwards -> ForwardsTab(sessions, scope, onGoHosts = { tab = MobileTab.Hosts })
                     MobileTab.Keys -> KeysScreen(deps.identities)
                     MobileTab.Settings -> SettingsScreen(deps, onLock)
                 }
@@ -499,6 +511,188 @@ private fun FilesTab(sessions: SessionsController?, scope: CoroutineScope, onGoH
                 }
             }
             is ConnectionUiState.Form -> Box(Modifier.weight(1f))
+        }
+    }
+}
+
+/**
+ * Вкладка Forwards: проброс портов (`-L`/`-R`) активной сессии. Туннели поднимает общий с desktop
+ * [PortForwardController] через `ConnectionController.openPortForwards()`. [scope] — долгоживущий
+ * scope [MobileRoot]: `closeAll` в `onDispose` снимает все туннели при уходе сессии из композиции.
+ * В отличие от desktop (горизонтальная форма-`Row`), на телефоне параметры вводятся в нижнем листе
+ * [AddForwardSheet], а список занимает весь экран.
+ */
+@Composable
+private fun ForwardsTab(sessions: SessionsController?, scope: CoroutineScope, onGoHosts: () -> Unit) {
+    val active = sessions?.active
+    if (sessions == null || active == null) {
+        EmptyCenter(SkerryIconKind.Forward, "Нет активных сессий", "Подключитесь к хосту, чтобы настроить проброс")
+        return
+    }
+    val mono = rememberJetBrainsMono()
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().background(SkerryColors.nightSeaSoft).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onGoHosts), contentAlignment = Alignment.Center) {
+                SkerryIcon(SkerryIconKind.Chevron, tint = SkerryColors.textDim, size = 18.dp, modifier = Modifier.rotate(90f))
+            }
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.size(7.dp).clip(CircleShape).background(statusColor(active.controller.uiState)))
+                    Text(active.title.ifBlank { "сессия" }, color = SkerryColors.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Text("Проброс портов", color = SkerryColors.textFaint, fontSize = 10.sp, fontFamily = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
+
+        when (val st = active.controller.uiState) {
+            is ConnectionUiState.Connecting -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    CircularProgressIndicator(color = SkerryColors.cyan)
+                    Text("Подключение…", color = SkerryColors.textDim)
+                }
+            }
+            is ConnectionUiState.Connected -> {
+                // Контроллер пробросов живёт на самой сессии (ConnectionController владеет им и
+                // снимает все туннели в disconnect), поэтому пробросы переживают переключение
+                // вкладок и не рвутся при уходе с этой вкладки.
+                val forwards = remember(active.controller) { active.controller.openPortForwards(scope) }
+                MobileForwardList(forwards, mono, Modifier.weight(1f).fillMaxWidth())
+            }
+            is ConnectionUiState.Error -> Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("Не удалось подключиться", color = SkerryColors.storm, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(st.message, color = SkerryColors.textDim, fontSize = 13.sp)
+                    Button(onClick = onGoHosts) { Text("К хостам") }
+                }
+            }
+            is ConnectionUiState.Form -> Box(Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun MobileForwardList(controller: PortForwardController, mono: FontFamily, modifier: Modifier) {
+    var showAdd by remember { mutableStateOf(false) }
+    Box(modifier) {
+        val forwards = controller.forwards
+        if (forwards.isEmpty()) {
+            EmptyCenter(SkerryIconKind.Forward, "Пробросов пока нет", "Нажмите +, чтобы поднять -L или -R туннель")
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(forwards, key = { it.id }) { entry ->
+                    MobileForwardRow(entry, mono, onRemove = { controller.remove(entry) })
+                }
+                item { Spacer(Modifier.height(80.dp)) }
+            }
+        }
+        Box(
+            Modifier.align(Alignment.BottomEnd).padding(18.dp).size(56.dp).clip(RoundedCornerShape(18.dp)).background(SkerryColors.cyan).clickable { showAdd = true },
+            contentAlignment = Alignment.Center,
+        ) { SkerryIcon(SkerryIconKind.Add, tint = SkerryColors.deep2, size = 26.dp) }
+    }
+    if (showAdd) {
+        AddForwardSheet(
+            mono = mono,
+            onDismiss = { showAdd = false },
+            onAdd = { direction, req ->
+                when (direction) {
+                    ForwardDirection.Local -> controller.addLocal(req.bindPort, req.destHost, req.destPort)
+                    ForwardDirection.Remote -> controller.addRemote(req.bindPort, req.destHost, req.destPort)
+                }
+                showAdd = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun MobileForwardRow(entry: ForwardEntry, mono: FontFamily, onRemove: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(SkerryColors.nightSeaSoft).border(1.dp, SkerryColors.line, RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(SkerryColors.cyan.copy(alpha = 0.10f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+            Text(
+                if (entry.direction == ForwardDirection.Local) "-L" else "-R",
+                color = SkerryColors.cyan, fontFamily = mono, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Text(forwardRouteText(entry), color = SkerryColors.text, fontFamily = mono, fontSize = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val (statusText, statusColor) = when (val s = entry.status) {
+                ForwardStatus.Starting -> "поднимается…" to SkerryColors.amber
+                is ForwardStatus.Active -> "активен · порт ${s.boundPort}" to SkerryColors.moss
+                is ForwardStatus.Failed -> s.message to SkerryColors.storm
+            }
+            Text(statusText, color = statusColor, fontFamily = mono, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.04f)).clickable(onClick = onRemove), contentAlignment = Alignment.Center) {
+            SkerryIcon(SkerryIconKind.Close, tint = SkerryColors.textDim, size = 16.dp)
+        }
+    }
+}
+
+@Composable
+private fun AddForwardSheet(
+    mono: FontFamily,
+    onDismiss: () -> Unit,
+    onAdd: (ForwardDirection, ForwardRequest) -> Unit,
+) {
+    var direction by remember { mutableStateOf(ForwardDirection.Local) }
+    var bindPort by remember { mutableStateOf("") }
+    var destHost by remember { mutableStateOf("") }
+    var destPort by remember { mutableStateOf("") }
+    val request = parseForwardInput(bindPort, destHost, destPort)
+
+    SheetScaffold(onDismiss) {
+        Text("Новый проброс", color = SkerryColors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (direction == ForwardDirection.Local) {
+                "-L · локальный порт на телефоне открывает доступ к адресу, видимому с сервера."
+            } else {
+                "-R · порт на сервере открывает доступ к адресу, видимому с телефона."
+            },
+            color = SkerryColors.textDim, fontSize = 11.5.sp,
+        )
+        DirectionPicker(direction, mono) { direction = it }
+        SheetField("Порт слушателя", bindPort, "напр. 8080 (0 — выберет система)", KeyboardType.Number) { bindPort = it.filter(Char::isDigit) }
+        SheetField("Хост назначения", destHost, "напр. localhost или 10.0.0.5") { destHost = it }
+        SheetField("Порт назначения", destPort, "напр. 5432", KeyboardType.Number) { destPort = it.filter(Char::isDigit) }
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = { request?.let { onAdd(direction, it) } },
+            enabled = request != null,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Поднять туннель") }
+        OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Отмена") }
+    }
+}
+
+/** Полноширинный сегментированный переключатель -L / -R для нижнего листа. */
+@Composable
+private fun DirectionPicker(selected: ForwardDirection, mono: FontFamily, onSelect: (ForwardDirection) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(SkerryColors.nightSea).border(1.dp, SkerryColors.lineStrong, RoundedCornerShape(10.dp)).padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        for (dir in ForwardDirection.entries) {
+            val active = dir == selected
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (active) SkerryColors.cyanSoft else Color.Transparent).clickable { onSelect(dir) }.padding(vertical = 9.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (dir == ForwardDirection.Local) "-L  локальный" else "-R  обратный",
+                    color = if (active) SkerryColors.cyan else SkerryColors.textDim,
+                    fontFamily = mono, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                )
+            }
         }
     }
 }

@@ -551,12 +551,12 @@ private fun MainArea(
                 when (val state = activeSession.controller.uiState) {
                     is ConnectionUiState.Connecting -> ConnectingIndicator()
                     is ConnectionUiState.Connected -> Column(Modifier.fillMaxSize()) {
-                        // Контроллер пробросов создаём один раз на сессию (переживает переключение
-                        // вида), а на уход сессии из композиции — снимаем все туннели.
+                        // Контроллер пробросов живёт на самой сессии (ConnectionController владеет им
+                        // и снимает туннели в disconnect), поэтому пробросы переживают и переключение
+                        // вида, и переключение между вкладками-сессиями — рвутся только при закрытии.
                         val forwards = remember(activeSession.controller) {
                             activeSession.controller.openPortForwards(sftpScope)
                         }
-                        DisposableEffect(activeSession.controller) { onDispose { forwards.closeAll() } }
 
                         DesktopSessionBar(
                             title = activeSession.subtitle,

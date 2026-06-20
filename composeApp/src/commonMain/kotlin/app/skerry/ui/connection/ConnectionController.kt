@@ -64,6 +64,7 @@ class ConnectionController(
     private var connectJob: Job? = null
     private var connection: SshConnection? = null
     private var sessionScope: CoroutineScope? = null
+    private var portForwards: PortForwardController? = null
 
     fun connect(target: SshTarget, auth: SshAuth) {
         // Стартуем только из формы: пока идёт подключение или есть открытая сессия,
@@ -105,22 +106,25 @@ class ConnectionController(
         (connection ?: error("Нет активного соединения для SFTP")).openSftp()
 
     /**
-     * Создать контроллер проброса портов поверх живого соединения. Соединение остаётся за этим
-     * контроллером ([disconnect] его закроет); пробросы закрывает сам [PortForwardController]
-     * (через свои [PortForwardController.remove]/[PortForwardController.closeAll]).
+     * Контроллер проброса портов этой сессии — один на соединение, создаётся лениво и кэшируется,
+     * поэтому переживает переключение вкладок/панелей UI (туннели живут, пока жива сессия). Все
+     * пробросы снимает [disconnect] при закрытии сессии; [scope] первого вызова (UI-scope экрана)
+     * закрепляется за контроллером и должен жить не меньше соединения.
      * @throws IllegalStateException сессия не подключена (нет живого соединения)
      */
     fun openPortForwards(scope: CoroutineScope): PortForwardController =
-        PortForwardController(
+        portForwards ?: PortForwardController(
             connection ?: error("Нет активного соединения для проброса портов"),
             scope,
-        )
+        ).also { portForwards = it }
 
     /** Закрыть сессию (если есть) и вернуться к форме. */
     fun disconnect() {
         connectJob?.cancel()
         connectJob = null
         val conn = connection
+        portForwards?.closeAll()
+        portForwards = null
         sessionScope?.cancel()
         sessionScope = null
         connection = null

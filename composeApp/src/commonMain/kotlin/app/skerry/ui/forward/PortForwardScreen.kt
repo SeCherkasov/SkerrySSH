@@ -94,11 +94,7 @@ private fun AddForwardForm(
     var destHost by remember { mutableStateOf("") }
     var destPort by remember { mutableStateOf("") }
 
-    val bindPortValue = bindPort.trim().toIntOrNull()
-    val destPortValue = destPort.trim().toIntOrNull()
-    val valid = bindPortValue != null && bindPortValue in 0..65535 &&
-        destHost.isNotBlank() &&
-        destPortValue != null && destPortValue in 1..65535
+    val request = parseForwardInput(bindPort, destHost, destPort)
 
     Row(
         Modifier.fillMaxWidth().background(SkerryColors.nightSeaSoft).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -111,13 +107,12 @@ private fun AddForwardForm(
         HostField(destHost, onChange = { destHost = it }, mono = mono)
         PortField(destPort, onChange = { destPort = it }, placeholder = "порт", mono = mono, width = 74.dp)
         AddButton(
-            enabled = valid,
+            enabled = request != null,
             onClick = {
-                val bp = bindPortValue ?: return@AddButton
-                val dp = destPortValue ?: return@AddButton
+                val r = request ?: return@AddButton
                 when (direction) {
-                    ForwardDirection.Local -> onAddLocal(bp, destHost.trim(), dp, "127.0.0.1")
-                    ForwardDirection.Remote -> onAddRemote(bp, destHost.trim(), dp, "127.0.0.1")
+                    ForwardDirection.Local -> onAddLocal(r.bindPort, r.destHost, r.destPort, "127.0.0.1")
+                    ForwardDirection.Remote -> onAddRemote(r.bindPort, r.destHost, r.destPort, "127.0.0.1")
                 }
                 bindPort = ""; destHost = ""; destPort = ""
             },
@@ -249,7 +244,7 @@ private fun ForwardRow(entry: ForwardEntry, mono: FontFamily, onRemove: () -> Un
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(routeText(entry), color = SkerryColors.text, fontFamily = mono, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(forwardRouteText(entry), color = SkerryColors.text, fontFamily = mono, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             StatusLine(entry.status, mono)
         }
         ChromeIconButton(SkerryIconKind.Close, onClick = onRemove)
@@ -266,8 +261,11 @@ private fun StatusLine(status: ForwardStatus, mono: FontFamily) {
     Text(text, color = color, fontFamily = mono, fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
-/** Маршрут проброса для показа. Сторона слушателя зависит от направления (-L: эта машина, -R: сервер). */
-private fun routeText(entry: ForwardEntry): String {
+/**
+ * Маршрут проброса для показа. Сторона слушателя зависит от направления (-L: эта машина, -R: сервер).
+ * Общий для desktop ([PortForwardScreen]) и мобильного списка — чтобы формат не разъезжался.
+ */
+internal fun forwardRouteText(entry: ForwardEntry): String {
     val listenPort = (entry.status as? ForwardStatus.Active)?.boundPort ?: entry.requestedPort
     val side = if (entry.direction == ForwardDirection.Local) "localhost" else "server"
     return "$side:$listenPort  →  ${entry.destHost}:${entry.destPort}"
