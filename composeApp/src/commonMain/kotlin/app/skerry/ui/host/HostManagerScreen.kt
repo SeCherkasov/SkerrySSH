@@ -79,6 +79,7 @@ import app.skerry.ui.identity.kindLabel
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.files.RemoteDualSftpPane
+import app.skerry.ui.forward.PortForwardScreen
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.rememberJetBrainsMono
 import app.skerry.ui.theme.SkerryColors
@@ -120,9 +121,9 @@ fun HostManagerScreen(
     var editing by remember { mutableStateOf<HostDraft?>(null) }
     var managingIdentities by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(true) }
-    // SFTP-панель активной сессии вместо терминала; сбрасывается при смене/открытии сессии,
-    // чтобы вид не «перетекал» на другую вкладку.
-    var showSftp by remember { mutableStateOf(false) }
+    // Текущий вид активной сессии (терминал/SFTP/проброс портов); сбрасывается на терминал при
+    // смене/открытии сессии, чтобы вид не «перетекал» на другую вкладку.
+    var sessionView by remember { mutableStateOf(SessionView.Terminal) }
     var query by remember { mutableStateOf("") }
 
     val mono = rememberJetBrainsMono()
@@ -138,11 +139,11 @@ fun HostManagerScreen(
                     sessions.activate(id)
                     showCatalog = false
                     managingIdentities = false
-                    showSftp = false
+                    sessionView = SessionView.Terminal
                 },
                 onCloseTab = { id ->
                     sessions.close(id)
-                    showSftp = false
+                    sessionView = SessionView.Terminal
                     if (sessions.sessions.isEmpty()) showCatalog = true
                 },
                 onNewTab = {
@@ -194,8 +195,13 @@ fun HostManagerScreen(
                 editing = editing,
                 selectedHost = selectedId?.let(hosts::find),
                 mono = mono,
-                showSftp = showSftp,
-                onToggleSftp = { showSftp = !showSftp },
+                sessionView = sessionView,
+                onToggleSftp = {
+                    sessionView = if (sessionView == SessionView.Sftp) SessionView.Terminal else SessionView.Sftp
+                },
+                onToggleForward = {
+                    sessionView = if (sessionView == SessionView.Forward) SessionView.Terminal else SessionView.Forward
+                },
                 sftpScope = scope,
                 onCloseActive = {
                     // То же поведение, что и закрытие вкладки крестиком: уходим к соседней сессии,
@@ -221,7 +227,7 @@ fun HostManagerScreen(
                     )
                     showCatalog = false
                     managingIdentities = false
-                    showSftp = false
+                    sessionView = SessionView.Terminal
                 },
                 onEditHost = { host -> editing = host.toDraft() },
                 onDeleteHost = { host -> hosts.delete(host.id); selectedId = null },
@@ -514,6 +520,9 @@ private fun SidebarFooter(onManageIdentities: (() -> Unit)?, onNew: () -> Unit) 
 
 // ===================== MAIN AREA =====================
 
+/** Что показывает основная область активной сессии: терминал, SFTP-панель или проброс портов. */
+private enum class SessionView { Terminal, Sftp, Forward }
+
 @Composable
 private fun MainArea(
     inSession: Boolean,
@@ -523,8 +532,9 @@ private fun MainArea(
     editing: HostDraft?,
     selectedHost: Host?,
     mono: FontFamily,
-    showSftp: Boolean,
+    sessionView: SessionView,
     onToggleSftp: () -> Unit,
+    onToggleForward: () -> Unit,
     sftpScope: CoroutineScope,
     onCloseActive: () -> Unit,
     onCloseIdentities: () -> Unit,
@@ -541,31 +551,48 @@ private fun MainArea(
                 when (val state = activeSession.controller.uiState) {
                     is ConnectionUiState.Connecting -> ConnectingIndicator()
                     is ConnectionUiState.Connected -> Column(Modifier.fillMaxSize()) {
+                        // Контроллер пробросов создаём один раз на сессию (переживает переключение
+                        // вида), а на уход сессии из композиции — снимаем все туннели.
+                        val forwards = remember(activeSession.controller) {
+                            activeSession.controller.openPortForwards(sftpScope)
+                        }
+                        DisposableEffect(activeSession.controller) { onDispose { forwards.closeAll() } }
+
                         DesktopSessionBar(
                             title = activeSession.subtitle,
-                            meta = if (showSftp) "SFTP · передача файлов" else "SSH · интерактивный shell",
+                            meta = when (sessionView) {
+                                SessionView.Sftp -> "SFTP · передача файлов"
+                                SessionView.Forward -> "Проброс портов"
+                                SessionView.Terminal -> "SSH · интерактивный shell"
+                            },
                             onDisconnect = onCloseActive,
                             mono = mono,
                             onSftp = onToggleSftp,
+                            onForward = onToggleForward,
                         )
                         Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
-                        if (showSftp) {
-                            // Стабилизируем ссылку: bound-reference не имеет equals(), иначе каждая
-                            // рекомпозиция меняла бы ключ produceState и переоткрывала SFTP-канал.
-                            val openSftp = remember(activeSession.controller) {
-                                activeSession.controller::openSftp
+                        when (sessionView) {
+                            SessionView.Sftp -> {
+                                // Стабилизируем ссылку: bound-reference не имеет equals(), иначе каждая
+                                // рекомпозиция меняла бы ключ produceState и переоткрывала SFTP-канал.
+                                val openSftp = remember(activeSession.controller) {
+                                    activeSession.controller::openSftp
+                                }
+                                RemoteDualSftpPane(
+                                    openSftp = openSftp,
+                                    hostLabel = activeSession.subtitle,
+                                    scope = sftpScope,
+                                    mono = mono,
+                                    modifier = Modifier.weight(1f),
+                                )
                             }
-                            RemoteDualSftpPane(
-                                openSftp = openSftp,
-                                hostLabel = activeSession.subtitle,
-                                scope = sftpScope,
-                                mono = mono,
-                                modifier = Modifier.weight(1f),
-                            )
-                        } else {
-                            TerminalScreen(state.terminal, Modifier.weight(1f))
-                            Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
-                            AiBar(mono = mono)
+                            SessionView.Forward ->
+                                PortForwardScreen(forwards, mono, Modifier.weight(1f))
+                            SessionView.Terminal -> {
+                                TerminalScreen(state.terminal, Modifier.weight(1f))
+                                Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
+                                AiBar(mono = mono)
+                            }
                         }
                     }
 

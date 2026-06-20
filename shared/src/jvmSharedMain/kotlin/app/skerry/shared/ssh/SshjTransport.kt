@@ -3,12 +3,15 @@ package app.skerry.shared.ssh
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SshjSftpClient
 import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.Security
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +21,11 @@ import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
+import net.schmizz.sshj.connection.channel.direct.LocalPortForwarder
+import net.schmizz.sshj.connection.channel.direct.Parameters
 import net.schmizz.sshj.connection.channel.direct.Session
+import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
+import net.schmizz.sshj.connection.channel.forwarded.SocketForwardingConnectListener
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.password.PasswordUtils
 
@@ -147,12 +154,105 @@ private class SshjConnection(private val client: SSHClient) : SshConnection {
         }
     }
 
+    override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward =
+        withContext(Dispatchers.IO) {
+            // Слушатель биндим сами: так читаем фактический порт при bindPort=0 и ловим «порт занят»
+            // как PortForwardException ещё до запуска цикла accept.
+            val serverSocket = try {
+                ServerSocket().apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(spec.bindHost, spec.bindPort))
+                }
+            } catch (e: IOException) {
+                throw PortForwardException(
+                    "Не удалось занять локальный порт ${spec.bindHost}:${spec.bindPort}", e,
+                )
+            }
+            val params = Parameters(spec.bindHost, serverSocket.localPort, spec.destHost, spec.destPort)
+            SshjLocalForward(client.newLocalPortForwarder(params, serverSocket), serverSocket)
+        }
+
+    override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward =
+        withContext(Dispatchers.IO) {
+            val forwarder = client.remotePortForwarder
+            val forward = try {
+                forwarder.bind(
+                    RemotePortForwarder.Forward(spec.bindHost, spec.bindPort),
+                    SocketForwardingConnectListener(InetSocketAddress(spec.destHost, spec.destPort)),
+                )
+            } catch (e: IOException) {
+                throw PortForwardException(
+                    "Сервер отверг обратный проброс ${spec.bindHost}:${spec.bindPort}", e,
+                )
+            }
+            SshjRemoteForward(forwarder, forward)
+        }
+
     override suspend fun disconnect() = withContext(Dispatchers.IO) {
         client.disconnect()
     }
 
     private companion object {
         const val EXEC_TIMEOUT_SECONDS = 30L
+    }
+}
+
+/**
+ * Локальный проброс (`-L`) поверх sshj. [LocalPortForwarder.listen] блокирует, принимая соединения,
+ * пока [serverSocket] открыт, поэтому крутим его на демоническом потоке; [close] закрывает сокет —
+ * это рвёт accept и завершает listen.
+ */
+private class SshjLocalForward(
+    private val forwarder: LocalPortForwarder,
+    private val serverSocket: ServerSocket,
+) : PortForward {
+
+    private val active = AtomicBoolean(true)
+
+    override val boundPort: Int = serverSocket.localPort
+
+    override val isActive: Boolean
+        get() = active.get() && !serverSocket.isClosed
+
+    private val listener = thread(isDaemon = true, name = "skerry-local-forward-$boundPort") {
+        // Закрытие сокета/форвардера роняет accept как IOException — это штатное завершение.
+        runCatching { forwarder.listen() }
+    }
+
+    override suspend fun close() = withContext(Dispatchers.IO) {
+        if (!active.compareAndSet(true, false)) return@withContext
+        runCatching { forwarder.close() }
+        runCatching { serverSocket.close() }
+        listener.join(CLOSE_JOIN_MILLIS)
+        Unit
+    }
+
+    private companion object {
+        const val CLOSE_JOIN_MILLIS = 1000L
+    }
+}
+
+/**
+ * Обратный проброс (`-R`) поверх sshj. Слушатель держит сервер; входящие туннели sshj обрабатывает
+ * на своём connection-потоке через [SocketForwardingConnectListener], отдельный поток не нужен.
+ * [close] отменяет привязку на сервере.
+ */
+private class SshjRemoteForward(
+    private val forwarder: RemotePortForwarder,
+    private val forward: RemotePortForwarder.Forward,
+) : PortForward {
+
+    private val active = AtomicBoolean(true)
+
+    override val boundPort: Int = forward.port
+
+    override val isActive: Boolean
+        get() = active.get()
+
+    override suspend fun close() = withContext(Dispatchers.IO) {
+        if (!active.compareAndSet(true, false)) return@withContext
+        runCatching { forwarder.cancel(forward) }
+        Unit
     }
 }
 

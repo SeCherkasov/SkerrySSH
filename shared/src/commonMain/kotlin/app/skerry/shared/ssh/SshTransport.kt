@@ -62,6 +62,20 @@ interface SshConnection {
      */
     suspend fun openSftp(): app.skerry.shared.sftp.SftpClient
 
+    /**
+     * Поднять локальный проброс портов (`-L`) поверх этого соединения. Слушатель живёт, пока не
+     * вызван [PortForward.close]; соединение остаётся открытым. См. [LocalForwardSpec].
+     * @throws PortForwardException слушатель не поднялся (порт занят) или обрыв канала
+     */
+    suspend fun forwardLocal(spec: LocalForwardSpec): PortForward
+
+    /**
+     * Поднять обратный проброс портов (`-R`) поверх этого соединения. Сервер слушает у себя, пока не
+     * вызван [PortForward.close]; соединение остаётся открытым. См. [RemoteForwardSpec].
+     * @throws PortForwardException сервер отверг запрос или обрыв канала
+     */
+    suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward
+
     suspend fun disconnect()
 }
 

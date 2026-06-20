@@ -10,6 +10,7 @@ import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
+import app.skerry.ui.forward.PortForwardController
 import app.skerry.ui.terminal.TerminalScreenState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +103,18 @@ class ConnectionController(
      */
     suspend fun openSftp(): SftpClient =
         (connection ?: error("Нет активного соединения для SFTP")).openSftp()
+
+    /**
+     * Создать контроллер проброса портов поверх живого соединения. Соединение остаётся за этим
+     * контроллером ([disconnect] его закроет); пробросы закрывает сам [PortForwardController]
+     * (через свои [PortForwardController.remove]/[PortForwardController.closeAll]).
+     * @throws IllegalStateException сессия не подключена (нет живого соединения)
+     */
+    fun openPortForwards(scope: CoroutineScope): PortForwardController =
+        PortForwardController(
+            connection ?: error("Нет активного соединения для проброса портов"),
+            scope,
+        )
 
     /** Закрыть сессию (если есть) и вернуться к форме. */
     fun disconnect() {
