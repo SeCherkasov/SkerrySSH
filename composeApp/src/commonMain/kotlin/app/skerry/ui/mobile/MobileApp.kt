@@ -74,7 +74,9 @@ import app.skerry.ui.forward.ForwardEntry
 import app.skerry.ui.forward.ForwardRequest
 import app.skerry.ui.forward.ForwardStatus
 import app.skerry.ui.forward.PortForwardController
+import app.skerry.ui.forward.directionShort
 import app.skerry.ui.forward.forwardRouteText
+import app.skerry.ui.forward.parseBindPort
 import app.skerry.ui.forward.parseForwardInput
 import app.skerry.ui.host.HostDraft
 import app.skerry.ui.host.HostManagerController
@@ -581,7 +583,7 @@ private fun MobileForwardList(controller: PortForwardController, mono: FontFamil
     Box(modifier) {
         val forwards = controller.forwards
         if (forwards.isEmpty()) {
-            EmptyCenter(SkerryIconKind.Forward, "Пробросов пока нет", "Нажмите +, чтобы поднять -L или -R туннель")
+            EmptyCenter(SkerryIconKind.Forward, "Пробросов пока нет", "Нажмите +, чтобы поднять -L, -R или -D туннель")
         } else {
             LazyColumn(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(forwards, key = { it.id }) { entry ->
@@ -599,13 +601,12 @@ private fun MobileForwardList(controller: PortForwardController, mono: FontFamil
         AddForwardSheet(
             mono = mono,
             onDismiss = { showAdd = false },
-            onAdd = { direction, req ->
-                when (direction) {
-                    ForwardDirection.Local -> controller.addLocal(req.bindPort, req.destHost, req.destPort)
-                    ForwardDirection.Remote -> controller.addRemote(req.bindPort, req.destHost, req.destPort)
-                }
+            onAddLocalRemote = { direction, req ->
+                if (direction == ForwardDirection.Local) controller.addLocal(req.bindPort, req.destHost, req.destPort)
+                else controller.addRemote(req.bindPort, req.destHost, req.destPort)
                 showAdd = false
             },
+            onAddDynamic = { port -> controller.addDynamic(port); showAdd = false },
         )
     }
 }
@@ -619,7 +620,7 @@ private fun MobileForwardRow(entry: ForwardEntry, mono: FontFamily, onRemove: ()
     ) {
         Box(Modifier.clip(RoundedCornerShape(6.dp)).background(SkerryColors.cyan.copy(alpha = 0.10f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
             Text(
-                if (entry.direction == ForwardDirection.Local) "-L" else "-R",
+                directionShort(entry.direction),
                 color = SkerryColors.cyan, fontFamily = mono, fontSize = 12.sp, fontWeight = FontWeight.Medium,
             )
         }
@@ -642,32 +643,40 @@ private fun MobileForwardRow(entry: ForwardEntry, mono: FontFamily, onRemove: ()
 private fun AddForwardSheet(
     mono: FontFamily,
     onDismiss: () -> Unit,
-    onAdd: (ForwardDirection, ForwardRequest) -> Unit,
+    onAddLocalRemote: (ForwardDirection, ForwardRequest) -> Unit,
+    onAddDynamic: (bindPort: Int) -> Unit,
 ) {
     var direction by remember { mutableStateOf(ForwardDirection.Local) }
     var bindPort by remember { mutableStateOf("") }
     var destHost by remember { mutableStateOf("") }
     var destPort by remember { mutableStateOf("") }
-    val request = parseForwardInput(bindPort, destHost, destPort)
+    val dynamic = direction == ForwardDirection.Dynamic
+    // -D: назначения нет, валиден только порт слушателя; -L/-R требуют полного адреса.
+    val request = if (dynamic) null else parseForwardInput(bindPort, destHost, destPort)
+    val dynamicPort = if (dynamic) parseBindPort(bindPort) else null
 
     SheetScaffold(onDismiss) {
         Text("Новый проброс", color = SkerryColors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Text(
-            if (direction == ForwardDirection.Local) {
-                "-L · локальный порт на телефоне открывает доступ к адресу, видимому с сервера."
-            } else {
-                "-R · порт на сервере открывает доступ к адресу, видимому с телефона."
+            when (direction) {
+                ForwardDirection.Local -> "-L · локальный порт на телефоне открывает доступ к адресу, видимому с сервера."
+                ForwardDirection.Remote -> "-R · порт на сервере открывает доступ к адресу, видимому с телефона."
+                ForwardDirection.Dynamic -> "-D · SOCKS5-прокси на телефоне; приложения сами задают адрес, трафик идёт через сервер."
             },
             color = SkerryColors.textDim, fontSize = 11.5.sp,
         )
         DirectionPicker(direction, mono) { direction = it }
-        SheetField("Порт слушателя", bindPort, "напр. 8080 (0 — выберет система)", KeyboardType.Number) { bindPort = it.filter(Char::isDigit) }
-        SheetField("Хост назначения", destHost, "напр. localhost или 10.0.0.5") { destHost = it }
-        SheetField("Порт назначения", destPort, "напр. 5432", KeyboardType.Number) { destPort = it.filter(Char::isDigit) }
+        SheetField(if (dynamic) "Порт SOCKS-прокси" else "Порт слушателя", bindPort, "напр. 1080 (0 — выберет система)", KeyboardType.Number) { bindPort = it.filter(Char::isDigit) }
+        if (!dynamic) {
+            SheetField("Хост назначения", destHost, "напр. localhost или 10.0.0.5") { destHost = it }
+            SheetField("Порт назначения", destPort, "напр. 5432", KeyboardType.Number) { destPort = it.filter(Char::isDigit) }
+        }
         Spacer(Modifier.height(8.dp))
         Button(
-            onClick = { request?.let { onAdd(direction, it) } },
-            enabled = request != null,
+            onClick = {
+                if (dynamic) dynamicPort?.let(onAddDynamic) else request?.let { onAddLocalRemote(direction, it) }
+            },
+            enabled = if (dynamic) dynamicPort != null else request != null,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Поднять туннель") }
         OutlinedButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Отмена") }
@@ -688,9 +697,13 @@ private fun DirectionPicker(selected: ForwardDirection, mono: FontFamily, onSele
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    if (dir == ForwardDirection.Local) "-L  локальный" else "-R  обратный",
+                    when (dir) {
+                        ForwardDirection.Local -> "-L  локальный"
+                        ForwardDirection.Remote -> "-R  обратный"
+                        ForwardDirection.Dynamic -> "-D  SOCKS"
+                    },
                     color = if (active) SkerryColors.cyan else SkerryColors.textDim,
-                    fontFamily = mono, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                    fontFamily = mono, fontSize = 11.sp, fontWeight = FontWeight.Medium,
                 )
             }
         }

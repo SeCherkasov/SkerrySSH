@@ -1,6 +1,7 @@
 package app.skerry.ui.session
 
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
@@ -211,6 +212,7 @@ private class FakeConnection : SshConnection {
     override suspend fun openSftp(): SftpClient = throw UnsupportedOperationException()
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = throw UnsupportedOperationException()
     override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = throw UnsupportedOperationException()
+    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = throw UnsupportedOperationException()
     override suspend fun disconnect() {
         disconnected = true
     }

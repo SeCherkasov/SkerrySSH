@@ -2,13 +2,18 @@ package app.skerry.shared.ssh
 
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SshjSftpClient
+import java.io.Closeable
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.Socket
 import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.Security
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -21,6 +26,7 @@ import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
+import net.schmizz.sshj.connection.channel.direct.DirectConnection
 import net.schmizz.sshj.connection.channel.direct.LocalPortForwarder
 import net.schmizz.sshj.connection.channel.direct.Parameters
 import net.schmizz.sshj.connection.channel.direct.Session
@@ -188,6 +194,23 @@ private class SshjConnection(private val client: SSHClient) : SshConnection {
             SshjRemoteForward(forwarder, forward)
         }
 
+    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward =
+        withContext(Dispatchers.IO) {
+            // Слушатель биндим сами (как у `-L`): читаем фактический порт при bindPort=0 и ловим
+            // «порт занят» сразу. Дальше каждое принятое соединение обслуживает SOCKS5-протокол.
+            val serverSocket = try {
+                ServerSocket().apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(spec.bindHost, spec.bindPort))
+                }
+            } catch (e: IOException) {
+                throw PortForwardException(
+                    "Не удалось занять локальный порт ${spec.bindHost}:${spec.bindPort}", e,
+                )
+            }
+            SshjDynamicForward(client, serverSocket)
+        }
+
     override suspend fun disconnect() = withContext(Dispatchers.IO) {
         client.disconnect()
     }
@@ -253,6 +276,95 @@ private class SshjRemoteForward(
         if (!active.compareAndSet(true, false)) return@withContext
         runCatching { forwarder.cancel(forward) }
         Unit
+    }
+}
+
+/** Перекачать поток до EOF, сбрасывая буфер после каждого чанка (нужно для интерактивного TCP). */
+private fun pump(input: InputStream, output: OutputStream) {
+    val buf = ByteArray(8192)
+    while (true) {
+        val n = input.read(buf)
+        if (n < 0) break
+        output.write(buf, 0, n)
+        output.flush()
+    }
+}
+
+/**
+ * Динамический проброс (`-D`) поверх sshj: на [serverSocket] мы сами держим SOCKS5-сервер. Цикл
+ * accept крутится на демоническом потоке; каждое соединение обслуживает отдельный поток — проводит
+ * SOCKS5-хэндшейк ([Socks5]) и открывает под запрошенный адрес `direct-tcpip`-канал
+ * ([SSHClient.newDirectConnection]), затем двунаправленно перекачивает байты до обрыва любой стороны.
+ *
+ * [close] закрывает [serverSocket] (рвёт accept) и все ещё живые соединения/каналы — по контракту
+ * [PortForward] установленные туннели тоже снимаются.
+ */
+private class SshjDynamicForward(
+    private val client: SSHClient,
+    private val serverSocket: ServerSocket,
+) : PortForward {
+
+    private val active = AtomicBoolean(true)
+    private val live = ConcurrentHashMap.newKeySet<Closeable>()
+
+    override val boundPort: Int = serverSocket.localPort
+
+    override val isActive: Boolean
+        get() = active.get() && !serverSocket.isClosed
+
+    private val acceptor = thread(isDaemon = true, name = "skerry-socks-$boundPort") {
+        while (active.get() && !serverSocket.isClosed) {
+            // accept роняется IOException при close() — это штатное завершение цикла.
+            val socket = try { serverSocket.accept() } catch (e: IOException) { break }
+            thread(isDaemon = true, name = "skerry-socks-conn-$boundPort") { handle(socket) }
+        }
+    }
+
+    private fun handle(socket: Socket) {
+        var channel: DirectConnection? = null
+        live.add(socket)
+        try {
+            socket.tcpNoDelay = true
+            val input = socket.getInputStream()
+            val output = socket.getOutputStream()
+            val target = Socks5.accept(input, output) ?: return // отказ уже отправлен
+            channel = try {
+                client.newDirectConnection(target.host, target.port)
+            } catch (e: IOException) {
+                Socks5.replyFailure(output, Socks5.REP_CONNECTION_REFUSED)
+                return
+            }
+            val ch = channel
+            live.add(ch)
+            Socks5.replySuccess(output)
+            // Восходящий поток (клиент → сервер) на отдельном потоке; нисходящий — на этом. Качаем
+            // вручную с flush на каждый чанк: kotlin copyTo не сбрасывает буфер, и интерактивные
+            // данные (не завершённые EOF) застряли бы. По концу клиентского ввода полузакрываем
+            // write-сторону канала — сервер увидит EOF и закроет назначение, нисходящий поток завершится.
+            val upstream = thread(isDaemon = true, name = "skerry-socks-up-$boundPort") {
+                runCatching { pump(input, ch.outputStream); ch.outputStream.close() }
+            }
+            runCatching { pump(ch.inputStream, output) }
+            upstream.join()
+        } catch (e: Exception) {
+            // Обрыв соединения/канала — штатное завершение туннеля.
+        } finally {
+            channel?.let { live.remove(it); runCatching { it.close() } }
+            live.remove(socket)
+            runCatching { socket.close() }
+        }
+    }
+
+    override suspend fun close() = withContext(Dispatchers.IO) {
+        if (!active.compareAndSet(true, false)) return@withContext
+        runCatching { serverSocket.close() } // рвёт accept
+        live.toList().forEach { runCatching { it.close() } } // снять уже поднятые туннели
+        acceptor.join(CLOSE_JOIN_MILLIS)
+        Unit
+    }
+
+    private companion object {
+        const val CLOSE_JOIN_MILLIS = 1000L
     }
 }
 

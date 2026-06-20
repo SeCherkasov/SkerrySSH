@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
 import app.skerry.shared.ssh.RemoteForwardSpec
@@ -12,8 +13,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
-/** Направление проброса: локальный (`-L`) или обратный (`-R`). */
-enum class ForwardDirection { Local, Remote }
+/** Направление проброса: локальный (`-L`), обратный (`-R`) или динамический SOCKS (`-D`). */
+enum class ForwardDirection { Local, Remote, Dynamic }
 
 /** Состояние одного проброса в списке. */
 sealed interface ForwardStatus {
@@ -75,6 +76,13 @@ class PortForwardController(
     fun addRemote(bindPort: Int, destHost: String, destPort: Int, bindHost: String = "127.0.0.1") =
         add(ForwardDirection.Remote, bindHost, bindPort, destHost, destPort)
 
+    /**
+     * Поднять динамический проброс (`-D`, SOCKS5-прокси). Адрес назначения динамический, поэтому
+     * параметров назначения нет; [bindPort] `0` — порт выберет ОС.
+     */
+    fun addDynamic(bindPort: Int, bindHost: String = "127.0.0.1") =
+        add(ForwardDirection.Dynamic, bindHost, bindPort, destHost = "", destPort = 0)
+
     private fun add(
         direction: ForwardDirection,
         bindHost: String,
@@ -91,6 +99,8 @@ class PortForwardController(
                         connection.forwardLocal(LocalForwardSpec(bindHost, bindPort, destHost, destPort))
                     ForwardDirection.Remote ->
                         connection.forwardRemote(RemoteForwardSpec(bindHost, bindPort, destHost, destPort))
+                    ForwardDirection.Dynamic ->
+                        connection.forwardDynamic(DynamicForwardSpec(bindHost, bindPort))
                 }
                 entry.handle = forward
                 entry.status = ForwardStatus.Active(forward.boundPort)

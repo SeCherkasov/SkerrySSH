@@ -76,6 +76,14 @@ interface SshConnection {
      */
     suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward
 
+    /**
+     * Поднять динамический проброс (`-D`) поверх этого соединения: на нашей машине запускается
+     * SOCKS5-прокси, а адрес назначения каждый клиент задаёт сам. Слушатель живёт, пока не вызван
+     * [PortForward.close]; соединение остаётся открытым. См. [DynamicForwardSpec].
+     * @throws PortForwardException слушатель не поднялся (порт занят)
+     */
+    suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward
+
     suspend fun disconnect()
 }
 
