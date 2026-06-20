@@ -54,4 +54,14 @@ class ForwardInputTest {
         // UI фильтрует ввод до цифр, но функция публична — фиксируем контракт явно.
         assertNull(parseForwardInput(bindPort = "-1", destHost = "host", destPort = "80"))
     }
+
+    @Test
+    fun `parseBindPort accepts the listener range including zero and rejects the rest`() {
+        // Для -D назначения нет — валиден только порт слушателя (0 = выберет ОС).
+        assertEquals(1080, parseBindPort("1080"))
+        assertEquals(0, parseBindPort("0"))
+        assertNull(parseBindPort("70000"))
+        assertNull(parseBindPort(""))
+        assertNull(parseBindPort("abc"))
+    }
 }

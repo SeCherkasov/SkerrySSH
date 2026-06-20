@@ -3,6 +3,7 @@ package app.skerry.ui.connection
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpProgress
+import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
@@ -212,6 +213,7 @@ private class FakeSshConnection(
     override suspend fun openSftp(): SftpClient = sftp ?: throw UnsupportedOperationException()
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = throw UnsupportedOperationException()
     override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = throw UnsupportedOperationException()
+    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = throw UnsupportedOperationException()
     override suspend fun disconnect() {
         disconnected = true
     }
@@ -248,6 +250,7 @@ private class CountingSshConnection(private val channel: ShellChannel) : SshConn
     override suspend fun openSftp(): SftpClient = throw UnsupportedOperationException()
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = throw UnsupportedOperationException()
     override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = throw UnsupportedOperationException()
+    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = throw UnsupportedOperationException()
 
     override suspend fun disconnect() {}
 }

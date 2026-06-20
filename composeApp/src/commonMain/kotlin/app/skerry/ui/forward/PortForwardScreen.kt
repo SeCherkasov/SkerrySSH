@@ -58,6 +58,7 @@ fun PortForwardScreen(
             mono = mono,
             onAddLocal = controller::addLocal,
             onAddRemote = controller::addRemote,
+            onAddDynamic = controller::addDynamic,
         )
         Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
 
@@ -65,7 +66,7 @@ fun PortForwardScreen(
         if (forwards.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    "Пробросов пока нет. Добавьте локальный (-L) или обратный (-R) туннель.",
+                    "Пробросов пока нет. Добавьте локальный (-L), обратный (-R) или динамический (-D) туннель.",
                     color = SkerryColors.textFaint,
                     fontSize = 12.5.sp,
                 )
@@ -88,13 +89,17 @@ private fun AddForwardForm(
     mono: FontFamily,
     onAddLocal: (bindPort: Int, destHost: String, destPort: Int, bindHost: String) -> Unit,
     onAddRemote: (bindPort: Int, destHost: String, destPort: Int, bindHost: String) -> Unit,
+    onAddDynamic: (bindPort: Int, bindHost: String) -> Unit,
 ) {
     var direction by remember { mutableStateOf(ForwardDirection.Local) }
     var bindPort by remember { mutableStateOf("") }
     var destHost by remember { mutableStateOf("") }
     var destPort by remember { mutableStateOf("") }
 
-    val request = parseForwardInput(bindPort, destHost, destPort)
+    val dynamic = direction == ForwardDirection.Dynamic
+    // -D: адреса назначения нет, валиден только порт слушателя; -L/-R требуют полного адреса.
+    val request = if (dynamic) null else parseForwardInput(bindPort, destHost, destPort)
+    val dynamicPort = if (dynamic) parseBindPort(bindPort) else null
 
     Row(
         Modifier.fillMaxWidth().background(SkerryColors.nightSeaSoft).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -102,17 +107,21 @@ private fun AddForwardForm(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         DirectionToggle(direction, mono, onSelect = { direction = it })
-        PortField(bindPort, onChange = { bindPort = it }, placeholder = "лок. порт", mono = mono, width = 92.dp)
-        Text("→", color = SkerryColors.textFaint, fontSize = 14.sp)
-        HostField(destHost, onChange = { destHost = it }, mono = mono)
-        PortField(destPort, onChange = { destPort = it }, placeholder = "порт", mono = mono, width = 74.dp)
+        PortField(bindPort, onChange = { bindPort = it }, placeholder = if (dynamic) "SOCKS-порт" else "лок. порт", mono = mono, width = 92.dp)
+        if (dynamic) {
+            Text("→  SOCKS5-прокси", color = SkerryColors.textFaint, fontFamily = mono, fontSize = 12.sp)
+        } else {
+            Text("→", color = SkerryColors.textFaint, fontSize = 14.sp)
+            HostField(destHost, onChange = { destHost = it }, mono = mono)
+            PortField(destPort, onChange = { destPort = it }, placeholder = "порт", mono = mono, width = 74.dp)
+        }
         AddButton(
-            enabled = request != null,
+            enabled = if (dynamic) dynamicPort != null else request != null,
             onClick = {
-                val r = request ?: return@AddButton
                 when (direction) {
-                    ForwardDirection.Local -> onAddLocal(r.bindPort, r.destHost, r.destPort, "127.0.0.1")
-                    ForwardDirection.Remote -> onAddRemote(r.bindPort, r.destHost, r.destPort, "127.0.0.1")
+                    ForwardDirection.Local -> request?.let { onAddLocal(it.bindPort, it.destHost, it.destPort, "127.0.0.1") }
+                    ForwardDirection.Remote -> request?.let { onAddRemote(it.bindPort, it.destHost, it.destPort, "127.0.0.1") }
+                    ForwardDirection.Dynamic -> dynamicPort?.let { onAddDynamic(it, "127.0.0.1") }
                 }
                 bindPort = ""; destHost = ""; destPort = ""
             },
@@ -141,7 +150,7 @@ private fun DirectionToggle(
                     .padding(horizontal = 10.dp, vertical = 5.dp),
             ) {
                 Text(
-                    if (dir == ForwardDirection.Local) "-L" else "-R",
+                    directionShort(dir),
                     color = if (active) SkerryColors.cyan else SkerryColors.textDim,
                     fontFamily = mono,
                     fontSize = 12.sp,
@@ -239,7 +248,7 @@ private fun ForwardRow(entry: ForwardEntry, mono: FontFamily, onRemove: () -> Un
             Modifier.clip(RoundedCornerShape(4.dp)).background(SkerryColors.cyanSoft).padding(horizontal = 7.dp, vertical = 3.dp),
         ) {
             Text(
-                if (entry.direction == ForwardDirection.Local) "-L" else "-R",
+                directionShort(entry.direction),
                 color = SkerryColors.cyan, fontFamily = mono, fontSize = 11.sp, fontWeight = FontWeight.Medium,
             )
         }
@@ -267,6 +276,10 @@ private fun StatusLine(status: ForwardStatus, mono: FontFamily) {
  */
 internal fun forwardRouteText(entry: ForwardEntry): String {
     val listenPort = (entry.status as? ForwardStatus.Active)?.boundPort ?: entry.requestedPort
-    val side = if (entry.direction == ForwardDirection.Local) "localhost" else "server"
-    return "$side:$listenPort  →  ${entry.destHost}:${entry.destPort}"
+    return when (entry.direction) {
+        // -D: назначение динамическое (его задаёт клиент SOCKS), маршрут показываем как прокси.
+        ForwardDirection.Dynamic -> "localhost:$listenPort  →  SOCKS5"
+        ForwardDirection.Local -> "localhost:$listenPort  →  ${entry.destHost}:${entry.destPort}"
+        ForwardDirection.Remote -> "server:$listenPort  →  ${entry.destHost}:${entry.destPort}"
+    }
 }

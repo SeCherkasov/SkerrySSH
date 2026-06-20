@@ -1,6 +1,7 @@
 package app.skerry.ui.forward
 
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
@@ -61,6 +62,19 @@ class PortForwardControllerTest {
     }
 
     @Test
+    fun `addDynamic raises a SOCKS forward carrying only listener params`() = runTest {
+        val conn = FakeForwardConnection(dynamicPort = 1080)
+        val (controller, _) = controllerWith(conn)
+
+        controller.addDynamic(bindPort = 0)
+
+        val entry = controller.forwards.single()
+        assertEquals(ForwardDirection.Dynamic, entry.direction)
+        assertEquals(ForwardStatus.Active(1080), entry.status)
+        assertEquals(DynamicForwardSpec(bindHost = "127.0.0.1", bindPort = 0), conn.lastDynamicSpec)
+    }
+
+    @Test
     fun `a failed forward becomes Failed without dropping the row`() = runTest {
         val conn = FakeForwardConnection(localError = PortForwardException("порт занят"))
         val (controller, _) = controllerWith(conn)
@@ -106,12 +120,16 @@ class PortForwardControllerTest {
 private class FakeForwardConnection(
     private val localPort: Int = 0,
     private val remotePort: Int = 0,
+    private val dynamicPort: Int = 0,
     private val localError: PortForwardException? = null,
     private val remoteError: PortForwardException? = null,
+    private val dynamicError: PortForwardException? = null,
 ) : SshConnection {
     var lastLocalSpec: LocalForwardSpec? = null
         private set
     var lastRemoteSpec: RemoteForwardSpec? = null
+        private set
+    var lastDynamicSpec: DynamicForwardSpec? = null
         private set
     var lastForward: FakePortForward? = null
         private set
@@ -131,6 +149,12 @@ private class FakeForwardConnection(
         lastRemoteSpec = spec
         remoteError?.let { throw it }
         return FakePortForward(remotePort).also { lastForward = it }
+    }
+
+    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward {
+        lastDynamicSpec = spec
+        dynamicError?.let { throw it }
+        return FakePortForward(dynamicPort).also { lastForward = it }
     }
 
     override suspend fun disconnect() {}

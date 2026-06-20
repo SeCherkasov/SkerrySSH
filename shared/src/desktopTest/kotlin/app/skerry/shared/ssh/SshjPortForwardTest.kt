@@ -100,6 +100,27 @@ class SshjPortForwardTest {
     }
 
     @Test
+    fun `dynamic forward proxies via SOCKS5 to the destination through the server`() = runTest {
+        EchoServer().use { echo ->
+            val connection = connect()
+            try {
+                val forward = connection.forwardDynamic(DynamicForwardSpec(bindPort = 0))
+                try {
+                    assertTrue(forward.isActive)
+                    assertTrue(forward.boundPort > 0, "SOCKS-слушатель должен получить порт от ОС")
+                    // Клиент SOCKS5 сам сообщает адрес назначения (наш echo), туннель идёт через сервер.
+                    assertEquals("socks", socksRoundTrip(forward.boundPort, "127.0.0.1", echo.port, "socks"))
+                } finally {
+                    forward.close()
+                }
+                assertFalse(forward.isActive)
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    @Test
     fun `local forward rejects an already occupied bind port`() = runTest {
         ServerSocket().use { occupied ->
             occupied.bind(InetSocketAddress("127.0.0.1", 0))
@@ -137,6 +158,48 @@ private fun roundTrip(host: String, port: Int, message: String): String =
         }
         buffer.copyOf(read).decodeToString()
     }
+
+/**
+ * Прокидывает [message] на [targetHost]:[targetPort] через локальный SOCKS5-прокси на
+ * 127.0.0.1:[proxyPort] и возвращает эхо-ответ. Реализует клиентскую сторону SOCKS5 (no-auth +
+ * CONNECT, IPv4) — встречно к серверной части в [Socks5].
+ */
+private fun socksRoundTrip(proxyPort: Int, targetHost: String, targetPort: Int, message: String): String =
+    Socket("127.0.0.1", proxyPort).use { socket ->
+        val out = socket.getOutputStream()
+        val input = socket.getInputStream()
+        // Приветствие: VER=5, NMETHODS=1, METHOD=0(no-auth). Сервер должен выбрать no-auth.
+        out.write(byteArrayOf(5, 1, 0)); out.flush()
+        val method = readFully(input, 2)
+        require(method[0].toInt() == 5 && method[1].toInt() == 0) { "SOCKS5: сервер не выбрал no-auth" }
+        // Запрос: CONNECT(1), ATYP=IPv4(1), адрес, порт (big-endian).
+        val addr = targetHost.split(".").map { it.toInt().toByte() }.toByteArray()
+        out.write(byteArrayOf(5, 1, 0, 1) + addr + byteArrayOf((targetPort shr 8).toByte(), targetPort.toByte()))
+        out.flush()
+        val reply = readFully(input, 10)
+        require(reply[1].toInt() == 0) { "SOCKS5: CONNECT отклонён, REP=${reply[1]}" }
+        // Туннель установлен — гоняем эхо.
+        out.write(message.encodeToByteArray()); out.flush()
+        val buffer = ByteArray(message.length)
+        var read = 0
+        while (read < buffer.size) {
+            val n = input.read(buffer, read, buffer.size - read)
+            if (n < 0) break
+            read += n
+        }
+        buffer.copyOf(read).decodeToString()
+    }
+
+private fun readFully(input: java.io.InputStream, n: Int): ByteArray {
+    val buf = ByteArray(n)
+    var off = 0
+    while (off < n) {
+        val r = input.read(buf, off, n - off)
+        if (r < 0) break
+        off += r
+    }
+    return buf
+}
 
 /** Однопоточный echo-сервер на свободном loopback-порту; читает запрос и шлёт его обратно. */
 private class EchoServer : Closeable {
