@@ -239,7 +239,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.HostDetail -> MobileHostDetailScreen(state)
         MobileRoute.Terminal -> MobileTerminalScreen(state)
         MobileRoute.Ports -> MobilePortsScreen(state)
-        MobileRoute.Known -> MobileRoutePlaceholder(state, "Known hosts")
+        MobileRoute.Known -> MobileKnownScreen(state)
         MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")
     }
 }

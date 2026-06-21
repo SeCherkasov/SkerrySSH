@@ -114,7 +114,9 @@ fun main() {
 private fun renderMobile(out: String, viewName: String, overlay: String, live: Boolean) {
     val state = MobileDesignState()
     val hosts = if (live) seededHosts() else null
-    val deps = if (hosts != null) AppDependencies(hosts = hosts) else AppDependencies()
+    // Менеджер known-hosts засеваем только в live-режиме — иначе экран Known берёт встроенный мок.
+    val knownHosts = if (live) seededKnownHosts() else null
+    val deps = if (hosts != null) AppDependencies(hosts = hosts, knownHosts = knownHosts) else AppDependencies()
     // Засеянные сессии (фейковый транспорт) для живого терминала — как в desktop-ветке; подаём в
     // MobileDesignApp внешним менеджером, чтобы офскрин показал реальный TerminalScreen без сети.
     val sessions = if (live && hosts != null) seededSessions(hosts) else null
