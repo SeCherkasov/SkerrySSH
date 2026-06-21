@@ -8,6 +8,9 @@ import androidx.compose.ui.unit.Density
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.sftp.SftpEntry
+import app.skerry.shared.sftp.SftpEntryType
+import app.skerry.shared.sftp.SftpProgress
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.LocalForwardSpec
@@ -140,7 +143,7 @@ private class FakeConnection(private val target: SshTarget) : SshConnection {
     override val isConnected: Boolean = true
     override suspend fun exec(command: String): ExecResult = ExecResult(0, "", "")
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = FakeChannel(target)
-    override suspend fun openSftp(): SftpClient = error("fake: no sftp")
+    override suspend fun openSftp(): SftpClient = FakeSftpClient()
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = error("fake: no forward")
     override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = error("fake: no forward")
     override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = error("fake: no forward")
@@ -170,4 +173,28 @@ private class FakeChannel(target: SshTarget) : ShellChannel {
     override suspend fun write(data: ByteArray) {}
     override suspend fun resize(size: PtySize) {}
     override suspend fun close() {}
+}
+
+/** Фейковый SFTP-клиент с заготовленным листингом `/var/www` — для офскрин-рендера живой панели. */
+private class FakeSftpClient : SftpClient {
+    private val listing = listOf(
+        SftpEntry("html", "/var/www/html", SftpEntryType.Directory, 4096, 0, 0b111_101_101),
+        SftpEntry("releases", "/var/www/releases", SftpEntryType.Directory, 4096, 0, 0b111_101_101),
+        SftpEntry("nginx.conf", "/var/www/nginx.conf", SftpEntryType.File, 3174, 0, 0b110_100_100),
+        SftpEntry("robots.txt", "/var/www/robots.txt", SftpEntryType.File, 112, 0, 0b110_100_100),
+        SftpEntry("deploy.sh", "/var/www/deploy.sh", SftpEntryType.File, 1843, 0, 0b111_101_101),
+    )
+
+    override suspend fun list(path: String): List<SftpEntry> = listing
+    override suspend fun stat(path: String): SftpEntry? = null
+    override suspend fun realpath(path: String): String = "/var/www"
+    override suspend fun read(path: String): ByteArray = ByteArray(0)
+    override suspend fun write(path: String, data: ByteArray) = Unit
+    override suspend fun download(remotePath: String, localPath: String, onProgress: SftpProgress) = Unit
+    override suspend fun upload(localPath: String, remotePath: String, onProgress: SftpProgress) = Unit
+    override suspend fun mkdir(path: String) = Unit
+    override suspend fun remove(path: String) = Unit
+    override suspend fun rmdir(path: String) = Unit
+    override suspend fun rename(from: String, to: String) = Unit
+    override suspend fun close() = Unit
 }

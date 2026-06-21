@@ -11,6 +11,7 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
 import app.skerry.ui.forward.PortForwardController
+import app.skerry.ui.sftp.SftpController
 import app.skerry.ui.terminal.TerminalScreenState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Состояние экрана подключения. */
@@ -65,6 +68,9 @@ class ConnectionController(
     private var connection: SshConnection? = null
     private var sessionScope: CoroutineScope? = null
     private var portForwards: PortForwardController? = null
+    private var sftpClient: SftpClient? = null
+    private var sftpController: SftpController? = null
+    private val sftpMutex = Mutex()
 
     fun connect(target: SshTarget, auth: SshAuth) {
         // Стартуем только из формы: пока идёт подключение или есть открытая сессия,
@@ -118,6 +124,27 @@ class ConnectionController(
             scope,
         ).also { portForwards = it }
 
+    /**
+     * SFTP-контроллер этой сессии — один на соединение, создаётся лениво и кэшируется (как
+     * [openPortForwards]), поэтому переживает переключение вкладок/панелей (листинг не сбрасывается).
+     * Операции контроллера гоняются на внутреннем [scope] сессии, а сам канал ([sftpClient]) закрывает
+     * [disconnect]. Первый вызов открывает канал и запускает загрузку стартового каталога
+     * ([SftpController.start]). [sftpMutex] сериализует ленивую инициализацию: даже при гонке двух
+     * вызывающих канал откроется один раз (без утечки второго), а не-volatile поля кэша безопасно
+     * публикуются под локом.
+     * @throws IllegalStateException сессия не подключена (нет живого соединения)
+     */
+    suspend fun openSftpController(): SftpController = sftpMutex.withLock {
+        sftpController ?: run {
+            val client = (connection ?: error("Нет активного соединения для SFTP")).openSftp()
+            sftpClient = client
+            SftpController(client, scope).also {
+                it.start()
+                sftpController = it
+            }
+        }
+    }
+
     /** Закрыть сессию (если есть) и вернуться к форме. */
     fun disconnect() {
         connectJob?.cancel()
@@ -125,9 +152,13 @@ class ConnectionController(
         val conn = connection
         portForwards?.closeAll()
         portForwards = null
+        val sftp = sftpClient
+        sftpClient = null
+        sftpController = null
         sessionScope?.cancel()
         sessionScope = null
         connection = null
+        if (sftp != null) closeSftpQuietly(sftp)
         if (conn != null) closeConnectionQuietly(conn)
         uiState = ConnectionUiState.Form
     }
@@ -140,5 +171,10 @@ class ConnectionController(
     /** Закрыть соединение, не давая отмене scope сорвать teardown и не пробрасывая ошибки. */
     private fun closeConnectionQuietly(conn: SshConnection) {
         scope.launch(NonCancellable) { runCatching { conn.disconnect() } }
+    }
+
+    /** Закрыть SFTP-канал в фоне под [NonCancellable] (SSH-соединение закроется следом отдельно). */
+    private fun closeSftpQuietly(client: SftpClient) {
+        scope.launch(NonCancellable) { runCatching { client.close() } }
     }
 }

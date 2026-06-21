@@ -150,6 +150,48 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `openSftpController caches one controller and opens a single channel`() = runTest {
+        val sftp = RecordingSftpClient()
+        val conn = FakeSshConnection(FakeShellChannel(), sftp = sftp)
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(target, SshAuth.Password("pw"))
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        // Кэш на соединение: панель SFTP переживает переключение вкладок, поэтому повторный вызов
+        // отдаёт тот же контроллер и не открывает второй канал.
+        val first = controller.openSftpController()
+        val second = controller.openSftpController()
+
+        assertSame(first, second)
+        assertEquals(1, conn.openSftpCalls)
+        scope.cancel()
+    }
+
+    @Test
+    fun `openSftpController without a live connection fails`() = runTest {
+        val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))
+        assertEquals(ConnectionUiState.Form, controller.uiState)
+
+        assertFailsWith<IllegalStateException> { controller.openSftpController() }
+        scope.cancel()
+    }
+
+    @Test
+    fun `disconnect closes the opened sftp channel`() = runTest {
+        val sftp = RecordingSftpClient()
+        val conn = FakeSshConnection(FakeShellChannel(), sftp = sftp)
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(target, SshAuth.Password("pw"))
+        controller.openSftpController()
+        assertTrue(!sftp.closed)
+
+        controller.disconnect()
+
+        assertTrue(sftp.closed)
+        scope.cancel()
+    }
+
+    @Test
     fun `openPortForwards returns the same controller for one session`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
@@ -206,11 +248,16 @@ private class FakeSshConnection(
 ) : SshConnection {
     var disconnected = false
         private set
+    var openSftpCalls = 0
+        private set
 
     override val isConnected: Boolean get() = !disconnected
     override suspend fun exec(command: String): ExecResult = throw UnsupportedOperationException()
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = channel
-    override suspend fun openSftp(): SftpClient = sftp ?: throw UnsupportedOperationException()
+    override suspend fun openSftp(): SftpClient {
+        openSftpCalls++
+        return sftp ?: throw UnsupportedOperationException()
+    }
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = throw UnsupportedOperationException()
     override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = throw UnsupportedOperationException()
     override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = throw UnsupportedOperationException()
@@ -219,11 +266,14 @@ private class FakeSshConnection(
     }
 }
 
-/** Заглушка SFTP-клиента: важна только идентичность объекта (что openSftp вернул именно его). */
+/** Заглушка SFTP-клиента: важна идентичность объекта и факт закрытия канала. */
 private class RecordingSftpClient : SftpClient {
+    var closed = false
+        private set
+
     override suspend fun list(path: String): List<SftpEntry> = emptyList()
     override suspend fun stat(path: String): SftpEntry? = null
-    override suspend fun realpath(path: String): String = path
+    override suspend fun realpath(path: String): String = "/"
     override suspend fun read(path: String): ByteArray = ByteArray(0)
     override suspend fun write(path: String, data: ByteArray) = Unit
     override suspend fun download(remotePath: String, localPath: String, onProgress: SftpProgress) = Unit
@@ -232,7 +282,9 @@ private class RecordingSftpClient : SftpClient {
     override suspend fun remove(path: String) = Unit
     override suspend fun rmdir(path: String) = Unit
     override suspend fun rename(from: String, to: String) = Unit
-    override suspend fun close() = Unit
+    override suspend fun close() {
+        closed = true
+    }
 }
 
 /** Считает вызовы openShell — для проверки, что повторный connect не открывает второй shell. */
