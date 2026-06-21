@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
@@ -278,7 +279,14 @@ fun TerminalScreen(
                     copySelection()
                     return@onPreviewKeyEvent true
                 }
-                val bytes = mapTerminalKey(event.key, event.isCtrlPressed, event.utf16CodePoint)
+                val bytes = mapTerminalKey(
+                    key = event.key,
+                    ctrl = event.isCtrlPressed,
+                    codePoint = event.utf16CodePoint,
+                    alt = event.isAltPressed,
+                    shift = event.isShiftPressed,
+                    applicationCursor = state.applicationCursorKeys,
+                )
                 if (bytes != null) {
                     state.clearSelection()
                     textToolbar.hide()
