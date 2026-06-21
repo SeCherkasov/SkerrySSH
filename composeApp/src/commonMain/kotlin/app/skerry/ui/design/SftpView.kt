@@ -467,7 +467,7 @@ private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismi
 
 /** Модальный ввод имени (New folder / Rename) в дизайн-стиле. Confirm активен только при валидном имени. */
 @Composable
-private fun NameDialog(
+internal fun NameDialog(
     title: String,
     confirmLabel: String,
     initial: String,
@@ -532,7 +532,7 @@ private fun NameDialog(
 
 /** Подтверждение удаления файла/каталога в дизайн-стиле. */
 @Composable
-private fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val isDir = entry.type == FileItemType.Directory
     Dialog(onDismissRequest = onDismiss) {
         Column(
