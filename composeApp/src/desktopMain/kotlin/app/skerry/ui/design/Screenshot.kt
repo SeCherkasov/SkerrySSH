@@ -7,15 +7,38 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
+import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.ssh.DynamicForwardSpec
+import app.skerry.shared.ssh.ExecResult
+import app.skerry.shared.ssh.LocalForwardSpec
+import app.skerry.shared.ssh.PortForward
+import app.skerry.shared.ssh.PtySize
+import app.skerry.shared.ssh.RemoteForwardSpec
+import app.skerry.shared.ssh.ShellChannel
+import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.SshConnection
+import app.skerry.shared.ssh.SshTarget
+import app.skerry.shared.ssh.SshTransport
+import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.session.SessionsController
 import app.skerry.ui.theme.SkerryTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import java.io.File
 
 /**
  * Офскрин-рендер десктопного дизайна в PNG для визуальной проверки без окна/композитора.
  * Управляется системным свойством `skerry.screenshot.*`: out — путь PNG, view/overlay — что показать,
- * `live=true` — подать засеянный [HostManagerController] (живой сайдбар/модалка). Не часть
- * приложения; запускается Gradle-задачей `screenshotDesign`.
+ * `live=true` — подать засеянные [HostManagerController] + [SessionsController] (живой сайдбар,
+ * вкладки, терминал поверх фейкового транспорта с заготовленным выводом). Не часть приложения;
+ * запускается Gradle-задачей `screenshotDesign`.
  *
  * Оверлеи `create`/`unlock` рендерят живые экраны гейта мастер-пароля ([DesktopCreateScreen]/
  * [DesktopUnlockScreen]) standalone (без `VaultGateController`/lifecycle) — проверка визуала; их
@@ -36,18 +59,20 @@ fun main() {
         "settings" -> state.openSettings()
     }
 
-    val hosts = if (live) seededHosts().also { state.selectHost(it.hosts.first().id) } else null
+    val hosts = if (live) seededHosts() else null
+    val sessions = if (live && hosts != null) seededSessions(hosts) else null
 
     val content: @Composable () -> Unit = when (overlay) {
         "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null) { _, _ -> } } } }
         "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}) } } }
-        else -> { { DesktopDesignApp(state, hosts = hosts) } }
+        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions) } }
     }
 
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
         SkerryTheme { content() }
     }
-    // Пампим кадры с реальной паузой, чтобы compose-resources успели подгрузить шрифты (async IO).
+    // Пампим кадры с реальной паузой, чтобы compose-resources успели подгрузить шрифты (async IO)
+    // и фейковая сессия успела отдать вывод в терминал.
     var img = scene.render(0)
     for (i in 1..80) {
         img = scene.render(i * 16_000_000L)
@@ -56,6 +81,7 @@ fun main() {
     val data = img.encodeToData() ?: error("encode failed")
     File(out).writeBytes(data.bytes)
     scene.close()
+    sessions?.disconnectAll() // снять коллекторы фейковых сессий перед выходом
     println("screenshot → $out (${File(out).length()} bytes)")
 }
 
@@ -86,4 +112,62 @@ private fun seededHosts(): HostManagerController {
     ).forEach(store::put)
     var seq = 0
     return HostManagerController(store) { "gen-${seq++}" }
+}
+
+/**
+ * Менеджер сессий поверх фейкового транспорта ([fakeTransport]) с одной открытой вкладкой к первому
+ * хосту — чтобы офскрин-рендер показал живой терминал/тулбар/вкладки реальными компонентами
+ * ([SessionsController]→[ConnectionController]→[TerminalScreen]) без сети.
+ */
+private fun seededSessions(hosts: HostManagerController): SessionsController {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    var n = 0
+    val sessions = SessionsController(newId = { "s${n++}" }, controllerFactory = { ConnectionController(fakeTransport(), scope) })
+    // Пустой пароль: фейковый транспорт auth игнорирует (см. FakeConnection) — реального хендшейка нет.
+    val h = hosts.hosts.first()
+    sessions.open(h.id, h.label, h.connectionSubtitle(), h.toTarget(), SshAuth.Password(""))
+    hosts.hosts.getOrNull(1)?.let { h2 -> sessions.open(h2.id, h2.label, h2.connectionSubtitle(), h2.toTarget(), SshAuth.Password("")) }
+    sessions.activate(sessions.sessions.first().id)
+    return sessions
+}
+
+/** Фейковый SSH-транспорт: shell отдаёт заготовленный баннер+листинг, затем висит до отмены. */
+private fun fakeTransport(): SshTransport = object : SshTransport {
+    override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection = FakeConnection(target)
+}
+
+private class FakeConnection(private val target: SshTarget) : SshConnection {
+    override val isConnected: Boolean = true
+    override suspend fun exec(command: String): ExecResult = ExecResult(0, "", "")
+    override suspend fun openShell(size: PtySize, term: String): ShellChannel = FakeChannel(target)
+    override suspend fun openSftp(): SftpClient = error("fake: no sftp")
+    override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = error("fake: no forward")
+    override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = error("fake: no forward")
+    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = error("fake: no forward")
+    override suspend fun disconnect() {}
+}
+
+private class FakeChannel(target: SshTarget) : ShellChannel {
+    private val prompt = "${target.username}@${target.host.substringBefore('.')}:~# "
+    private val banner =
+        "Last login: Sat Jun 21 14:22:10 2026 from 10.0.0.15\r\n" +
+            "$prompt" + "ls -la\r\n" +
+            "total 24\r\n" +
+            "drwxr-xr-x  5 root root 4096 Jun 21 14:02 app\r\n" +
+            "drwxr-xr-x  2 root root 4096 Jun 21 09:11 deploy\r\n" +
+            "-rw-r--r--  1 root root  812 Jun 20 23:40 backup.tar.gz\r\n" +
+            "$prompt" + "df -h /\r\n" +
+            "Filesystem      Size  Used Avail Use% Mounted on\r\n" +
+            "/dev/sda1        50G   42G  5.2G  87% /\r\n" +
+            prompt
+
+    override val isOpen: Boolean = true
+    override val output: Flow<ByteArray> = flow {
+        emit(banner.encodeToByteArray())
+        awaitCancellation()
+    }
+
+    override suspend fun write(data: ByteArray) {}
+    override suspend fun resize(size: PtySize) {}
+    override suspend fun close() {}
 }

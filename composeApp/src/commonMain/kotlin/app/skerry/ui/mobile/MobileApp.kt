@@ -58,13 +58,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
-import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.Identity
-import app.skerry.shared.vault.IdentityAuth
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.connection.toSshAuth
+import app.skerry.ui.connection.toTarget
 import app.skerry.ui.desktop.BrandLogo
 import app.skerry.ui.desktop.SkerryIcon
 import app.skerry.ui.desktop.SkerryIconKind
@@ -149,8 +150,8 @@ private fun MobileRoot(deps: AppDependencies, onLock: (() -> Unit)?) {
         sessions?.open(
             hostId = host.id,
             title = host.label,
-            subtitle = "${host.username}@${host.address}:${host.port}",
-            target = SshTarget(host = host.address, port = host.port, username = host.username),
+            subtitle = host.connectionSubtitle(),
+            target = host.toTarget(),
             auth = auth,
         )
         tab = MobileTab.Terminal
@@ -200,11 +201,6 @@ private fun MobileRoot(deps: AppDependencies, onLock: (() -> Unit)?) {
             )
         }
     }
-}
-
-private fun Identity.toSshAuth(): SshAuth = when (val a = auth) {
-    is IdentityAuth.Password -> SshAuth.Password(a.password)
-    is IdentityAuth.PrivateKey -> SshAuth.PublicKey(a.privateKeyPem, a.passphrase)
 }
 
 // ===================== TAB BAR =====================

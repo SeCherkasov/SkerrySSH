@@ -17,7 +17,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,9 +35,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.connection.toSshAuth
+import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.identity.IdentityManagerController
+import app.skerry.ui.session.SessionsController
 import app.skerry.ui.vault.VaultGate
 
 /**
@@ -51,22 +67,45 @@ fun DesktopDesignApp(
     vault: Vault? = null,
     biometrics: VaultBiometrics? = null,
     hosts: HostManagerController? = null,
+    transport: SshTransport? = null,
+    identities: IdentityManagerController? = null,
+    sessions: SessionsController? = null,
 ) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
-    CompositionLocalProvider(LocalFonts provides fonts, LocalHosts provides hosts) {
+    // Менеджер сессий: либо подан снаружи (офскрин-рендер с фейковым транспортом), либо строится
+    // из живого транспорта — один shell на вкладку, как в [app.skerry.ui.mobile.MobileApp]. Свой
+    // граф закрываем при dispose; внешний — собственность вызывающего, не трогаем.
+    val scope = rememberCoroutineScope()
+    val liveSessions = sessions ?: remember(transport, scope) {
+        transport?.let { t ->
+            var counter = 0
+            SessionsController(newId = { "sess-${counter++}" }, controllerFactory = { ConnectionController(t, scope) })
+        }
+    }
+    // Владение фиксируем снимком на момент композиции: внешний менеджер сессий — собственность
+    // вызывающего (не рвём), локально построенный закрываем при dispose.
+    val ownsSessions = sessions == null
+    DisposableEffect(liveSessions) {
+        onDispose { if (ownsSessions) liveSessions?.disconnectAll() }
+    }
+    CompositionLocalProvider(
+        LocalFonts provides fonts,
+        LocalHosts provides hosts,
+        LocalSessions provides liveSessions,
+    ) {
         if (vault != null) {
             VaultGate(
                 vault = vault,
                 biometrics = biometrics,
                 createForm = { error, onCreate -> DesktopCreateScreen(error, onCreate) },
                 unlockForm = { error, canBio, onUnlock, onBio -> DesktopUnlockScreen(error, canBio, onUnlock, onBio) },
-            ) { onLock -> DesktopChrome(state, onLock) }
+            ) { onLock -> DesktopChrome(state, onLock, liveSessions, identities) }
         } else {
-            DesktopChrome(state, onLock = null)
+            DesktopChrome(state, onLock = null, sessions = liveSessions, identities = identities)
         }
     }
 }
@@ -77,23 +116,64 @@ fun DesktopDesignApp(
  * заглушечный [LockScreen] по [DesktopDesignState.locked].
  */
 @Composable
-private fun DesktopChrome(state: DesktopDesignState, onLock: (() -> Unit)?) {
-    Box(Modifier.fillMaxSize().background(D.bg)) {
-        Column(Modifier.fillMaxSize()) {
-            TitleBar(state, onLock)
-            HLine()
-            Row(Modifier.weight(1f).fillMaxWidth()) {
-                IconRail(state)
-                VLine(D.line)
-                Box(Modifier.weight(1f).fillMaxHeight()) { Viewport(state) }
-            }
-            HLine()
-            StatusBar()
+private fun DesktopChrome(
+    state: DesktopDesignState,
+    onLock: (() -> Unit)?,
+    sessions: SessionsController?,
+    identities: IdentityManagerController?,
+) {
+    // Identity-список живёт в открытом vault — перечитываем за гейтом мастер-пароля (как MobileRoot).
+    LaunchedEffect(identities) { identities?.reload() }
+
+    // Хост, для которого нет привязанной identity → спрашиваем пароль перед подключением.
+    var pendingHost by remember { mutableStateOf<Host?>(null) }
+
+    // Стабильная лямбда коннекта: без remember она пересоздавалась бы на каждой рекомпозиции и,
+    // уходя в staticCompositionLocalOf, инвалидировала бы всех потребителей [LocalConnectHost].
+    val connectHost = remember(sessions, identities, state) {
+        { host: Host ->
+            val identity = identities?.find(host.identityId)
+            if (identity != null) openHostSession(sessions, state, host, identity.toSshAuth()) else pendingHost = host
         }
-        if (state.modalOpen) NewConnectionModal(state)
-        if (state.settingsOpen) SettingsPanel(state)
-        if (onLock == null && state.locked) LockScreen(state)
     }
+
+    CompositionLocalProvider(LocalConnectHost provides connectHost) {
+        Box(Modifier.fillMaxSize().background(D.bg)) {
+            Column(Modifier.fillMaxSize()) {
+                TitleBar(state, onLock)
+                HLine()
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    IconRail(state)
+                    VLine(D.line)
+                    Box(Modifier.weight(1f).fillMaxHeight()) { Viewport(state) }
+                }
+                HLine()
+                StatusBar()
+            }
+            if (state.modalOpen) NewConnectionModal(state)
+            if (state.settingsOpen) SettingsPanel(state)
+            if (onLock == null && state.locked) LockScreen(state)
+            pendingHost?.let { host ->
+                DesktopPasswordDialog(
+                    host = host,
+                    onDismiss = { pendingHost = null },
+                    onConnect = { pw -> pendingHost = null; openHostSession(sessions, state, host, SshAuth.Password(pw)) },
+                )
+            }
+        }
+    }
+}
+
+/** Открыть вкладку-сессию к [host] с [auth] и переключиться на терминал. */
+private fun openHostSession(sessions: SessionsController?, state: DesktopDesignState, host: Host, auth: SshAuth) {
+    sessions?.open(
+        hostId = host.id,
+        title = host.label,
+        subtitle = host.connectionSubtitle(),
+        target = host.toTarget(),
+        auth = auth,
+    )
+    state.showView(DesktopView.Terminal)
 }
 
 @Composable
@@ -116,8 +196,22 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            state.tabs.forEachIndexed { i, tab ->
-                SessionTabChip(tab, active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
+            // Живые вкладки из менеджера сессий (за гейтом vault); иначе — мок-вкладки макета.
+            val sessions = LocalSessions.current
+            if (sessions != null) {
+                sessions.sessions.forEach { s ->
+                    SessionTabChip(
+                        name = s.title,
+                        dot = sessionDotColor(s.controller.uiState),
+                        active = s.id == sessions.activeId,
+                        onClick = { sessions.activate(s.id) },
+                        onClose = { sessions.close(s.id) },
+                    )
+                }
+            } else {
+                state.tabs.forEachIndexed { i, tab ->
+                    SessionTabChip(tab.name, tab.dot, active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
+                }
             }
             IconBtn("add", onClick = state::openModal, box = 26, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
         }
@@ -142,7 +236,7 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
 }
 
 @Composable
-private fun SessionTabChip(tab: SessionTab, active: Boolean, onClick: () -> Unit, onClose: () -> Unit) {
+private fun SessionTabChip(name: String, dot: Color, active: Boolean, onClick: () -> Unit, onClose: () -> Unit) {
     Row(
         Modifier
             .height(30.dp)
@@ -158,9 +252,9 @@ private fun SessionTabChip(tab: SessionTab, active: Boolean, onClick: () -> Unit
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Dot(tab.dot)
+        Dot(dot)
         Txt(
-            tab.name,
+            name,
             color = if (active) D.text else D.dim,
             size = 12.sp,
             weight = FontWeight.Medium,
@@ -229,6 +323,13 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
 @Composable
 private fun StatusBar() {
     val mono = LocalFonts.current.mono
+    // В живом режиме статус слева отражает активную сессию; пропускная способность/пинг пока
+    // плейсхолдеры макета (реальная телеметрия — отдельный шаг), но не противоречат состоянию связи.
+    val sessions = LocalSessions.current
+    val connected = sessions?.active?.controller?.uiState is ConnectionUiState.Connected
+    val live = sessions != null
+    val statusText = if (!live || connected) "Connected" else "Disconnected"
+    val statusColor = if (!live || connected) D.moss else D.faint
     Row(
         Modifier
             .fillMaxWidth()
@@ -239,7 +340,7 @@ private fun StatusBar() {
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            StatusItem("circle", "Connected", color = D.moss, iconSize = 11.sp, mono = mono)
+            StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
             StatusItem("network_ping", "42 ms", mono = mono)
             StatusItem("arrow_upward", "1.2 KB/s", mono = mono)
             StatusItem("arrow_downward", "8.4 KB/s", mono = mono)

@@ -32,8 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.groupHostsByFolder
+import app.skerry.ui.session.SessionsController
+import app.skerry.ui.terminal.TerminalScreen
 
 /** Терминальный view: hosts-sidebar + main (toolbar, панели, AI-bar) + info-panel. */
 @Composable
@@ -152,18 +155,25 @@ private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, mono: Fo
     }
 }
 
-/** Живая папка каталога: те же визуалы, но из [HostFolder] поверх [HostManagerController]. */
+/**
+ * Живая папка каталога: те же визуалы, но из [HostFolder] поверх [HostManagerController]. Клик по
+ * хосту запускает подключение ([LocalConnectHost]); точка статуса и подсветка берутся из живых
+ * сессий ([LocalSessions]) — хост подсвечен, если он у активной вкладки, цвет точки = состояние
+ * соединения свежайшей его сессии.
+ */
 @Composable
 private fun LiveHostFolder(folder: HostFolder, state: DesktopDesignState, mono: FontFamily) {
+    val sessions = LocalSessions.current
+    val connect = LocalConnectHost.current
     Column(Modifier.padding(bottom = 2.dp)) {
         FolderHeader(folder.name, folder.hosts.size)
         Column(Modifier.padding(start = 22.dp)) {
             folder.hosts.forEach { host ->
-                val onClick = remember(host.id) { { state.selectHost(host.id) } }
+                val onClick = remember(host, connect) { { connect(host) } }
                 HostEntryRow(
                     label = host.label,
-                    selected = state.selectedHost == host.id,
-                    dot = D.faint, // live-статус подключения появится со слайсом соединения
+                    selected = sessions?.active?.hostId == host.id,
+                    dot = sessionDotColor(sessions?.statusFor(host.id)),
                     badge = null,
                     onClick = onClick,
                     mono = mono,
@@ -219,6 +229,8 @@ private fun HostEntryRow(
 @Composable
 private fun SessionToolbar(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
+    val sessions = LocalSessions.current
+    val active = sessions?.active
     Column {
         Row(
             Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -226,21 +238,31 @@ private fun SessionToolbar(state: DesktopDesignState) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Txt("root@prod-web-01", color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Txt("192.168.1.45:22", color = D.dim, size = 11.5.sp)
-                    Txt(" · ", color = D.faint, size = 11.5.sp)
-                    Txt("●", color = D.moss, size = 11.5.sp)
-                    Txt(" 04:12:45", color = D.faint, size = 11.5.sp)
+                if (active != null) {
+                    // Живой заголовок: ярлык хоста + user@addr:port + точка состояния соединения.
+                    Txt(active.title, color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Txt(active.subtitle, color = D.dim, size = 11.5.sp, font = mono)
+                        Dot(sessionDotColor(active.controller.uiState))
+                    }
+                } else {
+                    Txt("root@prod-web-01", color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Txt("192.168.1.45:22", color = D.dim, size = 11.5.sp)
+                        Txt(" · ", color = D.faint, size = 11.5.sp)
+                        Txt("●", color = D.moss, size = 11.5.sp)
+                        Txt(" 04:12:45", color = D.faint, size = 11.5.sp)
+                    }
+                    Txt("SSHv2 · aes256-gcm · ed25519", color = D.faint, size = 11.5.sp)
                 }
-                Txt("SSHv2 · aes256-gcm · ed25519", color = D.faint, size = 11.5.sp)
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconBtn("splitscreen_right", onClick = state::toggleSplit)
                 IconBtn("folder", onClick = { state.showView(DesktopView.Sftp) })
                 IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
                 IconBtn("info", onClick = state::toggleInfo)
-                IconBtn("power_settings_new", onClick = {}, tint = D.sunset)
+                // Power: рвёт активную сессию (живой путь); в мок-режиме — no-op заглушка.
+                IconBtn("power_settings_new", onClick = { if (active != null) sessions.close(active.id) }, tint = D.sunset)
             }
         }
         HLine()
@@ -249,8 +271,49 @@ private fun SessionToolbar(state: DesktopDesignState) {
 
 // ──────────────────────────────── terminal pane ────────────────────────────────
 
+/**
+ * Терминальная область: живая ([LocalSessions] подан, за гейтом vault) или мок-демо макета.
+ * Живой путь рендерит реальную сетку активной сессии через готовый [TerminalScreen] (VT-эмулятор
+ * + ввод в PTV) или экран-плейсхолдер для прочих состояний соединения.
+ */
 @Composable
 private fun TerminalPane(state: DesktopDesignState, modifier: Modifier = Modifier) {
+    val sessions = LocalSessions.current
+    if (sessions != null) LiveTerminalPane(sessions, modifier) else MockTerminalPane(state, modifier)
+}
+
+/** Живой терминал активной вкладки: рендер по состоянию её [ConnectionUiState]. */
+@Composable
+private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = Modifier) {
+    val active = sessions.active
+    Box(modifier.fillMaxHeight().fillMaxWidth().background(D.terminalBg)) {
+        when (val st = active?.controller?.uiState) {
+            null, ConnectionUiState.Form -> TerminalNotice("terminal", "No active session", "Pick a host from the sidebar to connect.")
+            ConnectionUiState.Connecting -> TerminalNotice("sync", "Connecting…", active.subtitle)
+            is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
+            is ConnectionUiState.Error -> TerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+        }
+    }
+}
+
+/** Центрированное сообщение на фоне терминала (нет сессии / подключение / ошибка). */
+@Composable
+private fun TerminalNotice(icon: String, title: String, subtitle: String, color: Color = D.dim) {
+    val mono = LocalFonts.current.mono
+    Column(
+        Modifier.fillMaxSize().padding(40.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Sym(icon, size = 30.sp, color = color)
+        Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+        Txt(subtitle, color = D.faint, size = 12.sp, font = mono)
+    }
+}
+
+/** Демо-терминал макета (мок-путь без живых сессий: офскрин-рендер/превью). */
+@Composable
+private fun MockTerminalPane(state: DesktopDesignState, modifier: Modifier = Modifier) {
     val mono = LocalFonts.current.mono
     Column(modifier.fillMaxHeight().background(D.terminalBg)) {
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 14.dp)) {
@@ -442,6 +505,13 @@ private fun SplitPane(modifier: Modifier = Modifier) {
 @Composable
 private fun InfoPanel() {
     val mono = LocalFonts.current.mono
+    // Живой контекст активной сессии (если есть): профиль хоста из каталога + состояние соединения.
+    val sessions = LocalSessions.current
+    val hosts = LocalHosts.current
+    val active = sessions?.active
+    val host = active?.hostId?.let { id -> hosts?.find(id) }
+    val live = sessions != null
+    val connected = active?.controller?.uiState is ConnectionUiState.Connected
     Column(Modifier.width(268.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState())) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -450,16 +520,20 @@ private fun InfoPanel() {
         ) {
             Txt("CONNECTION", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Dot(D.moss)
-                Txt("LIVE", color = D.moss, size = 10.sp)
+                val dot = if (live) sessionDotColor(active?.controller?.uiState) else D.moss
+                val label = if (!live) "LIVE" else if (connected) "LIVE" else "—"
+                Dot(dot)
+                Txt(label, color = dot, size = 10.sp)
             }
         }
         HLine()
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            InfoRow("Host", "prod-web-01", mono)
-            InfoRow("Address", "192.168.1.45:22", mono)
-            InfoRow("User", "root", mono)
-            InfoRow("Auth", "id_ed25519", mono)
+            // Host/Address/User — из живого профиля активной сессии; cipher/uptime пока статичны
+            // (требуют опроса сервера — отдельный шаг), в мок-режиме всё из макета.
+            InfoRow("Host", if (live) (host?.label ?: active?.title ?: "—") else "prod-web-01", mono)
+            InfoRow("Address", if (live) (host?.let { "${it.address}:${it.port}" } ?: "—") else "192.168.1.45:22", mono)
+            InfoRow("User", if (live) (host?.username ?: "—") else "root", mono)
+            InfoRow("Auth", if (live) (host?.identityId?.let { "identity" } ?: "password") else "id_ed25519", mono)
             InfoRow("Cipher", "aes256-gcm", mono)
             InfoRow("Uptime", "04:12:45", mono)
         }
