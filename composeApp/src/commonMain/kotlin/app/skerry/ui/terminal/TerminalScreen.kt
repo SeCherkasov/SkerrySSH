@@ -29,6 +29,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -63,6 +64,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -77,6 +79,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
@@ -88,6 +91,7 @@ import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.design.ArrowKey
 import app.skerry.ui.design.arrowSequence
+import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
@@ -99,6 +103,9 @@ import org.jetbrains.compose.resources.Font
 
 /** Порог между кликами (мс), в пределах которого они складываются в двойной/тройной. */
 private const val DOUBLE_CLICK_MS = 350
+
+/** Полупериод мигания курсора (мс) — стандартный xterm-ритм ~530 мс на фазу. */
+private const val CURSOR_BLINK_MS = 530L
 
 private const val FONT_SIZE_SP = 13
 private const val LINE_HEIGHT_SP = 18
@@ -209,8 +216,28 @@ fun TerminalScreen(
         state.resize(gridSizeFor(viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, metrics))
     }
 
-    val rendered = remember(state.screen, state.cursorRow, state.cursorCol, state.selection, closed) {
-        renderScreen(state.screen, state.cursorRow, state.cursorCol, state.selection, showCursor = !closed)
+    // Фаза мигания курсора: при включённом blink дёргаем булеву раз в полупериод; иначе курсор
+    // стоит постоянно. Курсор рисуется ОВЕРЛЕЕМ (см. ниже), поэтому мигание перерисовывает лишь
+    // маленький Canvas, а не весь экранный текст.
+    var blinkOn by remember { mutableStateOf(true) }
+    LaunchedEffect(state.cursorBlink, state.cursorVisible, closed) {
+        if (!state.cursorBlink || !state.cursorVisible || closed) {
+            blinkOn = true
+            return@LaunchedEffect
+        }
+        while (true) {
+            blinkOn = true
+            delay(CURSOR_BLINK_MS)
+            blinkOn = false
+            delay(CURSOR_BLINK_MS)
+        }
+    }
+    val cursorVisibleNow = !closed && state.cursorVisible && blinkOn
+
+    // Текст экрана БЕЗ курсора: пересобирается только при смене содержимого/выделения, а не на
+    // каждое движение курсора. Сам курсор — отдельный оверлей поверх (формы block/underline/bar).
+    val rendered = remember(state.screen, state.selection) {
+        renderScreen(state.screen, state.selection)
     }
 
     fun cellAt(x: Float, y: Float) = cellAtOffset(x, y, metrics)
@@ -224,8 +251,7 @@ fun TerminalScreen(
         var rem = l.getOffsetForPosition(Offset(x, y))
         var row = 0
         while (row < screen.lastIndex) {
-            var len = screen[row].size
-            if (!closed && row == state.cursorRow && state.cursorCol >= screen[row].size) len += 1
+            val len = screen[row].size
             if (rem <= len) break
             rem -= len + 1
             row++
@@ -234,8 +260,8 @@ fun TerminalScreen(
     }
 
     // Линейный индекс ячейки (row, col) в строке [rendered]: суммируем длины предыдущих строк
-    // (+1 на '\n'), плюс «хвостовой» пробел курсора, который renderScreen дорисовывает в конце
-    // строки курсора. Нужен, чтобы спросить у TextLayoutResult точную пиксельную позицию.
+    // (+1 на '\n'). Нужен, чтобы спросить у TextLayoutResult точную пиксельную позицию. Курсор в
+    // текст больше не входит (рисуется оверлеем), поэтому «хвостовых» поправок здесь нет.
     fun lineOffset(pos: TerminalPos): Int {
         val screen = state.screen
         if (screen.isEmpty()) return 0
@@ -243,7 +269,6 @@ fun TerminalScreen(
         var off = 0
         for (r in 0 until row) {
             off += screen[r].size
-            if (!closed && r == state.cursorRow && state.cursorCol >= screen[r].size) off += 1
             off += 1 // '\n'
         }
         return off + pos.col.coerceIn(0, screen[row].size)
@@ -530,6 +555,36 @@ fun TerminalScreen(
             },
       )
 
+      // Курсор-оверлей поверх текста по форме DECSCUSR. Block — заливка ячейки + перерисовка
+      // символа контрастным цветом; Underline — полоса снизу; Bar — вертикальная черта слева.
+      // Геометрию берём по той же моноширинной метрике, что и текст, со сдвигом на прокрутку.
+      if (cursorVisibleNow && state.screen.isNotEmpty()) {
+          val thickness = with(density) { 2.dp.toPx() }
+          val glyph = state.screen.getOrNull(state.cursorRow)?.getOrNull(state.cursorCol)?.char
+          Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
+              val x = state.cursorCol * metrics.cellWidth
+              val y = state.cursorRow * metrics.cellHeight - scroll.value.toFloat()
+              when (state.cursorShape) {
+                  CursorShape.Block -> {
+                      drawRect(cursorBg, topLeft = Offset(x, y), size = Size(metrics.cellWidth, metrics.cellHeight))
+                      if (glyph != null && glyph != ' ') {
+                          drawText(measurer, glyph.toString(), topLeft = Offset(x, y), style = textStyle.copy(color = cursorFg))
+                      }
+                  }
+                  CursorShape.Underline -> drawRect(
+                      cursorBg,
+                      topLeft = Offset(x, y + metrics.cellHeight - thickness),
+                      size = Size(metrics.cellWidth, thickness),
+                  )
+                  CursorShape.Bar -> drawRect(
+                      cursorBg,
+                      topLeft = Offset(x, y),
+                      size = Size(thickness, metrics.cellHeight),
+                  )
+              }
+          }
+      }
+
       // Тач-маркеры выделения («капли» по краям). Рисуем только на мобильном пути ([imeInput]):
       // оверлей внутри того же padding, что и текст, со сдвигом по вертикали на текущую прокрутку,
       // чтобы маркеры держались на границах выделения при скролле. На мыши (desktop) их нет.
@@ -609,23 +664,17 @@ private fun DrawScope.drawSelectionHandle(
 
 /**
  * Собирает [AnnotatedString] из сетки ячеек: для каждой ячейки считается эффективный стиль
- * (базовый + подсветка выделения + блок-курсор), соседние ячейки одинакового стиля схлопываются
- * в один span. Строки разделяются `\n`.
+ * (базовый + подсветка выделения), соседние ячейки одинакового стиля схлопываются в один span.
+ * Строки разделяются `\n`. Курсор сюда НЕ входит — он рисуется отдельным оверлеем поверх текста,
+ * чтобы blink и перемещение курсора не пересобирали весь экранный текст.
  */
 private fun renderScreen(
     screen: List<List<TermCell>>,
-    cursorRow: Int,
-    cursorCol: Int,
     selection: TerminalSelection?,
-    showCursor: Boolean,
 ): AnnotatedString = buildAnnotatedString {
     for (r in screen.indices) {
         val row = screen[r]
-        fun spanAt(c: Int) = cellSpan(
-            row[c],
-            isCursor = showCursor && r == cursorRow && c == cursorCol,
-            isSelected = selection?.contains(r, c) == true,
-        )
+        fun spanAt(c: Int) = cellSpan(row[c], isSelected = selection?.contains(r, c) == true)
         var c = 0
         while (c < row.size) {
             val span = spanAt(c)
@@ -635,22 +684,14 @@ private fun renderScreen(
             while (c < row.size && spanAt(c) == span) c++
             withStyle(span) { for (k in start until c) append(row[k].char) }
         }
-        // Курсор за концом строки — рисуем блок-пробел.
-        if (showCursor && r == cursorRow && cursorCol >= row.size) {
-            withStyle(SpanStyle(color = cursorFg, background = cursorBg)) { append(" ") }
-        }
         if (r < screen.lastIndex) append("\n")
     }
 }
 
-/** Эффективный стиль ячейки: базовый стиль → подсветка выделения → блок-курсор (курсор главнее). */
-private fun cellSpan(cell: TermCell, isCursor: Boolean, isSelected: Boolean): SpanStyle {
+/** Эффективный стиль ячейки: базовый стиль + полупрозрачная подсветка выделения. */
+private fun cellSpan(cell: TermCell, isSelected: Boolean): SpanStyle {
     val base = cell.style.toSpanStyle()
-    return when {
-        isCursor -> base.copy(color = cursorFg, background = cursorBg)
-        isSelected -> base.copy(background = selectionBg)
-        else -> base
-    }
+    return if (isSelected) base.copy(background = selectionBg) else base
 }
 
 private fun TermStyle.toSpanStyle(): SpanStyle {

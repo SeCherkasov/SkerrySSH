@@ -1,6 +1,7 @@
 package app.skerry.ui.terminal
 
 import app.skerry.shared.ssh.PtySize
+import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
@@ -133,6 +134,28 @@ class TerminalScreenStateTest {
         assertEquals(true, state.applicationCursorKeys)
         session.emit("$esc[?1l".encodeToByteArray()) // DECCKM off
         assertEquals(false, state.applicationCursorKeys)
+        scope.cancel()
+    }
+
+    @Test
+    fun `tracks cursor visibility shape and blink from emulator`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar().toString()
+
+        // Дефолты: курсор виден, блок, мигает.
+        assertEquals(true, state.cursorVisible)
+        assertEquals(CursorShape.Block, state.cursorShape)
+        assertEquals(true, state.cursorBlink)
+
+        session.emit("$esc[?25l".encodeToByteArray())   // скрыть курсор
+        assertEquals(false, state.cursorVisible)
+
+        session.emit("$esc[6 q".encodeToByteArray())     // DECSCUSR: steady bar
+        assertEquals(CursorShape.Bar, state.cursorShape)
+        assertEquals(false, state.cursorBlink)
         scope.cancel()
     }
 

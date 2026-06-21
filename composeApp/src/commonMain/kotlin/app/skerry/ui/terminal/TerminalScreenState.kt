@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.PtySize
+import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
@@ -53,6 +54,18 @@ class TerminalScreenState(
         private set
 
     var cursorCol: Int by mutableStateOf(0)
+        private set
+
+    /** Виден ли курсор (DEC ?25): TUI прячут его на время перерисовки. Рендер не рисует скрытый. */
+    var cursorVisible: Boolean by mutableStateOf(true)
+        private set
+
+    /** Форма курсора (DECSCUSR): блок/подчёркивание/черта. Рендер выбирает геометрию по ней. */
+    var cursorShape: CursorShape by mutableStateOf(CursorShape.Block)
+        private set
+
+    /** Должен ли курсор мигать (DECSCUSR steady/blink). Рендер гоняет таймер мигания по флагу. */
+    var cursorBlink: Boolean by mutableStateOf(true)
         private set
 
     /** Текущее выделение мышью (или `null`, если ничего не выделено). Рендер подсвечивает его. */
@@ -140,6 +153,9 @@ class TerminalScreenState(
         screen = emulator.lines // строки уже скопированы в неизменяемые внутри геттера
         cursorRow = emulator.cursorRow
         cursorCol = emulator.cursorCol
+        cursorVisible = emulator.cursorVisible
+        cursorShape = emulator.cursorShape
+        cursorBlink = emulator.cursorBlink
         applicationCursorKeys = emulator.applicationCursorKeys
         mouseTracking = emulator.mouseTracking
         mouseSgr = emulator.mouseSgr

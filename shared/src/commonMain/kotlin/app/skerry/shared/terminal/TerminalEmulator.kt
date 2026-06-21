@@ -52,6 +52,9 @@ data class TermCell(val char: Char, val style: TermStyle = TermStyle())
 /** Режим репортинга мыши в приложение (DEC private modes). Кодировку выбирает [TerminalEmulator.mouseSgr]. */
 enum class MouseTracking { Off, X10, Normal, ButtonEvent, AnyEvent }
 
+/** Форма курсора (DECSCUSR `CSI Ps SP q`): блок, подчёркивание или вертикальная черта. */
+enum class CursorShape { Block, Underline, Bar }
+
 /**
  * Полноценный VT/ANSI-эмулятор поверх фиксированной сетки `rows × cols` — устройство-независимая
  * логика (без Compose). UI рендерит [lines] (scrollback + экран) и блок-курсор по
@@ -137,6 +140,15 @@ class TerminalEmulator(
 
     var cursorVisible: Boolean = true
         private set
+
+    /** Форма курсора (DECSCUSR). По умолчанию блок, как у xterm. */
+    var cursorShape: CursorShape = CursorShape.Block
+        private set
+
+    /** Должен ли курсор мигать (DECSCUSR steady/blink). По умолчанию мигает (xterm DECSCUSR 1). */
+    var cursorBlink: Boolean = true
+        private set
+
     var applicationCursorKeys: Boolean = false
         private set
     var applicationKeypad: Boolean = false
@@ -156,7 +168,10 @@ class TerminalEmulator(
 
     private var parser = State.Ground
     private val params = StringBuilder()
-    private var csiIntermediate = ' '
+
+    // Промежуточный байт CSI (0x20..0x2f). NUL = «не было»: отличаем от РЕАЛЬНОГО пробельного
+    // intermediate (0x20) у DECSCUSR (`CSI Ps SP q`) — иначе форму курсора не отличить от обычного CSI.
+    private var csiIntermediate = NO_INTERMEDIATE
     private val osc = StringBuilder()
 
     private var utf8Remaining = 0
@@ -220,7 +235,7 @@ class TerminalEmulator(
 
     private fun esc(b: Int) {
         when (b.toChar()) {
-            '[' -> { params.clear(); csiIntermediate = ' '; parser = State.Csi }
+            '[' -> { params.clear(); csiIntermediate = NO_INTERMEDIATE; parser = State.Csi }
             ']' -> { osc.clear(); parser = State.Osc }
             '(', ')', '*', '+', '-', '.', '/', '#', ' ' -> parser = State.Consume
             '7' -> { saveCursor(); parser = State.Ground }
@@ -279,7 +294,9 @@ class TerminalEmulator(
             return
         }
         if (csiIntermediate == '!' && final == 'p') { softReset(); return }
-        if (csiIntermediate != ' ') return // напр. DECSCUSR (CSI Sp q) — форма курсора, слайс рендера
+        // DECSCUSR (CSI Ps SP q) — форма и мигание курсора.
+        if (csiIntermediate == ' ' && final == 'q') { setCursorStyle(parseArgs(raw)); return }
+        if (csiIntermediate != NO_INTERMEDIATE) return // прочие intermediate-последовательности поглощаем
 
         val args = parseArgs(raw)
         fun arg(i: Int, d: Int) = args.getOrNull(i)?.takeIf { it > 0 } ?: d
@@ -554,6 +571,21 @@ class TerminalEmulator(
         scrollBottom = rows - 1
     }
 
+    /**
+     * DECSCUSR (`CSI Ps SP q`): число задаёт форму и мигание курсора. 0/1 — мигающий блок (дефолт),
+     * 2 — блок, 3 — мигающее подчёркивание, 4 — подчёркивание, 5 — мигающая черта, 6 — черта.
+     * Нечётные (и 0) мигают, чётные — нет.
+     */
+    private fun setCursorStyle(args: List<Int>) {
+        val n = args.getOrNull(0)?.takeIf { it >= 0 } ?: 0
+        cursorShape = when (n) {
+            3, 4 -> CursorShape.Underline
+            5, 6 -> CursorShape.Bar
+            else -> CursorShape.Block
+        }
+        cursorBlink = n == 0 || n % 2 == 1
+    }
+
     private fun softReset() {
         style = TermStyle()
         resetRegion()
@@ -561,6 +593,8 @@ class TerminalEmulator(
         insertMode = false
         autoWrap = true
         cursorVisible = true
+        cursorShape = CursorShape.Block
+        cursorBlink = true
         applicationCursorKeys = false
         applicationKeypad = false
         pendingWrap = false
@@ -578,6 +612,7 @@ class TerminalEmulator(
         resetRegion()
         tabStops = defaultTabStops(cols)
         originMode = false; insertMode = false; autoWrap = true; cursorVisible = true
+        cursorShape = CursorShape.Block; cursorBlink = true
         applicationCursorKeys = false; applicationKeypad = false
         bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false
     }
@@ -664,6 +699,12 @@ class TerminalEmulator(
         const val DEFAULT_MAX_SCROLLBACK = 5000
         const val TAB = 8
         val ESC = 27.toChar().toString()
+
+        /** Sentinel «у CSI не было intermediate-байта» (NUL) — отличаем от реального пробела (0x20) DECSCUSR. */
+        // NUL через toChar(), а не char-литерал: правило проекта запрещает сырые управляющие
+        // байты в исходнике, а \u-escape Edit-инструмент сворачивает в сырой байт. Сравнение
+        // редкое (раз на CSI-последовательность), поэтому отсутствие const-инлайна несущественно.
+        val NO_INTERMEDIATE = 0.toChar()
 
         fun defaultTabStops(cols: Int) = BooleanArray(cols) { it % TAB == 0 && it != 0 }
     }

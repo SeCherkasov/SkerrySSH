@@ -306,6 +306,61 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `cursor shape defaults to a blinking block`() {
+        val emu = TerminalEmulator()
+        assertEquals(CursorShape.Block, emu.cursorShape)
+        assertTrue(emu.cursorBlink)
+    }
+
+    @Test
+    fun `decscusr selects steady block`() {
+        // CSI 2 SP q — пробел перед 'q' это intermediate-байт DECSCUSR.
+        val emu = emulate(chunks = arrayOf("$esc[2 q"))
+        assertEquals(CursorShape.Block, emu.cursorShape)
+        assertFalse(emu.cursorBlink)
+    }
+
+    @Test
+    fun `decscusr selects underline cursors`() {
+        assertEquals(CursorShape.Underline, emulate(chunks = arrayOf("$esc[3 q")).cursorShape)
+        assertTrue(emulate(chunks = arrayOf("$esc[3 q")).cursorBlink)
+        assertEquals(CursorShape.Underline, emulate(chunks = arrayOf("$esc[4 q")).cursorShape)
+        assertFalse(emulate(chunks = arrayOf("$esc[4 q")).cursorBlink)
+    }
+
+    @Test
+    fun `decscusr selects bar cursors`() {
+        assertEquals(CursorShape.Bar, emulate(chunks = arrayOf("$esc[5 q")).cursorShape)
+        assertTrue(emulate(chunks = arrayOf("$esc[5 q")).cursorBlink)
+        assertEquals(CursorShape.Bar, emulate(chunks = arrayOf("$esc[6 q")).cursorShape)
+        assertFalse(emulate(chunks = arrayOf("$esc[6 q")).cursorBlink)
+    }
+
+    @Test
+    fun `decscusr zero or empty resets to blinking block`() {
+        val byZero = emulate(chunks = arrayOf("$esc[6 q", "$esc[0 q"))
+        assertEquals(CursorShape.Block, byZero.cursorShape)
+        assertTrue(byZero.cursorBlink)
+        val byEmpty = emulate(chunks = arrayOf("$esc[4 q", "$esc[ q"))
+        assertEquals(CursorShape.Block, byEmpty.cursorShape)
+        assertTrue(byEmpty.cursorBlink)
+    }
+
+    @Test
+    fun `ris resets cursor shape to blinking block`() {
+        val emu = emulate(chunks = arrayOf("$esc[4 q", "${esc}c"))
+        assertEquals(CursorShape.Block, emu.cursorShape)
+        assertTrue(emu.cursorBlink)
+    }
+
+    @Test
+    fun `soft reset restores cursor shape to blinking block`() {
+        val emu = emulate(chunks = arrayOf("$esc[6 q", "$esc[!p"))
+        assertEquals(CursorShape.Block, emu.cursorShape)
+        assertTrue(emu.cursorBlink)
+    }
+
+    @Test
     fun `mouse tracking and sgr encoding modes are tracked`() {
         val emu = emulate(chunks = arrayOf("$esc[?1002h", "$esc[?1006h"))
         assertEquals(MouseTracking.ButtonEvent, emu.mouseTracking)
