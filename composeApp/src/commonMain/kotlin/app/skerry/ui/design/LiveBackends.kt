@@ -5,6 +5,7 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.host.Host
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 
 /**
@@ -39,6 +40,13 @@ val LocalHosts: ProvidableCompositionLocal<HostManagerController?> = staticCompo
  * титулбар и терминал рисуют статичные данные макета.
  */
 val LocalSessions: ProvidableCompositionLocal<SessionsController?> = staticCompositionLocalOf { null }
+
+/**
+ * Менеджер known-hosts (доверенные ключи хостов + незакрытые события смены ключа). `null` — мок-путь
+ * без бэкенда: [app.skerry.ui.design.KnownHostsView] рисует статичную таблицу и панель смены ключа
+ * из макета. Поставляется [DesktopDesignApp] за гейтом vault.
+ */
+val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticCompositionLocalOf { null }
 
 /**
  * Действие «подключиться к хосту»: резолвит секрет (identity из vault или запрос пароля) и открывает

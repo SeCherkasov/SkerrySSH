@@ -1,7 +1,10 @@
 package app.skerry.ui.design
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,14 +18,27 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import app.skerry.shared.ssh.HostKeyMismatch
+import app.skerry.ui.known.KnownHostEntry
+import app.skerry.ui.known.KnownHostStatus
+import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.known.shortFingerprint
 
 private data class KnownHost(val name: String, val keyType: String, val fp: String, val seen: String, val changed: Boolean)
 
@@ -33,15 +49,234 @@ private val KNOWN = listOf(
     KnownHost("homelab-pi", "rsa", "5fG1hKp8s…vB3n", "Feb 2 2026", false),
 )
 
-/** Known hosts view: заголовок + предупреждение о смене ключа + таблица + панель сравнения отпечатков. */
+/**
+ * Known hosts view. С живым [KnownHostsController] ([LocalKnownHosts]) рисует доверенные ключи из
+ * стора (host/тип/отпечаток/первое доверие/статус), предупреждения о смене ключа и рабочую панель
+ * сравнения отпечатков (Accept new key / Reject & block); забыть ключ — через контекстное меню строки
+ * (right-click/long-press), как в шаблоне без ⋮. Без контроллера (офскрин-рендер/превью) показывается
+ * статичный макет [KNOWN].
+ */
 @Composable
 fun KnownHostsView() {
+    when (val controller = LocalKnownHosts.current) {
+        null -> MockKnownHostsView()
+        else -> LiveKnownHostsView(controller)
+    }
+}
+
+@Composable
+private fun KnownHostsHeader() {
+    Column(Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 22.dp, vertical = 14.dp)) {
+        Txt("Known hosts", color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+        Txt("Verified host key fingerprints. Skerry warns when a key changes.", color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
+    }
+}
+
+@Composable
+private fun KnownHostsTableHeader() {
+    Row(
+        Modifier.fillMaxWidth().background(Color(0x05FFFFFF)).padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        KHeader("HOST", Modifier.weight(1f))
+        KHeader("KEY TYPE", Modifier.width(90.dp))
+        KHeader("FINGERPRINT (SHA256)", Modifier.weight(1.4f))
+        KHeader("FIRST SEEN", Modifier.width(100.dp))
+        KHeader("STATUS", Modifier.width(80.dp), end = true)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Живой путь: таблица доверенных ключей + предупреждения/панель смены ключа поверх контроллера.
+// ---------------------------------------------------------------------------------------------
+
+@Composable
+private fun LiveKnownHostsView(controller: KnownHostsController) {
+    val mono = LocalFonts.current.mono
+    val entries = controller.entries
+    val mismatches = controller.mismatches
+
+    // Выбранное событие смены ключа для правой панели: по умолчанию первое незакрытое. После
+    // принятия/отклонения оно покидает список — выбор сам падает на следующее (или исчезает).
+    var selectedKey by remember { mutableStateOf<Triple<String, Int, String>?>(null) }
+    val selected = mismatches.firstOrNull { it.identity() == selectedKey } ?: mismatches.firstOrNull()
+
+    Column(Modifier.fillMaxSize().background(D.bg)) {
+        KnownHostsHeader()
+        HLine()
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
+                mismatches.forEach { mismatch ->
+                    MismatchBanner(
+                        mismatch = mismatch,
+                        onReview = { selectedKey = mismatch.identity() },
+                        onDismiss = { controller.reject(mismatch) },
+                    )
+                }
+                if (entries.isEmpty()) {
+                    EmptyKnownHosts()
+                } else {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
+                        KnownHostsTableHeader()
+                        entries.forEach { entry ->
+                            HLine()
+                            KnownRowLive(entry, mono, onForget = { controller.forget(entry) })
+                        }
+                    }
+                }
+            }
+            val current = selected
+            if (current != null) {
+                VLine(D.line)
+                LiveMismatchPanel(
+                    mismatch = current,
+                    mono = mono,
+                    onAccept = { controller.acceptNewKey(current) },
+                    onReject = { controller.reject(current) },
+                )
+            }
+        }
+    }
+}
+
+private fun HostKeyMismatch.identity() = Triple(host, port, keyType)
+
+@Composable
+private fun MismatchBanner(mismatch: HostKeyMismatch, onReview: () -> Unit, onDismiss: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(10.dp)).background(D.sunset.copy(alpha = 0.05f)).border(1.dp, D.sunset.copy(alpha = 0.3f), RoundedCornerShape(10.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Sym("gpp_maybe", size = 20.sp, color = D.sunset)
+        Column(Modifier.weight(1f)) {
+            Txt("Host key changed for ${mismatch.host}", color = D.sunset, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(
+                "The ${displayKeyType(mismatch.keyType).uppercase()} fingerprint differs from the one Skerry recorded. This could be a re-install — or a man-in-the-middle. Verify before reconnecting.",
+                color = D.dim, size = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp),
+            )
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ClickableSmallButton("Review fingerprint", D.sunset, D.sunset.copy(alpha = 0.4f), bold = true, onClick = onReview)
+                ClickableSmallButton("Dismiss", D.dim, D.cyan14, onClick = onDismiss)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -> Unit) {
+    val host = entry.host
+    val changed = entry.status == KnownHostStatus.Changed
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                // Действие Forget — в контекстном меню (right-click/long-press), как в шаблоне без ⋮.
+                .pointerInput(host.host, host.port, host.keyType) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                                event.changes.forEach { it.consume() }
+                                menuOpen = true
+                            }
+                        }
+                    }
+                }
+                .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Txt(host.host, color = D.textBright, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt(displayKeyType(host.keyType), color = D.dim, size = 12.sp, modifier = Modifier.width(90.dp))
+            Txt(shortFingerprint(host.fingerprint), color = if (changed) D.sunset else D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1.4f))
+            Txt(displayFirstSeen(host.firstSeen), color = D.faint, size = 12.sp, modifier = Modifier.width(100.dp))
+            Row(Modifier.width(80.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (changed) {
+                    Sym("error", size = 14.sp, color = D.sunset)
+                    Txt("Changed", color = D.sunset, size = 11.sp)
+                } else {
+                    Sym("verified", size = 14.sp, color = D.moss)
+                    Txt("Verified", color = D.moss, size = 11.sp)
+                }
+            }
+        }
+        if (menuOpen) {
+            Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
+                Column(
+                    Modifier.clip(RoundedCornerShape(7.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
+                ) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(5.dp)).clickable { menuOpen = false; onForget() }.padding(horizontal = 14.dp, vertical = 7.dp),
+                    ) {
+                        Txt("Forget key", color = D.sunset, size = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyKnownHosts() {
+    Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Sym("fingerprint", size = 26.sp, color = D.faint)
+            Txt("No known hosts yet", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt("Connect to a host — its key is trusted on first use and recorded here.", color = D.faint, size = 11.5.sp)
+        }
+    }
+}
+
+@Composable
+private fun LiveMismatchPanel(mismatch: HostKeyMismatch, mono: FontFamily, onAccept: () -> Unit, onReject: () -> Unit) {
+    Column(Modifier.width(322.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
+        Row(Modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Sym("policy", size = 18.sp, color = D.sunset)
+            Txt("Fingerprint mismatch", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+        }
+        Txt("${mismatch.host} · ${displayKeyType(mismatch.keyType)}", color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
+        Txt("PREVIOUSLY RECORDED", color = D.moss, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
+        FpBox(mismatch.recordedFingerprint, D.dim, D.moss.copy(alpha = 0.2f), mono)
+        Txt("NOW OFFERED", color = D.sunset, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
+        FpBox(mismatch.offeredFingerprint, D.sunset, D.sunset.copy(alpha = 0.3f), mono)
+        Row(
+            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 18.dp).clip(RoundedCornerShape(7.dp)).background(D.sunset.copy(alpha = 0.06f)).padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Sym("info", size = 15.sp, color = D.sunset)
+            Txt("If you recently re-installed this host, accepting is safe. Otherwise treat this as a possible interception.", color = D.dim, size = 11.sp, lineHeight = 16.sp)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            GhostButton("Accept new key", onClick = onAccept, modifier = Modifier.fillMaxWidth())
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.sunset.copy(alpha = 0.12f)).border(1.dp, D.sunset, RoundedCornerShape(7.dp)).clickable(onClick = onReject).padding(vertical = 9.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Txt("Reject & block", color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+/** Тип ключа в виде из макета: без префикса `ssh-` (ed25519, rsa, …). */
+private fun displayKeyType(keyType: String): String = keyType.removePrefix("ssh-")
+
+/** Дата первого доверия из ISO-8601 (только дата); пусто → «—». */
+private fun displayFirstSeen(firstSeen: String): String = firstSeen.substringBefore('T').ifEmpty { "—" }
+
+// ---------------------------------------------------------------------------------------------
+// Мок-путь (офскрин-рендер/превью): статичная таблица + панель сравнения отпечатков из макета.
+// ---------------------------------------------------------------------------------------------
+
+/** Known hosts view (мок): заголовок + предупреждение о смене ключа + таблица + панель сравнения. */
+@Composable
+private fun MockKnownHostsView() {
     val mono = LocalFonts.current.mono
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        Column(Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 22.dp, vertical = 14.dp)) {
-            Txt("Known hosts", color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-            Txt("Verified host key fingerprints. Skerry warns when a key changes.", color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
-        }
+        KnownHostsHeader()
         HLine()
         Row(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
@@ -60,16 +295,7 @@ fun KnownHostsView() {
                     }
                 }
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
-                    Row(
-                        Modifier.fillMaxWidth().background(Color(0x05FFFFFF)).padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                        KHeader("HOST", Modifier.weight(1f))
-                        KHeader("KEY TYPE", Modifier.width(90.dp))
-                        KHeader("FINGERPRINT (SHA256)", Modifier.weight(1.4f))
-                        KHeader("FIRST SEEN", Modifier.width(100.dp))
-                        KHeader("STATUS", Modifier.width(80.dp), end = true)
-                    }
+                    KnownHostsTableHeader()
                     KNOWN.forEach { host ->
                         HLine()
                         KnownRow(host, mono)
@@ -153,6 +379,14 @@ private fun FpBox(text: String, color: Color, border: Color, mono: FontFamily) {
 @Composable
 private fun SmallButton(label: String, fg: Color, border: Color, bold: Boolean = false) {
     Box(Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, border, RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Txt(label, color = fg, size = 11.5.sp, weight = if (bold) FontWeight.SemiBold else FontWeight.Normal)
+    }
+}
+
+/** [SmallButton] с обработчиком — для живых баннеров (Review fingerprint / Dismiss). */
+@Composable
+private fun ClickableSmallButton(label: String, fg: Color, border: Color, bold: Boolean = false, onClick: () -> Unit) {
+    Box(Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, border, RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp)) {
         Txt(label, color = fg, size = 11.5.sp, weight = if (bold) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
