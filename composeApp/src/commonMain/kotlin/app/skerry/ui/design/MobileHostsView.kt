@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 
 /** Превью-каталог для пути без живого [LocalHosts] (офскрин/превью) — состав и группы из макета. */
-private val MOBILE_PREVIEW_HOSTS = listOf(
+internal val MOBILE_PREVIEW_HOSTS = listOf(
     Host("p1", "prod-web-01", "192.168.1.45", 22, "root", "Production"),
     Host("p2", "db-master", "192.168.1.50", 22, "root", "Production"),
     Host("p3", "homelab-pi", "10.0.0.12", 22, "pi", "Homelab"),
