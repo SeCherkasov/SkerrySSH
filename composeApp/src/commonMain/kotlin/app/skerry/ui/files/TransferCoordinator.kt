@@ -9,6 +9,7 @@ import app.skerry.shared.files.FileItemType
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpProgress
 import app.skerry.ui.sftp.TransferDirection
+import app.skerry.ui.sftp.UploadSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
@@ -79,6 +80,35 @@ class TransferCoordinator(
         receiver = local,
         source = remote,
     ) { item, target, onProgress -> sftp.download(item.path, target, onProgress) }
+
+    /**
+     * Fallback-загрузка: залить произвольный локальный [source] (из нативного пикера) в текущий каталог
+     * remote-панели — на случай, когда в локальной панели нечего выделить. Имя на сервере — `source.name`.
+     * Прогресс/ошибка идут в [transfer]; по завершении (успех/ошибка) вызывается `source.cleanup()` и
+     * remote-панель перечитывается. Сериализуется тем же [busy], что и передачи по выделению.
+     */
+    fun uploadSource(source: UploadSource) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                val target = childPath(remote.path, source.name)
+                transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, 0, 0)
+                sftp.upload(source.stagingPath, target) { transferred, total ->
+                    transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, transferred, total)
+                }
+                transfer = TransferState.Idle
+                remote.refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                transfer = TransferState.Failed(source.name, e.message ?: "Ошибка передачи")
+            } finally {
+                runCatching { source.cleanup() }
+                busy = false
+            }
+        }
+    }
 
     /** Закрыть полосу передачи (сбросить в [TransferState.Idle]); идущую передачу не трогает. */
     fun clearTransfer() {

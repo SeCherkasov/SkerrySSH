@@ -4,15 +4,18 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.files.FileBrowser
+import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
+import app.skerry.ui.files.FilePaneController
+import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.forward.PortForwardController
 import app.skerry.ui.metrics.HostMetricsController
-import app.skerry.ui.sftp.SftpController
 import app.skerry.ui.terminal.TerminalScreenState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -79,7 +82,7 @@ class ConnectionController(
     private var sessionScope: CoroutineScope? = null
     private var portForwards: PortForwardController? = null
     private var sftpClient: SftpClient? = null
-    private var sftpController: SftpController? = null
+    private var transferCoordinator: TransferCoordinator? = null
     private val sftpMutex = Mutex()
     private var metrics: HostMetricsController? = null
 
@@ -126,7 +129,7 @@ class ConnectionController(
     /**
      * Контроллер проброса портов этой сессии — один на соединение, создаётся лениво и кэшируется,
      * поэтому переживает переключение вкладок/панелей UI (туннели живут, пока жива сессия). Операции
-     * гоняются на внутреннем [scope] сессии (как у [openSftpController]), а не на UI-scope экрана —
+     * гоняются на внутреннем [scope] сессии (как у [openTransferCoordinator]), а не на UI-scope экрана —
      * иначе уход вью из композиции отменил бы scope уже закэшированного контроллера и тихо убил бы
      * подъём/снятие туннелей. Все пробросы снимает [disconnect] при закрытии сессии.
      * @throws IllegalStateException сессия не подключена (нет живого соединения)
@@ -138,29 +141,39 @@ class ConnectionController(
         ).also { portForwards = it }
 
     /**
-     * SFTP-контроллер этой сессии — один на соединение, создаётся лениво и кэшируется (как
-     * [openPortForwards]), поэтому переживает переключение вкладок/панелей (листинг не сбрасывается).
-     * Операции контроллера гоняются на внутреннем [scope] сессии, а сам канал ([sftpClient]) закрывает
-     * [disconnect]. Первый вызов открывает канал и запускает загрузку стартового каталога
-     * ([SftpController.start]). [sftpMutex] сериализует ленивую инициализацию: даже при гонке двух
-     * вызывающих канал откроется один раз (без утечки второго), а не-volatile поля кэша безопасно
-     * публикуются под локом.
+     * Двухпанельный SFTP-координатор этой сессии (локальная ФС + удалённый хост) — один на соединение,
+     * создаётся лениво и кэшируется (как [openPortForwards]), поэтому переживает переключение view
+     * (путь/выделение панелей не сбрасываются). Операции панелей и передачи гоняются на внутреннем
+     * [scope] сессии, а сам канал ([sftpClient]) закрывает [disconnect]. Первый вызов открывает канал
+     * и запускает загрузку стартовых каталогов обеих панелей ([FilePaneController.start]). [localBrowser]
+     * — платформенный браузер локальной ФС (его поставляет UI-слой, чтобы контроллер не зависел от
+     * платформенных expect-функций и оставался тестируемым); [hostLabel] — метка удалённой панели.
+     * Оба параметра используются лишь при первом создании — повторный вызов отдаёт кэш и их игнорирует.
+     * [sftpMutex] сериализует ленивую инициализацию: даже при гонке двух вызывающих канал откроется
+     * один раз (без утечки второго), а не-volatile поля кэша безопасно публикуются под локом.
      * @throws IllegalStateException сессия не подключена (нет живого соединения)
      */
-    suspend fun openSftpController(): SftpController = sftpMutex.withLock {
-        sftpController ?: run {
-            val client = (connection ?: error("Нет активного соединения для SFTP")).openSftp()
-            sftpClient = client
-            SftpController(client, scope).also {
-                it.start()
-                sftpController = it
+    suspend fun openTransferCoordinator(localBrowser: FileBrowser, hostLabel: String): TransferCoordinator =
+        sftpMutex.withLock {
+            transferCoordinator ?: run {
+                val client = (connection ?: error("Нет активного соединения для SFTP")).openSftp()
+                sftpClient = client
+                TransferCoordinator(
+                    sftp = client,
+                    local = FilePaneController(localBrowser, scope),
+                    remote = FilePaneController(SftpFileBrowser(client, hostLabel), scope),
+                    scope = scope,
+                ).also {
+                    it.local.start()
+                    it.remote.start()
+                    transferCoordinator = it
+                }
             }
         }
-    }
 
     /**
      * Контроллер live-метрик хоста этой сессии — один на соединение, создаётся лениво и кэшируется
-     * (как [openPortForwards]/[openSftpController]), опрос гоняется на [scope] сессии и стартует
+     * (как [openPortForwards]/[openTransferCoordinator]), опрос гоняется на [scope] сессии и стартует
      * сразу. Останавливается в [disconnect] вместе с сессией.
      * @throws IllegalStateException сессия не подключена (нет живого соединения)
      */
@@ -181,7 +194,7 @@ class ConnectionController(
         portForwards = null
         val sftp = sftpClient
         sftpClient = null
-        sftpController = null
+        transferCoordinator = null
         metrics?.stop()
         metrics = null
         sessionScope?.cancel()

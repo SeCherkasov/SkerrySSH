@@ -1,5 +1,7 @@
 package app.skerry.ui.connection
 
+import app.skerry.shared.files.FileBrowser
+import app.skerry.shared.files.FileItem
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpProgress
@@ -150,17 +152,17 @@ class ConnectionControllerTest {
     }
 
     @Test
-    fun `openSftpController caches one controller and opens a single channel`() = runTest {
+    fun `openTransferCoordinator caches one coordinator and opens a single channel`() = runTest {
         val sftp = RecordingSftpClient()
         val conn = FakeSshConnection(FakeShellChannel(), sftp = sftp)
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
         controller.connect(target, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
-        // Кэш на соединение: панель SFTP переживает переключение вкладок, поэтому повторный вызов
-        // отдаёт тот же контроллер и не открывает второй канал.
-        val first = controller.openSftpController()
-        val second = controller.openSftpController()
+        // Кэш на соединение: двухпанельный SFTP переживает переключение view, поэтому повторный
+        // вызов отдаёт тот же координатор и не открывает второй канал.
+        val first = controller.openTransferCoordinator(FakeFileBrowser(), "host")
+        val second = controller.openTransferCoordinator(FakeFileBrowser(), "host")
 
         assertSame(first, second)
         assertEquals(1, conn.openSftpCalls)
@@ -168,11 +170,11 @@ class ConnectionControllerTest {
     }
 
     @Test
-    fun `openSftpController without a live connection fails`() = runTest {
+    fun `openTransferCoordinator without a live connection fails`() = runTest {
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))
         assertEquals(ConnectionUiState.Form, controller.uiState)
 
-        assertFailsWith<IllegalStateException> { controller.openSftpController() }
+        assertFailsWith<IllegalStateException> { controller.openTransferCoordinator(FakeFileBrowser(), "host") }
         scope.cancel()
     }
 
@@ -182,7 +184,7 @@ class ConnectionControllerTest {
         val conn = FakeSshConnection(FakeShellChannel(), sftp = sftp)
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
         controller.connect(target, SshAuth.Password("pw"))
-        controller.openSftpController()
+        controller.openTransferCoordinator(FakeFileBrowser(), "host")
         assertTrue(!sftp.closed)
 
         controller.disconnect()
@@ -311,6 +313,16 @@ private class RecordingSftpClient : SftpClient {
     override suspend fun close() {
         closed = true
     }
+}
+
+/** Заглушка локального файлового браузера для левой панели координатора: важна лишь идентичность. */
+private class FakeFileBrowser : FileBrowser {
+    override val label: String = "local"
+    override suspend fun realpath(path: String): String = "/"
+    override suspend fun list(path: String): List<FileItem> = emptyList()
+    override suspend fun mkdir(path: String) = Unit
+    override suspend fun delete(item: FileItem) = Unit
+    override suspend fun rename(from: String, to: String) = Unit
 }
 
 /** Считает вызовы openShell — для проверки, что повторный connect не открывает второй shell. */

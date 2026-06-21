@@ -3,6 +3,7 @@ package app.skerry.ui.files
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.ui.sftp.FakeSftpClient
 import app.skerry.ui.sftp.TransferDirection
+import app.skerry.ui.sftp.UploadSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.TestScope
@@ -118,6 +119,25 @@ class TransferCoordinatorTest {
         gate.complete(Unit)
         advanceUntilIdle()
         assertEquals(TransferState.Idle, r.coordinator.transfer)
+    }
+
+    @Test
+    fun `uploadSource uploads a picked file into the remote directory and refreshes it`() = runTest {
+        val r = rig()
+        val source = object : UploadSource {
+            override val name = "picked.txt"
+            override val stagingPath = "/tmp/picked.txt"
+            var cleaned = false
+            override suspend fun cleanup() { cleaned = true }
+        }
+
+        r.coordinator.uploadSource(source)
+        advanceUntilIdle()
+
+        val remoteNames = (r.remote.state as FilePaneState.Loaded).entries.map { it.name }
+        assertTrue("picked.txt" in remoteNames)
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+        assertTrue(source.cleaned)
     }
 
     @Test
