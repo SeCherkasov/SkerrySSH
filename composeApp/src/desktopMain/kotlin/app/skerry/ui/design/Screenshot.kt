@@ -113,8 +113,21 @@ fun main() {
 @OptIn(ExperimentalComposeUiApi::class)
 private fun renderMobile(out: String, viewName: String, live: Boolean) {
     val state = MobileDesignState()
-    runCatching { MobileTab.valueOf(viewName) }.getOrNull()?.let { state.select(it) }
     val deps = if (live) AppDependencies(hosts = seededHosts()) else AppDependencies()
+    // view — имя MobileTab (корневой) либо MobileRoute (push-экран). HostDetail открывается на первом
+    // хосте каталога, чтобы офскрин показал живую деталь.
+    val tab = runCatching { MobileTab.valueOf(viewName) }.getOrNull()
+    if (tab != null) {
+        state.select(tab)
+    } else {
+        runCatching { MobileRoute.valueOf(viewName) }.getOrNull()?.let { route ->
+            if (route == MobileRoute.HostDetail) {
+                state.openHost(deps.hosts?.hosts?.firstOrNull()?.id ?: MOBILE_PREVIEW_HOSTS.first().id)
+            } else {
+                state.push(route)
+            }
+        }
+    }
     // ширина/высота сцены — в ПИКСЕЛЯХ: 780×1688 при density 2 = логические 390×844dp (телефон).
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
         SkerryTheme { MobileDesignApp(deps = deps, state = state) }

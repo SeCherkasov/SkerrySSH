@@ -106,7 +106,7 @@ private fun MobileChrome(state: MobileDesignState, onLock: (() -> Unit)?) {
         val route = state.route
         Box(Modifier.fillMaxSize()) {
             if (route != null) {
-                MobileRoutePane(route, onBack = state::pop)
+                MobileRoutePane(state, route)
             } else {
                 MobileTabPane(state)
             }
@@ -147,23 +147,31 @@ private fun MobileTabPlaceholder(tab: MobileTab) {
     }
 }
 
-/** Полноэкранный push-экран. Слайс 1 — back-стрелка + заголовок; тело придёт со слайсом раздела. */
+/**
+ * Полноэкранный push-экран. HostDetail реализован 1:1 ([MobileHostDetailScreen], слайс 2B);
+ * остальные — back-стрелка + заголовок ([MobileRoutePlaceholder]), тело придёт со слайсом раздела.
+ */
 @Composable
-private fun MobileRoutePane(route: MobileRoute, onBack: () -> Unit) {
-    val title = when (route) {
-        MobileRoute.Terminal -> "Terminal"
-        MobileRoute.HostDetail -> "Host"
-        MobileRoute.Ports -> "Port forwarding"
-        MobileRoute.Known -> "Known hosts"
-        MobileRoute.Team -> "Team"
+private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
+    when (route) {
+        MobileRoute.HostDetail -> MobileHostDetailScreen(state)
+        MobileRoute.Terminal -> MobileRoutePlaceholder(state, "Terminal")
+        MobileRoute.Ports -> MobileRoutePlaceholder(state, "Port forwarding")
+        MobileRoute.Known -> MobileRoutePlaceholder(state, "Known hosts")
+        MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")
     }
+}
+
+/** Заглушка push-экрана раздела: back-стрелка + заголовок; тело придёт со слайсом раздела. */
+@Composable
+private fun MobileRoutePlaceholder(state: MobileDesignState, title: String) {
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = onBack))
+            Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
             Txt(title, color = D.text, size = 18.sp, weight = FontWeight.Bold)
         }
     }
