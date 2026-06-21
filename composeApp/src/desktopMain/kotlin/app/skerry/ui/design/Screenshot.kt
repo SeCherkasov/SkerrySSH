@@ -19,6 +19,10 @@ import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.ssh.RemoteForwardSpec
 import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.HostKeyMismatch
+import app.skerry.shared.ssh.HostKeyMismatchStore
+import app.skerry.shared.ssh.KnownHost
+import app.skerry.shared.ssh.KnownHostsStore
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
@@ -27,6 +31,7 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.theme.SkerryTheme
 import kotlinx.coroutines.CoroutineScope
@@ -68,11 +73,12 @@ fun main() {
 
     val hosts = if (live) seededHosts() else null
     val sessions = if (live && hosts != null) seededSessions(hosts) else null
+    val knownHosts = if (live) seededKnownHosts() else null
 
     val content: @Composable () -> Unit = when (overlay) {
         "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null) { _, _ -> } } } }
         "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}) } } }
-        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions) } }
+        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions, knownHosts = knownHosts) } }
     }
 
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
@@ -119,6 +125,46 @@ private fun seededHosts(): HostManagerController {
     ).forEach(store::put)
     var seq = 0
     return HostManagerController(store) { "gen-${seq++}" }
+}
+
+/**
+ * Менеджер known-hosts с демо-ключами и одним незакрытым событием смены ключа — чтобы офскрин-рендер
+ * показал живую таблицу (firstSeen/Verified), предупреждение и панель сравнения отпечатков реальными
+ * компонентами ([KnownHostsController]→[KnownHostsView]). In-memory, без файлов.
+ */
+private fun seededKnownHosts(): KnownHostsController {
+    val ed = "ssh-ed25519"
+    val store = object : KnownHostsStore {
+        private val items = mutableListOf(
+            KnownHost("prod-web-01", 22, ed, "SHA256:8c3F1a2bQzABCDEFGHIJKLMNpK9R", "2026-01-12T09:00:00Z"),
+            KnownHost("db-master", 22, ed, "SHA256:2dE7bLm4xRABCDEFGHIJKLMNwQ1z", "2026-01-12T09:05:00Z"),
+            KnownHost("nas-truenas", 22, ed, "SHA256:9aB0cTn2wE4rXp1kLm7sQ8vZabcd", "2026-03-04T18:30:00Z"),
+            KnownHost("homelab-pi", 22, "ssh-rsa", "SHA256:5fG1hKp8sXYZ0123456789vB3nqrst", "2026-02-02T11:15:00Z"),
+        )
+        override fun all() = items.toList()
+        override fun add(host: KnownHost) { items += host }
+        override fun replace(host: KnownHost) {
+            items.removeAll { it.host == host.host && it.port == host.port && it.keyType == host.keyType }
+            items += host
+        }
+        override fun remove(host: String, port: Int, keyType: String) {
+            items.removeAll { it.host == host && it.port == port && it.keyType == keyType }
+        }
+    }
+    val mismatches = object : HostKeyMismatchStore {
+        private val items = mutableListOf(
+            HostKeyMismatch("nas-truenas", 22, ed, "SHA256:9aB0cTn2wE4rXp1kLm7sQ8vZabcd", "SHA256:Kp3xQ9zR1tWv7nB4mL0sJ2dFefgh", "2026-06-22T08:00:00Z"),
+        )
+        override fun all() = items.toList()
+        override fun record(mismatch: HostKeyMismatch) {
+            items.removeAll { it.host == mismatch.host && it.port == mismatch.port && it.keyType == mismatch.keyType }
+            items += mismatch
+        }
+        override fun clear(host: String, port: Int, keyType: String) {
+            items.removeAll { it.host == host && it.port == port && it.keyType == keyType }
+        }
+    }
+    return KnownHostsController(store, mismatches) { "2026-06-22T12:00:00Z" }
 }
 
 /**

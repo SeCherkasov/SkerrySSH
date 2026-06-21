@@ -47,6 +47,7 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
+import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.vault.VaultGate
 
@@ -70,6 +71,7 @@ fun DesktopDesignApp(
     transport: SshTransport? = null,
     identities: IdentityManagerController? = null,
     sessions: SessionsController? = null,
+    knownHosts: KnownHostsController? = null,
     features: FeatureFlags = FeatureFlags(),
 ) {
     val fonts = DesignFonts(
@@ -97,6 +99,7 @@ fun DesktopDesignApp(
         LocalFonts provides fonts,
         LocalHosts provides hosts,
         LocalSessions provides liveSessions,
+        LocalKnownHosts provides knownHosts,
         LocalFeatures provides features,
     ) {
         if (vault != null) {

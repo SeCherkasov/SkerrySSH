@@ -10,6 +10,7 @@ import androidx.compose.ui.window.rememberWindowState
 import app.skerry.ui.design.optimalWindowSize
 import java.awt.GraphicsEnvironment
 import app.skerry.shared.host.FileHostStore
+import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.FileKnownHostsStore
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
@@ -19,6 +20,7 @@ import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
+import app.skerry.ui.known.KnownHostsController
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -55,10 +57,15 @@ fun main() {
     runBlocking { initializeVaultCrypto() }
     application {
         val dir = configDir()
-        // TOFU: первый ключ хоста запоминается в known_hosts, при смене ключа — отказ.
-        // Интерактивное подтверждение отпечатка появится с UI менеджера хостов.
-        val knownHosts = FileKnownHostsStore(dir.resolve("known_hosts"))
-        val transport = SshjTransport(TofuHostKeyVerifier(knownHosts))
+        // TOFU: первый ключ хоста запоминается в known_hosts (с отметкой времени), при смене ключа —
+        // отказ + запись события в known_hosts_mismatches, чтобы менеджер known-hosts мог показать
+        // предупреждение и дать принять/отклонить новый ключ. Часы штампуют firstSeen/observedAt.
+        val knownHostsStore = FileKnownHostsStore(dir.resolve("known_hosts"))
+        val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches"))
+        val transport = SshjTransport(
+            TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+        )
+        val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
         // Менеджер хостов: профили в hosts.json рядом с known_hosts; id — случайный UUID.
         val hostStore = FileHostStore(dir.resolve("hosts.json"))
         val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
@@ -71,7 +78,7 @@ fun main() {
         ) { Instant.now().toString() }
         // Переиспользуемые секреты (identity) хранятся в том же vault как записи IDENTITY.
         val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
-        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities)
+        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities, knownHosts = knownHosts)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
@@ -85,9 +92,9 @@ fun main() {
             title = "Skerry",
         ) {
             // Десктопный UI — точная реализация макета docs/new/Skerry.html (визуальный слой).
-            // Живой vault + хосты + сессии подключены: chrome закрыт гейтом мастер-пароля, клик по
-            // хосту открывает живой SSH-терминал во вкладке (transport+identities из `deps`). SFTP/
-            // forward/known-hosts подключаются к своим экранам следующими слайсами.
+            // Живой vault + хосты + сессии + known-hosts подключены: chrome закрыт гейтом мастер-пароля,
+            // клик по хосту открывает живой SSH-терминал во вкладке (transport+identities из `deps`),
+            // менеджер known-hosts работает поверх своих сторов (knownHosts из `deps`).
             app.skerry.ui.theme.SkerryTheme {
                 app.skerry.ui.design.DesktopDesignApp(
                     vault = deps.vault,
@@ -95,6 +102,7 @@ fun main() {
                     hosts = deps.hosts,
                     transport = deps.transport,
                     identities = deps.identities,
+                    knownHosts = deps.knownHosts,
                 )
             }
         }

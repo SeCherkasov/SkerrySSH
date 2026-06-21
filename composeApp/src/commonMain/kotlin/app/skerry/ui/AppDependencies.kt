@@ -5,6 +5,7 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
+import app.skerry.ui.known.KnownHostsController
 
 /**
  * Граф зависимостей приложения, собираемый платформенной точкой входа и подаваемый в [App].
@@ -19,6 +20,8 @@ data class AppDependencies(
     val hosts: HostManagerController? = null,
     val vault: Vault? = null,
     val identities: IdentityManagerController? = null,
+    /** Менеджер known-hosts (доверенные ключи + события смены ключа); `null` — подсистема не подключена. */
+    val knownHosts: KnownHostsController? = null,
     /** Биометрическая разблокировка vault; `null` — платформа без биометрии (desktop MVP). */
     val biometrics: VaultBiometrics? = null,
 )

@@ -46,6 +46,58 @@ class FileKnownHostsStoreTest {
     }
 
     @Test
+    fun `round-trips the firstSeen timestamp`() {
+        val seen = KnownHost("d.example", 22, "ssh-ed25519", "SHA256:DDD", "2026-06-22T10:00:00Z")
+
+        FileKnownHostsStore(file).add(seen)
+
+        assertEquals(listOf(seen), FileKnownHostsStore(file).all())
+    }
+
+    @Test
+    fun `reads legacy four-field rows with an empty firstSeen`() {
+        file.writeText("legacy.example 22 ssh-ed25519 SHA256:LEG")
+
+        assertEquals(
+            listOf(KnownHost("legacy.example", 22, "ssh-ed25519", "SHA256:LEG", "")),
+            FileKnownHostsStore(file).all(),
+        )
+    }
+
+    @Test
+    fun `remove forgets a key and persists across instances`() {
+        val a = KnownHost("a.example", 22, "ssh-ed25519", "SHA256:AAA", "2026-06-22T10:00:00Z")
+        val b = KnownHost("b.example", 2222, "rsa-sha2-512", "SHA256:BBB")
+        FileKnownHostsStore(file).apply { add(a); add(b) }
+
+        FileKnownHostsStore(file).remove("a.example", 22, "ssh-ed25519")
+
+        assertEquals(listOf(b), FileKnownHostsStore(file).all())
+    }
+
+    @Test
+    fun `replace swaps the fingerprint for the same identity and persists`() {
+        val old = KnownHost("nas.example", 22, "ssh-ed25519", "SHA256:OLD", "2026-06-01T10:00:00Z")
+        val other = KnownHost("db.example", 22, "ssh-ed25519", "SHA256:DB")
+        FileKnownHostsStore(file).apply { add(old); add(other) }
+
+        val updated = KnownHost("nas.example", 22, "ssh-ed25519", "SHA256:NEW", "2026-06-22T12:00:00Z")
+        FileKnownHostsStore(file).replace(updated)
+
+        assertEquals(listOf(other, updated), FileKnownHostsStore(file).all())
+    }
+
+    @Test
+    fun `remove is a no-op for an unknown key`() {
+        val a = KnownHost("a.example", 22, "ssh-ed25519", "SHA256:AAA")
+        FileKnownHostsStore(file).add(a)
+
+        FileKnownHostsStore(file).remove("a.example", 22, "rsa-sha2-512")
+
+        assertEquals(listOf(a), FileKnownHostsStore(file).all())
+    }
+
+    @Test
     fun `ignores malformed and blank lines`() {
         file.writeText(
             """
