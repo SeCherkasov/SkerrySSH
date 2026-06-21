@@ -3,18 +3,38 @@ package app.skerry.ui.metrics
 import kotlin.math.roundToInt
 
 /**
- * Снимок ресурсов хоста для info-панели терминала. Проценты CPU/диска — 0..100; память — в байтах.
- * Доли ([cpuFraction]/[memFraction]/[diskFraction]) — для прогресс-баров (0..1).
+ * Снимок состояния хоста для info-панели терминала: ресурсы (CPU/память/диск) плюс факты хоста
+ * (аптайм, load average, ОС, ядро, число CPU) — всё за один round-trip [HostMetricsController].
+ * Проценты CPU/диска — 0..100; память — в байтах. Доли ([cpuFraction]/[memFraction]/[diskFraction]) —
+ * для прогресс-баров (0..1). Поля-факты опциональны: `null`, если соответствующей секции в выводе нет
+ * (старый сервер, не-Linux) — UI тогда показывает «…», а не мусор.
  */
 data class HostMetrics(
     val cpuPercent: Int,
     val memUsedBytes: Long,
     val memTotalBytes: Long,
     val diskPercent: Int,
+    val uptimeSeconds: Long? = null,
+    val loadAverage: String? = null,
+    val osName: String? = null,
+    val kernel: String? = null,
+    val cpuCount: Int? = null,
 ) {
     val cpuFraction: Float get() = (cpuPercent / 100f).coerceIn(0f, 1f)
     val memFraction: Float get() = if (memTotalBytes > 0) (memUsedBytes.toFloat() / memTotalBytes).coerceIn(0f, 1f) else 0f
     val diskFraction: Float get() = (diskPercent / 100f).coerceIn(0f, 1f)
+}
+
+/** Секунды аптайма → `HH:MM:SS` (с префиксом `Nd `, если ≥ суток). Отрицательное зажимается в ноль. */
+fun formatUptime(seconds: Long): String {
+    val s = seconds.coerceAtLeast(0)
+    val days = s / 86_400
+    val h = (s % 86_400) / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    fun pad(v: Long) = v.toString().padStart(2, '0')
+    val hms = "${pad(h)}:${pad(m)}:${pad(sec)}"
+    return if (days > 0) "${days}d $hms" else hms
 }
 
 /**
@@ -36,27 +56,64 @@ data class HostMetrics(
 fun parseHostMetrics(raw: String): HostMetrics? {
     val lines = raw.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
 
-    // Секции разделены маркерами @MEM/@DISK — память и диск ищем строго внутри своих секций,
+    // Каждую метрику ищем строго внутри своей секции (между её маркером и следующим маркером),
     // чтобы случайный %-токен из соседней секции (или строка чужой точки монтирования df) не
     // подменил метрику. CPU — строки `cpu …` /proc/stat, всегда в начале до @MEM.
-    val memMarker = lines.indexOf("@MEM")
-    val diskMarker = lines.indexOf("@DISK")
-
     val cpuPercent = cpuPercentFromStat(lines.filter { it.startsWith("cpu ") })
 
-    val memSection = if (memMarker >= 0) lines.subList(memMarker + 1, if (diskMarker > memMarker) diskMarker else lines.size) else lines
+    // Память и диск обязательны: их отсутствие — признак не-Linux/обрезанного вывода → null целиком.
+    val memSection = sectionOrAll(lines, "@MEM")
     val memLine = memSection.firstOrNull { it.startsWith("Mem:") } ?: return null
     val memTokens = memLine.split(WHITESPACE)
     val memTotal = memTokens.getOrNull(1)?.toLongOrNull() ?: return null
     val memUsed = memTokens.getOrNull(2)?.toLongOrNull() ?: return null
 
-    val diskSection = if (diskMarker >= 0) lines.subList(diskMarker + 1, lines.size) else lines
-    val diskPercent = diskPercentFromDf(diskSection) ?: return null
+    val diskPercent = diskPercentFromDf(sectionOrAll(lines, "@DISK")) ?: return null
 
-    return HostMetrics(cpuPercent, memUsed, memTotal, diskPercent)
+    // Факты хоста опциональны: их секций может не быть (старый сервер) — тогда поле остаётся null.
+    val uptimeSeconds = section(lines, "@UPTIME").firstOrNull()
+        ?.split(WHITESPACE)?.firstOrNull()?.toDoubleOrNull()?.toLong()
+    val loadAverage = section(lines, "@LOAD").firstOrNull()
+        ?.split(WHITESPACE)?.take(3)?.takeIf { it.size == 3 }?.joinToString(" ")
+    // ОС/ядро приходят от удалённого (доверенного, но потенциально неисправного) хоста — режем
+    // длину, чтобы аномально длинная строка не ломала вёрстку info-панели (defence-in-depth).
+    val osName = section(lines, "@OS").firstOrNull { it.startsWith("PRETTY_NAME=") }
+        ?.removePrefix("PRETTY_NAME=")?.trim('"')?.take(FACT_MAX_LEN)?.takeIf { it.isNotBlank() }
+    val kernel = section(lines, "@KERNEL").firstOrNull()?.take(FACT_MAX_LEN)?.takeIf { it.isNotBlank() }
+    val cpuCount = section(lines, "@CPU").firstOrNull()?.toIntOrNull()
+
+    return HostMetrics(
+        cpuPercent = cpuPercent,
+        memUsedBytes = memUsed,
+        memTotalBytes = memTotal,
+        diskPercent = diskPercent,
+        uptimeSeconds = uptimeSeconds,
+        loadAverage = loadAverage,
+        osName = osName,
+        kernel = kernel,
+        cpuCount = cpuCount,
+    )
 }
 
 private val WHITESPACE = Regex("\\s+")
+
+/** Предел длины строковых фактов хоста (ОС/ядро) от удалённого сервера — защита вёрстки info-панели. */
+private const val FACT_MAX_LEN = 120
+
+/** Все маркеры секций вывода — по ним [section] определяет границу «своей» секции. */
+private val SECTION_MARKERS = setOf("@MEM", "@DISK", "@UPTIME", "@LOAD", "@OS", "@KERNEL", "@CPU")
+
+/** Строки секции [marker] — от него (не включая) до следующего маркера (или конца). Пусто, если нет. */
+private fun section(lines: List<String>, marker: String): List<String> {
+    val start = lines.indexOf(marker)
+    if (start < 0) return emptyList()
+    val end = (start + 1 until lines.size).firstOrNull { lines[it] in SECTION_MARKERS } ?: lines.size
+    return lines.subList(start + 1, end)
+}
+
+/** Как [section], но при отсутствии маркера ищет по всему выводу — обратная совместимость с форматом без маркеров. */
+private fun sectionOrAll(lines: List<String>, marker: String): List<String> =
+    if (marker in lines) section(lines, marker) else lines
 
 /** total и idle (idle+iowait) джиффи из строки `cpu …` /proc/stat, либо null если чисел мало. */
 private fun cpuTotalsFromStatLine(line: String): Pair<Long, Long>? {

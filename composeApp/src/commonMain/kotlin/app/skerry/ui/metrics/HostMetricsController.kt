@@ -57,11 +57,19 @@ class HostMetricsController(
 
     companion object {
         /**
-         * Одна команда — один round-trip: две выборки /proc/stat для CPU по дельте, затем память и
-         * диск. Маркеры `@MEM`/`@DISK` разделяют секции для [parseHostMetrics].
+         * Одна команда — один round-trip: две выборки /proc/stat для CPU по дельте, затем память,
+         * диск и факты хоста (аптайм, load average, ОС, ядро, число CPU). Маркеры
+         * `@MEM`/`@DISK`/`@UPTIME`/`@LOAD`/`@OS`/`@KERNEL`/`@CPU` разделяют секции для
+         * [parseHostMetrics]. Факты дешёвы (всё из /proc + один файл + uname/nproc), поэтому
+         * опрашиваются тем же циклом; статичные (ОС/ядро/CPU) парсер просто перечитывает.
+         * Рассчитано на POSIX-шелл (`;`-цепочка команд) и Linux (/proc, free -b, df -Pk); на иных
+         * системах отсутствующие секции просто дают `null`-поля (см. [parseHostMetrics]).
          */
         const val METRICS_COMMAND: String =
             "grep '^cpu ' /proc/stat; sleep 0.4; grep '^cpu ' /proc/stat; " +
-                "echo '@MEM'; free -b; echo '@DISK'; df -Pk /"
+                "echo '@MEM'; free -b; echo '@DISK'; df -Pk /; " +
+                "echo '@UPTIME'; cat /proc/uptime; echo '@LOAD'; cat /proc/loadavg; " +
+                "echo '@OS'; grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null; " +
+                "echo '@KERNEL'; uname -s -r -m; echo '@CPU'; nproc"
     }
 }

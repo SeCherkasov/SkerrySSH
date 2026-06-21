@@ -158,7 +158,32 @@ private fun fakeTransport(): SshTransport = object : SshTransport {
 
 private class FakeConnection(private val target: SshTarget) : SshConnection {
     override val isConnected: Boolean = true
-    override suspend fun exec(command: String): ExecResult = ExecResult(0, "", "")
+    override val cipher: String? = "chacha20-poly1305@openssh.com"
+
+    // Реалистичный вывод METRICS_COMMAND, чтобы офскрин-рендер info-панели показал живые
+    // метрики и факты хоста (CPU/память/диск/аптайм/load/ОС/ядро/CPU), а не плейсхолдеры «…».
+    override suspend fun exec(command: String): ExecResult = ExecResult(
+        exitCode = 0,
+        stdout = """
+            cpu  100 0 100 800 0 0 0 0
+            cpu  168 0 132 900 0 0 0 0
+            @MEM
+            Mem:     4000000000  2100000000  1000000000
+            @DISK
+            /dev/sda1  51475068 42000000 6900000 87% /
+            @UPTIME
+            372765.42 1488907.15
+            @LOAD
+            0.42 0.51 0.48 1/512 28931
+            @OS
+            PRETTY_NAME="Ubuntu 22.04.4 LTS"
+            @KERNEL
+            Linux 5.15.0-105-generic x86_64
+            @CPU
+            4
+        """.trimIndent(),
+        stderr = "",
+    )
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = FakeChannel(target)
     override suspend fun openSftp(): SftpClient = FakeSftpClient()
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = FakePortForward(if (spec.bindPort != 0) spec.bindPort else 50080)

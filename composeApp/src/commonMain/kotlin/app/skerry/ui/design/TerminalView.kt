@@ -40,6 +40,8 @@ import app.skerry.ui.connection.ConnectionUiState
 import kotlin.math.roundToInt
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.groupHostsByFolder
+import app.skerry.ui.metrics.HostMetrics
+import app.skerry.ui.metrics.formatUptime
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.terminal.TerminalScreen
 
@@ -611,7 +613,7 @@ private fun InfoPanel() {
     // Контроллер live-метрик активной сессии (когда подключена). remember безусловный — ключи
     // (id сессии + флаг connected) пересоздают его при смене сессии/подключения, без условного
     // вызова remember. openMetrics идемпотентен (кэш в ConnectionController).
-    val liveMetrics = remember(active?.id, connected) {
+    val liveMetrics = remember(active, connected) {
         if (connected && active != null) active.controller.openMetrics() else null
     }?.metrics
     Column(Modifier.width(268.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState())) {
@@ -630,14 +632,14 @@ private fun InfoPanel() {
         }
         HLine()
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            // Host/Address/User — из живого профиля активной сессии; cipher/uptime пока статичны
-            // (требуют опроса сервера — отдельный шаг), в мок-режиме всё из макета.
+            // Host/Address/User — из живого профиля активной сессии; cipher — из транспорта,
+            // uptime — из live-метрик (до первого опроса «…»); в мок-режиме всё из макета.
             InfoRow("Host", if (live) (host?.label ?: active?.title ?: "—") else "prod-web-01", mono)
             InfoRow("Address", if (live) (host?.let { "${it.address}:${it.port}" } ?: "—") else "192.168.1.45:22", mono)
             InfoRow("User", if (live) (host?.username ?: "—") else "root", mono)
             InfoRow("Auth", if (live) (host?.identityId?.let { "identity" } ?: "password") else "id_ed25519", mono)
-            InfoRow("Cipher", "aes256-gcm", mono)
-            InfoRow("Uptime", "04:12:45", mono)
+            InfoRow("Cipher", if (live) (active?.controller?.cipher ?: "…") else "aes256-gcm", mono)
+            InfoRow("Uptime", if (live) (liveMetrics?.uptimeSeconds?.let { formatUptime(it) } ?: "…") else "04:12:45", mono)
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
             Txt("LIVE METRICS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
@@ -659,7 +661,10 @@ private fun InfoPanel() {
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             Txt("SYSTEM", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
-            Txt("Ubuntu 22.04.4 LTS\nLinux 5.15.0-105 x86_64\n4 vCPU · load 0.42 0.51 0.48", color = D.dim, size = 10.5.sp, font = mono, lineHeight = 18.sp)
+            // Живой блок собирается из фактов хоста (ОС / ядро / CPU+load); до первого опроса — «…».
+            // В мок-режиме (превью/офскрин) — статичный текст макета.
+            val systemText = if (live) liveSystemSummary(liveMetrics) else MOCK_SYSTEM
+            Txt(systemText, color = D.dim, size = 10.5.sp, font = mono, lineHeight = 18.sp)
         }
     }
 }
@@ -687,6 +692,29 @@ private fun Meter(label: String, value: String, fraction: Float, bar: Color, val
 private fun gb(bytes: Long): String {
     val rounded = (bytes / 1_000_000_000.0 * 10).roundToInt() / 10.0
     return rounded.toString()
+}
+
+/** Статичный SYSTEM-блок для мок/офскрин-режима (нет живой сессии). */
+private const val MOCK_SYSTEM = "Ubuntu 22.04.4 LTS\nLinux 5.15.0-105 x86_64\n4 vCPU · load 0.42 0.51 0.48"
+
+/**
+ * Собирает SYSTEM-блок info-панели из живых фактов хоста: ОС, ядро, строка «N vCPU · load …».
+ * Пропускает поля, которых ещё нет (опрос не дошёл / не-Linux). Пусто всё — «…».
+ */
+private fun liveSystemSummary(m: HostMetrics?): String {
+    val cpuLoad = buildString {
+        m?.cpuCount?.let { append("$it vCPU") }
+        m?.loadAverage?.let {
+            if (isNotEmpty()) append(" · ")
+            append("load $it")
+        }
+    }
+    val lines = listOfNotNull(
+        m?.osName,
+        m?.kernel,
+        cpuLoad.takeIf { it.isNotEmpty() },
+    )
+    return if (lines.isEmpty()) "…" else lines.joinToString("\n")
 }
 
 // ──────────────────────────────── AI bar ────────────────────────────────

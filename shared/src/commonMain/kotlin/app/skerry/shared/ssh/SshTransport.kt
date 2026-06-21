@@ -46,6 +46,14 @@ fun interface HostKeyVerifier {
 interface SshConnection {
     val isConnected: Boolean
 
+    /**
+     * Согласованный при установке соединения симметричный шифр (направление client→server) в нотации
+     * SSH (`chacha20-poly1305@openssh.com`, `aes256-gcm@openssh.com`, `aes256-ctr`, …), либо `null`,
+     * если транспорт его не сообщает. Статичен на всё время жизни соединения. Реализация по умолчанию —
+     * `null` (фейки/тесты), реальный транспорт перекрывает.
+     */
+    val cipher: String? get() = null
+
     /** Одноразовый exec-канал для неинтерактивных команд. */
     suspend fun exec(command: String): ExecResult
 

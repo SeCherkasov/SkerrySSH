@@ -65,6 +65,15 @@ class ConnectionController(
     var uiState: ConnectionUiState by mutableStateOf(ConnectionUiState.Form)
         private set
 
+    /**
+     * Согласованный шифр живого соединения этой сессии (для info-панели) или `null`, пока сессия не
+     * подключена / транспорт его не сообщает. Хранится snapshot-стейтом (а не геттером по
+     * не-snapshot [connection]), чтобы Compose отслеживал чтение и перерисовывал info-панель при
+     * появлении/сбросе соединения. Выставляется при переходе в [ConnectionUiState.Connected].
+     */
+    var cipher: String? by mutableStateOf(null)
+        private set
+
     private var connectJob: Job? = null
     private var connection: SshConnection? = null
     private var sessionScope: CoroutineScope? = null
@@ -88,6 +97,7 @@ class ConnectionController(
                 ensureActive()
                 val sScope = newSessionScope()
                 connection = conn
+                cipher = conn.cipher
                 sessionScope = sScope
                 uiState = ConnectionUiState.Connected(
                     TerminalScreenState(ShellTerminalSession(channel, sScope), sScope),
@@ -177,6 +187,7 @@ class ConnectionController(
         sessionScope?.cancel()
         sessionScope = null
         connection = null
+        cipher = null
         if (sftp != null) closeSftpQuietly(sftp)
         if (conn != null) closeConnectionQuietly(conn)
         uiState = ConnectionUiState.Form

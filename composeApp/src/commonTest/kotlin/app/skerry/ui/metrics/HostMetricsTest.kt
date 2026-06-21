@@ -17,6 +17,16 @@ class HostMetricsTest {
         @DISK
         Filesystem     1024-blocks      Used Available Capacity Mounted on
         /dev/sda1         51475068  42000000   6900000      87% /
+        @UPTIME
+        372765.42 1488907.15
+        @LOAD
+        0.42 0.51 0.48 1/512 28931
+        @OS
+        PRETTY_NAME="Ubuntu 22.04.4 LTS"
+        @KERNEL
+        Linux 5.15.0-105-generic x86_64
+        @CPU
+        4
     """.trimIndent()
 
     @Test
@@ -107,6 +117,62 @@ class HostMetricsTest {
             /dev/sda2        209715200 120000000  78000000      62% /var
         """.trimIndent()
         assertEquals(87, parseHostMetrics(out)!!.diskPercent)
+    }
+
+    @Test
+    fun parses_host_facts_from_their_sections() {
+        val m = parseHostMetrics(fullOutput)!!
+        assertEquals(372_765L, m.uptimeSeconds) // первый токен /proc/uptime, дробная часть отброшена
+        assertEquals("0.42 0.51 0.48", m.loadAverage) // первые три токена /proc/loadavg
+        assertEquals("Ubuntu 22.04.4 LTS", m.osName) // PRETTY_NAME без кавычек
+        assertEquals("Linux 5.15.0-105-generic x86_64", m.kernel)
+        assertEquals(4, m.cpuCount)
+    }
+
+    @Test
+    fun host_facts_are_null_when_their_sections_absent() {
+        // Старый формат без новых секций: ресурсы парсятся, факты null (не мусор).
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            cpu  150 0 150 900 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @DISK
+            /dev/sda1  100 87 13 87% /
+        """.trimIndent()
+        val m = parseHostMetrics(out)!!
+        assertNull(m.uptimeSeconds)
+        assertNull(m.loadAverage)
+        assertNull(m.osName)
+        assertNull(m.kernel)
+        assertNull(m.cpuCount)
+    }
+
+    @Test
+    fun caps_length_of_server_provided_os_and_kernel_strings() {
+        val longName = "X".repeat(500)
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @DISK
+            /dev/sda1  100 87 13 87% /
+            @OS
+            PRETTY_NAME="$longName"
+            @KERNEL
+            $longName
+        """.trimIndent()
+        val m = parseHostMetrics(out)!!
+        assertEquals(120, m.osName?.length) // длина обрезана до предела вёрстки
+        assertEquals(120, m.kernel?.length)
+    }
+
+    @Test
+    fun formats_uptime_with_days_hours_minutes_seconds() {
+        assertEquals("04:12:45", formatUptime(4 * 3600 + 12 * 60 + 45L))
+        assertEquals("4d 07:01:05", formatUptime(4 * 86_400 + 7 * 3600 + 1 * 60 + 5L))
+        assertEquals("00:00:09", formatUptime(9L))
+        assertEquals("00:00:00", formatUptime(-5L)) // отрицательное зажимается в ноль
     }
 
     @Test

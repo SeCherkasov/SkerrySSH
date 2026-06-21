@@ -16,6 +16,7 @@ import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,16 @@ class SshjTransport(
         withContext(Dispatchers.IO) {
             ensureCryptoProvider()
             val client = SSHClient()
+            // Согласованный при KEX шифр (client→server) перехватываем верификатором алгоритмов:
+            // в sshj 0.40 он вызывается синхронно на IO-потоке внутри connect() (после NEWKEYS, до
+            // возврата), а читаем после connect() — нужна потокобезопасная публикация, поэтому
+            // AtomicReference. Верификатор всегда пропускает (true): проверкой шифров не занимаемся,
+            // только снимаем имя для info-панели; host-key проверка — отдельная цепочка (addHostKeyVerifier).
+            val negotiatedCipher = AtomicReference<String?>(null)
+            client.transport.addAlgorithmsVerifier { negotiated ->
+                negotiatedCipher.set(negotiated.client2ServerCipherAlgorithm)
+                true
+            }
             // verify() вызывается из IO-потока sshj, а читаем флаг из корутины после
             // connect() — нужна потокобезопасная видимость, поэтому AtomicBoolean.
             val hostKeyRejected = AtomicBoolean(false)
@@ -95,7 +106,7 @@ class SshjTransport(
                 throw SshConnectionException("Обрыв соединения при аутентификации", e)
             }
 
-            SshjConnection(client)
+            SshjConnection(client, negotiatedCipher.get())
         }
 }
 
@@ -121,7 +132,10 @@ private fun ensureCryptoProvider() {
     }
 }
 
-private class SshjConnection(private val client: SSHClient) : SshConnection {
+private class SshjConnection(
+    private val client: SSHClient,
+    override val cipher: String?,
+) : SshConnection {
 
     override val isConnected: Boolean
         get() = client.isConnected && client.isAuthenticated

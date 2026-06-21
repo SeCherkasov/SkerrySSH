@@ -63,6 +63,20 @@ class SshjTransportTest {
     }
 
     @Test
+    fun `exposes negotiated cipher after connect`() = runTest {
+        val connection = connect()
+        try {
+            val cipher = connection.cipher
+            assertTrue(
+                !cipher.isNullOrBlank(),
+                "соединение должно сообщить согласованный шифр, получено: $cipher",
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    @Test
     fun `rejects invalid password`() = runTest {
         assertFailsWith<SshAuthenticationException> {
             SshjTransport(acceptAllKeys).connect(target(), SshAuth.Password("wrong"))
