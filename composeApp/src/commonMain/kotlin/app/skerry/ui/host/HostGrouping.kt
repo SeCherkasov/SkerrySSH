@@ -1,8 +1,10 @@
 package app.skerry.ui.host
 
+import androidx.compose.runtime.Immutable
 import app.skerry.shared.host.Host
 
 /** Папка списка хостов: имя группы + хосты в ней (порядок исходного списка). */
+@Immutable
 data class HostFolder(val name: String, val hosts: List<Host>)
 
 /**

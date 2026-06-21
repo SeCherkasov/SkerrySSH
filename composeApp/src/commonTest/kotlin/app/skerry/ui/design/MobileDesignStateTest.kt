@@ -71,6 +71,27 @@ class MobileDesignStateTest {
     }
 
     @Test
+    fun open_host_pushes_detail_with_selected_id() {
+        val s = MobileDesignState()
+        s.openHost("host-42")
+        assertEquals(MobileRoute.HostDetail, s.route)
+        assertEquals("host-42", s.selectedHostId)
+        assertFalse(s.showTabs)
+    }
+
+    @Test
+    fun pop_and_select_clear_selected_host_id() {
+        val s = MobileDesignState()
+        s.openHost("host-42")
+        s.pop()
+        assertNull(s.selectedHostId) // иначе 2B прочёл бы устаревший id
+
+        s.openHost("host-7")
+        s.select(MobileTab.Files)
+        assertNull(s.selectedHostId)
+    }
+
+    @Test
     fun new_connection_sheet_opens_and_closes() {
         val s = MobileDesignState()
         s.openNewConn()

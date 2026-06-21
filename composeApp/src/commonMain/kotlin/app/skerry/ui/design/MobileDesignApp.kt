@@ -108,7 +108,7 @@ private fun MobileChrome(state: MobileDesignState, onLock: (() -> Unit)?) {
             if (route != null) {
                 MobileRoutePane(route, onBack = state::pop)
             } else {
-                MobileTabPane(state.tab)
+                MobileTabPane(state)
             }
         }
         if (state.showTabs) {
@@ -119,9 +119,20 @@ private fun MobileChrome(state: MobileDesignState, onLock: (() -> Unit)?) {
 
 // ──────────────────────────────── контент (плейсхолдеры слайса 1) ────────────────────────────────
 
-/** Корневой экран таба. Слайс 1 — заголовок макета (28sp) + плейсхолдер; тело придёт со слайсом раздела. */
+/**
+ * Корневой экран текущего таба. Hosts реализован 1:1 ([MobileHostsScreen], слайс 2); остальные —
+ * заголовок макета (28sp) + плейсхолдер, тело придёт со слайсом раздела.
+ */
 @Composable
-private fun MobileTabPane(tab: MobileTab) {
+private fun MobileTabPane(state: MobileDesignState) {
+    when (state.tab) {
+        MobileTab.Hosts -> MobileHostsScreen(state)
+        else -> MobileTabPlaceholder(state.tab)
+    }
+}
+
+@Composable
+private fun MobileTabPlaceholder(tab: MobileTab) {
     val title = when (tab) {
         MobileTab.Hosts -> "Hosts"
         MobileTab.Files -> "Files"

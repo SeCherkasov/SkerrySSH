@@ -37,20 +37,33 @@ class MobileDesignState {
     var route: MobileRoute? by mutableStateOf(null); private set
     var sheetNewConn: Boolean by mutableStateOf(false); private set
 
+    /** Идентификатор хоста, открытого на [MobileRoute.HostDetail] — экран читает его из стора по id. */
+    var selectedHostId: String? by mutableStateOf(null); private set
+
     /** Таб-бар виден только на корневых экранах: push-экраны макета полноэкранные. */
     val showTabs: Boolean get() = route == null
 
-    /** Переключить корневой таб — закрывает любой открытый push-экран. */
+    /** Переключить корневой таб — закрывает любой открытый push-экран и сбрасывает выбранный хост. */
     fun select(t: MobileTab) {
         tab = t
         route = null
+        selectedHostId = null
     }
 
     /** Открыть полноэкранный под-экран поверх текущего таба. */
     fun push(r: MobileRoute) { route = r }
 
-    /** Вернуться с push-экрана на текущий таб (back-стрелка макета). */
-    fun pop() { route = null }
+    /** Открыть деталь конкретного хоста (тап по строке списка): запоминает id и пушит экран. */
+    fun openHost(id: String) {
+        selectedHostId = id
+        route = MobileRoute.HostDetail
+    }
+
+    /** Вернуться с push-экрана на текущий таб (back-стрелка макета); снимает выбор хоста. */
+    fun pop() {
+        route = null
+        selectedHostId = null
+    }
 
     fun openNewConn() { sheetNewConn = true }
     fun closeSheet() { sheetNewConn = false }

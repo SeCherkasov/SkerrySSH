@@ -26,6 +26,7 @@ import app.skerry.shared.ssh.KnownHostsStore
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.ui.AppDependencies
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionSubtitle
@@ -63,6 +64,11 @@ fun main() {
     val overlay = System.getProperty("skerry.screenshot.overlay", "")
     val live = System.getProperty("skerry.screenshot.live", "false").toBoolean()
 
+    // Телефонный макет: рендерим MobileDesignApp в узкой сцене. view=MobileTab (по умолчанию Hosts).
+    if (System.getProperty("skerry.screenshot.device", "desktop") == "mobile") {
+        renderMobile(out, viewName, live); return
+    }
+
     val state = DesktopDesignState()
     runCatching { state.showView(DesktopView.valueOf(viewName)) }
     when (overlay) {
@@ -96,6 +102,32 @@ fun main() {
     scene.close()
     sessions?.disconnectAll() // снять коллекторы фейковых сессий перед выходом
     println("screenshot → $out (${File(out).length()} bytes)")
+}
+
+/**
+ * Офскрин-рендер телефонного макета ([MobileDesignApp]) в узкой сцене 390×844 (density 2). `view` —
+ * имя [MobileTab] (по умолчанию Hosts); `live=true` подаёт засеянный каталог [seededHosts], иначе
+ * экран берёт встроенные превью-данные. Аналог desktop-ветки [main]; запускается той же задачей
+ * `screenshotDesign` со свойством `skerry.screenshot.device=mobile`.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+private fun renderMobile(out: String, viewName: String, live: Boolean) {
+    val state = MobileDesignState()
+    runCatching { MobileTab.valueOf(viewName) }.getOrNull()?.let { state.select(it) }
+    val deps = if (live) AppDependencies(hosts = seededHosts()) else AppDependencies()
+    // ширина/высота сцены — в ПИКСЕЛЯХ: 780×1688 при density 2 = логические 390×844dp (телефон).
+    val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
+        SkerryTheme { MobileDesignApp(deps = deps, state = state) }
+    }
+    var img = scene.render(0)
+    for (i in 1..80) {
+        img = scene.render(i * 16_000_000L)
+        Thread.sleep(16)
+    }
+    val data = img.encodeToData() ?: error("encode failed")
+    File(out).writeBytes(data.bytes)
+    scene.close()
+    println("screenshot(mobile) → $out (${File(out).length()} bytes)")
 }
 
 /** Поставщик дизайн-шрифтов для standalone-рендера экранов, минуя [DesktopDesignApp]. */

@@ -71,10 +71,11 @@ compose.desktop {
 }
 
 // Офскрин-рендер дизайна в PNG (визуальная проверка без окна). См. design/Screenshot.kt.
-// Параметры: -Dskerry.screenshot.{out,view,overlay,live}. Не входит в дистрибутив.
+// Параметры: -Dskerry.screenshot.{out,view,overlay,live,device}. device=mobile рендерит телефонный
+// макет (MobileDesignApp); view тогда — имя MobileTab. Не входит в дистрибутив.
 tasks.register<JavaExec>("screenshotDesign") {
     group = "verification"
-    description = "Render DesktopDesignApp to a PNG via ImageComposeScene"
+    description = "Render Desktop/Mobile DesignApp to a PNG via ImageComposeScene"
     val desktopMainComp = kotlin.targets.getByName("desktop").compilations.getByName("main")
     dependsOn(desktopMainComp.compileTaskProvider)
     classpath(desktopMainComp.output.allOutputs, desktopMainComp.runtimeDependencyFiles)
@@ -83,4 +84,5 @@ tasks.register<JavaExec>("screenshotDesign") {
     systemProperty("skerry.screenshot.view", providers.systemProperty("skerry.screenshot.view").getOrElse("Terminal"))
     systemProperty("skerry.screenshot.overlay", providers.systemProperty("skerry.screenshot.overlay").getOrElse(""))
     systemProperty("skerry.screenshot.live", providers.systemProperty("skerry.screenshot.live").getOrElse("false"))
+    systemProperty("skerry.screenshot.device", providers.systemProperty("skerry.screenshot.device").getOrElse("desktop"))
 }
