@@ -63,4 +63,41 @@ class MobileTerminalTest {
         assertEquals("\u001a", controlByte('z')) // Ctrl+Z = SUB
         assertEquals("\u001b", controlByte('[')) // Ctrl+[ = ESC
     }
+
+    // ── sticky-ctrl поверх ввода с софт-клавиатуры (IME-путь) ──
+    // ESC и control-байты строим из кодов (27.toChar()/controlByte) — никаких невидимых литералов.
+
+    @Test
+    fun sticky_ctrl_encodes_first_soft_keyboard_char() {
+        // Армированный ctrl + буква с экранной клавиатуры → Ctrl+<буква>; остаток (если есть) как есть.
+        assertEquals(controlByte('c'), applyStickyCtrl(armed = true, input = "c"))
+        assertEquals(controlByte('c') + "rest", applyStickyCtrl(armed = true, input = "crest"))
+    }
+
+    @Test
+    fun sticky_ctrl_passes_through_when_not_armed_or_empty() {
+        assertEquals("c", applyStickyCtrl(armed = false, input = "c"))
+        assertEquals("", applyStickyCtrl(armed = true, input = ""))
+    }
+
+    // ── стрелки с учётом DECCKM (application-cursor-keys) ──
+
+    @Test
+    fun arrows_use_csi_in_normal_mode() {
+        val esc = 27.toChar().toString()
+        assertEquals("$esc[A", arrowSequence(ArrowKey.Up, applicationCursor = false))
+        assertEquals("$esc[B", arrowSequence(ArrowKey.Down, applicationCursor = false))
+        assertEquals("$esc[C", arrowSequence(ArrowKey.Right, applicationCursor = false))
+        assertEquals("$esc[D", arrowSequence(ArrowKey.Left, applicationCursor = false))
+    }
+
+    @Test
+    fun arrows_use_ss3_in_application_cursor_mode() {
+        // В DECCKM (vim/less прислали ESC[?1h) стрелки идут как SS3 ESC O <буква>.
+        val esc = 27.toChar().toString()
+        assertEquals("${esc}OA", arrowSequence(ArrowKey.Up, applicationCursor = true))
+        assertEquals("${esc}OB", arrowSequence(ArrowKey.Down, applicationCursor = true))
+        assertEquals("${esc}OC", arrowSequence(ArrowKey.Right, applicationCursor = true))
+        assertEquals("${esc}OD", arrowSequence(ArrowKey.Left, applicationCursor = true))
+    }
 }

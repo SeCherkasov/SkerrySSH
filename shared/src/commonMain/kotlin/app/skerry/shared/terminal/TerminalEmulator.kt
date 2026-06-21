@@ -33,6 +33,9 @@ data class TermCell(val char: Char, val style: TermStyle = TermStyle())
  * Модель — строко-ориентированная со scrollback (не фиксированная сетка): перенос длинных строк
  * делает сам shell по размеру PTY, а PTY транслирует LF→CRLF, поэтому LF опускает курсор, не
  * сбрасывая колонку (CR делает это отдельно). Глубина истории ограничена [maxLines].
+ *
+ * НЕ потокобезопасен: [feed] и чтение состояния должны идти из одной корутины-сборщика вывода
+ * (так его и использует `TerminalScreenState`). Поля без синхронизации рассчитаны на этот контракт.
  */
 class TerminalEmulator(private val maxLines: Int = DEFAULT_MAX_LINES) {
 
@@ -44,6 +47,14 @@ class TerminalEmulator(private val maxLines: Int = DEFAULT_MAX_LINES) {
     var cursorRow: Int = 0
         private set
     var cursorCol: Int = 0
+        private set
+
+    /**
+     * DECCKM (application-cursor-keys). Полноэкранные программы (vim, less, htop) включают этот режим
+     * через `ESC[?1h` и выключают через `ESC[?1l`. Когда он активен, клавиши-стрелки должны слаться
+     * как SS3 (`ESC O A`), а не CSI (`ESC[A`) — UI читает флаг при кодировании клавиш-стрелок.
+     */
+    var applicationCursorKeys: Boolean = false
         private set
 
     private var style = TermStyle()
@@ -156,7 +167,15 @@ class TerminalEmulator(private val maxLines: Int = DEFAULT_MAX_LINES) {
 
     private fun dispatchCsi(final: Char) {
         val private = params.isNotEmpty() && params[0] == '?'
-        if (private) return // приватные режимы (показ курсора, alt-screen и т.п.) — игнор
+        if (private) {
+            // Приватные режимы. Из них трекаем только DECCKM (?1) — нужен для кодировки стрелок;
+            // показ курсора (?25), alt-screen (?1049), bracketed paste (?2004) и пр. безопасно игнорим.
+            if (final == 'h' || final == 'l') {
+                val set = final == 'h'
+                if (parseParams().contains(1)) applicationCursorKeys = set
+            }
+            return
+        }
         val args = parseParams()
         fun arg(i: Int, default: Int) = args.getOrNull(i)?.takeIf { it >= 0 } ?: default
         when (final) {

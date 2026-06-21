@@ -110,9 +110,18 @@ fun rememberJetBrainsMono(): FontFamily = FontFamily(
  * [imeInput] включает мобильный путь ввода: софт-клавиатура не шлёт key-события в
  * [onPreviewKeyEvent], поэтому ввод снимается со скрытого `BasicTextField` ([imeDeltaToPty]).
  * На desktop оставлен `false` — там работает физическая клавиатура через [mapTerminalKey].
+ *
+ * [imeTransform] (только для IME-пути) пост-обрабатывает непустой результат [imeDeltaToPty] перед
+ * отправкой — мобильная клавишная панель пропускает через него sticky-ctrl ([app.skerry.ui.design.applyStickyCtrl]),
+ * чтобы Ctrl+<буква> работал и с софт-клавиатуры, а не только с клавиш панели.
  */
 @Composable
-fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, imeInput: Boolean = false) {
+fun TerminalScreen(
+    state: TerminalScreenState,
+    modifier: Modifier = Modifier,
+    imeInput: Boolean = false,
+    imeTransform: ((String) -> String)? = null,
+) {
     val mono = rememberJetBrainsMono()
     val textStyle = remember(mono) {
         TextStyle(
@@ -357,7 +366,9 @@ fun TerminalScreen(state: TerminalScreenState, modifier: Modifier = Modifier, im
           BasicTextField(
               value = imeValue,
               onValueChange = { nv ->
-                  val out = imeDeltaToPty(ANCHOR, nv.text)
+                  val raw = imeDeltaToPty(ANCHOR, nv.text)
+                  // sticky-ctrl и т.п. применяются только к реальному вводу (не к пустой дельте).
+                  val out = if (raw.isEmpty()) raw else imeTransform?.invoke(raw) ?: raw
                   if (out.isNotEmpty()) {
                       state.clearSelection()
                       textToolbar.hide()

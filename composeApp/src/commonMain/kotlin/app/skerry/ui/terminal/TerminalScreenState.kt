@@ -46,6 +46,14 @@ class TerminalScreenState(
     var selection: TerminalSelection? by mutableStateOf(null)
         private set
 
+    /**
+     * DECCKM-режим (application-cursor-keys), снятый с эмулятора: vim/less/htop включают его, и тогда
+     * клавиши-стрелки клавишной панели должны слаться как SS3 (`ESC O A`), а не CSI. UI читает флаг
+     * при кодировании стрелок ([app.skerry.ui.design.arrowSequence]).
+     */
+    var applicationCursorKeys: Boolean by mutableStateOf(false)
+        private set
+
     /** Плоский текст экрана — для тестов и простых проверок (рендер использует [screen]). */
     val output: String
         get() = screen.joinToString("\n") { row -> buildString { row.forEach { append(it.char) } } }
@@ -59,6 +67,7 @@ class TerminalScreenState(
                 screen = emulator.lines.map { it.toList() }
                 cursorRow = emulator.cursorRow
                 cursorCol = emulator.cursorCol
+                applicationCursorKeys = emulator.applicationCursorKeys
             }
         }
     }
