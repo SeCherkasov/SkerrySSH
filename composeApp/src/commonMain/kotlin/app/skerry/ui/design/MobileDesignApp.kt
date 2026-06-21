@@ -207,6 +207,7 @@ private fun openMobileSession(sessions: SessionsController?, state: MobileDesign
 private fun MobileTabPane(state: MobileDesignState) {
     when (state.tab) {
         MobileTab.Hosts -> MobileHostsScreen(state)
+        MobileTab.Files -> MobileFilesScreen()
         else -> MobileTabPlaceholder(state.tab)
     }
 }

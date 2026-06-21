@@ -1,0 +1,67 @@
+package app.skerry.ui.design
+
+import app.skerry.shared.files.FileItem
+import app.skerry.shared.files.FileItemType
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+/** Чистая логика мобильного экрана Files (слайс 4): режим экрана, мета/иконки строк, путь-крошка. */
+class MobileFilesTest {
+
+    private fun item(name: String, type: FileItemType, size: Long = 0): FileItem =
+        FileItem(name = name, path = "/var/www/$name", type = type, size = size, modifiedEpochSeconds = 0)
+
+    // ── режим экрана по состоянию сессий ──
+
+    @Test
+    fun files_mode_picks_preview_when_no_session_manager() {
+        // Путь превью/офскрин без бэкенда — статичный мок макета.
+        assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = false))
+        assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = true))
+    }
+
+    @Test
+    fun files_mode_is_live_only_when_connected() {
+        assertEquals(MobileFilesMode.Live, mobileFilesMode(hasSessions = true, connected = true))
+        // Менеджер есть, но активная сессия не подключена — нечего листать.
+        assertEquals(MobileFilesMode.NoSession, mobileFilesMode(hasSessions = true, connected = false))
+    }
+
+    // ── мета-подпись строки (честная проекция на FileItem) ──
+
+    @Test
+    fun row_meta_shows_human_size_for_files_and_empty_for_dirs() {
+        assertEquals("3.0 KB", mobileFileRowMeta(item("nginx.conf", FileItemType.File, size = 3072)))
+        assertEquals("112 B", mobileFileRowMeta(item("robots.txt", FileItemType.File, size = 112)))
+        // У каталога в модели нет ни прав, ни числа элементов — мета пустая (без выдумок).
+        assertEquals("", mobileFileRowMeta(item("html", FileItemType.Directory)))
+    }
+
+    // ── ведущая иконка строки ──
+
+    @Test
+    fun leading_icon_maps_by_type_and_script_extension() {
+        assertEquals("folder", mobileFileIcon(item("html", FileItemType.Directory)))
+        assertEquals("link", mobileFileIcon(item("current", FileItemType.Symlink)))
+        assertEquals("description", mobileFileIcon(item("nginx.conf", FileItemType.File)))
+        // Шелл-скрипт — иконка terminal, как в макете для deploy.sh.
+        assertEquals("terminal", mobileFileIcon(item("deploy.sh", FileItemType.File)))
+    }
+
+    // ── завершающая иконка строки (видимое действие макета) ──
+
+    @Test
+    fun trailing_icon_is_chevron_for_dirs_and_share_for_files() {
+        assertEquals("chevron_right", mobileFileTrailingIcon(FileItemType.Directory))
+        assertEquals("ios_share", mobileFileTrailingIcon(FileItemType.File))
+        assertEquals("ios_share", mobileFileTrailingIcon(FileItemType.Symlink))
+    }
+
+    // ── строка пути (крошка под переключателем) ──
+
+    @Test
+    fun breadcrumb_joins_label_and_path() {
+        assertEquals("prod-web-01 : /var/www", mobileFilesBreadcrumb("prod-web-01", "/var/www"))
+        assertEquals("This Mac : /", mobileFilesBreadcrumb("This Mac", "/"))
+    }
+}
