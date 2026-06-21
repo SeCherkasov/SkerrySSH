@@ -20,7 +20,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,7 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import app.skerry.ui.connection.ConnectionUiState
+import kotlin.math.roundToInt
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.groupHostsByFolder
 import app.skerry.ui.session.SessionsController
@@ -49,11 +54,14 @@ fun TerminalView(state: DesktopDesignState) {
                 TerminalPane(state, Modifier.weight(1f))
                 if (state.split) {
                     Box(Modifier.width(1.dp).fillMaxHeight().background(D.cyan14))
-                    SplitPane(Modifier.weight(1f))
+                    // Живой split (за гейтом vault) — вторая сессия с пикером; иначе мок-демо макета.
+                    val sessions = LocalSessions.current
+                    if (sessions != null) LiveSplitPane(sessions, Modifier.weight(1f)) else SplitPane(Modifier.weight(1f))
                 }
                 if (state.infoPanel) InfoPanel()
             }
-            AiBar()
+            // AI-бар — фича MVP2 за фича-флагом; в MVP1 (дефолт) терминал без него.
+            if (LocalFeatures.current.ai) AiBar()
         }
     }
 }
@@ -334,7 +342,8 @@ private fun MockTerminalPane(state: DesktopDesignState, modifier: Modifier = Mod
             LogLine(mono, "127.0.0.1 - - [21/Jun/2026:14:25:15] \"GET /assets/main.css HTTP/1.1\" ", "200", " 4521", D.moss)
             TermOut("127.0.0.1 - - [21/Jun/2026:14:25:22] \"POST /api/auth HTTP/1.1\" 500 245", mono, color = D.storm)
 
-            AiSuggestionCard()
+            // AI-карточка — фича MVP2 за фича-флагом; в MVP1 (дефолт) её в выводе нет.
+            if (LocalFeatures.current.ai) AiSuggestionCard()
 
             state.termLines.forEach { line ->
                 if (line.isCmd) Prompt(mono, line.text) else TermOut(line.text, mono, color = line.color)
@@ -464,6 +473,93 @@ private fun AiSuggestionCard() {
 
 // ──────────────────────────────── split pane ────────────────────────────────
 
+/**
+ * Живая split-панель: показывает рядом вторую сессию ([SessionsController.split]). Заголовок —
+ * пикер: клик раскрывает список открытых сессий ([Popup]), выбор назначает её в панель
+ * ([SessionsController.setSplit]). Тело рендерит терминал выбранной сессии по её состоянию
+ * соединения — тем же приёмом, что [LiveTerminalPane]; пока сессия не выбрана — подсказка.
+ */
+@Composable
+private fun LiveSplitPane(sessions: SessionsController, modifier: Modifier = Modifier) {
+    val mono = LocalFonts.current.mono
+    var pickerOpen by remember { mutableStateOf(false) }
+    val split = sessions.split
+    Column(modifier.fillMaxHeight().background(D.terminalBg)) {
+        Box(Modifier.fillMaxWidth().background(D.panel)) {
+            Row(
+                Modifier.fillMaxWidth().clickable { pickerOpen = !pickerOpen }.padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Dot(sessionDotColor(split?.controller?.uiState))
+                Txt(
+                    split?.subtitle ?: "Select a session…",
+                    color = if (split != null) D.dim else D.faint,
+                    size = 11.sp, font = mono, modifier = Modifier.weight(1f),
+                )
+                Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+            }
+            if (pickerOpen) {
+                Popup(alignment = Alignment.BottomStart, onDismissRequest = { pickerOpen = false }) {
+                    SplitSessionPicker(sessions, split?.id) { id -> sessions.setSplit(id); pickerOpen = false }
+                }
+            }
+        }
+        HLine()
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when (val st = split?.controller?.uiState) {
+                null -> TerminalNotice("splitscreen_right", "No session selected", "Pick a session to show it side by side.")
+                ConnectionUiState.Form -> TerminalNotice("terminal", "Session closed", split.subtitle)
+                ConnectionUiState.Connecting -> TerminalNotice("sync", "Connecting…", split.subtitle)
+                is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
+                is ConnectionUiState.Error -> TerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+            }
+        }
+    }
+}
+
+/** Выпадающий список сессий для split-пикера: каждая строка назначает её в панель; «Clear» снимает. */
+@Composable
+private fun SplitSessionPicker(sessions: SessionsController, selectedId: String?, onPick: (String?) -> Unit) {
+    val mono = LocalFonts.current.mono
+    Column(
+        Modifier
+            .width(240.dp)
+            .clip(RoundedCornerShape(7.dp))
+            .background(D.surface2)
+            .border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+            .padding(4.dp),
+    ) {
+        sessions.sessions.forEach { s ->
+            val selected = s.id == selectedId
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(if (selected) D.cyan10 else Color.Transparent)
+                    .clickable { onPick(s.id) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Dot(sessionDotColor(s.controller.uiState))
+                Txt(s.title, color = if (selected) D.cyanBright else D.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+            }
+        }
+        if (selectedId != null) {
+            HLine()
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp)).clickable { onPick(null) }.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Sym("close", size = 14.sp, color = D.faint)
+                Txt("Clear split", color = D.faint, size = 11.5.sp)
+            }
+        }
+    }
+}
+
 @Composable
 private fun SplitPane(modifier: Modifier = Modifier) {
     val mono = LocalFonts.current.mono
@@ -512,6 +608,12 @@ private fun InfoPanel() {
     val host = active?.hostId?.let { id -> hosts?.find(id) }
     val live = sessions != null
     val connected = active?.controller?.uiState is ConnectionUiState.Connected
+    // Контроллер live-метрик активной сессии (когда подключена). remember безусловный — ключи
+    // (id сессии + флаг connected) пересоздают его при смене сессии/подключения, без условного
+    // вызова remember. openMetrics идемпотентен (кэш в ConnectionController).
+    val liveMetrics = remember(active?.id, connected) {
+        if (connected && active != null) active.controller.openMetrics() else null
+    }?.metrics
     Column(Modifier.width(268.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState())) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -539,9 +641,21 @@ private fun InfoPanel() {
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
             Txt("LIVE METRICS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
-            Meter("CPU", "34%", 0.34f, D.cyan, D.textBright, mono)
-            Meter("Memory", "2.1 / 4 GB", 0.52f, D.moss, D.textBright, mono)
-            Meter("Disk /", "87%", 0.87f, D.sunset, D.sunset, mono)
+            if (!live) {
+                // Мок-путь (превью/офскрин): статичные значения макета.
+                Meter("CPU", "34%", 0.34f, D.cyan, D.textBright, mono)
+                Meter("Memory", "2.1 / 4 GB", 0.52f, D.moss, D.textBright, mono)
+                Meter("Disk /", "87%", 0.87f, D.sunset, D.sunset, mono)
+            } else {
+                // Живой опрос ресурсов сессии (контроллер поднят выше). До первого удачного
+                // опроса (или на не-Linux хосте) — «…».
+                val m = liveMetrics
+                val cpu = m?.cpuPercent
+                Meter("CPU", cpu?.let { "$it%" } ?: "…", m?.cpuFraction ?: 0f, D.cyan, if ((cpu ?: 0) > 85) D.sunset else D.textBright, mono)
+                Meter("Memory", m?.let { "${gb(it.memUsedBytes)} / ${gb(it.memTotalBytes)} GB" } ?: "…", m?.memFraction ?: 0f, D.moss, D.textBright, mono)
+                val disk = m?.diskPercent
+                Meter("Disk /", disk?.let { "$it%" } ?: "…", m?.diskFraction ?: 0f, if ((disk ?: 0) > 85) D.sunset else D.cyan, if ((disk ?: 0) > 85) D.sunset else D.textBright, mono)
+            }
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             Txt("SYSTEM", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
@@ -567,6 +681,12 @@ private fun Meter(label: String, value: String, fraction: Float, bar: Color, val
         }
         MeterBar(fraction, bar)
     }
+}
+
+/** Байты → строка гигабайт с одним знаком после запятой (десятичные ГБ, как в free -h). */
+private fun gb(bytes: Long): String {
+    val rounded = (bytes / 1_000_000_000.0 * 10).roundToInt() / 10.0
+    return rounded.toString()
 }
 
 // ──────────────────────────────── AI bar ────────────────────────────────

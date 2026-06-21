@@ -104,11 +104,14 @@ fun NewConnectionModal(state: DesktopDesignState) {
                         Txt("add tag…", color = D.faint, size = 12.5.sp)
                     }
                 }
-                Spacer14()
-                Field("AI policy for this connection") {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        POLICY_OPTIONS.forEach { opt ->
-                            PolicyRow(opt, selected = state.modalPolicy == opt.policy, onClick = { state.choosePolicy(opt.policy) })
+                // Выбор AI-политики — фича MVP2 за фича-флагом; в MVP1 (дефолт) его в форме нет.
+                if (LocalFeatures.current.ai) {
+                    Spacer14()
+                    Field("AI policy for this connection") {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            POLICY_OPTIONS.forEach { opt ->
+                                PolicyRow(opt, selected = state.modalPolicy == opt.policy, onClick = { state.choosePolicy(opt.policy) })
+                            }
                         }
                     }
                 }

@@ -47,15 +47,19 @@ fun SettingsPanel(state: DesktopDesignState) {
                 .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
                 .clickable(interactionSource = noop, indication = null, onClick = {}),
         ) {
+            // AI — фича MVP2 за фича-флагом: при выключенном флаге таб «AI» скрыт из nav, а выбор
+            // (дефолт state.settingsTab = AI, как в прототипе) безопасно проецируется на Account.
+            val features = LocalFeatures.current
+            val effectiveTab = if (state.settingsTab == SettingsTab.AI && !features.ai) SettingsTab.Account else state.settingsTab
             Column(Modifier.width(200.dp).fillMaxHeight().background(Color(0x33000000)).padding(horizontal = 8.dp, vertical = 16.dp)) {
                 Txt("SETTINGS", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
-                SETTINGS_NAV.forEach { item ->
-                    NavRow(item, active = state.settingsTab == item.tab, onClick = { state.showSettingsTab(item.tab) })
+                SETTINGS_NAV.filter { features.ai || it.tab != SettingsTab.AI }.forEach { item ->
+                    NavRow(item, active = effectiveTab == item.tab, onClick = { state.showSettingsTab(item.tab) })
                 }
             }
             VLine(D.line)
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 26.dp, vertical = 22.dp)) {
-                when (state.settingsTab) {
+                when (effectiveTab) {
                     SettingsTab.AI -> AiSection(state)
                     SettingsTab.Appearance -> AppearanceSection()
                     SettingsTab.Terminal -> TerminalSection()

@@ -49,7 +49,17 @@ class SessionsController(
     var activeId: String? by mutableStateOf(null)
         private set
 
+    /**
+     * Вторая сессия, показываемая рядом в split-панели терминала (focus-модель: пользователь сам
+     * назначает её через пикер). `null` — split-панель пуста. Может совпадать с активной либо
+     * указывать на любую открытую сессию; сбрасывается, когда выбранная сессия закрывается.
+     */
+    var splitId: String? by mutableStateOf(null)
+        private set
+
     val active: Session? get() = sessions.firstOrNull { it.id == activeId }
+
+    val split: Session? get() = sessions.firstOrNull { it.id == splitId }
 
     /**
      * Открыть новую сессию к [target] и сделать её активной; подключение стартует сразу.
@@ -69,11 +79,20 @@ class SessionsController(
         if (sessions.any { it.id == id }) activeId = id
     }
 
+    /**
+     * Назначить сессию [id] в split-панель (или `null`, чтобы очистить её). Неизвестный id
+     * игнорируется — в панель нельзя поставить несуществующую сессию.
+     */
+    fun setSplit(id: String?) {
+        if (id == null || sessions.any { it.id == id }) splitId = id
+    }
+
     /** Закрыть сессию [id]: разорвать соединение, убрать вкладку, при необходимости выбрать соседа. */
     fun close(id: String) {
         val index = sessions.indexOfFirst { it.id == id }
         if (index < 0) return
         sessions[index].controller.disconnect()
+        if (splitId == id) splitId = null
         val remaining = sessions.toMutableList().apply { removeAt(index) }
         if (activeId == id) {
             // Сосед справа сместился на освободившийся индекс; иначе берём слева, иначе пусто.
@@ -91,5 +110,6 @@ class SessionsController(
         sessions.forEach { it.controller.disconnect() }
         sessions = emptyList()
         activeId = null
+        splitId = null
     }
 }

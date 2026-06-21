@@ -217,6 +217,32 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `openMetrics caches one controller for one session`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(target, SshAuth.Password("pw"))
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        // Кэш на соединение: info-панель переживает переключение вкладок, повторный вызов отдаёт
+        // тот же контроллер (и тот же polling job), а не поднимает второй.
+        val first = controller.openMetrics()
+        val second = controller.openMetrics()
+
+        assertSame(first, second)
+        controller.disconnect()
+        scope.cancel()
+    }
+
+    @Test
+    fun `openMetrics without a live connection fails`() = runTest {
+        val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))
+        assertEquals(ConnectionUiState.Form, controller.uiState)
+
+        assertFailsWith<IllegalStateException> { controller.openMetrics() }
+        scope.cancel()
+    }
+
+    @Test
     fun `dismissError returns to Form`() = runTest {
         val (controller, scope) = controllerWith(FakeSshTransport(error = SshAuthenticationException("x")))
         controller.connect(target, SshAuth.Password("pw"))

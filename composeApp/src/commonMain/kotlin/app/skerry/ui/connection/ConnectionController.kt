@@ -11,6 +11,7 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
 import app.skerry.ui.forward.PortForwardController
+import app.skerry.ui.metrics.HostMetricsController
 import app.skerry.ui.sftp.SftpController
 import app.skerry.ui.terminal.TerminalScreenState
 import kotlinx.coroutines.CoroutineScope
@@ -71,6 +72,7 @@ class ConnectionController(
     private var sftpClient: SftpClient? = null
     private var sftpController: SftpController? = null
     private val sftpMutex = Mutex()
+    private var metrics: HostMetricsController? = null
 
     fun connect(target: SshTarget, auth: SshAuth) {
         // Стартуем только из формы: пока идёт подключение или есть открытая сессия,
@@ -146,6 +148,20 @@ class ConnectionController(
         }
     }
 
+    /**
+     * Контроллер live-метрик хоста этой сессии — один на соединение, создаётся лениво и кэшируется
+     * (как [openPortForwards]/[openSftpController]), опрос гоняется на [scope] сессии и стартует
+     * сразу. Останавливается в [disconnect] вместе с сессией.
+     * @throws IllegalStateException сессия не подключена (нет живого соединения)
+     */
+    fun openMetrics(): HostMetricsController {
+        val conn = connection ?: error("Нет активного соединения для метрик")
+        return metrics ?: HostMetricsController(
+            exec = { cmd -> conn.exec(cmd) },
+            scope = scope,
+        ).also { it.start(); metrics = it }
+    }
+
     /** Закрыть сессию (если есть) и вернуться к форме. */
     fun disconnect() {
         connectJob?.cancel()
@@ -156,6 +172,8 @@ class ConnectionController(
         val sftp = sftpClient
         sftpClient = null
         sftpController = null
+        metrics?.stop()
+        metrics = null
         sessionScope?.cancel()
         sessionScope = null
         connection = null
