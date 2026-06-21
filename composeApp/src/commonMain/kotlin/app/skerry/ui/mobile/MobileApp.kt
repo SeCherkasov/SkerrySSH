@@ -175,7 +175,7 @@ private fun MobileRoot(deps: AppDependencies, onLock: (() -> Unit)?) {
                     )
                     MobileTab.Terminal -> TerminalTab(sessions, onGoHosts = { tab = MobileTab.Hosts })
                     MobileTab.Files -> FilesTab(sessions, scope, onGoHosts = { tab = MobileTab.Hosts })
-                    MobileTab.Forwards -> ForwardsTab(sessions, scope, onGoHosts = { tab = MobileTab.Hosts })
+                    MobileTab.Forwards -> ForwardsTab(sessions, onGoHosts = { tab = MobileTab.Hosts })
                     MobileTab.Keys -> KeysScreen(deps.identities)
                     MobileTab.Settings -> SettingsScreen(deps, onLock)
                 }
@@ -515,13 +515,13 @@ private fun FilesTab(sessions: SessionsController?, scope: CoroutineScope, onGoH
 
 /**
  * Вкладка Forwards: проброс портов (`-L`/`-R`) активной сессии. Туннели поднимает общий с desktop
- * [PortForwardController] через `ConnectionController.openPortForwards()`. [scope] — долгоживущий
- * scope [MobileRoot]: `closeAll` в `onDispose` снимает все туннели при уходе сессии из композиции.
- * В отличие от desktop (горизонтальная форма-`Row`), на телефоне параметры вводятся в нижнем листе
- * [AddForwardSheet], а список занимает весь экран.
+ * [PortForwardController] через `ConnectionController.openPortForwards()`; он живёт на внутреннем
+ * scope сессии, поэтому туннели переживают переключение вкладок, а `disconnectAll` ([MobileRoot])
+ * снимает их через `disconnect`. В отличие от desktop (горизонтальная форма-`Row`), на телефоне
+ * параметры вводятся в нижнем листе [AddForwardSheet], а список занимает весь экран.
  */
 @Composable
-private fun ForwardsTab(sessions: SessionsController?, scope: CoroutineScope, onGoHosts: () -> Unit) {
+private fun ForwardsTab(sessions: SessionsController?, onGoHosts: () -> Unit) {
     val active = sessions?.active
     if (sessions == null || active == null) {
         EmptyCenter(SkerryIconKind.Forward, "Нет активных сессий", "Подключитесь к хосту, чтобы настроить проброс")
@@ -558,7 +558,7 @@ private fun ForwardsTab(sessions: SessionsController?, scope: CoroutineScope, on
                 // Контроллер пробросов живёт на самой сессии (ConnectionController владеет им и
                 // снимает все туннели в disconnect), поэтому пробросы переживают переключение
                 // вкладок и не рвутся при уходе с этой вкладки.
-                val forwards = remember(active.controller) { active.controller.openPortForwards(scope) }
+                val forwards = remember(active.controller) { active.controller.openPortForwards() }
                 MobileForwardList(forwards, mono, Modifier.weight(1f).fillMaxWidth())
             }
             is ConnectionUiState.Error -> Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {

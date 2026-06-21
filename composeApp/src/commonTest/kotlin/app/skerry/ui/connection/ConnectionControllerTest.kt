@@ -200,8 +200,8 @@ class ConnectionControllerTest {
 
         // Кэш на соединение: туннели должны пережить переключение вкладок UI, поэтому каждый
         // openPortForwards возвращает один и тот же контроллер, а не новый.
-        val first = controller.openPortForwards(scope)
-        val second = controller.openPortForwards(scope)
+        val first = controller.openPortForwards()
+        val second = controller.openPortForwards()
 
         assertSame(first, second)
         scope.cancel()
@@ -212,7 +212,7 @@ class ConnectionControllerTest {
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))
         assertEquals(ConnectionUiState.Form, controller.uiState)
 
-        assertFailsWith<IllegalStateException> { controller.openPortForwards(scope) }
+        assertFailsWith<IllegalStateException> { controller.openPortForwards() }
         scope.cancel()
     }
 

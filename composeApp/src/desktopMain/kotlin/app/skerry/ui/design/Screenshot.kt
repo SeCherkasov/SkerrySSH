@@ -23,6 +23,7 @@ import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
@@ -31,9 +32,12 @@ import app.skerry.ui.theme.SkerryTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -131,6 +135,19 @@ private fun seededSessions(hosts: HostManagerController): SessionsController {
     sessions.open(h.id, h.label, h.connectionSubtitle(), h.toTarget(), SshAuth.Password(""))
     hosts.hosts.getOrNull(1)?.let { h2 -> sessions.open(h2.id, h2.label, h2.connectionSubtitle(), h2.toTarget(), SshAuth.Password("")) }
     sessions.activate(sessions.sessions.first().id)
+    // Засеять пробросы на активной сессии для живого скриншота вкладки Tunnels: ждём, пока fake-
+    // соединение поднимется (connect идёт асинхронно), затем поднимаем -L/-R/-D тем же путём, что и
+    // UI (PortForwardController). Фейковый форвард сразу Active.
+    val ctrl = sessions.sessions.first().controller
+    scope.launch {
+        // uiState — Compose snapshot-стейт; ждём перехода в Connected через snapshotFlow (а не
+        // busy-spin), чтобы корректно подписаться на снапшот-систему и не крутить CPU.
+        snapshotFlow { ctrl.uiState }.first { it is ConnectionUiState.Connected }
+        val pf = ctrl.openPortForwards()
+        pf.addLocal(bindPort = 0, destHost = "10.0.0.5", destPort = 80)
+        pf.addRemote(bindPort = 9000, destHost = "localhost", destPort = 3000)
+        pf.addDynamic(bindPort = 1080)
+    }
     return sessions
 }
 
@@ -144,10 +161,16 @@ private class FakeConnection(private val target: SshTarget) : SshConnection {
     override suspend fun exec(command: String): ExecResult = ExecResult(0, "", "")
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = FakeChannel(target)
     override suspend fun openSftp(): SftpClient = FakeSftpClient()
-    override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = error("fake: no forward")
-    override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = error("fake: no forward")
-    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = error("fake: no forward")
+    override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = FakePortForward(if (spec.bindPort != 0) spec.bindPort else 50080)
+    override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = FakePortForward(if (spec.bindPort != 0) spec.bindPort else 9000)
+    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = FakePortForward(if (spec.bindPort != 0) spec.bindPort else 1080)
     override suspend fun disconnect() {}
+}
+
+/** Фейковый проброс: сразу «активен», порт echo'ится из spec — для офскрин-рендера таблицы туннелей. */
+private class FakePortForward(override val boundPort: Int) : PortForward {
+    override val isActive: Boolean = true
+    override suspend fun close() = Unit
 }
 
 private class FakeChannel(target: SshTarget) : ShellChannel {

@@ -555,7 +555,7 @@ private fun MainArea(
                         // и снимает туннели в disconnect), поэтому пробросы переживают и переключение
                         // вида, и переключение между вкладками-сессиями — рвутся только при закрытии.
                         val forwards = remember(activeSession.controller) {
-                            activeSession.controller.openPortForwards(sftpScope)
+                            activeSession.controller.openPortForwards()
                         }
 
                         DesktopSessionBar(
