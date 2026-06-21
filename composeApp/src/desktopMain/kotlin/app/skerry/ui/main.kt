@@ -1,7 +1,14 @@
 package app.skerry.ui
 
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
+import app.skerry.ui.design.optimalWindowSize
+import java.awt.GraphicsEnvironment
 import app.skerry.shared.host.FileHostStore
 import app.skerry.shared.ssh.FileKnownHostsStore
 import app.skerry.shared.ssh.SshjTransport
@@ -65,8 +72,16 @@ fun main() {
         // Переиспользуемые секреты (identity) хранятся в том же vault как записи IDENTITY.
         val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
         val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities)
+        // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
+        // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
+        val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+        val windowState = rememberWindowState(
+            size = optimalWindowSize(DpSize(screen.width.dp, screen.height.dp)),
+            position = WindowPosition(Alignment.Center),
+        )
         Window(
             onCloseRequest = ::exitApplication,
+            state = windowState,
             title = "Skerry",
         ) {
             // Десктопный UI — точная реализация макета docs/new/Skerry.html (визуальный слой).
