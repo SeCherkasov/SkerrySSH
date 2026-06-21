@@ -88,6 +88,22 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `tracks application cursor keys mode from emulator`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar().toString()
+
+        assertEquals(false, state.applicationCursorKeys)
+        session.emit("$esc[?1h".encodeToByteArray()) // DECCKM on (vim/less)
+        assertEquals(true, state.applicationCursorKeys)
+        session.emit("$esc[?1l".encodeToByteArray()) // DECCKM off
+        assertEquals(false, state.applicationCursorKeys)
+        scope.cancel()
+    }
+
+    @Test
     fun `selection over screen yields the spanned text`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

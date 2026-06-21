@@ -47,3 +47,28 @@ fun mobileConnectAction(existing: ConnectionUiState?): MobileConnectAction =
  * Возвращает строку из одного символа для отправки в PTY ([app.skerry.ui.terminal.TerminalScreenState.send]).
  */
 fun controlByte(c: Char): String = (c.uppercaseChar().code and 0x1F).toChar().toString()
+
+/**
+ * Применяет sticky-ctrl к строке, введённой с софт-клавиатуры (IME-путь терминала: текст снимается
+ * скрытым полем мимо клавишной панели). Если ctrl армирован и ввод непустой — ПЕРВЫЙ символ кодируется
+ * как Ctrl+<символ> ([controlByte]), остаток уходит как есть; модификатор действует на одно нажатие,
+ * как на физической клавиатуре (снятие делает вызывающий, увидев тот же предикат). Без армирования
+ * или на пустом вводе — строка без изменений.
+ */
+fun applyStickyCtrl(armed: Boolean, input: String): String =
+    if (armed && input.isNotEmpty()) controlByte(input[0]) + input.substring(1) else input
+
+/** Клавиша-стрелка клавишной панели терминала; [finalByte] — финальный символ её escape-кода. */
+enum class ArrowKey(val finalByte: Char) { Up('A'), Down('B'), Right('C'), Left('D') }
+
+/** ESC (0x1B) — задан кодом, чтобы не быть невидимым управляющим байтом в исходнике (Read/grep). */
+private val ESC: String = 27.toChar().toString()
+
+/**
+ * Escape-последовательность клавиши-стрелки для PTY с учётом DECCKM (application-cursor-keys,
+ * [app.skerry.ui.terminal.TerminalScreenState.applicationCursorKeys]). В нормальном режиме —
+ * CSI (`ESC[A`); когда полноэкранная программа (vim/less) включила application-режим через `ESC[?1h` —
+ * SS3 (`ESC O A`). Чистая и тестируемая: панель читает текущий режим сессии и зовёт эту функцию.
+ */
+fun arrowSequence(key: ArrowKey, applicationCursor: Boolean): String =
+    (if (applicationCursor) ESC + "O" else ESC + "[") + key.finalByte

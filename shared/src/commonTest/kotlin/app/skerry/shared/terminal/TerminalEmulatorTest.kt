@@ -107,6 +107,32 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `application cursor keys mode off by default`() {
+        assertTrue(!TerminalEmulator().applicationCursorKeys)
+    }
+
+    @Test
+    fun `decckm set and reset toggles application cursor keys`() {
+        // ESC[?1h включает application-cursor-keys (vim/less), ESC[?1l возвращает в нормальный режим.
+        val emu = emulate("${esc}[?1h")
+        assertTrue(emu.applicationCursorKeys)
+        emu.feed("${esc}[?1l".encodeToByteArray())
+        assertTrue(!emu.applicationCursorKeys)
+    }
+
+    @Test
+    fun `decckm does not affect printed text`() {
+        assertEquals("ok", emulate("${esc}[?1hok").asText())
+    }
+
+    @Test
+    fun `unrelated private mode does not arm application cursor keys`() {
+        // 1049 (alt-screen) и 2004 (bracketed paste) не должны трогать DECCKM.
+        val emu = emulate("${esc}[?1049h${esc}[?2004h")
+        assertTrue(!emu.applicationCursorKeys)
+    }
+
+    @Test
     fun `utf8 multibyte split across feeds decodes to one cell`() {
         val emu = TerminalEmulator()
         emu.feed(byteArrayOf(0xD0.toByte()))

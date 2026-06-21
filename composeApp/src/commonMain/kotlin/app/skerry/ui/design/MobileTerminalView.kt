@@ -59,8 +59,8 @@ private const val ESC = "\u001b"
  *
  * Сессию открывает Connect на [MobileHostDetailScreen] (через `LocalConnectHost`); back-стрелка лишь
  * возвращает на список (сессия остаётся живой), а Disconnect в меню `more_horiz` рвёт её и закрывает
- * экран. AI-bar/AI-карточки макета спрятаны за [FeatureFlags.ai] (Phase 2). Split (иконка `splitscreen`)
- * — задел макета, на телефоне отложен (показывается, без действия).
+ * экран. AI-bar/AI-карточки макета спрятаны за [FeatureFlags.ai] (Phase 2). Split-режим на телефоне
+ * не нужен (решение пользователя 2026-06-22) — иконка `splitscreen` из шапки убрана.
  */
 @Composable
 fun MobileTerminalScreen(state: MobileDesignState) {
@@ -70,6 +70,22 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // возвращает на список — back-стрелка сессию оставляет живой, Disconnect её закрывает.
     val onDisconnect = remember(active?.id, sessions) {
         active?.let { s -> { sessions.close(s.id); state.pop() } }
+    }
+    // sticky-ctrl поднят на уровень экрана, чтобы армирование клавишной панели влияло И на ввод с
+    // софт-клавиатуры (IME-путь идёт мимо панели). Сбрасывается при смене сессии.
+    var ctrlArmed by remember(active?.id) { mutableStateOf(false) }
+    // Колбэки стабилизированы remember'ом (ключ — сессия), иначе свежая лямбда на каждый PTY-чанк
+    // перерисовывала бы клавишную панель/терминал зря. `ctrlArmed` — compose-state, поэтому тело
+    // лямбды видит его живое значение даже сквозь remember.
+    val setCtrlArmed = remember(active?.id) { { v: Boolean -> ctrlArmed = v } }
+    val imeTransform = remember(active?.id) {
+        { raw: String ->
+            // Армированный ctrl применяется к первому символу с софт-клавиатуры и тут же снимается
+            // (raw здесь всегда непуст — TerminalScreen зовёт imeTransform только на реальном вводе).
+            val out = applyStickyCtrl(ctrlArmed, raw)
+            if (ctrlArmed) ctrlArmed = false
+            out
+        }
     }
     Column(Modifier.fillMaxSize().background(D.terminalBg)) {
         MobileTerminalHeader(
@@ -84,8 +100,13 @@ fun MobileTerminalScreen(state: MobileDesignState) {
             ConnectionUiState.Connecting ->
                 MobileTerminalNotice("sync", "Connecting…", active.subtitle)
             is ConnectionUiState.Connected -> {
-                TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth(), imeInput = true)
-                MobileKeybar(st.terminal)
+                TerminalScreen(
+                    st.terminal,
+                    Modifier.weight(1f).fillMaxWidth(),
+                    imeInput = true,
+                    imeTransform = imeTransform,
+                )
+                MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
             }
             is ConnectionUiState.Error ->
                 MobileTerminalNotice("error", "Connection failed", st.message, color = D.sunset)
@@ -95,8 +116,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
 
 /**
  * Шапка терминала по моку (`#0B1A26` + нижняя cyan-линия): back-шеврон, имя хоста + статус-строка,
- * иконки split (задел) и `more_horiz` (меню с Disconnect). [onDisconnect]==null — нет активной
- * сессии, пункт Disconnect скрыт.
+ * иконка `more_horiz` (меню с Disconnect). [onDisconnect]==null — нет активной сессии, пункт
+ * Disconnect скрыт. Split-иконка макета на телефоне убрана (split не нужен).
  */
 @Composable
 private fun MobileTerminalHeader(
@@ -133,8 +154,6 @@ private fun MobileTerminalHeader(
                     Txt(mobileTerminalStatusText(status), color = sessionDotColor(status), size = 10.5.sp)
                 }
             }
-            // Split — задел макета, на телефоне отложен (иконка без действия).
-            Sym("splitscreen", size = 21.sp, color = D.dim)
             Box {
                 Sym(
                     "more_horiz",
@@ -193,22 +212,27 @@ private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, 
 /**
  * Клавишная панель спецклавиш (`#0E1A24`, горизонтальный скролл) — сердце мобильного SSH-UX из мока:
  * esc, tab, ctrl (sticky-модификатор), /, |, -, ~, стрелки. Управляющие последовательности уходят в
- * PTY через [TerminalScreenState.send]. `ctrl` армируется тапом (подсветка cyan) и применяется к
- * следующей символьной клавише панели ([controlByte]); полноценный Ctrl+<буква> с софт-клавиатуры —
- * отдельный шаг (нужен хук IME-пути терминала).
+ * PTY через [TerminalScreenState.send]. `ctrl` армируется тапом (подсветка cyan): [ctrlArmed] поднят
+ * в [MobileTerminalScreen], поэтому применяется и к символьным клавишам панели ([controlByte]), и к
+ * вводу с софт-клавиатуры ([applyStickyCtrl] в IME-пути). Стрелки кодируются с учётом DECCKM-режима
+ * сессии ([arrowSequence]): CSI в норме, SS3 в application-cursor (vim/less).
  */
 @Composable
-private fun MobileKeybar(terminal: TerminalScreenState) {
-    var ctrlArmed by remember { mutableStateOf(false) }
-    val plain = { seq: String -> terminal.send(seq); ctrlArmed = false }
+private fun MobileKeybar(
+    terminal: TerminalScreenState,
+    ctrlArmed: Boolean,
+    onCtrlArmedChange: (Boolean) -> Unit,
+) {
+    val plain = { seq: String -> terminal.send(seq); onCtrlArmedChange(false) }
     val char = { c: String ->
         if (ctrlArmed && c.length == 1) {
             terminal.send(controlByte(c[0]))
-            ctrlArmed = false
+            onCtrlArmedChange(false)
         } else {
             terminal.send(c)
         }
     }
+    val arrow = { key: ArrowKey -> plain(arrowSequence(key, terminal.applicationCursorKeys)) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -221,15 +245,15 @@ private fun MobileKeybar(terminal: TerminalScreenState) {
         KeyCap("esc") { plain(ESC) }
         KeyCap("tab") { plain("\t") }
         // ctrl — спец-клавиша макета (всегда cyan); армирование заливает её сплошным cyan.
-        KeyCap("ctrl", accent = true, active = ctrlArmed) { ctrlArmed = !ctrlArmed }
+        KeyCap("ctrl", accent = true, active = ctrlArmed) { onCtrlArmedChange(!ctrlArmed) }
         KeyCap("/") { char("/") }
         KeyCap("|") { char("|") }
         KeyCap("-") { char("-") }
         KeyCap("~") { char("~") }
-        KeyCapIcon("keyboard_arrow_up") { plain(ESC + "[A") }
-        KeyCapIcon("keyboard_arrow_down") { plain(ESC + "[B") }
-        KeyCapIcon("keyboard_arrow_left") { plain(ESC + "[D") }
-        KeyCapIcon("keyboard_arrow_right") { plain(ESC + "[C") }
+        KeyCapIcon("keyboard_arrow_up") { arrow(ArrowKey.Up) }
+        KeyCapIcon("keyboard_arrow_down") { arrow(ArrowKey.Down) }
+        KeyCapIcon("keyboard_arrow_left") { arrow(ArrowKey.Left) }
+        KeyCapIcon("keyboard_arrow_right") { arrow(ArrowKey.Right) }
     }
 }
 
