@@ -114,6 +114,9 @@ private fun MobileChrome(state: MobileDesignState, onLock: (() -> Unit)?) {
         if (state.showTabs) {
             MobileTabBar(state, Modifier.align(Alignment.BottomCenter))
         }
+        if (state.sheetNewConn) {
+            MobileNewConnectionSheet(state)
+        }
     }
 }
 

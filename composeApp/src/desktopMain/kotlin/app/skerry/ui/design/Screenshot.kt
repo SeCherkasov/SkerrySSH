@@ -66,7 +66,7 @@ fun main() {
 
     // Телефонный макет: рендерим MobileDesignApp в узкой сцене. view=MobileTab (по умолчанию Hosts).
     if (System.getProperty("skerry.screenshot.device", "desktop") == "mobile") {
-        renderMobile(out, viewName, live); return
+        renderMobile(out, viewName, overlay, live); return
     }
 
     val state = DesktopDesignState()
@@ -111,7 +111,7 @@ fun main() {
  * `screenshotDesign` со свойством `skerry.screenshot.device=mobile`.
  */
 @OptIn(ExperimentalComposeUiApi::class)
-private fun renderMobile(out: String, viewName: String, live: Boolean) {
+private fun renderMobile(out: String, viewName: String, overlay: String, live: Boolean) {
     val state = MobileDesignState()
     val deps = if (live) AppDependencies(hosts = seededHosts()) else AppDependencies()
     // view — имя MobileTab (корневой) либо MobileRoute (push-экран). HostDetail открывается на первом
@@ -128,6 +128,7 @@ private fun renderMobile(out: String, viewName: String, live: Boolean) {
             }
         }
     }
+    if (overlay == "sheet") state.openNewConn() // лист New connection поверх текущего таба
     // ширина/высота сцены — в ПИКСЕЛЯХ: 780×1688 при density 2 = логические 390×844dp (телефон).
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
         SkerryTheme { MobileDesignApp(deps = deps, state = state) }
