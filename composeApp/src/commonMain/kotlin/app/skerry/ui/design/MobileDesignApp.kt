@@ -165,7 +165,7 @@ private fun MobileChrome(
                 if (route != null) {
                     MobileRoutePane(state, route)
                 } else {
-                    MobileTabPane(state)
+                    MobileTabPane(state, onLock)
                 }
             }
             if (state.showTabs) {
@@ -200,14 +200,15 @@ private fun openMobileSession(sessions: SessionsController?, state: MobileDesign
 // ──────────────────────────────── контент (плейсхолдеры слайса 1) ────────────────────────────────
 
 /**
- * Корневой экран текущего таба. Hosts реализован 1:1 ([MobileHostsScreen], слайс 2); остальные —
- * заголовок макета (28sp) + плейсхолдер, тело придёт со слайсом раздела.
+ * Корневой экран текущего таба. Hosts/Files/More реализованы 1:1 (слайсы 2/4/5); Snippets/Vault —
+ * заголовок макета (28sp) + плейсхолдер (Phase 2/позже). [onLock] прокидывается в хаб More («Lock Skerry»).
  */
 @Composable
-private fun MobileTabPane(state: MobileDesignState) {
+private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
     when (state.tab) {
         MobileTab.Hosts -> MobileHostsScreen(state)
         MobileTab.Files -> MobileFilesScreen()
+        MobileTab.More -> MobileMoreScreen(state, onLock)
         else -> MobileTabPlaceholder(state.tab)
     }
 }
@@ -237,7 +238,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
     when (route) {
         MobileRoute.HostDetail -> MobileHostDetailScreen(state)
         MobileRoute.Terminal -> MobileTerminalScreen(state)
-        MobileRoute.Ports -> MobileRoutePlaceholder(state, "Port forwarding")
+        MobileRoute.Ports -> MobilePortsScreen(state)
         MobileRoute.Known -> MobileRoutePlaceholder(state, "Known hosts")
         MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")
     }
