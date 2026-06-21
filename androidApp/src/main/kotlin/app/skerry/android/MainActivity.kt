@@ -17,7 +17,7 @@ import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
-import app.skerry.ui.mobile.MobileApp
+import app.skerry.ui.design.MobileDesignApp
 import app.skerry.ui.sftp.SafBridge
 import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
@@ -65,7 +65,7 @@ class MainActivity : FragmentActivity() {
         runBlocking { initializeVaultCrypto() }
 
         val deps = buildDependencies()
-        setContent { MobileApp(deps) }
+        setContent { MobileDesignApp(deps) }
     }
 
     private fun buildDependencies(): AppDependencies {
