@@ -5,12 +5,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.PtySize
+import app.skerry.shared.terminal.MouseButton
+import app.skerry.shared.terminal.MouseEventType
+import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TerminalEmulator
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.shared.terminal.bracketedPasteWrap
+import app.skerry.shared.terminal.encodeMouseReport
+import app.skerry.shared.terminal.lineSelectionAt
 import app.skerry.shared.terminal.wordSelectionAt
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +65,26 @@ class TerminalScreenState(
      * при кодировании стрелок ([app.skerry.ui.design.arrowSequence]).
      */
     var applicationCursorKeys: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Режим репортинга мыши, снятый с эмулятора (DEC 1000/1002/1003 + X10). Когда не [MouseTracking.Off],
+     * приложение само обрабатывает мышь: UI шлёт ему события вместо локального выделения (если не
+     * зажат Shift, который форсит локальное выделение по xterm-конвенции).
+     */
+    var mouseTracking: MouseTracking by mutableStateOf(MouseTracking.Off)
+        private set
+
+    /** SGR-кодировка мыши (DEC 1006) — выбирает формат отчётов в [reportMouse]. */
+    var mouseSgr: Boolean by mutableStateOf(false)
+        private set
+
+    /** Bracketed-paste (DEC 2004): когда включён, [paste] оборачивает вставку маркерами. */
+    var bracketedPaste: Boolean by mutableStateOf(false)
+        private set
+
+    /** Активен альтернативный буфер (полноэкранные TUI): без своего scrollback, колесо ≠ прокрутке. */
+    var altScreen: Boolean by mutableStateOf(false)
         private set
 
     /**
@@ -115,6 +141,10 @@ class TerminalScreenState(
         cursorRow = emulator.cursorRow
         cursorCol = emulator.cursorCol
         applicationCursorKeys = emulator.applicationCursorKeys
+        mouseTracking = emulator.mouseTracking
+        mouseSgr = emulator.mouseSgr
+        bracketedPaste = emulator.bracketedPaste
+        altScreen = emulator.altScreen
     }
 
     /** Начать выделение в позиции [pos] (нажатие мыши): якорь и фокус совпадают — пока пусто. */
@@ -133,6 +163,11 @@ class TerminalScreenState(
      */
     fun selectWordAt(pos: TerminalPos) {
         selection = wordSelectionAt(screen, pos).takeIf { !it.isEmpty }
+    }
+
+    /** Выделить целую строку под [pos] — для тройного клика мышью ([lineSelectionAt]). */
+    fun selectLineAt(pos: TerminalPos) {
+        selection = lineSelectionAt(screen, pos).takeIf { !it.isEmpty }
     }
 
     /**
@@ -165,6 +200,39 @@ class TerminalScreenState(
     /** Отправить введённый текст в PTY (fire-and-forget в [scope]). */
     fun send(text: String) {
         scope.launch { session.send(text.encodeToByteArray()) }
+    }
+
+    /**
+     * Отправить сырые байты в PTY (fire-and-forget). Нужен для отчётов мыши: в legacy-кодировке
+     * байты могут выходить за 0x7f и не должны прогоняться через UTF-8, как делает [send].
+     */
+    fun sendBytes(bytes: ByteArray) {
+        scope.launch { session.send(bytes) }
+    }
+
+    /**
+     * Закодировать событие мыши под текущий режим/кодировку эмулятора и отправить в PTY. Возвращает
+     * `true`, если отчёт был отправлен (событие репортится в активном режиме), иначе `false` —
+     * вызывающий тогда может обработать событие локально. No-op без репортинга мыши.
+     */
+    fun reportMouse(
+        button: MouseButton,
+        type: MouseEventType,
+        pos: TerminalPos,
+        shift: Boolean = false,
+        alt: Boolean = false,
+        ctrl: Boolean = false,
+    ): Boolean {
+        val bytes = encodeMouseReport(mouseTracking, mouseSgr, button, type, pos.col, pos.row, shift, alt, ctrl)
+            ?: return false
+        sendBytes(bytes)
+        return true
+    }
+
+    /** Вставить текст из буфера: при включённом bracketed-paste оборачивает маркерами (DEC 2004). */
+    fun paste(text: String) {
+        if (text.isEmpty()) return
+        send(bracketedPasteWrap(text, bracketedPaste))
     }
 
     /**

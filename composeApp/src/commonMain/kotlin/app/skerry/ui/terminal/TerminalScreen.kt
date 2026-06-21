@@ -41,7 +41,15 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isAltPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -69,17 +77,28 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.terminal.MouseButton
+import app.skerry.shared.terminal.MouseEventType
+import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermColor
 import app.skerry.shared.terminal.TermStyle
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.ui.design.ArrowKey
+import app.skerry.ui.design.arrowSequence
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.jetbrainsmono_bold
 import app.skerry.ui.generated.resources.jetbrainsmono_regular
 import app.skerry.ui.theme.SkerryColors
 import org.jetbrains.compose.resources.Font
+
+/** Порог между кликами (мс), в пределах которого они складываются в двойной/тройной. */
+private const val DOUBLE_CLICK_MS = 350
 
 private const val FONT_SIZE_SP = 13
 private const val LINE_HEIGHT_SP = 18
@@ -150,6 +169,12 @@ fun TerminalScreen(
     // сфокусированном скрытом поле — no-op (после скрытия фокус остаётся, клавиатура не всплывает).
     val keyboard = LocalSoftwareKeyboardController.current
     var layoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    // Подсчёт кликов мышью для двойного (слово) / тройного (строка) выделения: запоминаем время и
+    // позицию предыдущего клика; повтор в той же ячейке за порог времени наращивает счётчик.
+    var clickCount by remember { mutableStateOf(0) }
+    var lastClickMark by remember { mutableStateOf<TimeMark?>(null) }
+    var lastClickPos by remember { mutableStateOf<TerminalPos?>(null) }
 
     // Размер моноширинной ячейки в пикселях — фолбэк-перевод координат мыши в ячейку до того, как
     // придёт реальный лэйаут текста ([layout]). Точные позиции (подсветка/маркеры/хит-тест) берём
@@ -279,6 +304,13 @@ fun TerminalScreen(
                     copySelection()
                     return@onPreviewKeyEvent true
                 }
+                // Ctrl+Shift+V и Shift+Insert — вставка из буфера обмена (bracketed-paste, если приложение включило).
+                if ((event.isCtrlPressed && event.isShiftPressed && event.key == Key.V) ||
+                    (event.isShiftPressed && event.key == Key.Insert)
+                ) {
+                    clipboard.getText()?.text?.let { state.paste(it) }
+                    return@onPreviewKeyEvent true
+                }
                 val bytes = mapTerminalKey(
                     key = event.key,
                     ctrl = event.isCtrlPressed,
@@ -298,20 +330,152 @@ fun TerminalScreen(
             }
             .focusable()
             .onGloballyPositioned { layoutCoords = it }
+            // Колесо мыши: когда приложение слушает мышь — шлём wheel-отчёт; в alt-screen без
+            // mouse-tracking (less/man) — стрелки (3 строки за «щелчок»), т.к. своего scrollback нет.
+            // Перехватываем в Initial-проходе и гасим событие, чтобы verticalScroll не дёргал scrollback;
+            // иначе (основной буфер, без репортинга) пропускаем — колесо листает scrollback штатно.
+            .pointerInput(state, closed) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type != PointerEventType.Scroll || closed) continue
+                        val reporting = state.mouseTracking != MouseTracking.Off
+                        if (!reporting && !state.altScreen) continue
+                        val change = event.changes.firstOrNull() ?: continue
+                        val dy = change.scrollDelta.y
+                        if (dy != 0f) {
+                            val up = dy < 0f
+                            if (reporting) {
+                                val pos = posAt(change.position.x, change.position.y)
+                                state.reportMouse(if (up) MouseButton.WheelUp else MouseButton.WheelDown, MouseEventType.Press, pos)
+                            } else {
+                                val seq = arrowSequence(if (up) ArrowKey.Up else ArrowKey.Down, state.applicationCursorKeys)
+                                repeat(3) { state.send(seq) }
+                            }
+                        }
+                        event.changes.forEach { it.consume() }
+                    }
+                }
+            }
+            // Hover-репортинг для AnyEvent (DEC 1003): приложение хочет события движения и без
+            // зажатой кнопки. Шлём Move только при смене ячейки (кнопка 3 = «не зажата» проставляется
+            // внутри encodeMouseReport). Drag с зажатой кнопкой обрабатывает жестовый цикл ниже.
+            .pointerInput(state, closed) {
+                var lastHover: TerminalPos? = null
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (closed || state.mouseTracking != MouseTracking.AnyEvent) continue
+                        if (event.type != PointerEventType.Move) continue
+                        val change = event.changes.firstOrNull { !it.pressed } ?: continue
+                        val pos = posAt(change.position.x, change.position.y)
+                        if (pos != lastHover) {
+                            state.reportMouse(MouseButton.Left, MouseEventType.Move, pos)
+                            lastHover = pos
+                        }
+                    }
+                }
+            }
+            // Средняя/правая кнопки мыши: awaitFirstDown (в жесте ниже) реагирует только на основную
+            // (левую) кнопку, поэтому средний/правый клик ловим здесь на сырых событиях. При активном
+            // mouse-tracking — репортим press/release приложению; иначе средний/правый клик = вставка
+            // (средний берёт PRIMARY-выделение X11 c откатом на буфер, правый — буфер обмена).
+            .pointerInput(state, closed) {
+                var reported: MouseButton? = null
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.type == PointerType.Mouse } ?: continue
+                        if (closed) continue
+                        val mods = event.keyboardModifiers
+                        val shift = mods.isShiftPressed
+                        val reporting = state.mouseTracking != MouseTracking.Off && !shift
+                        val pos = posAt(change.position.x, change.position.y)
+                        when (event.type) {
+                            PointerEventType.Press -> {
+                                val btn = when {
+                                    event.buttons.isTertiaryPressed -> MouseButton.Middle
+                                    event.buttons.isSecondaryPressed -> MouseButton.Right
+                                    else -> null
+                                } ?: continue
+                                if (reporting) {
+                                    state.reportMouse(btn, MouseEventType.Press, pos, shift, mods.isAltPressed, mods.isCtrlPressed)
+                                    reported = btn
+                                } else if (btn == MouseButton.Middle) {
+                                    val text = readPrimarySelectionText()?.takeUnless { it.isBlank() }
+                                        ?: clipboard.getText()?.text
+                                    text?.let { state.paste(it) }
+                                } else {
+                                    clipboard.getText()?.text?.let { state.paste(it) }
+                                }
+                                change.consume()
+                            }
+                            PointerEventType.Release -> reported?.let { btn ->
+                                state.reportMouse(btn, MouseEventType.Release, pos, shift, mods.isAltPressed, mods.isCtrlPressed)
+                                reported = null
+                                change.consume()
+                            }
+                            else -> {}
+                        }
+                    }
+                }
+            }
             .pointerInput(metrics) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     textToolbar.hide()
                     if (down.type == PointerType.Mouse) {
-                        // Мышь: фокус сразу (desktop-ввод с клавиатуры), выделение по перетаскиванию,
-                        // одиночный клик — снять выделение.
                         focusRequester.requestFocus()
-                        state.beginSelection(posAt(down.position.x, down.position.y))
-                        val dragged = drag(down.id) { change ->
-                            change.consume()
-                            state.extendSelection(posAt(change.position.x, change.position.y))
+                        val mods = currentEvent.keyboardModifiers
+                        val shift = mods.isShiftPressed
+                        // Левая кнопка с зажатым мышиным трекингом: транслируем press/drag/release в
+                        // отчёты, пока не отпущена. (Среднюю/правую ловит отдельный обработчик ниже —
+                        // awaitFirstDown реагирует только на основную кнопку.) Shift форсит выделение.
+                        if (state.mouseTracking != MouseTracking.Off && !shift) {
+                            val ctrl = mods.isCtrlPressed
+                            val alt = mods.isAltPressed
+                            state.reportMouse(MouseButton.Left, MouseEventType.Press, posAt(down.position.x, down.position.y), shift, alt, ctrl)
+                            down.consume()
+                            var last = posAt(down.position.x, down.position.y)
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                                    ?: continue
+                                if (change.pressed) {
+                                    val pos = posAt(change.position.x, change.position.y)
+                                    if (pos != last) {
+                                        // В Normal-режиме (1000) drag не репортится — encodeMouseReport
+                                        // вернёт false и ничего не отправит; для 1002/1003 уйдёт отчёт.
+                                        state.reportMouse(MouseButton.Left, MouseEventType.Drag, pos, shift, alt, ctrl)
+                                        last = pos
+                                    }
+                                    change.consume()
+                                } else {
+                                    state.reportMouse(MouseButton.Left, MouseEventType.Release, posAt(change.position.x, change.position.y), shift, alt, ctrl)
+                                    change.consume()
+                                    break
+                                }
+                            }
+                            return@awaitEachGesture
                         }
-                        if (!dragged || state.selection?.isEmpty != false) state.clearSelection()
+                        // Локальное выделение. Счётчик кликов: 1 — drag-выделение, 2 — слово, 3 — строка.
+                        val pos = posAt(down.position.x, down.position.y)
+                        val multi = lastClickPos == pos &&
+                            lastClickMark?.let { it.elapsedNow() < DOUBLE_CLICK_MS.milliseconds } == true
+                        clickCount = if (multi) clickCount + 1 else 1
+                        lastClickMark = TimeSource.Monotonic.markNow()
+                        lastClickPos = pos
+                        when ((clickCount - 1) % 3) {
+                            1 -> state.selectWordAt(pos)   // двойной клик — слово
+                            2 -> state.selectLineAt(pos)   // тройной клик — строка
+                            else -> {                       // одиночный — выделение перетаскиванием
+                                state.beginSelection(pos)
+                                val dragged = drag(down.id) { change ->
+                                    change.consume()
+                                    state.extendSelection(posAt(change.position.x, change.position.y))
+                                }
+                                if (!dragged || state.selection?.isEmpty != false) state.clearSelection()
+                            }
+                        }
                     } else {
                         // Тач: сначала — попал ли палец в маркер уже существующего выделения.
                         // Если да, перетаскиваем эту границу (вторую держим) — корректировка краёв,

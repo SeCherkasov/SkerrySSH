@@ -70,4 +70,20 @@ class TerminalSelectionTest {
         val sel = TerminalSelection(TerminalPos(0, 0), TerminalPos(0, 99))
         assertEquals("hi", sel.extract(grid("hi")))
     }
+
+    @Test
+    fun `line selection spans the whole row under the position`() {
+        val screen = grid("first", "second", "third")
+        val sel = lineSelectionAt(screen, TerminalPos(1, 3))
+        assertEquals(TerminalPos(1, 0), sel.start)
+        assertEquals(TerminalPos(1, 6), sel.end) // "second" = 6 ячеек, конец эксклюзивен
+        assertEquals("second", sel.extract(screen))
+    }
+
+    @Test
+    fun `line selection clamps row beyond the grid`() {
+        val screen = grid("only")
+        val sel = lineSelectionAt(screen, TerminalPos(9, 0))
+        assertEquals("only", sel.extract(screen))
+    }
 }

@@ -27,6 +27,16 @@ fun wordSelectionAt(screen: List<List<TermCell>>, pos: TerminalPos): TerminalSel
 }
 
 /**
+ * Выделение целой строки под позицией [pos] — для тройного клика: от первой до последней колонки
+ * строки (конец эксклюзивен). Выход за сетку поджимается; пустую сетку отдаёт пустым выделением.
+ */
+fun lineSelectionAt(screen: List<List<TermCell>>, pos: TerminalPos): TerminalSelection {
+    if (screen.isEmpty()) return TerminalSelection(pos, pos)
+    val row = pos.row.coerceIn(0, screen.lastIndex)
+    return TerminalSelection(TerminalPos(row, 0), TerminalPos(row, screen[row].size))
+}
+
+/**
  * Линейное выделение текста на экране терминала — как в обычных эмуляторах: от точки `anchor`
  * (где нажали) до `focus` (где сейчас курсор мыши), с переносом через концы строк (не блочное).
  * Чистая модель без Compose: оперирует сеткой `List<List<TermCell>>`, поэтому тестируется напрямую.

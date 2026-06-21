@@ -1,6 +1,9 @@
 package app.skerry.ui.terminal
 
 import app.skerry.shared.ssh.PtySize
+import app.skerry.shared.terminal.MouseButton
+import app.skerry.shared.terminal.MouseEventType
+import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
@@ -237,6 +240,96 @@ class TerminalScreenStateTest {
         state.moveSelectionEnd(TerminalPos(0, 3))
 
         assertEquals(null, state.selection)
+        scope.cancel()
+    }
+
+    @Test
+    fun `tracks mouse and bracketed-paste modes from emulator`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar().toString()
+
+        assertEquals(MouseTracking.Off, state.mouseTracking)
+        session.emit("$esc[?1002h$esc[?1006h$esc[?2004h".encodeToByteArray())
+        assertEquals(MouseTracking.ButtonEvent, state.mouseTracking)
+        assertEquals(true, state.mouseSgr)
+        assertEquals(true, state.bracketedPaste)
+        scope.cancel()
+    }
+
+    @Test
+    fun `tracks any-event mouse mode and alt-screen from emulator`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar().toString()
+
+        assertEquals(MouseTracking.Off, state.mouseTracking)
+        assertEquals(false, state.altScreen)
+        session.emit("$esc[?1003h$esc[?1049h".encodeToByteArray()) // AnyEvent + alt-screen
+        assertEquals(MouseTracking.AnyEvent, state.mouseTracking)
+        assertEquals(true, state.altScreen)
+        scope.cancel()
+    }
+
+    @Test
+    fun `reportMouse sends an sgr report and signals it handled the event`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar().toString()
+
+        session.emit("$esc[?1000h$esc[?1006h".encodeToByteArray()) // Normal + SGR
+        val handled = state.reportMouse(MouseButton.Left, MouseEventType.Press, TerminalPos(0, 0))
+
+        assertEquals(true, handled)
+        assertContentEquals("$esc[<0;1;1M".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun `reportMouse is a no-op when mouse tracking is off`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        val handled = state.reportMouse(MouseButton.Left, MouseEventType.Press, TerminalPos(0, 0))
+
+        assertEquals(false, handled)
+        assertEquals(0, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `paste wraps in bracketed markers when the mode is enabled`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar().toString()
+
+        session.emit("$esc[?2004h".encodeToByteArray()) // bracketed paste on
+        state.paste("hi")
+
+        assertContentEquals("$esc[200~hi$esc[201~".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun `paste passes text through when bracketed mode is off`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        state.paste("hi")
+
+        assertContentEquals("hi".encodeToByteArray(), session.sent.single())
         scope.cancel()
     }
 
