@@ -180,6 +180,76 @@ class SessionsControllerTest {
     }
 
     @Test
+    fun `starts with no split session`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        assertNull(sessions.splitId)
+        assertNull(sessions.split)
+        scope.cancel()
+    }
+
+    @Test
+    fun `setSplit pins a second session shown alongside the active one`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        sessions.open(hostId = "host-a")
+        val b = sessions.open(hostId = "host-b")
+
+        sessions.setSplit(b)
+
+        assertEquals(b, sessions.splitId)
+        assertEquals(b, sessions.split!!.id)
+        scope.cancel()
+    }
+
+    @Test
+    fun `setSplit ignores an unknown id`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        sessions.open(hostId = "host-a")
+
+        sessions.setSplit("does-not-exist")
+
+        assertNull(sessions.splitId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `setSplit null clears the split`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.setSplit(a)
+
+        sessions.setSplit(null)
+
+        assertNull(sessions.splitId)
+        assertNull(sessions.split)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing the split session clears the split id`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        sessions.open(hostId = "host-a")
+        val b = sessions.open(hostId = "host-b")
+        sessions.setSplit(b)
+
+        sessions.close(b)
+
+        assertNull(sessions.splitId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `disconnectAll clears the split`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.setSplit(a)
+
+        sessions.disconnectAll()
+
+        assertNull(sessions.splitId)
+        scope.cancel()
+    }
+
+    @Test
     fun `disconnectAll closes every session`() = runTest {
         val transport = FakeTransport()
         val (sessions, scope) = sessionsWith(transport)

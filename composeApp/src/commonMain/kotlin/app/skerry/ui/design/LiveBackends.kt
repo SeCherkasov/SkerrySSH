@@ -1,10 +1,28 @@
 package app.skerry.ui.design
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.host.Host
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.session.SessionsController
+
+/**
+ * Фича-флаги отображения дизайн-слоя. Поставляются параметром в [DesktopDesignApp] и доступны
+ * любому composable через [LocalFeatures]. Незавершённые фичи прячутся за флагом (а не удаляются
+ * из макета), чтобы вернуть их одним переключателем, когда бэкенд готов.
+ *
+ * [ai] — AI-ассистент (Phase 2 / MVP2): нижний AI-bar, suggestion-карточки в терминале, выбор
+ * AI-политики в New connection и таб «AI» в настройках. По умолчанию выключен — в MVP1 этих
+ * элементов в UI нет, реализация остаётся заглушкой до MVP2.
+ */
+@Immutable
+data class FeatureFlags(
+    val ai: Boolean = false,
+)
+
+/** Текущие фича-флаги; дефолт — всё незавершённое выключено (мок-путь/превью и MVP1). */
+val LocalFeatures: ProvidableCompositionLocal<FeatureFlags> = staticCompositionLocalOf { FeatureFlags() }
 
 /**
  * Живые бэкенды, подаваемые в дизайн-слой через CompositionLocal (тем же приёмом, что [LocalFonts]) —

@@ -70,6 +70,7 @@ fun DesktopDesignApp(
     transport: SshTransport? = null,
     identities: IdentityManagerController? = null,
     sessions: SessionsController? = null,
+    features: FeatureFlags = FeatureFlags(),
 ) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
@@ -96,6 +97,7 @@ fun DesktopDesignApp(
         LocalFonts provides fonts,
         LocalHosts provides hosts,
         LocalSessions provides liveSessions,
+        LocalFeatures provides features,
     ) {
         if (vault != null) {
             VaultGate(
