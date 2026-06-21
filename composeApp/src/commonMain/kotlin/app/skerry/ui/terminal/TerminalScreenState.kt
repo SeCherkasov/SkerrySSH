@@ -30,7 +30,9 @@ class TerminalScreenState(
     private val session: TerminalSession,
     private val scope: CoroutineScope,
 ) {
-    private val emulator = TerminalEmulator()
+    // respond: ответы терминала (DSR/DA) уходят обратно в PTY — иначе приложения, опрашивающие
+    // курсор/атрибуты, подвисают в ожидании.
+    private val emulator = TerminalEmulator(respond = { reply -> send(reply) })
 
     /** Снимок экрана (строки сверху вниз) для отрисовки. */
     var screen: List<List<TermCell>> by mutableStateOf(emptyList())
@@ -54,9 +56,15 @@ class TerminalScreenState(
     var applicationCursorKeys: Boolean by mutableStateOf(false)
         private set
 
-    /** Плоский текст экрана — для тестов и простых проверок (рендер использует [screen]). */
+    /**
+     * Плоский текст экрана — для тестов и простых проверок (рендер использует [screen]).
+     * Сетка всегда `rows` строк фиксированной ширины, поэтому хвостовые пробелы и пустые строки
+     * обрезаются, чтобы текст читался как видимое содержимое.
+     */
     val output: String
-        get() = screen.joinToString("\n") { row -> buildString { row.forEach { append(it.char) } } }
+        get() = screen
+            .joinToString("\n") { row -> buildString { row.forEach { append(it.char) } }.trimEnd() }
+            .trimEnd('\n')
 
     val state: StateFlow<TerminalState> get() = session.state
 
@@ -64,7 +72,7 @@ class TerminalScreenState(
         scope.launch {
             session.output.collect { chunk ->
                 emulator.feed(chunk)
-                screen = emulator.lines.map { it.toList() }
+                screen = emulator.lines // строки уже скопированы в неизменяемые внутри геттера
                 cursorRow = emulator.cursorRow
                 cursorCol = emulator.cursorCol
                 applicationCursorKeys = emulator.applicationCursorKeys

@@ -55,7 +55,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -467,29 +469,56 @@ private fun cellSpan(cell: TermCell, isCursor: Boolean, isSelected: Boolean): Sp
     }
 }
 
-private fun TermStyle.toSpanStyle(): SpanStyle = SpanStyle(
-    color = fg.toComposeColor(SkerryColors.text),
-    background = if (bg == TermColor.Default) Color.Unspecified else bg.toComposeColor(SkerryColors.text),
-    fontWeight = if (bold) FontWeight.Bold else null,
-)
+private fun TermStyle.toSpanStyle(): SpanStyle {
+    // inverse меняет местами текст и фон; при дефолтном фоне он становится цветом фона терминала.
+    val resolvedFg = fg.toComposeColor(SkerryColors.text)
+    val resolvedBg = if (bg == TermColor.Default) SkerryColors.terminalBg else bg.toComposeColor(SkerryColors.text)
+    var fgColor = if (inverse) resolvedBg else resolvedFg
+    val bgColor = when {
+        inverse -> resolvedFg
+        bg == TermColor.Default -> Color.Unspecified
+        else -> resolvedBg
+    }
+    if (hidden) fgColor = bgColor.takeIf { it != Color.Unspecified } ?: SkerryColors.terminalBg
+    if (dim) fgColor = fgColor.copy(alpha = 0.6f)
+    val decoration = when {
+        underline && strikethrough -> TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
+        underline -> TextDecoration.Underline
+        strikethrough -> TextDecoration.LineThrough
+        else -> null
+    }
+    return SpanStyle(
+        color = fgColor,
+        background = bgColor,
+        fontWeight = if (bold) FontWeight.Bold else null,
+        fontStyle = if (italic) FontStyle.Italic else null,
+        textDecoration = decoration,
+    )
+}
 
-/** ANSI-палитра под тему «night sea»; Default берёт цвет из контекста (текст/прозрачный фон). */
+/**
+ * Перевод [TermColor] в Compose Color: Default — цвет из контекста; Rgb — напрямую; Indexed —
+ * xterm-палитра, где первые 16 индексов взяты из темы «night sea», а 16..255 — стандартный
+ * 6×6×6 куб и градации серого.
+ */
 private fun TermColor.toComposeColor(default: Color): Color = when (this) {
     TermColor.Default -> default
-    TermColor.Black -> Color(0xFF2A3540)
-    TermColor.Red -> Color(0xFFE94B4B)
-    TermColor.Green -> Color(0xFF5DCE9E)
-    TermColor.Yellow -> Color(0xFFF2A65A)
-    TermColor.Blue -> Color(0xFF4A9EDB)
-    TermColor.Magenta -> Color(0xFFC792EA)
-    TermColor.Cyan -> Color(0xFF2BBDEE)
-    TermColor.White -> Color(0xFFC9D6DE)
-    TermColor.BrightBlack -> Color(0xFF5A7080)
-    TermColor.BrightRed -> Color(0xFFFF6B6B)
-    TermColor.BrightGreen -> Color(0xFF7FE9B8)
-    TermColor.BrightYellow -> Color(0xFFFFC078)
-    TermColor.BrightBlue -> Color(0xFF6FC3F5)
-    TermColor.BrightMagenta -> Color(0xFFE0A8FF)
-    TermColor.BrightCyan -> Color(0xFF5FD1F4)
-    TermColor.BrightWhite -> Color(0xFFFFFFFF)
+    is TermColor.Rgb -> Color(r, g, b)
+    is TermColor.Indexed -> xtermColor(index)
+}
+
+/** ANSI 0..15 под «night sea» + стандартный xterm-куб/grayscale для 16..255. */
+private fun xtermColor(index: Int): Color = when (index) {
+    0 -> Color(0xFF2A3540); 1 -> Color(0xFFE94B4B); 2 -> Color(0xFF5DCE9E); 3 -> Color(0xFFF2A65A)
+    4 -> Color(0xFF4A9EDB); 5 -> Color(0xFFC792EA); 6 -> Color(0xFF2BBDEE); 7 -> Color(0xFFC9D6DE)
+    8 -> Color(0xFF5A7080); 9 -> Color(0xFFFF6B6B); 10 -> Color(0xFF7FE9B8); 11 -> Color(0xFFFFC078)
+    12 -> Color(0xFF6FC3F5); 13 -> Color(0xFFE0A8FF); 14 -> Color(0xFF5FD1F4); 15 -> Color(0xFFFFFFFF)
+    in 16..231 -> {
+        val n = index - 16
+        val r = n / 36; val g = (n / 6) % 6; val b = n % 6
+        fun lvl(v: Int) = if (v == 0) 0 else 55 + v * 40
+        Color(lvl(r), lvl(g), lvl(b))
+    }
+    in 232..255 -> { val v = 8 + (index - 232) * 10; Color(v, v, v) }
+    else -> Color(0xFFC9D6DE)
 }
