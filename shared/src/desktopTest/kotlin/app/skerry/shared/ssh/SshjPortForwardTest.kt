@@ -121,6 +121,93 @@ class SshjPortForwardTest {
     }
 
     @Test
+    fun `local forward counts bytes tunnelled in both directions`() = runTest {
+        EchoServer().use { echo ->
+            val connection = connect()
+            try {
+                val forward = connection.forwardLocal(
+                    LocalForwardSpec(bindPort = 0, destHost = "127.0.0.1", destPort = echo.port),
+                )
+                try {
+                    assertEquals("ping", roundTrip("127.0.0.1", forward.boundPort, "ping"))
+                    assertTrue(forward.bytesUp >= 4, "ушедшие байты должны быть посчитаны: ${forward.bytesUp}")
+                    assertTrue(forward.bytesDown >= 4, "пришедшие байты должны быть посчитаны: ${forward.bytesDown}")
+                } finally {
+                    forward.close()
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    @Test
+    fun `dynamic forward counts bytes tunnelled in both directions`() = runTest {
+        EchoServer().use { echo ->
+            val connection = connect()
+            try {
+                val forward = connection.forwardDynamic(DynamicForwardSpec(bindPort = 0))
+                try {
+                    assertEquals("socks", socksRoundTrip(forward.boundPort, "127.0.0.1", echo.port, "socks"))
+                    assertTrue(forward.bytesUp >= 5, "ушедшие байты должны быть посчитаны: ${forward.bytesUp}")
+                    assertTrue(forward.bytesDown >= 5, "пришедшие байты должны быть посчитаны: ${forward.bytesDown}")
+                } finally {
+                    forward.close()
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    @Test
+    fun `remote forward counts bytes tunnelled in both directions`() = runTest {
+        EchoServer().use { echo ->
+            val connection = connect()
+            try {
+                val forward = connection.forwardRemote(
+                    RemoteForwardSpec(bindPort = 0, destHost = "127.0.0.1", destPort = echo.port),
+                )
+                try {
+                    assertEquals("pong", roundTrip("127.0.0.1", forward.boundPort, "pong"))
+                    assertTrue(forward.bytesUp >= 4, "ушедшие байты должны быть посчитаны: ${forward.bytesUp}")
+                    assertTrue(forward.bytesDown >= 4, "пришедшие байты должны быть посчитаны: ${forward.bytesDown}")
+                } finally {
+                    forward.close()
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    @Test
+    fun `paused local forward refuses new connections and resumes`() = runTest {
+        EchoServer().use { echo ->
+            val connection = connect()
+            try {
+                val forward = connection.forwardLocal(
+                    LocalForwardSpec(bindPort = 0, destHost = "127.0.0.1", destPort = echo.port),
+                )
+                try {
+                    forward.pause()
+                    assertTrue(forward.isPaused)
+                    // На паузе соединение принимается и сразу рвётся — туннеля к echo нет, ответ пуст.
+                    assertEquals("", roundTrip("127.0.0.1", forward.boundPort, "ping"))
+
+                    forward.resume()
+                    assertFalse(forward.isPaused)
+                    assertEquals("back", roundTrip("127.0.0.1", forward.boundPort, "back"))
+                } finally {
+                    forward.close()
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    @Test
     fun `local forward rejects an already occupied bind port`() = runTest {
         ServerSocket().use { occupied ->
             occupied.bind(InetSocketAddress("127.0.0.1", 0))

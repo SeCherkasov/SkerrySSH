@@ -10,6 +10,8 @@ import app.skerry.shared.ssh.PortForward
 import app.skerry.shared.ssh.RemoteForwardSpec
 import app.skerry.shared.ssh.SshConnection
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -45,7 +47,31 @@ class ForwardEntry internal constructor(
     var status: ForwardStatus by mutableStateOf(ForwardStatus.Starting)
         internal set
 
+    /** На паузе ли проброс (тумблер ACTIVE снят, но порт держится). Меняется через [PortForwardController.pause]/[resume]. */
+    var paused: Boolean by mutableStateOf(false)
+        internal set
+
+    /** Суммарно байт, ушедших к серверу — снимок последнего опроса телеметрии. */
+    var bytesUp: Long by mutableStateOf(0)
+        internal set
+
+    /** Суммарно байт, пришедших от сервера — снимок последнего опроса телеметрии. */
+    var bytesDown: Long by mutableStateOf(0)
+        internal set
+
+    /** Текущая скорость отдачи (байт/с) по дельте между опросами. */
+    var upRate: Long by mutableStateOf(0)
+        internal set
+
+    /** Текущая скорость приёма (байт/с) по дельте между опросами. */
+    var downRate: Long by mutableStateOf(0)
+        internal set
+
     internal var handle: PortForward? = null
+
+    // Предыдущий снимок счётчиков — для расчёта скорости в опросе (наружу не отдаётся).
+    internal var prevUp: Long = 0
+    internal var prevDown: Long = 0
 }
 
 /**
@@ -62,11 +88,38 @@ class ForwardEntry internal constructor(
 class PortForwardController(
     private val connection: SshConnection,
     private val scope: CoroutineScope,
+    private val pollIntervalMillis: Long = 1000,
 ) {
     var forwards: List<ForwardEntry> by mutableStateOf(emptyList())
         private set
 
     private var nextId = 0L
+
+    init {
+        // Опрос телеметрии живёт на scope сессии: пока сессия жива, по каждому активному пробросу
+        // снимаем счётчики байт и считаем скорость (байт/с) по дельте за интервал. Отмену scope
+        // (disconnect) цикл не глотает — выходит по isActive.
+        scope.launch {
+            while (isActive) {
+                delay(pollIntervalMillis)
+                pollTelemetry()
+            }
+        }
+    }
+
+    internal fun pollTelemetry() {
+        forwards.forEach { entry ->
+            val handle = entry.handle ?: return@forEach
+            val up = handle.bytesUp
+            val down = handle.bytesDown
+            entry.upRate = ((up - entry.prevUp) * 1000 / pollIntervalMillis).coerceAtLeast(0)
+            entry.downRate = ((down - entry.prevDown) * 1000 / pollIntervalMillis).coerceAtLeast(0)
+            entry.prevUp = up
+            entry.prevDown = down
+            entry.bytesUp = up
+            entry.bytesDown = down
+        }
+    }
 
     /** Поднять локальный проброс (`-L`). [bindPort] `0` — порт выберет ОС. */
     fun addLocal(bindPort: Int, destHost: String, destPort: Int, bindHost: String = "127.0.0.1") =
@@ -112,6 +165,24 @@ class PortForwardController(
                 entry.status = ForwardStatus.Failed(e.message ?: "Не удалось поднять проброс")
             }
         }
+    }
+
+    /**
+     * Приостановить проброс [entry]: слушатель держит порт, но новые соединения не туннелируются.
+     * Флаг [ForwardEntry.paused] обновляется сразу (для отзывчивого тумблера), сама пауза слушателя —
+     * на [scope]. Действует только на активный проброс.
+     */
+    fun pause(entry: ForwardEntry) {
+        if (entry.status !is ForwardStatus.Active) return
+        entry.paused = true
+        scope.launch { runCatching { entry.handle?.pause() } }
+    }
+
+    /** Возобновить ранее приостановленный проброс [entry]. */
+    fun resume(entry: ForwardEntry) {
+        if (entry.status !is ForwardStatus.Active) return
+        entry.paused = false
+        scope.launch { runCatching { entry.handle?.resume() } }
     }
 
     /** Снять проброс [entry]: убрать из списка и закрыть слушатель (если уже поднялся). */

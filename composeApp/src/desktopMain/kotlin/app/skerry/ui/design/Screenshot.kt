@@ -195,6 +195,12 @@ private class FakeConnection(private val target: SshTarget) : SshConnection {
 /** Фейковый проброс: сразу «активен», порт echo'ится из spec — для офскрин-рендера таблицы туннелей. */
 private class FakePortForward(override val boundPort: Int) : PortForward {
     override val isActive: Boolean = true
+    override var isPaused: Boolean = false
+        private set
+    override val bytesUp: Long = 0
+    override val bytesDown: Long = 0
+    override suspend fun pause() { isPaused = true }
+    override suspend fun resume() { isPaused = false }
     override suspend fun close() = Unit
 }
 

@@ -57,4 +57,19 @@ class ForwardDisplayTest {
     fun `dynamic forward has no fixed destination`() {
         assertNull(forwardDestText(entry(ForwardDirection.Dynamic)))
     }
+
+    @Test
+    fun `human rate scales bytes per second across units`() {
+        assertEquals("512 B/s", humanRate(512))
+        assertEquals("42 KB/s", humanRate(42L * 1024))
+        assertEquals("1.1 MB/s", humanRate(1_200_000)) // ~1.14 MiB/с округляется вниз до 1.1
+        assertEquals("0 B/s", humanRate(0))
+    }
+
+    @Test
+    fun `rate fraction saturates at one mebibyte per second`() {
+        assertEquals(0f, rateFraction(0))
+        assertEquals(1f, rateFraction(1024L * 1024))
+        assertEquals(1f, rateFraction(5L * 1024 * 1024)) // насыщение
+    }
 }

@@ -100,6 +100,67 @@ class PortForwardControllerTest {
     }
 
     @Test
+    fun `pause pauses the underlying forward and flags the entry`() = runTest {
+        val conn = FakeForwardConnection(localPort = 50011)
+        val (controller, _) = controllerWith(conn)
+        controller.addLocal(bindPort = 0, destHost = "a", destPort = 1)
+        val entry = controller.forwards.single()
+        val handle = conn.lastForward!!
+
+        controller.pause(entry)
+
+        assertTrue(entry.paused)
+        assertEquals(1, handle.pauseCount)
+        assertTrue(handle.isPaused)
+
+        controller.resume(entry)
+
+        assertEquals(false, entry.paused)
+        assertEquals(1, handle.resumeCount)
+        assertEquals(false, handle.isPaused)
+    }
+
+    @Test
+    fun `pause is a no-op while the forward is still starting`() = runTest {
+        // Соединение зависает на подъёме (порт 0, но статус останется Starting в этом тесте через
+        // ошибку): берём Failed-путь — пауза не должна срабатывать на не-Active строке.
+        val conn = FakeForwardConnection(localError = PortForwardException("ещё не поднят"))
+        val (controller, _) = controllerWith(conn)
+        controller.addLocal(bindPort = 0, destHost = "a", destPort = 1)
+        val entry = controller.forwards.single()
+
+        controller.pause(entry)
+
+        assertEquals(false, entry.paused)
+    }
+
+    @Test
+    fun `telemetry poll snapshots bytes and computes per-second rate`() = runTest {
+        val conn = FakeForwardConnection(localPort = 50012)
+        val (controller, _) = controllerWith(conn)
+        controller.addLocal(bindPort = 0, destHost = "a", destPort = 1)
+        val entry = controller.forwards.single()
+        val handle = conn.lastForward!!
+
+        handle.bytesUp = 5000
+        handle.bytesDown = 200
+        controller.pollTelemetry()
+
+        assertEquals(5000, entry.bytesUp)
+        assertEquals(200, entry.bytesDown)
+        assertEquals(5000, entry.upRate) // 5000 байт за интервал 1000мс = 5000 байт/с
+        assertEquals(200, entry.downRate)
+
+        // Второй опрос считает скорость по дельте к предыдущему снимку.
+        handle.bytesUp = 5500
+        controller.pollTelemetry()
+
+        assertEquals(5500, entry.bytesUp)
+        assertEquals(500, entry.upRate)
+        assertEquals(0, entry.downRate)
+    }
+
+    @Test
     fun `closeAll clears the list and closes every forward`() = runTest {
         val conn = FakeForwardConnection(localPort = 50003)
         val (controller, _) = controllerWith(conn)
@@ -160,10 +221,28 @@ private class FakeForwardConnection(
     override suspend fun disconnect() {}
 }
 
-private class FakePortForward(override val boundPort: Int) : PortForward {
+private class FakePortForward(
+    override val boundPort: Int,
+    override var bytesUp: Long = 0,
+    override var bytesDown: Long = 0,
+) : PortForward {
     var closeCount = 0
         private set
+    var pauseCount = 0
+        private set
+    var resumeCount = 0
+        private set
+    override var isPaused: Boolean = false
+        private set
     override val isActive: Boolean get() = closeCount == 0
+    override suspend fun pause() {
+        isPaused = true
+        pauseCount++
+    }
+    override suspend fun resume() {
+        isPaused = false
+        resumeCount++
+    }
     override suspend fun close() {
         closeCount++
     }

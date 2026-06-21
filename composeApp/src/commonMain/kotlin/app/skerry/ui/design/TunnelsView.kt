@@ -40,10 +40,13 @@ import app.skerry.ui.forward.ForwardEntry
 import app.skerry.ui.forward.ForwardStatus
 import app.skerry.ui.forward.PortForwardController
 import app.skerry.ui.forward.forwardDestText
+import app.skerry.ui.forward.forwardListenPort
 import app.skerry.ui.forward.forwardSourceText
 import app.skerry.ui.forward.forwardTypeLabel
+import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.parseBindPort
 import app.skerry.ui.forward.parseForwardInput
+import app.skerry.ui.forward.rateFraction
 
 private data class TunnelRule(
     val type: String, val typeBg: Color, val typeFg: Color,
@@ -73,6 +76,12 @@ fun TunnelsView() {
     val connected = controller?.uiState is ConnectionUiState.Connected
     val live = sessions != null
 
+    // Состояние правой панели live-режима: выбранная строка и режим «добавить туннель» (кнопка
+    // New rule). По шаблону правая панель показывает детали выбранного туннеля; New rule переключает
+    // её на форму добавления.
+    var selectedId by remember { mutableStateOf<Long?>(null) }
+    var adding by remember { mutableStateOf(false) }
+
     Column(Modifier.fillMaxSize().background(D.bg)) {
         Row(
             Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 22.dp, vertical = 12.dp),
@@ -86,14 +95,21 @@ fun TunnelsView() {
                     else "SSH tunnels — local, remote and dynamic (SOCKS) port forwards."
                 Txt(subtitle, color = D.dim, size = 12.sp, font = if (live) mono else FontFamily.Default, modifier = Modifier.padding(top = 2.dp))
             }
-            // В live-режиме форма всегда видна справа, поэтому кнопка декоративна (как в макете).
-            PrimaryButton("New rule", onClick = {}, icon = "add")
+            PrimaryButton("New rule", onClick = { adding = true; selectedId = null }, icon = "add")
         }
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 !live -> MockTunnelsBody()
-                connected && controller != null -> LiveTunnelsBody(controller, active?.title ?: "—", mono)
+                connected && controller != null -> LiveTunnelsBody(
+                    controller = controller,
+                    host = active?.title ?: "—",
+                    mono = mono,
+                    adding = adding,
+                    selectedId = selectedId,
+                    onSelect = { selectedId = it; adding = false },
+                    onAddingChange = { adding = it },
+                )
                 else -> TunnelsNotice()
             }
         }
@@ -105,12 +121,25 @@ fun TunnelsView() {
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun LiveTunnelsBody(controller: ConnectionController, host: String, mono: FontFamily) {
+private fun LiveTunnelsBody(
+    controller: ConnectionController,
+    host: String,
+    mono: FontFamily,
+    adding: Boolean,
+    selectedId: Long?,
+    onSelect: (Long) -> Unit,
+    onAddingChange: (Boolean) -> Unit,
+) {
     // openPortForwards кэшируется на соединении и живёт на scope сессии — переключение вкладок/вида
     // список не сбрасывает; все пробросы снимает disconnect().
     val forwards = remember(controller) { controller.openPortForwards() }
     val rules = forwards.forwards
-    val activeCount = rules.count { it.status is ForwardStatus.Active }
+    val activeCount = rules.count { it.status is ForwardStatus.Active && !it.paused }
+    // Выбранная строка (по умолчанию первая) — для панели деталей справа.
+    val selected = rules.firstOrNull { it.id == selectedId } ?: rules.firstOrNull()
+    // Правая панель: форма добавления (New rule или пока туннелей нет), иначе детали выбранного.
+    val showForm = adding || selected == null
+
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
             if (rules.isEmpty()) {
@@ -120,7 +149,14 @@ private fun LiveTunnelsBody(controller: ConnectionController, host: String, mono
                     TunnelHeaderRow()
                     rules.forEach { entry ->
                         HLine()
-                        TunnelRowLive(entry, host, mono, onRemove = { forwards.remove(entry) })
+                        TunnelRowLive(
+                            entry = entry,
+                            host = host,
+                            mono = mono,
+                            selected = !showForm && entry.id == selected?.id,
+                            onSelect = { onSelect(entry.id) },
+                            onToggle = { if (entry.paused) forwards.resume(entry) else forwards.pause(entry) },
+                        )
                     }
                 }
                 Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -130,7 +166,11 @@ private fun LiveTunnelsBody(controller: ConnectionController, host: String, mono
             }
         }
         VLine(D.line)
-        AddTunnelForm(forwards, mono)
+        if (showForm) {
+            AddTunnelForm(forwards, mono, onAdded = { onSelect(it); onAddingChange(false) })
+        } else {
+            TunnelDetailLive(selected, host, mono, onRemove = { forwards.remove(selected) })
+        }
     }
 }
 
@@ -146,7 +186,14 @@ private fun EmptyTunnels() {
 }
 
 @Composable
-private fun TunnelRowLive(entry: ForwardEntry, host: String, mono: FontFamily, onRemove: () -> Unit) {
+private fun TunnelRowLive(
+    entry: ForwardEntry,
+    host: String,
+    mono: FontFamily,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onToggle: () -> Unit,
+) {
     val (bg, fg) = when (entry.direction) {
         ForwardDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
         ForwardDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber
@@ -154,7 +201,8 @@ private fun TunnelRowLive(entry: ForwardEntry, host: String, mono: FontFamily, o
     }
     val arrow = if (entry.direction == ForwardDirection.Dynamic) "all_inclusive" else "arrow_forward"
     val dest = forwardDestText(entry)
-    Column(Modifier.fillMaxWidth()) {
+    val dim = entry.paused
+    Column(Modifier.fillMaxWidth().clickable(onClick = onSelect).background(if (selected) D.cyan08 else Color.Transparent)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -163,12 +211,12 @@ private fun TunnelRowLive(entry: ForwardEntry, host: String, mono: FontFamily, o
             Box(Modifier.width(76.dp)) {
                 Badge(forwardTypeLabel(entry.direction), bg = bg, fg = fg, radius = 4, size = 10.sp)
             }
-            Txt(forwardSourceText(entry), color = D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt(forwardSourceText(entry), color = if (dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
             Box(Modifier.width(20.dp)) { Sym(arrow, size = 16.sp, color = D.faint) }
-            Txt(dest ?: "dynamic proxy", color = if (dest == null) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt(dest ?: "dynamic proxy", color = if (dest == null || dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
             Txt(host, color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.width(110.dp))
             Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
-                ActiveCell(entry.status, onRemove)
+                ActiveCell(entry, onToggle)
             }
         }
         (entry.status as? ForwardStatus.Failed)?.let {
@@ -177,21 +225,21 @@ private fun TunnelRowLive(entry: ForwardEntry, host: String, mono: FontFamily, o
     }
 }
 
-/** Ячейка ACTIVE по статусу: активный — тумблер (выкл = снять), поднимается — индикатор, ошибка — снять. */
+/**
+ * Ячейка ACTIVE по статусу: активный — тумблер (вкл = идёт, выкл = на паузе; переключает pause/resume),
+ * поднимается — индикатор песочных часов, ошибка — иконка ошибки (удаление — из панели деталей справа).
+ */
 @Composable
-private fun ActiveCell(status: ForwardStatus, onRemove: () -> Unit) {
-    when (status) {
-        is ForwardStatus.Active -> Toggle(on = true, onToggle = onRemove)
+private fun ActiveCell(entry: ForwardEntry, onToggle: () -> Unit) {
+    when (entry.status) {
+        is ForwardStatus.Active -> Toggle(on = !entry.paused, onToggle = onToggle)
         ForwardStatus.Starting -> Sym("hourglass_top", size = 16.sp, color = D.amber)
-        is ForwardStatus.Failed ->
-            Box(Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onRemove).padding(2.dp)) {
-                Sym("error", size = 16.sp, color = D.sunset)
-            }
+        is ForwardStatus.Failed -> Sym("error", size = 16.sp, color = D.sunset)
     }
 }
 
 @Composable
-private fun AddTunnelForm(controller: PortForwardController, mono: FontFamily) {
+private fun AddTunnelForm(controller: PortForwardController, mono: FontFamily, onAdded: (Long) -> Unit) {
     var direction by remember { mutableStateOf(ForwardDirection.Local) }
     var bindHost by remember { mutableStateOf("127.0.0.1") }
     var bindPort by remember { mutableStateOf("") }
@@ -245,11 +293,71 @@ private fun AddTunnelForm(controller: PortForwardController, mono: FontFamily) {
                     ForwardDirection.Dynamic -> bind?.let { controller.addDynamic(it, host) }
                 }
                 bindPort = ""; destHost = ""; destPort = ""
+                // Новая строка добавляется в список синхронно — выбрать её и закрыть форму.
+                controller.forwards.lastOrNull()?.let { onAdded(it.id) }
             },
             modifier = Modifier.fillMaxWidth(),
             bg = if (canAdd) D.cyan else Color(0x14FFFFFF),
             fg = if (canAdd) Color(0xFF0A1A26) else D.faint,
         )
+    }
+}
+
+/**
+ * Панель деталей выбранного живого туннеля по шаблону: тип/bind/destination (только чтение — живой
+ * проброс переконфигурировать нельзя, поэтому Save неактивна), live-throughput up/down из счётчиков
+ * телеметрии контроллера и рабочая кнопка Remove (снимает проброс). На паузе скорости естественно
+ * падают в ноль.
+ */
+@Composable
+private fun TunnelDetailLive(entry: ForwardEntry, host: String, mono: FontFamily, onRemove: () -> Unit) {
+    val (badgeBg, badgeFg) = when (entry.direction) {
+        ForwardDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
+        ForwardDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber
+        ForwardDirection.Dynamic -> D.moss.copy(alpha = 0.14f) to D.moss
+    }
+    val isDynamic = entry.direction == ForwardDirection.Dynamic
+    Column(
+        Modifier.width(308.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
+    ) {
+        Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Badge(forwardTypeLabel(entry.direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
+            Txt("Tunnel detail", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            if (entry.paused) {
+                Box(Modifier.weight(1f))
+                Badge("PAUSED", bg = D.amber.copy(alpha = 0.14f), fg = D.amber, radius = 4, size = 9.sp)
+            }
+        }
+        FieldLabel("Type")
+        SelectField(directionDisplay(entry.direction))
+        Box(Modifier.padding(bottom = 12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) { FieldLabel("Bind address"); InputField(entry.bindHost, mono) }
+            Column(Modifier.width(70.dp)) { FieldLabel("Port"); InputField(forwardListenPort(entry).toString(), mono) }
+        }
+        if (!isDynamic) {
+            Box(Modifier.padding(bottom = 12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f)) { FieldLabel("Destination"); InputField(entry.destHost, mono) }
+                Column(Modifier.width(70.dp)) { FieldLabel("Port"); InputField(entry.destPort.toString(), mono) }
+            }
+        } else {
+            Box(Modifier.padding(bottom = 12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f)) { FieldLabel("Via host"); InputField(host, mono) }
+            }
+        }
+        Box(Modifier.padding(bottom = 16.dp))
+        FieldLabel("Live throughput")
+        ThroughputRow("arrow_upward", D.cyanBright, rateFraction(entry.upRate), humanRate(entry.upRate), mono)
+        Box(Modifier.padding(bottom = 8.dp))
+        ThroughputRow("arrow_downward", D.moss, rateFraction(entry.downRate), humanRate(entry.downRate), mono)
+        Box(Modifier.padding(bottom = 18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Параметры живого проброса неизменны — Save показан по шаблону, но неактивен.
+            PrimaryButton("Save", onClick = {}, modifier = Modifier.weight(1f), bg = Color(0x14FFFFFF), fg = D.faint)
+            GhostButton("Remove", onClick = onRemove, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+        }
     }
 }
 

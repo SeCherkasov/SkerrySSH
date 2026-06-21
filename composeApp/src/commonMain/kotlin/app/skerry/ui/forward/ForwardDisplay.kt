@@ -41,3 +41,22 @@ fun forwardDestText(entry: ForwardEntry): String? = when (entry.direction) {
     ForwardDirection.Dynamic -> null
     else -> "${entry.destHost}:${entry.destPort}"
 }
+
+/**
+ * Человекочитаемая скорость для метки throughput: `B/s` < 1 KiB, целые `KB/s` < 1 MiB, иначе `MB/s`
+ * с одной десятичной. База — 1024 (как принято для сетевых индикаторов в этом UI).
+ */
+fun humanRate(bytesPerSec: Long): String {
+    if (bytesPerSec < 1024) return "$bytesPerSec B/s"
+    val kb = bytesPerSec / 1024
+    if (kb < 1024) return "$kb KB/s"
+    val mbTenths = bytesPerSec * 10 / (1024 * 1024)
+    return "${mbTenths / 10}.${mbTenths % 10} MB/s"
+}
+
+/**
+ * Доля заполнения throughput-метра (0..1) по скорости: линейная шкала с насыщением на 1 MiB/с —
+ * этого достаточно как визуальный индикатор интенсивности (точное значение даёт [humanRate]).
+ */
+fun rateFraction(bytesPerSec: Long): Float =
+    (bytesPerSec.toFloat() / (1024f * 1024f)).coerceIn(0f, 1f)

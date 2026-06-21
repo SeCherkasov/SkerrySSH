@@ -16,6 +16,7 @@ import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.bouncycastle.jce.provider.BouncyCastleProvider
@@ -27,12 +28,12 @@ import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
+import net.schmizz.sshj.connection.channel.Channel
+import net.schmizz.sshj.connection.channel.OpenFailException
 import net.schmizz.sshj.connection.channel.direct.DirectConnection
-import net.schmizz.sshj.connection.channel.direct.LocalPortForwarder
-import net.schmizz.sshj.connection.channel.direct.Parameters
 import net.schmizz.sshj.connection.channel.direct.Session
+import net.schmizz.sshj.connection.channel.forwarded.ConnectListener
 import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
-import net.schmizz.sshj.connection.channel.forwarded.SocketForwardingConnectListener
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.password.PasswordUtils
 
@@ -177,7 +178,9 @@ private class SshjConnection(
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward =
         withContext(Dispatchers.IO) {
             // Слушатель биндим сами: так читаем фактический порт при bindPort=0 и ловим «порт занят»
-            // как PortForwardException ещё до запуска цикла accept.
+            // как PortForwardException ещё до запуска цикла accept. Каждое принятое соединение сами
+            // туннелируем через direct-tcpip-канал к destHost:destPort — это даёт счётчики трафика и
+            // паузу (см. [SshjLocalForward]); штатный sshj LocalPortForwarder перекачку прячет внутри.
             val serverSocket = try {
                 ServerSocket().apply {
                     reuseAddress = true
@@ -188,24 +191,23 @@ private class SshjConnection(
                     "Не удалось занять локальный порт ${spec.bindHost}:${spec.bindPort}", e,
                 )
             }
-            val params = Parameters(spec.bindHost, serverSocket.localPort, spec.destHost, spec.destPort)
-            SshjLocalForward(client.newLocalPortForwarder(params, serverSocket), serverSocket)
+            SshjLocalForward(client, serverSocket, spec.destHost, spec.destPort)
         }
 
     override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward =
         withContext(Dispatchers.IO) {
-            val forwarder = client.remotePortForwarder
-            val forward = try {
-                forwarder.bind(
+            try {
+                SshjRemoteForward.open(
+                    client.remotePortForwarder,
                     RemotePortForwarder.Forward(spec.bindHost, spec.bindPort),
-                    SocketForwardingConnectListener(InetSocketAddress(spec.destHost, spec.destPort)),
+                    spec.destHost,
+                    spec.destPort,
                 )
             } catch (e: IOException) {
                 throw PortForwardException(
                     "Сервер отверг обратный проброс ${spec.bindHost}:${spec.bindPort}", e,
                 )
             }
-            SshjRemoteForward(forwarder, forward)
         }
 
     override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward =
@@ -235,106 +237,142 @@ private class SshjConnection(
 }
 
 /**
- * Локальный проброс (`-L`) поверх sshj. [LocalPortForwarder.listen] блокирует, принимая соединения,
- * пока [serverSocket] открыт, поэтому крутим его на демоническом потоке; [close] закрывает сокет —
- * это рвёт accept и завершает listen.
+ * Перекачать поток до EOF, сбрасывая буфер после каждого чанка (нужно для интерактивного TCP), и
+ * прибавить число прокачанных байт к [counter]. Считаем сразу после чтения (до записи), чтобы
+ * счётчик был не позади видимых получателю данных — на это опираются тесты телеметрии.
  */
-private class SshjLocalForward(
-    private val forwarder: LocalPortForwarder,
-    private val serverSocket: ServerSocket,
-) : PortForward {
-
-    private val active = AtomicBoolean(true)
-
-    override val boundPort: Int = serverSocket.localPort
-
-    override val isActive: Boolean
-        get() = active.get() && !serverSocket.isClosed
-
-    private val listener = thread(isDaemon = true, name = "skerry-local-forward-$boundPort") {
-        // Закрытие сокета/форвардера роняет accept как IOException — это штатное завершение.
-        runCatching { forwarder.listen() }
-    }
-
-    override suspend fun close() = withContext(Dispatchers.IO) {
-        if (!active.compareAndSet(true, false)) return@withContext
-        runCatching { forwarder.close() }
-        runCatching { serverSocket.close() }
-        listener.join(CLOSE_JOIN_MILLIS)
-        Unit
-    }
-
-    private companion object {
-        const val CLOSE_JOIN_MILLIS = 1000L
-    }
-}
-
-/**
- * Обратный проброс (`-R`) поверх sshj. Слушатель держит сервер; входящие туннели sshj обрабатывает
- * на своём connection-потоке через [SocketForwardingConnectListener], отдельный поток не нужен.
- * [close] отменяет привязку на сервере.
- */
-private class SshjRemoteForward(
-    private val forwarder: RemotePortForwarder,
-    private val forward: RemotePortForwarder.Forward,
-) : PortForward {
-
-    private val active = AtomicBoolean(true)
-
-    override val boundPort: Int = forward.port
-
-    override val isActive: Boolean
-        get() = active.get()
-
-    override suspend fun close() = withContext(Dispatchers.IO) {
-        if (!active.compareAndSet(true, false)) return@withContext
-        runCatching { forwarder.cancel(forward) }
-        Unit
-    }
-}
-
-/** Перекачать поток до EOF, сбрасывая буфер после каждого чанка (нужно для интерактивного TCP). */
-private fun pump(input: InputStream, output: OutputStream) {
+private fun pump(input: InputStream, output: OutputStream, counter: AtomicLong) {
     val buf = ByteArray(8192)
     while (true) {
         val n = input.read(buf)
         if (n < 0) break
+        counter.addAndGet(n.toLong())
         output.write(buf, 0, n)
         output.flush()
     }
 }
 
 /**
- * Динамический проброс (`-D`) поверх sshj: на [serverSocket] мы сами держим SOCKS5-сервер. Цикл
- * accept крутится на демоническом потоке; каждое соединение обслуживает отдельный поток — проводит
- * SOCKS5-хэндшейк ([Socks5]) и открывает под запрошенный адрес `direct-tcpip`-канал
- * ([SSHClient.newDirectConnection]), затем двунаправленно перекачивает байты до обрыва любой стороны.
- *
- * [close] закрывает [serverSocket] (рвёт accept) и все ещё живые соединения/каналы — по контракту
- * [PortForward] установленные туннели тоже снимаются.
+ * Двунаправленная перекачка между принятым локальным соединением ([near]) и SSH-каналом ([far]):
+ * восходящий поток (near→far) крутится на отдельном демоническом потоке, нисходящий (far→near) — на
+ * вызывающем. [up] считает байты, ушедшие в канал (к серверу), [down] — пришедшие из канала. По концу
+ * ввода near полузакрываем write-сторону канала: сервер увидит EOF и закроет назначение, нисходящий
+ * поток завершится. Возврат — после завершения обоих направлений.
  */
-private class SshjDynamicForward(
-    private val client: SSHClient,
+private fun tunnel(near: Socket, far: Channel, up: AtomicLong, down: AtomicLong, name: String) {
+    val upstream = thread(isDaemon = true, name = "$name-up") {
+        runCatching { pump(near.getInputStream(), far.outputStream, up); far.outputStream.close() }
+    }
+    runCatching { pump(far.inputStream, near.getOutputStream(), down) }
+    upstream.join()
+}
+
+/**
+ * База для пробросов со слушателем на нашей стороне (`-L`, `-D`). Держит [serverSocket], крутит accept
+ * на демоническом потоке, на каждое соединение запускает [handle] в своём потоке. Несёт паузу (на
+ * паузе принятое соединение сразу рвём, порт держим) и счётчики [up]/[down], которые наполняет
+ * [handle] через [tunnel]. [close] закрывает слушатель и все живые туннели.
+ *
+ * Поток accept НЕ запускается в конструкторе базы (иначе [handle] мог бы сработать на ещё не
+ * достроенном подклассе) — подкласс вызывает [startAccepting] в конце своего init.
+ */
+private abstract class AcceptingForward(
     private val serverSocket: ServerSocket,
+    private val threadName: String,
 ) : PortForward {
 
-    private val active = AtomicBoolean(true)
-    private val live = ConcurrentHashMap.newKeySet<Closeable>()
+    protected val active = AtomicBoolean(true)
+    private val paused = AtomicBoolean(false)
+    protected val up = AtomicLong(0)
+    protected val down = AtomicLong(0)
+    protected val live: MutableSet<Closeable> = ConcurrentHashMap.newKeySet()
 
-    override val boundPort: Int = serverSocket.localPort
+    final override val boundPort: Int = serverSocket.localPort
+    final override val isActive: Boolean get() = active.get() && !serverSocket.isClosed
+    final override val isPaused: Boolean get() = paused.get()
+    final override val bytesUp: Long get() = up.get()
+    final override val bytesDown: Long get() = down.get()
 
-    override val isActive: Boolean
-        get() = active.get() && !serverSocket.isClosed
+    private lateinit var acceptor: Thread
 
-    private val acceptor = thread(isDaemon = true, name = "skerry-socks-$boundPort") {
-        while (active.get() && !serverSocket.isClosed) {
-            // accept роняется IOException при close() — это штатное завершение цикла.
-            val socket = try { serverSocket.accept() } catch (e: IOException) { break }
-            thread(isDaemon = true, name = "skerry-socks-conn-$boundPort") { handle(socket) }
+    protected fun startAccepting() {
+        acceptor = thread(isDaemon = true, name = "$threadName-$boundPort") {
+            while (active.get() && !serverSocket.isClosed) {
+                // accept роняется IOException при close() — штатное завершение цикла.
+                val socket = try { serverSocket.accept() } catch (e: IOException) { break }
+                // На паузе порт держим, но соединение сразу рвём — туннель не поднимаем.
+                if (paused.get()) { runCatching { socket.close() }; continue }
+                thread(isDaemon = true, name = "$threadName-conn-$boundPort") { handle(socket) }
+            }
         }
     }
 
-    private fun handle(socket: Socket) {
+    /** Обслужить принятое соединение: открыть SSH-канал к назначению и прокачать байты через [tunnel]. */
+    protected abstract fun handle(socket: Socket)
+
+    final override suspend fun pause() = withContext(Dispatchers.IO) { paused.set(true) }
+    final override suspend fun resume() = withContext(Dispatchers.IO) { paused.set(false) }
+
+    final override suspend fun close() = withContext(Dispatchers.IO) {
+        if (!active.compareAndSet(true, false)) return@withContext
+        runCatching { serverSocket.close() } // рвёт accept
+        live.toList().forEach { runCatching { it.close() } } // снять уже поднятые туннели
+        acceptor.join(CLOSE_JOIN_MILLIS)
+        Unit
+    }
+
+    protected companion object {
+        const val CLOSE_JOIN_MILLIS = 1000L
+    }
+}
+
+/**
+ * Локальный проброс (`-L`): сами принимаем соединения на слушателе и под каждое открываем
+ * direct-tcpip-канал к фиксированному [destHost]:[destPort] (адрес разрешает сервер), затем
+ * двунаправленно перекачиваем байты. Собственная перекачка (вместо штатного sshj LocalPortForwarder,
+ * прятавшего поток внутри) даёт счётчики трафика и паузу.
+ */
+private class SshjLocalForward(
+    private val client: SSHClient,
+    serverSocket: ServerSocket,
+    private val destHost: String,
+    private val destPort: Int,
+) : AcceptingForward(serverSocket, "skerry-local-forward") {
+
+    init { startAccepting() }
+
+    override fun handle(socket: Socket) {
+        var channel: DirectConnection? = null
+        live.add(socket)
+        try {
+            socket.tcpNoDelay = true
+            channel = client.newDirectConnection(destHost, destPort)
+            val ch = channel
+            live.add(ch)
+            tunnel(socket, ch, up, down, "skerry-local-$boundPort")
+        } catch (e: Exception) {
+            // Обрыв соединения/канала — штатное завершение туннеля.
+        } finally {
+            channel?.let { live.remove(it); runCatching { it.close() } }
+            live.remove(socket)
+            runCatching { socket.close() }
+        }
+    }
+}
+
+/**
+ * Динамический проброс (`-D`): на слушателе держим SOCKS5-сервер. Каждое соединение проводит
+ * SOCKS5-хэндшейк ([Socks5]) и под запрошенный адрес открывает direct-tcpip-канал, затем
+ * двунаправленно перекачивает байты со счётом трафика.
+ */
+private class SshjDynamicForward(
+    private val client: SSHClient,
+    serverSocket: ServerSocket,
+) : AcceptingForward(serverSocket, "skerry-socks") {
+
+    init { startAccepting() }
+
+    override fun handle(socket: Socket) {
         var channel: DirectConnection? = null
         live.add(socket)
         try {
@@ -351,15 +389,7 @@ private class SshjDynamicForward(
             val ch = channel
             live.add(ch)
             Socks5.replySuccess(output)
-            // Восходящий поток (клиент → сервер) на отдельном потоке; нисходящий — на этом. Качаем
-            // вручную с flush на каждый чанк: kotlin copyTo не сбрасывает буфер, и интерактивные
-            // данные (не завершённые EOF) застряли бы. По концу клиентского ввода полузакрываем
-            // write-сторону канала — сервер увидит EOF и закроет назначение, нисходящий поток завершится.
-            val upstream = thread(isDaemon = true, name = "skerry-socks-up-$boundPort") {
-                runCatching { pump(input, ch.outputStream); ch.outputStream.close() }
-            }
-            runCatching { pump(ch.inputStream, output) }
-            upstream.join()
+            tunnel(socket, ch, up, down, "skerry-socks-$boundPort")
         } catch (e: Exception) {
             // Обрыв соединения/канала — штатное завершение туннеля.
         } finally {
@@ -368,17 +398,100 @@ private class SshjDynamicForward(
             runCatching { socket.close() }
         }
     }
+}
+
+/**
+ * Обратный проброс (`-R`): слушатель держит сервер. Каждое входящее соединение sshj отдаёт нашему
+ * ConnectListener каналом [Channel.Forwarded]; под него мы открываем локальный сокет к
+ * [destHost]:[destPort] и двунаправленно перекачиваем байты со счётом трафика и поддержкой паузы. На
+ * паузе входящий канал сразу закрываем (новые соединения не туннелируем). [close] отменяет привязку на
+ * сервере и рвёт живые туннели. Создаётся через [open], которая биндит проброс и узнаёт назначенный порт.
+ */
+private class SshjRemoteForward private constructor(
+    private val forwarder: RemotePortForwarder,
+    private val destHost: String,
+    private val destPort: Int,
+) : PortForward {
+
+    private val active = AtomicBoolean(true)
+    private val paused = AtomicBoolean(false)
+    private val up = AtomicLong(0)
+    private val down = AtomicLong(0)
+    private val live: MutableSet<Closeable> = ConcurrentHashMap.newKeySet()
+    private lateinit var forward: RemotePortForwarder.Forward
+
+    override var boundPort: Int = 0
+        private set
+
+    override val isActive: Boolean get() = active.get()
+    override val isPaused: Boolean get() = paused.get()
+    override val bytesUp: Long get() = up.get()
+    override val bytesDown: Long get() = down.get()
+
+    private fun gotConnect(channel: Channel.Forwarded) {
+        // На паузе/после снятия отвергаем входящий канал (сервер увидит отказ), а не молча закрываем.
+        if (!active.get() || paused.get()) {
+            runCatching { channel.reject(OpenFailException.Reason.ADMINISTRATIVELY_PROHIBITED, "tunnel paused") }
+            return
+        }
+        thread(isDaemon = true, name = "skerry-remote-conn-$boundPort") { handle(channel) }
+    }
+
+    private fun handle(channel: Channel.Forwarded) {
+        live.add(channel)
+        // Сначала соединяемся с локальным назначением; не вышло — отвергаем канал и выходим.
+        val socket = try {
+            Socket(destHost, destPort).apply { tcpNoDelay = true }
+        } catch (e: IOException) {
+            runCatching { channel.reject(OpenFailException.Reason.CONNECT_FAILED, "destination unreachable") }
+            live.remove(channel)
+            runCatching { channel.close() }
+            return
+        }
+        live.add(socket)
+        try {
+            // Подтверждаем открытие forwarded-канала — без этого сервер не начнёт слать данные.
+            channel.confirm()
+            // near = локальный сокет назначения, far = канал от сервера: up — ответ назначения в канал
+            // (к серверу), down — данные удалённого клиента из канала к назначению.
+            tunnel(socket, channel, up, down, "skerry-remote-$boundPort")
+        } catch (e: Exception) {
+            // Обрыв соединения/канала — штатное завершение туннеля.
+        } finally {
+            live.remove(socket)
+            runCatching { socket.close() }
+            live.remove(channel)
+            runCatching { channel.close() }
+        }
+    }
+
+    override suspend fun pause() = withContext(Dispatchers.IO) { paused.set(true) }
+    override suspend fun resume() = withContext(Dispatchers.IO) { paused.set(false) }
 
     override suspend fun close() = withContext(Dispatchers.IO) {
         if (!active.compareAndSet(true, false)) return@withContext
-        runCatching { serverSocket.close() } // рвёт accept
-        live.toList().forEach { runCatching { it.close() } } // снять уже поднятые туннели
-        acceptor.join(CLOSE_JOIN_MILLIS)
+        runCatching { forwarder.cancel(forward) }
+        live.toList().forEach { runCatching { it.close() } }
         Unit
     }
 
-    private companion object {
-        const val CLOSE_JOIN_MILLIS = 1000L
+    companion object {
+        /** Забиндить обратный проброс на сервере с нашим ConnectListener и вернуть готовый [PortForward]. */
+        fun open(
+            forwarder: RemotePortForwarder,
+            forwardSpec: RemotePortForwarder.Forward,
+            destHost: String,
+            destPort: Int,
+        ): SshjRemoteForward {
+            val pf = SshjRemoteForward(forwarder, destHost, destPort)
+            val bound = forwarder.bind(
+                forwardSpec,
+                ConnectListener { channel -> pf.gotConnect(channel) },
+            )
+            pf.forward = bound
+            pf.boundPort = bound.port
+            return pf
+        }
     }
 }
 
