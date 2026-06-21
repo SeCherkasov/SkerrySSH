@@ -25,9 +25,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +45,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.SshAuth
 import app.skerry.ui.AppDependencies
+import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.connection.toSshAuth
+import app.skerry.ui.connection.toTarget
+import app.skerry.ui.identity.IdentityManagerController
+import app.skerry.ui.session.SessionsController
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
@@ -65,15 +76,29 @@ fun MobileDesignApp(
     deps: AppDependencies = AppDependencies(),
     state: MobileDesignState = remember { MobileDesignState() },
     features: FeatureFlags = FeatureFlags(),
+    sessions: SessionsController? = null,
 ) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
+    // Менеджер сессий: либо подан снаружи (офскрин-рендер с фейковым транспортом), либо строится
+    // из живого транспорта — один shell на сессию, как в [DesktopDesignApp]/legacy-`MobileApp`.
+    // Свой граф закрываем при dispose; внешний — собственность вызывающего, не трогаем.
+    val scope = rememberCoroutineScope()
+    val liveSessions = sessions ?: remember(deps.transport, scope) {
+        deps.transport?.let { t ->
+            var counter = 0
+            SessionsController(newId = { "sess-${counter++}" }, controllerFactory = { ConnectionController(t, scope) })
+        }
+    }
+    val ownsSessions = sessions == null
+    DisposableEffect(liveSessions) { onDispose { if (ownsSessions) liveSessions?.disconnectAll() } }
     CompositionLocalProvider(
         LocalFonts provides fonts,
         LocalHosts provides deps.hosts,
+        LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,
         LocalFeatures provides features,
     ) {
@@ -87,9 +112,9 @@ fun MobileDesignApp(
                     unlockForm = { error, canBio, onUnlock, onBio ->
                         MobileUnlockScreen(error, canBio, onUnlock, onBio)
                     },
-                ) { onLock -> MobileChrome(state, onLock) }
+                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.identities) }
             } else {
-                MobileChrome(state, onLock = null)
+                MobileChrome(state, onLock = null, sessions = liveSessions, identities = deps.identities)
             }
         }
     }
@@ -101,23 +126,75 @@ fun MobileDesignApp(
  * гейтом (пункт «Lock Skerry» в More реально запирает vault); пока используется в следующих слайсах.
  */
 @Composable
-private fun MobileChrome(state: MobileDesignState, onLock: (() -> Unit)?) {
-    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        val route = state.route
-        Box(Modifier.fillMaxSize()) {
-            if (route != null) {
-                MobileRoutePane(state, route)
-            } else {
-                MobileTabPane(state)
+private fun MobileChrome(
+    state: MobileDesignState,
+    onLock: (() -> Unit)?,
+    sessions: SessionsController?,
+    identities: IdentityManagerController?,
+) {
+    // Identity-список живёт в открытом vault — перечитываем за гейтом мастер-пароля (как desktop).
+    LaunchedEffect(identities) { identities?.reload() }
+
+    // Хост без привязанной identity → спрашиваем пароль листом перед подключением.
+    var pendingHost by remember { mutableStateOf<Host?>(null) }
+
+    // Стабильная лямбда коннекта (без remember пересоздавалась бы и инвалидировала потребителей
+    // [LocalConnectHost]). Живую сессию хоста переиспользуем, мёртвую/отсутствующую — открываем
+    // заново ([mobileConnectAction]): на телефоне одна сессия за раз, без накопления сокетов.
+    val connectHost = remember(sessions, identities, state) {
+        { host: Host ->
+            val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
+            when (mobileConnectAction(existing?.controller?.uiState)) {
+                MobileConnectAction.Resume -> {
+                    existing?.let { sessions.activate(it.id) }
+                    state.push(MobileRoute.Terminal)
+                }
+                MobileConnectAction.OpenFresh -> {
+                    existing?.let { sessions.close(it.id) }
+                    val identity = identities?.find(host.identityId)
+                    if (identity != null) openMobileSession(sessions, state, host, identity.toSshAuth()) else pendingHost = host
+                }
             }
         }
-        if (state.showTabs) {
-            MobileTabBar(state, Modifier.align(Alignment.BottomCenter))
-        }
-        if (state.sheetNewConn) {
-            MobileNewConnectionSheet(state)
+    }
+
+    CompositionLocalProvider(LocalConnectHost provides connectHost) {
+        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            val route = state.route
+            Box(Modifier.fillMaxSize()) {
+                if (route != null) {
+                    MobileRoutePane(state, route)
+                } else {
+                    MobileTabPane(state)
+                }
+            }
+            if (state.showTabs) {
+                MobileTabBar(state, Modifier.align(Alignment.BottomCenter))
+            }
+            if (state.sheetNewConn) {
+                MobileNewConnectionSheet(state)
+            }
+            pendingHost?.let { host ->
+                MobilePasswordSheet(
+                    host = host,
+                    onDismiss = { pendingHost = null },
+                    onConnect = { pw -> pendingHost = null; openMobileSession(sessions, state, host, SshAuth.Password(pw)) },
+                )
+            }
         }
     }
+}
+
+/** Открыть сессию к [host] с [auth] и перейти на push-экран терминала. */
+private fun openMobileSession(sessions: SessionsController?, state: MobileDesignState, host: Host, auth: SshAuth) {
+    sessions?.open(
+        hostId = host.id,
+        title = host.label,
+        subtitle = host.connectionSubtitle(),
+        target = host.toTarget(),
+        auth = auth,
+    )
+    state.push(MobileRoute.Terminal)
 }
 
 // ──────────────────────────────── контент (плейсхолдеры слайса 1) ────────────────────────────────
@@ -158,7 +235,7 @@ private fun MobileTabPlaceholder(tab: MobileTab) {
 private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
     when (route) {
         MobileRoute.HostDetail -> MobileHostDetailScreen(state)
-        MobileRoute.Terminal -> MobileRoutePlaceholder(state, "Terminal")
+        MobileRoute.Terminal -> MobileTerminalScreen(state)
         MobileRoute.Ports -> MobileRoutePlaceholder(state, "Port forwarding")
         MobileRoute.Known -> MobileRoutePlaceholder(state, "Known hosts")
         MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")

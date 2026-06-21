@@ -113,9 +113,13 @@ fun main() {
 @OptIn(ExperimentalComposeUiApi::class)
 private fun renderMobile(out: String, viewName: String, overlay: String, live: Boolean) {
     val state = MobileDesignState()
-    val deps = if (live) AppDependencies(hosts = seededHosts()) else AppDependencies()
+    val hosts = if (live) seededHosts() else null
+    val deps = if (hosts != null) AppDependencies(hosts = hosts) else AppDependencies()
+    // Засеянные сессии (фейковый транспорт) для живого терминала — как в desktop-ветке; подаём в
+    // MobileDesignApp внешним менеджером, чтобы офскрин показал реальный TerminalScreen без сети.
+    val sessions = if (live && hosts != null) seededSessions(hosts) else null
     // view — имя MobileTab (корневой) либо MobileRoute (push-экран). HostDetail открывается на первом
-    // хосте каталога, чтобы офскрин показал живую деталь.
+    // хосте каталога, Terminal — на активной засеянной сессии, чтобы офскрин показал живой экран.
     val tab = runCatching { MobileTab.valueOf(viewName) }.getOrNull()
     if (tab != null) {
         state.select(tab)
@@ -131,7 +135,7 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     if (overlay == "sheet") state.openNewConn() // лист New connection поверх текущего таба
     // ширина/высота сцены — в ПИКСЕЛЯХ: 780×1688 при density 2 = логические 390×844dp (телефон).
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
-        SkerryTheme { MobileDesignApp(deps = deps, state = state) }
+        SkerryTheme { MobileDesignApp(deps = deps, state = state, sessions = sessions) }
     }
     var img = scene.render(0)
     for (i in 1..80) {
@@ -141,6 +145,7 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     val data = img.encodeToData() ?: error("encode failed")
     File(out).writeBytes(data.bytes)
     scene.close()
+    sessions?.disconnectAll() // снять коллекторы фейковых сессий перед выходом
     println("screenshot(mobile) → $out (${File(out).length()} bytes)")
 }
 

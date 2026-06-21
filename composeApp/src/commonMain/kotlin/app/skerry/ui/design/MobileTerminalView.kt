@@ -1,0 +1,351 @@
+package app.skerry.ui.design
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import app.skerry.shared.host.Host
+import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.terminal.TerminalScreen
+import app.skerry.ui.terminal.TerminalScreenState
+
+/** Фон клавишной панели терминала (`#0E1A24` из мока). Клавиши — белый 6%, моноширинные. */
+private val KeybarBg = Color(0xFF0E1A24)
+private val KeyCapBg = Color(0x0FFFFFFFF)
+private val KeyCapFg = Color(0xFFC9D6DE)
+
+/** ESC (0x1B) — префикс CSI-последовательностей стрелок и сама клавиша esc. */
+private const val ESC = "\u001b"
+
+/**
+ * Полноэкранный push-экран терминала мобильного макета `Skerry Mobile.html` (живая SSH-сессия
+ * поверх готового PTY-ядра). Шапка с именем хоста и статусом → тело по состоянию соединения активной
+ * сессии ([LocalSessions]) → клавишная панель спецклавиш. Тело подключённой сессии рендерит реальную
+ * сетку через общий [TerminalScreen] в IME-режиме (как legacy-`MobileApp` и desktop-`LiveTerminalPane`).
+ *
+ * Сессию открывает Connect на [MobileHostDetailScreen] (через `LocalConnectHost`); back-стрелка лишь
+ * возвращает на список (сессия остаётся живой), а Disconnect в меню `more_horiz` рвёт её и закрывает
+ * экран. AI-bar/AI-карточки макета спрятаны за [FeatureFlags.ai] (Phase 2). Split (иконка `splitscreen`)
+ * — задел макета, на телефоне отложен (показывается, без действия).
+ */
+@Composable
+fun MobileTerminalScreen(state: MobileDesignState) {
+    val sessions = LocalSessions.current
+    val active = sessions?.active
+    // Стабильная лямбда Disconnect (пересоздаётся только при смене сессии): рвёт соединение и
+    // возвращает на список — back-стрелка сессию оставляет живой, Disconnect её закрывает.
+    val onDisconnect = remember(active?.id, sessions) {
+        active?.let { s -> { sessions.close(s.id); state.pop() } }
+    }
+    Column(Modifier.fillMaxSize().background(D.terminalBg)) {
+        MobileTerminalHeader(
+            title = active?.title ?: "Terminal",
+            status = active?.controller?.uiState,
+            onBack = state::pop,
+            onDisconnect = onDisconnect,
+        )
+        when (val st = active?.controller?.uiState) {
+            null, ConnectionUiState.Form ->
+                MobileTerminalNotice("terminal", "No active session", "Open a host and tap Connect.")
+            ConnectionUiState.Connecting ->
+                MobileTerminalNotice("sync", "Connecting…", active.subtitle)
+            is ConnectionUiState.Connected -> {
+                TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth(), imeInput = true)
+                MobileKeybar(st.terminal)
+            }
+            is ConnectionUiState.Error ->
+                MobileTerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+        }
+    }
+}
+
+/**
+ * Шапка терминала по моку (`#0B1A26` + нижняя cyan-линия): back-шеврон, имя хоста + статус-строка,
+ * иконки split (задел) и `more_horiz` (меню с Disconnect). [onDisconnect]==null — нет активной
+ * сессии, пункт Disconnect скрыт.
+ */
+@Composable
+private fun MobileTerminalHeader(
+    title: String,
+    status: ConnectionUiState?,
+    onBack: () -> Unit,
+    onDisconnect: (() -> Unit)?,
+) {
+    val mono = LocalFonts.current.mono
+    var menuOpen by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().background(D.surface2)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Sym(
+                "chevron_left",
+                size = 24.sp,
+                color = D.cyanBright,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onBack,
+                ),
+            )
+            Column(Modifier.weight(1f)) {
+                Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold, font = mono)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Dot(sessionDotColor(status))
+                    Txt(mobileTerminalStatusText(status), color = sessionDotColor(status), size = 10.5.sp)
+                }
+            }
+            // Split — задел макета, на телефоне отложен (иконка без действия).
+            Sym("splitscreen", size = 21.sp, color = D.dim)
+            Box {
+                Sym(
+                    "more_horiz",
+                    size = 21.sp,
+                    color = D.dim,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { menuOpen = !menuOpen },
+                    ),
+                )
+                if (menuOpen && onDisconnect != null) {
+                    Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
+                        Column(
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(D.surface2)
+                                .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
+                                .padding(4.dp),
+                        ) {
+                            Row(
+                                Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { menuOpen = false; onDisconnect() }
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Sym("power_settings_new", size = 17.sp, color = D.sunset)
+                                Txt("Disconnect", color = D.sunset, size = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan08))
+    }
+}
+
+/** Центрированное сообщение на фоне терминала (нет сессии / подключение / ошибка). */
+@Composable
+private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, color: Color = D.dim) {
+    val mono = LocalFonts.current.mono
+    Column(
+        Modifier.fillMaxSize().padding(40.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Sym(icon, size = 30.sp, color = color)
+        Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+        Txt(subtitle, color = D.faint, size = 12.sp, font = mono)
+    }
+}
+
+/**
+ * Клавишная панель спецклавиш (`#0E1A24`, горизонтальный скролл) — сердце мобильного SSH-UX из мока:
+ * esc, tab, ctrl (sticky-модификатор), /, |, -, ~, стрелки. Управляющие последовательности уходят в
+ * PTY через [TerminalScreenState.send]. `ctrl` армируется тапом (подсветка cyan) и применяется к
+ * следующей символьной клавише панели ([controlByte]); полноценный Ctrl+<буква> с софт-клавиатуры —
+ * отдельный шаг (нужен хук IME-пути терминала).
+ */
+@Composable
+private fun MobileKeybar(terminal: TerminalScreenState) {
+    var ctrlArmed by remember { mutableStateOf(false) }
+    val plain = { seq: String -> terminal.send(seq); ctrlArmed = false }
+    val char = { c: String ->
+        if (ctrlArmed && c.length == 1) {
+            terminal.send(controlByte(c[0]))
+            ctrlArmed = false
+        } else {
+            terminal.send(c)
+        }
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(KeybarBg)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KeyCap("esc") { plain(ESC) }
+        KeyCap("tab") { plain("\t") }
+        // ctrl — спец-клавиша макета (всегда cyan); армирование заливает её сплошным cyan.
+        KeyCap("ctrl", accent = true, active = ctrlArmed) { ctrlArmed = !ctrlArmed }
+        KeyCap("/") { char("/") }
+        KeyCap("|") { char("|") }
+        KeyCap("-") { char("-") }
+        KeyCap("~") { char("~") }
+        KeyCapIcon("keyboard_arrow_up") { plain(ESC + "[A") }
+        KeyCapIcon("keyboard_arrow_down") { plain(ESC + "[B") }
+        KeyCapIcon("keyboard_arrow_left") { plain(ESC + "[D") }
+        KeyCapIcon("keyboard_arrow_right") { plain(ESC + "[C") }
+    }
+}
+
+/**
+ * Текстовая клавиша панели. [accent] — спец-клавиша макета (бирюзовый покой, как `ctrl`); [active] —
+ * sticky-армирование (залитая бирюза + тёмный текст).
+ */
+@Composable
+private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = false, onClick: () -> Unit) {
+    val bg = when {
+        active -> D.cyan
+        accent -> D.cyan14
+        else -> KeyCapBg
+    }
+    val fg = when {
+        active -> Color(0xFF0A1A26)
+        accent -> D.cyanBright
+        else -> KeyCapFg
+    }
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(7.dp))
+            .background(bg)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Txt(label, color = fg, size = 12.5.sp, font = LocalFonts.current.mono)
+    }
+}
+
+/** Иконочная клавиша панели (стрелки). */
+@Composable
+private fun KeyCapIcon(icon: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(7.dp))
+            .background(KeyCapBg)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Sym(icon, size = 16.sp, color = KeyCapFg)
+    }
+}
+
+/**
+ * Нижний лист запроса пароля при Connect к хосту без привязанной identity (в стиле листа
+ * `New connection`). Пароль уходит в [onConnect] как строку и тут же используется в `SshAuth.Password`;
+ * буфер живёт только в этом composable. Тап мимо панели — [onDismiss].
+ */
+@Composable
+fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -> Unit) {
+    var password by remember { mutableStateOf("") }
+    val submit = { if (password.isNotEmpty()) onConnect(password) }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0x8C04080C))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+                .background(Color(0xFF0E1B26))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
+                .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 30.dp),
+        ) {
+            Box(
+                Modifier
+                    .padding(bottom = 16.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .size(width = 38.dp, height = 5.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color(0x2EFFFFFF)),
+            )
+            Txt(host.label, color = D.text, size = 20.sp, weight = FontWeight.Bold)
+            Spacer(Modifier.height(3.dp))
+            Txt("${host.username}@${host.address}:${host.port}", color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono)
+            Spacer(Modifier.height(18.dp))
+            Txt("PASSWORD", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+            Spacer(Modifier.height(6.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(D.bg)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .padding(horizontal = 14.dp, vertical = 13.dp),
+            ) {
+                if (password.isEmpty()) Txt("••••••••", color = D.faint, size = 15.sp)
+                BasicTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+                    cursorBrush = SolidColor(D.cyan),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { submit() }, onDone = { submit() }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (password.isNotEmpty()) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
+                    .padding(15.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Txt("Connect", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+            }
+        }
+    }
+}

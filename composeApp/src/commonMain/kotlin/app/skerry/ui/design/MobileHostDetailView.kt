@@ -113,7 +113,9 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             )
         }
 
-        // Connect: переход в терминал-экран (живая сессия — слайс терминала; id уже выбран в state).
+        // Connect: открыть живую сессию через LocalConnectHost (резолвит identity или спрашивает
+        // пароль) и перейти на push-экран терминала; в превью/вне гейта это no-op.
+        val connect = LocalConnectHost.current
         Box(Modifier.padding(horizontal = 22.dp)) {
             Row(
                 Modifier
@@ -123,7 +125,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = { state.push(MobileRoute.Terminal) },
+                        onClick = { connect(host) },
                     )
                     .padding(15.dp),
                 verticalAlignment = Alignment.CenterVertically,
