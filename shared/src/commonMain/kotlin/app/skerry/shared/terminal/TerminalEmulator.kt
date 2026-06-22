@@ -231,6 +231,10 @@ class TerminalEmulator(
     var title: String = ""
         private set
 
+    // Стек заголовка окна (XTWINOPS CSI 22/23 t): vim/tmux сохраняют заголовок при входе и
+    // восстанавливают при выходе. Кап от недоверенного сервера, который мог бы пушить без pop.
+    private val titleStack = ArrayDeque<String>()
+
     // Активная гиперссылка OSC 8 (URI) — вешается на печатаемые клетки до закрытия пустым URI.
     private var currentHyperlink: String? = null
 
@@ -546,6 +550,29 @@ class TerminalEmulator(
             'u' -> restoreCursor()
             'n' -> deviceStatus(args.getOrNull(0) ?: 0)
             'c' -> if ((args.getOrNull(0) ?: 0) == 0) respond("$ESC[?1;2c") // DA: VT100 с AVO
+            't' -> windowOp(args)
+        }
+    }
+
+    /**
+     * XTWINOPS (CSI Ps ; Ps ; Ps t). Поддерживаем только стек заголовка окна — 22 (push) и 23 (pop);
+     * второй параметр выбирает цель: 0 = icon + window title, 2 = window title (оба моделируем как
+     * заголовок), 1 = только icon name. В xterm icon- и window-title — РАЗДЕЛЬНЫЕ стеки; icon-only
+     * (`;1`) не трогает window-стек ни на push, ни на pop, поэтому мы такие операции игнорируем целиком
+     * — наш единственный (window) стек видит лишь сбалансированные `{0,2}`-пары и остаётся согласован.
+     * Прочие операции (ресайз/перемещение/запрос геометрии окна) намеренно игнорируем: они либо
+     * неуместны для встроенного терминала, либо утечка отпечатка (xterm их по умолчанию тоже отключает).
+     */
+    private fun windowOp(args: List<Int>) {
+        val op = args.getOrNull(0) ?: return
+        val target = args.getOrNull(1) ?: 0 // отсутствует -> 0 (icon + window)
+        if (target != 0 && target != 2) return // только icon (1) или иное -> заголовок окна не затронут
+        when (op) {
+            22 -> {
+                if (titleStack.size >= MAX_TITLE_STACK) titleStack.removeFirst() // кап против пуша без pop
+                titleStack.addLast(title)
+            }
+            23 -> titleStack.removeLastOrNull()?.let { title = it }
         }
     }
 
@@ -977,6 +1004,7 @@ class TerminalEmulator(
         bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; focusReporting = false
         g0LineDrawing = false; g1LineDrawing = false; glG1 = false
         pendingDesignation = -1
+        title = ""; titleStack.clear() // RIS возвращает заголовок к дефолту (вкладка падает на host.label)
     }
 
     // --- Табстопы ----------------------------------------------------------
@@ -1225,6 +1253,9 @@ class TerminalEmulator(
 
         /** Потолок длины OSC-строки (защита от OOM на недоверенном выводе); 4 MiB с запасом под OSC 52. */
         const val MAX_OSC_LEN = 4 * 1024 * 1024
+
+        /** Потолок глубины стека заголовка окна (CSI 22 t без парного 23 t) — против раздувания. */
+        const val MAX_TITLE_STACK = 128
         const val TAB = 8
         val ESC = 27.toChar().toString()
 

@@ -563,6 +563,51 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `CSI 22 t pushes and CSI 23 t pops the window title`() {
+        // XTWINOPS title stack: vim/tmux сохраняют заголовок при входе (22;2 t) и восстанавливают
+        // при выходе (23;2 t). Ставим A, push, меняем на B, pop -> снова A.
+        val emu = emulate(chunks = arrayOf("$esc]2;A$bel", "$esc[22;2t", "$esc]2;B$bel"))
+        assertEquals("B", emu.title)
+        emu.feed("$esc[23;2t".encodeToByteArray())
+        assertEquals("A", emu.title)
+    }
+
+    @Test
+    fun `title stack nests and second-param 0 also targets the title`() {
+        // Ps=0 (icon+window) тоже толкает/снимает заголовок; стек вложенный (LIFO).
+        val emu = emulate(chunks = arrayOf("$esc]2;A$bel", "$esc[22;0t", "$esc]2;B$bel", "$esc[22t", "$esc]2;C$bel"))
+        assertEquals("C", emu.title)
+        emu.feed("$esc[23t".encodeToByteArray())   // pop -> B
+        assertEquals("B", emu.title)
+        emu.feed("$esc[23;0t".encodeToByteArray())  // pop -> A
+        assertEquals("A", emu.title)
+    }
+
+    @Test
+    fun `popping the title with empty stack leaves it unchanged`() {
+        val emu = emulate(chunks = arrayOf("$esc]2;A$bel", "$esc[23;2t"))
+        assertEquals("A", emu.title)
+    }
+
+    @Test
+    fun `icon-only title ops are ignored and do not unbalance the stack`() {
+        // Ps=1 — только icon name, заголовок окна не моделируем: 22;1/23;1 не трогают стек.
+        val emu = emulate(
+            chunks = arrayOf("$esc]2;A$bel", "$esc[22;1t", "$esc]2;B$bel", "$esc[23;1t"),
+        )
+        assertEquals("B", emu.title) // icon-pop не вернул A
+    }
+
+    @Test
+    fun `RIS clears the title and its stack`() {
+        // ESC c (RIS) возвращает заголовок к дефолту и очищает стек: последующий pop — no-op.
+        val emu = emulate(chunks = arrayOf("$esc]2;A$bel", "$esc[22;2t", "${esc}c"))
+        assertEquals("", emu.title)
+        emu.feed("$esc[23;2t".encodeToByteArray())
+        assertEquals("", emu.title)
+    }
+
+    @Test
     fun `bell triggers the callback`() {
         var rang = false
         TerminalEmulator(onBell = { rang = true }).feed(bel.encodeToByteArray())
