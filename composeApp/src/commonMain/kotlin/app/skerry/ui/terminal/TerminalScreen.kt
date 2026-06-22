@@ -332,33 +332,18 @@ fun TerminalScreen(
                           drawRect(selectionBg, topLeft = Offset(s * cw, top), size = Size((k - s) * cw, chh))
                       }
                   }
-                  // 3) Глифы — раны подряд идущих одностилевых Single-клеток рисуем одним drawText
-                  // (быстрый общий случай моноширинного текста); Wide-клетку — отдельно (её глиф шире
-                  // одной колонки), Continuation — пропускаем (под широким символом глифа нет).
-                  var g = 0
-                  while (g < row.size) {
-                      val cell = row[g]
-                      if (cell.width == CellWidth.Continuation) { g++; continue }
-                      if (cell.width == CellWidth.Wide) {
-                          if (cell.text.isNotBlank()) {
-                              drawText(measurer, cell.text, topLeft = Offset(g * cw, top), style = cell.style.toGlyphStyle(textStyle, palette))
-                          }
-                          if (cell.style.underline) drawCellUnderline(cell.style, g * cw, top, 2 * cw, chh, palette)
-                          g++
-                          continue
-                      }
-                      val st = cell.style
-                      val sCol = g
-                      val runText = buildString {
-                          while (g < row.size && row[g].width == CellWidth.Single && row[g].style == st) {
-                              append(row[g].text); g++
-                          }
-                      }
-                      if (runText.isNotBlank()) {
-                          drawText(measurer, runText, topLeft = Offset(sCol * cw, top), style = st.toGlyphStyle(textStyle, palette))
+                  // 3) Глифы — сегментируем строку на раны (см. glyphRuns): подряд идущие
+                  // одностилевые ASCII-клетки рисуем одним drawText (быстрый моноширинный случай),
+                  // а каждый НЕ-ASCII глиф (box-drawing рамок mc, CJK, символы) — в свою колонку
+                  // отдельно: fallback-шрифт даёт не-cellWidth advance, и длинный ран накапливал бы
+                  // дрейф (рваные горизонтали рамок, съезд цветных строк). Wide-клетка — span=2.
+                  for (run in glyphRuns(row)) {
+                      val x = run.col * cw
+                      if (run.text.isNotBlank()) {
+                          drawText(measurer, run.text, topLeft = Offset(x, top), style = run.style.toGlyphStyle(textStyle, palette))
                       }
                       // Подчёркивание тянем по всей ширине рана, в т.ч. под пробелами (как в xterm).
-                      if (st.underline) drawCellUnderline(st, sCol * cw, top, (g - sCol) * cw, chh, palette)
+                      if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette)
                   }
                   // 4) Гиперссылки (OSC 8) подчёркиваем отдельным проходом — раны соседних клеток с
                   // одним URI; пропускаем те, что уже подчёркнуты приложением (SGR), чтобы не дублировать.
@@ -753,6 +738,53 @@ private fun cellBgColor(style: TermStyle, palette: Palette): Color? = when {
     style.inverse -> style.fg.toComposeColor(SkerryColors.text, palette)
     style.bg == TermColor.Default -> null
     else -> style.bg.toComposeColor(SkerryColors.text, palette)
+}
+
+/**
+ * Один ран глифов для отрисовки: текст, начальная колонка [col], число занятых колонок [span] (для
+ * подчёркивания: Wide=2, ASCII-ран = число клеток) и стиль.
+ */
+internal data class GlyphRun(val col: Int, val text: String, val span: Int, val style: TermStyle)
+
+/**
+ * Печатный ASCII (один BMP-символ 0x20..0x7e) — у JetBrains Mono гарантированно cellWidth advance.
+ * Вызывается только для Single-клеток (Continuation/Wide отфильтрованы раньше в [glyphRuns]).
+ */
+private fun TermCell.isPlainAscii(): Boolean = text.length == 1 && text[0].code in 0x20..0x7e
+
+/**
+ * Сегментирует строку сетки на раны глифов. Подряд идущие одностилевые ASCII-клетки склеиваются в
+ * один ран (быстрый моноширинный drawText), а каждый НЕ-ASCII глиф (box-drawing рамок mc, CJK,
+ * символы) выделяется в отдельный ран на одну колонку — потому что fallback-шрифт рисует такие глифы
+ * с advance ≠ cellWidth, и в длинном ране это копит дрейф (рваные горизонтали рамок, съезд цветных
+ * строк на колонку). Wide-клетка — отдельный ран на две колонки; Continuation глифа не несёт.
+ * Колонка рана — физический индекс клетки, поэтому Continuation-«дыра» не сдвигает следующий ран.
+ */
+internal fun glyphRuns(row: List<TermCell>): List<GlyphRun> {
+    val runs = ArrayList<GlyphRun>()
+    var g = 0
+    while (g < row.size) {
+        val cell = row[g]
+        when {
+            cell.width == CellWidth.Continuation -> g++
+            cell.width == CellWidth.Wide -> {
+                runs.add(GlyphRun(g, cell.text, 2, cell.style)); g++
+            }
+            !cell.isPlainAscii() -> {
+                runs.add(GlyphRun(g, cell.text, 1, cell.style)); g++
+            }
+            else -> {
+                val st = cell.style
+                val start = g
+                val sb = StringBuilder()
+                while (g < row.size && row[g].width == CellWidth.Single && row[g].style == st && row[g].isPlainAscii()) {
+                    sb.append(row[g].text); g++
+                }
+                runs.add(GlyphRun(start, sb.toString(), g - start, st))
+            }
+        }
+    }
+    return runs
 }
 
 /**
