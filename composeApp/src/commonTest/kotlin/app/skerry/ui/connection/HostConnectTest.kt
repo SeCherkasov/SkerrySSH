@@ -50,4 +50,23 @@ class HostConnectTest {
         val id = Identity("i3", "key", IdentityAuth.PrivateKey("PEMDATA", null))
         assertEquals(SshAuth.PublicKey("PEMDATA", null), id.toSshAuth())
     }
+
+    @Test
+    fun short_cipher_drops_vendor_suffix() {
+        assertEquals("chacha20-poly1305", shortCipher("chacha20-poly1305@openssh.com"))
+        assertEquals("aes256-gcm", shortCipher("aes256-gcm@openssh.com"))
+    }
+
+    @Test
+    fun short_cipher_keeps_plain_name() {
+        assertEquals("aes256-ctr", shortCipher("aes256-ctr"))
+    }
+
+    @Test
+    fun short_cipher_trims_and_handles_blank_or_null() {
+        assertEquals("chacha20-poly1305", shortCipher("  chacha20-poly1305@openssh.com  "))
+        assertEquals(null, shortCipher(null))
+        assertEquals(null, shortCipher("   "))
+        assertEquals(null, shortCipher("@"))
+    }
 }

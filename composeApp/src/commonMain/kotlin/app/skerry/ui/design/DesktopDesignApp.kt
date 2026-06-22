@@ -349,12 +349,15 @@ private fun StatusBar() {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
-            StatusItem("network_ping", "42 ms", mono = mono)
-            StatusItem("arrow_upward", "1.2 KB/s", mono = mono)
-            StatusItem("arrow_downward", "8.4 KB/s", mono = mono)
+            // RTT/throughput — живой источник появится отдельными слайсами; пока в живом режиме
+            // честный «—» вместо фейковых значений, в мок-режиме (офскрин) — метки шаблона.
+            StatusItem("network_ping", if (live) "—" else "42 ms", mono = mono)
+            StatusItem("arrow_upward", if (live) "—" else "1.2 KB/s", mono = mono)
+            StatusItem("arrow_downward", if (live) "—" else "8.4 KB/s", mono = mono)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            StatusItem("memory", "SSH-2.0-OpenSSH_8.9p1", mono = mono)
+            // Версия сервера — живой источник в отдельном слайсе; пока «—» в живом режиме.
+            StatusItem("memory", if (live) "—" else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
             Txt("UTF-8 · LF", color = D.faint, size = 10.5.sp, font = mono)
             Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
         }

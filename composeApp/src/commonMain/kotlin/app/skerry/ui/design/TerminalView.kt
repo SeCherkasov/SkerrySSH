@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.connection.shortCipher
 import kotlin.math.roundToInt
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.groupHostsByFolder
@@ -255,7 +256,11 @@ private fun SessionToolbar(state: DesktopDesignState) {
                         Txt(active.subtitle, color = D.dim, size = 11.5.sp, font = mono)
                         Dot(sessionDotColor(active.controller.uiState))
                     }
+                } else if (sessions != null) {
+                    // Живой режим без активной сессии: честное пустое состояние, без фейкового хоста.
+                    Txt("No active session", color = D.faint, size = 12.sp, font = mono)
                 } else {
+                    // Мок/превью (офскрин-рендер без LocalSessions): статичный заголовок макета.
                     Txt("root@prod-web-01", color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Txt("192.168.1.45:22", color = D.dim, size = 11.5.sp)
@@ -638,7 +643,7 @@ private fun InfoPanel() {
             InfoRow("Address", if (live) (host?.let { "${it.address}:${it.port}" } ?: "—") else "192.168.1.45:22", mono)
             InfoRow("User", if (live) (host?.username ?: "—") else "root", mono)
             InfoRow("Auth", if (live) (host?.identityId?.let { "identity" } ?: "password") else "id_ed25519", mono)
-            InfoRow("Cipher", if (live) (active?.controller?.cipher ?: "…") else "aes256-gcm", mono)
+            InfoRow("Cipher", if (live) (shortCipher(active?.controller?.cipher) ?: "…") else "aes256-gcm", mono)
             InfoRow("Uptime", if (live) (liveMetrics?.uptimeSeconds?.let { formatUptime(it) } ?: "…") else "04:12:45", mono)
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {

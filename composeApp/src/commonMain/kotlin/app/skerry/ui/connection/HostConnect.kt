@@ -26,3 +26,11 @@ fun Identity.toSshAuth(): SshAuth = when (val a = auth) {
     is IdentityAuth.Password -> SshAuth.Password(a.password)
     is IdentityAuth.PrivateKey -> SshAuth.PublicKey(a.privateKeyPem, a.passphrase)
 }
+
+/**
+ * Имя шифра для тесной info-панели: отбрасывает вендорный суффикс `@…` (`chacha20-poly1305@openssh.com`
+ * → `chacha20-poly1305`), чтобы строка влезала. Пустую/`null`-строку возвращает как `null` (нечего
+ * показывать). Сам алгоритм в имени не меняется — суффикс лишь маркер вендора OpenSSH.
+ */
+fun shortCipher(cipher: String?): String? =
+    cipher?.trim()?.substringBefore('@')?.takeIf { it.isNotEmpty() }
