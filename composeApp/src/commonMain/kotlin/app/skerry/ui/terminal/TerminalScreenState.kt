@@ -153,7 +153,8 @@ class TerminalScreenState(
                         try {
                             session.resize(cmd.size)
                             emulator.resize(cmd.size.cols, cmd.size.rows)
-                        } catch (_: Throwable) {
+                        } catch (_: Exception) {
+                            // только восстановимые сбои (например, обрыв PTY); Error пробрасываем
                         }
                     }
                 }
