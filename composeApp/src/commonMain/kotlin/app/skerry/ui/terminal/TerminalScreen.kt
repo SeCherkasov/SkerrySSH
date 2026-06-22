@@ -412,6 +412,7 @@ fun TerminalScreen(
                     alt = event.isAltPressed,
                     shift = event.isShiftPressed,
                     applicationCursor = state.applicationCursorKeys,
+                    applicationKeypad = state.applicationKeypad,
                 )
                 if (bytes != null) {
                     state.clearSelection()

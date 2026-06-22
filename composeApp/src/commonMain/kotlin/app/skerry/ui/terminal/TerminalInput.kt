@@ -36,7 +36,11 @@ fun mapTerminalKey(
     alt: Boolean = false,
     shift: Boolean = false,
     applicationCursor: Boolean = false,
+    applicationKeypad: Boolean = false,
 ): String? {
+    // Application keypad (DECKPAM): numpad шлёт SS3 (ESC O p..y / M/k/m/j/o/n) вместо цифр. Только без
+    // ctrl — Ctrl+numpad оставляем общему пути. Перехватываем до when ниже (иначе NumPadEnter дал бы CR).
+    if (applicationKeypad && !ctrl) keypadSequence(key)?.let { return it }
     // Навигация и F-клавиши идут ПЕРВЫМИ: при Ctrl/Alt/Shift они кодируют модификатор внутри CSI
     // (ESC[1;<mod>x), поэтому Ctrl+стрелка не должна провалиться в ctrl-блок ниже (там она дала бы null).
     navKeySequence(key, applicationCursor, shift, alt, ctrl)?.let { return it }
@@ -58,6 +62,33 @@ fun mapTerminalKey(
     }
     val ch = printableChar(key, codePoint, shift) ?: return null
     return meta(alt, ch.toString())
+}
+
+/**
+ * SS3-последовательность numpad-клавиши в application-keypad-режиме (DECKPAM) или `null`, если [key]
+ * не из numpad. Кодировка xterm: цифры 0..9 → `ESC O p`..`ESC O y`, `.`→`ESC O n`, Enter→`ESC O M`,
+ * `+`→`ESC O k`, `-`→`ESC O m`, `*`→`ESC O j`, `/`→`ESC O o`, `=`→`ESC O X`, `,`→`ESC O l`.
+ */
+private fun keypadSequence(key: Key): String? = when (key) {
+    Key.NumPad0 -> "${ESC}Op"
+    Key.NumPad1 -> "${ESC}Oq"
+    Key.NumPad2 -> "${ESC}Or"
+    Key.NumPad3 -> "${ESC}Os"
+    Key.NumPad4 -> "${ESC}Ot"
+    Key.NumPad5 -> "${ESC}Ou"
+    Key.NumPad6 -> "${ESC}Ov"
+    Key.NumPad7 -> "${ESC}Ow"
+    Key.NumPad8 -> "${ESC}Ox"
+    Key.NumPad9 -> "${ESC}Oy"
+    Key.NumPadDot -> "${ESC}On"
+    Key.NumPadEnter -> "${ESC}OM"
+    Key.NumPadAdd -> "${ESC}Ok"
+    Key.NumPadSubtract -> "${ESC}Om"
+    Key.NumPadMultiply -> "${ESC}Oj"
+    Key.NumPadDivide -> "${ESC}Oo"
+    Key.NumPadEquals -> "${ESC}OX"
+    Key.NumPadComma -> "${ESC}Ol"
+    else -> null
 }
 
 /**

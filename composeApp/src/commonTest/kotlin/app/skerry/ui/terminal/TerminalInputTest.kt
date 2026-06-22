@@ -258,6 +258,32 @@ class TerminalInputTest {
     }
 
     @Test
+    fun `numpad sends literal digits in normal keypad mode`() {
+        // Без application-keypad numpad-клавиши = обычные символы (NumLock on).
+        assertEquals("7", mapTerminalKey(Key.NumPad7, ctrl = false, codePoint = '7'.code))
+        assertEquals("0", mapTerminalKey(Key.NumPad0, ctrl = false, codePoint = '0'.code))
+        assertEquals(listOf(0x0d), codes(mapTerminalKey(Key.NumPadEnter, ctrl = false, codePoint = 0)))
+    }
+
+    @Test
+    fun `numpad sends SS3 in application keypad mode (DECKPAM)`() {
+        // Application keypad (Emacs, калькуляторные TUI): NumPad0..9 → ESC O p..y.
+        assertEquals(listOf(0x1b, 'O'.code, 'p'.code),
+            codes(mapTerminalKey(Key.NumPad0, ctrl = false, codePoint = '0'.code, applicationKeypad = true)))
+        assertEquals(listOf(0x1b, 'O'.code, 'w'.code),
+            codes(mapTerminalKey(Key.NumPad7, ctrl = false, codePoint = '7'.code, applicationKeypad = true)))
+        assertEquals(listOf(0x1b, 'O'.code, 'y'.code),
+            codes(mapTerminalKey(Key.NumPad9, ctrl = false, codePoint = '9'.code, applicationKeypad = true)))
+        // Операторы и Enter: + → ESC O k, - → ESC O m, * → ESC O j, / → ESC O o, . → ESC O n, Enter → ESC O M.
+        assertEquals(listOf(0x1b, 'O'.code, 'M'.code),
+            codes(mapTerminalKey(Key.NumPadEnter, ctrl = false, codePoint = 0, applicationKeypad = true)))
+        assertEquals(listOf(0x1b, 'O'.code, 'k'.code),
+            codes(mapTerminalKey(Key.NumPadAdd, ctrl = false, codePoint = '+'.code, applicationKeypad = true)))
+        assertEquals(listOf(0x1b, 'O'.code, 'n'.code),
+            codes(mapTerminalKey(Key.NumPadDot, ctrl = false, codePoint = '.'.code, applicationKeypad = true)))
+    }
+
+    @Test
     fun `focus report sequences are CSI I and CSI O`() {
         // DECSET 1004: фокус окна → ESC[I, потеря фокуса → ESC[O.
         assertEquals(listOf(0x1b, '['.code, 'I'.code), codes(focusReportSequence(focused = true)))

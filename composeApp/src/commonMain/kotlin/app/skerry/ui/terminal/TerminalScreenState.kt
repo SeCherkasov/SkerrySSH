@@ -108,6 +108,13 @@ class TerminalScreenState(
         private set
 
     /**
+     * Application-keypad-режим (DECKPAM/DECKPNM), снятый с эмулятора: когда включён, numpad-клавиши
+     * шлются как SS3 (`ESC O p`..`ESC O y` и т.п.), а не как цифры. UI читает флаг при кодировании клавиш.
+     */
+    var applicationKeypad: Boolean by mutableStateOf(false)
+        private set
+
+    /**
      * Режим репортинга мыши, снятый с эмулятора (DEC 1000/1002/1003 + X10). Когда не [MouseTracking.Off],
      * приложение само обрабатывает мышь: UI шлёт ему события вместо локального выделения (если не
      * зажат Shift, который форсит локальное выделение по xterm-конвенции).
@@ -205,6 +212,7 @@ class TerminalScreenState(
         cursorShape = emulator.cursorShape
         cursorBlink = emulator.cursorBlink
         applicationCursorKeys = emulator.applicationCursorKeys
+        applicationKeypad = emulator.applicationKeypad
         mouseTracking = emulator.mouseTracking
         mouseSgr = emulator.mouseSgr
         bracketedPaste = emulator.bracketedPaste

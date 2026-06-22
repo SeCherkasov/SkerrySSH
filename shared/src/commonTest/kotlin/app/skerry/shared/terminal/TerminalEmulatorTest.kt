@@ -623,6 +623,14 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `application keypad mode is tracked via DECKPAM and DECKPNM`() {
+        assertTrue(emulate(chunks = arrayOf("$esc=")).applicationKeypad)   // DECKPAM
+        val emu = emulate(chunks = arrayOf("$esc="))
+        emu.feed("$esc>".encodeToByteArray())                              // DECKPNM
+        assertFalse(emu.applicationKeypad)
+    }
+
+    @Test
     fun `focus reporting mode is tracked`() {
         // DECSET 1004: vim/tmux просят уведомления о фокусе окна.
         assertTrue(emulate(chunks = arrayOf("$esc[?1004h")).focusReporting)
