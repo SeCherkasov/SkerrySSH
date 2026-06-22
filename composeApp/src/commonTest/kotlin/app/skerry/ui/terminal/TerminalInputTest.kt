@@ -258,6 +258,13 @@ class TerminalInputTest {
     }
 
     @Test
+    fun `focus report sequences are CSI I and CSI O`() {
+        // DECSET 1004: фокус окна → ESC[I, потеря фокуса → ESC[O.
+        assertEquals(listOf(0x1b, '['.code, 'I'.code), codes(focusReportSequence(focused = true)))
+        assertEquals(listOf(0x1b, '['.code, 'O'.code), codes(focusReportSequence(focused = false)))
+    }
+
+    @Test
     fun `bare modifier or unknown key is ignored`() {
         assertNull(mapTerminalKey(Key.CtrlLeft, ctrl = false, codePoint = 0))
         assertNull(mapTerminalKey(Key.ShiftLeft, ctrl = false, codePoint = 0))

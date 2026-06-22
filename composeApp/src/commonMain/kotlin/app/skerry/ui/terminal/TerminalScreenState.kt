@@ -123,6 +123,10 @@ class TerminalScreenState(
     var bracketedPaste: Boolean by mutableStateOf(false)
         private set
 
+    /** Focus reporting (DEC 1004): когда включён, [notifyFocus] шлёт ESC[I/ESC[O при смене фокуса. */
+    var focusReporting: Boolean by mutableStateOf(false)
+        private set
+
     /** Активен альтернативный буфер (полноэкранные TUI): без своего scrollback, колесо ≠ прокрутке. */
     var altScreen: Boolean by mutableStateOf(false)
         private set
@@ -204,6 +208,7 @@ class TerminalScreenState(
         mouseTracking = emulator.mouseTracking
         mouseSgr = emulator.mouseSgr
         bracketedPaste = emulator.bracketedPaste
+        focusReporting = emulator.focusReporting
         altScreen = emulator.altScreen
         palette = emulator.paletteSnapshot()
     }
@@ -288,6 +293,14 @@ class TerminalScreenState(
             ?: return false
         sendBytes(bytes)
         return true
+    }
+
+    /**
+     * Уведомить приложение о смене фокуса окна терминала: при включённом focus-reporting (DEC 1004)
+     * шлёт ESC[I (фокус) или ESC[O (потеря). No-op, если приложение режим не запрашивало.
+     */
+    fun notifyFocus(focused: Boolean) {
+        if (focusReporting) send(focusReportSequence(focused))
     }
 
     /** Вставить текст из буфера: при включённом bracketed-paste оборачивает маркерами (DEC 2004). */

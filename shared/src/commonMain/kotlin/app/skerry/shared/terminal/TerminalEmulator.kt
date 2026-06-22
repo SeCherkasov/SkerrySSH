@@ -212,6 +212,10 @@ class TerminalEmulator(
         private set
     var mouseSgr: Boolean = false
         private set
+
+    /** Focus reporting (DEC 1004): когда включён, UI шлёт ESC[I при фокусе окна и ESC[O при потере. */
+    var focusReporting: Boolean = false
+        private set
     var title: String = ""
         private set
 
@@ -537,6 +541,7 @@ class TerminalEmulator(
             1000 -> mouseTracking = if (on) MouseTracking.Normal else MouseTracking.Off
             1002 -> mouseTracking = if (on) MouseTracking.ButtonEvent else MouseTracking.Off
             1003 -> mouseTracking = if (on) MouseTracking.AnyEvent else MouseTracking.Off
+            1004 -> focusReporting = on
             1006 -> mouseSgr = on
             2004 -> bracketedPaste = on
             47, 1047 -> setAltScreen(on, saveRestore = false)
@@ -910,7 +915,7 @@ class TerminalEmulator(
         originMode = false; insertMode = false; autoWrap = true; cursorVisible = true
         cursorShape = CursorShape.Block; cursorBlink = true
         applicationCursorKeys = false; applicationKeypad = false
-        bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false
+        bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; focusReporting = false
         g0LineDrawing = false; g1LineDrawing = false; glG1 = false
         pendingDesignation = -1
     }

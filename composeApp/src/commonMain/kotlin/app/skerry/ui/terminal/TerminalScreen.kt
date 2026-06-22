@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -388,6 +389,8 @@ fun TerminalScreen(
             .padding(PADDING_DP.dp)
             .fillMaxWidth()
             .focusRequester(focusRequester)
+            // Focus reporting (DEC 1004): vim/tmux получают ESC[I/ESC[O при фокусе окна терминала.
+            .onFocusChanged { state.notifyFocus(it.isFocused) }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown || closed) return@onPreviewKeyEvent false
                 // Ctrl+Shift+C — копирование выделения (Ctrl+C остаётся SIGINT для shell).

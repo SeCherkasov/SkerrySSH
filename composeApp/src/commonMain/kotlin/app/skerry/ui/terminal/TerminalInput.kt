@@ -60,6 +60,12 @@ fun mapTerminalKey(
     return meta(alt, ch.toString())
 }
 
+/**
+ * Последовательность focus-reporting (DEC 1004): фокус окна → `ESC[I`, потеря фокуса → `ESC[O`.
+ * UI шлёт её в PTY при смене фокуса, только когда приложение включило режим (vim/tmux).
+ */
+fun focusReportSequence(focused: Boolean): String = if (focused) "$ESC[I" else "$ESC[O"
+
 /** Meta-обёртка: при зажатом Alt добавляет префикс ESC (xterm metaSendsEscape). */
 private fun meta(alt: Boolean, seq: String): String = if (alt) ESC + seq else seq
 

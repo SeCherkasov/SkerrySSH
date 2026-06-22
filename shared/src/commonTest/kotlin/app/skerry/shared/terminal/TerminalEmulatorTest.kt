@@ -623,6 +623,15 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `focus reporting mode is tracked`() {
+        // DECSET 1004: vim/tmux просят уведомления о фокусе окна.
+        assertTrue(emulate(chunks = arrayOf("$esc[?1004h")).focusReporting)
+        val emu = emulate(chunks = arrayOf("$esc[?1004h"))
+        emu.feed("$esc[?1004l".encodeToByteArray())
+        assertFalse(emu.focusReporting)
+    }
+
+    @Test
     fun `unrelated private mode does not arm application cursor keys`() {
         assertFalse(emulate(chunks = arrayOf("$esc[?1049h$esc[?2004h")).applicationCursorKeys)
     }
