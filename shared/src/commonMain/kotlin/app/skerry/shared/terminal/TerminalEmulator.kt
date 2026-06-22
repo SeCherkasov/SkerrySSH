@@ -494,10 +494,18 @@ class TerminalEmulator(
     private fun dispatchCsi(final: Char) {
         val raw = params.toString()
         val privateMarker = raw.firstOrNull()?.takeIf { it == '?' || it == '<' || it == '=' || it == '>' }
+        // DECRQM (CSI [?] Ps $ p): запрос текущего состояния режима — отвечаем DECRPM.
+        if (csiIntermediate == '$' && final == 'p') {
+            val body = if (privateMarker == '?') raw.substring(1) else raw
+            reportMode(parseArgs(body).firstOrNull() ?: 0, private = privateMarker == '?')
+            return
+        }
         if (privateMarker == '?') { privateMode(final, parseArgs(raw.substring(1))); return }
         if (privateMarker != null) {
             // Вторичная DA (CSI > c) и прочие — отвечаем минимально, остальное поглощаем.
             if (privateMarker == '>' && final == 'c') respond("$ESC[>0;10;0c")
+            // XTVERSION (CSI > q): сообщаем имя/версию терминала через DCS.
+            if (privateMarker == '>' && final == 'q') respond("${ESC}P>|Skerry(0.1)$ESC\\")
             return
         }
         if (csiIntermediate == '!' && final == 'p') { softReset(); return }
@@ -559,6 +567,40 @@ class TerminalEmulator(
             47, 1047 -> setAltScreen(on, saveRestore = false)
             1049 -> setAltScreen(on, saveRestore = true)
         }
+    }
+
+    /**
+     * DECRQM → DECRPM: отвечает состоянием режима [code]. Pm: 1 = установлен, 2 = сброшен,
+     * 0 = не распознан. [private] выбирает DEC-private (`?`-маркер) или ANSI-набор.
+     */
+    private fun reportMode(code: Int, private: Boolean) {
+        val set: Boolean? = if (private) privateModeSet(code) else ansiModeSet(code)
+        val pm = when (set) { true -> 1; false -> 2; null -> 0 }
+        val marker = if (private) "?" else ""
+        respond("$ESC[$marker$code;$pm\$y")
+    }
+
+    /** Текущее состояние DEC-private-режима для DECRQM, или `null` если режим не распознан. */
+    private fun privateModeSet(code: Int): Boolean? = when (code) {
+        1 -> applicationCursorKeys
+        6 -> originMode
+        7 -> autoWrap
+        25 -> cursorVisible
+        9 -> mouseTracking == MouseTracking.X10
+        1000 -> mouseTracking == MouseTracking.Normal
+        1002 -> mouseTracking == MouseTracking.ButtonEvent
+        1003 -> mouseTracking == MouseTracking.AnyEvent
+        1004 -> focusReporting
+        1006 -> mouseSgr
+        2004 -> bracketedPaste
+        47, 1047, 1049 -> altScreen
+        else -> null
+    }
+
+    /** Текущее состояние ANSI-режима для DECRQM, или `null` если режим не распознан. */
+    private fun ansiModeSet(code: Int): Boolean? = when (code) {
+        4 -> insertMode // IRM
+        else -> null
     }
 
     private fun deviceStatus(code: Int) {

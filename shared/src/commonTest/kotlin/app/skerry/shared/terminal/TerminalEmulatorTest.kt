@@ -514,6 +514,45 @@ class TerminalEmulatorTest {
         assertEquals("$esc[?1;2c", replies.single())
     }
 
+    @Test
+    fun `DECRQM reports private mode state`() {
+        val replies = mutableListOf<String>()
+        val emu = TerminalEmulator(respond = { replies += it })
+        // bracketed-paste выключен по умолчанию → reset (2).
+        emu.feed("$esc[?2004\$p".encodeToByteArray())
+        assertEquals("$esc[?2004;2\$y", replies.last())
+        // Включаем → set (1).
+        emu.feed("$esc[?2004h".encodeToByteArray())
+        emu.feed("$esc[?2004\$p".encodeToByteArray())
+        assertEquals("$esc[?2004;1\$y", replies.last())
+    }
+
+    @Test
+    fun `DECRQM reports not-recognized for unknown mode`() {
+        val replies = mutableListOf<String>()
+        val emu = TerminalEmulator(respond = { replies += it })
+        emu.feed("$esc[?9999\$p".encodeToByteArray())
+        assertEquals("$esc[?9999;0\$y", replies.single())
+    }
+
+    @Test
+    fun `DECRQM reports ANSI insert mode state`() {
+        val replies = mutableListOf<String>()
+        val emu = TerminalEmulator(respond = { replies += it })
+        emu.feed("$esc[4h".encodeToByteArray())        // IRM on
+        emu.feed("$esc[4\$p".encodeToByteArray())
+        assertEquals("$esc[4;1\$y", replies.last())
+    }
+
+    @Test
+    fun `XTVERSION reports the terminal name`() {
+        val replies = mutableListOf<String>()
+        val emu = TerminalEmulator(respond = { replies += it })
+        emu.feed("$esc[>q".encodeToByteArray())
+        // Ответ DCS: ESC P > | <name> ESC \
+        assertEquals("${esc}P>|Skerry(0.1)$esc\\", replies.single())
+    }
+
     // --- OSC / bell --------------------------------------------------------
 
     @Test
