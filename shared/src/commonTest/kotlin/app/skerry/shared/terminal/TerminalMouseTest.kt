@@ -214,6 +214,35 @@ class TerminalMouseTest {
         assertEquals("ESC[200~okrm -rf /ESC[201~", out)
     }
 
+    @Test
+    fun `disabled paste strips CR and ESC (anti command injection)`() {
+        // Без bracketed-paste shell не отличает вставку от ввода: подсаженный CR = Enter → команда
+        // за ним исполнилась бы. Режем CR и ESC (и прочие управляющие C0/DEL).
+        assertEquals("okrm -rf /", bracketedPasteWrap("ok" + Char(13) + "rm -rf /", bracketed = false).show())
+        assertEquals("plain", bracketedPasteWrap("pl" + Char(27) + "ain", bracketed = false).show())
+    }
+
+    @Test
+    fun `disabled paste keeps tab and newline`() {
+        // Tab и LF — легитимные разделители многострочной/колоночной вставки, их сохраняем.
+        val input = "a" + Char(9) + "b" + Char(10) + "c"
+        assertEquals("a<9>b<10>c", bracketedPasteWrap(input, bracketed = false).show())
+    }
+
+    @Test
+    fun `disabled paste strips DEL and NUL`() {
+        val input = "a" + Char(0) + Char(127) + "b"
+        assertEquals("ab", bracketedPasteWrap(input, bracketed = false).show())
+    }
+
+    @Test
+    fun `enabled paste preserves control chars inside markers`() {
+        // В bracketed-режиме приложение само знает, что это вставка — управляющие байты безопасны
+        // и должны дойти как литералы (режем только подсаженный закрывающий маркер, см. тест выше).
+        val input = "a" + Char(13) + "b" + Char(9) + "c"
+        assertEquals("ESC[200~a<13>b<9>cESC[201~", bracketedPasteWrap(input, bracketed = true).show())
+    }
+
     // --- Гейтинг X10 в SGR-кодировке --------------------------------------
 
     @Test
