@@ -201,9 +201,15 @@ fun TerminalScreen(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val metrics = remember(textStyle, density) {
-        val sample = measurer.measure(AnnotatedString("MMMMMMMMMM"), textStyle)
+        // cellWidth = РЕАЛЬНЫЙ advance шрифта, которым drawText раскладывает ASCII-раны. Меряем на длинной
+        // строке и делим на её длину: size.width — целое (округление ~0.5px), на 10 символах это давало
+        // ошибку до ~0.05px/символ, и к правому краю строки ASCII-ран уползал от cw-сетки на ~1 клетку
+        // (подсветка/курсор/мышь считают по сетке, текст — по advance). На 200 символах ошибка ничтожна,
+        // сетка совпадает с раскладкой drawText, дрейф исчезает.
+        val sampleLen = 200
+        val sample = measurer.measure(AnnotatedString("M".repeat(sampleLen)), textStyle)
         TerminalMetrics(
-            cellWidth = sample.size.width / 10f,
+            cellWidth = sample.size.width / sampleLen.toFloat(),
             cellHeight = with(density) { LINE_HEIGHT_SP.sp.toPx() },
         )
     }
