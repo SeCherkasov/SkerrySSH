@@ -61,9 +61,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
@@ -75,10 +73,10 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.terminal.CellWidth
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
@@ -183,9 +181,9 @@ fun TerminalScreen(
     var lastClickMark by remember { mutableStateOf<TimeMark?>(null) }
     var lastClickPos by remember { mutableStateOf<TerminalPos?>(null) }
 
-    // Размер моноширинной ячейки в пикселях — фолбэк-перевод координат мыши в ячейку до того, как
-    // придёт реальный лэйаут текста ([layout]). Точные позиции (подсветка/маркеры/хит-тест) берём
-    // из самого [TextLayoutResult], чтобы совпадать с рендером при любом шрифте и системном масштабе.
+    // Размер моноширинной ячейки в пикселях — единственный источник правды по геометрии: глифы,
+    // фон, выделение, курсор, мышь и маркеры считаются от него арифметикой (col*cellWidth /
+    // row*cellHeight), поэтому всё совпадает при любом шрифте и системном масштабе.
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val metrics = remember(textStyle, density) {
@@ -195,7 +193,6 @@ fun TerminalScreen(
             cellHeight = with(density) { LINE_HEIGHT_SP.sp.toPx() },
         )
     }
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val handleRadiusPx = with(density) { HANDLE_RADIUS_DP.dp.toPx() }
     val handleTouchRadiusPx = with(density) { HANDLE_TOUCH_RADIUS_DP.dp.toPx() }
 
@@ -234,58 +231,30 @@ fun TerminalScreen(
     }
     val cursorVisibleNow = !closed && state.cursorVisible && blinkOn
 
-    // Текст экрана БЕЗ курсора: пересобирается только при смене содержимого/выделения, а не на
-    // каждое движение курсора. Сам курсор — отдельный оверлей поверх (формы block/underline/bar).
-    val rendered = remember(state.screen, state.selection) {
-        renderScreen(state.screen, state.selection)
+    // Структурная подложка под Text: лишь задаёт высоту контента для прокрутки (по числу строк) и
+    // несёт модификаторы ввода/IME — глифы рисует отдельный пер-клеточный оверлей (см. ниже), а сам
+    // текст невидим. Высота = число строк (scrollback + экран); ширину даёт fillMaxWidth.
+    val structural = remember(state.screen.size) {
+        AnnotatedString("\n".repeat((state.screen.size - 1).coerceAtLeast(0)))
     }
 
     fun cellAt(x: Float, y: Float) = cellAtOffset(x, y, metrics)
 
-    // Координата указателя (содержимое, со скроллом) → ячейка через фактический лэйаут: совпадает с
-    // подсветкой и маркерами. До прихода лэйаута — фолбэк на арифметику [cellAt].
+    // Координата указателя → ячейка чистой арифметикой: pointerInput стоит после verticalScroll и
+    // padding, поэтому offset уже в координатах контента (со скроллом, без отступа). Колонку/строку
+    // поджимаем к фактической сетке, чтобы выделение не уходило за её пределы.
     fun posAt(x: Float, y: Float): TerminalPos {
-        val l = layout ?: return cellAt(x, y)
+        val p = cellAt(x, y)
         val screen = state.screen
-        if (screen.isEmpty()) return cellAt(x, y)
-        var rem = l.getOffsetForPosition(Offset(x, y))
-        var row = 0
-        while (row < screen.lastIndex) {
-            val len = screen[row].size
-            if (rem <= len) break
-            rem -= len + 1
-            row++
-        }
-        return TerminalPos(row, rem.coerceIn(0, screen[row].size))
+        if (screen.isEmpty()) return p
+        val row = p.row.coerceIn(0, screen.lastIndex)
+        return TerminalPos(row, p.col.coerceIn(0, screen[row].size))
     }
 
-    // Линейный индекс ячейки (row, col) в строке [rendered]: суммируем длины предыдущих строк
-    // (+1 на '\n'). Нужен, чтобы спросить у TextLayoutResult точную пиксельную позицию. Курсор в
-    // текст больше не входит (рисуется оверлеем), поэтому «хвостовых» поправок здесь нет.
-    fun lineOffset(pos: TerminalPos): Int {
-        val screen = state.screen
-        if (screen.isEmpty()) return 0
-        val row = pos.row.coerceIn(0, screen.lastIndex)
-        var off = 0
-        for (r in 0 until row) {
-            off += screen[r].size
-            off += 1 // '\n'
-        }
-        return off + pos.col.coerceIn(0, screen[row].size)
-    }
-
-    // Пиксельная позиция границы выделения (содержимое, без скролла) из фактического лэйаута —
-    // совпадает с подсветкой, которую рисует Text. null, пока лэйаут не пришёл.
-    fun handleAnchor(pos: TerminalPos): Offset? {
-        val l = layout ?: return null
-        if (state.screen.isEmpty()) return null
-        val off = lineOffset(pos)
-        val line = l.getLineForOffset(off)
-        return Offset(
-            x = l.getHorizontalPosition(off, usePrimaryDirection = true),
-            y = l.getLineBottom(line),
-        )
-    }
+    // Якорь границы выделения в координатах контента (нижний угол ячейки) — арифметика, совпадающая
+    // с сеткой глифов. Канвас маркеров рисует с поправкой на прокрутку.
+    fun handleAnchor(pos: TerminalPos): Offset =
+        Offset(pos.col * metrics.cellWidth, (pos.row + 1) * metrics.cellHeight)
 
     fun copySelection() {
         state.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
@@ -311,56 +280,75 @@ fun TerminalScreen(
     }
 
     Box(modifier.onSizeChanged { viewportSize = it }.background(SkerryColors.terminalBg)) {
-      // Фон ячеек рисуем ОТДЕЛЬНЫМ подслоем, а не через SpanStyle.background: Compose Text не
-      // закрашивает фон висячих (trailing) пробелов в конце строки, из-за чего reverse-полосы TUI
-      // (шапка nano/htop) обрывались на последнем непробельном символе. Канвас заливает фон по
-      // моноширинной сетке на всю ширину строки, включая хвостовые ячейки. Геометрия — как у курсора
-      // (тот же padding и сдвиг на прокрутку), глифы рисует Text поверх.
-      val bgLayout = layout
-      if (state.screen.isNotEmpty() && bgLayout != null) {
+      // Весь видимый экран рисуем ОДНИМ пер-клеточным оверлеем по моноширинной сетке (а не потоковым
+      // Text): фон ячеек на полную ширину строки (включая хвостовые reverse-пробелы TUI), подсветку
+      // выделения и сами глифы — каждый по своей колонке `col*cellWidth`. Так широкие символы (CJK,
+      // emoji) и их continuation-клетки держат сетку, а курсор/мышь/маркеры (та же арифметика) с ней
+      // совпадают. Геометрия как у курсора: тот же padding и сдвиг на прокрутку. Сам Text ниже —
+      // невидимая подложка (высота для скролла + приём ввода).
+      if (state.screen.isNotEmpty()) {
+          val sel = state.selection
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
               val scrollPx = scroll.value.toFloat()
               val screen = state.screen
-              // Позиции берём ИЗ фактической раскладки текста (а не из приблизительной метрики ячейки):
-              // иначе фон уезжает от глифов на больших колонках (раскиданные reverse-боксы нижнего бара
-              // nano). rowStart — смещение первого символа строки в [rendered] (+1 на '\n' между строками).
-              // ВАЖНО: [bgLayout] — снимок [rendered] и при активном выводе может на кадр ОТСТАВАТЬ от
-              // более свежего [screen]. Все смещения держим в пределах длины текста раскладки и
-              // обрываем обход, когда строка уже за её концом, — иначе getHorizontalPosition бросает
-              // IndexOutOfBounds в фазе отрисовки (краш на каждый кадр). Один кадр может быть слегка
-              // неточным; рекомпозиция со свежим layout его выправляет.
-              val textLen = bgLayout.layoutInput.text.length
-              var rowStart = 0
+              val cw = metrics.cellWidth
+              val chh = metrics.cellHeight
               for (r in screen.indices) {
+                  val top = r * chh - scrollPx
+                  if (top + chh < 0f || top > size.height) continue
                   val row = screen[r]
-                  if (rowStart > textLen) break
-                  val line = bgLayout.getLineForOffset(rowStart)
-                  val top = bgLayout.getLineTop(line) - scrollPx
-                  val bottom = bgLayout.getLineBottom(line) - scrollPx
-                  if (bottom >= 0f && top <= size.height) {
-                      var c = 0
-                      while (c < row.size) {
-                          val color = cellBgColor(row[c].style)
-                          if (color == null) { c++; continue }
-                          val s = c
-                          c++
-                          while (c < row.size && cellBgColor(row[c].style) == color) c++
-                          val left = bgLayout.getHorizontalPosition((rowStart + s).coerceAtMost(textLen), usePrimaryDirection = true)
-                          // Хвостовой ран (до конца строки) тянем до полной ширины: Text исключает
-                          // висячие пробелы, и их правый край по layout был бы коротким (исходный баг).
-                          val right = if (c >= row.size) size.width
-                              else bgLayout.getHorizontalPosition((rowStart + c).coerceAtMost(textLen), usePrimaryDirection = true)
-                          if (right > left) drawRect(color, topLeft = Offset(left, top), size = Size(right - left, bottom - top))
+                  // 1) Фон ячеек — раны одного цвета схлопываем; хвостовой ран тянем до края вьюпорта.
+                  var c = 0
+                  while (c < row.size) {
+                      val color = cellBgColor(row[c].style)
+                      if (color == null) { c++; continue }
+                      val s = c; c++
+                      while (c < row.size && cellBgColor(row[c].style) == color) c++
+                      val left = s * cw
+                      val right = if (c >= row.size) size.width else c * cw
+                      drawRect(color, topLeft = Offset(left, top), size = Size(right - left, chh))
+                  }
+                  // 2) Подсветка выделения — поверх фона, под глифами.
+                  if (sel != null && !sel.isEmpty) {
+                      var k = 0
+                      while (k < row.size) {
+                          if (!sel.contains(r, k)) { k++; continue }
+                          val s = k
+                          while (k < row.size && sel.contains(r, k)) k++
+                          drawRect(selectionBg, topLeft = Offset(s * cw, top), size = Size((k - s) * cw, chh))
                       }
                   }
-                  rowStart += row.size + 1
+                  // 3) Глифы — раны подряд идущих одностилевых Single-клеток рисуем одним drawText
+                  // (быстрый общий случай моноширинного текста); Wide-клетку — отдельно (её глиф шире
+                  // одной колонки), Continuation — пропускаем (под широким символом глифа нет).
+                  var g = 0
+                  while (g < row.size) {
+                      val cell = row[g]
+                      if (cell.width == CellWidth.Continuation) { g++; continue }
+                      if (cell.width == CellWidth.Wide) {
+                          if (cell.text.isNotBlank()) {
+                              drawText(measurer, cell.text, topLeft = Offset(g * cw, top), style = cell.style.toGlyphStyle(textStyle))
+                          }
+                          g++
+                          continue
+                      }
+                      val st = cell.style
+                      val sCol = g
+                      val runText = buildString {
+                          while (g < row.size && row[g].width == CellWidth.Single && row[g].style == st) {
+                              append(row[g].text); g++
+                          }
+                      }
+                      if (runText.isNotBlank()) {
+                          drawText(measurer, runText, topLeft = Offset(sCol * cw, top), style = st.toGlyphStyle(textStyle))
+                      }
+                  }
               }
           }
       }
       Text(
-        text = rendered,
-        style = textStyle,
-        onTextLayout = { layout = it },
+        text = structural,
+        style = textStyle.copy(color = Color.Transparent),
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scroll)
@@ -552,10 +540,10 @@ fun TerminalScreen(
                         // как в мессенджерах; по окончании обновляем меню «Copy».
                         val sel = state.selection
                         val handle = if (sel != null && !sel.isEmpty) {
-                            val s = handleAnchor(sel.start)
-                            val e = handleAnchor(sel.end)
-                            val ds = s?.let { (down.position - it).getDistance() } ?: Float.MAX_VALUE
-                            val de = e?.let { (down.position - it).getDistance() } ?: Float.MAX_VALUE
+                            // Якоря маркеров и down.position — в одной системе координат контента
+                            // (pointerInput стоит после verticalScroll/padding), поэтому сравниваем напрямую.
+                            val ds = (down.position - handleAnchor(sel.start)).getDistance()
+                            val de = (down.position - handleAnchor(sel.end)).getDistance()
                             when {
                                 ds <= handleTouchRadiusPx && ds <= de -> SelectionHandle.START
                                 de <= handleTouchRadiusPx -> SelectionHandle.END
@@ -708,36 +696,10 @@ private fun DrawScope.drawSelectionHandle(
 }
 
 /**
- * Собирает [AnnotatedString] из сетки ячеек: для каждой ячейки считается эффективный стиль
- * (базовый + подсветка выделения), соседние ячейки одинакового стиля схлопываются в один span.
- * Строки разделяются `\n`. Курсор сюда НЕ входит — он рисуется отдельным оверлеем поверх текста,
- * чтобы blink и перемещение курсора не пересобирали весь экранный текст.
- */
-private fun renderScreen(
-    screen: List<List<TermCell>>,
-    selection: TerminalSelection?,
-): AnnotatedString = buildAnnotatedString {
-    for (r in screen.indices) {
-        val row = screen[r]
-        fun spanAt(c: Int) = cellSpan(row[c], isSelected = selection?.contains(r, c) == true)
-        var c = 0
-        while (c < row.size) {
-            val span = spanAt(c)
-            val start = c
-            c++
-            // Схлопываем подряд идущие ячейки с тем же эффективным стилем.
-            while (c < row.size && spanAt(c) == span) c++
-            withStyle(span) { for (k in start until c) append(row[k].text) }
-        }
-        if (r < screen.lastIndex) append("\n")
-    }
-}
-
-/**
- * Цвет ФОНА ячейки для подслоя-канваса (закраска полной ширины строки, включая хвостовые пробелы).
- * inverse → цвет текста (reverse-видео меняет fg/bg местами); заданный bg → его цвет; дефолтный фон
- * без inverse → `null` (рисовать не нужно — виден общий фон терминала за Text). Выделение здесь не
- * учитываем: его подсветку по-прежнему даёт [cellSpan] через SpanStyle.background.
+ * Цвет ФОНА ячейки для пер-клеточного оверлея (закраска полной ширины строки, включая хвостовые
+ * пробелы). inverse → цвет текста (reverse-видео меняет fg/bg местами); заданный bg → его цвет;
+ * дефолтный фон без inverse → `null` (рисовать не нужно — виден общий фон терминала). Подсветку
+ * выделения накладывает сам оверлей отдельным слоем поверх фона.
  */
 private fun cellBgColor(style: TermStyle): Color? = when {
     style.inverse -> style.fg.toComposeColor(SkerryColors.text)
@@ -745,11 +707,12 @@ private fun cellBgColor(style: TermStyle): Color? = when {
     else -> style.bg.toComposeColor(SkerryColors.text)
 }
 
-/** Эффективный стиль ячейки: базовый стиль + полупрозрачная подсветка выделения. */
-private fun cellSpan(cell: TermCell, isSelected: Boolean): SpanStyle {
-    val base = cell.style.toSpanStyle()
-    return if (isSelected) base.copy(background = selectionBg) else base
-}
+/**
+ * [TextStyle] для отрисовки глифа ячейки: базовый моноширинный стиль + цвет/начертание/подчёркивание
+ * из [TermStyle]. Фон убираем (его рисует оверлей отдельным слоем по полной ширине ячейки).
+ */
+private fun TermStyle.toGlyphStyle(base: TextStyle): TextStyle =
+    base.merge(toSpanStyle().copy(background = Color.Unspecified))
 
 private fun TermStyle.toSpanStyle(): SpanStyle {
     // inverse меняет местами текст и фон; при дефолтном фоне он становится цветом фона терминала.
