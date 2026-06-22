@@ -77,6 +77,14 @@ class ConnectionController(
     var cipher: String? by mutableStateOf(null)
         private set
 
+    /**
+     * Ident SSH-сервера живого соединения (`SSH-2.0-OpenSSH_8.9p1`) или `null`, пока сессия не
+     * подключена / транспорт его не сообщает. Snapshot-стейт по тем же причинам, что и [cipher]
+     * (Compose должен перерисовывать статус-бар при появлении/сбросе соединения).
+     */
+    var serverVersion: String? by mutableStateOf(null)
+        private set
+
     private var connectJob: Job? = null
     private var connection: SshConnection? = null
     private var sessionScope: CoroutineScope? = null
@@ -101,6 +109,7 @@ class ConnectionController(
                 val sScope = newSessionScope()
                 connection = conn
                 cipher = conn.cipher
+                serverVersion = conn.serverVersion
                 sessionScope = sScope
                 uiState = ConnectionUiState.Connected(
                     TerminalScreenState(ShellTerminalSession(channel, sScope), sScope),
@@ -201,6 +210,7 @@ class ConnectionController(
         sessionScope = null
         connection = null
         cipher = null
+        serverVersion = null
         if (sftp != null) closeSftpQuietly(sftp)
         if (conn != null) closeConnectionQuietly(conn)
         uiState = ConnectionUiState.Form

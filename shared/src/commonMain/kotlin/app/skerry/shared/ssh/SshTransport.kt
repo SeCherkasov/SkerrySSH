@@ -54,6 +54,13 @@ interface SshConnection {
      */
     val cipher: String? get() = null
 
+    /**
+     * Идентификационная строка сервера (remote ident) в полной форме `SSH-2.0-<software>`, напр.
+     * `SSH-2.0-OpenSSH_8.9p1`, либо `null`, если транспорт её не сообщает. Статична на всё время
+     * жизни соединения. Реализация по умолчанию — `null` (фейки/тесты), реальный транспорт перекрывает.
+     */
+    val serverVersion: String? get() = null
+
     /** Одноразовый exec-канал для неинтерактивных команд. */
     suspend fun exec(command: String): ExecResult
 

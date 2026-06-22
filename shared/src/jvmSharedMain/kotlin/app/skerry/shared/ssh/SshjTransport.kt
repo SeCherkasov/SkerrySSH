@@ -107,7 +107,13 @@ class SshjTransport(
                 throw SshConnectionException("Обрыв соединения при аутентификации", e)
             }
 
-            SshjConnection(client, negotiatedCipher.get())
+            // Ident сервера sshj отдаёт без префикса (`getServerVersion()` = serverID.substring(8)),
+            // восстанавливаем полную форму `SSH-2.0-<software>` как в статус-баре. Читаем синхронно
+            // на этом же IO-потоке после connect() — identification exchange уже завершён, гонки нет.
+            // (Вымерший `SSH-1.99-` сервер отобразился бы как `SSH-2.0-` — substring(8) одинаков; косметика.)
+            val serverVersion = runCatching { client.transport.serverVersion }
+                .getOrNull()?.takeIf { it.isNotBlank() }?.let { "SSH-2.0-$it" }
+            SshjConnection(client, negotiatedCipher.get(), serverVersion)
         }
 }
 
@@ -136,6 +142,7 @@ private fun ensureCryptoProvider() {
 private class SshjConnection(
     private val client: SSHClient,
     override val cipher: String?,
+    override val serverVersion: String?,
 ) : SshConnection {
 
     override val isConnected: Boolean

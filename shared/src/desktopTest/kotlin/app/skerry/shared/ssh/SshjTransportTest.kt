@@ -77,6 +77,20 @@ class SshjTransportTest {
     }
 
     @Test
+    fun `exposes server version after connect`() = runTest {
+        val connection = connect()
+        try {
+            val version = connection.serverVersion
+            assertTrue(
+                version != null && version.startsWith("SSH-2.0-"),
+                "соединение должно сообщить ident сервера с префиксом SSH-2.0-, получено: $version",
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    @Test
     fun `rejects invalid password`() = runTest {
         assertFailsWith<SshAuthenticationException> {
             SshjTransport(acceptAllKeys).connect(target(), SshAuth.Password("wrong"))

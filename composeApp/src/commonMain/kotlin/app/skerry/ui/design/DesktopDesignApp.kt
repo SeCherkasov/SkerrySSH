@@ -356,8 +356,8 @@ private fun StatusBar() {
             StatusItem("arrow_downward", if (live) "—" else "8.4 KB/s", mono = mono)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Версия сервера — живой источник в отдельном слайсе; пока «—» в живом режиме.
-            StatusItem("memory", if (live) "—" else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
+            // Версия сервера — live ident активной сессии (до коннекта/если транспорт молчит — «—»).
+            StatusItem("memory", if (live) (sessions?.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
             Txt("UTF-8 · LF", color = D.faint, size = 10.5.sp, font = mono)
             Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
         }
