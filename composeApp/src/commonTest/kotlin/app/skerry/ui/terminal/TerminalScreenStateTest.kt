@@ -97,6 +97,22 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `exposes the live grid size to the status bar`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        // Дефолт 80×24 до первого лэйаута, затем живой размер из эмулятора.
+        assertEquals(80, state.cols)
+        assertEquals(24, state.rows)
+        state.resize(PtySize(cols = 132, rows = 43))
+        assertEquals(132, state.cols)
+        assertEquals(43, state.rows)
+        scope.cancel()
+    }
+
+    @Test
     fun `repeated resize with the same size forwards once`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

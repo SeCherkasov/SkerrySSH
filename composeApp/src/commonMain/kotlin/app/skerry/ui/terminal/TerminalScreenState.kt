@@ -50,6 +50,13 @@ class TerminalScreenState(
     var screen: List<List<TermCell>> by mutableStateOf(emptyList())
         private set
 
+    /** Текущий размер сетки (живой `cols × rows` эмулятора) — статус-бар показывает его вместо мока. */
+    var cols: Int by mutableStateOf(emulator.cols)
+        private set
+
+    var rows: Int by mutableStateOf(emulator.rows)
+        private set
+
     var cursorRow: Int by mutableStateOf(0)
         private set
 
@@ -151,6 +158,8 @@ class TerminalScreenState(
     /** Опубликовать снимок эмулятора в Compose-state (после feed/resize). */
     private fun publishSnapshot() {
         screen = emulator.lines // строки уже скопированы в неизменяемые внутри геттера
+        cols = emulator.cols
+        rows = emulator.rows
         cursorRow = emulator.cursorRow
         cursorCol = emulator.cursorCol
         cursorVisible = emulator.cursorVisible

@@ -335,6 +335,9 @@ private fun StatusBar() {
     val live = sessions != null
     val statusText = if (!live || connected) "Connected" else "Disconnected"
     val statusColor = if (!live || connected) D.moss else D.faint
+    // Размер сетки — живой cols×rows активного терминала; вне коннекта остаётся мок-метка макета.
+    val gridLabel = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)
+        ?.terminal?.let { "${it.cols} × ${it.rows}" } ?: "80 × 24"
     Row(
         Modifier
             .fillMaxWidth()
@@ -353,7 +356,7 @@ private fun StatusBar() {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             StatusItem("memory", "SSH-2.0-OpenSSH_8.9p1", mono = mono)
             Txt("UTF-8 · LF", color = D.faint, size = 10.5.sp, font = mono)
-            Txt("80 × 24", color = D.faint, size = 10.5.sp, font = mono)
+            Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
         }
     }
 }
