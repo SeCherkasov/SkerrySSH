@@ -185,6 +185,42 @@ class TerminalEmulatorTest {
         assertEquals(TermColor.BrightRed, s.underlineColor)
     }
 
+    // --- OSC 8 гиперссылки --------------------------------------------------
+
+    @Test
+    fun `osc 8 attaches a hyperlink to printed cells`() {
+        // OSC 8 ; params ; URI ST  ... текст ...  OSC 8 ; ; ST (закрытие).
+        val emu = emulate(chunks = arrayOf("$esc]8;;https://skerry.app${esc}\\link$esc]8;;${esc}\\x"))
+        assertEquals("https://skerry.app", emu.lines[0][0].hyperlink)
+        assertEquals("https://skerry.app", emu.lines[0][3].hyperlink) // 'k'
+        assertEquals(null, emu.lines[0][4].hyperlink, "после закрытия ссылки нет")
+    }
+
+    @Test
+    fun `osc 8 terminated by bel also works`() {
+        val emu = emulate(chunks = arrayOf("$esc]8;;https://x.test${bel}A"))
+        assertEquals("https://x.test", emu.lines[0][0].hyperlink)
+    }
+
+    @Test
+    fun `osc 8 with id params captures only the uri`() {
+        val emu = emulate(chunks = arrayOf("$esc]8;id=42;https://id.test${esc}\\Z"))
+        assertEquals("https://id.test", emu.lines[0][0].hyperlink)
+    }
+
+    @Test
+    fun `hyperlink persists across a newline until closed`() {
+        val emu = emulate(chunks = arrayOf("$esc]8;;https://multi.line${esc}\\a\r\nb"))
+        assertEquals("https://multi.line", emu.lines[0][0].hyperlink)
+        assertEquals("https://multi.line", emu.lines[1][0].hyperlink)
+    }
+
+    @Test
+    fun `ris clears the active hyperlink`() {
+        val emu = emulate(chunks = arrayOf("$esc]8;;https://gone${esc}\\", "${esc}cX"))
+        assertEquals(null, emu.lines[0][0].hyperlink)
+    }
+
     // --- Адресация курсора -------------------------------------------------
 
     @Test

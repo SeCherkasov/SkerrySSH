@@ -79,6 +79,8 @@ data class TermCell(
     val text: String = " ",
     val style: TermStyle = TermStyle(),
     val width: CellWidth = CellWidth.Single,
+    /** URI гиперссылки (OSC 8) для этой клетки, либо `null`. Кликабельность/подсветку решает рендер. */
+    val hyperlink: String? = null,
 ) {
     /** Удобный конструктор от одиночного BMP-символа (бланк, ASCII, line-drawing-глиф). */
     constructor(char: Char, style: TermStyle = TermStyle()) : this(char.toString(), style, CellWidth.Single)
@@ -205,6 +207,9 @@ class TerminalEmulator(
         private set
     var title: String = ""
         private set
+
+    // Активная гиперссылка OSC 8 (URI) — вешается на печатаемые клетки до закрытия пустым URI.
+    private var currentHyperlink: String? = null
 
     // --- Парсер ------------------------------------------------------------
 
@@ -352,7 +357,20 @@ class TerminalEmulator(
         val sep = s.indexOf(';')
         if (sep <= 0) return
         val code = s.substring(0, sep).toIntOrNull() ?: return
-        if (code == 0 || code == 1 || code == 2) title = s.substring(sep + 1)
+        val rest = s.substring(sep + 1)
+        when (code) {
+            0, 1, 2 -> title = rest
+            8 -> setHyperlink(rest) // OSC 8 ; params ; URI
+        }
+    }
+
+    /**
+     * OSC 8: `params;URI` — params (например `id=...`) игнорируем, берём URI после первого `;`.
+     * Пустой URI закрывает текущую ссылку. Активный URI вешается на последующие печатаемые клетки.
+     */
+    private fun setHyperlink(rest: String) {
+        val uri = rest.substringAfter(';', "").trim()
+        currentHyperlink = uri.ifEmpty { null }
     }
 
     // --- Диспетчеризация CSI ----------------------------------------------
@@ -550,10 +568,10 @@ class TerminalEmulator(
             while (row.size > cols) row.removeAt(row.size - 1)
         }
         if (w == 2 && cx < cols - 1) {
-            row[cx] = TermCell(text, style, CellWidth.Wide)
-            row[cx + 1] = TermCell("", style, CellWidth.Continuation)
+            row[cx] = TermCell(text, style, CellWidth.Wide, currentHyperlink)
+            row[cx + 1] = TermCell("", style, CellWidth.Continuation, currentHyperlink)
         } else {
-            row[cx] = TermCell(text, style, CellWidth.Single)
+            row[cx] = TermCell(text, style, CellWidth.Single, currentHyperlink)
         }
         lastPrintedCp = cp
         val rightmost = (cx + w - 1).coerceAtMost(cols - 1)
@@ -783,6 +801,7 @@ class TerminalEmulator(
         cx = 0; cy = 0
         pendingWrap = false
         lastPrintedCp = null
+        currentHyperlink = null
         style = TermStyle()
         resetRegion()
         tabStops = defaultTabStops(cols)
