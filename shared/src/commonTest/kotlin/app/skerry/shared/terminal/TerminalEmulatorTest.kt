@@ -449,4 +449,50 @@ class TerminalEmulatorTest {
         assertEquals("П", emu.asText())
         assertEquals('П', emu.lines[0][0].char)
     }
+
+    // --- DEC line-drawing charset (DEC Special Graphics) -------------------
+
+    @Test
+    fun `ESC paren 0 maps ascii qxlk to box-drawing glyphs`() {
+        // ESC ( 0 переводит G0 в DEC Special Graphics: q=─ x=│ l=┌ k=┐ j=┘ m=└ n=┼
+        val emu = emulate(chunks = arrayOf("$esc(0lqk"))
+        assertEquals("┌─┐", emu.asText())
+    }
+
+    @Test
+    fun `ESC paren B restores ascii after line-drawing`() {
+        // Рисуем уголок, затем возвращаем US-ASCII и печатаем буквы — они не транслируются.
+        val emu = emulate(chunks = arrayOf("$esc(0qq", "${esc}(Bqq"))
+        assertEquals("──qq", emu.asText())
+    }
+
+    @Test
+    fun `shift-out invokes G1 line-drawing then shift-in restores G0`() {
+        // ESC ) 0 кладёт line-drawing в G1; SO (0x0e) активирует G1, SI (0x0f) возвращает G0(ASCII).
+        val so = 14.toChar().toString()
+        val si = 15.toChar().toString()
+        val emu = emulate(chunks = arrayOf("$esc)0a${so}qx${si}b"))
+        assertEquals("a─│b", emu.asText())
+    }
+
+    @Test
+    fun `line-drawing maps full corner and tee set`() {
+        // j=┘ k=┐ l=┌ m=└ n=┼ t=├ u=┤ v=┴ w=┬ x=│ q=─
+        val emu = emulate(chunks = arrayOf("$esc(0jklmntuvwxq"))
+        assertEquals("┘┐┌└┼├┤┴┬│─", emu.asText())
+    }
+
+    @Test
+    fun `RIS resets charset back to ascii`() {
+        val emu = emulate(chunks = arrayOf("$esc(0", "${esc}cqk"))
+        assertEquals("qk", emu.asText())
+    }
+
+    @Test
+    fun `DECSC and DECRC save and restore the active charset`() {
+        // ESC 7 (DECSC) в ASCII; включаем line-drawing и рисуем ─; ESC 8 (DECRC) должен вернуть
+        // ASCII, поэтому следующий q печатается буквой, а не глифом. \r возвращает курсор в колонку 0.
+        val emu = emulate(chunks = arrayOf("${esc}7$esc(0q", "${esc}8\rq"))
+        assertEquals("q", emu.asText())
+    }
 }
