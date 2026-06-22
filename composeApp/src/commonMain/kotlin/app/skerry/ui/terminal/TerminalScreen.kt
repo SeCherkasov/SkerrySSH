@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -174,6 +175,7 @@ fun TerminalScreen(
     var imeValue by remember { mutableStateOf(imeBaseline) }
     val clipboard = LocalClipboardManager.current
     val textToolbar = LocalTextToolbar.current
+    val uriHandler = LocalUriHandler.current
     // Контроллер софт-клавиатуры: на таче поднимаем её явно, т.к. requestFocus() на уже
     // сфокусированном скрытом поле — no-op (после скрытия фокус остаётся, клавиатура не всплывает).
     val keyboard = LocalSoftwareKeyboardController.current
@@ -350,6 +352,23 @@ fun TerminalScreen(
                       // Подчёркивание тянем по всей ширине рана, в т.ч. под пробелами (как в xterm).
                       if (st.underline) drawCellUnderline(st, sCol * cw, top, (g - sCol) * cw, chh)
                   }
+                  // 4) Гиперссылки (OSC 8) подчёркиваем отдельным проходом — раны соседних клеток с
+                  // одним URI; пропускаем те, что уже подчёркнуты приложением (SGR), чтобы не дублировать.
+                  var h = 0
+                  while (h < row.size) {
+                      val uri = row[h].hyperlink
+                      if (uri == null) { h++; continue }
+                      val from = h
+                      while (h < row.size && row[h].hyperlink == uri) h++
+                      val to = h
+                      var k = from
+                      while (k < to) {
+                          if (row[k].style.underline) { k++; continue } // app уже подчёркивает — не дублируем
+                          val runStart = k
+                          while (k < to && !row[k].style.underline) k++
+                          drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh)
+                      }
+                  }
               }
           }
       }
@@ -524,6 +543,17 @@ fun TerminalScreen(
                         }
                         // Локальное выделение. Счётчик кликов: 1 — drag-выделение, 2 — слово, 3 — строка.
                         val pos = posAt(down.position.x, down.position.y)
+                        // Ctrl+клик по клетке с OSC 8-гиперссылкой — открыть URI (не начинать выделение).
+                        // URI приходит от НЕДОВЕРЕННОГО сервера — открываем лишь безопасные веб-схемы,
+                        // отсекая file:/javascript:/прочее, что могло бы навредить локально.
+                        if (mods.isCtrlPressed) {
+                            val uri = state.screen.getOrNull(pos.row)?.getOrNull(pos.col)?.hyperlink
+                            if (uri != null && isSafeLinkUri(uri)) {
+                                runCatching { uriHandler.openUri(uri) }
+                                down.consume()
+                                return@awaitEachGesture
+                            }
+                        }
                         val multi = lastClickPos == pos &&
                             lastClickMark?.let { it.elapsedNow() < DOUBLE_CLICK_MS.milliseconds } == true
                         clickCount = if (multi) clickCount + 1 else 1
@@ -744,6 +774,12 @@ private fun TermStyle.toSpanStyle(): SpanStyle {
         textDecoration = if (strikethrough) TextDecoration.LineThrough else null,
     )
 }
+
+/** Стиль подчёркивания OSC 8-гиперссылок: одиночная линия тематическим бирюзовым (primary cyan). */
+private val LINK_UNDERLINE_STYLE = TermStyle(
+    underlineStyle = UnderlineStyle.Single,
+    underlineColor = TermColor.Rgb(0x2B, 0xBD, 0xEE),
+)
 
 /**
  * Цвет линии подчёркивания: [TermStyle.underlineColor], а при [TermColor.Default] — следует цвету
