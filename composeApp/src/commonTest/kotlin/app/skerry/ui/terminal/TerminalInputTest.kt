@@ -104,6 +104,71 @@ class TerminalInputTest {
     }
 
     @Test
+    fun `modified arrows send CSI with xterm modifier parameter`() {
+        // xterm: mod = 1 + shift(1) + alt(2) + ctrl(4). Shift+Up → ESC[1;2A (mc выделяет файлы),
+        // Ctrl+Right → ESC[1;5C (переход по словам в readline), Alt+Left → ESC[1;3D.
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'A'.code),
+            codes(mapTerminalKey(Key.DirectionUp, ctrl = false, shift = true, codePoint = 0)))
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'B'.code),
+            codes(mapTerminalKey(Key.DirectionDown, ctrl = false, shift = true, codePoint = 0)))
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '5'.code, 'C'.code),
+            codes(mapTerminalKey(Key.DirectionRight, ctrl = true, codePoint = 0)))
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '3'.code, 'D'.code),
+            codes(mapTerminalKey(Key.DirectionLeft, ctrl = false, alt = true, codePoint = 0)))
+        // Alt+Up = mod 3.
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '3'.code, 'A'.code),
+            codes(mapTerminalKey(Key.DirectionUp, ctrl = false, alt = true, codePoint = 0)))
+    }
+
+    @Test
+    fun `combined modifiers sum into the CSI parameter`() {
+        // Ctrl+Shift = 1 + 1 + 4 = 6.
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '6'.code, 'A'.code),
+            codes(mapTerminalKey(Key.DirectionUp, ctrl = true, shift = true, codePoint = 0)))
+        // Ctrl+Alt+Shift = 1 + 1 + 2 + 4 = 8.
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '8'.code, 'C'.code),
+            codes(mapTerminalKey(Key.DirectionRight, ctrl = true, alt = true, shift = true, codePoint = 0)))
+    }
+
+    @Test
+    fun `modified home and end send CSI with modifier`() {
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'H'.code),
+            codes(mapTerminalKey(Key.MoveHome, ctrl = false, shift = true, codePoint = 0)))
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '5'.code, 'F'.code),
+            codes(mapTerminalKey(Key.MoveEnd, ctrl = true, codePoint = 0)))
+    }
+
+    @Test
+    fun `modified arrows force CSI even in application-cursor mode`() {
+        // С модификатором стрелки всегда CSI 1;<mod> — SS3 не несёт параметр модификатора.
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'A'.code),
+            codes(mapTerminalKey(Key.DirectionUp, ctrl = false, shift = true, codePoint = 0, applicationCursor = true)))
+    }
+
+    @Test
+    fun `modified tilde keys send CSI num semicolon mod tilde`() {
+        // Ctrl+Delete → ESC[3;5~ (удалить слово вперёд), Shift+PageUp → ESC[5;2~.
+        assertEquals(listOf(0x1b, '['.code, '3'.code, ';'.code, '5'.code, '~'.code),
+            codes(mapTerminalKey(Key.Delete, ctrl = true, codePoint = 0)))
+        assertEquals(listOf(0x1b, '['.code, '5'.code, ';'.code, '2'.code, '~'.code),
+            codes(mapTerminalKey(Key.PageUp, ctrl = false, shift = true, codePoint = 0)))
+        // F5 (CSI 15~) с Ctrl → ESC[15;5~, с Shift → ESC[15;2~.
+        assertEquals(listOf(0x1b, '['.code, '1'.code, '5'.code, ';'.code, '5'.code, '~'.code),
+            codes(mapTerminalKey(Key.F5, ctrl = true, codePoint = 0)))
+        assertEquals(listOf(0x1b, '['.code, '1'.code, '5'.code, ';'.code, '2'.code, '~'.code),
+            codes(mapTerminalKey(Key.F5, ctrl = false, shift = true, codePoint = 0)))
+    }
+
+    @Test
+    fun `modified F1 to F4 switch from SS3 to CSI with modifier`() {
+        // F1 без модификатора = ESC O P; с Shift → ESC[1;2P.
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'P'.code),
+            codes(mapTerminalKey(Key.F1, ctrl = false, shift = true, codePoint = 0)))
+        assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '5'.code, 'S'.code),
+            codes(mapTerminalKey(Key.F4, ctrl = true, codePoint = 0)))
+    }
+
+    @Test
     fun `shift tab sends back-tab CSI Z`() {
         assertEquals(listOf(0x1b, '['.code, 'Z'.code), codes(mapTerminalKey(Key.Tab, ctrl = false, shift = true, codePoint = 9)))
         // Plain Tab stays a literal tab.
