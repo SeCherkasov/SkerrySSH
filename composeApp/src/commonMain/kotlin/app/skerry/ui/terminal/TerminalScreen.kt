@@ -310,14 +310,38 @@ fun TerminalScreen(
         )
     }
 
-    Box(modifier.onSizeChanged { viewportSize = it }) {
+    Box(modifier.onSizeChanged { viewportSize = it }.background(SkerryColors.terminalBg)) {
+      // Фон ячеек рисуем ОТДЕЛЬНЫМ подслоем, а не через SpanStyle.background: Compose Text не
+      // закрашивает фон висячих (trailing) пробелов в конце строки, из-за чего reverse-полосы TUI
+      // (шапка nano/htop) обрывались на последнем непробельном символе. Канвас заливает фон по
+      // моноширинной сетке на всю ширину строки, включая хвостовые ячейки. Геометрия — как у курсора
+      // (тот же padding и сдвиг на прокрутку), глифы рисует Text поверх.
+      if (state.screen.isNotEmpty()) {
+          Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
+              val scrollPx = scroll.value.toFloat()
+              val first = (scrollPx / metrics.cellHeight).toInt().coerceAtLeast(0)
+              val last = ((scrollPx + size.height) / metrics.cellHeight).toInt().coerceAtMost(state.screen.lastIndex)
+              for (r in first..last) {
+                  val row = state.screen[r]
+                  val y = r * metrics.cellHeight - scrollPx
+                  var c = 0
+                  while (c < row.size) {
+                      val color = cellBgColor(row[c].style)
+                      if (color == null) { c++; continue }
+                      val s = c
+                      c++
+                      while (c < row.size && cellBgColor(row[c].style) == color) c++
+                      drawRect(color, topLeft = Offset(s * metrics.cellWidth, y), size = Size((c - s) * metrics.cellWidth, metrics.cellHeight))
+                  }
+              }
+          }
+      }
       Text(
         text = rendered,
         style = textStyle,
         onTextLayout = { layout = it },
         modifier = Modifier
             .fillMaxSize()
-            .background(SkerryColors.terminalBg)
             .verticalScroll(scroll)
             .padding(PADDING_DP.dp)
             .fillMaxWidth()
@@ -686,6 +710,18 @@ private fun renderScreen(
         }
         if (r < screen.lastIndex) append("\n")
     }
+}
+
+/**
+ * Цвет ФОНА ячейки для подслоя-канваса (закраска полной ширины строки, включая хвостовые пробелы).
+ * inverse → цвет текста (reverse-видео меняет fg/bg местами); заданный bg → его цвет; дефолтный фон
+ * без inverse → `null` (рисовать не нужно — виден общий фон терминала за Text). Выделение здесь не
+ * учитываем: его подсветку по-прежнему даёт [cellSpan] через SpanStyle.background.
+ */
+private fun cellBgColor(style: TermStyle): Color? = when {
+    style.inverse -> style.fg.toComposeColor(SkerryColors.text)
+    style.bg == TermColor.Default -> null
+    else -> style.bg.toComposeColor(SkerryColors.text)
 }
 
 /** Эффективный стиль ячейки: базовый стиль + полупрозрачная подсветка выделения. */
