@@ -49,6 +49,7 @@ import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.areAnyPressed
 import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
@@ -264,6 +265,22 @@ fun TerminalScreen(
         return TerminalPos(row, p.col.coerceIn(0, screen[row].size))
     }
 
+    // Репорт мыши приложению по координатам указателя. Пиксели берём из той же системы координат
+    // контента, что и posAt (после verticalScroll/padding), и передаём отдельно — encodeMouseReport
+    // использует их лишь в SGR-Pixels (1016), в клеточных режимах они игнорируются.
+    fun reportMouseAt(
+        button: MouseButton,
+        type: MouseEventType,
+        x: Float,
+        y: Float,
+        shift: Boolean = false,
+        alt: Boolean = false,
+        ctrl: Boolean = false,
+    ): Boolean = state.reportMouse(
+        button, type, posAt(x, y), shift, alt, ctrl,
+        x.toInt().coerceAtLeast(0), y.toInt().coerceAtLeast(0),
+    )
+
     // Якорь границы выделения в координатах контента (нижний угол ячейки) — арифметика, совпадающая
     // с сеткой глифов. Канвас маркеров рисует с поправкой на прокрутку.
     fun handleAnchor(pos: TerminalPos): Offset =
@@ -271,6 +288,13 @@ fun TerminalScreen(
 
     fun copySelection() {
         state.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
+    }
+
+    // Публикуем завершённое выделение мышью как PRIMARY: в системный PRIMARY (X11) и в in-app буфер.
+    // Тогда средний клик вставляет именно выделенное (а не устаревший CLIPBOARD), и работает на Wayland,
+    // где системный PRIMARY недоступен. No-op, если выделять нечего.
+    fun publishPrimary() {
+        state.capturePrimarySelection()?.let { writePrimarySelectionText(it) }
     }
 
     // Системное текстовое меню «Copy» над выделением — тач-аффорданс копирования (на мыши Ctrl+Shift+C).
@@ -426,8 +450,7 @@ fun TerminalScreen(
                         if (dy != 0f) {
                             val up = dy < 0f
                             if (reporting) {
-                                val pos = posAt(change.position.x, change.position.y)
-                                state.reportMouse(if (up) MouseButton.WheelUp else MouseButton.WheelDown, MouseEventType.Press, pos)
+                                reportMouseAt(if (up) MouseButton.WheelUp else MouseButton.WheelDown, MouseEventType.Press, change.position.x, change.position.y)
                             } else {
                                 val seq = arrowSequence(if (up) ArrowKey.Up else ArrowKey.Down, state.applicationCursorKeys)
                                 repeat(3) { state.send(seq) }
@@ -439,18 +462,20 @@ fun TerminalScreen(
             }
             // Hover-репортинг для AnyEvent (DEC 1003): приложение хочет события движения и без
             // зажатой кнопки. Шлём Move только при смене ячейки (кнопка 3 = «не зажата» проставляется
-            // внутри encodeMouseReport). Drag с зажатой кнопкой обрабатывает жестовый цикл ниже.
+            // внутри encodeMouseReport). Движение с ЗАЖАТОЙ кнопкой — это Drag, его репортят жестовые
+            // циклы ниже (левая — awaitEachGesture, средняя/правая — сырой обработчик), поэтому здесь
+            // глушим события с любой зажатой кнопкой, иначе один кадр движения уйдёт и как Move, и как Drag.
             .pointerInput(state, closed) {
                 var lastHover: TerminalPos? = null
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
                         if (closed || state.mouseTracking != MouseTracking.AnyEvent) continue
-                        if (event.type != PointerEventType.Move) continue
+                        if (event.type != PointerEventType.Move || event.buttons.areAnyPressed) continue
                         val change = event.changes.firstOrNull { !it.pressed } ?: continue
                         val pos = posAt(change.position.x, change.position.y)
                         if (pos != lastHover) {
-                            state.reportMouse(MouseButton.Left, MouseEventType.Move, pos)
+                            reportMouseAt(MouseButton.Left, MouseEventType.Move, change.position.x, change.position.y)
                             lastHover = pos
                         }
                     }
@@ -462,6 +487,7 @@ fun TerminalScreen(
             // (средний берёт PRIMARY-выделение X11 c откатом на буфер, правый — буфер обмена).
             .pointerInput(state, closed) {
                 var reported: MouseButton? = null
+                var lastPos: TerminalPos? = null
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
@@ -470,7 +496,9 @@ fun TerminalScreen(
                         val mods = event.keyboardModifiers
                         val shift = mods.isShiftPressed
                         val reporting = state.mouseTracking != MouseTracking.Off && !shift
-                        val pos = posAt(change.position.x, change.position.y)
+                        val x = change.position.x
+                        val y = change.position.y
+                        val pos = posAt(x, y)
                         when (event.type) {
                             PointerEventType.Press -> {
                                 val btn = when {
@@ -479,10 +507,14 @@ fun TerminalScreen(
                                     else -> null
                                 } ?: continue
                                 if (reporting) {
-                                    state.reportMouse(btn, MouseEventType.Press, pos, shift, mods.isAltPressed, mods.isCtrlPressed)
+                                    reportMouseAt(btn, MouseEventType.Press, x, y, shift, mods.isAltPressed, mods.isCtrlPressed)
                                     reported = btn
+                                    lastPos = pos
                                 } else if (btn == MouseButton.Middle) {
+                                    // Средний клик = вставка PRIMARY: системный PRIMARY (X11, видит и
+                                    // выделение в других окнах) → in-app буфер (Wayland) → CLIPBOARD.
                                     val text = readPrimarySelectionText()?.takeUnless { it.isBlank() }
+                                        ?: state.primarySelection?.takeUnless { it.isBlank() }
                                         ?: clipboard.getText()?.text
                                     text?.let { state.paste(it) }
                                 } else {
@@ -490,9 +522,24 @@ fun TerminalScreen(
                                 }
                                 change.consume()
                             }
+                            // Drag средней/правой кнопки (DEC 1002/1003): awaitFirstDown в жесте ниже
+                            // реагирует только на основную кнопку, поэтому движение с зажатой средней/правой
+                            // отслеживаем здесь — репортим только при смене ячейки, чтобы не спамить.
+                            PointerEventType.Move -> reported?.let { btn ->
+                                // Если приложение выключило трекинг (или зажат Shift) на середине drag —
+                                // больше не репортим, но событие всё равно глушим, пока кнопку не отпустят.
+                                if (reporting && pos != lastPos) {
+                                    reportMouseAt(btn, MouseEventType.Drag, x, y, shift, mods.isAltPressed, mods.isCtrlPressed)
+                                    lastPos = pos
+                                }
+                                change.consume()
+                            }
                             PointerEventType.Release -> reported?.let { btn ->
-                                state.reportMouse(btn, MouseEventType.Release, pos, shift, mods.isAltPressed, mods.isCtrlPressed)
+                                if (reporting) {
+                                    reportMouseAt(btn, MouseEventType.Release, x, y, shift, mods.isAltPressed, mods.isCtrlPressed)
+                                }
                                 reported = null
+                                lastPos = null
                                 change.consume()
                             }
                             else -> {}
@@ -514,7 +561,7 @@ fun TerminalScreen(
                         if (state.mouseTracking != MouseTracking.Off && !shift) {
                             val ctrl = mods.isCtrlPressed
                             val alt = mods.isAltPressed
-                            state.reportMouse(MouseButton.Left, MouseEventType.Press, posAt(down.position.x, down.position.y), shift, alt, ctrl)
+                            reportMouseAt(MouseButton.Left, MouseEventType.Press, down.position.x, down.position.y, shift, alt, ctrl)
                             down.consume()
                             var last = posAt(down.position.x, down.position.y)
                             while (true) {
@@ -525,12 +572,12 @@ fun TerminalScreen(
                                     if (pos != last) {
                                         // В Normal-режиме (1000) drag не репортится — encodeMouseReport
                                         // вернёт false и ничего не отправит; для 1002/1003 уйдёт отчёт.
-                                        state.reportMouse(MouseButton.Left, MouseEventType.Drag, pos, shift, alt, ctrl)
+                                        reportMouseAt(MouseButton.Left, MouseEventType.Drag, change.position.x, change.position.y, shift, alt, ctrl)
                                         last = pos
                                     }
                                     change.consume()
                                 } else {
-                                    state.reportMouse(MouseButton.Left, MouseEventType.Release, posAt(change.position.x, change.position.y), shift, alt, ctrl)
+                                    reportMouseAt(MouseButton.Left, MouseEventType.Release, change.position.x, change.position.y, shift, alt, ctrl)
                                     change.consume()
                                     break
                                 }
@@ -567,6 +614,8 @@ fun TerminalScreen(
                                 if (!dragged || state.selection?.isEmpty != false) state.clearSelection()
                             }
                         }
+                        // Завершённое выделение мышью становится PRIMARY — источник для среднего клика.
+                        publishPrimary()
                     } else {
                         // Тач: сначала — попал ли палец в маркер уже существующего выделения.
                         // Если да, перетаскиваем эту границу (вторую держим) — корректировка краёв,
@@ -590,7 +639,7 @@ fun TerminalScreen(
                                 if (handle == SelectionHandle.START) state.moveSelectionStart(pos)
                                 else state.moveSelectionEnd(pos)
                             }
-                            if (state.selection?.isEmpty != false) state.clearSelection() else showCopyMenu()
+                            if (state.selection?.isEmpty != false) state.clearSelection() else { showCopyMenu(); publishPrimary() }
                             return@awaitEachGesture
                         }
                         // Иначе разводим жесты, чтобы тап-для-клавиатуры и long-press-для-выделения
@@ -606,7 +655,7 @@ fun TerminalScreen(
                                 change.consume()
                                 state.extendSelection(posAt(change.position.x, change.position.y))
                             }
-                            if (state.selection?.isEmpty != false) state.clearSelection() else showCopyMenu()
+                            if (state.selection?.isEmpty != false) state.clearSelection() else { showCopyMenu(); publishPrimary() }
                         } else if (imeInput) {
                             // Не long-press: если палец уже отпущен — это тап, поднимаем клавиатуру;
                             // если ещё на экране (жест забрала прокрутка) — не трогаем.

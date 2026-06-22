@@ -224,6 +224,8 @@ class TerminalEmulator(
         private set
     var mouseSgr: Boolean = false
         private set
+    var mousePixels: Boolean = false
+        private set
 
     /** Focus reporting (DEC 1004): когда включён, UI шлёт ESC[I при фокусе окна и ESC[O при потере. */
     var focusReporting: Boolean = false
@@ -683,6 +685,7 @@ class TerminalEmulator(
             1003 -> mouseTracking = if (on) MouseTracking.AnyEvent else MouseTracking.Off
             1004 -> focusReporting = on
             1006 -> mouseSgr = on
+            1016 -> mousePixels = on
             2004 -> bracketedPaste = on
             47, 1047 -> setAltScreen(on, saveRestore = false)
             1049 -> setAltScreen(on, saveRestore = true)
@@ -712,6 +715,7 @@ class TerminalEmulator(
         1003 -> mouseTracking == MouseTracking.AnyEvent
         1004 -> focusReporting
         1006 -> mouseSgr
+        1016 -> mousePixels
         2004 -> bracketedPaste
         47, 1047, 1049 -> altScreen
         else -> null
@@ -1139,7 +1143,7 @@ class TerminalEmulator(
         originMode = false; insertMode = false; autoWrap = true; cursorVisible = true
         cursorShape = CursorShape.Block; cursorBlink = true
         applicationCursorKeys = false; applicationKeypad = false
-        bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; focusReporting = false
+        bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; mousePixels = false; focusReporting = false
         g0LineDrawing = false; g1LineDrawing = false; glG1 = false
         pendingDesignation = -1
         strSeq.clear(); strSeqIsDcs = false; parser = State.Ground // RIS прерывает любую частичную последовательность

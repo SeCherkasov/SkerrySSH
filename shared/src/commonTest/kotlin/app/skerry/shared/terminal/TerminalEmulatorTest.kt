@@ -780,6 +780,26 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `mouse pixel mode 1016 is tracked`() {
+        // DECSET 1016: приложение просит SGR-Pixels (координаты в пикселях вместо клеток).
+        val emu = emulate(chunks = arrayOf("$esc[?1016h"))
+        assertTrue(emu.mousePixels)
+        emu.feed("$esc[?1016l".encodeToByteArray())
+        assertFalse(emu.mousePixels)
+    }
+
+    @Test
+    fun `DECRQM reports mouse pixel mode state`() {
+        val replies = mutableListOf<String>()
+        val emu = TerminalEmulator(respond = { replies += it })
+        emu.feed("$esc[?1016\$p".encodeToByteArray())          // выключен по умолчанию → reset (2)
+        assertEquals("$esc[?1016;2\$y", replies.last())
+        emu.feed("$esc[?1016h".encodeToByteArray())
+        emu.feed("$esc[?1016\$p".encodeToByteArray())
+        assertEquals("$esc[?1016;1\$y", replies.last())
+    }
+
+    @Test
     fun `bracketed paste mode is tracked`() {
         assertTrue(emulate(chunks = arrayOf("$esc[?2004h")).bracketedPaste)
     }

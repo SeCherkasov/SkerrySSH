@@ -126,6 +126,10 @@ class TerminalScreenState(
     var mouseSgr: Boolean by mutableStateOf(false)
         private set
 
+    /** SGR-Pixels (DEC 1016): координаты в пикселях вместо клеток — см. [reportMouse]. */
+    var mousePixels: Boolean by mutableStateOf(false)
+        private set
+
     /** Bracketed-paste (DEC 2004): когда включён, [paste] оборачивает вставку маркерами. */
     var bracketedPaste: Boolean by mutableStateOf(false)
         private set
@@ -219,6 +223,7 @@ class TerminalScreenState(
         applicationKeypad = emulator.applicationKeypad
         mouseTracking = emulator.mouseTracking
         mouseSgr = emulator.mouseSgr
+        mousePixels = emulator.mousePixels
         bracketedPaste = emulator.bracketedPaste
         focusReporting = emulator.focusReporting
         altScreen = emulator.altScreen
@@ -276,6 +281,24 @@ class TerminalScreenState(
         ?.extract(screen)
         ?.takeIf { it.isNotEmpty() }
 
+    /**
+     * In-app PRIMARY-буфер: текст последнего выделения мышью. Нужен для среднего клика-вставки там,
+     * где системный PRIMARY недоступен (Wayland: AWT `getSystemSelection()`==null) — тогда вставка
+     * берёт его вместо CLIPBOARD, чтобы средний клик вставлял именно выделенное, а не устаревший буфер.
+     */
+    var primarySelection: String? = null
+        private set
+
+    /**
+     * Зафиксировать текущее выделение как PRIMARY (вызывается по завершении выделения мышью). Возвращает
+     * сохранённый текст или `null`, если выделять нечего (буфер тогда не трогаем — прежний PRIMARY живёт).
+     */
+    fun capturePrimarySelection(): String? {
+        val text = selectedText() ?: return null
+        primarySelection = text
+        return text
+    }
+
     /** Отправить введённый текст в PTY (fire-and-forget в [scope]). */
     fun send(text: String) {
         scope.launch { session.send(text.encodeToByteArray()) }
@@ -301,9 +324,13 @@ class TerminalScreenState(
         shift: Boolean = false,
         alt: Boolean = false,
         ctrl: Boolean = false,
+        pixelX: Int = 0,
+        pixelY: Int = 0,
     ): Boolean {
-        val bytes = encodeMouseReport(mouseTracking, mouseSgr, button, type, pos.col, pos.row, shift, alt, ctrl)
-            ?: return false
+        val bytes = encodeMouseReport(
+            mouseTracking, mouseSgr, button, type, pos.col, pos.row, shift, alt, ctrl,
+            pixels = mousePixels, pixelX = pixelX, pixelY = pixelY,
+        ) ?: return false
         sendBytes(bytes)
         return true
     }
