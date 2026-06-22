@@ -98,8 +98,10 @@ import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.design.ArrowKey
 import app.skerry.ui.design.arrowSequence
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
@@ -231,7 +233,10 @@ fun TerminalScreen(
         // иначе OSC 52 перестанет работать до конца сессии. Отмену корутины пробрасываем.
         state.clipboardCopies.collect {
             try {
-                clipboard.setClipEntry(plainTextClipEntry(it))
+                // На Wayland пишем через wl-copy (тот же буфер, что читаем при вставке); иначе Compose.
+                if (!withContext(Dispatchers.Default) { writeSystemClipboardDirect(it) }) {
+                    clipboard.setClipEntry(plainTextClipEntry(it))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -339,7 +344,10 @@ fun TerminalScreen(
         val text = state.selectedText() ?: return
         clipboardScope.launch {
             try {
-                clipboard.setClipEntry(plainTextClipEntry(text))
+                // Wayland: wl-copy (парно к вставке через wl-paste); иначе штатный Compose-буфер.
+                if (!withContext(Dispatchers.Default) { writeSystemClipboardDirect(text) }) {
+                    clipboard.setClipEntry(plainTextClipEntry(text))
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -347,12 +355,22 @@ fun TerminalScreen(
         }
     }
 
-    // Вставка из системного буфера: читаем его suspend-API асинхронно и шлём текст в PTY (paste сам
-    // оборачивает bracketed-paste, если приложение включило). Пустой/нетекстовый буфер — no-op.
+    // Текст системного CLIPBOARD. На Wayland (прямой путь берёт чтение на себя) читаем через wl-paste,
+    // минуя AWT, — и НЕ откатываемся на Compose даже при пустом результате, иначе при не-текстовом
+    // буфере всплыла бы шумная JDK-трасса. Субпроцесс и резолв утилит держим вне UI-потока (Default).
+    suspend fun fetchClipboardText(): String? =
+        // Гейт и субпроцесс — одним заходом на Default; getClipEntry (suspend, ждёт UI-поток) — на
+        // возвращённом контексте вызывающего (Main). Прямой путь, взяв чтение, на AWT уже не падает.
+        withContext(Dispatchers.Default) {
+            if (systemClipboardDirectHandlesReads()) readSystemClipboardDirect() else null
+        } ?: if (systemClipboardDirectHandlesReads()) null else clipboard.getClipEntry()?.readPlainText()
+
+    // Вставка из системного буфера: читаем асинхронно и шлём текст в PTY (paste сам оборачивает
+    // bracketed-paste, если приложение включило). Пустой/нетекстовый буфер — no-op.
     fun pasteFromClipboard() {
         clipboardScope.launch {
             try {
-                clipboard.getClipEntry()?.readPlainText()?.let { state.paste(it) }
+                fetchClipboardText()?.let { state.paste(it) }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -360,11 +378,36 @@ fun TerminalScreen(
         }
     }
 
-    // Публикуем завершённое выделение мышью как PRIMARY: в системный PRIMARY (X11) и в in-app буфер.
-    // Тогда средний клик вставляет именно выделенное (а не устаревший CLIPBOARD), и работает на Wayland,
-    // где системный PRIMARY недоступен. No-op, если выделять нечего.
+    // Средний клик = вставка PRIMARY: системный PRIMARY (X11 AWT / Wayland wl-paste, видит выделение
+    // в других окнах) → in-app буфер → CLIPBOARD. Чтение PRIMARY на Wayland — субпроцесс, поэтому весь
+    // флоу уводим в корутину (Default для чтения, paste обратно на UI), чтобы не блокировать клик.
+    fun pastePrimaryOrClipboard() {
+        clipboardScope.launch {
+            try {
+                val primary = withContext(Dispatchers.Default) { readPrimarySelectionText() }
+                    ?.takeUnless { it.isBlank() }
+                    ?: state.primarySelection?.takeUnless { it.isBlank() }
+                if (primary != null) state.paste(primary) else fetchClipboardText()?.let { state.paste(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    // Публикуем завершённое выделение мышью как PRIMARY: в системный PRIMARY (X11 AWT / Wayland wl-copy)
+    // и в in-app буфер. Тогда средний клик вставляет именно выделенное. Запись PRIMARY на Wayland —
+    // субпроцесс, поэтому уводим в корутину (Default), чтобы не блокировать UI. No-op, если выделять нечего.
     fun publishPrimary() {
-        state.capturePrimarySelection()?.let { writePrimarySelectionText(it) }
+        val text = state.capturePrimarySelection() ?: return
+        clipboardScope.launch {
+            try {
+                withContext(Dispatchers.Default) { writePrimarySelectionText(text) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
     }
 
     // Системное текстовое меню «Copy» над выделением — тач-аффорданс копирования (на мыши Ctrl+Shift+C).
@@ -581,13 +624,9 @@ fun TerminalScreen(
                                     reported = btn
                                     lastPos = pos
                                 } else if (btn == MouseButton.Middle) {
-                                    // Средний клик = вставка PRIMARY: системный PRIMARY (X11, видит и
-                                    // выделение в других окнах) → in-app буфер (Wayland) → CLIPBOARD.
-                                    // Первые два источника синхронны; на CLIPBOARD откатываемся
-                                    // асинхронно (suspend-буфер) лишь когда PRIMARY/in-app пусты.
-                                    val primary = readPrimarySelectionText()?.takeUnless { it.isBlank() }
-                                        ?: state.primarySelection?.takeUnless { it.isBlank() }
-                                    if (primary != null) state.paste(primary) else pasteFromClipboard()
+                                    // Средний клик = вставка PRIMARY (PRIMARY → in-app буфер → CLIPBOARD).
+                                    // Чтение PRIMARY на Wayland — субпроцесс, поэтому весь флоу асинхронный.
+                                    pastePrimaryOrClipboard()
                                 } else {
                                     // Правый клик = копировать текущее выделение в буфер обмена (без
                                     // вставки — вставка осталась на средней кнопке). No-op, если ничего
