@@ -23,6 +23,9 @@ import app.skerry.shared.terminal.wordSelectionAt
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -45,7 +48,23 @@ class TerminalScreenState(
     // (внутри корутины-владельца), поэтому он обязан лишь писать в PTY (send → session.send) и НЕ
     // должен прямо/косвенно заводить новый emulator.feed/resize — иначе ломается однопоточный
     // контракт эмулятора. session.send в PTY-сток, обратно в commands не возвращается.
-    private val emulator = TerminalEmulator(respond = { reply -> send(reply) })
+    // Запросы OSC 52 на запись в системный буфер. extraBufferCapacity, чтобы tryEmit с владельца-корутины
+    // не терялся при отсутствии подписчика в момент эмита; DROP_OLDEST — при всплеске буфер получает
+    // последнюю запись (last-writer-wins, верная семантика для clipboard), а не застревает на старой.
+    private val _clipboardCopies = MutableSharedFlow<String>(
+        extraBufferCapacity = 16,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** Текст, который приложение просит положить в системный буфер (OSC 52). UI собирает и кладёт. */
+    val clipboardCopies: SharedFlow<String> = _clipboardCopies
+
+    private val emulator = TerminalEmulator(
+        respond = { reply -> send(reply) },
+        // OSC 52-запись: эмулятор зовёт это синхронно из feed() на корутине-владельце, поэтому НЕ трогаем
+        // системный буфер здесь — публикуем во flow, а композбл кладёт в буфер на UI-потоке.
+        onClipboardCopy = { text -> _clipboardCopies.tryEmit(text) },
+    )
 
     /** Снимок экрана (строки сверху вниз) для отрисовки. */
     var screen: List<List<TermCell>> by mutableStateOf(emptyList())
