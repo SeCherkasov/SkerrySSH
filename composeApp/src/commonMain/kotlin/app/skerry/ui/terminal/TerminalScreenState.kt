@@ -138,6 +138,10 @@ class TerminalScreenState(
     var altScreen: Boolean by mutableStateOf(false)
         private set
 
+    /** Заголовок окна из OSC 0/1/2 (пустой, пока приложение его не задало). UI кладёт его на вкладку. */
+    var title: String by mutableStateOf("")
+        private set
+
     /**
      * Переопределения палитры (OSC 4/104): index 0..255 → Rgb. Пусто, пока приложение их не задавало.
      * Рендер консультируется при разрешении [TermColor.Indexed] перед дефолтами темы.
@@ -218,6 +222,7 @@ class TerminalScreenState(
         bracketedPaste = emulator.bracketedPaste
         focusReporting = emulator.focusReporting
         altScreen = emulator.altScreen
+        title = emulator.title
         palette = emulator.paletteSnapshot()
     }
 

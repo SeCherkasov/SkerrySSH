@@ -206,7 +206,7 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
             if (sessions != null) {
                 sessions.sessions.forEach { s ->
                     SessionTabChip(
-                        name = s.title,
+                        name = s.displayTitle,
                         dot = sessionDotColor(s.controller.uiState),
                         active = s.id == sessions.activeId,
                         onClick = { sessions.activate(s.id) },

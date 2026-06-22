@@ -263,6 +263,18 @@ class SessionsControllerTest {
         assertTrue(transport.connections.all { it.disconnected })
         scope.cancel()
     }
+
+    @Test
+    fun `effectiveTabTitle prefers live OSC title over fallback`() {
+        assertEquals("vim ~/app", effectiveTabTitle(liveTitle = "vim ~/app", fallback = "web-1"))
+    }
+
+    @Test
+    fun `effectiveTabTitle falls back when live title is null or blank`() {
+        assertEquals("web-1", effectiveTabTitle(liveTitle = null, fallback = "web-1"))
+        assertEquals("web-1", effectiveTabTitle(liveTitle = "", fallback = "web-1"))
+        assertEquals("web-1", effectiveTabTitle(liveTitle = "   ", fallback = "web-1"))
+    }
 }
 
 /** Транспорт, отдающий свежее соединение на каждый connect; список — для проверки disconnect. */

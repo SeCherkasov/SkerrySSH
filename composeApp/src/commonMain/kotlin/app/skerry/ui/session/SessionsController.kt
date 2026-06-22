@@ -23,7 +23,22 @@ class Session(
     val title: String,
     val subtitle: String,
     val controller: ConnectionController,
-)
+) {
+    /**
+     * Заголовок для вкладки: живой OSC 0/1/2-title терминала (когда сессия подключена и приложение
+     * его задало), иначе фолбэк на статичный [title] (имя хоста). Чтение реактивно — Compose
+     * перерисует вкладку при смене `uiState` или `terminal.title`.
+     */
+    val displayTitle: String
+        get() = effectiveTabTitle(
+            liveTitle = (controller.uiState as? ConnectionUiState.Connected)?.terminal?.title,
+            fallback = title,
+        )
+}
+
+/** Эффективный заголовок вкладки: непустой живой [liveTitle] перекрывает [fallback]. */
+fun effectiveTabTitle(liveTitle: String?, fallback: String): String =
+    liveTitle?.takeIf { it.isNotBlank() } ?: fallback
 
 /**
  * Менеджер открытых сессий поверх [ConnectionController] — модель вкладок desktop-каркаса.

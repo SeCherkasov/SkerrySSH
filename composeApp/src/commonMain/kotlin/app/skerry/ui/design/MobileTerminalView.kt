@@ -89,7 +89,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     }
     Column(Modifier.fillMaxSize().background(D.terminalBg)) {
         MobileTerminalHeader(
-            title = active?.title ?: "Terminal",
+            title = active?.displayTitle ?: "Terminal",
             status = active?.controller?.uiState,
             onBack = state::pop,
             onDisconnect = onDisconnect,
