@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -60,7 +61,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
@@ -96,7 +97,9 @@ import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.design.ArrowKey
 import app.skerry.ui.design.arrowSequence
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
@@ -175,7 +178,10 @@ fun TerminalScreen(
     val imeFocusRequester = remember { FocusRequester() }
     val imeBaseline = remember { TextFieldValue(ANCHOR, selection = TextRange(ANCHOR.length)) }
     var imeValue by remember { mutableStateOf(imeBaseline) }
-    val clipboard = LocalClipboardManager.current
+    // Системный буфер обмена — новый suspend-API ([androidx.compose.ui.platform.Clipboard]); чтение/запись
+    // идут через clipboardScope (вызовы из не-suspend обработчиков клавиш/мыши — fire-and-forget).
+    val clipboard = LocalClipboard.current
+    val clipboardScope = rememberCoroutineScope()
     val textToolbar = LocalTextToolbar.current
     val uriHandler = LocalUriHandler.current
     // Контроллер софт-клавиатуры: на таче поднимаем её явно, т.к. requestFocus() на уже
@@ -215,7 +221,17 @@ fun TerminalScreen(
     // OSC 52: приложение (tmux/vim) просит положить текст в системный буфер — кладём на UI-потоке.
     // (Запрос чтения буфера сервером эмулятор не пропускает — утечки буфера пользователя нет.)
     LaunchedEffect(state) {
-        state.clipboardCopies.collect { clipboard.setText(AnnotatedString(it)) }
+        // try/catch на каждую запись: сбой одной копии (буфер недоступен) НЕ должен валить collect —
+        // иначе OSC 52 перестанет работать до конца сессии. Отмену корутины пробрасываем.
+        state.clipboardCopies.collect {
+            try {
+                clipboard.setClipEntry(plainTextClipEntry(it))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // буфер недоступен/занят — копию молча теряем, collect продолжает работать
+            }
+        }
     }
 
     // Размер вьюпорта в ячейках → PTY/эмулятор: при первом лэйауте и ресайзе окна. Без этого
@@ -310,8 +326,32 @@ fun TerminalScreen(
     fun handleAnchor(pos: TerminalPos): Offset =
         Offset(pos.col * metrics.cellWidth, (pos.row + 1) * metrics.cellHeight)
 
+    // try/catch на каждую буферную корутину: scope из rememberCoroutineScope несёт обычный Job (не
+    // Supervisor), поэтому необработанное исключение в одной операции отменило бы весь scope и убило бы
+    // копирование/вставку до конца сессии. Отмену корутины пробрасываем, прочее глушим (буфер недоступен).
     fun copySelection() {
-        state.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
+        val text = state.selectedText() ?: return
+        clipboardScope.launch {
+            try {
+                clipboard.setClipEntry(plainTextClipEntry(text))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    // Вставка из системного буфера: читаем его suspend-API асинхронно и шлём текст в PTY (paste сам
+    // оборачивает bracketed-paste, если приложение включило). Пустой/нетекстовый буфер — no-op.
+    fun pasteFromClipboard() {
+        clipboardScope.launch {
+            try {
+                clipboard.getClipEntry()?.readPlainText()?.let { state.paste(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
     }
 
     // Публикуем завершённое выделение мышью как PRIMARY: в системный PRIMARY (X11) и в in-app буфер.
@@ -435,7 +475,7 @@ fun TerminalScreen(
                 if ((event.isCtrlPressed && event.isShiftPressed && event.key == Key.V) ||
                     (event.isShiftPressed && event.key == Key.Insert)
                 ) {
-                    clipboard.getText()?.text?.let { state.paste(it) }
+                    pasteFromClipboard()
                     return@onPreviewKeyEvent true
                 }
                 val bytes = mapTerminalKey(
@@ -507,8 +547,8 @@ fun TerminalScreen(
             }
             // Средняя/правая кнопки мыши: awaitFirstDown (в жесте ниже) реагирует только на основную
             // (левую) кнопку, поэтому средний/правый клик ловим здесь на сырых событиях. При активном
-            // mouse-tracking — репортим press/release приложению; иначе средний/правый клик = вставка
-            // (средний берёт PRIMARY-выделение X11 c откатом на буфер, правый — буфер обмена).
+            // mouse-tracking — репортим press/release приложению; иначе средний = вставка (PRIMARY-
+            // выделение X11 c откатом на буфер), правый = КОПИРОВАТЬ текущее выделение в буфер.
             .pointerInput(state, closed) {
                 var reported: MouseButton? = null
                 var lastPos: TerminalPos? = null
@@ -537,12 +577,16 @@ fun TerminalScreen(
                                 } else if (btn == MouseButton.Middle) {
                                     // Средний клик = вставка PRIMARY: системный PRIMARY (X11, видит и
                                     // выделение в других окнах) → in-app буфер (Wayland) → CLIPBOARD.
-                                    val text = readPrimarySelectionText()?.takeUnless { it.isBlank() }
+                                    // Первые два источника синхронны; на CLIPBOARD откатываемся
+                                    // асинхронно (suspend-буфер) лишь когда PRIMARY/in-app пусты.
+                                    val primary = readPrimarySelectionText()?.takeUnless { it.isBlank() }
                                         ?: state.primarySelection?.takeUnless { it.isBlank() }
-                                        ?: clipboard.getText()?.text
-                                    text?.let { state.paste(it) }
+                                    if (primary != null) state.paste(primary) else pasteFromClipboard()
                                 } else {
-                                    clipboard.getText()?.text?.let { state.paste(it) }
+                                    // Правый клик = копировать текущее выделение в буфер обмена (без
+                                    // вставки — вставка осталась на средней кнопке). No-op, если ничего
+                                    // не выделено. Выделение НЕ снимаем, чтобы можно было копировать повторно.
+                                    copySelection()
                                 }
                                 change.consume()
                             }
