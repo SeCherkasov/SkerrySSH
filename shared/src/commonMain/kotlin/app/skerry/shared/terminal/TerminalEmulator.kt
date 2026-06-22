@@ -211,6 +211,28 @@ class TerminalEmulator(
     // Активная гиперссылка OSC 8 (URI) — вешается на печатаемые клетки до закрытия пустым URI.
     private var currentHyperlink: String? = null
 
+    // Переопределения палитры (OSC 4): index 0..255 → Rgb. Пусто = используются дефолты темы.
+    // Рендер консультируется с этим слоем при разрешении TermColor.Indexed.
+    private val paletteOverrides = HashMap<Int, TermColor.Rgb>()
+
+    // Кэш неизменяемого снимка палитры: пересобирается лишь при мутации (paletteDirty), чтобы
+    // publishSnapshot() отдавал ОДНУ И ТУ ЖЕ ссылку между кадрами — иначе referential-equality Compose
+    // считал бы state «грязным» и аллокация HashMap шла бы на каждый feed.
+    private var paletteCache: Map<Int, TermColor.Rgb> = emptyMap()
+    private var paletteDirty = false
+
+    /** Снимок переопределений палитры (OSC 4) для рендера; пуст, пока приложение их не задавало. */
+    fun paletteSnapshot(): Map<Int, TermColor.Rgb> {
+        if (paletteDirty) {
+            paletteCache = if (paletteOverrides.isEmpty()) emptyMap() else HashMap(paletteOverrides)
+            paletteDirty = false
+        }
+        return paletteCache
+    }
+
+    /** Текущее переопределение цвета палитры `index` (OSC 4), либо `null`. */
+    fun paletteOverride(index: Int): TermColor.Rgb? = paletteOverrides[index]
+
     // --- Парсер ------------------------------------------------------------
 
     private enum class State { Ground, Esc, Csi, Osc, OscEsc, Consume, Utf8 }
@@ -355,13 +377,67 @@ class TerminalEmulator(
     private fun finishOsc() {
         val s = osc.toString()
         val sep = s.indexOf(';')
-        if (sep <= 0) return
-        val code = s.substring(0, sep).toIntOrNull() ?: return
-        val rest = s.substring(sep + 1)
+        // code-only OSC (без ';') допустим — например `OSC 104 ST` (сброс всей палитры).
+        val code = (if (sep < 0) s else s.substring(0, sep)).toIntOrNull() ?: return
+        val rest = if (sep < 0) "" else s.substring(sep + 1)
         when (code) {
             0, 1, 2 -> title = rest
-            8 -> setHyperlink(rest) // OSC 8 ; params ; URI
+            4 -> setPalette(rest)     // OSC 4 ; index ; spec [ ; index ; spec ... ]
+            8 -> setHyperlink(rest)   // OSC 8 ; params ; URI
+            104 -> resetPalette(rest) // OSC 104 [ ; index ... ]  (пусто = вся палитра)
         }
+    }
+
+    /** OSC 4: пары `index;spec`. spec `?` (запрос) пропускаем — отвечать нечем (цвета знает рендер). */
+    private fun setPalette(rest: String) {
+        val parts = rest.split(';')
+        var i = 0
+        while (i + 1 < parts.size) {
+            val idx = parts[i].toIntOrNull()
+            val rgb = parseXColor(parts[i + 1])
+            if (idx != null && idx in 0..255 && rgb != null) { paletteOverrides[idx] = rgb; paletteDirty = true }
+            i += 2
+        }
+    }
+
+    /** OSC 104: без аргументов — сброс всей палитры; иначе сброс перечисленных индексов. */
+    private fun resetPalette(rest: String) {
+        if (rest.isBlank()) { paletteOverrides.clear(); paletteDirty = true; return }
+        for (part in rest.split(';')) part.toIntOrNull()?.let { if (paletteOverrides.remove(it) != null) paletteDirty = true }
+    }
+
+    /**
+     * Разбор X11/xterm color-spec в [TermColor.Rgb]: `rgb:R/G/B` (по 1..4 hex-цифры на компоненту,
+     * масштабируются в 0..255) и `#RGB`/`#RRGGBB`/`#RRRRGGGGBBBB`. Прочее (`?`, имена цветов) → null.
+     */
+    private fun parseXColor(spec: String): TermColor.Rgb? {
+        if (spec.startsWith("rgb:")) {
+            val ch = spec.substring(4).split('/')
+            if (ch.size != 3) return null
+            val r = scaleHex(ch[0]) ?: return null
+            val g = scaleHex(ch[1]) ?: return null
+            val b = scaleHex(ch[2]) ?: return null
+            return TermColor.Rgb(r, g, b)
+        }
+        if (spec.startsWith("#")) {
+            val hex = spec.substring(1)
+            // X11 #-форма: 3 (#RGB), 6 (#RRGGBB) или 12 (#RRRRGGGGBBBB) hex-цифр; прочие длины — мусор.
+            if (hex.length != 3 && hex.length != 6 && hex.length != 12) return null
+            val n = hex.length / 3
+            val r = scaleHex(hex.substring(0, n)) ?: return null
+            val g = scaleHex(hex.substring(n, 2 * n)) ?: return null
+            val b = scaleHex(hex.substring(2 * n, 3 * n)) ?: return null
+            return TermColor.Rgb(r, g, b)
+        }
+        return null
+    }
+
+    /** hex-компонента 1..4 цифр → 0..255 масштабированием по разрядности (`ff`→255, `ffff`→255, `8080`→128). */
+    private fun scaleHex(h: String): Int? {
+        if (h.isEmpty() || h.length > 4) return null
+        val v = h.toIntOrNull(16) ?: return null
+        val max = (1 shl (4 * h.length)) - 1
+        return (v * 255 + max / 2) / max
     }
 
     /**
@@ -802,6 +878,8 @@ class TerminalEmulator(
         pendingWrap = false
         lastPrintedCp = null
         currentHyperlink = null
+        paletteOverrides.clear()
+        paletteDirty = true
         style = TermStyle()
         resetRegion()
         tabStops = defaultTabStops(cols)

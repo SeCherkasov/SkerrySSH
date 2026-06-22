@@ -10,6 +10,7 @@ import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
+import app.skerry.shared.terminal.TermColor
 import app.skerry.shared.terminal.TerminalEmulator
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
@@ -108,6 +109,13 @@ class TerminalScreenState(
         private set
 
     /**
+     * Переопределения палитры (OSC 4/104): index 0..255 → Rgb. Пусто, пока приложение их не задавало.
+     * Рендер консультируется при разрешении [TermColor.Indexed] перед дефолтами темы.
+     */
+    var palette: Map<Int, TermColor.Rgb> by mutableStateOf(emptyMap())
+        private set
+
+    /**
      * Плоский текст экрана — для тестов и простых проверок (рендер использует [screen]).
      * Сетка всегда `rows` строк фиксированной ширины, поэтому хвостовые пробелы и пустые строки
      * обрезаются, чтобы текст читался как видимое содержимое.
@@ -178,6 +186,7 @@ class TerminalScreenState(
         mouseSgr = emulator.mouseSgr
         bracketedPaste = emulator.bracketedPaste
         altScreen = emulator.altScreen
+        palette = emulator.paletteSnapshot()
     }
 
     /** Начать выделение в позиции [pos] (нажатие мыши): якорь и фокус совпадают — пока пусто. */

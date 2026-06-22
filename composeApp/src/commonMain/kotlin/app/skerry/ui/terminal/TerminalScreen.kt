@@ -294,6 +294,7 @@ fun TerminalScreen(
       // невидимая подложка (высота для скролла + приём ввода).
       if (state.screen.isNotEmpty()) {
           val sel = state.selection
+          val palette = state.palette // OSC 4/104 переопределения индексов; пусто — дефолты темы
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
               val scrollPx = scroll.value.toFloat()
               val screen = state.screen
@@ -306,10 +307,10 @@ fun TerminalScreen(
                   // 1) Фон ячеек — раны одного цвета схлопываем; хвостовой ран тянем до края вьюпорта.
                   var c = 0
                   while (c < row.size) {
-                      val color = cellBgColor(row[c].style)
+                      val color = cellBgColor(row[c].style, palette)
                       if (color == null) { c++; continue }
                       val s = c; c++
-                      while (c < row.size && cellBgColor(row[c].style) == color) c++
+                      while (c < row.size && cellBgColor(row[c].style, palette) == color) c++
                       val left = s * cw
                       val right = if (c >= row.size) size.width else c * cw
                       drawRect(color, topLeft = Offset(left, top), size = Size(right - left, chh))
@@ -333,9 +334,9 @@ fun TerminalScreen(
                       if (cell.width == CellWidth.Continuation) { g++; continue }
                       if (cell.width == CellWidth.Wide) {
                           if (cell.text.isNotBlank()) {
-                              drawText(measurer, cell.text, topLeft = Offset(g * cw, top), style = cell.style.toGlyphStyle(textStyle))
+                              drawText(measurer, cell.text, topLeft = Offset(g * cw, top), style = cell.style.toGlyphStyle(textStyle, palette))
                           }
-                          if (cell.style.underline) drawCellUnderline(cell.style, g * cw, top, 2 * cw, chh)
+                          if (cell.style.underline) drawCellUnderline(cell.style, g * cw, top, 2 * cw, chh, palette)
                           g++
                           continue
                       }
@@ -347,10 +348,10 @@ fun TerminalScreen(
                           }
                       }
                       if (runText.isNotBlank()) {
-                          drawText(measurer, runText, topLeft = Offset(sCol * cw, top), style = st.toGlyphStyle(textStyle))
+                          drawText(measurer, runText, topLeft = Offset(sCol * cw, top), style = st.toGlyphStyle(textStyle, palette))
                       }
                       // Подчёркивание тянем по всей ширине рана, в т.ч. под пробелами (как в xterm).
-                      if (st.underline) drawCellUnderline(st, sCol * cw, top, (g - sCol) * cw, chh)
+                      if (st.underline) drawCellUnderline(st, sCol * cw, top, (g - sCol) * cw, chh, palette)
                   }
                   // 4) Гиперссылки (OSC 8) подчёркиваем отдельным проходом — раны соседних клеток с
                   // одним URI; пропускаем те, что уже подчёркнуты приложением (SGR), чтобы не дублировать.
@@ -366,7 +367,7 @@ fun TerminalScreen(
                           if (row[k].style.underline) { k++; continue } // app уже подчёркивает — не дублируем
                           val runStart = k
                           while (k < to && !row[k].style.underline) k++
-                          drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh)
+                          drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette)
                       }
                   }
               }
@@ -738,23 +739,23 @@ private fun DrawScope.drawSelectionHandle(
  * дефолтный фон без inverse → `null` (рисовать не нужно — виден общий фон терминала). Подсветку
  * выделения накладывает сам оверлей отдельным слоем поверх фона.
  */
-private fun cellBgColor(style: TermStyle): Color? = when {
-    style.inverse -> style.fg.toComposeColor(SkerryColors.text)
+private fun cellBgColor(style: TermStyle, palette: Palette): Color? = when {
+    style.inverse -> style.fg.toComposeColor(SkerryColors.text, palette)
     style.bg == TermColor.Default -> null
-    else -> style.bg.toComposeColor(SkerryColors.text)
+    else -> style.bg.toComposeColor(SkerryColors.text, palette)
 }
 
 /**
  * [TextStyle] для отрисовки глифа ячейки: базовый моноширинный стиль + цвет/начертание/подчёркивание
  * из [TermStyle]. Фон убираем (его рисует оверлей отдельным слоем по полной ширине ячейки).
  */
-private fun TermStyle.toGlyphStyle(base: TextStyle): TextStyle =
-    base.merge(toSpanStyle().copy(background = Color.Unspecified))
+private fun TermStyle.toGlyphStyle(base: TextStyle, palette: Palette): TextStyle =
+    base.merge(toSpanStyle(palette).copy(background = Color.Unspecified))
 
-private fun TermStyle.toSpanStyle(): SpanStyle {
+private fun TermStyle.toSpanStyle(palette: Palette): SpanStyle {
     // inverse меняет местами текст и фон; при дефолтном фоне он становится цветом фона терминала.
-    val resolvedFg = fg.toComposeColor(SkerryColors.text)
-    val resolvedBg = if (bg == TermColor.Default) SkerryColors.terminalBg else bg.toComposeColor(SkerryColors.text)
+    val resolvedFg = fg.toComposeColor(SkerryColors.text, palette)
+    val resolvedBg = if (bg == TermColor.Default) SkerryColors.terminalBg else bg.toComposeColor(SkerryColors.text, palette)
     var fgColor = if (inverse) resolvedBg else resolvedFg
     val bgColor = when {
         inverse -> resolvedFg
@@ -775,6 +776,9 @@ private fun TermStyle.toSpanStyle(): SpanStyle {
     )
 }
 
+/** Переопределения палитры (OSC 4/104): индекс 0..255 → Rgb. Пусто — используются дефолты темы. */
+private typealias Palette = Map<Int, TermColor.Rgb>
+
 /** Стиль подчёркивания OSC 8-гиперссылок: одиночная линия тематическим бирюзовым (primary cyan). */
 private val LINK_UNDERLINE_STYLE = TermStyle(
     underlineStyle = UnderlineStyle.Single,
@@ -785,13 +789,13 @@ private val LINK_UNDERLINE_STYLE = TermStyle(
  * Цвет линии подчёркивания: [TermStyle.underlineColor], а при [TermColor.Default] — следует цвету
  * текста (с учётом inverse и dim). Рендерится отдельно от глифа, поэтому цвет считаем тут.
  */
-private fun TermStyle.underlineDrawColor(): Color {
+private fun TermStyle.underlineDrawColor(palette: Palette): Color {
     val base = if (underlineColor == TermColor.Default) {
         if (inverse) {
-            if (bg == TermColor.Default) SkerryColors.terminalBg else bg.toComposeColor(SkerryColors.text)
-        } else fg.toComposeColor(SkerryColors.text)
+            if (bg == TermColor.Default) SkerryColors.terminalBg else bg.toComposeColor(SkerryColors.text, palette)
+        } else fg.toComposeColor(SkerryColors.text, palette)
     } else {
-        underlineColor.toComposeColor(SkerryColors.text)
+        underlineColor.toComposeColor(SkerryColors.text, palette)
     }
     return if (dim) base.copy(alpha = 0.6f) else base
 }
@@ -800,9 +804,9 @@ private fun TermStyle.underlineDrawColor(): Color {
  * Рисует линию подчёркивания нужной формы (modern SGR `4:x`) у нижней кромки ячейки/рана.
  * [left]/[width] — горизонтальный отрезок, [top] — верх строки, [chh] — высота клетки.
  */
-private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float) {
+private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette) {
     if (style.underlineStyle == UnderlineStyle.None) return
-    val color = style.underlineDrawColor()
+    val color = style.underlineDrawColor(palette)
     val thickness = (chh / 14f).coerceAtLeast(1f)
     val y = top + chh - thickness * 1.5f
     val right = left + width
@@ -850,14 +854,20 @@ private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Floa
  * xterm-палитра, где первые 16 индексов взяты из темы «night sea», а 16..255 — стандартный
  * 6×6×6 куб и градации серого.
  */
-private fun TermColor.toComposeColor(default: Color): Color = when (this) {
+private fun TermColor.toComposeColor(default: Color, palette: Palette): Color = when (this) {
     TermColor.Default -> default
     is TermColor.Rgb -> Color(r, g, b)
-    is TermColor.Indexed -> xtermColor(index)
+    is TermColor.Indexed -> xtermColor(index, palette)
 }
 
-/** ANSI 0..15 под «night sea» + стандартный xterm-куб/grayscale для 16..255. */
-private fun xtermColor(index: Int): Color = when (index) {
+/** ANSI 0..15 под «night sea» + стандартный xterm-куб/grayscale для 16..255; OSC 4-override приоритетнее. */
+private fun xtermColor(index: Int, palette: Palette): Color {
+    palette[index]?.let { return Color(it.r, it.g, it.b) }
+    return xtermDefaultColor(index)
+}
+
+/** Дефолтная xterm-палитра темы (без OSC 4-переопределений). */
+private fun xtermDefaultColor(index: Int): Color = when (index) {
     0 -> Color(0xFF2A3540); 1 -> Color(0xFFE94B4B); 2 -> Color(0xFF5DCE9E); 3 -> Color(0xFFF2A65A)
     4 -> Color(0xFF4A9EDB); 5 -> Color(0xFFC792EA); 6 -> Color(0xFF2BBDEE); 7 -> Color(0xFFC9D6DE)
     8 -> Color(0xFF5A7080); 9 -> Color(0xFFFF6B6B); 10 -> Color(0xFF7FE9B8); 11 -> Color(0xFFFFC078)
