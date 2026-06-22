@@ -331,6 +331,70 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `capturePrimarySelection stores the current selection text`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello world".encodeToByteArray())
+        state.selectWordAt(TerminalPos(0, 8)) // "world"
+        val captured = state.capturePrimarySelection()
+
+        assertEquals("world", captured)
+        assertEquals("world", state.primarySelection)
+        scope.cancel()
+    }
+
+    @Test
+    fun `capturePrimarySelection is a no-op without a selection`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hello".encodeToByteArray())
+        val captured = state.capturePrimarySelection()
+
+        assertEquals(null, captured)
+        assertEquals(null, state.primarySelection)
+        scope.cancel()
+    }
+
+    @Test
+    fun `tracks mouse pixel mode 1016 from emulator`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar().toString()
+
+        assertEquals(false, state.mousePixels)
+        session.emit("$esc[?1016h".encodeToByteArray())
+        assertEquals(true, state.mousePixels)
+        scope.cancel()
+    }
+
+    @Test
+    fun `reportMouse uses pixel coordinates when 1016 is active`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar().toString()
+
+        session.emit("$esc[?1002h$esc[?1016h".encodeToByteArray()) // ButtonEvent + SGR-Pixels
+        val handled = state.reportMouse(
+            MouseButton.Left, MouseEventType.Press, TerminalPos(2, 3), pixelX = 49, pixelY = 99,
+        )
+
+        assertEquals(true, handled)
+        // Координаты — пиксельные (49+1 / 99+1), а не клеточные.
+        assertContentEquals("$esc[<0;50;100M".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
     fun `reportMouse is a no-op when mouse tracking is off`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

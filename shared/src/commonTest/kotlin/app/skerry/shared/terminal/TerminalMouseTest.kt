@@ -84,6 +84,47 @@ class TerminalMouseTest {
         assertEquals("ESC[<28;1;1M", out!!.show())
     }
 
+    // --- SGR-Pixels (1016) -------------------------------------------------
+
+    @Test
+    fun `pixel mode encodes pixel coordinates not cells`() {
+        // pixels=true: координаты берутся из pixelX/pixelY (1-based), а не из col/row.
+        val out = encodeMouseReport(
+            MouseTracking.ButtonEvent, sgr = true, button = MouseButton.Left, type = MouseEventType.Press,
+            col = 3, row = 7, pixels = true, pixelX = 119, pixelY = 239,
+        )
+        assertEquals("ESC[<0;120;240M", out!!.show())
+    }
+
+    @Test
+    fun `pixel mode release uses lowercase m and keeps button even without sgr flag`() {
+        // 1016 без 1006 (sgr=false): release всё равно сохраняет код кнопки (не legacy-3).
+        val out = encodeMouseReport(
+            MouseTracking.ButtonEvent, sgr = false, button = MouseButton.Right, type = MouseEventType.Release,
+            col = 0, row = 0, pixels = true, pixelX = 9, pixelY = 4,
+        )
+        assertEquals("ESC[<2;10;5m", out!!.show())
+    }
+
+    @Test
+    fun `pixel mode forces sgr form even when sgr flag is false`() {
+        // 1016 подразумевает SGR-кодировку независимо от 1006.
+        val out = encodeMouseReport(
+            MouseTracking.ButtonEvent, sgr = false, button = MouseButton.Middle, type = MouseEventType.Drag,
+            col = 0, row = 0, pixels = true, pixelX = 0, pixelY = 0,
+        )
+        // Cb = 1(middle) + 32(motion) = 33; координаты 0+1/0+1.
+        assertEquals("ESC[<33;1;1M", out!!.show())
+    }
+
+    @Test
+    fun `pixel mode still gated by tracking off`() {
+        assertNull(encodeMouseReport(
+            MouseTracking.Off, sgr = true, button = MouseButton.Left, type = MouseEventType.Press,
+            col = 0, row = 0, pixels = true, pixelX = 5, pixelY = 5,
+        ))
+    }
+
     // --- Legacy (X11 1000) -------------------------------------------------
 
     @Test

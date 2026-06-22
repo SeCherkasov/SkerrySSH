@@ -35,6 +35,9 @@ private fun MouseButton.code(): Int = when (this) {
  *    1-based в десятичном виде, без 223-предела; отпускание идёт строчной `m`, кнопка сохраняется;
  *  - `sgr=false` — классический X11-формат (DEC 1000): `ESC [ M Cb Cx Cy`, где каждый байт = значение+32,
  *    координаты `col+1`/`row+1`, кнопка при отпускании — неразличимый код 3; байты клампятся в 0..255.
+ *  - `pixels=true` — SGR-Pixels (DEC 1016): тот же `ESC [ <` -формат, что и SGR, но координаты —
+ *    пиксельные [pixelX]/[pixelY] (0-based, в протоколе 1-based) вместо клеточных. Подразумевает
+ *    SGR-кодировку независимо от [sgr].
  *
  * Cb битами: младшие 2 — кнопка (или 3 = «нет/release»), 4 — Shift, 8 — Meta(Alt), 16 — Ctrl,
  * 32 — движение (Drag/Move), 64 — колесо. Возвращает `null`, если событие в данном режиме не
@@ -52,6 +55,9 @@ fun encodeMouseReport(
     shift: Boolean = false,
     alt: Boolean = false,
     ctrl: Boolean = false,
+    pixels: Boolean = false,
+    pixelX: Int = 0,
+    pixelY: Int = 0,
 ): ByteArray? {
     val wheel = button == MouseButton.WheelUp || button == MouseButton.WheelDown
     val motion = type == MouseEventType.Drag || type == MouseEventType.Move
@@ -71,7 +77,9 @@ fun encodeMouseReport(
     var cb = when {
         wheel -> button.code()
         type == MouseEventType.Move -> 3
-        isRelease && !sgr -> 3
+        // Только legacy (X11) кодирует отпускание неразличимым 3; SGR и SGR-Pixels сохраняют кнопку
+        // (release различается строчной `m`).
+        isRelease && !sgr && !pixels -> 3
         else -> button.code()
     }
     if (motion) cb += 32
@@ -82,12 +90,19 @@ fun encodeMouseReport(
         if (ctrl) cb += 16
     }
 
-    return if (sgr) {
-        val final = if (isRelease) 'm' else 'M'
-        "$ESC[<$cb;${col + 1};${row + 1}$final".encodeToByteArray()
-    } else {
-        fun enc(v: Int): Byte = (v + 32).coerceIn(0, 255).toByte()
-        byteArrayOf(0x1b, '['.code.toByte(), 'M'.code.toByte(), enc(cb), enc(col + 1), enc(row + 1))
+    return when {
+        pixels -> {
+            val final = if (isRelease) 'm' else 'M'
+            "$ESC[<$cb;${pixelX + 1};${pixelY + 1}$final".encodeToByteArray()
+        }
+        sgr -> {
+            val final = if (isRelease) 'm' else 'M'
+            "$ESC[<$cb;${col + 1};${row + 1}$final".encodeToByteArray()
+        }
+        else -> {
+            fun enc(v: Int): Byte = (v + 32).coerceIn(0, 255).toByte()
+            byteArrayOf(0x1b, '['.code.toByte(), 'M'.code.toByte(), enc(cb), enc(col + 1), enc(row + 1))
+        }
     }
 }
 
