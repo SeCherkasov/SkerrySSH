@@ -208,8 +208,9 @@ fun TerminalScreen(
     // скрытое IME-поле (оно же поднимает софт-клавиатуру), на desktop — сам терминал.
     LaunchedEffect(state) { if (!closed) (if (imeInput) imeFocusRequester else focusRequester).requestFocus() }
 
-    // Автоскролл вниз по мере нового вывода (новый снимок экрана на каждый чанк).
-    LaunchedEffect(state.screen) { scroll.scrollTo(scroll.maxValue) }
+    // Автоскролл вниз по мере нового вывода. Ключ — монотонный snapshotVersion, а НЕ state.screen:
+    // Compose сравнивает список структурно, и два подряд одинаковых снимка не перезапустили бы эффект.
+    LaunchedEffect(state.snapshotVersion) { scroll.scrollTo(scroll.maxValue) }
 
     // OSC 52: приложение (tmux/vim) просит положить текст в системный буфер — кладём на UI-потоке.
     // (Запрос чтения буфера сервером эмулятор не пропускает — утечки буфера пользователя нет.)
@@ -245,11 +246,33 @@ fun TerminalScreen(
     }
     val cursorVisibleNow = !closed && state.cursorVisible && blinkOn
 
+    // Единый снимок состояния на рекомпозицию: и текстовый оверлей, и курсорный оверлей читают одни и
+    // те же screen/cursor — иначе между двумя draw-проходами снимок мог бы разъехаться (курсор по новой
+    // позиции на старой сетке). Compose перерисует оба при следующей публикации (snapshotVersion).
+    val screen = state.screen
+    val cursorRow = state.cursorRow
+    val cursorCol = state.cursorCol
+
     // Структурная подложка под Text: лишь задаёт высоту контента для прокрутки (по числу строк) и
     // несёт модификаторы ввода/IME — глифы рисует отдельный пер-клеточный оверлей (см. ниже), а сам
     // текст невидим. Высота = число строк (scrollback + экран); ширину даёт fillMaxWidth.
-    val structural = remember(state.screen.size) {
-        AnnotatedString("\n".repeat((state.screen.size - 1).coerceAtLeast(0)))
+    val structural = remember(screen.size) {
+        AnnotatedString("\n".repeat((screen.size - 1).coerceAtLeast(0)))
+    }
+
+    // Кэш TextStyle глифа по TermStyle: toGlyphStyle делает merge() (аллокация SpanStyle+TextStyle) на
+    // каждый ран. Строк/ранов на кадр — сотни, но различных стилей мало, поэтому мемоизируем. Сбрасываем
+    // при смене базового стиля или палитры (OSC 4/104) — от них зависит результат.
+    val glyphStyleCache = remember(textStyle, state.palette) { HashMap<TermStyle, TextStyle>() }
+
+    // PathEffect для пунктирного/штрихового подчёркивания зависит только от высоты клетки (константа при
+    // фиксированном шрифте) — считаем один раз, а не на каждый подчёркнутый ран в draw-фазе.
+    val underlineEffects = remember(metrics) {
+        val t = (metrics.cellHeight / 14f).coerceAtLeast(1f)
+        UnderlineEffects(
+            dotted = PathEffect.dashPathEffect(floatArrayOf(t, t)),
+            dashed = PathEffect.dashPathEffect(floatArrayOf(t * 4f, t * 3f)),
+        )
     }
 
     fun cellAt(x: Float, y: Float) = cellAtOffset(x, y, metrics)
@@ -259,10 +282,11 @@ fun TerminalScreen(
     // поджимаем к фактической сетке, чтобы выделение не уходило за её пределы.
     fun posAt(x: Float, y: Float): TerminalPos {
         val p = cellAt(x, y)
-        val screen = state.screen
-        if (screen.isEmpty()) return p
-        val row = p.row.coerceIn(0, screen.lastIndex)
-        return TerminalPos(row, p.col.coerceIn(0, screen[row].size))
+        // Свежий снимок (жесты идут вне рекомпозиции), не захваченный composition-локал.
+        val snap = state.screen
+        if (snap.isEmpty()) return p
+        val row = p.row.coerceIn(0, snap.lastIndex)
+        return TerminalPos(row, p.col.coerceIn(0, snap[row].size))
     }
 
     // Репорт мыши приложению по координатам указателя. Пиксели берём из той же системы координат
@@ -323,12 +347,11 @@ fun TerminalScreen(
       // emoji) и их continuation-клетки держат сетку, а курсор/мышь/маркеры (та же арифметика) с ней
       // совпадают. Геометрия как у курсора: тот же padding и сдвиг на прокрутку. Сам Text ниже —
       // невидимая подложка (высота для скролла + приём ввода).
-      if (state.screen.isNotEmpty()) {
+      if (screen.isNotEmpty()) {
           val sel = state.selection
           val palette = state.palette // OSC 4/104 переопределения индексов; пусто — дефолты темы
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
               val scrollPx = scroll.value.toFloat()
-              val screen = state.screen
               val cw = metrics.cellWidth
               val chh = metrics.cellHeight
               for (r in screen.indices) {
@@ -364,10 +387,11 @@ fun TerminalScreen(
                   for (run in glyphRuns(row)) {
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
-                          drawText(measurer, run.text, topLeft = Offset(x, top), style = run.style.toGlyphStyle(textStyle, palette))
+                          val style = glyphStyleCache.getOrPut(run.style) { run.style.toGlyphStyle(textStyle, palette) }
+                          drawText(measurer, run.text, topLeft = Offset(x, top), style = style)
                       }
                       // Подчёркивание тянем по всей ширине рана, в т.ч. под пробелами (как в xterm).
-                      if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette)
+                      if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette, underlineEffects)
                   }
                   // 4) Гиперссылки (OSC 8) подчёркиваем отдельным проходом — раны соседних клеток с
                   // одним URI; пропускаем те, что уже подчёркнуты приложением (SGR), чтобы не дублировать.
@@ -383,7 +407,7 @@ fun TerminalScreen(
                           if (row[k].style.underline) { k++; continue } // app уже подчёркивает — не дублируем
                           val runStart = k
                           while (k < to && !row[k].style.underline) k++
-                          drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette)
+                          drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects)
                       }
                   }
               }
@@ -673,12 +697,12 @@ fun TerminalScreen(
       // Курсор-оверлей поверх текста по форме DECSCUSR. Block — заливка ячейки + перерисовка
       // символа контрастным цветом; Underline — полоса снизу; Bar — вертикальная черта слева.
       // Геометрию берём по той же моноширинной метрике, что и текст, со сдвигом на прокрутку.
-      if (cursorVisibleNow && state.screen.isNotEmpty()) {
+      if (cursorVisibleNow && screen.isNotEmpty()) {
           val thickness = with(density) { 2.dp.toPx() }
-          val glyph = state.screen.getOrNull(state.cursorRow)?.getOrNull(state.cursorCol)?.text
+          val glyph = screen.getOrNull(cursorRow)?.getOrNull(cursorCol)?.text
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
-              val x = state.cursorCol * metrics.cellWidth
-              val y = state.cursorRow * metrics.cellHeight - scroll.value.toFloat()
+              val x = cursorCol * metrics.cellWidth
+              val y = cursorRow * metrics.cellHeight - scroll.value.toFloat()
               when (state.cursorShape) {
                   CursorShape.Block -> {
                       drawRect(cursorBg, topLeft = Offset(x, y), size = Size(metrics.cellWidth, metrics.cellHeight))
@@ -870,6 +894,9 @@ private fun TermStyle.toSpanStyle(palette: Palette): SpanStyle {
 /** Переопределения палитры (OSC 4/104): индекс 0..255 → Rgb. Пусто — используются дефолты темы. */
 private typealias Palette = Map<Int, TermColor.Rgb>
 
+/** Предвычисленные PathEffect для пунктирного/штрихового подчёркивания (зависят лишь от высоты клетки). */
+private data class UnderlineEffects(val dotted: PathEffect, val dashed: PathEffect)
+
 /** Стиль подчёркивания OSC 8-гиперссылок: одиночная линия тематическим бирюзовым (primary cyan). */
 private val LINK_UNDERLINE_STYLE = TermStyle(
     underlineStyle = UnderlineStyle.Single,
@@ -895,7 +922,7 @@ private fun TermStyle.underlineDrawColor(palette: Palette): Color {
  * Рисует линию подчёркивания нужной формы (modern SGR `4:x`) у нижней кромки ячейки/рана.
  * [left]/[width] — горизонтальный отрезок, [top] — верх строки, [chh] — высота клетки.
  */
-private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette) {
+private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects) {
     if (style.underlineStyle == UnderlineStyle.None) return
     val color = style.underlineDrawColor(palette)
     val thickness = (chh / 14f).coerceAtLeast(1f)
@@ -913,12 +940,12 @@ private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Floa
         UnderlineStyle.Dotted ->
             drawLine(
                 color, Offset(left, y), Offset(right, y), strokeWidth = thickness,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(thickness, thickness)),
+                pathEffect = effects.dotted,
             )
         UnderlineStyle.Dashed ->
             drawLine(
                 color, Offset(left, y), Offset(right, y), strokeWidth = thickness,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(thickness * 4f, thickness * 3f)),
+                pathEffect = effects.dashed,
             )
         UnderlineStyle.Curly -> {
             val amp = thickness * 1.6f
