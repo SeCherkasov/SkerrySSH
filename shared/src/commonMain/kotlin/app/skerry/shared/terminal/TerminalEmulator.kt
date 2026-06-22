@@ -1,5 +1,8 @@
 package app.skerry.shared.terminal
 
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+
 /**
  * Цвет ячейки. UI-независим (не Compose Color): рендер сам переводит в палитру темы.
  *  - [Default] — «цвет по умолчанию» (берётся из темы);
@@ -113,6 +116,9 @@ enum class CursorShape { Block, Underline, Bar }
  *
  * @param respond вызывается с ответами терминала (DSR/DA) — UI шлёт их обратно в PTY.
  * @param onBell вызывается на BEL (0x07).
+ * @param onClipboardCopy вызывается на OSC 52-запись (декодированный текст) — UI кладёт его в системный
+ *   буфер. Запрос ЧТЕНИЯ буфера (OSC 52 с `?`) намеренно игнорируется: содержимое буфера пользователя
+ *   не отдаётся недоверенному серверу.
  */
 class TerminalEmulator(
     cols: Int = 80,
@@ -120,6 +126,7 @@ class TerminalEmulator(
     private val maxScrollback: Int = DEFAULT_MAX_SCROLLBACK,
     private val respond: (String) -> Unit = {},
     private val onBell: () -> Unit = {},
+    private val onClipboardCopy: (String) -> Unit = {},
 ) {
     var cols: Int = cols.coerceAtLeast(1)
         private set
@@ -364,7 +371,10 @@ class TerminalEmulator(
         when (b) {
             0x07 -> { finishOsc(); parser = State.Ground } // BEL — конец OSC
             0x1b -> parser = State.OscEsc // возможно ST (ESC \)
-            else -> osc.append((b and 0xff).toChar())
+            // Кап длины: недоверенный сервер мог бы слать бесконечный OSC (особенно OSC 52 base64) и
+            // раздуть кучу до OOM. Сверх лимита байты роняем, но парсим до терминатора (хвост не утечёт
+            // в Ground как текст). Усечённый OSC 52 → битый base64 → тихо отбрасывается в setClipboard.
+            else -> if (osc.length < MAX_OSC_LEN) osc.append((b and 0xff).toChar())
         }
     }
 
@@ -384,8 +394,22 @@ class TerminalEmulator(
             0, 1, 2 -> title = rest
             4 -> setPalette(rest)     // OSC 4 ; index ; spec [ ; index ; spec ... ]
             8 -> setHyperlink(rest)   // OSC 8 ; params ; URI
+            52 -> setClipboard(rest)  // OSC 52 ; Pc ; Pd
             104 -> resetPalette(rest) // OSC 104 [ ; index ... ]  (пусто = вся палитра)
         }
+    }
+
+    /**
+     * OSC 52: `Pc;Pd`. Pd — base64 текста для записи в буфер обмена (через [onClipboardCopy]).
+     * Pd == `?` — запрос ЧТЕНИЯ буфера сервером; намеренно игнорируем (буфер пользователя не утекает).
+     * Невалидный base64 тихо отбрасываем.
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun setClipboard(rest: String) {
+        val data = rest.substringAfter(';', "")
+        if (data.isEmpty() || data.startsWith("?")) return // пусто либо запрос чтения — буфер не отдаём
+        val text = runCatching { Base64.decode(data).decodeToString() }.getOrNull() ?: return
+        onClipboardCopy(text)
     }
 
     /** OSC 4: пары `index;spec`. spec `?` (запрос) пропускаем — отвечать нечем (цвета знает рендер). */
@@ -989,6 +1013,9 @@ class TerminalEmulator(
 
     private companion object {
         const val DEFAULT_MAX_SCROLLBACK = 5000
+
+        /** Потолок длины OSC-строки (защита от OOM на недоверенном выводе); 4 MiB с запасом под OSC 52. */
+        const val MAX_OSC_LEN = 4 * 1024 * 1024
         const val TAB = 8
         val ESC = 27.toChar().toString()
 

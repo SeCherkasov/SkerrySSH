@@ -221,6 +221,51 @@ class TerminalEmulatorTest {
         assertEquals(null, emu.lines[0][0].hyperlink)
     }
 
+    // --- OSC 52 буфер обмена -----------------------------------------------
+
+    @Test
+    fun `osc 52 write decodes base64 and reports a clipboard copy`() {
+        val copied = mutableListOf<String>()
+        val emu = TerminalEmulator(onClipboardCopy = { copied += it })
+        // OSC 52 ; c ; <base64 "hello"> ST
+        emu.feed("$esc]52;c;aGVsbG8=$esc\\".encodeToByteArray())
+        assertEquals(listOf("hello"), copied)
+    }
+
+    @Test
+    fun `osc 52 accepts an empty selection field`() {
+        val copied = mutableListOf<String>()
+        val emu = TerminalEmulator(onClipboardCopy = { copied += it })
+        emu.feed("$esc]52;;aGVsbG8=$esc\\".encodeToByteArray())
+        assertEquals(listOf("hello"), copied)
+    }
+
+    @Test
+    fun `osc 52 read request is ignored to avoid leaking the clipboard`() {
+        // Pd == '?' — запрос чтения буфера сервером. Никогда не отдаём (модель угроз): колбэк молчит.
+        val copied = mutableListOf<String>()
+        val emu = TerminalEmulator(onClipboardCopy = { copied += it })
+        emu.feed("$esc]52;c;?$esc\\".encodeToByteArray())
+        assertTrue(copied.isEmpty())
+    }
+
+    @Test
+    fun `osc 52 read query with trailing data is still denied`() {
+        // Защита в глубину: любой Pd, начинающийся с '?', трактуем как запрос чтения и не отдаём буфер.
+        val copied = mutableListOf<String>()
+        val emu = TerminalEmulator(onClipboardCopy = { copied += it })
+        emu.feed("$esc]52;c;?aGVsbG8=$esc\\".encodeToByteArray())
+        assertTrue(copied.isEmpty())
+    }
+
+    @Test
+    fun `osc 52 with invalid base64 is ignored`() {
+        val copied = mutableListOf<String>()
+        val emu = TerminalEmulator(onClipboardCopy = { copied += it })
+        emu.feed("$esc]52;c;@@@notbase64$esc\\".encodeToByteArray())
+        assertTrue(copied.isEmpty())
+    }
+
     // --- OSC 4/104 динамическая палитра ------------------------------------
 
     @Test
