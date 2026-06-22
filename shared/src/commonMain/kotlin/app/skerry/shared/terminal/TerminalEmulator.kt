@@ -130,10 +130,14 @@ class TerminalEmulator(
     private var scrollTop = 0
     private var scrollBottom = this.rows - 1
 
-    // Сохранённый курсор (DECSC/DECRC; также используется alt-screen 1049).
+    // Сохранённый курсор (DECSC/DECRC; также используется alt-screen 1049). По VT220 DECSC
+    // сохраняет и активный графический набор — иначе текст после DECRC мисрендерится в line-drawing.
     private var savedCx = 0
     private var savedCy = 0
     private var savedStyle = TermStyle()
+    private var savedG0LineDrawing = false
+    private var savedG1LineDrawing = false
+    private var savedGlG1 = false
 
     private var tabStops = defaultTabStops(this.cols)
 
@@ -181,6 +185,14 @@ class TerminalEmulator(
     private var utf8Remaining = 0
     private var utf8CodePoint = 0
 
+    // Графические наборы G0/G1 (DEC). true = DEC Special Graphics (line-drawing), false = US-ASCII.
+    // glG1 — какой набор сейчас в GL: false=G0, true=G1; переключают SO (0x0e) / SI (0x0f).
+    private var g0LineDrawing = false
+    private var g1LineDrawing = false
+    private var glG1 = false
+    // Куда применить следующий designation-байт: 0=G0 (`ESC (`), 1=G1 (`ESC )`), -1=прочее (поглотить).
+    private var pendingDesignation = -1
+
     fun feed(data: ByteArray) {
         for (b in data) process(b.toInt() and 0xff)
     }
@@ -193,7 +205,7 @@ class TerminalEmulator(
             State.Csi -> csi(b)
             State.Osc -> oscByte(b)
             State.OscEsc -> oscEsc(b)
-            State.Consume -> parser = State.Ground // поглощаем один байт (designation набора и т.п.)
+            State.Consume -> consumeDesignation(b)
         }
     }
 
@@ -205,10 +217,29 @@ class TerminalEmulator(
             b == 0x08 -> { if (cx > 0) cx--; pendingWrap = false }
             b == 0x09 -> { cx = nextTabStop(cx); pendingWrap = false }
             b == 0x07 -> onBell()
+            b == 0x0e -> glG1 = true  // SO — активировать G1 в GL
+            b == 0x0f -> glG1 = false // SI — вернуть G0 в GL
             b < 0x20 -> {} // прочие C0 — игнор
-            b < 0x80 -> putChar(b.toChar())
+            b < 0x80 -> putChar(mapGlyph(b.toChar()))
             else -> beginUtf8(b)
         }
+    }
+
+    /** Применяет активный графический набор: в DEC Special Graphics ASCII 0x60..0x7e → box-drawing. */
+    private fun mapGlyph(ch: Char): Char {
+        val lineDrawing = if (glG1) g1LineDrawing else g0LineDrawing
+        return if (lineDrawing && ch.code in 0x60..0x7e) DEC_SPECIAL_GRAPHICS[ch.code - 0x60] else ch
+    }
+
+    /** Обрабатывает байт после `ESC (`/`ESC )`/прочих: `0` = line-drawing, иначе US-ASCII. */
+    private fun consumeDesignation(b: Int) {
+        val lineDrawing = b == '0'.code
+        when (pendingDesignation) {
+            0 -> g0LineDrawing = lineDrawing
+            1 -> g1LineDrawing = lineDrawing
+        }
+        pendingDesignation = -1
+        parser = State.Ground
     }
 
     private fun beginUtf8(b: Int) {
@@ -241,7 +272,9 @@ class TerminalEmulator(
         when (b.toChar()) {
             '[' -> { params.clear(); csiIntermediate = NO_INTERMEDIATE; parser = State.Csi }
             ']' -> { osc.clear(); parser = State.Osc }
-            '(', ')', '*', '+', '-', '.', '/', '#', ' ' -> parser = State.Consume
+            '(' -> { pendingDesignation = 0; parser = State.Consume } // designate G0
+            ')' -> { pendingDesignation = 1; parser = State.Consume } // designate G1
+            '*', '+', '-', '.', '/', '#', ' ' -> { pendingDesignation = -1; parser = State.Consume }
             '7' -> { saveCursor(); parser = State.Ground }
             '8' -> { restoreCursor(); parser = State.Ground }
             'D' -> { lineFeed(); pendingWrap = false; parser = State.Ground } // IND
@@ -552,12 +585,14 @@ class TerminalEmulator(
 
     private fun saveCursor() {
         savedCx = cx; savedCy = cy; savedStyle = style
+        savedG0LineDrawing = g0LineDrawing; savedG1LineDrawing = g1LineDrawing; savedGlG1 = glG1
     }
 
     private fun restoreCursor() {
         cx = savedCx.coerceIn(0, cols - 1)
         cy = savedCy.coerceIn(0, rows - 1)
         style = savedStyle
+        g0LineDrawing = savedG0LineDrawing; g1LineDrawing = savedG1LineDrawing; glG1 = savedGlG1
         pendingWrap = false
     }
 
@@ -610,6 +645,8 @@ class TerminalEmulator(
         applicationCursorKeys = false
         applicationKeypad = false
         pendingWrap = false
+        g0LineDrawing = false; g1LineDrawing = false; glG1 = false
+        pendingDesignation = -1
     }
 
     private fun reset() {
@@ -628,6 +665,8 @@ class TerminalEmulator(
         cursorShape = CursorShape.Block; cursorBlink = true
         applicationCursorKeys = false; applicationKeypad = false
         bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false
+        g0LineDrawing = false; g1LineDrawing = false; glG1 = false
+        pendingDesignation = -1
     }
 
     // --- Табстопы ----------------------------------------------------------
@@ -724,6 +763,17 @@ class TerminalEmulator(
         // байты в исходнике, а \u-escape Edit-инструмент сворачивает в сырой байт. Сравнение
         // редкое (раз на CSI-последовательность), поэтому отсутствие const-инлайна несущественно.
         val NO_INTERMEDIATE = 0.toChar()
+
+        /**
+         * DEC Special Graphics (VT100 line-drawing): ASCII 0x60..0x7e → Unicode-глифы.
+         * Индекс = code - 0x60. Уголки/тройники/линии (j..x) — то, чем tmux/mc/htop рисуют рамки;
+         * прочие (диамант, затенение, скан-линии, ≤≥π≠£·) добиты для полноты набора.
+         */
+        const val DEC_SPECIAL_GRAPHICS =
+            "◆▒␉␌␍␊°±" + // ` a b c d e f g
+            "␤␋┘┐┌└┼⎺" + // h i j k l m n o
+            "⎻─⎼⎽├┤┴┬" + // p q r s t u v w
+            "│≤≥π≠£·"          // x y z { | } ~
 
         fun defaultTabStops(cols: Int) = BooleanArray(cols) { it % TAB == 0 && it != 0 }
     }
