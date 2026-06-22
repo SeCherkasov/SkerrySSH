@@ -262,7 +262,7 @@ class TerminalEmulator(
 
     // --- Парсер ------------------------------------------------------------
 
-    private enum class State { Ground, Esc, Csi, Osc, OscEsc, Consume, Utf8 }
+    private enum class State { Ground, Esc, Csi, Osc, OscEsc, Consume, Utf8, StrSeq, StrSeqEsc }
 
     private var parser = State.Ground
     private val params = StringBuilder()
@@ -271,6 +271,11 @@ class TerminalEmulator(
     // intermediate (0x20) у DECSCUSR (`CSI Ps SP q`) — иначе форму курсора не отличить от обычного CSI.
     private var csiIntermediate = NO_INTERMEDIATE
     private val osc = StringBuilder()
+
+    // Тело строковой последовательности (DCS/APC/PM/SOS) — копим до ST (ESC\) или BEL. [strSeqIsDcs]
+    // отличает DCS (его разбираем: XTGETTCAP) от APC/PM/SOS (поглощаем целиком: kitty graphics и пр.).
+    private val strSeq = StringBuilder()
+    private var strSeqIsDcs = false
 
     private var utf8Remaining = 0
     private var utf8CodePoint = 0
@@ -296,6 +301,8 @@ class TerminalEmulator(
             State.Osc -> oscByte(b)
             State.OscEsc -> oscEsc(b)
             State.Consume -> consumeDesignation(b)
+            State.StrSeq -> strSeqByte(b)
+            State.StrSeqEsc -> strSeqEsc(b)
         }
     }
 
@@ -374,6 +381,8 @@ class TerminalEmulator(
             'c' -> { reset(); parser = State.Ground } // RIS
             '=' -> { applicationKeypad = true; parser = State.Ground } // DECKPAM
             '>' -> { applicationKeypad = false; parser = State.Ground } // DECKPNM
+            'P' -> { strSeq.clear(); strSeqIsDcs = true; parser = State.StrSeq }       // DCS (sixel/DECRQSS/XTGETTCAP)
+            'X', '^', '_' -> { strSeq.clear(); strSeqIsDcs = false; parser = State.StrSeq } // SOS/PM/APC (kitty graphics)
             else -> parser = State.Ground
         }
     }
@@ -491,6 +500,90 @@ class TerminalEmulator(
     private fun setHyperlink(rest: String) {
         val uri = rest.substringAfter(';', "").trim()
         currentHyperlink = uri.ifEmpty { null }
+    }
+
+    // --- Строковые последовательности (DCS / APC / PM / SOS) ----------------
+
+    private fun strSeqByte(b: Int) {
+        when (b) {
+            // BEL как терминатор — нестандартное послабление (по ECMA-48 DCS/APC/PM/SOS терминирует
+            // только ST), удобно для приложений, шлющих BEL. ВНИМАНИЕ: при Phase-3 sixel это убрать —
+            // 0x07 может встретиться в бинарных graphics-данных и оборвать тело раньше времени.
+            0x07 -> { finishStrSeq(); parser = State.Ground }
+            0x1b -> parser = State.StrSeqEsc                        // возможно ST (ESC \)
+            // Кап длины переиспользует MAX_OSC_LEN (4 MiB) — с запасом под будущий потоковый sixel;
+            // для текущего XTGETTCAP хватило бы килобайтов. Защита от бесконечного DCS → OOM.
+            else -> if (strSeq.length < MAX_OSC_LEN) strSeq.append((b and 0xff).toChar())
+        }
+    }
+
+    private fun strSeqEsc(b: Int) {
+        finishStrSeq()
+        parser = State.Ground
+        // process(b) безопасен даже при b==ESC: strSeq уже очищен в finishStrSeq, повторного flush не будет.
+        if (b != '\\'.code) process(b) // не ST — ESC начинает новую последовательность
+    }
+
+    /**
+     * Завершение строковой последовательности. APC/PM/SOS поглощаем целиком (тело экран не трогает —
+     * так kitty graphics, оконные сообщения и т.п. не текут мусором). DCS дополнительно разбираем на
+     * XTGETTCAP (`+q`); прочие DCS (sixel `q…`, DECRQSS `$q…`) сейчас просто поглощаются — рендер
+     * изображений отложен в Phase 3.
+     */
+    private fun finishStrSeq() {
+        if (strSeqIsDcs) {
+            val s = strSeq.toString()
+            if (s.startsWith("+q")) replyXtGetTcap(s.substring(2))
+        }
+        strSeq.clear()
+    }
+
+    /**
+     * XTGETTCAP (`DCS + q <hex-name>[;…] ST`): на каждое запрошенное имя отвечаем DCS-ответом —
+     * `DCS 1 + r <name>=<hex-value> ST` для известных, `DCS 0 + r <name> ST` для неизвестных
+     * (имена/значения в hex, как в terminfo). Заявляем себя как xterm-256color, чтобы приложения
+     * включали 256 цветов / truecolor.
+     *
+     * Безопасность: [hexName] вставляется в строку ответа как есть, но `hexDecode(hexName) ?: continue`
+     * пропускает дальше ТОЛЬКО валидный hex (чётная длина, цифры 0-9a-fA-F), поэтому в ответ не попадут
+     * ESC/`\`/`;` — инъекция управляющих последовательностей в поток к серверу невозможна.
+     */
+    private fun replyXtGetTcap(hexNames: String) {
+        for (hexName in hexNames.split(';')) {
+            if (hexName.isEmpty()) continue
+            val name = hexDecode(hexName) ?: continue // также гарантирует, что hexName — чистый hex (см. выше)
+            val value = when (name) {
+                "Co", "colors" -> "256"
+                "TN" -> "xterm-256color"
+                "RGB" -> "8/8/8"
+                else -> null
+            }
+            if (value != null) respond("${ESC}P1+r$hexName=${hexEncode(value)}$ESC\\")
+            else respond("${ESC}P0+r$hexName$ESC\\")
+        }
+    }
+
+    /** Декодирует строку из пар hex-цифр в ASCII; нечётная длина или не-hex → null. */
+    private fun hexDecode(s: String): String? {
+        if (s.length % 2 != 0) return null
+        val sb = StringBuilder(s.length / 2)
+        var i = 0
+        while (i < s.length) {
+            val v = s.substring(i, i + 2).toIntOrNull(16) ?: return null
+            sb.append(v.toChar())
+            i += 2
+        }
+        return sb.toString()
+    }
+
+    /** Кодирует ASCII-строку в пары hex-цифр (верхний регистр, как в terminfo/xterm). */
+    private fun hexEncode(s: String): String {
+        val sb = StringBuilder(s.length * 2)
+        for (ch in s) {
+            val code = ch.code and 0xff
+            sb.append(HEX_DIGITS[code ushr 4]).append(HEX_DIGITS[code and 0xf])
+        }
+        return sb.toString()
     }
 
     // --- Диспетчеризация CSI ----------------------------------------------
@@ -737,6 +830,7 @@ class TerminalEmulator(
     // --- Печать и перемещение ---------------------------------------------
 
     private fun putCodePoint(cp: Int) {
+        if (isCombining(cp) && appendCombining(cp)) return // прицепили к базе — курсор не двигаем
         val w = charWidth(cp)
         if (pendingWrap) {
             // Мягкий перенос: покидаемая строка логически продолжается на следующей — помечаем её
@@ -766,6 +860,50 @@ class TerminalEmulator(
         val rightmost = (cx + w - 1).coerceAtMost(cols - 1)
         if (rightmost >= cols - 1) { cx = cols - 1; if (autoWrap) pendingWrap = true } else cx = rightmost + 1
     }
+
+    /**
+     * Прицепляет комбинируемый знак (диакритика, ZWJ, вариационный селектор) к тексту предыдущей
+     * базовой клетки, не двигая курсор и не меняя её ширину — так "e"+U+0301 рендерится как одна
+     * клетка, а ZWJ-emoji-цепочки не разваливаются. Возвращает false, если базы слева нет (курсор в
+     * колонке 0) — тогда знак печатается как обычная клетка (фолбэк). Длину кластера ограничиваем
+     * (защита от недоверенного сервера, льющего знаки в одну клетку).
+     */
+    private fun appendCombining(cp: Int): Boolean {
+        val row = grid[cy]
+        val baseCol = when {
+            pendingWrap -> cx                                                    // курсор не сдвинулся: cx == cols-1 (>=0), это последняя напечатанная клетка
+            cx == 0 -> return false                                              // слева пусто — крепить не к чему
+            row[cx - 1].width == CellWidth.Continuation && cx >= 2 -> cx - 2     // под Wide-символом — берём саму Wide-клетку
+            else -> cx - 1
+        }
+        val base = row[baseCol]
+        if (base.width == CellWidth.Continuation) return false                   // защита: на голую континуацию не крепим
+        if (base.text.length >= MAX_GRAPHEME_LEN) return true                    // кластер переполнен — знак глотаем
+        row[baseCol] = base.copy(text = base.text + codePointToString(cp))
+        return true
+    }
+
+    /**
+     * Комбинируемый знак нулевой ширины (упрощённая таблица, как [charWidth]): диакритика, ZWJ,
+     * вариационные селекторы, комбинируемые знаки для символов. Полная категория Mn/Me — позже.
+     * Hangul Jamo (L/V/T-композиция) намеренно НЕ здесь: его ширину держит [charWidth] (как ncurses).
+     */
+    private fun isCombining(cp: Int): Boolean =
+        cp == 0x200D ||                  // ZWJ (склейка emoji)
+        cp in 0x0300..0x036F ||          // combining diacritical marks
+        cp in 0x0483..0x0489 ||          // комбинируемые (кириллица и пр.)
+        cp in 0x0591..0x05BD ||          // иврит (огласовки, часть)
+        cp in 0x0610..0x061A ||          // арабский (часть)
+        cp in 0x064B..0x065F ||          // арабская диакритика
+        cp == 0x0670 ||
+        cp in 0x06D6..0x06DC ||
+        cp in 0x0E31..0x0E3A ||          // тайский (часть)
+        cp in 0x1AB0..0x1AFF ||          // combining diacritical marks extended
+        cp in 0x1DC0..0x1DFF ||          // combining diacritical marks supplement
+        cp in 0x20D0..0x20FF ||          // combining marks for symbols
+        cp in 0xFE00..0xFE0F ||          // variation selectors
+        cp in 0xFE20..0xFE2F ||          // combining half marks
+        cp in 0xE0100..0xE01EF           // variation selectors supplement
 
     /** REP (CSI Ps b): повторить последний печатный символ Ps раз. Кламп — не больше площади экрана. */
     private fun repeatLastChar(n: Int) {
@@ -1004,6 +1142,7 @@ class TerminalEmulator(
         bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; focusReporting = false
         g0LineDrawing = false; g1LineDrawing = false; glG1 = false
         pendingDesignation = -1
+        strSeq.clear(); strSeqIsDcs = false; parser = State.Ground // RIS прерывает любую частичную последовательность
         title = ""; titleStack.clear() // RIS возвращает заголовок к дефолту (вкладка падает на host.label)
     }
 
@@ -1256,8 +1395,12 @@ class TerminalEmulator(
 
         /** Потолок глубины стека заголовка окна (CSI 22 t без парного 23 t) — против раздувания. */
         const val MAX_TITLE_STACK = 128
+
+        /** Потолок длины grapheme-кластера в клетке (база + комбинируемые) — против раздувания. */
+        const val MAX_GRAPHEME_LEN = 32
         const val TAB = 8
         val ESC = 27.toChar().toString()
+        private const val HEX_DIGITS = "0123456789ABCDEF"
 
         /** Sentinel «у CSI не было intermediate-байта» (NUL) — отличаем от реального пробела (0x20) DECSCUSR. */
         // NUL через toChar(), а не char-литерал: правило проекта запрещает сырые управляющие

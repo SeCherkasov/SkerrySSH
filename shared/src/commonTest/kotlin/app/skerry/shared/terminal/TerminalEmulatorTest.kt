@@ -607,6 +607,84 @@ class TerminalEmulatorTest {
         assertEquals("", emu.title)
     }
 
+    // --- Комбинируемые знаки (grapheme-кластеры) ------------------------------------------
+
+    private val acute = "́" // combining acute accent (нулевая ширина)
+    private val zwj = "‍"   // zero-width joiner
+
+    @Test
+    fun `combining accent attaches to the base cell without advancing`() {
+        // "e" + U+0301 -> одна клетка, курсор сдвинулся лишь на 1.
+        val emu = emulate(chunks = arrayOf("e$acute"))
+        assertEquals("e$acute", emu.lines[0][0].text)
+        assertEquals(" ", emu.lines[0][1].text) // следующая клетка пуста — знак её не занял
+        assertEquals(1, emu.cursorCol)
+    }
+
+    @Test
+    fun `ZWJ joins into the previous cell`() {
+        // ZWJ — нулевой ширины, должен прицепиться к базе, а не стать своей клеткой.
+        val emu = emulate(chunks = arrayOf("a$zwj"))
+        assertEquals("a$zwj", emu.lines[0][0].text)
+        assertEquals(1, emu.cursorCol)
+    }
+
+    @Test
+    fun `combining mark attaches to a wide base not its continuation`() {
+        // "中" (Wide) + U+0301: знак идёт в саму Wide-клетку, континуация не трогается; курсор на 2.
+        val emu = emulate(chunks = arrayOf("中$acute"))
+        assertEquals("中$acute", emu.lines[0][0].text)
+        assertEquals(CellWidth.Wide, emu.lines[0][0].width)
+        assertEquals(CellWidth.Continuation, emu.lines[0][1].width)
+        assertEquals(2, emu.cursorCol)
+    }
+
+    @Test
+    fun `leading combining mark on empty line does not crash`() {
+        // База слева отсутствует — знак печатается как обычная клетка (фолбэк), курсор едет на 1.
+        val emu = emulate(chunks = arrayOf(acute))
+        assertEquals(1, emu.cursorCol)
+        emu.feed("X".encodeToByteArray())
+        assertEquals("X", emu.lines[0][1].text)
+    }
+
+    // --- Строковые последовательности: DCS / APC / PM / SOS + XTGETTCAP --------------------
+
+    @Test
+    fun `DCS body is swallowed and does not leak to the screen`() {
+        // Раньше ESC P падал в Ground и тело DCS (sixel/DECRQSS) текло как мусорный текст.
+        // DCS q ... ST (типичный sixel-конверт) должен поглотиться целиком; печать после — норм.
+        val emu = emulate(chunks = arrayOf("A", "${esc}Pq#0;2;0;0;0~~$esc\\", "B"))
+        assertEquals("AB", emu.asText())
+    }
+
+    @Test
+    fun `APC kitty graphics envelope is swallowed`() {
+        // Kitty graphics: APC G ... ST (ESC _ ... ESC \). Не должно протечь на экран.
+        val emu = emulate(chunks = arrayOf("X", "${esc}_Ga=T,f=24;payload$esc\\", "Y"))
+        assertEquals("XY", emu.asText())
+    }
+
+    @Test
+    fun `string sequence terminated by BEL is also swallowed`() {
+        val emu = emulate(chunks = arrayOf("${esc}^privmsg${bel}Z"))
+        assertEquals("Z", emu.asText())
+    }
+
+    @Test
+    fun `XTGETTCAP replies with known capabilities and rejects unknown`() {
+        // DCS + q <hex(name)> ; ... ST. Co=colors(256), TN=имя терминала; неизвестное -> 0+r.
+        val responses = mutableListOf<String>()
+        val emu = TerminalEmulator(cols = 80, rows = 24, respond = { responses.add(it) })
+        // "Co" = 436F, "ZZ" = 5A5A (неизвестная).
+        emu.feed("${esc}P+q436F;5A5A$esc\\".encodeToByteArray())
+        val joined = responses.joinToString("")
+        // Валидный ответ на Co: DCS 1 + r 436F = <hex("256")> ST ; hex("256") = 323536.
+        assertTrue(joined.contains("1+r436F=323536"), "ожидался валидный Co=256, было: $joined")
+        // Неизвестная ZZ -> DCS 0 + r 5A5A ST.
+        assertTrue(joined.contains("0+r5A5A"), "ожидался отказ по ZZ, было: $joined")
+    }
+
     @Test
     fun `bell triggers the callback`() {
         var rang = false
