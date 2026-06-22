@@ -11,3 +11,12 @@ internal actual fun plainTextClipEntry(text: String): ClipEntry =
 /** Android: берём текст первого элемента [ClipData]; `null`, если буфер пуст или элемент без текста. */
 internal actual fun ClipEntry.readPlainText(): String? =
     clipData.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+
+/** Android: прямого (не-Compose) пути к буферу нет — всегда штатный Compose-буфер. */
+internal actual fun readSystemClipboardDirect(): String? = null
+
+/** Android: прямого (не-Compose) пути к буферу нет — всегда штатный Compose-буфер. */
+internal actual fun writeSystemClipboardDirect(text: String): Boolean = false
+
+/** Android: прямого пути нет — чтение всегда через штатный Compose-буфер. */
+internal actual fun systemClipboardDirectHandlesReads(): Boolean = false

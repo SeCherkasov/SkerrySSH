@@ -22,3 +22,14 @@ internal actual fun ClipEntry.readPlainText(): String? = try {
 } catch (_: Exception) {
     null
 }
+
+/** Desktop: на Wayland читаем CLIPBOARD через `wl-paste` (минуя AWT — без шумной JDK-трассы); иначе null. */
+internal actual fun readSystemClipboardDirect(): String? =
+    if (WaylandClipboard.available) WaylandClipboard.paste(primary = false) else null
+
+/** Desktop: на Wayland пишем CLIPBOARD через `wl-copy` (парно к чтению); иначе false → штатный Compose-буфер. */
+internal actual fun writeSystemClipboardDirect(text: String): Boolean =
+    WaylandClipboard.available && WaylandClipboard.copy(text, primary = false)
+
+/** Desktop: на Wayland прямой путь читает буфер целиком (без отката на AWT — без JDK-трассы). */
+internal actual fun systemClipboardDirectHandlesReads(): Boolean = WaylandClipboard.available
