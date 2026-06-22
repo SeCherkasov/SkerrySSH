@@ -177,27 +177,31 @@ private fun SheetInput(
     placeholder: String,
     keyboardType: KeyboardType = KeyboardType.Text,
 ) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(11.dp))
-            .background(D.bg)
-            .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
-            .padding(horizontal = 14.dp, vertical = 13.dp),
-    ) {
-        if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
-        val ui = LocalFonts.current.ui
-        val textStyle = remember(ui) { TextStyle(color = D.text, fontSize = 15.sp, fontFamily = ui) }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = textStyle,
-            cursorBrush = SolidColor(D.cyan),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
+    val ui = LocalFonts.current.ui
+    val textStyle = remember(ui) { TextStyle(color = D.text, fontSize = 15.sp, fontFamily = ui) }
+    // Рамка/паддинг — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(D.cyan),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(D.bg)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .padding(horizontal = 14.dp, vertical = 13.dp),
+            ) {
+                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
+                inner()
+            }
+        },
+    )
 }
 
 /** Заглушка-селект (значение + шеврон) в стиле полей листа. */

@@ -381,31 +381,35 @@ private fun SidebarSearch(query: String, onQuery: (String) -> Unit) {
         Modifier.padding(12.dp).fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(7.dp))
-                .background(Color.White.copy(alpha = 0.03f))
-                .border(1.dp, SkerryColors.line, RoundedCornerShape(7.dp))
-                .padding(horizontal = 9.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SkerryIcon(SkerryIconKind.Search, tint = SkerryColors.textFaint, size = 16.dp)
-            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (query.isEmpty()) {
-                    Text("Поиск соединений…", color = SkerryColors.textFaint, fontSize = 12.5.sp)
+        // Рамка/иконка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+        BasicTextField(
+            value = query,
+            onValueChange = onQuery,
+            singleLine = true,
+            textStyle = TextStyle(color = SkerryColors.text, fontSize = 12.5.sp),
+            cursorBrush = SolidColor(SkerryColors.cyan),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color.White.copy(alpha = 0.03f))
+                        .border(1.dp, SkerryColors.line, RoundedCornerShape(7.dp))
+                        .padding(horizontal = 9.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SkerryIcon(SkerryIconKind.Search, tint = SkerryColors.textFaint, size = 16.dp)
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        if (query.isEmpty()) {
+                            Text("Поиск соединений…", color = SkerryColors.textFaint, fontSize = 12.5.sp)
+                        }
+                        inner()
+                    }
                 }
-                BasicTextField(
-                    value = query,
-                    onValueChange = onQuery,
-                    singleLine = true,
-                    textStyle = TextStyle(color = SkerryColors.text, fontSize = 12.5.sp),
-                    cursorBrush = SolidColor(SkerryColors.cyan),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
+            },
+        )
     }
 }
 

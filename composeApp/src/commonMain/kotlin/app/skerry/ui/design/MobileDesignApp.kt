@@ -414,31 +414,36 @@ private fun MobileLockField(
     imeAction: ImeAction,
     onSubmit: () -> Unit = {},
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(13.dp))
-            .background(D.surface2)
-            .border(1.dp, D.cyan.copy(alpha = 0.16f), RoundedCornerShape(13.dp))
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Sym("lock", size = 19.sp, color = D.faint)
-        Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
-                cursorBrush = SolidColor(D.cyan),
-                keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
-                keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
-            )
-        }
-    }
+    // Рамка/иконка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(D.cyan),
+        keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
+        keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(D.surface2)
+                    .border(1.dp, D.cyan.copy(alpha = 0.16f), RoundedCornerShape(13.dp))
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Sym("lock", size = 19.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
+                    inner()
+                }
+            }
+        },
+    )
 }
 
 /** Primary-кнопка на всю ширину (cyan-фон, тёмный текст, радиус 13) — стиль кнопок мобильного макета. */

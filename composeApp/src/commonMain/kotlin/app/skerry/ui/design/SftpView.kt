@@ -497,23 +497,25 @@ internal fun NameDialog(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(D.panel)
-                    .border(1.dp, D.lineStrong, RoundedCornerShape(7.dp))
-                    .padding(horizontal = 10.dp, vertical = 9.dp),
-            ) {
-                BasicTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    singleLine = true,
-                    textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono),
-                    cursorBrush = SolidColor(D.cyan),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            // Рамка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+            BasicTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono),
+                cursorBrush = SolidColor(D.cyan),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { inner ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(D.panel)
+                            .border(1.dp, D.lineStrong, RoundedCornerShape(7.dp))
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                    ) { inner() }
+                },
+            )
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),

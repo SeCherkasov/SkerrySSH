@@ -383,21 +383,25 @@ private fun PortField(label: String, modifier: Modifier = Modifier, content: @Co
 
 @Composable
 private fun PortInput(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily, keyboardType: KeyboardType = KeyboardType.Text) {
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
-    ) {
-        if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp, font = mono)
-        val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 15.sp, fontFamily = mono) }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = textStyle,
-            cursorBrush = SolidColor(D.cyan),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
+    val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 15.sp, fontFamily = mono) }
+    // Рамка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(D.cyan),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+            ) {
+                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp, font = mono)
+                inner()
+            }
+        },
+    )
 }
 
 /** Кликабельный селект типа: тап циклически меняет `-L`→`-R`→`-D` (на телефоне дропдаун ни к чему). */

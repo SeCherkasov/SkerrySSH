@@ -537,20 +537,25 @@ private fun EditField(
     mono: FontFamily,
     keyboardType: KeyboardType = KeyboardType.Text,
 ) {
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
-    ) {
-        if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 12.5.sp, font = mono)
-        val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = textStyle,
-            cursorBrush = SolidColor(D.cyan),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        )
-    }
+    val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
+    // Рамка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(D.cyan),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 12.5.sp, font = mono)
+                inner()
+            }
+        },
+    )
 }
 
 @Composable

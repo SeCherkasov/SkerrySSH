@@ -104,30 +104,35 @@ private fun HostsHeader(onAvatar: () -> Unit) {
 /** Строка поиска по имени/адресу/пользователю/группе хоста. */
 @Composable
 private fun HostsSearch(query: String, onChange: (String) -> Unit) {
-    Row(
-        Modifier
+    // Внешний отступ — на обёртке; рамка — в decorationBox, чтобы клик по всей площади ставил каретку.
+    BasicTextField(
+        value = query,
+        onValueChange = onChange,
+        singleLine = true,
+        textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(D.cyan),
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 6.dp)
-            .clip(RoundedCornerShape(11.dp))
-            .background(Color(0x0DFFFFFF))
-            .border(1.dp, D.cyan08, RoundedCornerShape(11.dp))
-            .padding(start = 12.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Sym("search", size = 19.sp, color = D.faint)
-        Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) Txt("Search hosts, tags…", color = D.faint, size = 15.sp)
-            BasicTextField(
-                value = query,
-                onValueChange = onChange,
-                singleLine = true,
-                textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
-                cursorBrush = SolidColor(D.cyan),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
+            .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 6.dp),
+        decorationBox = { inner ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(Color(0x0DFFFFFF))
+                    .border(1.dp, D.cyan08, RoundedCornerShape(11.dp))
+                    .padding(start = 12.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Sym("search", size = 19.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) Txt("Search hosts, tags…", color = D.faint, size = 15.sp)
+                    inner()
+                }
+            }
+        },
+    )
 }
 
 /** Лента фильтр-чипов: «All» + группы; активный подсвечен cyan. Горизонтальный скролл, как в макете. */

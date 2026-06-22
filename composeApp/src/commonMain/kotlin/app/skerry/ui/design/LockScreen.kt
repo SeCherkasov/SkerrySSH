@@ -176,30 +176,36 @@ private fun LockPasswordField(
     imeAction: ImeAction,
     onSubmit: () -> Unit = {},
 ) {
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(D.surface2)
-            .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Sym("lock", size = 18.sp, color = D.faint)
-        Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 14.sp)
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                textStyle = TextStyle(color = D.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
-                cursorBrush = SolidColor(D.cyan),
-                keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
-                keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
-            )
-        }
-    }
+    // Рамка/паддинг/иконка живут в decorationBox самого поля, поэтому зона ввода покрывает
+    // всю видимую рамку целиком — клик в любую её точку (паддинги, край, иконка) ставит каретку.
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        textStyle = TextStyle(color = D.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(D.cyan),
+        keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
+        keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { innerTextField ->
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(D.surface2)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Sym("lock", size = 18.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 14.sp)
+                    innerTextField()
+                }
+            }
+        },
+    )
 }
 
 /** Контурная квадратная кнопка биометрии (отпечаток). */

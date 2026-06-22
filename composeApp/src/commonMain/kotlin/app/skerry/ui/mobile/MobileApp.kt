@@ -898,19 +898,23 @@ private fun SheetField(
     Column(Modifier.fillMaxWidth()) {
         Text(label.uppercase(), color = SkerryColors.textFaint, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
         Spacer(Modifier.height(6.dp))
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(SkerryColors.nightSea).border(1.dp, SkerryColors.lineStrong, RoundedCornerShape(11.dp)).padding(horizontal = 13.dp, vertical = 12.dp)) {
-            if (value.isEmpty() && placeholder.isNotEmpty()) Text(placeholder, color = SkerryColors.textFaint, fontSize = 13.5.sp)
-            BasicTextField(
-                value = value,
-                onValueChange = onChange,
-                singleLine = true,
-                textStyle = TextStyle(color = SkerryColors.text, fontSize = 13.5.sp),
-                cursorBrush = SolidColor(SkerryColors.cyan),
-                visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
+        // Рамка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = TextStyle(color = SkerryColors.text, fontSize = 13.5.sp),
+            cursorBrush = SolidColor(SkerryColors.cyan),
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Done),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { inner ->
+                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(SkerryColors.nightSea).border(1.dp, SkerryColors.lineStrong, RoundedCornerShape(11.dp)).padding(horizontal = 13.dp, vertical = 12.dp)) {
+                    if (value.isEmpty() && placeholder.isNotEmpty()) Text(placeholder, color = SkerryColors.textFaint, fontSize = 13.5.sp)
+                    inner()
+                }
+            },
+        )
     }
 }
 
@@ -933,24 +937,28 @@ private fun AppBarButton(icon: SkerryIconKind, onClick: () -> Unit) {
 
 @Composable
 private fun SearchField(query: String, onQuery: (String) -> Unit, placeholder: String) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.04f)).border(1.dp, SkerryColors.line, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        SkerryIcon(SkerryIconKind.Search, tint = SkerryColors.textFaint, size = 18.dp)
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (query.isEmpty()) Text(placeholder, color = SkerryColors.textFaint, fontSize = 14.sp)
-            BasicTextField(
-                value = query,
-                onValueChange = onQuery,
-                singleLine = true,
-                textStyle = TextStyle(color = SkerryColors.text, fontSize = 14.sp),
-                cursorBrush = SolidColor(SkerryColors.cyan),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
+    // Рамка/иконка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    BasicTextField(
+        value = query,
+        onValueChange = onQuery,
+        singleLine = true,
+        textStyle = TextStyle(color = SkerryColors.text, fontSize = 14.sp),
+        cursorBrush = SolidColor(SkerryColors.cyan),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.04f)).border(1.dp, SkerryColors.line, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SkerryIcon(SkerryIconKind.Search, tint = SkerryColors.textFaint, size = 18.dp)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (query.isEmpty()) Text(placeholder, color = SkerryColors.textFaint, fontSize = 14.sp)
+                    inner()
+                }
+            }
+        },
+    )
 }
 
 @Composable

@@ -167,26 +167,31 @@ private fun ModalTextField(
     icon: String? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
 ) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (icon != null) Sym(icon, size = 16.sp, color = D.faint)
-        val ui = LocalFonts.current.ui
-        val textStyle = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
-        Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                textStyle = textStyle,
-                cursorBrush = SolidColor(D.cyan),
-                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            )
-        }
-    }
+    val ui = LocalFonts.current.ui
+    val textStyle = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
+    // Рамка/иконка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(D.cyan),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (icon != null) Sym(icon, size = 16.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
+                    inner()
+                }
+            }
+        },
+    )
 }
 
 @Composable
