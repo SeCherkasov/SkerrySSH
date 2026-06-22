@@ -146,8 +146,15 @@ class TerminalScreenState(
                 when (cmd) {
                     is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
                     is TerminalCommand.Resize -> {
-                        emulator.resize(cmd.size.cols, cmd.size.rows)
-                        session.resize(cmd.size)
+                        // PTY ресайзим ПЕРВЫМ, эмулятор — только при успехе: иначе сетка станет шире,
+                        // чем знает приложение, и хвост строк зависнет нестёртым. Сбой PTY-ресайза НЕ
+                        // должен убивать корутину-обработчик (иначе feed перестанет обрабатываться и
+                        // терминал замёрзнет), поэтому ловим здесь.
+                        try {
+                            session.resize(cmd.size)
+                            emulator.resize(cmd.size.cols, cmd.size.rows)
+                        } catch (_: Throwable) {
+                        }
                     }
                 }
                 publishSnapshot()
