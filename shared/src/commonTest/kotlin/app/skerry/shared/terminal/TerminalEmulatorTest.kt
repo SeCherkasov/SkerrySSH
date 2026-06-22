@@ -116,6 +116,75 @@ class TerminalEmulatorTest {
         assertTrue(s.italic && s.underline && s.inverse && s.strikethrough)
     }
 
+    // --- Modern SGR: стили и цвет подчёркивания (4:x, 21, 58, 59) ----------
+
+    @Test
+    fun `plain sgr 4 is a single underline`() {
+        val s = emulate(chunks = arrayOf("$esc[4mX")).lines[0][0].style
+        assertEquals(UnderlineStyle.Single, s.underlineStyle)
+        assertTrue(s.underline, "одиночное подчёркивание видно через булев флаг совместимости")
+    }
+
+    @Test
+    fun `sgr 4 colon 3 is a curly underline`() {
+        // 4:3 — curly/squiggly underline (диагностика компиляторов, ls --hyperlink и т.п.).
+        val s = emulate(chunks = arrayOf("$esc[4:3mX")).lines[0][0].style
+        assertEquals(UnderlineStyle.Curly, s.underlineStyle)
+        assertTrue(s.underline)
+    }
+
+    @Test
+    fun `sgr 4 colon variants select double dotted dashed`() {
+        assertEquals(UnderlineStyle.Double, emulate(chunks = arrayOf("$esc[4:2mX")).lines[0][0].style.underlineStyle)
+        assertEquals(UnderlineStyle.Dotted, emulate(chunks = arrayOf("$esc[4:4mX")).lines[0][0].style.underlineStyle)
+        assertEquals(UnderlineStyle.Dashed, emulate(chunks = arrayOf("$esc[4:5mX")).lines[0][0].style.underlineStyle)
+    }
+
+    @Test
+    fun `sgr 4 colon 0 clears the underline`() {
+        val s = emulate(chunks = arrayOf("$esc[4:3m", "$esc[4:0mX")).lines[0][0].style
+        assertEquals(UnderlineStyle.None, s.underlineStyle)
+        assertFalse(s.underline)
+    }
+
+    @Test
+    fun `sgr 21 is a double underline`() {
+        assertEquals(UnderlineStyle.Double, emulate(chunks = arrayOf("$esc[21mX")).lines[0][0].style.underlineStyle)
+    }
+
+    @Test
+    fun `sgr 24 resets any underline style to none`() {
+        val s = emulate(chunks = arrayOf("$esc[4:3m", "$esc[24mX")).lines[0][0].style
+        assertEquals(UnderlineStyle.None, s.underlineStyle)
+    }
+
+    @Test
+    fun `sgr 58 sets a 256-color underline color`() {
+        val s = emulate(chunks = arrayOf("$esc[4;58;5;201mX")).lines[0][0].style
+        assertEquals(TermColor.Indexed(201), s.underlineColor)
+    }
+
+    @Test
+    fun `sgr 58 colon truecolor underline color with empty colorspace`() {
+        // 58:2::r:g:b — ITU-форма с пустым полем colorspace (двойное двоеточие).
+        val s = emulate(chunks = arrayOf("$esc[58:2::1:2:3mX")).lines[0][0].style
+        assertEquals(TermColor.Rgb(1, 2, 3), s.underlineColor)
+    }
+
+    @Test
+    fun `sgr 59 resets the underline color to default`() {
+        val s = emulate(chunks = arrayOf("$esc[58;5;201m", "$esc[59mX")).lines[0][0].style
+        assertEquals(TermColor.Default, s.underlineColor)
+    }
+
+    @Test
+    fun `underline color survives independently of foreground`() {
+        // Цвет подчёркивания не должен меняться при смене fg и наоборот.
+        val s = emulate(chunks = arrayOf("$esc[4;58;5;9;31mX")).lines[0][0].style
+        assertEquals(TermColor.Red, s.fg)
+        assertEquals(TermColor.BrightRed, s.underlineColor)
+    }
+
     // --- Адресация курсора -------------------------------------------------
 
     @Test

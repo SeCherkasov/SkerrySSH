@@ -31,8 +31,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
@@ -84,6 +87,7 @@ import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermColor
 import app.skerry.shared.terminal.TermStyle
+import app.skerry.shared.terminal.UnderlineStyle
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
@@ -329,6 +333,7 @@ fun TerminalScreen(
                           if (cell.text.isNotBlank()) {
                               drawText(measurer, cell.text, topLeft = Offset(g * cw, top), style = cell.style.toGlyphStyle(textStyle))
                           }
+                          if (cell.style.underline) drawCellUnderline(cell.style, g * cw, top, 2 * cw, chh)
                           g++
                           continue
                       }
@@ -342,6 +347,8 @@ fun TerminalScreen(
                       if (runText.isNotBlank()) {
                           drawText(measurer, runText, topLeft = Offset(sCol * cw, top), style = st.toGlyphStyle(textStyle))
                       }
+                      // Подчёркивание тянем по всей ширине рана, в т.ч. под пробелами (как в xterm).
+                      if (st.underline) drawCellUnderline(st, sCol * cw, top, (g - sCol) * cw, chh)
                   }
               }
           }
@@ -726,19 +733,80 @@ private fun TermStyle.toSpanStyle(): SpanStyle {
     }
     if (hidden) fgColor = bgColor.takeIf { it != Color.Unspecified } ?: SkerryColors.terminalBg
     if (dim) fgColor = fgColor.copy(alpha = 0.6f)
-    val decoration = when {
-        underline && strikethrough -> TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
-        underline -> TextDecoration.Underline
-        strikethrough -> TextDecoration.LineThrough
-        else -> null
-    }
+    // Подчёркивание (включая modern 4:x формы и SGR 58 цвет) рисуем вручную в Canvas — Compose
+    // TextDecoration не умеет ни волнистое/пунктирное/двойное, ни отдельный цвет. Здесь только
+    // strikethrough, которое штатное.
     return SpanStyle(
         color = fgColor,
         background = bgColor,
         fontWeight = if (bold) FontWeight.Bold else null,
         fontStyle = if (italic) FontStyle.Italic else null,
-        textDecoration = decoration,
+        textDecoration = if (strikethrough) TextDecoration.LineThrough else null,
     )
+}
+
+/**
+ * Цвет линии подчёркивания: [TermStyle.underlineColor], а при [TermColor.Default] — следует цвету
+ * текста (с учётом inverse и dim). Рендерится отдельно от глифа, поэтому цвет считаем тут.
+ */
+private fun TermStyle.underlineDrawColor(): Color {
+    val base = if (underlineColor == TermColor.Default) {
+        if (inverse) {
+            if (bg == TermColor.Default) SkerryColors.terminalBg else bg.toComposeColor(SkerryColors.text)
+        } else fg.toComposeColor(SkerryColors.text)
+    } else {
+        underlineColor.toComposeColor(SkerryColors.text)
+    }
+    return if (dim) base.copy(alpha = 0.6f) else base
+}
+
+/**
+ * Рисует линию подчёркивания нужной формы (modern SGR `4:x`) у нижней кромки ячейки/рана.
+ * [left]/[width] — горизонтальный отрезок, [top] — верх строки, [chh] — высота клетки.
+ */
+private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float) {
+    if (style.underlineStyle == UnderlineStyle.None) return
+    val color = style.underlineDrawColor()
+    val thickness = (chh / 14f).coerceAtLeast(1f)
+    val y = top + chh - thickness * 1.5f
+    val right = left + width
+    when (style.underlineStyle) {
+        UnderlineStyle.None -> {}
+        UnderlineStyle.Single ->
+            drawLine(color, Offset(left, y), Offset(right, y), strokeWidth = thickness)
+        UnderlineStyle.Double -> {
+            val gap = thickness * 1.6f
+            drawLine(color, Offset(left, y - gap), Offset(right, y - gap), strokeWidth = thickness)
+            drawLine(color, Offset(left, y + gap), Offset(right, y + gap), strokeWidth = thickness)
+        }
+        UnderlineStyle.Dotted ->
+            drawLine(
+                color, Offset(left, y), Offset(right, y), strokeWidth = thickness,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(thickness, thickness)),
+            )
+        UnderlineStyle.Dashed ->
+            drawLine(
+                color, Offset(left, y), Offset(right, y), strokeWidth = thickness,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(thickness * 4f, thickness * 3f)),
+            )
+        UnderlineStyle.Curly -> {
+            val amp = thickness * 1.6f
+            val halfPeriod = (chh / 6f).coerceAtLeast(2f)
+            val path = Path().apply {
+                moveTo(left, y)
+                var x = left
+                var up = true
+                while (x < right) {
+                    val nx = (x + halfPeriod).coerceAtMost(right)
+                    val peak = if (up) y - amp else y + amp
+                    quadraticTo((x + nx) / 2f, peak, nx, y)
+                    x = nx
+                    up = !up
+                }
+            }
+            drawPath(path, color, style = Stroke(width = thickness))
+        }
+    }
 }
 
 /**
