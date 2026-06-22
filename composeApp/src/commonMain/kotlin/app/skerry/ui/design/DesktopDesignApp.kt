@@ -42,6 +42,7 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.forward.humanRate
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
@@ -328,13 +329,22 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
 @Composable
 private fun StatusBar() {
     val mono = LocalFonts.current.mono
-    // В живом режиме статус слева отражает активную сессию; пропускная способность/пинг пока
-    // плейсхолдеры макета (реальная телеметрия — отдельный шаг), но не противоречат состоянию связи.
+    // В живом режиме статус слева и throughput отражают активную сессию; RTT-пинг пока плейсхолдер
+    // макета (отдельный слайс), но не противоречит состоянию связи.
     val sessions = LocalSessions.current
-    val connected = sessions?.active?.controller?.uiState is ConnectionUiState.Connected
+    val active = sessions?.active
+    val connected = active?.controller?.uiState is ConnectionUiState.Connected
     val live = sessions != null
     val statusText = if (!live || connected) "Connected" else "Disconnected"
     val statusColor = if (!live || connected) D.moss else D.faint
+    // Поллер скорости канала активной сессии (когда подключена). remember безусловный — ключи
+    // (сессия + флаг connected) пересоздают его при смене сессии/подключения; openThroughput
+    // идемпотентен (кэш в ConnectionController).
+    val throughput = remember(active, connected) {
+        if (connected && active != null) active.controller.openThroughput() else null
+    }
+    val upRate = throughput?.upRate
+    val downRate = throughput?.downRate
     // Размер сетки — живой cols×rows активного терминала; вне коннекта остаётся мок-метка макета.
     val gridLabel = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)
         ?.terminal?.let { "${it.cols} × ${it.rows}" } ?: "80 × 24"
@@ -349,11 +359,11 @@ private fun StatusBar() {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
-            // RTT/throughput — живой источник появится отдельными слайсами; пока в живом режиме
-            // честный «—» вместо фейковых значений, в мок-режиме (офскрин) — метки шаблона.
+            // RTT-пинг — живой источник в отдельном слайсе; пока «—» в живом режиме.
             StatusItem("network_ping", if (live) "—" else "42 ms", mono = mono)
-            StatusItem("arrow_upward", if (live) "—" else "1.2 KB/s", mono = mono)
-            StatusItem("arrow_downward", if (live) "—" else "8.4 KB/s", mono = mono)
+            // Throughput канала live (до коннекта — «—»); в мок-режиме (офскрин) — метки шаблона.
+            StatusItem("arrow_upward", if (live) (upRate?.let { humanRate(it) } ?: "—") else "1.2 KB/s", mono = mono)
+            StatusItem("arrow_downward", if (live) (downRate?.let { humanRate(it) } ?: "—") else "8.4 KB/s", mono = mono)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             // Версия сервера — live ident активной сессии (до коннекта/если транспорт молчит — «—»).
