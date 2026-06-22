@@ -10,8 +10,10 @@ import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
+import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
+import app.skerry.ui.terminal.ThroughputController
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.forward.PortForwardController
@@ -87,12 +89,14 @@ class ConnectionController(
 
     private var connectJob: Job? = null
     private var connection: SshConnection? = null
+    private var shellChannel: ShellChannel? = null
     private var sessionScope: CoroutineScope? = null
     private var portForwards: PortForwardController? = null
     private var sftpClient: SftpClient? = null
     private var transferCoordinator: TransferCoordinator? = null
     private val sftpMutex = Mutex()
     private var metrics: HostMetricsController? = null
+    private var throughput: ThroughputController? = null
 
     fun connect(target: SshTarget, auth: SshAuth) {
         // Стартуем только из формы: пока идёт подключение или есть открытая сессия,
@@ -108,6 +112,9 @@ class ConnectionController(
                 ensureActive()
                 val sScope = newSessionScope()
                 connection = conn
+                // ВАЖНО: канал должен быть выставлен ДО uiState = Connected — статус-бар по этому
+                // переходу зовёт openThroughput(), который требует живой shellChannel (иначе бросит).
+                shellChannel = channel
                 cipher = conn.cipher
                 serverVersion = conn.serverVersion
                 sessionScope = sScope
@@ -194,6 +201,21 @@ class ConnectionController(
         ).also { it.start(); metrics = it }
     }
 
+    /**
+     * Контроллер скорости терминального канала этой сессии — один на соединение, создаётся лениво и
+     * кэшируется (как [openMetrics]), опрос гоняется на [scope] сессии. Сэмплеры читают живые счётчики
+     * канала; после [disconnect] (канал обнулён) вернут 0, но к тому моменту поллер уже остановлен.
+     * @throws IllegalStateException сессия не подключена (нет живого канала)
+     */
+    fun openThroughput(): ThroughputController {
+        val channel = shellChannel ?: error("Нет активного канала для замера скорости")
+        return throughput ?: ThroughputController(
+            sampleUp = { channel.bytesUp },
+            sampleDown = { channel.bytesDown },
+            scope = scope,
+        ).also { it.start(); throughput = it }
+    }
+
     /** Закрыть сессию (если есть) и вернуться к форме. */
     fun disconnect() {
         connectJob?.cancel()
@@ -206,9 +228,12 @@ class ConnectionController(
         transferCoordinator = null
         metrics?.stop()
         metrics = null
+        throughput?.stop()
+        throughput = null
         sessionScope?.cancel()
         sessionScope = null
         connection = null
+        shellChannel = null
         cipher = null
         serverVersion = null
         if (sftp != null) closeSftpQuietly(sftp)

@@ -510,6 +510,13 @@ private class SshjShellChannel(
     private val outputClaimed = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
 
+    // Счётчики трафика канала (для индикатора скорости): пишутся из IO-потоков чтения/записи,
+    // читаются из поллера на другой корутине — AtomicLong для потокобезопасной видимости.
+    private val _bytesUp = AtomicLong(0)
+    private val _bytesDown = AtomicLong(0)
+    override val bytesUp: Long get() = _bytesUp.get()
+    override val bytesDown: Long get() = _bytesDown.get()
+
     override val isOpen: Boolean
         get() = session.isOpen
 
@@ -529,7 +536,10 @@ private class SshjShellChannel(
                 break
             }
             if (read < 0) break
-            if (read > 0) emit(buffer.copyOf(read))
+            if (read > 0) {
+                _bytesDown.addAndGet(read.toLong())
+                emit(buffer.copyOf(read))
+            }
         }
     }
 
@@ -537,6 +547,8 @@ private class SshjShellChannel(
         try {
             shell.outputStream.write(data)
             shell.outputStream.flush()
+            _bytesUp.addAndGet(data.size.toLong())
+            Unit
         } catch (e: IOException) {
             throw SshConnectionException("Запись в shell-канал не удалась", e)
         }
