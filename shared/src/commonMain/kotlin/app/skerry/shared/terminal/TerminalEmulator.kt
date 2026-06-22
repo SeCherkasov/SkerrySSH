@@ -391,7 +391,9 @@ class TerminalEmulator(
 
     private fun csi(b: Int) {
         when {
-            b in 0x30..0x3f -> params.append(b.toChar()) // цифры, ';', ':', приватные маркеры ?<=>
+            // Кап длины: сверх лимита цифры/разделители роняем, но парсим до финального байта (хвост
+            // не утечёт в Ground как текст). Реальные CSI — десятки байт, так что усечение безвредно.
+            b in 0x30..0x3f -> if (params.length < MAX_CSI_PARAMS_LEN) params.append(b.toChar()) // цифры, ';', ':', маркеры ?<=>
             b in 0x20..0x2f -> csiIntermediate = b.toChar() // промежуточные байты
             b in 0x40..0x7e -> { dispatchCsi(b.toChar()); parser = State.Ground }
             else -> parser = State.Ground
@@ -422,7 +424,9 @@ class TerminalEmulator(
         val code = (if (sep < 0) s else s.substring(0, sep)).toIntOrNull() ?: return
         val rest = if (sep < 0) "" else s.substring(sep + 1)
         when (code) {
-            0, 1, 2 -> title = rest
+            // C0/C1/DEL из заголовка вырезаем: сервер не должен искажать UI вкладки или
+            // протаскивать управляющие байты в потребителей строки (логи и т.п.).
+            0, 1, 2 -> title = rest.filter { it.code in 0x20..0x7e || it.code >= 0xa0 }
             4 -> setPalette(rest)     // OSC 4 ; index ; spec [ ; index ; spec ... ]
             8 -> setHyperlink(rest)   // OSC 8 ; params ; URI
             52 -> setClipboard(rest)  // OSC 52 ; Pc ; Pd
@@ -440,6 +444,7 @@ class TerminalEmulator(
         val data = rest.substringAfter(';', "")
         if (data.isEmpty() || data.startsWith("?")) return // пусто либо запрос чтения — буфер не отдаём
         val text = runCatching { Base64.decode(data).decodeToString() }.getOrNull() ?: return
+        if (text.length > MAX_CLIPBOARD_LEN) return // анти-флуд: сервер не льёт мегабайты в системный буфер
         onClipboardCopy(text)
     }
 
@@ -500,7 +505,8 @@ class TerminalEmulator(
      * Пустой URI закрывает текущую ссылку. Активный URI вешается на последующие печатаемые клетки.
      */
     private fun setHyperlink(rest: String) {
-        val uri = rest.substringAfter(';', "").trim()
+        // Кап длины: URI тиражируется в каждую печатаемую клетку, мегабайтный URI раздул бы grid.
+        val uri = rest.substringAfter(';', "").trim().take(MAX_HYPERLINK_LEN)
         currentHyperlink = uri.ifEmpty { null }
     }
 
@@ -551,9 +557,12 @@ class TerminalEmulator(
      * ESC/`\`/`;` — инъекция управляющих последовательностей в поток к серверу невозможна.
      */
     private fun replyXtGetTcap(hexNames: String) {
+        var replies = 0
         for (hexName in hexNames.split(';')) {
+            if (replies >= MAX_XTGETTCAP_REPLIES) break // анти-амплификация: один DCS не плодит тысячи ответов
             if (hexName.isEmpty()) continue
             val name = hexDecode(hexName) ?: continue // также гарантирует, что hexName — чистый hex (см. выше)
+            replies++
             val value = when (name) {
                 "Co", "colors" -> "256"
                 "TN" -> "xterm-256color"
@@ -1076,8 +1085,9 @@ class TerminalEmulator(
         if (on == altScreen) return
         if (on) {
             if (saveRestore) saveCursor()
-            altGrid = freshScreen()
-            grid = altGrid!!
+            val fresh = freshScreen()
+            altGrid = fresh
+            grid = fresh
             altScreen = true
             resetRegion()
         } else {
@@ -1181,8 +1191,10 @@ class TerminalEmulator(
      * Сбрасывает регион прокрутки и табстопы.
      */
     fun resize(newCols: Int, newRows: Int) {
-        val nc = newCols.coerceAtLeast(1)
-        val nr = newRows.coerceAtLeast(1)
+        // Кап сверху: исключает переполнение Int в cols*rows (REP) и безумный объём работы на ресайз;
+        // 2000 с запасом покрывает любой реальный дисплей при крошечном шрифте.
+        val nc = newCols.coerceIn(1, MAX_DIMENSION)
+        val nr = newRows.coerceIn(1, MAX_DIMENSION)
         if (nc == cols && nr == rows) return
         val wasPendingWrap = pendingWrap
         val (newCy, newCx) = reflowPrimary(nc, nr, trackCursor = !altScreen)
@@ -1396,6 +1408,21 @@ class TerminalEmulator(
 
         /** Потолок длины OSC-строки (защита от OOM на недоверенном выводе); 4 MiB с запасом под OSC 52. */
         const val MAX_OSC_LEN = 4 * 1024 * 1024
+
+        /** Потолок длины буфера параметров CSI (защита от OOM: сервер льёт цифры без финального байта). */
+        const val MAX_CSI_PARAMS_LEN = 1024
+
+        /** Потолок размера текста OSC 52 для записи в системный буфер обмена (анти-флуд буфера). */
+        const val MAX_CLIPBOARD_LEN = 64 * 1024
+
+        /** Потолок числа ответов на один XTGETTCAP-запрос (анти-амплификация исходящего PTY-трафика). */
+        const val MAX_XTGETTCAP_REPLIES = 64
+
+        /** Потолок длины OSC 8 URI (URI копируется в каждую клетку — защита от раздувания grid). */
+        const val MAX_HYPERLINK_LEN = 2048
+
+        /** Потолок ширины/высоты сетки: против Int-overflow в cols*rows и чрезмерной работы на ресайз. */
+        const val MAX_DIMENSION = 2000
 
         /** Потолок глубины стека заголовка окна (CSI 22 t без парного 23 t) — против раздувания. */
         const val MAX_TITLE_STACK = 128

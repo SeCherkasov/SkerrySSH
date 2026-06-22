@@ -8,6 +8,7 @@ import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -437,6 +438,69 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `a recoverable resize failure keeps the command handler alive`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        // Обрыв PTY-ресайза (восстановимый): обработчик не должен умереть — feed после него идёт.
+        session.resizeError = { IllegalStateException("pty broke") }
+        state.resize(PtySize(cols = 10, rows = 4))
+        session.resizeError = null
+        session.emit("ok".encodeToByteArray())
+
+        assertEquals("ok", state.output)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a cancellation during resize tears down the command handler`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        // CancellationException не должна гаситься как «восстановимый сбой»: она обязана свалить
+        // корутину-обработчик (structured concurrency), иначе feed продолжит идти после отмены.
+        session.resizeError = { CancellationException("scope cancelled") }
+        state.resize(PtySize(cols = 10, rows = 4))
+        session.emit("ignored".encodeToByteArray())
+
+        assertEquals("", state.output) // обработчик отменён — feed не применён
+        scope.cancel()
+    }
+
+    @Test
+    fun `a burst of sends reaches the session in FIFO order`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        repeat(50) { state.send(it.toString()) }
+
+        val order = session.sent.map { it.decodeToString() }
+        assertEquals(List(50) { it.toString() }, order)
+        scope.cancel()
+    }
+
+    @Test
+    fun `snapshotVersion advances on every feed`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        val before = state.snapshotVersion
+        session.emit("a".encodeToByteArray())
+        session.emit("b".encodeToByteArray())
+
+        assertEquals(before + 2, state.snapshotVersion)
+        scope.cancel()
+    }
+
+    @Test
     fun `empty selection produces no copyable text`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
@@ -465,6 +529,9 @@ private class FakeTerminalSession : TerminalSession {
     val sent = mutableListOf<ByteArray>()
     val resizes = mutableListOf<PtySize>()
 
+    /** Если задан — `resize` бросает это перед записью (имитация обрыва PTY/отмены). */
+    var resizeError: (() -> Throwable)? = null
+
     suspend fun emit(chunk: ByteArray) {
         emissions.send(chunk)
     }
@@ -474,6 +541,7 @@ private class FakeTerminalSession : TerminalSession {
     }
 
     override suspend fun resize(size: PtySize) {
+        resizeError?.let { throw it() }
         resizes += size
     }
 

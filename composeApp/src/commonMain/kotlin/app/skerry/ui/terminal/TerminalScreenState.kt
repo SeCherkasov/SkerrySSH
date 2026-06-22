@@ -21,6 +21,7 @@ import app.skerry.shared.terminal.encodeMouseReport
 import app.skerry.shared.terminal.lineSelectionAt
 import app.skerry.shared.terminal.wordSelectionAt
 import kotlin.concurrent.Volatile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
@@ -68,6 +69,14 @@ class TerminalScreenState(
 
     /** Снимок экрана (строки сверху вниз) для отрисовки. */
     var screen: List<List<TermCell>> by mutableStateOf(emptyList())
+        private set
+
+    /**
+     * Монотонный счётчик публикаций снимка — растёт на каждый feed/resize, даже если содержимое [screen]
+     * структурно совпало с прежним. Авто-скролл к низу должен запускаться по нему, а НЕ по [screen]:
+     * Compose сравнивает список структурно ([equals]), и два подряд одинаковых снимка не дёрнут эффект.
+     */
+    var snapshotVersion: Int by mutableStateOf(0)
         private set
 
     /** Текущий размер сетки (живой `cols × rows` эмулятора) — статус-бар показывает его вместо мока. */
@@ -170,6 +179,11 @@ class TerminalScreenState(
     // — так вывод PTY и ресайз сериализованы относительно друг друга.
     private val commands = Channel<TerminalCommand>(Channel.UNLIMITED)
 
+    // Очередь исходящих байтов в PTY (ввод, отчёты мыши, ответы DSR/DA). Единственный потребитель в
+    // init сериализует запись, сохраняя порядок при отправке из разных корутин. UNLIMITED → trySend
+    // никогда не блокирует и не теряет (fire-and-forget, как и было у send/sendBytes).
+    private val outbound = Channel<ByteArray>(Channel.UNLIMITED)
+
     // Последний размер, отданный в PTY: дубликаты гасим, чтобы не спамить resize при перелэйауте.
     // @Volatile — resize() может зваться из разных корутин (LaunchedEffect/жесты), нужна видимость.
     @Volatile
@@ -199,6 +213,8 @@ class TerminalScreenState(
                         try {
                             session.resize(cmd.size)
                             emulator.resize(cmd.size.cols, cmd.size.rows)
+                        } catch (e: CancellationException) {
+                            throw e // отмену скоупа не глушим — structured concurrency должна свалить обработчик
                         } catch (_: Exception) {
                             // только восстановимые сбои (например, обрыв PTY); Error пробрасываем
                         }
@@ -206,6 +222,12 @@ class TerminalScreenState(
                 }
                 publishSnapshot()
             }
+        }
+        // Единственный потребитель исходящих байтов: гарантирует FIFO-порядок записи в PTY независимо
+        // от того, из скольких корутин звали send/sendBytes (иначе порядок держался лишь на внутренней
+        // синхронизации транспорта). Все отправки проходят через [outbound].
+        scope.launch {
+            for (bytes in outbound) session.send(bytes)
         }
     }
 
@@ -229,6 +251,7 @@ class TerminalScreenState(
         altScreen = emulator.altScreen
         title = emulator.title
         palette = emulator.paletteSnapshot()
+        snapshotVersion++
     }
 
     /** Начать выделение в позиции [pos] (нажатие мыши): якорь и фокус совпадают — пока пусто. */
@@ -299,9 +322,9 @@ class TerminalScreenState(
         return text
     }
 
-    /** Отправить введённый текст в PTY (fire-and-forget в [scope]). */
+    /** Отправить введённый текст в PTY (fire-and-forget через очередь [outbound], FIFO-порядок). */
     fun send(text: String) {
-        scope.launch { session.send(text.encodeToByteArray()) }
+        outbound.trySend(text.encodeToByteArray())
     }
 
     /**
@@ -309,7 +332,7 @@ class TerminalScreenState(
      * байты могут выходить за 0x7f и не должны прогоняться через UTF-8, как делает [send].
      */
     fun sendBytes(bytes: ByteArray) {
-        scope.launch { session.send(bytes) }
+        outbound.trySend(bytes)
     }
 
     /**

@@ -197,6 +197,14 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `osc 8 caps an oversized uri`() {
+        // Недоверённый сервер не должен мочь повесить мегабайтный URI на каждую клетку.
+        val emu = emulate(chunks = arrayOf("$esc]8;;https://x.test/${"a".repeat(5000)}${esc}\\Z"))
+        val link = emu.lines[0][0].hyperlink
+        assertEquals(2048, link?.length, "URI должен капаться до 2048 символов")
+    }
+
+    @Test
     fun `osc 8 terminated by bel also works`() {
         val emu = emulate(chunks = arrayOf("$esc]8;;https://x.test${bel}A"))
         assertEquals("https://x.test", emu.lines[0][0].hyperlink)
@@ -266,6 +274,25 @@ class TerminalEmulatorTest {
         assertTrue(copied.isEmpty())
     }
 
+    @Test
+    fun `osc 52 oversized clipboard write is dropped`() {
+        // Модель угроз: сервер не должен мочь заливать в системный буфер мегабайты. base64 "YWFh"
+        // декодируется в "aaa" (3 байта) — 25000 повторов = 75000 байт > лимита 64 KiB → молчим.
+        val copied = mutableListOf<String>()
+        val emu = TerminalEmulator(onClipboardCopy = { copied += it })
+        emu.feed("$esc]52;c;${"YWFh".repeat(25000)}$esc\\".encodeToByteArray())
+        assertTrue(copied.isEmpty(), "переразмерная запись буфера должна отбрасываться")
+    }
+
+    @Test
+    fun `osc 52 clipboard write at a sane size still works`() {
+        // 1000×"aaa" = 3000 байт — в пределах лимита, запись проходит.
+        val copied = mutableListOf<String>()
+        val emu = TerminalEmulator(onClipboardCopy = { copied += it })
+        emu.feed("$esc]52;c;${"YWFh".repeat(1000)}$esc\\".encodeToByteArray())
+        assertEquals(listOf("aaa".repeat(1000)), copied)
+    }
+
     // --- OSC 4/104 динамическая палитра ------------------------------------
 
     @Test
@@ -333,6 +360,23 @@ class TerminalEmulatorTest {
     fun `cup positions cursor absolutely`() {
         // ESC[2;3H ставит курсор в строку 2, колонку 3 (1-based); печать туда.
         assertEquals("\n  X", emulate(chunks = arrayOf("$esc[2;3HX")).asText())
+    }
+
+    @Test
+    fun `resize clamps pathological dimensions to a sane maximum`() {
+        // Защита от переполнения Int в cols*rows (REP) и от безумного объёма работы на ресайз.
+        val emu = emulate()
+        emu.resize(100_000, 100_000)
+        assertTrue(emu.cols <= 2000, "cols должен капаться, было ${emu.cols}")
+        assertTrue(emu.rows <= 2000, "rows должен капаться, было ${emu.rows}")
+    }
+
+    @Test
+    fun `overlong CSI parameter run does not break the parser`() {
+        // Недоверенный сервер льёт бесконечный поток цифр без финального байта (защита от OOM —
+        // буфер params капается). Парсер обязан выйти из CSI на финальном байте и продолжить печать.
+        val emu = emulate(chunks = arrayOf("$esc[${"9".repeat(5000)}mhi"))
+        assertEquals("hi", emu.asText())
     }
 
     @Test
@@ -563,6 +607,14 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `osc title strips embedded control characters`() {
+        // Сервер не должен мочь протащить C0/DEL в заголовок (искажение UI вкладки, риск лог-инъекции).
+        val c1 = 1.toChar(); val c31 = 31.toChar(); val del = 127.toChar()
+        val emu = emulate(chunks = arrayOf("$esc]0;a${c1}b${c31}c$del$bel"))
+        assertEquals("abc", emu.title)
+    }
+
+    @Test
     fun `CSI 22 t pushes and CSI 23 t pops the window title`() {
         // XTWINOPS title stack: vim/tmux сохраняют заголовок при входе (22;2 t) и восстанавливают
         // при выходе (23;2 t). Ставим A, push, меняем на B, pop -> снова A.
@@ -683,6 +735,17 @@ class TerminalEmulatorTest {
         assertTrue(joined.contains("1+r436F=323536"), "ожидался валидный Co=256, было: $joined")
         // Неизвестная ZZ -> DCS 0 + r 5A5A ST.
         assertTrue(joined.contains("0+r5A5A"), "ожидался отказ по ZZ, было: $joined")
+    }
+
+    @Test
+    fun `XTGETTCAP caps the number of replied capabilities`() {
+        // Амплификация: один DCS с тысячами имён не должен порождать тысячи ответов в PTY.
+        // 500 валидных запросов "Co" → ответов не больше предела (64).
+        val responses = mutableListOf<String>()
+        val emu = TerminalEmulator(cols = 80, rows = 24, respond = { responses.add(it) })
+        val names = List(500) { "436F" }.joinToString(";")
+        emu.feed("${esc}P+q$names$esc\\".encodeToByteArray())
+        assertTrue(responses.size <= 64, "ответов XTGETTCAP должно быть не больше 64, было ${responses.size}")
     }
 
     @Test
