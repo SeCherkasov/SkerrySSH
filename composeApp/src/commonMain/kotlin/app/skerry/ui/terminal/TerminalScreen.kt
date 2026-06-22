@@ -605,15 +605,15 @@ fun TerminalScreen(
       // Геометрию берём по той же моноширинной метрике, что и текст, со сдвигом на прокрутку.
       if (cursorVisibleNow && state.screen.isNotEmpty()) {
           val thickness = with(density) { 2.dp.toPx() }
-          val glyph = state.screen.getOrNull(state.cursorRow)?.getOrNull(state.cursorCol)?.char
+          val glyph = state.screen.getOrNull(state.cursorRow)?.getOrNull(state.cursorCol)?.text
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
               val x = state.cursorCol * metrics.cellWidth
               val y = state.cursorRow * metrics.cellHeight - scroll.value.toFloat()
               when (state.cursorShape) {
                   CursorShape.Block -> {
                       drawRect(cursorBg, topLeft = Offset(x, y), size = Size(metrics.cellWidth, metrics.cellHeight))
-                      if (glyph != null && glyph != ' ') {
-                          drawText(measurer, glyph.toString(), topLeft = Offset(x, y), style = textStyle.copy(color = cursorFg))
+                      if (!glyph.isNullOrBlank()) {
+                          drawText(measurer, glyph, topLeft = Offset(x, y), style = textStyle.copy(color = cursorFg))
                       }
                   }
                   CursorShape.Underline -> drawRect(
@@ -727,7 +727,7 @@ private fun renderScreen(
             c++
             // Схлопываем подряд идущие ячейки с тем же эффективным стилем.
             while (c < row.size && spanAt(c) == span) c++
-            withStyle(span) { for (k in start until c) append(row[k].char) }
+            withStyle(span) { for (k in start until c) append(row[k].text) }
         }
         if (r < screen.lastIndex) append("\n")
     }

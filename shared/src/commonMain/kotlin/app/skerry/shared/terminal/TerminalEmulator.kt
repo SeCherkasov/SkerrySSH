@@ -46,8 +46,27 @@ data class TermStyle(
     val strikethrough: Boolean = false,
 )
 
-/** Одна ячейка экрана: символ + его стиль. */
-data class TermCell(val char: Char, val style: TermStyle = TermStyle())
+/**
+ * Ширина ячейки в сетке (для CJK/emoji двойной ширины):
+ *  - [Single] — обычная клетка в одну колонку;
+ *  - [Wide] — ведущая клетка двухколоночного символа (рендер растягивает глиф на 2 колонки);
+ *  - [Continuation] — вторая колонка под широким символом; глиф не рисуется, курсор её перешагивает.
+ */
+enum class CellWidth { Single, Wide, Continuation }
+
+/**
+ * Одна ячейка экрана: отображаемый текст + стиль + ширина. [text] — строка (а не `Char`), чтобы
+ * вмещать астральные символы (emoji > U+FFFF как суррогатную пару) и при необходимости комбинируемые
+ * последовательности; у [Continuation]-клетки [text] пуст.
+ */
+data class TermCell(
+    val text: String = " ",
+    val style: TermStyle = TermStyle(),
+    val width: CellWidth = CellWidth.Single,
+) {
+    /** Удобный конструктор от одиночного BMP-символа (бланк, ASCII, line-drawing-глиф). */
+    constructor(char: Char, style: TermStyle = TermStyle()) : this(char.toString(), style, CellWidth.Single)
+}
 
 /** Режим репортинга мыши в приложение (DEC private modes). Кодировку выбирает [TerminalEmulator.mouseSgr]. */
 enum class MouseTracking { Off, X10, Normal, ButtonEvent, AnyEvent }
@@ -103,9 +122,10 @@ class TerminalEmulator(
     private var cy = 0
     private var pendingWrap = false
 
-    // Последний напечатанный графический символ — для REP (CSI Ps b): nano 9.0/ncurses заполняют
-    // им полосы (reverse title-бар), вместо литеральных пробелов. null до первой печати.
-    private var lastPrintedChar: Char? = null
+    // Последний напечатанный codepoint — для REP (CSI Ps b): nano 9.0/ncurses заполняют им полосы
+    // (reverse title-бар), вместо литеральных пробелов. null до первой печати. Хранится как Int
+    // (codepoint), а не Char, чтобы корректно повторять и астральные символы.
+    private var lastPrintedCp: Int? = null
 
     /** Абсолютный индекс строки курсора в [lines] (с учётом scrollback в основном буфере). */
     val cursorRow: Int get() = (if (altScreen) 0 else scrollback.size) + cy
@@ -220,15 +240,15 @@ class TerminalEmulator(
             b == 0x0e -> glG1 = true  // SO — активировать G1 в GL
             b == 0x0f -> glG1 = false // SI — вернуть G0 в GL
             b < 0x20 -> {} // прочие C0 — игнор
-            b < 0x80 -> putChar(mapGlyph(b.toChar()))
+            b < 0x80 -> putCodePoint(mapGlyph(b).code)
             else -> beginUtf8(b)
         }
     }
 
     /** Применяет активный графический набор: в DEC Special Graphics ASCII 0x60..0x7e → box-drawing. */
-    private fun mapGlyph(ch: Char): Char {
+    private fun mapGlyph(b: Int): Char {
         val lineDrawing = if (glG1) g1LineDrawing else g0LineDrawing
-        return if (lineDrawing && ch.code in 0x60..0x7e) DEC_SPECIAL_GRAPHICS[ch.code - 0x60] else ch
+        return if (lineDrawing && b in 0x60..0x7e) DEC_SPECIAL_GRAPHICS[b - 0x60] else b.toChar()
     }
 
     /** Обрабатывает байт после `ESC (`/`ESC )`/прочих: `0` = line-drawing, иначе US-ASCII. */
@@ -247,7 +267,7 @@ class TerminalEmulator(
             b and 0xE0 == 0xC0 -> 2 to (b and 0x1F)
             b and 0xF0 == 0xE0 -> 3 to (b and 0x0F)
             b and 0xF8 == 0xF0 -> 4 to (b and 0x07)
-            else -> { putChar('�'); return }
+            else -> { putCodePoint(0xFFFD); return }
         }
         utf8Remaining = len - 1
         utf8CodePoint = init
@@ -256,7 +276,7 @@ class TerminalEmulator(
 
     private fun utf8(b: Int) {
         if (b and 0xC0 != 0x80) {
-            putChar('�')
+            putCodePoint(0xFFFD)
             parser = State.Ground
             process(b)
             return
@@ -264,7 +284,7 @@ class TerminalEmulator(
         utf8CodePoint = (utf8CodePoint shl 6) or (b and 0x3F)
         if (--utf8Remaining == 0) {
             parser = State.Ground
-            putChar(if (utf8CodePoint in 0..0xFFFF) utf8CodePoint.toChar() else '�')
+            putCodePoint(utf8CodePoint)
         }
     }
 
@@ -450,27 +470,70 @@ class TerminalEmulator(
 
     // --- Печать и перемещение ---------------------------------------------
 
-    private fun putChar(ch: Char) {
+    private fun putCodePoint(cp: Int) {
+        val w = charWidth(cp)
         if (pendingWrap) {
             cx = 0
             lineFeed()
             pendingWrap = false
         }
+        // Широкий символ не помещается в последнюю колонку: при автопереносе уходим на новую строку,
+        // иначе размещаем его как одиночный в последней клетке (нет места под continuation).
+        if (w == 2 && cx >= cols - 1 && autoWrap) { cx = 0; lineFeed() }
+
+        val text = codePointToString(cp)
         val row = grid[cy]
         if (insertMode) {
-            row.add(cx, TermCell(ch, style))
+            repeat(w) { row.add(cx, blankCell()) }
             while (row.size > cols) row.removeAt(row.size - 1)
-        } else {
-            row[cx] = TermCell(ch, style)
         }
-        lastPrintedChar = ch
-        if (cx >= cols - 1) { if (autoWrap) pendingWrap = true } else cx++
+        if (w == 2 && cx < cols - 1) {
+            row[cx] = TermCell(text, style, CellWidth.Wide)
+            row[cx + 1] = TermCell("", style, CellWidth.Continuation)
+        } else {
+            row[cx] = TermCell(text, style, CellWidth.Single)
+        }
+        lastPrintedCp = cp
+        val rightmost = (cx + w - 1).coerceAtMost(cols - 1)
+        if (rightmost >= cols - 1) { cx = cols - 1; if (autoWrap) pendingWrap = true } else cx = rightmost + 1
     }
 
     /** REP (CSI Ps b): повторить последний печатный символ Ps раз. Кламп — не больше площади экрана. */
     private fun repeatLastChar(n: Int) {
-        val ch = lastPrintedChar ?: return
-        repeat(n.coerceIn(1, cols * rows)) { putChar(ch) }
+        val cp = lastPrintedCp ?: return
+        repeat(n.coerceIn(1, cols * rows)) { putCodePoint(cp) }
+    }
+
+    /**
+     * Ширина символа в колонках по упрощённой таблице East Asian Width + emoji: 2 для CJK/Hangul/
+     * kana/fullwidth-форм и эмодзи-блоков, иначе 1. Комбинируемые/нулевой ширины пока считаем за 1
+     * (отдельный слой объединения — позже).
+     */
+    private fun charWidth(cp: Int): Int = if (
+        cp in 0x1100..0x115F ||              // Hangul Jamo
+        cp in 0x2E80..0x303E ||              // CJK радикалы, Kangxi, punctuation
+        cp in 0x3041..0x33FF ||              // Hiragana/Katakana, CJK symbols
+        cp in 0x3400..0x4DBF ||              // CJK Ext A
+        cp in 0x4E00..0x9FFF ||              // CJK Unified
+        cp in 0xA000..0xA4CF ||              // Yi
+        cp in 0xAC00..0xD7A3 ||              // Hangul syllables
+        cp in 0xF900..0xFAFF ||              // CJK compatibility
+        cp in 0xFE10..0xFE19 ||              // vertical forms
+        cp in 0xFE30..0xFE6F ||              // CJK compat forms
+        cp in 0xFF00..0xFF60 ||              // fullwidth forms
+        cp in 0xFFE0..0xFFE6 ||              // fullwidth signs
+        cp in 0x1F300..0x1FAFF ||            // emoji, symbols, pictographs
+        cp in 0x20000..0x3FFFD               // CJK Ext B и далее
+    ) 2 else 1
+
+    /** Codepoint → строка: BMP — один Char, астральный — суррогатная пара, невалидный — U+FFFD. */
+    private fun codePointToString(cp: Int): String = when {
+        cp in 0..0xFFFF && cp !in 0xD800..0xDFFF -> cp.toChar().toString()
+        cp in 0x10000..0x10FFFF -> {
+            val v = cp - 0x10000
+            charArrayOf((0xD800 + (v shr 10)).toChar(), (0xDC00 + (v and 0x3FF)).toChar()).concatToString()
+        }
+        else -> "�"
     }
 
     private fun lineFeed() {
@@ -657,7 +720,7 @@ class TerminalEmulator(
         scrollback.clear()
         cx = 0; cy = 0
         pendingWrap = false
-        lastPrintedChar = null
+        lastPrintedCp = null
         style = TermStyle()
         resetRegion()
         tabStops = defaultTabStops(cols)

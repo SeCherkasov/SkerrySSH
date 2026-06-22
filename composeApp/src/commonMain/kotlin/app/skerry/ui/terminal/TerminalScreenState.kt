@@ -114,7 +114,7 @@ class TerminalScreenState(
      */
     val output: String
         get() = screen
-            .joinToString("\n") { row -> buildString { row.forEach { append(it.char) } }.trimEnd() }
+            .joinToString("\n") { row -> buildString { row.forEach { append(it.text) } }.trimEnd() }
             .trimEnd('\n')
 
     val state: StateFlow<TerminalState> get() = session.state

@@ -1,5 +1,8 @@
 package app.skerry.shared.terminal
 
+/** Пробельная ли ячейка для выделения слова: пустой текст (continuation-клетка) или пробелы. */
+private fun TermCell.isBlank(): Boolean = text.isBlank()
+
 /** Позиция ячейки в сетке экрана: строка сверху вниз, колонка слева направо (обе с нуля). */
 data class TerminalPos(val row: Int, val col: Int) : Comparable<TerminalPos> {
     override fun compareTo(other: TerminalPos): Int =
@@ -18,11 +21,11 @@ fun wordSelectionAt(screen: List<List<TermCell>>, pos: TerminalPos): TerminalSel
     val line = screen[row]
     if (line.isEmpty()) return TerminalSelection(TerminalPos(row, 0), TerminalPos(row, 0))
     val col = pos.col.coerceIn(0, line.lastIndex)
-    val wordClass = !line[col].char.isWhitespace()
+    val wordClass = !line[col].isBlank()
     var start = col
-    while (start > 0 && !line[start - 1].char.isWhitespace() == wordClass) start--
+    while (start > 0 && !line[start - 1].isBlank() == wordClass) start--
     var end = col
-    while (end < line.lastIndex && !line[end + 1].char.isWhitespace() == wordClass) end++
+    while (end < line.lastIndex && !line[end + 1].isBlank() == wordClass) end++
     return TerminalSelection(TerminalPos(row, start), TerminalPos(row, end + 1))
 }
 
@@ -82,7 +85,7 @@ data class TerminalSelection(val anchor: TerminalPos, val focus: TerminalPos) {
             val row = screen[r]
             val from = (if (r == s.row) s.col else 0).coerceIn(0, row.size)
             val to = (if (r == e.row) e.col else row.size).coerceIn(from, row.size)
-            buildString { for (c in from until to) append(row[c].char) }.trimEnd()
+            buildString { for (c in from until to) append(row[c].text) }.trimEnd()
         }
     }
 }

@@ -19,7 +19,7 @@ class TerminalEmulatorTest {
 
     /** Видимый текст экрана: строки через \n, хвостовые пробелы и пустые строки обрезаны. */
     private fun TerminalEmulator.asText(): String =
-        lines.joinToString("\n") { row -> row.joinToString("") { it.char.toString() }.trimEnd() }.trimEnd('\n')
+        lines.joinToString("\n") { row -> row.joinToString("") { it.text }.trimEnd() }.trimEnd('\n')
 
     // --- Базовая печать ----------------------------------------------------
 
@@ -447,7 +447,7 @@ class TerminalEmulatorTest {
         emu.feed(byteArrayOf(0xD0.toByte()))
         emu.feed(byteArrayOf(0x9F.toByte()))
         assertEquals("П", emu.asText())
-        assertEquals('П', emu.lines[0][0].char)
+        assertEquals("П", emu.lines[0][0].text)
     }
 
     // --- DEC line-drawing charset (DEC Special Graphics) -------------------
@@ -494,5 +494,48 @@ class TerminalEmulatorTest {
         // ASCII, поэтому следующий q печатается буквой, а не глифом. \r возвращает курсор в колонку 0.
         val emu = emulate(chunks = arrayOf("${esc}7$esc(0q", "${esc}8\rq"))
         assertEquals("q", emu.asText())
+    }
+
+    // --- Unicode-ширина (CJK/emoji двойной ширины + астральные) ------------
+
+    @Test
+    fun `cjk char occupies two cells and advances cursor by two`() {
+        val emu = emulate(chunks = arrayOf("中"))
+        assertEquals("中", emu.lines[0][0].text)
+        assertEquals(CellWidth.Wide, emu.lines[0][0].width)
+        assertEquals("", emu.lines[0][1].text)
+        assertEquals(CellWidth.Continuation, emu.lines[0][1].width)
+        assertEquals(2, emu.cursorCol)
+    }
+
+    @Test
+    fun `narrow ascii stays single width`() {
+        val emu = emulate(chunks = arrayOf("a"))
+        assertEquals(CellWidth.Single, emu.lines[0][0].width)
+        assertEquals(1, emu.cursorCol)
+    }
+
+    @Test
+    fun `astral emoji decodes to one wide cell not replacement char`() {
+        // U+1F600 GRINNING FACE — астральный (суррогатная пара), раньше превращался в '�'.
+        val emu = emulate(chunks = arrayOf("😀"))
+        assertEquals("😀", emu.lines[0][0].text)
+        assertEquals(CellWidth.Wide, emu.lines[0][0].width)
+        assertEquals(2, emu.cursorCol)
+    }
+
+    @Test
+    fun `wide char that does not fit the last column wraps to next line`() {
+        // cols=2: первый 中 заполняет обе колонки (pending-wrap), второй переносится на строку ниже.
+        val emu = emulate(cols = 2, rows = 3, chunks = arrayOf("中中"))
+        assertEquals("中\n中", emu.asText())
+        assertEquals("中", emu.lines[1][0].text)
+    }
+
+    @Test
+    fun `wide char does not start in the last column with content after a narrow`() {
+        // cols=3: a в col0, b в col1, 中 не влезает в col2 -> перенос на следующую строку.
+        val emu = emulate(cols = 3, rows = 3, chunks = arrayOf("ab中"))
+        assertEquals("ab\n中", emu.asText())
     }
 }
