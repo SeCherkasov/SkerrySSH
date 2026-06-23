@@ -146,36 +146,43 @@ private fun MobileChrome(
         credentials?.reload()
     }
 
-    // Хост без привязанного секрета → спрашиваем пароль листом перед подключением.
-    var pendingHost by remember { mutableStateOf<Host?>(null) }
+    // Хост без привязанного секрета → спрашиваем пароль листом перед подключением. Вместе с хостом
+    // запоминаем пункт назначения (терминал/файлы), чтобы после ввода пароля уйти туда, откуда звали.
+    var pending by remember { mutableStateOf<PendingConnect?>(null) }
 
     // Стабильная лямбда коннекта (без remember пересоздавалась бы и инвалидировала потребителей
-    // [LocalConnectHost]). Живую сессию хоста переиспользуем, мёртвую/отсутствующую — открываем
-    // заново ([mobileConnectAction]): на телефоне одна сессия за раз, без накопления сокетов.
-    val connectHost = remember(sessions, credentials, state) {
-        { host: Host ->
+    // [LocalConnectHost]/[LocalOpenSftp]). Живую сессию хоста переиспользуем, мёртвую/отсутствующую —
+    // открываем заново ([mobileConnectAction]): на телефоне одна сессия за раз, без накопления сокетов.
+    // [dest] — куда уйти после подключения: Connect → терминал, SFTP → таб Files (тот же путь, включая
+    // запрос пароля, расходится только финальной навигацией [navigateAfterConnect]).
+    val connect = remember(sessions, credentials, state) {
+        { host: Host, dest: MobileConnectDest ->
             val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
             when (mobileConnectAction(existing?.controller?.uiState)) {
                 MobileConnectAction.Resume -> {
                     existing?.let { sessions.activate(it.id) }
-                    state.push(MobileRoute.Terminal)
+                    navigateAfterConnect(state, dest)
                 }
                 MobileConnectAction.OpenFresh -> {
                     existing?.let { sessions.close(it.id) }
                     // Одноуровневый резолв: хост → keychain-секрет по credentialId → SshAuth; нет привязки → пароль.
                     val credential = credentials?.find(host.credentialId)
                     if (credential != null) {
-                        openMobileSession(sessions, state, host, credential.toSshAuth())
+                        openMobileSession(sessions, state, host, credential.toSshAuth(), dest)
                     } else {
-                        pendingHost = host
+                        pending = PendingConnect(host, dest)
                     }
                 }
             }
         }
     }
+    // Производные стабильные лямбды для двух точек входа: Connect (→ терминал) и SFTP (→ таб Files).
+    val connectHost = remember(connect) { { host: Host -> connect(host, MobileConnectDest.Terminal) } }
+    val openSftp = remember(connect) { { host: Host -> connect(host, MobileConnectDest.Files) } }
 
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
+        LocalOpenSftp provides openSftp,
         // Keychain открытого vault — нужен листу «New connection» для выбора/создания секрета (паритет desktop).
         LocalCredentials provides credentials,
     ) {
@@ -194,19 +201,28 @@ private fun MobileChrome(
             if (state.sheetNewConn) {
                 MobileNewConnectionSheet(state)
             }
-            pendingHost?.let { host ->
+            pending?.let { (host, dest) ->
                 MobilePasswordSheet(
                     host = host,
-                    onDismiss = { pendingHost = null },
-                    onConnect = { pw -> pendingHost = null; openMobileSession(sessions, state, host, SshAuth.Password(pw)) },
+                    onDismiss = { pending = null },
+                    onConnect = { pw -> pending = null; openMobileSession(sessions, state, host, SshAuth.Password(pw), dest) },
                 )
             }
         }
     }
 }
 
-/** Открыть сессию к [host] с [auth] и перейти на push-экран терминала. */
-private fun openMobileSession(sessions: SessionsController?, state: MobileDesignState, host: Host, auth: SshAuth) {
+/** Хост, ждущий ввода пароля, вместе с пунктом назначения после подключения (терминал/файлы). */
+private data class PendingConnect(val host: Host, val dest: MobileConnectDest)
+
+/** Открыть сессию к [host] с [auth] и перейти к месту назначения ([dest]): терминал или таб Files. */
+private fun openMobileSession(
+    sessions: SessionsController?,
+    state: MobileDesignState,
+    host: Host,
+    auth: SshAuth,
+    dest: MobileConnectDest,
+) {
     sessions?.open(
         hostId = host.id,
         title = host.label,
@@ -214,7 +230,7 @@ private fun openMobileSession(sessions: SessionsController?, state: MobileDesign
         target = host.toTarget(),
         auth = auth,
     )
-    state.push(MobileRoute.Terminal)
+    navigateAfterConnect(state, dest)
 }
 
 // ──────────────────────────────── контент (плейсхолдеры слайса 1) ────────────────────────────────

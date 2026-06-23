@@ -41,6 +41,19 @@ fun mobileConnectAction(existing: ConnectionUiState?): MobileConnectAction =
         MobileConnectAction.OpenFresh
     }
 
+/** Куда вести с экрана хоста после открытия/возобновления сессии: Connect → терминал, SFTP → файлы. */
+enum class MobileConnectDest { Terminal, Files }
+
+/**
+ * Навигация после того, как сессия хоста открыта или возобновлена. Connect ведёт на push-экран
+ * терминала, SFTP — на корневой таб Files (Remote-браузер активной сессии, закрывая деталь хоста).
+ * Вынесено из вью, чтобы единый путь подключения (включая лист запроса пароля) знал пункт назначения.
+ */
+fun navigateAfterConnect(state: MobileDesignState, dest: MobileConnectDest): Unit = when (dest) {
+    MobileConnectDest.Terminal -> state.push(MobileRoute.Terminal)
+    MobileConnectDest.Files -> state.select(MobileTab.Files)
+}
+
 /**
  * Control-последовательность для Ctrl+[c] клавишной панели терминала (sticky-ctrl): C0-код = код
  * символа в верхнем регистре, маскированный 0x1F. Так Ctrl+C → ETX (0x03), Ctrl+[ → ESC (0x1B).

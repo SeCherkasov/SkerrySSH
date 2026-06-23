@@ -54,7 +54,8 @@ fun mobileHostDetailRows(host: Host): List<HostDetailRow> = listOf(
  * берётся из живого [LocalHosts] по [MobileDesignState.selectedHostId] (или превью-каталог вне гейта).
  * Connect — seam в [MobileRoute.Terminal] (живой коннект подключается со слайсом терминала); Tunnels —
  * в [MobileRoute.Ports]; Delete удаляет профиль через [app.skerry.ui.host.HostManagerController] и
- * возвращает к списку. SFTP/Snippets/edit — host-scoped экраны своих слайсов (пока без действия).
+ * возвращает к списку. SFTP подключается к хосту (как Connect) и ведёт на таб Files;
+ * Snippets/edit — экраны своих слайсов (пока без действия).
  */
 @Composable
 fun MobileHostDetailScreen(state: MobileDesignState) {
@@ -136,12 +137,15 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             }
         }
 
-        // Быстрые действия: Tunnels ведёт на Ports; SFTP/Snippets — host-scoped экраны своих слайсов.
+        // Быстрые действия: SFTP подключается к хосту (как Connect, с резолвом секрета/паролем) и
+        // ведёт сразу на таб Files — Remote-браузер активной сессии, как SFTP-кнопка тулбара desktop.
+        // Tunnels — на Ports; Snippets — экран своего слайса (Phase 2).
+        val openSftp = LocalOpenSftp.current
         Row(
             Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            QuickAction("folder", "SFTP", Modifier.weight(1f), onClick = null)
+            QuickAction("folder", "SFTP", Modifier.weight(1f), onClick = { openSftp(host) })
             QuickAction("lan", "Tunnels", Modifier.weight(1f), onClick = { state.push(MobileRoute.Ports) })
             QuickAction("code_blocks", "Snippets", Modifier.weight(1f), onClick = null)
         }

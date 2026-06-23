@@ -78,3 +78,10 @@ val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticC
  * открывает сессию. Поставляется корнем chrome ([DesktopDesignApp]); дефолт — no-op (мок-путь/превью).
  */
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
+
+/**
+ * Действие «открыть SFTP хоста»: тот же путь подключения, что и [LocalConnectHost] (резолв секрета,
+ * возобновление живой сессии), но в конце ведёт на таб Files (Remote-браузер), а не на терминал —
+ * чтобы кнопка SFTP детали хоста сразу показывала файлы без отдельного Connect. Дефолт — no-op (превью).
+ */
+val LocalOpenSftp: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }

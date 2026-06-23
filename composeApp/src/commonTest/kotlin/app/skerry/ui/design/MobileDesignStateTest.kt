@@ -92,6 +92,25 @@ class MobileDesignStateTest {
     }
 
     @Test
+    fun navigate_after_connect_terminal_pushes_terminal_route() {
+        // Connect с экрана хоста ведёт на push-экран терминала.
+        val s = MobileDesignState()
+        navigateAfterConnect(s, MobileConnectDest.Terminal)
+        assertEquals(MobileRoute.Terminal, s.route)
+    }
+
+    @Test
+    fun navigate_after_connect_files_opens_files_tab() {
+        // SFTP с экрана хоста ведёт на корневой таб Files (Remote-браузер активной сессии),
+        // закрывая push-экран детали хоста.
+        val s = MobileDesignState()
+        s.push(MobileRoute.HostDetail)
+        navigateAfterConnect(s, MobileConnectDest.Files)
+        assertEquals(MobileTab.Files, s.tab)
+        assertNull(s.route)
+    }
+
+    @Test
     fun new_connection_sheet_opens_and_closes() {
         val s = MobileDesignState()
         s.openNewConn()

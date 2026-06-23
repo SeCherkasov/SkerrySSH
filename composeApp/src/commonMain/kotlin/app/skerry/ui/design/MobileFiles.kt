@@ -9,14 +9,20 @@ import app.skerry.ui.sftp.humanSize
  * desktop-`SftpView`, но для одной панели за раз (телефонный single-pane с переключателем Remote/Local):
  * - [Preview] — нет менеджера сессий (офскрин-рендер/превью без бэкенда) → статичный мок макета;
  * - [Live] — есть активная подключённая сессия → живой листинг поверх [app.skerry.ui.files.TransferCoordinator];
- * - [NoSession] — менеджер есть, но активная сессия не подключена → уведомление «нет сессии».
+ * - [Connecting] — активная сессия ещё подключается (после тапа SFTP/Connect) → «Connecting…»,
+ *   чтобы не мигать «No active session» на время сетевого хендшейка/аутентификации;
+ * - [NoSession] — менеджер есть, но активной сессии нет (или она в форме/ошибке) → уведомление «нет сессии».
  */
-enum class MobileFilesMode { Preview, NoSession, Live }
+enum class MobileFilesMode { Preview, NoSession, Connecting, Live }
 
-/** Выбрать режим экрана Files по наличию менеджера сессий и факту подключения активной сессии. */
-fun mobileFilesMode(hasSessions: Boolean, connected: Boolean): MobileFilesMode = when {
+/**
+ * Выбрать режим экрана Files по наличию менеджера сессий и состоянию активной сессии. [connecting] —
+ * активная сессия в процессе подключения (приоритет ниже [connected], чтобы готовая сразу шла в Live).
+ */
+fun mobileFilesMode(hasSessions: Boolean, connected: Boolean, connecting: Boolean): MobileFilesMode = when {
     !hasSessions -> MobileFilesMode.Preview
     connected -> MobileFilesMode.Live
+    connecting -> MobileFilesMode.Connecting
     else -> MobileFilesMode.NoSession
 }
 

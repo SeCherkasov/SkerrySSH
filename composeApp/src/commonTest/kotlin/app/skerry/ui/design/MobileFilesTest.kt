@@ -16,15 +16,28 @@ class MobileFilesTest {
     @Test
     fun files_mode_picks_preview_when_no_session_manager() {
         // Путь превью/офскрин без бэкенда — статичный мок макета.
-        assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = false))
-        assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = true))
+        assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = false, connecting = false))
+        assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = true, connecting = false))
     }
 
     @Test
     fun files_mode_is_live_only_when_connected() {
-        assertEquals(MobileFilesMode.Live, mobileFilesMode(hasSessions = true, connected = true))
-        // Менеджер есть, но активная сессия не подключена — нечего листать.
-        assertEquals(MobileFilesMode.NoSession, mobileFilesMode(hasSessions = true, connected = false))
+        assertEquals(MobileFilesMode.Live, mobileFilesMode(hasSessions = true, connected = true, connecting = false))
+    }
+
+    @Test
+    fun files_mode_shows_connecting_while_session_opens() {
+        // Открытая сессия ещё подключается — показываем «Connecting…», а не мигаем «No active session».
+        assertEquals(
+            MobileFilesMode.Connecting,
+            mobileFilesMode(hasSessions = true, connected = false, connecting = true),
+        )
+    }
+
+    @Test
+    fun files_mode_is_no_session_when_inactive_or_failed() {
+        // Нет активной сессии, либо она в форме/ошибке (ни connected, ни connecting) — листать нечего.
+        assertEquals(MobileFilesMode.NoSession, mobileFilesMode(hasSessions = true, connected = false, connecting = false))
     }
 
     // ── мета-подпись строки (честная проекция на FileItem) ──
