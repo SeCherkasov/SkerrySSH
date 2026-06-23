@@ -231,6 +231,9 @@ private fun seededVault(keyGenerator: SshKeyGenerator): CredentialManagerControl
     return credentials
 }
 
+// NOT_A_SECRET: учебный ed25519-ключ, сгенерирован для офскрин-посева тестов; не используется в
+// продакшн-сборке (только desktopMain Screenshot), не даёт доступа ни к чему. Маркер — чтобы
+// gitleaks/trufflehog не давали ложных срабатываний.
 // Учебный ed25519-сертификат (CA-подписанный, principals alice/deploy) — только для офскрин-посева
 // раздела Vault → Certificates реальными компонентами без файлов/мастер-пароля. Те же значения, что
 // в CertificateFixtures (shared/desktopTest) — источник правды там; при регенерации обновить оба.

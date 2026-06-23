@@ -23,10 +23,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +47,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
+import app.skerry.ui.vault.copyPasswordToClipboard
 import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -96,10 +97,11 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
 
     // Любой открытый оверлей (диалоги создания/удаления + лист деталей) прячет таб-бар: иначе он
     // плавает поверх центрированного диалога и перекрывает нижние поля ввода над клавиатурой.
-    // DisposableEffect снимает флаг при уходе с таба, чтобы таб-бар не остался скрытым.
+    // LaunchedEffect пишет флаг только при смене значения (не на каждой рекомпозиции списка);
+    // DisposableEffect снимает его при уходе с таба, чтобы таб-бар не остался скрытым.
     val modalOpen = showGenerate || showAddPassword || showImportCert || pendingDelete != null || selectedCred != null
-    SideEffect { state.modalOpen = modalOpen }
-    DisposableEffect(Unit) { onDispose { state.modalOpen = false } }
+    LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
+    DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
@@ -285,6 +287,10 @@ private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: Fon
     val generator = LocalSshKeyGenerator.current
     val inspector = LocalSshCertificateInspector.current
     val usedBy = VaultPresentation.usedByLabel(usedByCount)
+    // Считаем метаданные ОДИН раз на карточку (каждый хелпер — отдельный produceState-слот, поэтому
+    // повторный вызов завёл бы второй разбор того же секрета). null для неподходящего типа — без работы.
+    val keyInfo = rememberKeyInfo(credential, generator)
+    val certInfo = rememberCertInfo(credential, inspector)
     val (icon, iconColor) = when (credential.secret) {
         is CredentialSecret.Certificate -> "workspace_premium" to D.moss
         is CredentialSecret.PrivateKey -> "key" to D.cyanBright
@@ -306,30 +312,22 @@ private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: Fon
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 Txt(credential.label, color = D.text, size = 14.5.sp, weight = FontWeight.SemiBold)
                 when (credential.secret) {
-                    is CredentialSecret.PrivateKey -> {
-                        val info = rememberKeyInfo(credential, generator)
-                        info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, size = 9.sp) }
-                    }
+                    is CredentialSecret.PrivateKey ->
+                        keyInfo?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, size = 9.sp) }
                     is CredentialSecret.Certificate -> {
-                        val info = rememberCertInfo(credential, inspector)
-                        info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, size = 9.sp) }
-                        if (info?.expired == true) Badge("EXPIRED", bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, size = 9.sp)
+                        certInfo?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, size = 9.sp) }
+                        if (certInfo?.expired == true) Badge("EXPIRED", bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, size = 9.sp)
                     }
                     is CredentialSecret.Password -> Unit
                 }
             }
             val meta = when (credential.secret) {
-                is CredentialSecret.PrivateKey -> {
-                    val info = rememberKeyInfo(credential, generator)
-                    if (info != null) "${shortFingerprint(info.fingerprintSha256)} · $usedBy" else usedBy
-                }
-                is CredentialSecret.Certificate -> {
-                    val info = rememberCertInfo(credential, inspector)
-                    when {
-                        info == null -> "Certificate · $usedBy"
-                        info.principals.isEmpty() -> "any principal · $usedBy"
-                        else -> "${info.principals.joinToString(", ")} · $usedBy"
-                    }
+                is CredentialSecret.PrivateKey ->
+                    if (keyInfo != null) "${shortFingerprint(keyInfo.fingerprintSha256)} · $usedBy" else usedBy
+                is CredentialSecret.Certificate -> when {
+                    certInfo == null -> "Certificate · $usedBy"
+                    certInfo.principals.isEmpty() -> "any principal · $usedBy"
+                    else -> "${certInfo.principals.joinToString(", ")} · $usedBy"
                 }
                 is CredentialSecret.Password -> "Password · $usedBy"
             }
@@ -443,7 +441,9 @@ private fun MobileSecretDetailSheet(
                             }
                         }
                         is CredentialSecret.Password -> {
-                            PrimaryButton("Copy password", onClick = { onCopy(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                            // Пароль — чувствительный: платформенный путь (Android: sensitive-клип +
+                            // автоочистка), а не обычный буфер, как для публичного ключа/сертификата.
+                            PrimaryButton("Copy password", onClick = { copyPasswordToClipboard(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                             GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
                         }
                     }

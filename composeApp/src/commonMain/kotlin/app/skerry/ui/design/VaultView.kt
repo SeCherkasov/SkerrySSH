@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -71,6 +72,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
+import app.skerry.ui.vault.copyPasswordToClipboard
 import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -410,20 +412,32 @@ private fun VaultEmptyCategory(category: VaultCategoryKind) {
     }
 }
 
-/** Открытые метаданные приватного ключа (отпечаток/тип/публичная строка); для пароля — null. */
+/**
+ * Открытые метаданные приватного ключа (отпечаток/тип/публичная строка); для пароля/сертификата — null.
+ * Разбор PEM в sshj (BER/DER + SHA-256 + регистрация BC) недёшев, особенно на Android, поэтому считаем
+ * его на [Dispatchers.Default] через [produceState], а не в `remember {}` на потоке композиции (иначе
+ * дроп кадров при рендере списка ключей). До готовности значение `null` — UI рисует плейсхолдер.
+ * Ключи перевычисления — id+secret: при обновлении записи (тот же id, новый секрет) пересчитываем.
+ */
 @Composable
-internal fun rememberKeyInfo(credential: Credential, generator: SshKeyGenerator?): SshPublicKeyInfo? =
-    // Ключ включает secret, а не только id: при обновлении записи (тот же id, новый секрет) пересчитываем.
-    remember(credential.id, credential.secret, generator) {
-        (credential.secret as? CredentialSecret.PrivateKey)?.let { generator?.inspect(it.privateKeyPem, it.passphrase) }
-    }
+internal fun rememberKeyInfo(credential: Credential, generator: SshKeyGenerator?): SshPublicKeyInfo? {
+    val secret = credential.secret as? CredentialSecret.PrivateKey ?: return null
+    return produceState<SshPublicKeyInfo?>(null, credential.id, credential.secret, generator) {
+        value = withContext(Dispatchers.Default) { generator?.inspect(secret.privateKeyPem, secret.passphrase) }
+    }.value
+}
 
-/** Открытые метаданные сертификата (principals/срок/serial/CA); null — не сертификат или битый. */
+/**
+ * Открытые метаданные сертификата (principals/срок/serial/CA); null — не сертификат, битый или ещё
+ * считается. Разбор — на [Dispatchers.Default] через [produceState] (см. [rememberKeyInfo]).
+ */
 @Composable
-internal fun rememberCertInfo(credential: Credential, inspector: SshCertificateInspector?): SshCertificateInfo? =
-    remember(credential.id, credential.secret, inspector) {
-        (credential.secret as? CredentialSecret.Certificate)?.let { inspector?.inspect(it.certificate) }
-    }
+internal fun rememberCertInfo(credential: Credential, inspector: SshCertificateInspector?): SshCertificateInfo? {
+    val secret = credential.secret as? CredentialSecret.Certificate ?: return null
+    return produceState<SshCertificateInfo?>(null, credential.id, credential.secret, inspector) {
+        value = withContext(Dispatchers.Default) { inspector?.inspect(secret.certificate) }
+    }.value
+}
 
 // ---------------------------------------------------------------------------------------------
 // Панель деталей выбранного keychain-секрета и выбранной учётки.
@@ -492,7 +506,9 @@ private fun LiveSecretDetail(
                     }
                 }
                 is CredentialSecret.Password -> {
-                    PrimaryButton("Copy password", onClick = { onCopy(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                    // Пароль — чувствительный: копируем платформенным путём (Android: sensitive-клип +
+                    // автоочистка), а не обычным буфером, как публичный ключ/сертификат.
+                    PrimaryButton("Copy password", onClick = { copyPasswordToClipboard(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                     GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
                 }
             }
