@@ -47,7 +47,6 @@ import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.TransferState
 import app.skerry.ui.files.platformLocalBrowser
 import app.skerry.ui.sftp.TransferDirection
-import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.sftp.pickDownloadTarget
 import app.skerry.ui.sftp.pickUploadSource
 import kotlinx.coroutines.launch
@@ -56,20 +55,16 @@ import kotlin.coroutines.cancellation.CancellationException
 /** Фон карточки передачи (`#0B1A26` = [D.surface2]); трек прогресс-полосы — белый 7%. */
 private val TransferTrack = Color(0x12FFFFFF)
 
-/** Трек сегмент-переключателя Remote/Local (белый 5%, как в макете). */
-private val SegmentTrack = Color(0x0DFFFFFF)
-
 /**
- * Корневой таб Files мобильного макета `docs/new/Skerry Mobile.html` (слайс 4): single-pane браузер
- * с переключателем Remote/Local поверх живого SFTP активной сессии. В отличие от двухпанельного
- * desktop-[SftpView], телефон показывает одну панель за раз (как в макете), но опирается на тот же
- * кэшированный [TransferCoordinator] сессии — обе панели и передача реальны.
+ * Корневой таб Files: single-pane браузер Remote-SFTP активной сессии поверх кэшированного
+ * [TransferCoordinator]. Локальная панель устройства убрана (scoped-storage Android делает её
+ * бесполезной), переключатель Remote/Local тоже — экран всегда показывает каталог хоста.
  *
  * Режим выбирается [mobileFilesMode]: без менеджера сессий — статичный мок ([MockMobileFilesView]),
- * с подключённой активной сессией — живой листинг, иначе — уведомление «нет сессии». Видимые действия
- * макета: тап по папке — вход, тап по файлу (иконка `ios_share`) — передача (скачать с Remote / залить
- * с Local), FAB `upload` — выбор файла с устройства и заливка в текущий каталог Remote. Переименование/
- * удаление спрятаны в контекстное меню (long-press), как и на desktop — в макете их нет.
+ * с подключённой активной сессией — живой листинг, иначе — уведомление «нет сессии». Видимые действия:
+ * тап по папке — вход, тап по файлу (иконка `ios_share`) — скачать через системный «Save to…», FAB —
+ * создать каталог / залить файл с устройства. Переименование/удаление и «Download to device» спрятаны
+ * в контекстное меню (long-press), как и на desktop.
  */
 @Composable
 fun MobileFilesScreen() {
@@ -90,14 +85,13 @@ fun MobileFilesScreen() {
 
 /**
  * Живой Files-экран поверх кэшированного [TransferCoordinator] сессии (открывается один раз и живёт
- * на scope сессии — переключение таба путь/выделение не сбрасывает). [showRemote] выбирает активную
- * панель: Remote (хост) по умолчанию, как в макете; Local — локальная ФС.
+ * на scope сессии — переключение таба путь/выделение не сбрасывает). Показывает только Remote-панель
+ * (каталог хоста); Local-панель координатора используется лишь как приёмник «Download to device».
  */
 @Composable
 private fun LiveMobileFilesView(controller: ConnectionController, subtitle: String, mono: FontFamily) {
     var coord by remember(controller) { mutableStateOf<TransferCoordinator?>(null) }
     var openError by remember(controller) { mutableStateOf<String?>(null) }
-    var showRemote by remember(controller) { mutableStateOf(true) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
     var fabOpen by remember(controller) { mutableStateOf(false) }
     // UI-scope только для нативного пикера файла (FAB Upload); сама передача живёт на scope сессии
@@ -118,39 +112,33 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     Box(Modifier.fillMaxSize().background(D.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobileFilesTitle()
-            MobileFilesToggle(showRemote, onSelect = { showRemote = it })
             when {
                 openError != null -> MobileFilesNotice("error", "SFTP unavailable", openError, D.sunset)
                 c == null -> MobileFilesNotice("sync", "Opening SFTP…", null, D.faint)
                 else -> {
-                    val pane = if (showRemote) c.remote else c.local
-                    // Видимое действие строки-файла (ios_share). Remote: скачать НАРУЖУ из песочницы
-                    // через системный «Save to…» ([pickDownloadTarget] → SAF на Android, нативный диалог
-                    // на desktop) — пикер suspend, поэтому через uiScope. Local: залить файл на сервер.
-                    // Стабилизируем по (c, showRemote, uiScope), чтобы лямбда не пересоздавалась на каждой
-                    // рекомпозиции (напр. при обновлении карточки передачи) и зря не инвалидировала список.
-                    val onTransfer = remember(c, showRemote, uiScope) {
+                    val pane = c.remote
+                    // Видимое действие строки-файла (ios_share): скачать НАРУЖУ из песочницы через
+                    // системный «Save to…» ([pickDownloadTarget] → SAF на Android, нативный диалог на
+                    // desktop) — пикер suspend, поэтому через uiScope. Стабилизируем по (c, uiScope),
+                    // чтобы лямбда не пересоздавалась на каждой рекомпозиции (напр. при обновлении
+                    // карточки передачи) и зря не инвалидировала список.
+                    val onTransfer = remember(c, uiScope) {
                         { item: FileItem ->
-                            if (showRemote) {
-                                uiScope.launch { pickDownloadTarget(item.name)?.let { c.downloadToTarget(item, it) } }
-                            } else {
-                                c.local.selectOnly(item)
-                                c.uploadSelection()
-                            }
+                            uiScope.launch { pickDownloadTarget(item.name)?.let { c.downloadToTarget(item, it) } }
                             Unit
                         }
                     }
-                    // «Download to device» (long-press на remote-файле): скачать БЕЗ диалога в текущий
-                    // каталог Local-панели (на Android — папка приложения), чтобы файл сразу был виден там.
+                    // «Download to device» (long-press на файле): скачать БЕЗ диалога в каталог
+                    // приложения (Local-панель координатора), чтобы файл сразу лежал на устройстве.
                     val downloadHere = remember(c) {
                         { item: FileItem -> c.remote.selectOnly(item); c.downloadSelection() }
                     }
-                    MobileFilesBreadcrumbRow(showRemote, pane.label, pane.path, mono)
+                    MobileFilesBreadcrumbRow(pane.label, pane.path, mono)
                     MobileLivePane(
                         pane = pane,
                         mono = mono,
                         onTransfer = onTransfer,
-                        onDownloadHere = if (showRemote) downloadHere else null,
+                        onDownloadHere = downloadHere,
                         modifier = Modifier.weight(1f),
                     )
                     MobileTransferCard(c.transfer, mono, onDismiss = c::clearTransfer)
@@ -168,9 +156,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                     },
             )
         }
-        // Единый «+»-FAB: раскрывает действия над текущей панелью. «Создать директорию» — на обеих
-        // панелях; «Загрузить файл» — только на Remote (uploadSource целит в remote.path, на Local
-        // не к месту). Действия всплывают НАД кнопкой стопкой с подписями+иконками.
+        // Единый «+»-FAB: раскрывает действия над Remote-панелью — «Создать директорию» и «Загрузить
+        // файл» (uploadSource целит в remote.path). Действия всплывают НАД кнопкой стопкой с подписями.
         if (c != null && openError == null) {
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
@@ -182,20 +169,18 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                         fabOpen = false
                         creatingFolder = true
                     }
-                    if (showRemote) {
-                        MobileFabAction("upload", "Загрузить файл") {
-                            fabOpen = false
-                            uiScope.launch { pickUploadSource()?.let { c.uploadSource(it) } }
-                        }
+                    MobileFabAction("upload", "Загрузить файл") {
+                        fabOpen = false
+                        uiScope.launch { pickUploadSource()?.let { c.uploadSource(it) } }
                     }
                 }
                 MobileFabButton(open = fabOpen, onClick = { fabOpen = !fabOpen })
             }
         }
         if (creatingFolder && c != null) {
-            // Создание каталога в текущей видимой панели (Remote или Local). Переиспользуем общий
-            // NameDialog (валидирует пустоту/«/»/«.»/«..»/управляющие), как desktop «New folder».
-            val pane = if (showRemote) c.remote else c.local
+            // Создание каталога в Remote-панели. Переиспользуем общий NameDialog
+            // (валидирует пустоту/«/»/«.»/«..»/управляющие), как desktop «New folder».
+            val pane = c.remote
             NameDialog(
                 title = "New folder",
                 confirmLabel = "Create",
@@ -424,50 +409,15 @@ private fun MobileFilesTitle() {
     }
 }
 
-/** Сегмент-переключатель Remote/Local макета (трек белый 5%, активный — заливка cyan 16%). */
+/** Строка-крошка под заголовком: иконка хоста (dns) + «label : path» активной Remote-сессии. */
 @Composable
-private fun MobileFilesToggle(showRemote: Boolean, onSelect: (Boolean) -> Unit) {
+private fun MobileFilesBreadcrumbRow(label: String, path: String, mono: FontFamily) {
     Row(
-        Modifier
-            .padding(horizontal = 22.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(SegmentTrack)
-            .padding(3.dp),
-    ) {
-        MobileFilesSegment("Remote", active = showRemote, onClick = { onSelect(true) }, modifier = Modifier.weight(1f))
-        MobileFilesSegment("Local", active = !showRemote, onClick = { onSelect(false) }, modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun MobileFilesSegment(label: String, active: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (active) D.cyan.copy(alpha = 0.16f) else Color.Transparent)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(vertical = 7.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Txt(
-            label,
-            color = if (active) D.cyanBright else D.dim,
-            size = 13.sp,
-            weight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-        )
-    }
-}
-
-/** Строка-крошка под переключателем: иконка источника (dns/computer) + «label : path». */
-@Composable
-private fun MobileFilesBreadcrumbRow(remote: Boolean, label: String, path: String, mono: FontFamily) {
-    Row(
-        Modifier.padding(start = 22.dp, end = 22.dp, top = 13.dp, bottom = 2.dp),
+        Modifier.padding(start = 22.dp, end = 22.dp, top = 4.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Sym(if (remote) "dns" else "computer", size = 16.sp, color = if (remote) D.moss else D.dim)
+        Sym("dns", size = 16.sp, color = D.moss)
         Txt(
             mobileFilesBreadcrumb(label, path),
             color = D.dim,
@@ -564,8 +514,7 @@ private fun MockMobileFilesView(mono: FontFamily) {
     Box(Modifier.fillMaxSize().background(D.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobileFilesTitle()
-            MobileFilesToggle(showRemote = true, onSelect = {})
-            MobileFilesBreadcrumbRow(remote = true, label = "prod-web-01", path = "/var/www", mono = mono)
+            MobileFilesBreadcrumbRow(label = "prod-web-01", path = "/var/www", mono = mono)
             Column(Modifier.fillMaxWidth().padding(top = 12.dp, start = 12.dp, end = 12.dp)) {
                 MOCK_REMOTE_FILES.forEach { MockFileRow(it, mono) }
             }
