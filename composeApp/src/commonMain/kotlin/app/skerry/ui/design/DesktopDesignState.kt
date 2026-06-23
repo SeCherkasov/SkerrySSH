@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import app.skerry.shared.host.Host
 
 /** Левый rail / основные view макета. */
 enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
@@ -31,17 +32,29 @@ data class TermLine(val text: String, val isCmd: Boolean, val color: Color = D.t
  * (`private set`) — тем же приёмом, что [app.skerry.ui.session.SessionsController].
  */
 @Stable
-class DesktopDesignState {
+class DesktopDesignState(
+    // Стартовая видимость info-панели (на desktop читается из персиста при запуске) + колбэк её
+    // изменения (там же пишется обратно), чтобы выбор пользователя переживал перезапуск. Дефолты
+    // сохраняют прежнее поведение для мок/превью/тестов.
+    initialInfoPanel: Boolean = true,
+    private val onInfoPanelChange: (Boolean) -> Unit = {},
+) {
     var view: DesktopView by mutableStateOf(DesktopView.Terminal); private set
     var locked: Boolean by mutableStateOf(false); private set
     var modalOpen: Boolean by mutableStateOf(false); private set
     var settingsOpen: Boolean by mutableStateOf(false); private set
     var settingsTab: SettingsTab by mutableStateOf(SettingsTab.AI); private set
     var split: Boolean by mutableStateOf(false); private set
-    var infoPanel: Boolean by mutableStateOf(true); private set
+    var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
     var selectedHost: String by mutableStateOf("prod-web-01"); private set
     var activeTab: Int by mutableStateOf(0); private set
     var modalPolicy: AiPolicy by mutableStateOf(AiPolicy.Strict); private set
+
+    /** Хост, открытый в модалке на правку (null — модалка в режиме «New connection»). */
+    var editingHost: Host? by mutableStateOf(null); private set
+
+    /** Хост, для которого показан диалог подтверждения удаления (null — диалога нет). */
+    var pendingDeleteHost: Host? by mutableStateOf(null); private set
 
     var tabs: List<SessionTab> by mutableStateOf(
         listOf(
@@ -80,14 +93,17 @@ class DesktopDesignState {
 
     fun lock() { locked = true }
     fun unlock() { locked = false }
-    fun openModal() { modalOpen = true }
-    fun closeModal() { modalOpen = false }
+    fun openModal() { editingHost = null; modalOpen = true }
+    fun openEditModal(host: Host) { editingHost = host; modalOpen = true }
+    fun closeModal() { modalOpen = false; editingHost = null }
+    fun requestDeleteHost(host: Host) { pendingDeleteHost = host }
+    fun dismissDeleteHost() { pendingDeleteHost = null }
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
     fun openSettings() { settingsOpen = true }
     fun closeSettings() { settingsOpen = false }
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
-    fun toggleInfo() { infoPanel = !infoPanel }
+    fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
     fun toggleSanitize() { sanitize = !sanitize }
     fun togglePreview() { preview = !preview }
     fun toggleConfirm() { confirm = !confirm }

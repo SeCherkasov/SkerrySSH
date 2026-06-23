@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -179,16 +180,28 @@ private fun LiveHostFolder(folder: HostFolder, state: DesktopDesignState, mono: 
     Column(Modifier.padding(bottom = 2.dp)) {
         FolderHeader(folder.name, folder.hosts.size)
         Column(Modifier.padding(start = 22.dp)) {
+            // key(host.id): позиционная идентичность строк фиксируется на хосте — открытое меню/состояние
+            // строки не «переезжает» на соседа при переупорядочивании каталога после правки.
             folder.hosts.forEach { host ->
-                val onClick = remember(host, connect) { { connect(host) } }
-                HostEntryRow(
-                    label = host.label,
-                    selected = sessions?.active?.hostId == host.id,
-                    dot = sessionDotColor(sessions?.statusFor(host.id)),
-                    badge = null,
-                    onClick = onClick,
-                    mono = mono,
-                )
+                key(host.id) {
+                    // Лямбды стабилизируем по (host, …): иначе каждая рекомпозиция папки пересоздавала бы
+                    // их и заставляла строку (nullable-функции нестабильны) перерисовываться впустую.
+                    val onClick = remember(host, connect) { { connect(host) } }
+                    val onEdit = remember(host, state) { { state.openEditModal(host) } }
+                    val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
+                    HostEntryRow(
+                        label = host.label,
+                        selected = sessions?.active?.hostId == host.id,
+                        dot = sessionDotColor(sessions?.statusFor(host.id)),
+                        badge = null,
+                        onClick = onClick,
+                        mono = mono,
+                        // Правка/удаление профиля — через контекстное меню (right-click/long-press),
+                        // как в шаблоне без отдельных кнопок/⋮.
+                        onEdit = onEdit,
+                        onDelete = onDelete,
+                    )
+                }
             }
         }
     }
@@ -206,7 +219,12 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
     )
 }
 
-/** Общая строка хоста в сайдбаре (мок и живой каталог): точка статуса + имя + опц. бейдж. */
+/**
+ * Общая строка хоста в сайдбаре (мок и живой каталог): точка статуса + имя + опц. бейдж. Клик по
+ * строке — подключение ([onClick]). Когда переданы [onEdit]/[onDelete] (живой каталог), в конце
+ * строки появляется кнопка «⋮», открывающая выпадающее меню Edit/Delete; её собственный клик
+ * перехватывается раньше [onClick], поэтому открытие меню не запускает подключение.
+ */
 @Composable
 private fun HostEntryRow(
     label: String,
@@ -215,14 +233,18 @@ private fun HostEntryRow(
     badge: String?,
     onClick: () -> Unit,
     mono: FontFamily,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
+    val hasMenu = onEdit != null || onDelete != null
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(5.dp))
             .background(if (selected) D.cyan10 else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
+            .padding(start = 8.dp, end = 2.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -232,6 +254,35 @@ private fun HostEntryRow(
             val strict = badge == "STRICT"
             Badge(badge, bg = if (strict) D.strictBg else D.devBg, fg = if (strict) D.strictFg else D.moss)
         }
+        if (hasMenu) {
+            Box {
+                IconBtn("more_vert", onClick = { menuOpen = !menuOpen }, box = 22, icon = 16.sp, tint = D.faint)
+                if (menuOpen) {
+                    Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
+                        Column(
+                            Modifier.clip(RoundedCornerShape(7.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
+                        ) {
+                            onEdit?.let { edit ->
+                                HostMenuItem("Edit", D.text) { menuOpen = false; edit() }
+                            }
+                            onDelete?.let { delete ->
+                                HostMenuItem("Delete", D.sunset) { menuOpen = false; delete() }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Пункт контекстного меню строки хоста. */
+@Composable
+private fun HostMenuItem(label: String, color: Color, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(5.dp)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 7.dp),
+    ) {
+        Txt(label, color = color, size = 12.sp)
     }
 }
 
