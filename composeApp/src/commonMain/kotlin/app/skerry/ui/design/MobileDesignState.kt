@@ -43,8 +43,12 @@ class MobileDesignState {
     /**
      * Открыт ли модальный оверлей таба (например, vault-диалог Generate/Import) — таб-бар при этом
      * прячется, иначе он плавает поверх диалога и перекрывает нижние поля ввода над клавиатурой.
+     * Мутируется только через [modalOverlay] (инкапсуляция, как у остальных полей).
      */
-    var modalOpen: Boolean by mutableStateOf(false)
+    var modalOpen: Boolean by mutableStateOf(false); private set
+
+    /** Пометить, открыт ли модальный оверлей текущего таба (vault-диалоги/лист деталей) — прячет таб-бар. */
+    fun modalOverlay(open: Boolean) { modalOpen = open }
 
     /** Таб-бар виден только на корневых экранах без открытой модалки: push-экраны полноэкранные. */
     val showTabs: Boolean get() = route == null && !modalOpen
