@@ -105,6 +105,9 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     var showGenerate by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
     var showImportCert by remember { mutableStateOf(false) }
+    // null + showIdentityDialog → создание; не-null → правка этой учётки.
+    var showIdentityDialog by remember { mutableStateOf(false) }
+    var editingAccount by remember { mutableStateOf<Identity?>(null) }
     var pendingDeleteCred by remember { mutableStateOf<Credential?>(null) }
     var pendingDeleteAccount by remember { mutableStateOf<Identity?>(null) }
 
@@ -125,6 +128,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     onGenerate = { showGenerate = true },
                     onAddPassword = { showAddPassword = true },
                     onImportCert = { showImportCert = true },
+                    onNewIdentity = { editingAccount = null; showIdentityDialog = true },
                 )
                 HLine()
                 Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -173,6 +177,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                                 credentialLabel = credentials.find(account.credentialId)?.label,
                                 hosts = VaultPresentation.hostsUsing(account.id, hosts),
                                 mono = mono,
+                                onEdit = { editingAccount = account; showIdentityDialog = true },
                                 onDelete = { pendingDeleteAccount = account },
                             )
                         }
@@ -239,6 +244,23 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     )
                     category = VaultCategoryKind.CERTIFICATES
                     showImportCert = false
+                },
+            )
+        }
+        if (showIdentityDialog) {
+            IdentityDialog(
+                initial = editingAccount,
+                credentials = allCreds,
+                onDismiss = { showIdentityDialog = false },
+                onSave = { label, username, credentialId ->
+                    selectedId = identitiesController?.save(
+                        label = label,
+                        username = username,
+                        credentialId = credentialId,
+                        id = editingAccount?.id,
+                    )
+                    category = VaultCategoryKind.IDENTITIES
+                    showIdentityDialog = false
                 },
             )
         }
@@ -349,6 +371,7 @@ private fun VaultHeader(
     onGenerate: () -> Unit,
     onAddPassword: () -> Unit,
     onImportCert: () -> Unit,
+    onNewIdentity: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
@@ -360,8 +383,7 @@ private fun VaultHeader(
             VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton("Generate key", onClick = onGenerate, icon = "add")
             VaultCategoryKind.PASSWORDS -> PrimaryButton("Add password", onClick = onAddPassword, icon = "add")
             VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton("Import certificate", onClick = onImportCert, icon = "add")
-            // Создание учёток добавим следующим слайсом (нужен выбор keychain-секрета в диалоге).
-            VaultCategoryKind.IDENTITIES -> Unit
+            VaultCategoryKind.IDENTITIES -> PrimaryButton("New identity", onClick = onNewIdentity, icon = "add")
         }
     }
 }
@@ -580,6 +602,7 @@ private fun AccountDetail(
     credentialLabel: String?,
     hosts: List<Host>,
     mono: FontFamily,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Column(Modifier.width(340.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
@@ -595,7 +618,10 @@ private fun AccountDetail(
         DetailLabel("Credential")
         Txt(credentialLabel ?: "missing credential", color = if (credentialLabel != null) D.textBright else D.sunset, size = 12.sp, modifier = Modifier.padding(bottom = 16.dp))
         UsedByHosts(hosts, mono)
-        GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PrimaryButton("Edit", onClick = onEdit, icon = "edit", modifier = Modifier.weight(1f))
+            GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+        }
     }
 }
 
@@ -713,6 +739,85 @@ private fun ImportCertificateDialog(
             )
         }
         DialogButtons(confirmLabel = "Import", confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), pem.trim(), certificate.trim(), passphrase.ifBlank { null }) })
+    }
+}
+
+/** Человеческое имя типа keychain-секрета — для строки выбора в [IdentityDialog]. */
+private fun CredentialSecret.typeLabel(): String = when (this) {
+    is CredentialSecret.Password -> "Password"
+    is CredentialSecret.PrivateKey -> "SSH key"
+    is CredentialSecret.Certificate -> "Certificate"
+}
+
+/** Material-иконка типа keychain-секрета — для строки выбора в [IdentityDialog]. */
+private fun CredentialSecret.icon(): String = when (this) {
+    is CredentialSecret.Password -> "password"
+    is CredentialSecret.PrivateKey -> "key"
+    is CredentialSecret.Certificate -> "workspace_premium"
+}
+
+/**
+ * Диалог создания/правки учётки (username + ссылка на keychain-секрет). [initial] == null — создание,
+ * иначе правка (поля предзаполнены). Учётка обязана ссылаться на один [Credential] из [credentials];
+ * если keychain пуст — сохранение недоступно с подсказкой завести секрет в keychain-разделе.
+ */
+@Composable
+private fun IdentityDialog(
+    initial: Identity?,
+    credentials: List<Credential>,
+    onDismiss: () -> Unit,
+    onSave: (label: String, username: String, credentialId: String) -> Unit,
+) {
+    var label by remember { mutableStateOf(initial?.label ?: "") }
+    var username by remember { mutableStateOf(initial?.username ?: "") }
+    // Предвыбор: правка → текущий секрет (если ещё существует), создание → первый доступный.
+    var credentialId by remember {
+        mutableStateOf(
+            initial?.credentialId?.takeIf { id -> credentials.any { it.id == id } } ?: credentials.firstOrNull()?.id,
+        )
+    }
+    val valid = label.isNotBlank() && username.isNotBlank() && credentialId != null
+    val title = if (initial == null) "New identity" else "Edit identity"
+
+    VaultDialogScaffold(title, "A username paired with a keychain secret — reused across hosts.", onDismiss) {
+        DialogField("NAME", label, { label = it }, placeholder = "e.g. prod deploy")
+        Box(Modifier.padding(top = 16.dp)) {
+            DialogField("USERNAME", username, { username = it }, placeholder = "e.g. deploy")
+        }
+        Txt("CREDENTIAL", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 16.dp, bottom = 6.dp))
+        if (credentials.isEmpty()) {
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(12.dp)) {
+                Txt("No keychain secrets yet — add an SSH key, password or certificate first.", color = D.faint, size = 11.5.sp, lineHeight = 16.sp)
+            }
+        } else {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 168.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                credentials.forEach { cred ->
+                    val active = cred.id == credentialId
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp))
+                            .background(if (active) D.cyan.copy(alpha = 0.06f) else Color.Transparent)
+                            .border(1.dp, if (active) D.cyan.copy(alpha = 0.4f) else D.cyan14, RoundedCornerShape(7.dp))
+                            .clickable { credentialId = cred.id }
+                            .padding(horizontal = 11.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Sym(cred.secret.icon(), size = 16.sp, color = if (active) D.cyanBright else D.dim)
+                        Txt(cred.label, color = if (active) D.text else D.dim, size = 12.5.sp, modifier = Modifier.weight(1f))
+                        Txt(cred.secret.typeLabel(), color = D.faint, size = 10.sp)
+                    }
+                }
+            }
+        }
+        DialogButtons(
+            confirmLabel = if (initial == null) "Create" else "Save",
+            confirmEnabled = valid,
+            onDismiss = onDismiss,
+            onConfirm = { credentialId?.let { onSave(label.trim(), username.trim(), it) } },
+        )
     }
 }
 
