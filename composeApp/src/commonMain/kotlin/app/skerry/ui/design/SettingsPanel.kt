@@ -215,6 +215,17 @@ private fun TerminalSection() {
     }
     HLine()
     SettingValueRow("Copy on select", "", "On")
+    HLine()
+    // ЗАГЛУШКА (техдолг, см. память tab-title-host-label): сейчас вкладка всегда показывает лейбл
+    // хоста, а живой OSC 0/2-заголовок терминала (vim, htop, root@host…) игнорируется. Когда дойдут
+    // руки — этот тоггл должен включать ветку effectiveTabTitle в Session.displayTitle. Пока он
+    // визуально present, но выключен и без обработчика (как и прочие мок-настройки этой секции).
+    SettingToggleRow(
+        "Show terminal title on tabs",
+        "Let the connected shell rename a tab (e.g. the running program). Off — tabs always show the saved host name. Not implemented yet.",
+        on = false,
+        onToggle = {},
+    )
 }
 
 // ───────────────────────── Account ─────────────────────────
