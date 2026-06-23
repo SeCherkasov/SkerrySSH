@@ -25,18 +25,23 @@ class Session(
     val controller: ConnectionController,
 ) {
     /**
-     * Заголовок для вкладки: живой OSC 0/1/2-title терминала (когда сессия подключена и приложение
-     * его задало), иначе фолбэк на статичный [title] (имя хоста). Чтение реактивно — Compose
-     * перерисует вкладку при смене `uiState` или `terminal.title`.
+     * Заголовок для вкладки: имя хоста из каталога ([title]) — поведение SSH-менеджеров
+     * (Termius/Tabby/Royal TSX) и нашего шаблона (короткие имена хостов на вкладках).
+     *
+     * Живой OSC 0/1/2-title терминала НАМЕРЕННО не подставляется: на серверах с обычным bash он
+     * сводится к шумному `root@<hostname>` и перекрывал бы понятный лейбл, причём непоследовательно
+     * (роутеры на busybox OSC не шлют → у них оставался лейбл). ТЕХДОЛГ: вынести «показывать живой
+     * OSC-заголовок» в настройки приложения (выкл по умолчанию) — хелпер [effectiveTabTitle] уже
+     * готов под это. До этого вкладка всегда = лейбл хоста.
      */
-    val displayTitle: String
-        get() = effectiveTabTitle(
-            liveTitle = (controller.uiState as? ConnectionUiState.Connected)?.terminal?.title,
-            fallback = title,
-        )
+    val displayTitle: String get() = title
 }
 
-/** Эффективный заголовок вкладки: непустой живой [liveTitle] перекрывает [fallback]. */
+/**
+ * Эффективный заголовок вкладки: непустой живой [liveTitle] перекрывает [fallback]. Пока не
+ * вызывается из UI (см. [Session.displayTitle]) — заготовка под будущую настройку «показывать
+ * OSC-заголовок терминала на вкладке».
+ */
 fun effectiveTabTitle(liveTitle: String?, fallback: String): String =
     liveTitle?.takeIf { it.isNotBlank() } ?: fallback
 
