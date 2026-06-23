@@ -132,7 +132,10 @@ class SshjTransport(
 }
 
 /** Один раз на процесс: регистрация полного BouncyCastle (см. [ensureCryptoProvider]). */
-private val cryptoProviderReady = AtomicBoolean(false)
+private val cryptoProviderLock = Any()
+
+@Volatile
+private var cryptoProviderReady = false
 
 /**
  * sshj полагается на полный BouncyCastle. На Android в провайдере «BC» по умолчанию сидит урезанный
@@ -145,15 +148,25 @@ private val cryptoProviderReady = AtomicBoolean(false)
  * `internal` (а не `private`): тот же урезанный системный BouncyCastle ломает не только KEX при
  * коннекте, но и разбор приватного ключа (`SSHClient.loadKeys` в [app.skerry.shared.vault.BouncyCastleSshKeyGenerator.inspect]),
  * поэтому генератор/инспектор ключей раздела Vault регистрирует полный провайдер этим же вызовом.
+ *
+ * Под [synchronized] (а не lock-free `compareAndSet`): флаг `cryptoProviderReady` поднимаем ТОЛЬКО
+ * после фактической регистрации провайдера. Иначе второй поток (например, `inspect` из таба Vault и
+ * `connect()` одновременно) увидел бы поднятый флаг и начал использовать ещё урезанный «BC» в окне
+ * между взведением флага и `insertProviderAt`. Двойная проверка флага оставляет общий путь без лока.
  */
 internal fun ensureCryptoProvider() {
-    if (!cryptoProviderReady.compareAndSet(false, true)) return
-    val onAndroid = runCatching { Class.forName("android.os.Build") }.isSuccess
-    if (!onAndroid) return
-    val existing = Security.getProvider("BC")
-    if (existing == null || existing.javaClass != BouncyCastleProvider::class.java) {
-        Security.removeProvider("BC")
-        Security.insertProviderAt(BouncyCastleProvider(), 1)
+    if (cryptoProviderReady) return
+    synchronized(cryptoProviderLock) {
+        if (cryptoProviderReady) return
+        val onAndroid = runCatching { Class.forName("android.os.Build") }.isSuccess
+        if (onAndroid) {
+            val existing = Security.getProvider("BC")
+            if (existing == null || existing.javaClass != BouncyCastleProvider::class.java) {
+                Security.removeProvider("BC")
+                Security.insertProviderAt(BouncyCastleProvider(), 1)
+            }
+        }
+        cryptoProviderReady = true
     }
 }
 
