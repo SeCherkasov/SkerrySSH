@@ -257,7 +257,12 @@ fun TerminalScreen(
     // шелла лёг бы на дефолтные 80×24, а затем «переукладывался» при ресайзе — видимый «подпрыг»
     // текста при открытии. До этого виден только фон терминала (тот же цвет), потом — готовый перенос.
     var sized by remember(state) { mutableStateOf(false) }
-    LaunchedEffect(viewportSize, metrics, paddingPx) {
+    // state в ключах ОБЯЗАТЕЛЕН: при переключении вкладок меняется только state (новый
+    // TerminalScreenState активной сессии), а viewportSize/metrics/paddingPx остаются прежними.
+    // sized сбрасывается в false (remember(state) выше), и без state-ключа этот эффект не
+    // перезапустился бы — resize не вызвался, sized навсегда остался бы false, и сетка/курсор
+    // не рисовались бы (вывод «пропадает» при переключении между вкладками).
+    LaunchedEffect(state, viewportSize, metrics, paddingPx) {
         if (viewportSize.width == 0 || viewportSize.height == 0) return@LaunchedEffect
         // Дебаунс ресайза: при анимации софт-клавиатуры (adjustResize) вьюпорт меняется каждый кадр;
         // без задержки PTY ресайзился бы на каждый промежуточный размер → сетка переукладывается и
