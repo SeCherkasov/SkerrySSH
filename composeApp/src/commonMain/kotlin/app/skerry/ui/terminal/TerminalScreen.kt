@@ -218,9 +218,12 @@ fun TerminalScreen(
     val handleRadiusPx = with(density) { HANDLE_RADIUS_DP.dp.toPx() }
     val handleTouchRadiusPx = with(density) { HANDLE_TOUCH_RADIUS_DP.dp.toPx() }
 
-    // Активная сессия забирает фокус, чтобы можно было сразу печатать. На таче фокус держит
-    // скрытое IME-поле (оно же поднимает софт-клавиатуру), на desktop — сам терминал.
-    LaunchedEffect(state) { if (!closed) (if (imeInput) imeFocusRequester else focusRequester).requestFocus() }
+    // Активная сессия на desktop сразу забирает фокус (физическая клавиатура — печатаем без клика).
+    // На таче ([imeInput]) фокус НЕ запрашиваем автоматически: иначе скрытое IME-поле поднимает
+    // софт-клавиатуру прямо при подключении, и она подбрасывает раскладку/терминал вверх — видимый
+    // «скачок». Клавиатура встаёт по тапу пользователя (обработчик жестов ниже, как Termius/Blink);
+    // клавишная панель спецклавиш работает и без неё (шлёт в PTY напрямую).
+    LaunchedEffect(state) { if (!closed && !imeInput) focusRequester.requestFocus() }
 
     // Автоскролл вниз по мере нового вывода. Ключ — монотонный snapshotVersion, а НЕ state.screen:
     // Compose сравнивает список структурно, и два подряд одинаковых снимка не перезапустили бы эффект.
@@ -250,9 +253,20 @@ fun TerminalScreen(
     // Меряем ВНЕШНИЙ Box (вьюпорт), а не прокручиваемый Text: у того размер = высота всего контента.
     val paddingPx = with(density) { PADDING_DP.dp.toPx() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    // Глифы/курсор не показываем, пока сетка не подогнана под вьюпорт хотя бы раз: иначе первый вывод
+    // шелла лёг бы на дефолтные 80×24, а затем «переукладывался» при ресайзе — видимый «подпрыг»
+    // текста при открытии. До этого виден только фон терминала (тот же цвет), потом — готовый перенос.
+    var sized by remember(state) { mutableStateOf(false) }
     LaunchedEffect(viewportSize, metrics, paddingPx) {
         if (viewportSize.width == 0 || viewportSize.height == 0) return@LaunchedEffect
+        // Дебаунс ресайза: при анимации софт-клавиатуры (adjustResize) вьюпорт меняется каждый кадр;
+        // без задержки PTY ресайзился бы на каждый промежуточный размер → сетка переукладывается и
+        // текст «мигает/прыгает и возвращается». Новое изменение размера перезапускает эффект и
+        // отменяет ждущий ресайз, поэтому срабатываем один раз — когда размер устаканился. Самый
+        // первый ресайз (sized=false, открытие терминала) делаем мгновенно, без задержки.
+        if (sized) delay(150)
         state.resize(gridSizeFor(viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, metrics))
+        sized = true
     }
 
     // Фаза мигания курсора: при включённом blink дёргаем булеву раз в полупериод; иначе курсор
@@ -271,7 +285,7 @@ fun TerminalScreen(
             delay(CURSOR_BLINK_MS)
         }
     }
-    val cursorVisibleNow = !closed && state.cursorVisible && blinkOn
+    val cursorVisibleNow = sized && !closed && state.cursorVisible && blinkOn
 
     // Единый снимок состояния на рекомпозицию: и текстовый оверлей, и курсорный оверлей читают одни и
     // те же screen/cursor — иначе между двумя draw-проходами снимок мог бы разъехаться (курсор по новой
@@ -436,7 +450,7 @@ fun TerminalScreen(
       // emoji) и их continuation-клетки держат сетку, а курсор/мышь/маркеры (та же арифметика) с ней
       // совпадают. Геометрия как у курсора: тот же padding и сдвиг на прокрутку. Сам Text ниже —
       // невидимая подложка (высота для скролла + приём ввода).
-      if (screen.isNotEmpty()) {
+      if (sized && screen.isNotEmpty()) {
           val sel = state.selection
           val palette = state.palette // OSC 4/104 переопределения индексов; пусто — дефолты темы
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
