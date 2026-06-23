@@ -1,5 +1,6 @@
 package app.skerry.ui.host
 
+import app.skerry.shared.host.Host
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import kotlin.test.Test
@@ -136,5 +137,41 @@ class NewConnectionFormStateTest {
         val f = validBase().apply { authMode = AuthMode.NEW_PASSWORD; password = "s3cr3t" }
         val id = f.resolveCredentialId(saveCredential = { null }) // секрет не сохранился (например, без vault)
         assertNull(id)
+    }
+
+    // --- Правка существующего хоста (fromHost предзаполняет форму) ---
+
+    @Test
+    fun fromHost_prefills_fields_and_round_trips_via_draft() {
+        val host = Host(
+            id = "h1", label = "prod-web-01", address = "10.0.0.5", port = 2222,
+            username = "root", group = "Production", credentialId = "cred-9",
+        )
+        val f = NewConnectionFormState.fromHost(host)
+        assertEquals("prod-web-01", f.name)
+        assertEquals("10.0.0.5", f.address)
+        assertEquals("2222", f.port)
+        assertEquals("root", f.username)
+        assertEquals("Production", f.group)
+        // привязан секрет → режим EXISTING с тем же id; форма сразу валидна
+        assertEquals(AuthMode.EXISTING, f.authMode)
+        assertEquals("cred-9", f.existingCredentialId)
+        assertTrue(f.canSave)
+        // Сохранение правки удерживает id хоста и привязку, не пересоздавая секрет.
+        val credentialId = f.resolveCredentialId { error("existing credential must not be re-saved") }
+        val draft = f.toDraft(id = host.id, credentialId = credentialId)
+        assertEquals("h1", draft.id)
+        assertEquals("cred-9", draft.credentialId)
+        assertEquals("prod-web-01", draft.label)
+    }
+
+    @Test
+    fun fromHost_without_credential_defaults_to_ask_and_blank_group() {
+        val host = Host(id = "h2", label = "box", address = "a", port = 22, username = "u")
+        val f = NewConnectionFormState.fromHost(host)
+        assertEquals(AuthMode.ASK, f.authMode)
+        assertNull(f.existingCredentialId)
+        assertEquals("", f.group)
+        assertNull(f.resolveCredentialId { error("ask must not save a credential") })
     }
 }

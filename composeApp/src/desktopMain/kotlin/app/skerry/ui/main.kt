@@ -54,6 +54,23 @@ private fun deviceId(dir: Path): String {
     return id
 }
 
+/**
+ * Видимость info-панели терминала, переживающая перезапуск: хранится как один символ в файле
+ * `info_panel` (`0`/`1`) рядом с прочей конфигурацией. Отсутствует/нечитаем → дефолт `true`
+ * (панель показана, как в макете). Запись best-effort: сбой персиста не должен ронять UI.
+ */
+private fun readInfoPanel(dir: Path): Boolean {
+    val file = dir.resolve("info_panel")
+    return runCatching { Files.readString(file).trim() != "0" }.getOrDefault(true)
+}
+
+private fun writeInfoPanel(dir: Path, visible: Boolean) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("info_panel"), if (visible) "1" else "0")
+    }
+}
+
 fun main() {
     // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
     // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
@@ -112,6 +129,8 @@ fun main() {
             // менеджер known-hosts работает поверх своих сторов (knownHosts из `deps`).
             app.skerry.ui.theme.SkerryTheme {
                 app.skerry.ui.design.DesktopDesignApp(
+                    initialInfoPanel = readInfoPanel(dir),
+                    onInfoPanelChange = { writeInfoPanel(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,

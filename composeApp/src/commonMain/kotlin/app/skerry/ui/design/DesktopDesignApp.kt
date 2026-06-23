@@ -67,7 +67,10 @@ import app.skerry.ui.vault.VaultGate
  */
 @Composable
 fun DesktopDesignApp(
-    state: DesktopDesignState = remember { DesktopDesignState() },
+    // Видимость info-панели персистится снаружи (desktop main): стартовое значение + колбэк записи.
+    initialInfoPanel: Boolean = true,
+    onInfoPanelChange: (Boolean) -> Unit = {},
+    state: DesktopDesignState = remember { DesktopDesignState(initialInfoPanel, onInfoPanelChange) },
     vault: Vault? = null,
     biometrics: VaultBiometrics? = null,
     hosts: HostManagerController? = null,
@@ -179,7 +182,7 @@ private fun DesktopChrome(
                 HLine()
                 StatusBar()
             }
-            if (state.modalOpen) NewConnectionModal(state)
+            if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost)
             if (state.settingsOpen) SettingsPanel(state)
             if (onLock == null && state.locked) LockScreen(state)
             pendingHost?.let { host ->
@@ -187,6 +190,16 @@ private fun DesktopChrome(
                     host = host,
                     onDismiss = { pendingHost = null },
                     onConnect = { pw -> pendingHost = null; openHostSession(sessions, state, host, SshAuth.Password(pw)) },
+                )
+            }
+            // Подтверждение удаления профиля хоста (вызывается из контекстного меню сайдбара).
+            // Сам keychain-секрет остаётся в vault (переиспользуемый, управляется во вкладке Vault).
+            val hosts = LocalHosts.current
+            state.pendingDeleteHost?.let { host ->
+                DesktopDeleteHostDialog(
+                    host = host,
+                    onDismiss = state::dismissDeleteHost,
+                    onConfirm = { hosts?.delete(host.id); state.dismissDeleteHost() },
                 )
             }
         }

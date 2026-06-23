@@ -38,25 +38,29 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.host.Host
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 
 /**
- * Модалка «New connection»: форма профиля хоста + выбор AI-политики. С живым [LocalHosts]
- * (за гейтом vault) Save создаёт профиль через [app.skerry.ui.host.HostManagerController] и
- * выделяет его в сайдбаре; без него (мок/превью) Save просто закрывает модалку. Поля
- * authentication/jump/keep-alive/tags/AI-политика — пока визуальные заглушки (отдельные слайсы);
- * сохраняется базовый профиль ([NewConnectionFormState]).
+ * Модалка «New connection» / «Edit connection»: форма профиля хоста + выбор AI-политики. С живым
+ * [LocalHosts] (за гейтом vault) Save создаёт или (при [editHost] != null) обновляет профиль через
+ * [app.skerry.ui.host.HostManagerController] и выделяет его в сайдбаре; без него (мок/превью) Save
+ * просто закрывает модалку. В режиме правки форма предзаполняется из [editHost]
+ * ([NewConnectionFormState.fromHost]), а сохранение удерживает его [Host.id]. Поля
+ * jump/keep-alive/tags/AI-политика — пока визуальные заглушки (отдельные слайсы).
  */
 @Composable
-fun NewConnectionModal(state: DesktopDesignState) {
+fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
     val noop = remember { MutableInteractionSource() }
     val hosts = LocalHosts.current
     val credentials = LocalCredentials.current
-    val form = remember { NewConnectionFormState() }
+    // Ключ по editHost: открытие модалки на правку (или смена цели) пересоздаёт форму из профиля.
+    val form = remember(editHost) { editHost?.let { NewConnectionFormState.fromHost(it) } ?: NewConnectionFormState() }
     // Гард повторного Save (Enter/двойной клик) до закрытия модалки — иначе дубль секрета+хоста в vault.
-    var submitting by remember { mutableStateOf(false) }
+    // Ключ по editHost вместе с form: смена цели сбрасывает гард, а не залипает на прежней.
+    var submitting by remember(editHost) { mutableStateOf(false) }
     Box(
         Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = noop, indication = null, onClick = state::closeModal),
         contentAlignment = Alignment.Center,
@@ -74,8 +78,12 @@ fun NewConnectionModal(state: DesktopDesignState) {
         ) {
             Box(Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 14.dp)) {
                 Column {
-                    Txt("New connection", color = D.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-                    Txt("Configure a new skerry in your archipelago. Credentials are encrypted with your master password.", color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp))
+                    Txt(if (editHost != null) "Edit connection" else "New connection", color = D.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+                    Txt(
+                        if (editHost != null) "Update this skerry's profile. Credentials are encrypted with your master password."
+                        else "Configure a new skerry in your archipelago. Credentials are encrypted with your master password.",
+                        color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
                 IconBtn("close", onClick = state::closeModal, modifier = Modifier.align(Alignment.TopEnd))
             }
@@ -140,7 +148,7 @@ fun NewConnectionModal(state: DesktopDesignState) {
                 }
                 GhostButton("Test", onClick = {})
                 PrimaryButton(
-                    "Save",
+                    if (editHost != null) "Save changes" else "Save",
                     onClick = {
                         if (submitting) {
                             // повторное нажатие до закрытия — игнорируем
@@ -152,11 +160,13 @@ fun NewConnectionModal(state: DesktopDesignState) {
                             submitting = true
                             // Секрет создаём только при живом keychain: иначе он осел бы в vault без
                             // ссылки на хост (orphan). За гейтом credentials всегда присутствует;
-                            // гард — fail-closed на рассинхрон.
+                            // гард — fail-closed на рассинхрон. В режиме правки EXISTING-привязка
+                            // возвращается как есть (секрет не пересоздаётся).
                             val credentialId = form.resolveCredentialId(
                                 saveCredential = { draft -> credentials?.save(draft) },
                             )
-                            state.selectHost(hosts.save(form.toDraft(credentialId = credentialId)))
+                            // editHost?.id != null → обновление существующего профиля по месту.
+                            state.selectHost(hosts.save(form.toDraft(id = editHost?.id, credentialId = credentialId)))
                             state.closeModal()
                         }
                     },

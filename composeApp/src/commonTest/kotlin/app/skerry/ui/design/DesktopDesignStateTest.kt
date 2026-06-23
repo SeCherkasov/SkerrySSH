@@ -1,8 +1,10 @@
 package app.skerry.ui.design
 
+import app.skerry.shared.host.Host
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopDesignStateTest {
@@ -110,5 +112,56 @@ class DesktopDesignStateTest {
         s.choosePolicy(AiPolicy.Permissive)
         assertEquals(AiPolicy.Permissive, s.modalPolicy)
         s.closeModal(); assertFalse(s.modalOpen)
+    }
+
+    // --- Правка / удаление существующего хоста ---
+
+    private val sampleHost = Host(id = "h1", label = "box", address = "a", port = 22, username = "u")
+
+    @Test
+    fun openEditModal_opens_with_target_and_close_clears_it() {
+        val s = DesktopDesignState()
+        s.openEditModal(sampleHost)
+        assertTrue(s.modalOpen)
+        assertEquals(sampleHost, s.editingHost)
+        s.closeModal()
+        assertFalse(s.modalOpen)
+        assertNull(s.editingHost)
+    }
+
+    @Test
+    fun openModal_resets_edit_target_for_new_connection() {
+        val s = DesktopDesignState()
+        s.openEditModal(sampleHost)
+        s.openModal() // «New connection» поверх правки — должен сбросить цель
+        assertTrue(s.modalOpen)
+        assertNull(s.editingHost)
+    }
+
+    @Test
+    fun delete_host_request_then_dismiss() {
+        val s = DesktopDesignState()
+        s.requestDeleteHost(sampleHost)
+        assertEquals(sampleHost, s.pendingDeleteHost)
+        s.dismissDeleteHost()
+        assertNull(s.pendingDeleteHost)
+    }
+
+    // --- Персист видимости info-панели ---
+
+    @Test
+    fun info_panel_honours_initial_value() {
+        assertFalse(DesktopDesignState(initialInfoPanel = false).infoPanel)
+        assertTrue(DesktopDesignState(initialInfoPanel = true).infoPanel)
+    }
+
+    @Test
+    fun toggleInfo_reports_new_value_to_callback() {
+        val seen = mutableListOf<Boolean>()
+        val s = DesktopDesignState(initialInfoPanel = true, onInfoPanelChange = { seen += it })
+        s.toggleInfo() // true → false
+        s.toggleInfo() // false → true
+        assertEquals(listOf(false, true), seen)
+        assertTrue(s.infoPanel)
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.host.Host
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 
@@ -95,4 +96,25 @@ class NewConnectionFormState {
         group = group.trim().ifBlank { null },
         credentialId = credentialId,
     )
+
+    companion object {
+        /**
+         * Предзаполнить форму полями существующего [host] для режима правки. Привязанный секрет
+         * ([Host.credentialId]) разворачивается в [AuthMode.EXISTING] на тот же id — так
+         * [resolveCredentialId] вернёт его без пересоздания (секрет не дублируется), а пользователь
+         * при желании может сменить способ аутентификации. Без секрета — [AuthMode.ASK], как у нового
+         * хоста. [Host.id] форма не держит: его передают в [toDraft] на сохранении.
+         */
+        fun fromHost(host: Host): NewConnectionFormState = NewConnectionFormState().apply {
+            name = host.label
+            address = host.address
+            port = host.port.toString()
+            username = host.username
+            group = host.group ?: ""
+            if (host.credentialId != null) {
+                authMode = AuthMode.EXISTING
+                existingCredentialId = host.credentialId
+            }
+        }
+    }
 }
