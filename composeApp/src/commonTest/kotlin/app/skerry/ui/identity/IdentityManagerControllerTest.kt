@@ -2,7 +2,6 @@ package app.skerry.ui.identity
 
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.Identity
-import app.skerry.shared.vault.IdentityAuth
 import app.skerry.shared.vault.IdentityStore
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.UnlockResult
@@ -15,53 +14,32 @@ import kotlin.test.assertNull
 class IdentityManagerControllerTest {
 
     @Test
-    fun `save without id creates a password identity with a generated id`() {
+    fun `save without id creates an account with a generated id`() {
         val controller = IdentityManagerController(IdentityStore(FakeVault())) { "gen" }
 
-        val id = controller.save(IdentityDraft(label = "Prod", kind = IdentityKind.PASSWORD, password = "pw"))
+        val id = controller.save(label = "Prod", username = "root", credentialId = "cred-1")
 
         assertEquals("gen", id)
-        assertEquals(Identity("gen", "Prod", IdentityAuth.Password("pw")), controller.identities.single())
-    }
-
-    @Test
-    fun `save builds a private-key identity, blank passphrase becomes null`() {
-        val controller = IdentityManagerController(IdentityStore(FakeVault())) { "gen" }
-
-        controller.save(
-            IdentityDraft(label = "Key", kind = IdentityKind.PRIVATE_KEY, privateKeyPem = "pem", passphrase = ""),
-        )
-
-        assertEquals(IdentityAuth.PrivateKey("pem", passphrase = null), controller.identities.single().auth)
-    }
-
-    @Test
-    fun `save with a passphrase keeps it`() {
-        val controller = IdentityManagerController(IdentityStore(FakeVault())) { "gen" }
-
-        controller.save(
-            IdentityDraft(label = "Key", kind = IdentityKind.PRIVATE_KEY, privateKeyPem = "pem", passphrase = "pp"),
-        )
-
-        assertEquals(IdentityAuth.PrivateKey("pem", passphrase = "pp"), controller.identities.single().auth)
+        assertEquals(Identity("gen", "Prod", "root", "cred-1"), controller.identities.single())
     }
 
     @Test
     fun `save with an existing id updates in place`() {
         val controller = IdentityManagerController(IdentityStore(FakeVault())) { error("must not generate") }
 
-        val id = controller.save(IdentityDraft(id = "x", label = "New", kind = IdentityKind.PASSWORD, password = "p2"))
+        val id = controller.save(label = "New", username = "deploy", credentialId = "cred-2", id = "x")
 
         assertEquals("x", id)
         assertEquals(1, controller.identities.size)
+        assertEquals(Identity("x", "New", "deploy", "cred-2"), controller.identities.single())
     }
 
     @Test
-    fun `starts empty and reload pulls existing identities from the vault`() {
+    fun `starts empty and reload pulls existing accounts from the vault`() {
         // Контроллер создаётся до разблокировки vault, поэтому не читает стор в конструкторе;
         // существующие записи появляются только после reload (вызывается из UI после unlock).
         val vault = FakeVault()
-        IdentityStore(vault).put(Identity("a", "Pre-existing", IdentityAuth.Password("p")))
+        IdentityStore(vault).put(Identity("a", "Pre-existing", "root", "cred-pre"))
         val controller = IdentityManagerController(IdentityStore(vault)) { "gen" }
 
         assertEquals(emptyList(), controller.identities)
@@ -71,9 +49,9 @@ class IdentityManagerControllerTest {
     }
 
     @Test
-    fun `delete removes the identity`() {
+    fun `delete removes the account`() {
         val controller = IdentityManagerController(IdentityStore(FakeVault())) { "gen" }
-        controller.save(IdentityDraft(label = "Key", kind = IdentityKind.PASSWORD, password = "p"))
+        controller.save(label = "Key", username = "root", credentialId = "cred-1")
 
         controller.delete("gen")
 
@@ -83,7 +61,7 @@ class IdentityManagerControllerTest {
     @Test
     fun `find resolves by id or returns null`() {
         val controller = IdentityManagerController(IdentityStore(FakeVault())) { "gen" }
-        controller.save(IdentityDraft(label = "Key", kind = IdentityKind.PASSWORD, password = "p"))
+        controller.save(label = "Key", username = "root", credentialId = "cred-1")
 
         assertEquals("Key", controller.find("gen")?.label)
         assertNull(controller.find("missing"))

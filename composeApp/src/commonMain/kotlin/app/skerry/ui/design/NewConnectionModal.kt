@@ -53,6 +53,7 @@ fun NewConnectionModal(state: DesktopDesignState) {
     val noop = remember { MutableInteractionSource() }
     val hosts = LocalHosts.current
     val identities = LocalIdentities.current
+    val credentials = LocalCredentials.current
     val form = remember { NewConnectionFormState() }
     // Гард повторного Save (Enter/двойной клик) до закрытия модалки — иначе дубль identity+host в vault.
     var submitting by remember { mutableStateOf(false) }
@@ -146,10 +147,16 @@ fun NewConnectionModal(state: DesktopDesignState) {
                         } else if (hosts == null) {
                             state.closeModal() // мок/превью: сохранять некуда
                         } else if (form.canSave) {
-                            // Новый секрет (пароль/ключ) сначала запечатывается в vault, его id
-                            // привязывается к хосту; ASK/мок-путь без identities → identityId = null.
+                            // Новый секрет (пароль/ключ) сначала запечатывается в keychain, поверх
+                            // создаётся учётка (username из формы), её id привязывается к хосту;
+                            // ASK/мок-путь без vault → identityId = null.
                             submitting = true
-                            val identityId = form.resolveIdentityId { draft -> identities?.save(draft) }
+                            val identityId = form.resolveIdentityId(
+                                saveCredential = { draft -> credentials?.save(draft) },
+                                saveAccount = { label, username, credentialId ->
+                                    identities?.save(label = label, username = username, credentialId = credentialId)
+                                },
+                            )
                             state.selectHost(hosts.save(form.toDraft(identityId = identityId)))
                             state.closeModal()
                         }

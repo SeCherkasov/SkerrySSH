@@ -4,14 +4,15 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.skerry.ui.identity.IdentityDraft
-import app.skerry.ui.identity.IdentityKind
+import app.skerry.ui.identity.CredentialDraft
+import app.skerry.ui.identity.CredentialKind
 
 /**
  * Способ аутентификации, выбранный в форме «New connection».
- * - [ASK] — секрет не хранить, пароль спрашивается при каждом подключении (хост без identity);
- * - [EXISTING] — привязать уже сохранённую в vault identity ([existingIdentityId]);
- * - [NEW_PASSWORD] / [NEW_KEY] — создать новую identity (пароль / приватный ключ) в vault и привязать.
+ * - [ASK] — секрет не хранить, пароль спрашивается при каждом подключении (хост без учётки);
+ * - [EXISTING] — привязать уже сохранённую в vault учётку ([existingIdentityId]);
+ * - [NEW_PASSWORD] / [NEW_KEY] — создать новый keychain-секрет (пароль / приватный ключ) и учётку
+ *   поверх него, затем привязать хост к учётке.
  */
 enum class AuthMode { ASK, EXISTING, NEW_PASSWORD, NEW_KEY }
 
@@ -63,25 +64,41 @@ class NewConnectionFormState {
     private fun identityLabel(): String = "${username.trim()}@${address.trim()}"
 
     /**
-     * Разрешить [Host.identityId] для черновика: для [AuthMode.EXISTING] — выбранный id, для новых
-     * секретов — id созданной через [saveIdentity] записи, для [AuthMode.ASK] — `null` (секрет не
-     * хранится). [saveIdentity] вызывается ровно для новых секретов (создаёт запись в vault).
+     * Разрешить [Host.identityId] (id учётки) для черновика: для [AuthMode.EXISTING] — выбранная
+     * учётка, для новых секретов — создать keychain-секрет через [saveCredential], затем учётку
+     * поверх него через [saveAccount] и вернуть её id; для [AuthMode.ASK] — `null` (секрет не
+     * хранится). Колбэки вызываются ровно для новых секретов (пишут в vault); если [saveCredential]
+     * вернул `null`, учётка не создаётся.
      */
-    fun resolveIdentityId(saveIdentity: (IdentityDraft) -> String?): String? = when (authMode) {
+    fun resolveIdentityId(
+        saveCredential: (CredentialDraft) -> String?,
+        saveAccount: (label: String, username: String, credentialId: String) -> String?,
+    ): String? = when (authMode) {
         AuthMode.ASK -> null
         AuthMode.EXISTING -> existingIdentityId
-        AuthMode.NEW_PASSWORD -> saveIdentity(
-            IdentityDraft(label = identityLabel(), kind = IdentityKind.PASSWORD, password = password),
+        AuthMode.NEW_PASSWORD -> wrapInAccount(
+            saveCredential(CredentialDraft(label = identityLabel(), kind = CredentialKind.PASSWORD, password = password)),
+            saveAccount,
         )
-        AuthMode.NEW_KEY -> saveIdentity(
-            IdentityDraft(
-                label = identityLabel(),
-                kind = IdentityKind.PRIVATE_KEY,
-                privateKeyPem = privateKeyPem,
-                passphrase = passphrase,
+        AuthMode.NEW_KEY -> wrapInAccount(
+            saveCredential(
+                CredentialDraft(
+                    label = identityLabel(),
+                    kind = CredentialKind.PRIVATE_KEY,
+                    privateKeyPem = privateKeyPem,
+                    passphrase = passphrase,
+                ),
             ),
+            saveAccount,
         )
     }
+
+    // Обернуть свежесозданный keychain-секрет в учётку (username из формы). null credentialId →
+    // секрет не сохранился, учётку не плодим.
+    private fun wrapInAccount(
+        credentialId: String?,
+        saveAccount: (label: String, username: String, credentialId: String) -> String?,
+    ): String? = credentialId?.let { saveAccount(identityLabel(), username.trim(), it) }
 
     /** Собрать черновик для [HostManagerController.save]; [id] != null — правка существующего. */
     fun toDraft(id: String? = null, identityId: String? = null): HostDraft = HostDraft(

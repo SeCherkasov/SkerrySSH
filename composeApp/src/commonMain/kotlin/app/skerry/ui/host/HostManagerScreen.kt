@@ -58,8 +58,9 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vault.Credential
+import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.Identity
-import app.skerry.shared.vault.IdentityAuth
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.desktop.AiBar
@@ -73,9 +74,10 @@ import app.skerry.ui.desktop.SessionTab
 import app.skerry.ui.desktop.SkerryIcon
 import app.skerry.ui.desktop.SkerryIconKind
 import app.skerry.ui.desktop.statusColor
+import app.skerry.ui.connection.toSshAuth
+import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.identity.IdentityManagerPanel
-import app.skerry.ui.identity.kindLabel
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.files.RemoteDualSftpPane
@@ -104,6 +106,7 @@ fun HostManagerScreen(
     hosts: HostManagerController,
     modifier: Modifier = Modifier,
     identities: IdentityManagerController? = null,
+    credentials: CredentialManagerController? = null,
     onLock: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -192,6 +195,7 @@ fun HostManagerScreen(
                 activeSession = activeSession,
                 managingIdentities = managingIdentities,
                 identities = identities,
+                credentials = credentials,
                 editing = editing,
                 selectedHost = selectedId?.let(hosts::find),
                 mono = mono,
@@ -533,6 +537,7 @@ private fun MainArea(
     activeSession: Session?,
     managingIdentities: Boolean,
     identities: IdentityManagerController?,
+    credentials: CredentialManagerController?,
     editing: HostDraft?,
     selectedHost: Host?,
     mono: FontFamily,
@@ -606,7 +611,7 @@ private fun MainArea(
             }
 
             managingIdentities && identities != null ->
-                IdentityManagerPanel(identities, onClose = onCloseIdentities)
+                IdentityManagerPanel(identities, onClose = onCloseIdentities, credentials = credentials)
 
             editing != null -> HostEditor(
                 draft = editing,
@@ -616,13 +621,20 @@ private fun MainArea(
                 onDelete = editing.id?.let { id -> { onDeleteDraft(id) } },
             )
 
-            selectedHost != null -> HostConnectPanel(
-                host = selectedHost,
-                identity = identities?.find(selectedHost.identityId),
-                onConnect = { auth -> onConnect(selectedHost, auth) },
-                onEdit = { onEditHost(selectedHost) },
-                onDelete = { onDeleteHost(selectedHost) },
-            )
+            selectedHost != null -> {
+                // Двухуровневый резолв: хост → учётка → keychain-секрет. Учётка сама секрета не
+                // содержит, поэтому резолвим её credentialId в Credential для подписи/подключения.
+                val account = identities?.find(selectedHost.identityId)
+                val credential = account?.let { credentials?.find(it.credentialId) }
+                HostConnectPanel(
+                    host = selectedHost,
+                    identity = account,
+                    credential = credential,
+                    onConnect = { auth -> onConnect(selectedHost, auth) },
+                    onEdit = { onEditHost(selectedHost) },
+                    onDelete = { onDeleteHost(selectedHost) },
+                )
+            }
 
             else -> EmptyState()
         }
@@ -633,6 +645,7 @@ private fun MainArea(
 private fun HostConnectPanel(
     host: Host,
     identity: Identity?,
+    credential: Credential?,
     onConnect: (SshAuth) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -648,13 +661,14 @@ private fun HostConnectPanel(
             style = MaterialTheme.typography.bodyMedium,
             color = SkerryColors.textDim,
         )
-        if (identity != null) {
+        if (identity != null && credential != null) {
+            // Подпись: учётка (label + username) и тип привязанного keychain-секрета.
             Text(
-                "Секрет: ${identity.label} · ${identity.auth.kindLabel()}",
+                "Учётка: ${identity.label.ifBlank { "(без имени)" }} · ${identity.username} · ${credential.secret.kindLabel()}",
                 style = MaterialTheme.typography.bodySmall,
                 color = SkerryColors.textDim,
             )
-            Button(onClick = { onConnect(identity.toSshAuth()) }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { onConnect(credential.toSshAuth()) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Подключиться")
             }
         } else {
@@ -690,10 +704,11 @@ private fun HostConnectPanel(
     }
 }
 
-private fun Identity.toSshAuth(): SshAuth = when (val a = auth) {
-    is IdentityAuth.Password -> SshAuth.Password(a.password)
-    is IdentityAuth.PrivateKey -> SshAuth.PublicKey(a.privateKeyPem, a.passphrase)
-    is IdentityAuth.Certificate -> SshAuth.Certificate(a.privateKeyPem, a.certificate, a.passphrase)
+/** Короткая подпись вида keychain-секрета для панели подключения. */
+private fun CredentialSecret.kindLabel(): String = when (this) {
+    is CredentialSecret.Password -> "пароль"
+    is CredentialSecret.PrivateKey -> "ключ"
+    is CredentialSecret.Certificate -> "сертификат"
 }
 
 @Composable

@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 /** Тип записи vault — совпадает с моделью sync (`docs/skerry-sync-design.md` §2). */
 @Serializable
-enum class RecordType { HOST, GROUP, IDENTITY, KNOWN_HOST, SNIPPET }
+enum class RecordType { HOST, GROUP, IDENTITY, CREDENTIAL, KNOWN_HOST, SNIPPET }
 
 /**
  * Запись локального vault в её зашифрованном виде на диске. Метаданные (`id`, `type`,

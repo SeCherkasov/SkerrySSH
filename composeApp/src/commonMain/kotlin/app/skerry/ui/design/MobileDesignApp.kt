@@ -52,6 +52,7 @@ import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
+import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.vault.VaultGate
@@ -112,9 +113,9 @@ fun MobileDesignApp(
                     unlockForm = { error, canBio, onUnlock, onBio ->
                         MobileUnlockScreen(error, canBio, onUnlock, onBio)
                     },
-                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.identities) }
+                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.identities, deps.credentials) }
             } else {
-                MobileChrome(state, onLock = null, sessions = liveSessions, identities = deps.identities)
+                MobileChrome(state, onLock = null, sessions = liveSessions, identities = deps.identities, credentials = deps.credentials)
             }
         }
     }
@@ -131,9 +132,13 @@ private fun MobileChrome(
     onLock: (() -> Unit)?,
     sessions: SessionsController?,
     identities: IdentityManagerController?,
+    credentials: CredentialManagerController?,
 ) {
-    // Identity-список живёт в открытом vault — перечитываем за гейтом мастер-пароля (как desktop).
-    LaunchedEffect(identities) { identities?.reload() }
+    // Списки учёток/keychain живут в открытом vault — перечитываем за гейтом мастер-пароля (как desktop).
+    LaunchedEffect(identities, credentials) {
+        identities?.reload()
+        credentials?.reload()
+    }
 
     // Хост без привязанной identity → спрашиваем пароль листом перед подключением.
     var pendingHost by remember { mutableStateOf<Host?>(null) }
@@ -141,7 +146,7 @@ private fun MobileChrome(
     // Стабильная лямбда коннекта (без remember пересоздавалась бы и инвалидировала потребителей
     // [LocalConnectHost]). Живую сессию хоста переиспользуем, мёртвую/отсутствующую — открываем
     // заново ([mobileConnectAction]): на телефоне одна сессия за раз, без накопления сокетов.
-    val connectHost = remember(sessions, identities, state) {
+    val connectHost = remember(sessions, identities, credentials, state) {
         { host: Host ->
             val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
             when (mobileConnectAction(existing?.controller?.uiState)) {
@@ -151,8 +156,14 @@ private fun MobileChrome(
                 }
                 MobileConnectAction.OpenFresh -> {
                     existing?.let { sessions.close(it.id) }
-                    val identity = identities?.find(host.identityId)
-                    if (identity != null) openMobileSession(sessions, state, host, identity.toSshAuth()) else pendingHost = host
+                    // Двухуровневый резолв: хост → учётка → keychain-секрет → SshAuth; нет привязки/секрета → пароль.
+                    val account = identities?.find(host.identityId)
+                    val credential = account?.let { credentials?.find(it.credentialId) }
+                    if (account != null && credential != null) {
+                        openMobileSession(sessions, state, host, credential.toSshAuth())
+                    } else {
+                        pendingHost = host
+                    }
                 }
             }
         }

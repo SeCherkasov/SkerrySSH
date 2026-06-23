@@ -49,6 +49,7 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
@@ -73,11 +74,15 @@ fun DesktopDesignApp(
     hosts: HostManagerController? = null,
     transport: SshTransport? = null,
     identities: IdentityManagerController? = null,
+    credentials: CredentialManagerController? = null,
     sessions: SessionsController? = null,
     knownHosts: KnownHostsController? = null,
     keyGenerator: SshKeyGenerator? = null,
     certificateInspector: SshCertificateInspector? = null,
     features: FeatureFlags = FeatureFlags(),
+    // Вызывается один раз после разблокировки vault, до перечитывания списков — точка для миграции
+    // данных (старый формат → двухуровневая модель keychain/учётки). Дефолт — no-op (мок/превью).
+    onVaultUnlocked: () -> Unit = {},
 ) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
@@ -107,6 +112,7 @@ fun DesktopDesignApp(
         LocalKnownHosts provides knownHosts,
         LocalSshKeyGenerator provides keyGenerator,
         LocalSshCertificateInspector provides certificateInspector,
+        LocalCredentials provides credentials,
         LocalFeatures provides features,
     ) {
         if (vault != null) {
@@ -115,9 +121,9 @@ fun DesktopDesignApp(
                 biometrics = biometrics,
                 createForm = { error, onCreate -> DesktopCreateScreen(error, onCreate) },
                 unlockForm = { error, canBio, onUnlock, onBio -> DesktopUnlockScreen(error, canBio, onUnlock, onBio) },
-            ) { onLock -> DesktopChrome(state, onLock, liveSessions, identities) }
+            ) { onLock -> DesktopChrome(state, onLock, liveSessions, identities, credentials, onVaultUnlocked) }
         } else {
-            DesktopChrome(state, onLock = null, sessions = liveSessions, identities = identities)
+            DesktopChrome(state, onLock = null, sessions = liveSessions, identities = identities, credentials = credentials, onVaultUnlocked = onVaultUnlocked)
         }
     }
 }
@@ -133,25 +139,39 @@ private fun DesktopChrome(
     onLock: (() -> Unit)?,
     sessions: SessionsController?,
     identities: IdentityManagerController?,
+    credentials: CredentialManagerController?,
+    onVaultUnlocked: () -> Unit,
 ) {
-    // Identity-список живёт в открытом vault — перечитываем за гейтом мастер-пароля (как MobileRoot).
-    LaunchedEffect(identities) { identities?.reload() }
+    // Списки keychain/учёток живут в открытом vault — за гейтом мастер-пароля сперва прогоняем
+    // миграцию данных ([onVaultUnlocked]), затем перечитываем (как MobileRoot).
+    LaunchedEffect(identities, credentials) {
+        onVaultUnlocked()
+        identities?.reload()
+        credentials?.reload()
+    }
 
-    // Хост, для которого нет привязанной identity → спрашиваем пароль перед подключением.
+    // Хост, для которого нет привязанной учётки/секрета → спрашиваем пароль перед подключением.
     var pendingHost by remember { mutableStateOf<Host?>(null) }
 
     // Стабильная лямбда коннекта: без remember она пересоздавалась бы на каждой рекомпозиции и,
     // уходя в staticCompositionLocalOf, инвалидировала бы всех потребителей [LocalConnectHost].
-    val connectHost = remember(sessions, identities, state) {
+    // Резолв двухуровневый: хост → учётка → keychain-секрет → SshAuth; нет привязки/секрета → пароль.
+    val connectHost = remember(sessions, identities, credentials, state) {
         { host: Host ->
-            val identity = identities?.find(host.identityId)
-            if (identity != null) openHostSession(sessions, state, host, identity.toSshAuth()) else pendingHost = host
+            val account = identities?.find(host.identityId)
+            val credential = account?.let { credentials?.find(it.credentialId) }
+            if (account != null && credential != null) {
+                openHostSession(sessions, state, host, credential.toSshAuth())
+            } else {
+                pendingHost = host
+            }
         }
     }
 
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
         LocalIdentities provides identities,
+        LocalCredentials provides credentials,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             Column(Modifier.fillMaxSize()) {
