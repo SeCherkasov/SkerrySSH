@@ -1,5 +1,8 @@
 package app.skerry.ui.files
 
+import app.skerry.shared.files.FileBrowser
+import app.skerry.shared.files.FileBrowserException
+import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.ui.sftp.FakeSftpClient
@@ -93,6 +96,33 @@ class FilePaneControllerTest {
         c.goUp()
         advanceUntilIdle()
         assertEquals("/home", c.path)
+        assertTrue(c.loaded().entries.any { it.name == "skerry" })
+    }
+
+    @Test
+    fun `goUp does not ask the server to canonicalize a dotdot path`() = runTest {
+        // Сервер, который не умеет REALPATH с ".." (как в баге «Не удалось разрешить путь /root/..»):
+        // realpath любого пути с ".." бросает. goUp обязан вычислить родителя лексически и не упасть.
+        val base = seededBrowserWithNested()
+        val noDotDot = object : FileBrowser {
+            override val label: String get() = base.label
+            override suspend fun realpath(path: String): String {
+                if (path.contains("..")) throw FileBrowserException("REALPATH с .. не поддержан")
+                return base.realpath(path)
+            }
+            override suspend fun list(path: String): List<FileItem> = base.list(path)
+            override suspend fun mkdir(path: String) = base.mkdir(path)
+            override suspend fun delete(item: FileItem) = base.delete(item)
+            override suspend fun rename(from: String, to: String) = base.rename(from, to)
+        }
+        val c = FilePaneController(noDotDot, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        c.start(); advanceUntilIdle()
+
+        c.goUp()
+        advanceUntilIdle()
+
+        assertEquals("/home", c.path)
+        assertIs<FilePaneState.Loaded>(c.state)
         assertTrue(c.loaded().entries.any { it.name == "skerry" })
     }
 

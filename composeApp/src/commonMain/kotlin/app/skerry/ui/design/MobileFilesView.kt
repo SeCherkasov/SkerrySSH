@@ -48,6 +48,7 @@ import app.skerry.ui.files.TransferState
 import app.skerry.ui.files.platformLocalBrowser
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.humanSize
+import app.skerry.ui.sftp.pickDownloadTarget
 import app.skerry.ui.sftp.pickUploadSource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
@@ -97,6 +98,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     var coord by remember(controller) { mutableStateOf<TransferCoordinator?>(null) }
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var showRemote by remember(controller) { mutableStateOf(true) }
+    var creatingFolder by remember(controller) { mutableStateOf(false) }
+    var fabOpen by remember(controller) { mutableStateOf(false) }
     // UI-scope только для нативного пикера файла (FAB Upload); сама передача живёт на scope сессии
     // внутри координатора и переживёт уход вью из композиции.
     val uiScope = rememberCoroutineScope()
@@ -121,25 +124,33 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                 c == null -> MobileFilesNotice("sync", "Opening SFTP…", null, D.faint)
                 else -> {
                     val pane = if (showRemote) c.remote else c.local
-                    // Видимое действие строки-файла (ios_share): передать между панелями. Стабилизируем
-                    // лямбду по (c, showRemote) — иначе она пересоздавалась бы на каждой рекомпозиции
-                    // (напр. при обновлении карточки передачи) и зря инвалидировала MobileLivePane.
-                    val onTransfer = remember(c, showRemote) {
+                    // Видимое действие строки-файла (ios_share). Remote: скачать НАРУЖУ из песочницы
+                    // через системный «Save to…» ([pickDownloadTarget] → SAF на Android, нативный диалог
+                    // на desktop) — пикер suspend, поэтому через uiScope. Local: залить файл на сервер.
+                    // Стабилизируем по (c, showRemote, uiScope), чтобы лямбда не пересоздавалась на каждой
+                    // рекомпозиции (напр. при обновлении карточки передачи) и зря не инвалидировала список.
+                    val onTransfer = remember(c, showRemote, uiScope) {
                         { item: FileItem ->
                             if (showRemote) {
-                                c.remote.selectOnly(item)
-                                c.downloadSelection()
+                                uiScope.launch { pickDownloadTarget(item.name)?.let { c.downloadToTarget(item, it) } }
                             } else {
                                 c.local.selectOnly(item)
                                 c.uploadSelection()
                             }
+                            Unit
                         }
+                    }
+                    // «Download to device» (long-press на remote-файле): скачать БЕЗ диалога в текущий
+                    // каталог Local-панели (на Android — папка приложения), чтобы файл сразу был виден там.
+                    val downloadHere = remember(c) {
+                        { item: FileItem -> c.remote.selectOnly(item); c.downloadSelection() }
                     }
                     MobileFilesBreadcrumbRow(showRemote, pane.label, pane.path, mono)
                     MobileLivePane(
                         pane = pane,
                         mono = mono,
                         onTransfer = onTransfer,
+                        onDownloadHere = if (showRemote) downloadHere else null,
                         modifier = Modifier.weight(1f),
                     )
                     MobileTransferCard(c.transfer, mono, onDismiss = c::clearTransfer)
@@ -147,12 +158,50 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                 }
             }
         }
-        if (c != null && openError == null && showRemote) {
-            // FAB upload показан только на Remote-панели (как в макете): нативный пикер → заливка в
-            // текущий каталог Remote (uploadSource всегда целит в remote.path — на Local он не к месту).
-            MobileUploadFab(
-                onClick = { uiScope.launch { pickUploadSource()?.let { c.uploadSource(it) } } },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
+        // Скрим-подложка под раскрытым меню: тап мимо гасит FAB (мобильная идиома speed-dial).
+        if (fabOpen) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                        fabOpen = false
+                    },
+            )
+        }
+        // Единый «+»-FAB: раскрывает действия над текущей панелью. «Создать директорию» — на обеих
+        // панелях; «Загрузить файл» — только на Remote (uploadSource целит в remote.path, на Local
+        // не к месту). Действия всплывают НАД кнопкой стопкой с подписями+иконками.
+        if (c != null && openError == null) {
+            Column(
+                Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (fabOpen) {
+                    MobileFabAction("create_new_folder", "Создать директорию") {
+                        fabOpen = false
+                        creatingFolder = true
+                    }
+                    if (showRemote) {
+                        MobileFabAction("upload", "Загрузить файл") {
+                            fabOpen = false
+                            uiScope.launch { pickUploadSource()?.let { c.uploadSource(it) } }
+                        }
+                    }
+                }
+                MobileFabButton(open = fabOpen, onClick = { fabOpen = !fabOpen })
+            }
+        }
+        if (creatingFolder && c != null) {
+            // Создание каталога в текущей видимой панели (Remote или Local). Переиспользуем общий
+            // NameDialog (валидирует пустоту/«/»/«.»/«..»/управляющие), как desktop «New folder».
+            val pane = if (showRemote) c.remote else c.local
+            NameDialog(
+                title = "New folder",
+                confirmLabel = "Create",
+                initial = "",
+                onConfirm = { pane.mkdir(it); creatingFolder = false },
+                onDismiss = { creatingFolder = false },
             )
         }
     }
@@ -168,6 +217,7 @@ private fun MobileLivePane(
     pane: FilePaneController,
     mono: FontFamily,
     onTransfer: (FileItem) -> Unit,
+    onDownloadHere: ((FileItem) -> Unit)?,
     modifier: Modifier,
 ) {
     var renaming by remember(pane) { mutableStateOf<FileItem?>(null) }
@@ -193,6 +243,7 @@ private fun MobileLivePane(
                             selected = entry.path in pane.selection,
                             mono = mono,
                             onClick = { if (isDir) pane.open(entry) else onTransfer(entry) },
+                            onDownloadHere = if (!isDir && onDownloadHere != null) ({ onDownloadHere(entry) }) else null,
                             onRename = { renaming = entry },
                             onDelete = { deleting = entry },
                         )
@@ -232,6 +283,7 @@ private fun MobileFileRow(
     selected: Boolean,
     mono: FontFamily,
     onClick: () -> Unit,
+    onDownloadHere: (() -> Unit)?,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -265,6 +317,9 @@ private fun MobileFileRow(
                         .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
                         .padding(4.dp),
                 ) {
+                    onDownloadHere?.let { dl ->
+                        MobileMenuItem("Download to device", D.text) { menuOpen = false; dl() }
+                    }
                     MobileMenuItem("Rename", D.text) { menuOpen = false; onRename() }
                     MobileMenuItem("Delete", D.sunset) { menuOpen = false; onDelete() }
                 }
@@ -352,7 +407,7 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 Sym("error", size = 17.sp, color = D.sunset)
-                Txt("${transfer.name}: ${transfer.message}", color = D.sunset, size = 11.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Txt("${transfer.name}: ${transfer.message}", color = D.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 IconBtn("close", onClick = onDismiss, box = 26, icon = 16.sp)
             }
         }
@@ -361,7 +416,7 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
 
 // ──────────────────────────────────────── Shared chrome ────────────────────────────────────────
 
-/** Заголовок «Files» (28sp, как в макете). */
+/** Заголовок «Files» (28sp, как в макете). Действия (создать каталог/загрузить) — в общем «+»-FAB. */
 @Composable
 private fun MobileFilesTitle() {
     Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
@@ -424,9 +479,9 @@ private fun MobileFilesBreadcrumbRow(remote: Boolean, label: String, path: Strin
     }
 }
 
-/** Круглая FAB-кнопка upload (cyan, тёмная иконка) — нижний правый угол макета. */
+/** Круглая «+»-FAB (cyan, тёмная иконка); в раскрытом состоянии [open] показывает «×» для сворачивания. */
 @Composable
-private fun MobileUploadFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun MobileFabButton(open: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier
             .size(56.dp)
@@ -435,7 +490,25 @@ private fun MobileUploadFab(onClick: () -> Unit, modifier: Modifier = Modifier) 
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Sym("upload", size = 26.sp, color = Color(0xFF0A1A26))
+        Sym(if (open) "close" else "add", size = 26.sp, color = Color(0xFF0A1A26))
+    }
+}
+
+/** Пункт меню «+»-FAB: пилюля с иконкой и подписью (всплывает над кнопкой). */
+@Composable
+private fun MobileFabAction(icon: String, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(D.surface2)
+            .border(1.dp, D.cyan14, RoundedCornerShape(14.dp))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Sym(icon, size = 20.sp, color = D.cyanBright)
+        Txt(label, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
     }
 }
 
@@ -499,7 +572,7 @@ private fun MockMobileFilesView(mono: FontFamily) {
             MockTransferCard(mono)
             Spacer(Modifier.height(96.dp))
         }
-        MobileUploadFab(onClick = {}, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp))
+        MobileFabButton(open = false, onClick = {}, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp))
     }
 }
 

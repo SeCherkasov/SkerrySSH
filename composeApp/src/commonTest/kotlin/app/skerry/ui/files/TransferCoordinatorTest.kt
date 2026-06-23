@@ -1,6 +1,9 @@
 package app.skerry.ui.files
 
+import app.skerry.shared.files.FileItem
+import app.skerry.shared.files.FileItemType
 import app.skerry.shared.files.SftpFileBrowser
+import app.skerry.ui.sftp.DownloadTarget
 import app.skerry.ui.sftp.FakeSftpClient
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.UploadSource
@@ -97,6 +100,59 @@ class TransferCoordinatorTest {
         assertEquals("$RHOME/r.txt" to "$LHOME/r.txt", r.remoteFake.lastDownload)
         assertEquals(TransferState.Idle, r.coordinator.transfer)
         assertTrue(r.remote.selection.isEmpty())
+    }
+
+    /** Тест-цель скачивания «Save to…»: фиксирует staging-путь и финализацию/откат. */
+    private class FakeDownloadTarget(
+        override val displayName: String,
+        override val stagingPath: String,
+        private val finalizeError: String? = null,
+    ) : DownloadTarget {
+        var finalized = false
+        var discarded = false
+        override suspend fun finalize() {
+            finalizeError?.let { throw RuntimeException(it) }
+            finalized = true
+        }
+        override suspend fun discard() { discarded = true }
+    }
+
+    @Test
+    fun `downloadToTarget streams a remote file into the picked target and finalizes it`() = runTest {
+        val r = rig()
+        val target = FakeDownloadTarget("r.txt", "/staging/r.txt")
+
+        r.coordinator.downloadToTarget(r.remote.entry("r.txt"), target)
+        advanceUntilIdle()
+
+        assertEquals("$RHOME/r.txt" to "/staging/r.txt", r.remoteFake.lastDownload)
+        assertTrue(target.finalized)
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+    }
+
+    @Test
+    fun `downloadToTarget discards the target and reports Failed when finalize fails`() = runTest {
+        val r = rig()
+        val target = FakeDownloadTarget("r.txt", "/staging/r.txt", finalizeError = "нет места")
+
+        r.coordinator.downloadToTarget(r.remote.entry("r.txt"), target)
+        advanceUntilIdle()
+
+        assertIs<TransferState.Failed>(r.coordinator.transfer)
+        assertTrue(target.discarded)
+    }
+
+    @Test
+    fun `downloadToTarget ignores directories`() = runTest {
+        val r = rig()
+        val dir = FileItem("sub", "$RHOME/sub", FileItemType.Directory, 0, 0)
+        val target = FakeDownloadTarget("sub", "/staging/sub")
+
+        r.coordinator.downloadToTarget(dir, target)
+        advanceUntilIdle()
+
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+        assertTrue(!target.finalized && r.remoteFake.lastDownload == null)
     }
 
     @Test

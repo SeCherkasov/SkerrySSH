@@ -8,6 +8,7 @@ import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpProgress
+import app.skerry.ui.sftp.DownloadTarget
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.UploadSource
 import kotlinx.coroutines.CoroutineScope
@@ -80,6 +81,38 @@ class TransferCoordinator(
         receiver = local,
         source = remote,
     ) { item, target, onProgress -> sftp.download(item.path, target, onProgress) }
+
+    /**
+     * Скачать удалённый файл [item] в выбранную нативным пикером цель [target] (на Android — SAF-документ
+     * «Save to…», на desktop — выбранный путь). SFTP пишет байты в `target.stagingPath`; по успеху —
+     * `target.finalize()` (копирование staging→Uri), при ошибке/отмене — `target.discard()`. В отличие
+     * от [downloadSelection] цель не привязана к локальной панели — это путь скачивания мобильного экрана
+     * Files наружу из песочницы. Прогресс/ошибка идут в [transfer]; сериализуется тем же [busy]. Каталоги
+     * игнорируются (рекурсивная передача — позже). `discard()` под [runCatching], чтобы сбой очистки не
+     * подменил исходную ошибку.
+     */
+    fun downloadToTarget(item: FileItem, target: DownloadTarget) {
+        if (busy || item.type != FileItemType.File) return
+        busy = true
+        scope.launch {
+            try {
+                transfer = TransferState.Active(target.displayName, TransferDirection.Download, 1, 1, 0, item.size)
+                sftp.download(item.path, target.stagingPath) { transferred, total ->
+                    transfer = TransferState.Active(target.displayName, TransferDirection.Download, 1, 1, transferred, total)
+                }
+                target.finalize()
+                transfer = TransferState.Idle
+            } catch (e: CancellationException) {
+                runCatching { target.discard() }
+                throw e
+            } catch (e: Exception) {
+                runCatching { target.discard() }
+                transfer = TransferState.Failed(target.displayName, e.message ?: "Ошибка передачи")
+            } finally {
+                busy = false
+            }
+        }
+    }
 
     /**
      * Fallback-загрузка: залить произвольный локальный [source] (из нативного пикера) в текущий каталог

@@ -74,7 +74,7 @@ class FilePaneController(
 
     /** Подняться в родительский каталог. Сбрасывает выделение. */
     fun goUp() = op {
-        path = browser.realpath("$path/..")
+        path = parentPath(path)
         resetSelection()
         reload()
     }
@@ -189,6 +189,19 @@ class FilePaneController(
 
     /** Путь дочернего объекта [name] в текущем каталоге (без двойного `/` в корне). */
     private fun childPath(name: String): String = if (path == "/") "/$name" else "$path/$name"
+
+    /**
+     * Лексический родитель абсолютного пути для кнопки «вверх». НЕ просим сервер канонизировать
+     * `"$path/.."` через [FileBrowser.realpath]: часть SFTP-серверов не разрешает REALPATH для путей
+     * с `..` (наблюдалось «Не удалось разрешить путь /root/..»). Для навигации вверх лексический
+     * родитель — и есть ожидаемое поведение (вернуться в каталог, откуда пришли), а локальная ФС всё
+     * равно нормализует путь сама. Корень и пути без разделителя сводятся к `/`.
+     */
+    private fun parentPath(path: String): String {
+        val trimmed = path.trimEnd('/')
+        val cut = trimmed.lastIndexOf('/')
+        return if (cut <= 0) "/" else trimmed.substring(0, cut)
+    }
 }
 
 /** Каталоги первыми, затем по имени без учёта регистра — привычный порядок файлового менеджера. */

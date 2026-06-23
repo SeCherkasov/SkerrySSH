@@ -127,7 +127,10 @@ internal class SshjSftpClient(
         return try {
             block()
         } catch (e: IOException) {
-            throw SftpException(message, e)
+            // Включаем причину sshj в текст: иначе UI показывает только обёртку («Не удалось
+            // загрузить файл …»), а реальный повод (нет места/прав, обрыв канала) теряется.
+            val cause = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName
+            throw SftpException(if (cause != null) "$message: $cause" else message, e)
         }
     }
 
