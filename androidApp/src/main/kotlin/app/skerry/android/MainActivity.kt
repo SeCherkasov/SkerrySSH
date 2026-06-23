@@ -16,6 +16,7 @@ import app.skerry.shared.vault.FileBioArtifactStore
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
+import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
@@ -110,8 +111,10 @@ class MainActivity : FragmentActivity() {
             vault = vault,
             credentials = credentials,
             knownHosts = knownHosts,
-            // Инспектор/генератор SSH-ключей (BouncyCastle, общий JVM source set) — отпечатки ключей в табе Vault.
+            // Инспектор/генератор SSH-ключей (BouncyCastle, общий JVM source set) — отпечатки/генерация в табе Vault.
             keyGenerator = BouncyCastleSshKeyGenerator(),
+            // Инспектор SSH-сертификатов (sshj) — раздел Vault → Certificates: разбор *-cert.pub.
+            certificateInspector = SshjCertificateInspector(),
             biometrics = biometrics,
         )
     }

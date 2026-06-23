@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -230,7 +231,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     }
 }
 
-private fun Host.unbindCredential(): HostDraft =
+internal fun Host.unbindCredential(): HostDraft =
     HostDraft(id = id, label = label, address = address, port = port, username = username, group = group, credentialId = null)
 
 // ---------------------------------------------------------------------------------------------
@@ -373,7 +374,7 @@ private fun LiveSecretCard(
 
 /** Квадратная иконка секрета в карточке/деталях (cyan/moss-тон для ключей/сертификатов, нейтральный для пароля). */
 @Composable
-private fun SecretIcon(icon: String, tinted: Boolean, color: Color, size: Int = 38) {
+internal fun SecretIcon(icon: String, tinted: Boolean, color: Color, size: Int = 38) {
     Box(
         Modifier.size(size.dp).clip(RoundedCornerShape(9.dp)).background(if (tinted) color.copy(alpha = 0.12f) else Color(0x0DFFFFFF)),
         contentAlignment = Alignment.Center,
@@ -400,7 +401,7 @@ private fun VaultEmptyCategory(category: VaultCategoryKind) {
 
 /** Открытые метаданные приватного ключа (отпечаток/тип/публичная строка); для пароля — null. */
 @Composable
-private fun rememberKeyInfo(credential: Credential, generator: SshKeyGenerator?): SshPublicKeyInfo? =
+internal fun rememberKeyInfo(credential: Credential, generator: SshKeyGenerator?): SshPublicKeyInfo? =
     // Ключ включает secret, а не только id: при обновлении записи (тот же id, новый секрет) пересчитываем.
     remember(credential.id, credential.secret, generator) {
         (credential.secret as? CredentialSecret.PrivateKey)?.let { generator?.inspect(it.privateKeyPem, it.passphrase) }
@@ -408,7 +409,7 @@ private fun rememberKeyInfo(credential: Credential, generator: SshKeyGenerator?)
 
 /** Открытые метаданные сертификата (principals/срок/serial/CA); null — не сертификат или битый. */
 @Composable
-private fun rememberCertInfo(credential: Credential, inspector: SshCertificateInspector?): SshCertificateInfo? =
+internal fun rememberCertInfo(credential: Credential, inspector: SshCertificateInspector?): SshCertificateInfo? =
     remember(credential.id, credential.secret, inspector) {
         (credential.secret as? CredentialSecret.Certificate)?.let { inspector?.inspect(it.certificate) }
     }
@@ -491,7 +492,7 @@ private fun LiveSecretDetail(
 /** Блок «Used by · N hosts» с pill-ами имён хостов — для панели деталей секрета. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
+internal fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
     DetailLabel("Used by · ${hosts.size} ${if (hosts.size == 1) "host" else "hosts"}")
     if (hosts.isEmpty()) {
         Txt("Not attached to any host yet.", color = D.faint, size = 11.sp, modifier = Modifier.padding(bottom = 20.dp))
@@ -505,7 +506,7 @@ private fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
 /** Тело панели деталей сертификата: сама строка cert, key id, principals, срок, serial, CA. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CertificateDetailBody(info: SshCertificateInfo?, mono: FontFamily) {
+internal fun CertificateDetailBody(info: SshCertificateInfo?, mono: FontFamily) {
     DetailLabel("Certificate")
     Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(D.terminalBg).border(1.dp, D.moss.copy(alpha = 0.12f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
         Txt(
@@ -538,7 +539,7 @@ private fun CertificateDetailBody(info: SshCertificateInfo?, mono: FontFamily) {
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, type: SshKeyType) -> Unit) {
+internal fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, type: SshKeyType) -> Unit) {
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(SshKeyType.ED25519) }
     val valid = name.isNotBlank()
@@ -555,7 +556,7 @@ private fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, ty
 }
 
 @Composable
-private fun AddPasswordDialog(onDismiss: () -> Unit, onCreate: (name: String, password: String) -> Unit) {
+internal fun AddPasswordDialog(onDismiss: () -> Unit, onCreate: (name: String, password: String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val valid = name.isNotBlank() && password.isNotEmpty()
@@ -569,7 +570,7 @@ private fun AddPasswordDialog(onDismiss: () -> Unit, onCreate: (name: String, pa
 }
 
 @Composable
-private fun ImportCertificateDialog(
+internal fun ImportCertificateDialog(
     inspector: SshCertificateInspector,
     onDismiss: () -> Unit,
     onCreate: (name: String, pem: String, certificate: String, passphrase: String?) -> Unit,
@@ -606,7 +607,7 @@ private fun ImportCertificateDialog(
 }
 
 @Composable
-private fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     VaultDialogScaffold("Delete \"$label\"?", null, onDismiss) {
         val detail = if (boundHostCount == 0) {
             "This is removed from your vault. This can't be undone."
@@ -626,7 +627,9 @@ private fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: ()
 @Composable
 private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () -> Unit, content: @Composable () -> Unit) {
     Box(
-        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(onClick = onDismiss),
+        // imePadding: на мобильном поднимает центрированный диалог над экранной клавиатурой (поля
+        // NAME/PASSWORD/PEM), чтобы кнопки не уезжали под неё; на desktop WindowInsets.ime пуст — no-op.
+        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(onClick = onDismiss).imePadding(),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -877,12 +880,12 @@ private fun KeyDetail(mono: FontFamily) {
 }
 
 @Composable
-private fun DetailLabel(text: String) {
+internal fun DetailLabel(text: String) {
     Txt(text.uppercase(), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
 }
 
 @Composable
-private fun HostPill(name: String, mono: FontFamily, dim: Boolean = false) {
+internal fun HostPill(name: String, mono: FontFamily, dim: Boolean = false) {
     Box(Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 9.dp, vertical = 3.dp)) {
         Txt(name, color = if (dim) D.dim else D.textBright, size = 11.sp, font = mono)
     }

@@ -104,8 +104,9 @@ fun MobileDesignApp(
         LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,
         LocalFeatures provides features,
-        // Инспектор SSH-ключей — таб Vault считает им отпечатки живых ключей keychain.
+        // Инспектор/генератор SSH-ключей + инспектор сертификатов — таб Vault: отпечатки, генерация, разбор cert.
         LocalSshKeyGenerator provides deps.keyGenerator,
+        LocalSshCertificateInspector provides deps.certificateInspector,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             val vault = deps.vault
