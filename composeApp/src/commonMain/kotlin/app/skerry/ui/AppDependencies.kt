@@ -6,6 +6,7 @@ import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.KnownHostsController
 
@@ -22,6 +23,8 @@ data class AppDependencies(
     val hosts: HostManagerController? = null,
     val vault: Vault? = null,
     val identities: IdentityManagerController? = null,
+    /** Менеджер keychain-секретов (ключи/пароли/сертификаты); `null` — подсистема не подключена. */
+    val credentials: CredentialManagerController? = null,
     /** Менеджер known-hosts (доверенные ключи + события смены ключа); `null` — подсистема не подключена. */
     val knownHosts: KnownHostsController? = null,
     /** Генератор/инспектор SSH-ключей (раздел Vault); `null` — платформа без крипты ключей. */

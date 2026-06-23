@@ -3,8 +3,8 @@ package app.skerry.ui.connection
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
-import app.skerry.shared.vault.Identity
-import app.skerry.shared.vault.IdentityAuth
+import app.skerry.shared.vault.Credential
+import app.skerry.shared.vault.CredentialSecret
 
 /**
  * Чистые хелперы проводки сохранённого профиля хоста к живой сессии. Вынесены отдельно от UI,
@@ -19,13 +19,14 @@ fun Host.toTarget(): SshTarget = SshTarget(host = address, port = port, username
 fun Host.connectionSubtitle(): String = "$username@$address:$port"
 
 /**
- * Секрет identity из vault → способ аутентификации SSH. Пароль и приватный ключ (с опц. passphrase)
- * разворачиваются один в один; ветки совпадают с моделью [IdentityAuth].
+ * Keychain-секрет из vault → способ аутентификации SSH. Пароль/ключ/сертификат разворачиваются
+ * один в один; ветки совпадают с моделью [CredentialSecret]. Учётка ([app.skerry.shared.vault.Identity])
+ * сама секрета не содержит — вызывающий резолвит её `credentialId` в [Credential] и зовёт это.
  */
-fun Identity.toSshAuth(): SshAuth = when (val a = auth) {
-    is IdentityAuth.Password -> SshAuth.Password(a.password)
-    is IdentityAuth.PrivateKey -> SshAuth.PublicKey(a.privateKeyPem, a.passphrase)
-    is IdentityAuth.Certificate -> SshAuth.Certificate(a.privateKeyPem, a.certificate, a.passphrase)
+fun Credential.toSshAuth(): SshAuth = when (val s = secret) {
+    is CredentialSecret.Password -> SshAuth.Password(s.password)
+    is CredentialSecret.PrivateKey -> SshAuth.PublicKey(s.privateKeyPem, s.passphrase)
+    is CredentialSecret.Certificate -> SshAuth.Certificate(s.privateKeyPem, s.certificate, s.passphrase)
 }
 
 /**

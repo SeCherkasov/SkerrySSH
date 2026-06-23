@@ -79,6 +79,20 @@ class HostManagerControllerTest {
     }
 
     @Test
+    fun `reload pulls hosts written to the store behind the controller`() {
+        // Миграция при unlock пишет в HostStore напрямую (мимо контроллера); reload синхронизирует
+        // Compose-state со стором, чтобы UI увидел перенаправленные identityId.
+        val store = FakeHostStore(Host("1", "a", "a.local", 22, "u"))
+        val controller = HostManagerController(store) { "x" }
+        store.put(Host("2", "b", "b.local", 22, "u")) // запись в обход контроллера
+
+        assertEquals(listOf("1"), controller.hosts.map { it.id }) // ещё не видит
+        controller.reload()
+
+        assertEquals(listOf("1", "2"), controller.hosts.map { it.id })
+    }
+
+    @Test
     fun `find returns a host by id or null`() {
         val store = FakeHostStore(Host("1", "a", "a.local", 22, "u"))
         val controller = HostManagerController(store) { "x" }

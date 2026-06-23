@@ -1,64 +1,29 @@
 package app.skerry.shared.vault
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Способ аутентификации, хранимый в [Identity]. Полиморфно сериализуется внутрь зашифрованного
- * payload записи vault; `@SerialName` фиксирует стабильное wire-имя в дискриминаторе, чтобы
- * рефакторинг/переименование пакета или минификация (R8) не сделали уже записанные блобы
- * нечитаемыми. `toString` редактится — секрет не должен утечь в логи/краш-репорты.
+ * Учётка подключения (как «identity» в популярных SSH-клиентах): пара «имя пользователя + способ входа»,
+ * переиспользуемая на нескольких хостах. Хост ссылается на учётку по [id]
+ * ([app.skerry.shared.host.Host.identityId]), а учётка — на keychain-секрет по [credentialId]
+ * ([Credential.id]). Двухуровневая ссылка (хост → учётка → credential) даёт смену ключа/пароля
+ * в одном месте для всех зависимых хостов.
  *
- * Секреты держатся как `String`: на JVM их нельзя обнулить (живут в куче до GC). Это принятое
- * ограничение текущего этапа (как у [app.skerry.shared.ssh.SshAuth.Password]); переход на
- * затираемые `CharArray`/`ByteArray` — отдельный шаг вместе с секьюрным вводом.
- */
-@Serializable
-sealed interface IdentityAuth {
-    /** Пароль пользователя. */
-    @Serializable
-    @SerialName("password")
-    data class Password(val password: String) : IdentityAuth {
-        override fun toString(): String = "Password(redacted)"
-    }
-
-    /** Приватный ключ в PEM (OpenSSH/PKCS) и необязательная passphrase для его расшифровки. */
-    @Serializable
-    @SerialName("private_key")
-    data class PrivateKey(val privateKeyPem: String, val passphrase: String? = null) : IdentityAuth {
-        override fun toString(): String = "PrivateKey(redacted)"
-    }
-
-    /**
-     * SSH-сертификат: приватный ключ ([privateKeyPem]) плюс выданный CA сертификат ([certificate],
-     * строка `*-cert.pub` вида `ssh-…-cert-v01@openssh.com <base64> [comment]`). При аутентификации
-     * клиент предъявляет сертификат, а доказывает владение приватным ключом — поэтому оба хранятся
-     * вместе. [passphrase] расшифровывает приватный ключ, если он зашифрован. Сертификат публичен,
-     * но приватный ключ/passphrase — секрет, потому `toString` редактится целиком.
-     */
-    @Serializable
-    @SerialName("certificate")
-    data class Certificate(
-        val privateKeyPem: String,
-        val certificate: String,
-        val passphrase: String? = null,
-    ) : IdentityAuth {
-        override fun toString(): String = "Certificate(redacted)"
-    }
-}
-
-/**
- * Переиспользуемый секрет аутентификации (как «identity» в популярных SSH-клиентах): на него ссылаются хосты по
- * [id], один ключ/пароль может обслуживать несколько хостов. Целиком — включая [label] — лежит в
- * зашифрованном payload записи [RecordType.IDENTITY]: открытые метаданные [VaultRecord] не должны
- * раскрывать имена и типы ключей (zero-knowledge). По той же причине `toString` редактит [label]
- * и [auth], оставляя только [id] (он и так открыт в метаданных).
+ * [username] — имя пользователя для входа (раньше дублировалось в каждом хосте). [credentialId]
+ * указывает на ровно один [Credential] в том же vault; учётка не хранит секрет inline — только
+ * ссылку, поэтому секрет живёт единственным экземпляром в keychain.
+ *
+ * Целиком лежит в зашифрованном payload записи [RecordType.IDENTITY]: открытые метаданные не
+ * раскрывают [label]/[username]. `toString` редактит [label]/[username], оставляя [id]/[credentialId]
+ * (структурные ссылки, не секрет) — помогает диагностике без утечки имён.
  */
 @Serializable
 data class Identity(
     val id: String,
     val label: String,
-    val auth: IdentityAuth,
+    val username: String,
+    val credentialId: String,
 ) {
-    override fun toString(): String = "Identity(id=$id, label=redacted, auth=redacted)"
+    override fun toString(): String =
+        "Identity(id=$id, label=redacted, username=redacted, credentialId=$credentialId)"
 }

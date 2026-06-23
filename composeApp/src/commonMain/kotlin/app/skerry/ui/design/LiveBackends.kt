@@ -7,6 +7,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
@@ -44,6 +45,14 @@ val LocalHosts: ProvidableCompositionLocal<HostManagerController?> = staticCompo
  * [DesktopDesignApp] за гейтом мастер-пароля — там же, где список перечитывается ([reload]).
  */
 val LocalIdentities: ProvidableCompositionLocal<IdentityManagerController?> = staticCompositionLocalOf { null }
+
+/**
+ * Менеджер keychain-секретов (ключи/пароли/сертификаты в открытом vault) — сырой материал, на
+ * который ссылаются учётки [LocalIdentities]. `null` — мок-путь/превью без vault: разделы keychain
+ * в [app.skerry.ui.design.VaultView] рисуют статичный макет. Поставляется [DesktopDesignApp] за
+ * гейтом мастер-пароля (там же, где списки перечитываются).
+ */
+val LocalCredentials: ProvidableCompositionLocal<CredentialManagerController?> = staticCompositionLocalOf { null }
 
 /**
  * Генератор/инспектор SSH-ключей (создание пары в разделе Vault, вычисление отпечатка/типа уже

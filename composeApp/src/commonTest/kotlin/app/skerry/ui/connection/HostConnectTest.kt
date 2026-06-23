@@ -3,14 +3,16 @@ package app.skerry.ui.connection
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
-import app.skerry.shared.vault.Identity
-import app.skerry.shared.vault.IdentityAuth
+import app.skerry.shared.vault.Credential
+import app.skerry.shared.vault.CredentialSecret
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Чистые хелперы проводки хоста к сессии (host → адрес/ярлык, identity → способ аутентификации),
- * общие для desktop-дизайн-слоя и мобильного UI. Color/Compose тут не участвуют — только модели.
+ * Чистые хелперы проводки хоста к сессии (host → адрес/ярлык, keychain-секрет → способ
+ * аутентификации), общие для desktop-дизайн-слоя и мобильного UI. Color/Compose тут не участвуют —
+ * только модели. Учётка ([app.skerry.shared.vault.Identity]) сама секрета не содержит: вызывающий
+ * резолвит её `credentialId` в [Credential] и зовёт [toSshAuth].
  */
 class HostConnectTest {
 
@@ -34,33 +36,33 @@ class HostConnectTest {
     }
 
     @Test
-    fun password_identity_maps_to_password_auth() {
-        val id = Identity("i1", "pw", IdentityAuth.Password("s3cr3t"))
-        assertEquals(SshAuth.Password("s3cr3t"), id.toSshAuth())
+    fun password_credential_maps_to_password_auth() {
+        val c = Credential("c1", "pw", CredentialSecret.Password("s3cr3t"))
+        assertEquals(SshAuth.Password("s3cr3t"), c.toSshAuth())
     }
 
     @Test
-    fun private_key_identity_maps_with_passphrase() {
-        val id = Identity("i2", "key", IdentityAuth.PrivateKey("PEMDATA", "phrase"))
-        assertEquals(SshAuth.PublicKey("PEMDATA", "phrase"), id.toSshAuth())
+    fun private_key_credential_maps_with_passphrase() {
+        val c = Credential("c2", "key", CredentialSecret.PrivateKey("PEMDATA", "phrase"))
+        assertEquals(SshAuth.PublicKey("PEMDATA", "phrase"), c.toSshAuth())
     }
 
     @Test
-    fun private_key_identity_without_passphrase_keeps_null() {
-        val id = Identity("i3", "key", IdentityAuth.PrivateKey("PEMDATA", null))
-        assertEquals(SshAuth.PublicKey("PEMDATA", null), id.toSshAuth())
+    fun private_key_credential_without_passphrase_keeps_null() {
+        val c = Credential("c3", "key", CredentialSecret.PrivateKey("PEMDATA", null))
+        assertEquals(SshAuth.PublicKey("PEMDATA", null), c.toSshAuth())
     }
 
     @Test
-    fun certificate_identity_maps_to_certificate_auth() {
-        val id = Identity("i4", "cert", IdentityAuth.Certificate("PEMDATA", "CERTDATA", "phrase"))
-        assertEquals(SshAuth.Certificate("PEMDATA", "CERTDATA", "phrase"), id.toSshAuth())
+    fun certificate_credential_maps_to_certificate_auth() {
+        val c = Credential("c4", "cert", CredentialSecret.Certificate("PEMDATA", "CERTDATA", "phrase"))
+        assertEquals(SshAuth.Certificate("PEMDATA", "CERTDATA", "phrase"), c.toSshAuth())
     }
 
     @Test
-    fun certificate_identity_without_passphrase_keeps_null() {
-        val id = Identity("i5", "cert", IdentityAuth.Certificate("PEMDATA", "CERTDATA", null))
-        assertEquals(SshAuth.Certificate("PEMDATA", "CERTDATA", null), id.toSshAuth())
+    fun certificate_credential_without_passphrase_keeps_null() {
+        val c = Credential("c5", "cert", CredentialSecret.Certificate("PEMDATA", "CERTDATA", null))
+        assertEquals(SshAuth.Certificate("PEMDATA", "CERTDATA", null), c.toSshAuth())
     }
 
     @Test

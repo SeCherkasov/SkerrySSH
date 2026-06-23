@@ -42,6 +42,14 @@ class HostManagerController(
     fun find(id: String): Host? = hosts.firstOrNull { it.id == id }
 
     /**
+     * Перечитать список из стора. Нужно после записей в обход контроллера (например, миграция vault
+     * пишет перенаправленные [Host.identityId] прямо в [HostStore] при unlock).
+     */
+    fun reload() {
+        hosts = store.all()
+    }
+
+    /**
      * Создать (если [HostDraft.id] == null) или обновить профиль и перечитать список.
      * Возвращает назначенный id — для нового хоста это сгенерированный [newId], чтобы
      * вызывающий мог выделить только что созданную запись.

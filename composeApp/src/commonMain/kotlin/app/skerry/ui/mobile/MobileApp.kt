@@ -81,8 +81,8 @@ import app.skerry.ui.forward.parseBindPort
 import app.skerry.ui.forward.parseForwardInput
 import app.skerry.ui.host.HostDraft
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.identity.IdentityManagerController
-import app.skerry.ui.identity.kindLabel
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.sftp.RemoteSftpPane
 import app.skerry.ui.terminal.TerminalScreen
@@ -158,8 +158,10 @@ private fun MobileRoot(deps: AppDependencies, onLock: (() -> Unit)?) {
     }
 
     fun startConnect(host: Host) {
-        val identity = deps.identities?.find(host.identityId)
-        if (identity != null) openSession(host, identity.toSshAuth()) else pendingHost = host
+        // Двухуровневый резолв: хост → учётка → keychain-секрет → SshAuth; нет привязки/секрета → пароль.
+        val account = deps.identities?.find(host.identityId)
+        val credential = account?.let { deps.credentials?.find(it.credentialId) }
+        if (account != null && credential != null) openSession(host, credential.toSshAuth()) else pendingHost = host
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -176,7 +178,7 @@ private fun MobileRoot(deps: AppDependencies, onLock: (() -> Unit)?) {
                     MobileTab.Terminal -> TerminalTab(sessions, onGoHosts = { tab = MobileTab.Hosts })
                     MobileTab.Files -> FilesTab(sessions, scope, onGoHosts = { tab = MobileTab.Hosts })
                     MobileTab.Forwards -> ForwardsTab(sessions, onGoHosts = { tab = MobileTab.Hosts })
-                    MobileTab.Keys -> KeysScreen(deps.identities)
+                    MobileTab.Keys -> KeysScreen(deps.identities, deps.credentials)
                     MobileTab.Settings -> SettingsScreen(deps, onLock)
                 }
             }
@@ -706,8 +708,10 @@ private fun DirectionPicker(selected: ForwardDirection, mono: FontFamily, onSele
     }
 }
 
+// TODO(mobile parity): полноценный двухуровневый список keychain (Credential) отдельно от учёток —
+// отдельная сессия. Сейчас экран показывает учётки [Identity] (label + username + привязанный секрет).
 @Composable
-private fun KeysScreen(identities: IdentityManagerController?) {
+private fun KeysScreen(identities: IdentityManagerController?, credentials: CredentialManagerController?) {
     Column(Modifier.fillMaxSize()) {
         SimpleAppBar("Keychain")
         val list = identities?.identities ?: emptyList()
@@ -716,16 +720,22 @@ private fun KeysScreen(identities: IdentityManagerController?) {
             return@Column
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
-            SectionLabel("Секреты")
-            list.forEach { identity -> KeyCard(identity) }
+            SectionLabel("Учётки")
+            list.forEach { identity -> KeyCard(identity, credentials) }
             Spacer(Modifier.height(80.dp))
         }
     }
 }
 
 @Composable
-private fun KeyCard(identity: Identity) {
+private fun KeyCard(identity: Identity, credentials: CredentialManagerController?) {
     val mono = rememberJetBrainsMono()
+    // Подзаголовок — username учётки и метка привязанного keychain-секрета (если он доступен).
+    val credentialLabel = credentials?.find(identity.credentialId)?.label
+    val subtitle = buildString {
+        append(identity.username.ifBlank { "(без пользователя)" })
+        if (!credentialLabel.isNullOrBlank()) append(" · ").append(credentialLabel)
+    }
     Row(
         Modifier.fillMaxWidth().padding(vertical = 4.5.dp).clip(RoundedCornerShape(14.dp)).background(SkerryColors.nightSeaSoft).border(1.dp, SkerryColors.line, RoundedCornerShape(14.dp)).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -736,7 +746,7 @@ private fun KeyCard(identity: Identity) {
         }
         Column(Modifier.weight(1f)) {
             Text(identity.label.ifBlank { "(без имени)" }, color = SkerryColors.text, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, fontFamily = mono)
-            Text(identity.auth.kindLabel(), color = SkerryColors.textFaint, fontSize = 10.5.sp, fontFamily = mono)
+            Text(subtitle, color = SkerryColors.textFaint, fontSize = 10.5.sp, fontFamily = mono)
         }
     }
 }
