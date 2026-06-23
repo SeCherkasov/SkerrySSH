@@ -9,12 +9,13 @@ import app.skerry.shared.vault.IdentityAuth
 import app.skerry.shared.vault.IdentityStore
 
 /** Вид секрета в форме identity: разворачивается в [IdentityAuth]. */
-enum class IdentityKind { PASSWORD, PRIVATE_KEY }
+enum class IdentityKind { PASSWORD, PRIVATE_KEY, CERTIFICATE }
 
 /**
- * Редактируемые поля identity без [Identity.id]. Поля обоих видов держатся рядом (форма
+ * Редактируемые поля identity без [Identity.id]. Поля всех видов держатся рядом (форма
  * переключается без потери ввода); в [IdentityAuth] разворачивается только активный [kind].
- * [id] == null — создаётся новая identity, иначе обновляется существующая.
+ * [id] == null — создаётся новая identity, иначе обновляется существующая. [certificate] — строка
+ * `*-cert.pub` (для [IdentityKind.CERTIFICATE]; приватный ключ берётся из [privateKeyPem]).
  */
 data class IdentityDraft(
     val id: String? = null,
@@ -23,10 +24,12 @@ data class IdentityDraft(
     val password: String = "",
     val privateKeyPem: String = "",
     val passphrase: String = "",
+    val certificate: String = "",
 ) {
     fun toAuth(): IdentityAuth = when (kind) {
         IdentityKind.PASSWORD -> IdentityAuth.Password(password)
         IdentityKind.PRIVATE_KEY -> IdentityAuth.PrivateKey(privateKeyPem, passphrase.ifBlank { null })
+        IdentityKind.CERTIFICATE -> IdentityAuth.Certificate(privateKeyPem, certificate, passphrase.ifBlank { null })
     }
 
     // Секрет не должен утечь в логи/сообщения исключений (как и у [Identity]): держим только метаданные.

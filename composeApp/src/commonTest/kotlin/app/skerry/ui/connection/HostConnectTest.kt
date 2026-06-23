@@ -52,6 +52,18 @@ class HostConnectTest {
     }
 
     @Test
+    fun certificate_identity_maps_to_certificate_auth() {
+        val id = Identity("i4", "cert", IdentityAuth.Certificate("PEMDATA", "CERTDATA", "phrase"))
+        assertEquals(SshAuth.Certificate("PEMDATA", "CERTDATA", "phrase"), id.toSshAuth())
+    }
+
+    @Test
+    fun certificate_identity_without_passphrase_keeps_null() {
+        val id = Identity("i5", "cert", IdentityAuth.Certificate("PEMDATA", "CERTDATA", null))
+        assertEquals(SshAuth.Certificate("PEMDATA", "CERTDATA", null), id.toSshAuth())
+    }
+
+    @Test
     fun short_cipher_drops_vendor_suffix() {
         assertEquals("chacha20-poly1305", shortCipher("chacha20-poly1305@openssh.com"))
         assertEquals("aes256-gcm", shortCipher("aes256-gcm@openssh.com"))

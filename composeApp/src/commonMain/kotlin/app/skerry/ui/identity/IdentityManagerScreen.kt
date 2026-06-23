@@ -94,12 +94,21 @@ private fun Identity.toDraft(): IdentityDraft = when (val a = auth) {
         privateKeyPem = a.privateKeyPem,
         passphrase = a.passphrase ?: "",
     )
+    is IdentityAuth.Certificate -> IdentityDraft(
+        id = id,
+        label = label,
+        kind = IdentityKind.CERTIFICATE,
+        privateKeyPem = a.privateKeyPem,
+        passphrase = a.passphrase ?: "",
+        certificate = a.certificate,
+    )
 }
 
 /** Короткая подпись вида секрета для списков/панелей. */
 internal fun IdentityAuth.kindLabel(): String = when (this) {
     is IdentityAuth.Password -> "пароль"
     is IdentityAuth.PrivateKey -> "ключ"
+    is IdentityAuth.Certificate -> "сертификат"
 }
 
 @Composable
@@ -126,10 +135,12 @@ private fun IdentityEditor(
     var password by remember(draft) { mutableStateOf(draft.password) }
     var pem by remember(draft) { mutableStateOf(draft.privateKeyPem) }
     var passphrase by remember(draft) { mutableStateOf(draft.passphrase) }
+    var certificate by remember(draft) { mutableStateOf(draft.certificate) }
 
     val canSave = label.isNotBlank() && when (kind) {
         IdentityKind.PASSWORD -> password.isNotEmpty()
         IdentityKind.PRIVATE_KEY -> pem.isNotBlank()
+        IdentityKind.CERTIFICATE -> pem.isNotBlank() && certificate.isNotBlank()
     }
 
     Column(
@@ -141,6 +152,7 @@ private fun IdentityEditor(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             KindToggle("Пароль", kind == IdentityKind.PASSWORD, Modifier.weight(1f)) { kind = IdentityKind.PASSWORD }
             KindToggle("Ключ", kind == IdentityKind.PRIVATE_KEY, Modifier.weight(1f)) { kind = IdentityKind.PRIVATE_KEY }
+            KindToggle("Сертификат", kind == IdentityKind.CERTIFICATE, Modifier.weight(1f)) { kind = IdentityKind.CERTIFICATE }
         }
 
         when (kind) {
@@ -152,6 +164,21 @@ private fun IdentityEditor(
             IdentityKind.PRIVATE_KEY -> {
                 OutlinedTextField(
                     pem, { pem = it }, label = { Text("Приватный ключ (PEM)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    passphrase, { passphrase = it }, label = { Text("Passphrase (если есть)") }, singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            IdentityKind.CERTIFICATE -> {
+                OutlinedTextField(
+                    pem, { pem = it }, label = { Text("Приватный ключ (PEM)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    certificate, { certificate = it }, label = { Text("Сертификат (*-cert.pub)") },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
@@ -172,6 +199,7 @@ private fun IdentityEditor(
                                 password = password,
                                 privateKeyPem = pem,
                                 passphrase = passphrase,
+                                certificate = certificate,
                             ),
                         )
                     }

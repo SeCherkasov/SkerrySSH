@@ -27,6 +27,7 @@ import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
+import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.IdentityStore
 import app.skerry.shared.vault.RecordType
@@ -90,6 +91,7 @@ fun main() {
     }
 
     val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
+    val certificateInspector = if (live) SshjCertificateInspector() else null
     val identities = if (live && keyGenerator != null) seededIdentities(keyGenerator) else null
     val keyId = identities?.identities?.firstOrNull()?.id
     val hosts = if (live) seededHosts(boundIdentityId = keyId) else null
@@ -99,7 +101,7 @@ fun main() {
     val content: @Composable () -> Unit = when (overlay) {
         "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null) { _, _ -> } } } }
         "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}) } } }
-        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, identities = identities, keyGenerator = keyGenerator) } }
+        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, identities = identities, keyGenerator = keyGenerator, certificateInspector = certificateInspector) } }
     }
 
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
@@ -209,8 +211,27 @@ private fun seededIdentities(keyGenerator: SshKeyGenerator): IdentityManagerCont
     val key = keyGenerator.generate(SshKeyType.ED25519, comment = "alice@skerry")
     controller.save(IdentityDraft(label = "work-laptop", kind = IdentityKind.PRIVATE_KEY, privateKeyPem = key.privateKeyPem))
     controller.save(IdentityDraft(label = "db-admin", kind = IdentityKind.PASSWORD, password = "hunter2"))
+    controller.save(
+        IdentityDraft(label = "prod-access", kind = IdentityKind.CERTIFICATE, privateKeyPem = SEED_CERT_KEY, certificate = SEED_CERT),
+    )
     return controller
 }
+
+// Учебный ed25519-сертификат (CA-подписанный, principals alice/deploy) — только для офскрин-посева
+// раздела Vault → Certificates реальными компонентами без файлов/мастер-пароля. Те же значения, что
+// в CertificateFixtures (shared/desktopTest) — источник правды там; при регенерации обновить оба.
+private val SEED_CERT_KEY = """
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+    QyNTUxOQAAACCHmK+eOLE/3SmTEHz2mQerUTWuK10g2yXsCeRmqBhDJwAAAJCTquJek6ri
+    XgAAAAtzc2gtZWQyNTUxOQAAACCHmK+eOLE/3SmTEHz2mQerUTWuK10g2yXsCeRmqBhDJw
+    AAAECj4nk0xG00zyQDEYjZzkq4DYaRGzTDQCa722CqWQsnKIeYr544sT/dKZMQfPaZB6tR
+    Na4rXSDbJewJ5GaoGEMnAAAADGFsaWNlQHNrZXJyeQE=
+    -----END OPENSSH PRIVATE KEY-----
+""".trimIndent() + "\n"
+
+private const val SEED_CERT =
+    "ssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIJ/XTmChh23PUo43PsVebZVnBUh9yVb7r8UgCo6MD2XGAAAAIIeYr544sT/dKZMQfPaZB6tRNa4rXSDbJewJ5GaoGEMnAAAAAAAAACoAAAABAAAAE3NrZXJyeS10ZXN0QGVkMjU1MTkAAAATAAAABWFsaWNlAAAABmRlcGxveQAAAABlkgCAAAAAAHhh+AAAAAAAAAAAggAAABVwZXJtaXQtWDExLWZvcndhcmRpbmcAAAAAAAAAF3Blcm1pdC1hZ2VudC1mb3J3YXJkaW5nAAAAAAAAABZwZXJtaXQtcG9ydC1mb3J3YXJkaW5nAAAAAAAAAApwZXJtaXQtcHR5AAAAAAAAAA5wZXJtaXQtdXNlci1yYwAAAAAAAAAAAAAAMwAAAAtzc2gtZWQyNTUxOQAAACDGkIM6oT/mc8hunaUIY1avJGKsnfJB6yboLBsENiQ0kAAAAFMAAAALc3NoLWVkMjU1MTkAAABAwycZAnZtpvGb6wZDhWCcA6sa4Lz7sieexLCRkC7VNcZj23iiqej1B135atUIc0G7yR/g/TIzACfk2G3DHOYLAA== alice@skerry"
 
 /** Тривиальный незашифрованный vault в памяти — только для офскрин-посева identity (не для приложения). */
 private class InMemoryVault : Vault {

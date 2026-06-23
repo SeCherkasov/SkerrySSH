@@ -28,6 +28,23 @@ sealed interface IdentityAuth {
     data class PrivateKey(val privateKeyPem: String, val passphrase: String? = null) : IdentityAuth {
         override fun toString(): String = "PrivateKey(redacted)"
     }
+
+    /**
+     * SSH-сертификат: приватный ключ ([privateKeyPem]) плюс выданный CA сертификат ([certificate],
+     * строка `*-cert.pub` вида `ssh-…-cert-v01@openssh.com <base64> [comment]`). При аутентификации
+     * клиент предъявляет сертификат, а доказывает владение приватным ключом — поэтому оба хранятся
+     * вместе. [passphrase] расшифровывает приватный ключ, если он зашифрован. Сертификат публичен,
+     * но приватный ключ/passphrase — секрет, потому `toString` редактится целиком.
+     */
+    @Serializable
+    @SerialName("certificate")
+    data class Certificate(
+        val privateKeyPem: String,
+        val certificate: String,
+        val passphrase: String? = null,
+    ) : IdentityAuth {
+        override fun toString(): String = "Certificate(redacted)"
+    }
 }
 
 /**

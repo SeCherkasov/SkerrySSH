@@ -14,7 +14,7 @@ enum class VaultCategoryKind(val title: String, val icon: String, val hasBackend
     SSH_KEYS("SSH keys", "key", hasBackend = true),
     IDENTITIES("Identities", "badge", hasBackend = false),
     PASSWORDS("Passwords", "password", hasBackend = true),
-    CERTIFICATES("Certificates", "vpn_lock", hasBackend = false),
+    CERTIFICATES("Certificates", "vpn_lock", hasBackend = true),
 }
 
 /**
@@ -28,6 +28,7 @@ object VaultPresentation {
     fun categoryOf(identity: Identity): VaultCategoryKind = when (identity.auth) {
         is IdentityAuth.PrivateKey -> VaultCategoryKind.SSH_KEYS
         is IdentityAuth.Password -> VaultCategoryKind.PASSWORDS
+        is IdentityAuth.Certificate -> VaultCategoryKind.CERTIFICATES
     }
 
     /** Identity выбранной категории (для бэкендовых — фильтр по типу; для заглушек — всегда пусто). */

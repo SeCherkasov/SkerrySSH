@@ -10,6 +10,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.MessageDigest
+import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.Security
 import java.util.Base64
@@ -37,6 +38,7 @@ import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.connection.channel.forwarded.ConnectListener
 import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
 import net.schmizz.sshj.transport.TransportException
+import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.password.PasswordUtils
 
@@ -98,6 +100,15 @@ class SshjTransport(
                         val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
                         val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
                         client.authPublickey(target.username, keys)
+                    }
+                    is SshAuth.Certificate -> {
+                        // Cert-auth: владение доказываем приватным ключом из PEM, а серверу предъявляем
+                        // сам сертификат (публичная часть = распарсенный *-cert.pub). sshj не склеивает
+                        // их из строк сам (только из файлов по соседству), поэтому собираем KeyProvider
+                        // вручную: private — из PEM, public — Certificate, type — *_CERT.
+                        val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
+                        val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
+                        client.authPublickey(target.username, certificateKeyProvider(keys, auth.certificate))
                     }
                 }
             } catch (e: UserAuthException) {
@@ -607,6 +618,28 @@ private class SshjShellChannel(
 
     private companion object {
         const val BUFFER_SIZE = 8192
+    }
+}
+
+/**
+ * [KeyProvider] для аутентификации по сертификату: приватный ключ берётся из уже загруженного
+ * [privateKeys] (PEM), а публичная часть — распарсенный из строки [certificate] объект `Certificate`
+ * (sshj-декодер `Buffer.readPublicKey` для cert-типа возвращает именно его). Тип берём из первого
+ * поля строки (`ssh-…-cert-v01@openssh.com`) — это `*_CERT`, по нему sshj и шлёт серверу cert-blob.
+ */
+private fun certificateKeyProvider(privateKeys: KeyProvider, certificate: String): KeyProvider {
+    val fields = certificate.trim().split(Regex("\\s+"))
+    // Битая/обрезанная строка cert (нет второго поля, невалидный base64, мусор в wire-данных) не
+    // должна вылетать необработанным IndexOutOfBounds/IllegalArgument мимо обработчиков auth —
+    // конвертируем в SshAuthenticationException (предъявить учётные данные не удалось).
+    val (certType, certKey) = runCatching {
+        require(fields.size >= 2) { "ожидался формат '<type> <base64> [comment]'" }
+        KeyType.fromString(fields[0]) to Buffer.PlainBuffer(Base64.getDecoder().decode(fields[1])).readPublicKey()
+    }.getOrElse { throw SshAuthenticationException("Сохранённый SSH-сертификат не удалось разобрать", it) }
+    return object : KeyProvider {
+        override fun getPrivate(): PrivateKey = privateKeys.private
+        override fun getPublic(): PublicKey = certKey
+        override fun getType(): KeyType = certType
     }
 }
 

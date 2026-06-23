@@ -25,6 +25,7 @@ fun Host.connectionSubtitle(): String = "$username@$address:$port"
 fun Identity.toSshAuth(): SshAuth = when (val a = auth) {
     is IdentityAuth.Password -> SshAuth.Password(a.password)
     is IdentityAuth.PrivateKey -> SshAuth.PublicKey(a.privateKeyPem, a.passphrase)
+    is IdentityAuth.Certificate -> SshAuth.Certificate(a.privateKeyPem, a.certificate, a.passphrase)
 }
 
 /**

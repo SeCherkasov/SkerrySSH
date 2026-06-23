@@ -23,14 +23,32 @@ data class SshTarget(
 
 sealed interface SshAuth {
     // Секрет как String: на JVM не обнуляется, переход на затираемый буфер — отдельный шаг.
-    data class Password(val secret: String) : SshAuth
+    data class Password(val secret: String) : SshAuth {
+        override fun toString(): String = "Password(redacted)"
+    }
 
     /**
      * Аутентификация по приватному ключу: [privateKeyPem] — содержимое PEM (OpenSSH/PKCS),
      * [passphrase] расшифровывает ключ (null — ключ без passphrase). Секрет берётся из vault
      * ([app.skerry.shared.vault.IdentityAuth.PrivateKey]).
      */
-    data class PublicKey(val privateKeyPem: String, val passphrase: String? = null) : SshAuth
+    data class PublicKey(val privateKeyPem: String, val passphrase: String? = null) : SshAuth {
+        override fun toString(): String = "PublicKey(redacted)"
+    }
+
+    /**
+     * Аутентификация по SSH-сертификату: клиент предъявляет [certificate] (строка `*-cert.pub`,
+     * выданная CA) и доказывает владение приватным ключом [privateKeyPem] (PEM, [passphrase]
+     * расшифровывает его при необходимости). Секрет берётся из vault
+     * ([app.skerry.shared.vault.IdentityAuth.Certificate]).
+     */
+    data class Certificate(
+        val privateKeyPem: String,
+        val certificate: String,
+        val passphrase: String? = null,
+    ) : SshAuth {
+        override fun toString(): String = "Certificate(redacted)"
+    }
 }
 
 /**

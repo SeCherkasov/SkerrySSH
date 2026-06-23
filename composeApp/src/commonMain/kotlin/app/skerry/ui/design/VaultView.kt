@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Identity
 import app.skerry.shared.vault.IdentityAuth
+import app.skerry.shared.vault.SshCertificateInfo
+import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.SshKeyType
 import app.skerry.shared.vault.SshPublicKeyInfo
@@ -88,6 +91,7 @@ private fun LiveVaultView(identities: IdentityManagerController) {
     val hostsController = LocalHosts.current
     val hosts = hostsController?.hosts ?: emptyList()
     val generator = LocalSshKeyGenerator.current
+    val inspector = LocalSshCertificateInspector.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val all = identities.identities
@@ -96,6 +100,7 @@ private fun LiveVaultView(identities: IdentityManagerController) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var showGenerate by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
+    var showImportCert by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Identity?>(null) }
 
     val items = VaultPresentation.identitiesIn(category, all)
@@ -110,8 +115,10 @@ private fun LiveVaultView(identities: IdentityManagerController) {
                 VaultHeader(
                     category = category,
                     canGenerate = generator != null,
+                    canImportCert = inspector != null,
                     onGenerate = { showGenerate = true },
                     onAddPassword = { showAddPassword = true },
+                    onImportCert = { showImportCert = true },
                 )
                 HLine()
                 Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -127,6 +134,7 @@ private fun LiveVaultView(identities: IdentityManagerController) {
                                     identity = identity,
                                     active = identity.id == selected?.id,
                                     generator = generator,
+                                    inspector = inspector,
                                     usedByCount = VaultPresentation.hostsUsing(identity.id, hosts).size,
                                     mono = mono,
                                     onClick = { selectedId = identity.id },
@@ -140,6 +148,7 @@ private fun LiveVaultView(identities: IdentityManagerController) {
                         LiveSecretDetail(
                             identity = current,
                             generator = generator,
+                            inspector = inspector,
                             hosts = hosts,
                             mono = mono,
                             onCopy = { clipboard.setText(AnnotatedString(it)) },
@@ -176,6 +185,25 @@ private fun LiveVaultView(identities: IdentityManagerController) {
                     )
                     category = VaultCategoryKind.PASSWORDS
                     showAddPassword = false
+                },
+            )
+        }
+        if (showImportCert && inspector != null) {
+            ImportCertificateDialog(
+                inspector = inspector,
+                onDismiss = { showImportCert = false },
+                onCreate = { name, pem, cert, passphrase ->
+                    selectedId = identities.save(
+                        IdentityDraft(
+                            label = name,
+                            kind = IdentityKind.CERTIFICATE,
+                            privateKeyPem = pem,
+                            certificate = cert,
+                            passphrase = passphrase ?: "",
+                        ),
+                    )
+                    category = VaultCategoryKind.CERTIFICATES
+                    showImportCert = false
                 },
             )
         }
@@ -250,7 +278,14 @@ private fun VaultCategoryRow(icon: String, label: String, count: String, active:
 }
 
 @Composable
-private fun VaultHeader(category: VaultCategoryKind, canGenerate: Boolean, onGenerate: () -> Unit, onAddPassword: () -> Unit) {
+private fun VaultHeader(
+    category: VaultCategoryKind,
+    canGenerate: Boolean,
+    canImportCert: Boolean,
+    onGenerate: () -> Unit,
+    onAddPassword: () -> Unit,
+    onImportCert: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -260,6 +295,7 @@ private fun VaultHeader(category: VaultCategoryKind, canGenerate: Boolean, onGen
         when (category) {
             VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton("Generate key", onClick = onGenerate, icon = "add")
             VaultCategoryKind.PASSWORDS -> PrimaryButton("Add password", onClick = onAddPassword, icon = "add")
+            VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton("Import certificate", onClick = onImportCert, icon = "add")
             else -> Unit
         }
     }
@@ -274,35 +310,68 @@ private fun LiveSecretCard(
     identity: Identity,
     active: Boolean,
     generator: SshKeyGenerator?,
+    inspector: SshCertificateInspector?,
     usedByCount: Int,
     mono: FontFamily,
     onClick: () -> Unit,
 ) {
-    val isKey = identity.auth is IdentityAuth.PrivateKey
-    val info = rememberKeyInfo(identity, generator)
     val border = if (active) D.cyan.copy(alpha = 0.18f) else D.cyan08
     val bg = if (active) D.cyan.copy(alpha = 0.04f) else Color.Transparent
     val usedBy = if (usedByCount == 1) "used by 1 host" else "used by $usedByCount hosts"
-    val meta = when {
-        isKey && info != null -> "${shortFingerprint(info.fingerprintSha256)} · $usedBy"
-        isKey -> usedBy
-        else -> "Password · $usedBy"
-    }
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(bg).border(1.dp, border, RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(38.dp).clip(RoundedCornerShape(9.dp)).background(if (isKey) D.cyan.copy(alpha = 0.12f) else Color(0x0DFFFFFF)), contentAlignment = Alignment.Center) {
-            Sym(if (isKey) "key" else "password", size = 20.sp, color = if (isKey) D.cyanBright else D.dim)
-        }
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Txt(identity.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-                info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp) }
+        when (val auth = identity.auth) {
+            is IdentityAuth.Certificate -> {
+                val info = rememberCertInfo(identity, inspector)
+                SecretIcon("workspace_premium", tinted = true, color = D.moss)
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Txt(identity.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
+                        info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp) }
+                        if (info?.expired == true) Badge("EXPIRED", bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, radius = 3, size = 9.5.sp)
+                    }
+                    val meta = when {
+                        info == null -> "Certificate · $usedBy"
+                        info.principals.isEmpty() -> "any principal · $usedBy"
+                        else -> "${info.principals.joinToString(", ")} · $usedBy"
+                    }
+                    Txt(meta, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
+                }
             }
-            Txt(meta, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
+            is IdentityAuth.PrivateKey -> {
+                val info = rememberKeyInfo(identity, generator)
+                SecretIcon("key", tinted = true, color = D.cyanBright)
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Txt(identity.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
+                        info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp) }
+                    }
+                    val meta = if (info != null) "${shortFingerprint(info.fingerprintSha256)} · $usedBy" else usedBy
+                    Txt(meta, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+            is IdentityAuth.Password -> {
+                SecretIcon("password", tinted = false, color = D.dim)
+                Column(Modifier.weight(1f)) {
+                    Txt(identity.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
+                    Txt("Password · $usedBy", color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
         }
+    }
+}
+
+/** Квадратная иконка секрета в карточке/деталях (cyan/moss-тон для ключей/сертификатов, нейтральный для пароля). */
+@Composable
+private fun SecretIcon(icon: String, tinted: Boolean, color: Color, size: Int = 38) {
+    Box(
+        Modifier.size(size.dp).clip(RoundedCornerShape(9.dp)).background(if (tinted) color.copy(alpha = 0.12f) else Color(0x0DFFFFFF)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Sym(icon, size = (size * 0.52f).sp, color = if (tinted) color else D.dim)
     }
 }
 
@@ -314,6 +383,7 @@ private fun VaultEmptyCategory(category: VaultCategoryKind) {
             val (title, hint) = when (category) {
                 VaultCategoryKind.SSH_KEYS -> "No SSH keys yet" to "Generate a key — it's sealed in your vault and ready to attach to hosts."
                 VaultCategoryKind.PASSWORDS -> "No passwords yet" to "Add a password — it's stored encrypted and reusable across hosts."
+                VaultCategoryKind.CERTIFICATES -> "No certificates yet" to "Import a CA-signed certificate with its private key — sealed in your vault and ready to attach to hosts."
                 else -> "Nothing here" to ""
             }
             Txt(title, color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
@@ -336,8 +406,16 @@ private fun VaultPlaceholder(category: VaultCategoryKind) {
 /** Открытые метаданные приватного ключа (отпечаток/тип/публичная строка); для пароля — null. */
 @Composable
 private fun rememberKeyInfo(identity: Identity, generator: SshKeyGenerator?): SshPublicKeyInfo? =
-    remember(identity.id, generator) {
+    // Ключ включает auth, а не только id: при обновлении записи (тот же id, новый секрет) пересчитываем.
+    remember(identity.id, identity.auth, generator) {
         (identity.auth as? IdentityAuth.PrivateKey)?.let { generator?.inspect(it.privateKeyPem, it.passphrase) }
+    }
+
+/** Открытые метаданные сертификата (principals/срок/serial/CA); null — не сертификат или битый. */
+@Composable
+private fun rememberCertInfo(identity: Identity, inspector: SshCertificateInspector?): SshCertificateInfo? =
+    remember(identity.id, identity.auth, inspector) {
+        (identity.auth as? IdentityAuth.Certificate)?.let { inspector?.inspect(it.certificate) }
     }
 
 // ---------------------------------------------------------------------------------------------
@@ -349,32 +427,46 @@ private fun rememberKeyInfo(identity: Identity, generator: SshKeyGenerator?): Ss
 private fun LiveSecretDetail(
     identity: Identity,
     generator: SshKeyGenerator?,
+    inspector: SshCertificateInspector?,
     hosts: List<Host>,
     mono: FontFamily,
     onCopy: (String) -> Unit,
     onExport: (name: String, content: String) -> Unit,
     onDelete: () -> Unit,
 ) {
-    val isKey = identity.auth is IdentityAuth.PrivateKey
-    val info = rememberKeyInfo(identity, generator)
+    val auth = identity.auth
+    val keyInfo = rememberKeyInfo(identity, generator)
+    val certInfo = rememberCertInfo(identity, inspector)
     val bound = VaultPresentation.hostsUsing(identity.id, hosts)
+    val (icon, color, tinted) = when (auth) {
+        is IdentityAuth.Certificate -> Triple("workspace_premium", D.moss, true)
+        is IdentityAuth.PrivateKey -> Triple("key", D.cyanBright, true)
+        is IdentityAuth.Password -> Triple("password", D.dim, false)
+    }
+    val subtitle = when (auth) {
+        is IdentityAuth.Certificate -> certInfo?.keyTypeLabel?.let { "$it certificate" } ?: "Certificate"
+        is IdentityAuth.PrivateKey -> keyInfo?.keyTypeLabel ?: "Private key"
+        is IdentityAuth.Password -> "Password"
+    }
     Column(Modifier.width(340.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
         Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-            Box(Modifier.size(40.dp).clip(RoundedCornerShape(9.dp)).background(if (isKey) D.cyan.copy(alpha = 0.12f) else Color(0x0DFFFFFF)), contentAlignment = Alignment.Center) {
-                Sym(if (isKey) "key" else "password", size = 21.sp, color = if (isKey) D.cyanBright else D.dim)
-            }
+            SecretIcon(icon, tinted = tinted, color = color, size = 40)
             Column {
                 Txt(identity.label, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
-                Txt(info?.keyTypeLabel ?: if (isKey) "Private key" else "Password", color = D.dim, size = 11.5.sp)
+                Txt(subtitle, color = D.dim, size = 11.5.sp)
             }
         }
-        if (isKey) {
-            DetailLabel("Public key")
-            Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(D.terminalBg).border(1.dp, D.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                Txt(info?.publicKeyOpenSsh ?: "Key could not be read", color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
+        when (auth) {
+            is IdentityAuth.Certificate -> CertificateDetailBody(certInfo, mono)
+            is IdentityAuth.PrivateKey -> {
+                DetailLabel("Public key")
+                Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(D.terminalBg).border(1.dp, D.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    Txt(keyInfo?.publicKeyOpenSsh ?: "Key could not be read", color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
+                }
+                DetailLabel("Fingerprint")
+                Txt(keyInfo?.fingerprintSha256 ?: "—", color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
             }
-            DetailLabel("Fingerprint")
-            Txt(info?.fingerprintSha256 ?: "—", color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
+            is IdentityAuth.Password -> Unit
         }
         DetailLabel("Used by · ${bound.size} ${if (bound.size == 1) "host" else "hosts"}")
         if (bound.isEmpty()) {
@@ -385,18 +477,59 @@ private fun LiveSecretDetail(
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (isKey) {
-                PrimaryButton("Copy public key", onClick = { info?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GhostButton("Export", onClick = { info?.let { onExport("${identity.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
-                    GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+            when (auth) {
+                is IdentityAuth.Certificate -> {
+                    PrimaryButton("Copy certificate", onClick = { onCopy(auth.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GhostButton("Export", onClick = { onExport("${identity.label}-cert.pub", auth.certificate) }, modifier = Modifier.weight(1f))
+                        GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                    }
                 }
-            } else {
-                PrimaryButton("Copy password", onClick = { onCopy((identity.auth as IdentityAuth.Password).password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
+                is IdentityAuth.PrivateKey -> {
+                    PrimaryButton("Copy public key", onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GhostButton("Export", onClick = { keyInfo?.let { onExport("${identity.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
+                        GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                    }
+                }
+                is IdentityAuth.Password -> {
+                    PrimaryButton("Copy password", onClick = { onCopy(auth.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                    GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
+                }
             }
         }
     }
+}
+
+/** Тело панели деталей сертификата: сама строка cert, key id, principals, срок, serial, CA. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CertificateDetailBody(info: SshCertificateInfo?, mono: FontFamily) {
+    DetailLabel("Certificate")
+    Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(D.terminalBg).border(1.dp, D.moss.copy(alpha = 0.12f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Txt(
+            if (info != null) "Key ID: ${info.keyId}" else "Certificate could not be read",
+            color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp,
+        )
+    }
+    if (info == null) return
+    DetailLabel("Principals")
+    if (info.principals.isEmpty()) {
+        Txt("any principal", color = D.faint, size = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+    } else {
+        FlowRow(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            info.principals.forEach { HostPill(it, mono) }
+        }
+    }
+    DetailLabel("Valid")
+    Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Txt("${info.validFrom} → ${info.validUntil}", color = D.textBright, size = 11.sp, font = mono)
+        if (info.expired) Badge("EXPIRED", bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, radius = 3, size = 9.5.sp)
+    }
+    DetailLabel("Serial")
+    Txt(info.serial, color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
+    DetailLabel("Signing CA")
+    Txt(info.caFingerprintSha256, color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -431,6 +564,43 @@ private fun AddPasswordDialog(onDismiss: () -> Unit, onCreate: (name: String, pa
             DialogField("PASSWORD", password, { password = it }, placeholder = "secret", password = true)
         }
         DialogButtons(confirmLabel = "Add", confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), password) })
+    }
+}
+
+@Composable
+private fun ImportCertificateDialog(
+    inspector: SshCertificateInspector,
+    onDismiss: () -> Unit,
+    onCreate: (name: String, pem: String, certificate: String, passphrase: String?) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var pem by remember { mutableStateOf("") }
+    var certificate by remember { mutableStateOf("") }
+    var passphrase by remember { mutableStateOf("") }
+    // Метаданные считаются из введённой строки cert — заодно это и проверка, что сертификат валиден.
+    val info = remember(certificate, inspector) { certificate.trim().takeIf { it.isNotEmpty() }?.let { inspector.inspect(it) } }
+    val certInvalid = certificate.isNotBlank() && info == null
+    val valid = name.isNotBlank() && pem.isNotBlank() && info != null
+
+    VaultDialogScaffold("Import certificate", "A CA-signed certificate and its private key are sealed in your vault.", onDismiss) {
+        DialogField("NAME", name, { name = it }, placeholder = "e.g. prod-access")
+        Box(Modifier.padding(top = 16.dp)) {
+            DialogField("PRIVATE KEY (PEM)", pem, { pem = it }, placeholder = "-----BEGIN OPENSSH PRIVATE KEY-----", singleLine = false)
+        }
+        Box(Modifier.padding(top = 16.dp)) {
+            DialogField("CERTIFICATE (*-cert.pub)", certificate, { certificate = it }, placeholder = "ssh-…-cert-v01@openssh.com …", singleLine = false)
+        }
+        Box(Modifier.padding(top = 16.dp)) {
+            DialogField("PASSPHRASE (if any)", passphrase, { passphrase = it }, placeholder = "optional", password = true)
+        }
+        when {
+            certInvalid -> Txt("Couldn't read this certificate — expected an OpenSSH *-cert.pub line.", color = D.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
+            info != null -> Txt(
+                "${info.keyTypeLabel} · ${if (info.principals.isEmpty()) "any principal" else info.principals.joinToString(", ")} · valid until ${info.validUntil}",
+                color = D.moss, size = 11.sp, modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+        DialogButtons(confirmLabel = "Import", confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), pem.trim(), certificate.trim(), passphrase.ifBlank { null }) })
     }
 }
 
@@ -479,24 +649,37 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
 }
 
 @Composable
-private fun DialogField(label: String, value: String, onValueChange: (String) -> Unit, placeholder: String, password: Boolean = false) {
+private fun DialogField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    password: Boolean = false,
+    singleLine: Boolean = true,
+) {
     val ui = LocalFonts.current.ui
-    val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
+    val mono = LocalFonts.current.mono
+    // Многострочные поля (PEM/сертификат) — моноширинным, чтобы длинные блобы читались как в файле.
+    val style = remember(ui, mono, singleLine) {
+        TextStyle(color = D.text, fontSize = if (singleLine) 13.sp else 11.sp, fontFamily = if (singleLine) ui else mono)
+    }
     Column {
         Txt(label, color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
         Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                .then(if (singleLine) Modifier else Modifier.heightIn(min = 72.dp, max = 132.dp))
+                .padding(horizontal = 11.dp, vertical = 10.dp),
         ) {
-            if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
+            if (value.isEmpty()) Txt(placeholder, color = D.faint, size = if (singleLine) 13.sp else 11.sp, font = if (singleLine) ui else mono)
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
+                modifier = Modifier.fillMaxWidth().then(if (singleLine) Modifier else Modifier.verticalScroll(rememberScrollState())),
+                singleLine = singleLine,
                 textStyle = style,
                 cursorBrush = SolidColor(D.cyan),
                 visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = if (password) KeyboardType.Password else KeyboardType.Text),
+                keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default, keyboardType = if (password) KeyboardType.Password else KeyboardType.Text),
                 keyboardActions = KeyboardActions(),
             )
         }

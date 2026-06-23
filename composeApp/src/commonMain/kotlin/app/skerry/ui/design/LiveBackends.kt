@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.host.Host
+import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.IdentityManagerController
@@ -50,6 +51,13 @@ val LocalIdentities: ProvidableCompositionLocal<IdentityManagerController?> = st
  * рисует статичный макет, кнопка генерации недоступна. Поставляется [DesktopDesignApp] за гейтом vault.
  */
 val LocalSshKeyGenerator: ProvidableCompositionLocal<SshKeyGenerator?> = staticCompositionLocalOf { null }
+
+/**
+ * Инспектор SSH-сертификатов (разбор метаданных импортированного `*-cert.pub`: principals, срок,
+ * serial, CA). `null` — мок-путь/превью без платформенной реализации: раздел Certificates в
+ * [app.skerry.ui.design.VaultView] показывает заглушку. Поставляется [DesktopDesignApp] за гейтом vault.
+ */
+val LocalSshCertificateInspector: ProvidableCompositionLocal<SshCertificateInspector?> = staticCompositionLocalOf { null }
 
 /**
  * Менеджер открытых сессий (вкладки + живые соединения). `null` — мок-путь без бэкенда соединений:
