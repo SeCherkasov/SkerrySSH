@@ -57,15 +57,15 @@ class HostManagerControllerTest {
     }
 
     @Test
-    fun `save carries the identity reference through to the stored host`() {
+    fun `save carries the credential reference through to the stored host`() {
         val store = FakeHostStore()
         val controller = HostManagerController(store) { "gen-id" }
 
         controller.save(
-            HostDraft(label = "prod", address = "10.0.0.5", port = 22, username = "deploy", identityId = "key-1"),
+            HostDraft(label = "prod", address = "10.0.0.5", port = 22, username = "deploy", credentialId = "key-1"),
         )
 
-        assertEquals("key-1", controller.hosts.single().identityId)
+        assertEquals("key-1", controller.hosts.single().credentialId)
     }
 
     @Test
@@ -81,7 +81,7 @@ class HostManagerControllerTest {
     @Test
     fun `reload pulls hosts written to the store behind the controller`() {
         // Миграция при unlock пишет в HostStore напрямую (мимо контроллера); reload синхронизирует
-        // Compose-state со стором, чтобы UI увидел перенаправленные identityId.
+        // Compose-state со стором, чтобы UI увидел перенаправленные credentialId.
         val store = FakeHostStore(Host("1", "a", "a.local", 22, "u"))
         val controller = HostManagerController(store) { "x" }
         store.put(Host("2", "b", "b.local", 22, "u")) // запись в обход контроллера

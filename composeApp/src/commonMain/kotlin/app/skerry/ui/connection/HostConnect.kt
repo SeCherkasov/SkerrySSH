@@ -20,8 +20,8 @@ fun Host.connectionSubtitle(): String = "$username@$address:$port"
 
 /**
  * Keychain-секрет из vault → способ аутентификации SSH. Пароль/ключ/сертификат разворачиваются
- * один в один; ветки совпадают с моделью [CredentialSecret]. Учётка ([app.skerry.shared.vault.Identity])
- * сама секрета не содержит — вызывающий резолвит её `credentialId` в [Credential] и зовёт это.
+ * один в один; ветки совпадают с моделью [CredentialSecret]. Хост ссылается на секрет по
+ * `credentialId` — вызывающий резолвит его в [Credential] и зовёт это.
  */
 fun Credential.toSshAuth(): SshAuth = when (val s = secret) {
     is CredentialSecret.Password -> SshAuth.Password(s.password)

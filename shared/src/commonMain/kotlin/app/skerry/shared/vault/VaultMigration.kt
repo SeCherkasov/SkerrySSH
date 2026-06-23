@@ -1,90 +1,108 @@
 package app.skerry.shared.vault
 
-import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 /**
- * Разовая миграция к двухуровневой модели Vault (keychain + учётки). До разделения запись
- * [RecordType.IDENTITY] хранила сырой секрет (`{id, label, auth}`), а [Host.identityId] ссылался
- * прямо на него. После — секреты живут в keychain ([RecordType.CREDENTIAL], [Credential]), а хост
- * ссылается на учётку ([Identity] с `username` + `credentialId`).
+ * Разовая миграция схлопывания модели Vault с двух уровней (хост → учётка → секрет) до одного
+ * (хост → секрет). До схлопывания запись [RecordType.IDENTITY] хранила либо сырой секрет
+ * (`{id, label, auth}`), либо учётку-обёртку (`{id, label, username, credentialId}`), а
+ * [app.skerry.shared.host.Host.identityId] ссылался на одно из них. После — секреты живут в keychain
+ * ([RecordType.CREDENTIAL], [Credential]), а хост ссылается на них напрямую через `credentialId`.
  *
- * Миграция самоопределяющаяся и идемпотентная (без отдельного флага): старый формат IDENTITY
- * распознаётся по наличию поля `auth` ([LegacyIdentity]); новые учётки этого поля не имеют и
- * пропускаются, как и уже переведённые в CREDENTIAL записи. Безопасно вызывать при каждом unlock.
- *
- * Требует разблокированного [Vault]. Хосты живут в отдельном [HostStore], поэтому миграция
- * кросс-сторовая: сперва секреты IDENTITY→CREDENTIAL (с сохранением id), затем для каждого хоста с
- * мигрированным `identityId` создаётся учётка-обёртка (`username` берётся из хоста), и `identityId`
- * перенаправляется на неё. Хосты с одинаковыми `(username, секрет)` делят одну учётку.
+ * Миграция самоопределяющаяся и идемпотентная (без отдельного флага). Безопасно вызывать при каждом
+ * unlock. Требует разблокированного [Vault]; хосты живут в отдельном [HostStore], поэтому миграция
+ * кросс-сторовая: секреты IDENTITY→CREDENTIAL (с сохранением id), учётки-обёртки схлопываются в
+ * ссылку хоста на сам секрет, затем записи-обёртки удаляются.
  */
 class VaultMigration(
     private val vault: Vault,
     private val hostStore: HostStore,
-    private val newId: () -> String,
 ) {
 
     /** Выполнить миграцию; возвращает `true`, если что-то изменилось (для логов/тестов). */
     fun migrate(): Boolean {
-        // 1. Старые секреты IDENTITY → CREDENTIAL (тот же id: на него ещё ссылаются хосты).
-        val migratedSecretIds = mutableSetOf<String>()
+        var changed = false
+
+        // a) Старые сырые секреты IDENTITY → CREDENTIAL (тот же id: на него ещё ссылаются хосты).
+        //    Учётки-обёртки (поля username/credentialId, без auth) сюда не пройдут → пропуск.
         for (record in vault.records()) {
             if (record.type != RecordType.IDENTITY || record.deleted) continue
-            val legacy = decodeLegacy(vault.openPayload(record.id)) ?: continue
+            val legacy = decodeSecret(vault.openPayload(record.id)) ?: continue
             vault.put(record.id, RecordType.CREDENTIAL, encodeCredential(Credential(record.id, legacy.label, legacy.auth)))
-            migratedSecretIds += record.id
+            changed = true
         }
 
-        // 1b. Завершаем прерванный прошлый прогон: если шаг 1 успел перевести секрет в CREDENTIAL, но
-        //     процесс упал до шага 2, хост остался ссылаться прямо на CREDENTIAL (а не на учётку) —
-        //     иначе он навсегда останется несвязанным. Такие секреты тоже нуждаются в учётке-обёртке.
-        val credentialIds = vault.records()
+        // Живые keychain-секреты после шага (a) — только на такой id допустимо перепривязать хост.
+        val liveCredentials = vault.records()
             .filter { it.type == RecordType.CREDENTIAL && !it.deleted }
             .mapTo(mutableSetOf()) { it.id }
-        for (host in hostStore.all()) {
-            val sid = host.identityId ?: continue
-            if (sid in credentialIds) migratedSecretIds += sid
-        }
-        if (migratedSecretIds.isEmpty()) return false
 
-        // 2. Для каждого хоста с мигрированным секретом — учётка-обёртка; общие (username, секрет)
-        //    делят одну учётку, чтобы не плодить дубликаты. Хосты, уже указывающие на учётку
-        //    (IDENTITY, а не CREDENTIAL), сюда не попадают — их id нет в migratedSecretIds.
-        val accountByKey = mutableMapOf<Pair<String, String>, String>() // (username, secretId) → accountId
-        for (host in hostStore.all()) {
-            val secretId = host.identityId ?: continue
-            if (secretId !in migratedSecretIds) continue
-            val key = host.username to secretId
-            val accountId = accountByKey.getOrPut(key) {
-                val id = newId()
-                // Читаемый label учётки: «user@addr» (первого хоста группы) — username один на группу.
-                val label = "${host.username}@${host.address}"
-                vault.put(id, RecordType.IDENTITY, encodeIdentity(Identity(id, label, host.username, secretId)))
-                id
-            }
-            hostStore.put(host.copy(identityId = accountId))
+        // b) Учётки-обёртки → их credentialId, НО только если target-секрет реально жив. Обёртку с
+        //    пропавшим секретом (повреждение/частичный прогон) не схлопываем: не плодим висячую
+        //    ссылку и не сносим единственного свидетеля связи.
+        val wrapper = mutableMapOf<String, String>()
+        for (record in vault.records()) {
+            if (record.type != RecordType.IDENTITY || record.deleted) continue
+            val account = decodeAccount(vault.openPayload(record.id)) ?: continue
+            if (account.credentialId in liveCredentials) wrapper[record.id] = account.credentialId
         }
-        return true
+
+        // c) Перепривязываем хосты на ЖИВОЙ секрет: legacy → обёртка.credentialId, либо сам legacy,
+        //    если он уже id живого секрета (прерванный прогон/прямая ссылка). Не резолвится в живой
+        //    секрет → развязываем (credentialId=null, спросит пароль) — fail-safe вместо висячей ссылки.
+        for (host in hostStore.all()) {
+            val legacy = host.identityId ?: continue
+            val credId = (wrapper[legacy] ?: legacy).takeIf { it in liveCredentials }
+            hostStore.put(host.copy(credentialId = credId, identityId = null))
+            changed = true
+        }
+
+        // d) Сносим только схлопнутые обёртки (их target жив, хосты перепривязаны).
+        for (id in wrapper.keys) {
+            vault.remove(id)
+            changed = true
+        }
+
+        return changed
     }
 
-    private fun encodeCredential(c: Credential): ByteArray = json.encodeToString(Credential.serializer(), c).encodeToByteArray()
-    private fun encodeIdentity(i: Identity): ByteArray = json.encodeToString(Identity.serializer(), i).encodeToByteArray()
+    private fun encodeCredential(c: Credential): ByteArray =
+        json.encodeToString(Credential.serializer(), c).encodeToByteArray()
 
-    // Старый формат IDENTITY: распарсился как {id,label,auth} → это секрет, подлежит миграции.
-    // Новая учётка (поля username/credentialId, без auth) сюда не пройдёт → пропуск (идемпотентность).
-    private fun decodeLegacy(payload: ByteArray?): LegacyIdentity? =
-        payload?.let { runCatching { json.decodeFromString<LegacyIdentity>(it.decodeToString()) }.getOrNull() }
+    // Старый формат секрета: {id,label,auth} → подлежит миграции в CREDENTIAL. Обёртка (без auth)
+    // сюда не пройдёт благодаря обязательному полю auth. Доп. дискриминатор: запись с credentialId —
+    // это учётка, а не секрет (даже если у неё нашёлся бы auth), её НЕ конвертируем в CREDENTIAL.
+    private fun decodeSecret(payload: ByteArray?): LegacySecret? =
+        payload?.let { runCatching { json.decodeFromString(LegacySecret.serializer(), it.decodeToString()) }.getOrNull() }
+            ?.takeIf { it.credentialId == null }
 
-    /** Прежняя форма записи IDENTITY (сырой секрет). [auth] делит wire-имена с [CredentialSecret]. */
+    // Учётка-обёртка: {id,label,username,credentialId}. Сырой секрет (без credentialId) сюда не пройдёт.
+    private fun decodeAccount(payload: ByteArray?): LegacyAccount? =
+        payload?.let { runCatching { json.decodeFromString(LegacyAccount.serializer(), it.decodeToString()) }.getOrNull() }
+
+    /**
+     * Прежняя форма записи IDENTITY (сырой секрет). [auth] делит wire-имена с [CredentialSecret].
+     * [credentialId] — дискриминатор: у настоящего секрета его нет; присутствие означает учётку-
+     * обёртку (её разбирает [LegacyAccount]), такую запись [decodeSecret] отвергает.
+     */
     @Serializable
-    private data class LegacyIdentity(
+    private data class LegacySecret(
         val id: String,
         val label: String,
         @SerialName("auth") val auth: CredentialSecret,
+        val credentialId: String? = null,
+    )
+
+    /** Прежняя форма записи IDENTITY (учётка-обёртка): username + ссылка на keychain-секрет. */
+    @Serializable
+    private data class LegacyAccount(
+        val id: String,
+        val label: String,
+        val username: String,
+        val credentialId: String,
     )
 
     private companion object {

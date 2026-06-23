@@ -39,13 +39,13 @@ data class HostDetailRow(val label: String, val value: String, val mono: Boolean
 
 /**
  * Свести профиль [Host] к строкам карточки Details: Address, Port, Auth, Group. Только живые поля —
- * Auth отражает наличие привязанной identity (`Saved identity` / `Ask on connect`), Group падает в
- * «Ungrouped». AI-политика и онлайн-статус из макета здесь отсутствуют (нет в модели — Phase 2/сессии).
+ * Auth отражает наличие привязанного keychain-секрета (`Saved credential` / `Ask on connect`), Group
+ * падает в «Ungrouped». AI-политика и онлайн-статус из макета здесь отсутствуют (нет в модели).
  */
 fun mobileHostDetailRows(host: Host): List<HostDetailRow> = listOf(
     HostDetailRow("Address", host.address, mono = true),
     HostDetailRow("Port", host.port.toString(), mono = true),
-    HostDetailRow("Auth", if (host.identityId != null) "Saved identity" else "Ask on connect", mono = false),
+    HostDetailRow("Auth", if (host.credentialId != null) "Saved credential" else "Ask on connect", mono = false),
     HostDetailRow("Group", host.group?.takeIf { it.isNotBlank() } ?: "Ungrouped", mono = false),
 )
 

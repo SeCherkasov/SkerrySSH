@@ -53,7 +53,6 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.identity.CredentialManagerController
-import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.vault.VaultGateError
@@ -78,6 +77,9 @@ fun MobileDesignApp(
     state: MobileDesignState = remember { MobileDesignState() },
     features: FeatureFlags = FeatureFlags(),
     sessions: SessionsController? = null,
+    // Точка миграции данных при разблокировке vault (паритет с desktop `main`/`DesktopDesignApp`).
+    // No-op в превью/офскрине; Android-точка входа подставит вызов VaultMigration, когда появится.
+    onVaultUnlocked: () -> Unit = {},
 ) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
@@ -113,9 +115,9 @@ fun MobileDesignApp(
                     unlockForm = { error, canBio, onUnlock, onBio ->
                         MobileUnlockScreen(error, canBio, onUnlock, onBio)
                     },
-                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.identities, deps.credentials) }
+                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked) }
             } else {
-                MobileChrome(state, onLock = null, sessions = liveSessions, identities = deps.identities, credentials = deps.credentials)
+                MobileChrome(state, onLock = null, sessions = liveSessions, credentials = deps.credentials, onVaultUnlocked = onVaultUnlocked)
             }
         }
     }
@@ -131,22 +133,23 @@ private fun MobileChrome(
     state: MobileDesignState,
     onLock: (() -> Unit)?,
     sessions: SessionsController?,
-    identities: IdentityManagerController?,
     credentials: CredentialManagerController?,
+    onVaultUnlocked: () -> Unit,
 ) {
-    // Списки учёток/keychain живут в открытом vault — перечитываем за гейтом мастер-пароля (как desktop).
-    LaunchedEffect(identities, credentials) {
-        identities?.reload()
+    // Keychain-секреты живут в открытом vault — за гейтом мастер-пароля сперва прогоняем миграцию
+    // данных ([onVaultUnlocked]), затем перечитываем (как DesktopChrome).
+    LaunchedEffect(credentials) {
+        onVaultUnlocked()
         credentials?.reload()
     }
 
-    // Хост без привязанной identity → спрашиваем пароль листом перед подключением.
+    // Хост без привязанного секрета → спрашиваем пароль листом перед подключением.
     var pendingHost by remember { mutableStateOf<Host?>(null) }
 
     // Стабильная лямбда коннекта (без remember пересоздавалась бы и инвалидировала потребителей
     // [LocalConnectHost]). Живую сессию хоста переиспользуем, мёртвую/отсутствующую — открываем
     // заново ([mobileConnectAction]): на телефоне одна сессия за раз, без накопления сокетов.
-    val connectHost = remember(sessions, identities, credentials, state) {
+    val connectHost = remember(sessions, credentials, state) {
         { host: Host ->
             val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
             when (mobileConnectAction(existing?.controller?.uiState)) {
@@ -156,10 +159,9 @@ private fun MobileChrome(
                 }
                 MobileConnectAction.OpenFresh -> {
                     existing?.let { sessions.close(it.id) }
-                    // Двухуровневый резолв: хост → учётка → keychain-секрет → SshAuth; нет привязки/секрета → пароль.
-                    val account = identities?.find(host.identityId)
-                    val credential = account?.let { credentials?.find(it.credentialId) }
-                    if (account != null && credential != null) {
+                    // Одноуровневый резолв: хост → keychain-секрет по credentialId → SshAuth; нет привязки → пароль.
+                    val credential = credentials?.find(host.credentialId)
+                    if (credential != null) {
                         openMobileSession(sessions, state, host, credential.toSshAuth())
                     } else {
                         pendingHost = host

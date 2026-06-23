@@ -8,7 +8,6 @@ import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
-import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 
@@ -40,15 +39,8 @@ val LocalFeatures: ProvidableCompositionLocal<FeatureFlags> = staticCompositionL
 val LocalHosts: ProvidableCompositionLocal<HostManagerController?> = staticCompositionLocalOf { null }
 
 /**
- * Менеджер переиспользуемых identity (пароли/ключи в открытом vault). `null` — мок-путь/превью без
- * vault: форма «New connection» не предлагает сохранённых секретов и не создаёт новые. Поставляется
- * [DesktopDesignApp] за гейтом мастер-пароля — там же, где список перечитывается ([reload]).
- */
-val LocalIdentities: ProvidableCompositionLocal<IdentityManagerController?> = staticCompositionLocalOf { null }
-
-/**
  * Менеджер keychain-секретов (ключи/пароли/сертификаты в открытом vault) — сырой материал, на
- * который ссылаются учётки [LocalIdentities]. `null` — мок-путь/превью без vault: разделы keychain
+ * который ссылаются хосты по `credentialId`. `null` — мок-путь/превью без vault: разделы keychain
  * в [app.skerry.ui.design.VaultView] рисуют статичный макет. Поставляется [DesktopDesignApp] за
  * гейтом мастер-пароля (там же, где списки перечитываются).
  */
@@ -82,7 +74,7 @@ val LocalSessions: ProvidableCompositionLocal<SessionsController?> = staticCompo
 val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticCompositionLocalOf { null }
 
 /**
- * Действие «подключиться к хосту»: резолвит секрет (identity из vault или запрос пароля) и открывает
- * сессию. Поставляется корнем chrome ([DesktopDesignApp]); дефолт — no-op (мок-путь/превью).
+ * Действие «подключиться к хосту»: резолвит секрет (keychain-секрет из vault или запрос пароля) и
+ * открывает сессию. Поставляется корнем chrome ([DesktopDesignApp]); дефолт — no-op (мок-путь/превью).
  */
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }

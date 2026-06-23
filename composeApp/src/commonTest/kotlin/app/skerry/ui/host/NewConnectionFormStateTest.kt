@@ -62,25 +62,20 @@ class NewConnectionFormStateTest {
     }
 
     @Test
-    fun toDraft_carries_identity_id() {
+    fun toDraft_carries_credential_id() {
         val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
-        assertEquals("id-7", f.toDraft(identityId = "id-7").identityId)
-        assertNull(f.toDraft().identityId)
+        assertEquals("cred-7", f.toDraft(credentialId = "cred-7").credentialId)
+        assertNull(f.toDraft().credentialId)
     }
 
     // --- Аутентификация ---
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
 
-    // Колбэки-ловушки: saveCredential возвращает id секрета и захватывает черновик; saveAccount
-    // захватывает (label, username, credentialId) и возвращает id учётки.
+    // Колбэк-ловушка: saveCredential возвращает id секрета и захватывает черновик.
     private class Captures {
         var credentialDraft: CredentialDraft? = null
-        var accountArgs: Triple<String, String, String>? = null
         val saveCredential: (CredentialDraft) -> String? = { credentialDraft = it; "cred-id" }
-        val saveAccount: (String, String, String) -> String? = { label, username, credentialId ->
-            accountArgs = Triple(label, username, credentialId); "account-id"
-        }
     }
 
     @Test
@@ -89,68 +84,57 @@ class NewConnectionFormStateTest {
         assertEquals(AuthMode.ASK, f.authMode)
         assertTrue(f.canSave) // ASK не требует секрета
         val cap = Captures()
-        val id = f.resolveIdentityId(cap.saveCredential, cap.saveAccount)
+        val id = f.resolveCredentialId(cap.saveCredential)
         assertNull(id)
-        assertNull(cap.credentialDraft) // ни секрет, ни учётка не создаются
-        assertNull(cap.accountArgs)
+        assertNull(cap.credentialDraft) // секрет не создаётся
     }
 
     @Test
-    fun existing_identity_requires_selection_and_resolves_to_its_id() {
+    fun existing_credential_requires_selection_and_resolves_to_its_id() {
         val f = validBase().apply { authMode = AuthMode.EXISTING }
         assertFalse(f.canSave) // ничего не выбрано
-        f.existingIdentityId = "saved-1"
+        f.existingCredentialId = "saved-1"
         assertTrue(f.canSave)
         val cap = Captures()
-        assertEquals("saved-1", f.resolveIdentityId(cap.saveCredential, cap.saveAccount))
-        assertNull(cap.credentialDraft) // существующую не пересоздаём
-        assertNull(cap.accountArgs)
+        assertEquals("saved-1", f.resolveCredentialId(cap.saveCredential))
+        assertNull(cap.credentialDraft) // существующий не пересоздаём
     }
 
     @Test
-    fun new_password_requires_value_and_creates_credential_then_account() {
+    fun new_password_requires_value_and_creates_credential() {
         val f = validBase().apply { authMode = AuthMode.NEW_PASSWORD; username = "root"; address = "10.0.0.1" }
         assertFalse(f.canSave) // пароль пуст
         f.password = "s3cr3t"
         assertTrue(f.canSave)
         val cap = Captures()
-        val id = f.resolveIdentityId(cap.saveCredential, cap.saveAccount)
-        assertEquals("account-id", id) // возвращается id учётки, не секрета
-        // Секрет: пароль.
+        val id = f.resolveCredentialId(cap.saveCredential)
+        assertEquals("cred-id", id) // возвращается id созданного секрета
         assertEquals(CredentialKind.PASSWORD, cap.credentialDraft?.kind)
         assertEquals("s3cr3t", cap.credentialDraft?.password)
         assertEquals("root@10.0.0.1", cap.credentialDraft?.label)
         assertNull(cap.credentialDraft?.id) // создаётся новый
-        // Учётка поверх секрета: username из формы, credentialId — id созданного секрета.
-        assertEquals(Triple("root@10.0.0.1", "root", "cred-id"), cap.accountArgs)
     }
 
     @Test
-    fun new_key_requires_pem_and_creates_credential_then_account() {
+    fun new_key_requires_pem_and_creates_credential() {
         val f = validBase().apply { authMode = AuthMode.NEW_KEY; username = "ci"; address = "build.host" }
         assertFalse(f.canSave) // PEM пуст
         f.privateKeyPem = "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
         f.passphrase = "pp"
         assertTrue(f.canSave)
         val cap = Captures()
-        val id = f.resolveIdentityId(cap.saveCredential, cap.saveAccount)
-        assertEquals("account-id", id)
+        val id = f.resolveCredentialId(cap.saveCredential)
+        assertEquals("cred-id", id)
         assertEquals(CredentialKind.PRIVATE_KEY, cap.credentialDraft?.kind)
         assertEquals(f.privateKeyPem, cap.credentialDraft?.privateKeyPem)
         assertEquals("pp", cap.credentialDraft?.passphrase)
         assertEquals("ci@build.host", cap.credentialDraft?.label)
-        assertEquals(Triple("ci@build.host", "ci", "cred-id"), cap.accountArgs)
     }
 
     @Test
-    fun new_password_with_failed_credential_save_does_not_create_account() {
+    fun new_password_with_failed_credential_save_resolves_to_null() {
         val f = validBase().apply { authMode = AuthMode.NEW_PASSWORD; password = "s3cr3t" }
-        var accountCalled = false
-        val id = f.resolveIdentityId(
-            saveCredential = { null }, // секрет не сохранился (например, без vault)
-            saveAccount = { _, _, _ -> accountCalled = true; "x" },
-        )
+        val id = f.resolveCredentialId(saveCredential = { null }) // секрет не сохранился (например, без vault)
         assertNull(id)
-        assertFalse(accountCalled) // без credential учётку не плодим
     }
 }

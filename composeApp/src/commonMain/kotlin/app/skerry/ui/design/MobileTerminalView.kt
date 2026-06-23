@@ -55,7 +55,7 @@ private const val ESC = "\u001b"
  * Полноэкранный push-экран терминала мобильного макета `Skerry Mobile.html` (живая SSH-сессия
  * поверх готового PTY-ядра). Шапка с именем хоста и статусом → тело по состоянию соединения активной
  * сессии ([LocalSessions]) → клавишная панель спецклавиш. Тело подключённой сессии рендерит реальную
- * сетку через общий [TerminalScreen] в IME-режиме (как legacy-`MobileApp` и desktop-`LiveTerminalPane`).
+ * сетку через общий [TerminalScreen] в IME-режиме (как desktop-`LiveTerminalPane`).
  *
  * Сессию открывает Connect на [MobileHostDetailScreen] (через `LocalConnectHost`); back-стрелка лишь
  * возвращает на список (сессия остаётся живой), а Disconnect в меню `more_horiz` рвёт её и закрывает

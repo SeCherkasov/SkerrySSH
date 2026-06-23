@@ -30,7 +30,6 @@ import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.DataKey
-import app.skerry.shared.vault.IdentityStore
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.SshKeyType
@@ -41,7 +40,6 @@ import app.skerry.ui.AppDependencies
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
-import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionSubtitle
@@ -94,21 +92,18 @@ fun main() {
 
     val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
     val certificateInspector = if (live) SshjCertificateInspector() else null
-    // Двухуровневая модель: keychain-секреты ([CredentialManagerController]) + учётки
-    // ([IdentityManagerController]) поверх одного in-memory vault, чтобы учётки ссылались на реальные
-    // секреты, а раздел Vault отрисовался живыми компонентами.
-    val seeded = if (live && keyGenerator != null) seededVault(keyGenerator) else null
-    val credentials = seeded?.first
-    val identities = seeded?.second
-    val keyId = identities?.identities?.firstOrNull()?.id
-    val hosts = if (live) seededHosts(boundIdentityId = keyId) else null
+    // Одноуровневая модель: keychain-секреты ([CredentialManagerController]) поверх in-memory vault,
+    // чтобы раздел Vault отрисовался живыми компонентами; хосты ссылаются на секрет по credentialId.
+    val credentials = if (live && keyGenerator != null) seededVault(keyGenerator) else null
+    val boundCredentialId = credentials?.credentials?.firstOrNull()?.id
+    val hosts = if (live) seededHosts(boundCredentialId = boundCredentialId) else null
     val sessions = if (live && hosts != null) seededSessions(hosts) else null
     val knownHosts = if (live) seededKnownHosts() else null
 
     val content: @Composable () -> Unit = when (overlay) {
         "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null) { _, _ -> } } } }
         "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}) } } }
-        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, identities = identities, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector) } }
+        else -> { { DesktopDesignApp(state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector) } }
     }
 
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
@@ -187,10 +182,10 @@ private fun GateScreenPreview(body: @Composable () -> Unit) {
 }
 
 /**
- * In-memory каталог хостов с демо-профилями — только для офскрин-рендера живого сайдбара. [boundIdentityId]
- * (если задан) привязывается к паре хостов, чтобы раздел Vault показал блок «Used by hosts».
+ * In-memory каталог хостов с демо-профилями — только для офскрин-рендера живого сайдбара.
+ * [boundCredentialId] (если задан) привязывается к паре хостов, чтобы раздел Vault показал «Used by hosts».
  */
-private fun seededHosts(boundIdentityId: String? = null): HostManagerController {
+private fun seededHosts(boundCredentialId: String? = null): HostManagerController {
     val store = object : HostStore {
         private val items = LinkedHashMap<String, Host>()
         override fun all(): List<Host> = items.values.toList()
@@ -198,8 +193,8 @@ private fun seededHosts(boundIdentityId: String? = null): HostManagerController 
         override fun remove(id: String) { items.remove(id) }
     }
     listOf(
-        Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production", identityId = boundIdentityId),
-        Host("h2", "db-master", "192.168.1.50", 22, "root", "Production", identityId = boundIdentityId),
+        Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production", credentialId = boundCredentialId),
+        Host("h2", "db-master", "192.168.1.50", 22, "root", "Production", credentialId = boundCredentialId),
         Host("h3", "homelab-pi", "10.0.0.12", 22, "pi", "Homelab"),
         Host("h4", "vps-edge", "vps.example.com", 2222, "deploy", null),
     ).forEach(store::put)
@@ -208,32 +203,24 @@ private fun seededHosts(boundIdentityId: String? = null): HostManagerController 
 }
 
 /**
- * Двухуровневый посев vault: keychain-секреты ([CredentialManagerController]) + учётки
- * ([IdentityManagerController]) поверх ОДНОГО in-memory vault — чтобы офскрин-рендер показал живой
- * раздел Vault (карточки секретов, учётки, used-by-hosts) реальными компонентами без файлов/мастер-
- * пароля. Один ed25519-ключ генерируется настоящим [SshKeyGenerator]; учётки ссылаются на секреты
- * по [credentialId]. Возвращает пару (credentials, identities).
+ * Посев vault keychain-секретами ([CredentialManagerController]) поверх in-memory vault — чтобы
+ * офскрин-рендер показал живой раздел Vault (карточки ключа/пароля/сертификата, used-by-hosts)
+ * реальными компонентами без файлов/мастер-пароля. Один ed25519-ключ генерируется настоящим
+ * [SshKeyGenerator]; первый секрет привязывается к демо-хостам по credentialId.
  */
-private fun seededVault(keyGenerator: SshKeyGenerator): Pair<CredentialManagerController, IdentityManagerController> {
+private fun seededVault(keyGenerator: SshKeyGenerator): CredentialManagerController {
     val vault = InMemoryVault()
     var credSeq = 0
-    var idSeq = 0
     val credentials = CredentialManagerController(CredentialStore(vault)) { "cred-${credSeq++}" }
-    val identities = IdentityManagerController(IdentityStore(vault)) { "id-${idSeq++}" }
 
     val key = keyGenerator.generate(SshKeyType.ED25519, comment = "alice@skerry")
-    val keyCred = credentials.save(CredentialDraft(label = "work-laptop", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = key.privateKeyPem))
-    val pwCred = credentials.save(CredentialDraft(label = "db-admin", kind = CredentialKind.PASSWORD, password = "hunter2"))
-    val certCred = credentials.save(
+    credentials.save(CredentialDraft(label = "work-laptop", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = key.privateKeyPem))
+    credentials.save(CredentialDraft(label = "db-admin", kind = CredentialKind.PASSWORD, password = "hunter2"))
+    credentials.save(
         CredentialDraft(label = "prod-access", kind = CredentialKind.CERTIFICATE, privateKeyPem = SEED_CERT_KEY, certificate = SEED_CERT),
     )
 
-    // Учётки (label + username) ссылаются на keychain-секреты — двухуровневая модель хост → учётка → секрет.
-    identities.save(label = "alice@prod", username = "alice", credentialId = keyCred)
-    identities.save(label = "db root", username = "root", credentialId = pwCred)
-    identities.save(label = "deploy (cert)", username = "deploy", credentialId = certCred)
-
-    return credentials to identities
+    return credentials
 }
 
 // Учебный ed25519-сертификат (CA-подписанный, principals alice/deploy) — только для офскрин-посева

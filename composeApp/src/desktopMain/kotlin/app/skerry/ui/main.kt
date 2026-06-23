@@ -17,14 +17,12 @@ import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.CredentialStore
-import app.skerry.shared.vault.IdentityStore
 import app.skerry.shared.vault.VaultMigration
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
-import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.KnownHostsController
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
@@ -81,22 +79,21 @@ fun main() {
             deviceId(dir),
             FileSystem.SYSTEM,
         ) { Instant.now().toString() }
-        // Двухуровневая модель vault: keychain-секреты (записи CREDENTIAL) + учётки (записи IDENTITY,
-        // username + ссылка на секрет). Хост ссылается на учётку.
+        // Одноуровневая модель vault: keychain-секреты (записи CREDENTIAL). Хост ссылается на секрет
+        // напрямую через credentialId.
         val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
-        val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
-        // Разовая миграция старых данных (секрет под IDENTITY → CREDENTIAL + учётка-обёртка) при
-        // разблокировке vault; идемпотентна. После неё обновляем кэш списка хостов в контроллере.
+        // Разовая миграция старых данных (секрет под IDENTITY → CREDENTIAL, хост → прямой credentialId,
+        // снос учёток-обёрток) при разблокировке vault; идемпотентна. После неё обновляем кэш хостов.
         val onVaultUnlocked: () -> Unit = {
             // Сбой миграции не должен мешать показать уже доступные данные — гасим и перечитываем хосты.
-            runCatching { VaultMigration(vault, hostStore) { UUID.randomUUID().toString() }.migrate() }
+            runCatching { VaultMigration(vault, hostStore).migrate() }
             hosts.reload()
         }
         // Генерация SSH-ключей в разделе Vault: BouncyCastle поверх sshj-формата (тот же, что читает транспорт).
         val keyGenerator = BouncyCastleSshKeyGenerator()
         // Разбор импортированных SSH-сертификатов (раздел Vault → Certificates) — sshj поверх ssh-wire.
         val certificateInspector = SshjCertificateInspector()
-        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, identities = identities, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector)
+        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
@@ -119,7 +116,6 @@ fun main() {
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,
                     transport = deps.transport,
-                    identities = deps.identities,
                     credentials = deps.credentials,
                     knownHosts = deps.knownHosts,
                     keyGenerator = deps.keyGenerator,

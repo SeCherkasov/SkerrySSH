@@ -9,10 +9,10 @@ import app.skerry.ui.identity.CredentialKind
 
 /**
  * Способ аутентификации, выбранный в форме «New connection».
- * - [ASK] — секрет не хранить, пароль спрашивается при каждом подключении (хост без учётки);
- * - [EXISTING] — привязать уже сохранённую в vault учётку ([existingIdentityId]);
- * - [NEW_PASSWORD] / [NEW_KEY] — создать новый keychain-секрет (пароль / приватный ключ) и учётку
- *   поверх него, затем привязать хост к учётке.
+ * - [ASK] — секрет не хранить, пароль спрашивается при каждом подключении (хост без секрета);
+ * - [EXISTING] — привязать уже сохранённый keychain-секрет ([existingCredentialId]);
+ * - [NEW_PASSWORD] / [NEW_KEY] — создать новый keychain-секрет (пароль / приватный ключ) и привязать
+ *   к нему хост.
  */
 enum class AuthMode { ASK, EXISTING, NEW_PASSWORD, NEW_KEY }
 
@@ -24,10 +24,10 @@ enum class AuthMode { ASK, EXISTING, NEW_PASSWORD, NEW_KEY }
  * Валидация ([canSave]) и парсинг порта/секрета — здесь (чистая логика, без рендера), зафиксированы
  * [app.skerry.ui.host.NewConnectionFormStateTest]; UI лишь связывает поля и кнопку Save.
  *
- * Аутентификация ([authMode]) разворачивается в идентификатор vault-записи через [resolveIdentityId]:
- * для новых секретов форма не пишет в vault сама, а вызывает переданный `saveIdentity` (обычно
- * [app.skerry.ui.identity.IdentityManagerController.save]) — побочный эффект остаётся снаружи, логика
- * выбора тестируема. AI-политика и теги в черновик пока не входят (отдельные слайсы).
+ * Аутентификация ([authMode]) разворачивается в идентификатор keychain-секрета через
+ * [resolveCredentialId]: для новых секретов форма не пишет в vault сама, а вызывает переданный
+ * `saveCredential` (обычно [app.skerry.ui.identity.CredentialManagerController.save]) — побочный
+ * эффект остаётся снаружи, логика выбора тестируема. AI-политика и теги в черновик пока не входят.
  */
 @Stable
 class NewConnectionFormState {
@@ -39,7 +39,7 @@ class NewConnectionFormState {
 
     // Аутентификация: режим + поля под каждый вид (держатся рядом, чтобы переключение не теряло ввод).
     var authMode: AuthMode by mutableStateOf(AuthMode.ASK)
-    var existingIdentityId: String? by mutableStateOf(null)
+    var existingCredentialId: String? by mutableStateOf(null)
     var password: String by mutableStateOf("")
     var privateKeyPem: String by mutableStateOf("")
     var passphrase: String by mutableStateOf("")
@@ -51,7 +51,7 @@ class NewConnectionFormState {
     private val authValid: Boolean
         get() = when (authMode) {
             AuthMode.ASK -> true
-            AuthMode.EXISTING -> existingIdentityId != null
+            AuthMode.EXISTING -> existingCredentialId != null
             AuthMode.NEW_PASSWORD -> password.isNotEmpty()
             AuthMode.NEW_KEY -> privateKeyPem.isNotBlank()
         }
@@ -60,54 +60,39 @@ class NewConnectionFormState {
     val canSave: Boolean
         get() = name.isNotBlank() && address.isNotBlank() && username.isNotBlank() && portOrNull != null && authValid
 
-    /** Метка автосоздаваемой identity — `user@address`, чтобы её было видно во вкладке Vault. */
+    /** Метка автосоздаваемого секрета — `user@address`, чтобы его было видно во вкладке Vault. */
     private fun identityLabel(): String = "${username.trim()}@${address.trim()}"
 
     /**
-     * Разрешить [Host.identityId] (id учётки) для черновика: для [AuthMode.EXISTING] — выбранная
-     * учётка, для новых секретов — создать keychain-секрет через [saveCredential], затем учётку
-     * поверх него через [saveAccount] и вернуть её id; для [AuthMode.ASK] — `null` (секрет не
-     * хранится). Колбэки вызываются ровно для новых секретов (пишут в vault); если [saveCredential]
-     * вернул `null`, учётка не создаётся.
+     * Разрешить [Host.credentialId] (id keychain-секрета) для черновика: для [AuthMode.EXISTING] —
+     * выбранный секрет, для новых секретов — создать его через [saveCredential] и вернуть id; для
+     * [AuthMode.ASK] — `null` (секрет не хранится). [saveCredential] вызывается ровно для новых
+     * секретов (пишет в vault); если он вернул `null`, привязки нет.
      */
-    fun resolveIdentityId(
-        saveCredential: (CredentialDraft) -> String?,
-        saveAccount: (label: String, username: String, credentialId: String) -> String?,
-    ): String? = when (authMode) {
+    fun resolveCredentialId(saveCredential: (CredentialDraft) -> String?): String? = when (authMode) {
         AuthMode.ASK -> null
-        AuthMode.EXISTING -> existingIdentityId
-        AuthMode.NEW_PASSWORD -> wrapInAccount(
-            saveCredential(CredentialDraft(label = identityLabel(), kind = CredentialKind.PASSWORD, password = password)),
-            saveAccount,
+        AuthMode.EXISTING -> existingCredentialId
+        AuthMode.NEW_PASSWORD -> saveCredential(
+            CredentialDraft(label = identityLabel(), kind = CredentialKind.PASSWORD, password = password),
         )
-        AuthMode.NEW_KEY -> wrapInAccount(
-            saveCredential(
-                CredentialDraft(
-                    label = identityLabel(),
-                    kind = CredentialKind.PRIVATE_KEY,
-                    privateKeyPem = privateKeyPem,
-                    passphrase = passphrase,
-                ),
+        AuthMode.NEW_KEY -> saveCredential(
+            CredentialDraft(
+                label = identityLabel(),
+                kind = CredentialKind.PRIVATE_KEY,
+                privateKeyPem = privateKeyPem,
+                passphrase = passphrase,
             ),
-            saveAccount,
         )
     }
 
-    // Обернуть свежесозданный keychain-секрет в учётку (username из формы). null credentialId →
-    // секрет не сохранился, учётку не плодим.
-    private fun wrapInAccount(
-        credentialId: String?,
-        saveAccount: (label: String, username: String, credentialId: String) -> String?,
-    ): String? = credentialId?.let { saveAccount(identityLabel(), username.trim(), it) }
-
     /** Собрать черновик для [HostManagerController.save]; [id] != null — правка существующего. */
-    fun toDraft(id: String? = null, identityId: String? = null): HostDraft = HostDraft(
+    fun toDraft(id: String? = null, credentialId: String? = null): HostDraft = HostDraft(
         id = id,
         label = name.trim(),
         address = address.trim(),
         port = portOrNull ?: 22,
         username = username.trim(),
         group = group.trim().ifBlank { null },
-        identityId = identityId,
+        credentialId = credentialId,
     )
 }

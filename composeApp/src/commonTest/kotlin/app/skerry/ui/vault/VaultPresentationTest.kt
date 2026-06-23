@@ -3,7 +3,6 @@ package app.skerry.ui.vault
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
-import app.skerry.shared.vault.Identity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -31,46 +30,30 @@ class VaultPresentationTest {
     }
 
     @Test
-    fun `identities category never holds keychain secrets`() {
-        assertTrue(VaultPresentation.credentialsIn(VaultCategoryKind.IDENTITIES, credentials).isEmpty())
-    }
-
-    @Test
-    fun `counts live records per category`() {
-        val accounts = listOf(
-            Identity("a1", "acc-1", "root", "k1"),
-            Identity("a2", "acc-2", "deploy", "k1"),
-            Identity("a3", "acc-3", "ci", "p1"),
+    fun `sidebar holds the three keychain categories in order`() {
+        assertEquals(
+            listOf(VaultCategoryKind.SSH_KEYS, VaultCategoryKind.PASSWORDS, VaultCategoryKind.CERTIFICATES),
+            VaultPresentation.sidebarCategories,
         )
-        assertEquals(2, VaultPresentation.count(VaultCategoryKind.SSH_KEYS, credentials, accounts))
-        assertEquals(1, VaultPresentation.count(VaultCategoryKind.PASSWORDS, credentials, accounts))
-        assertEquals(1, VaultPresentation.count(VaultCategoryKind.CERTIFICATES, credentials, accounts))
-        // Identities считает учётки, а не keychain-секреты.
-        assertEquals(3, VaultPresentation.count(VaultCategoryKind.IDENTITIES, credentials, accounts))
     }
 
     @Test
-    fun `accountsUsing returns only accounts referencing the credential`() {
-        val accounts = listOf(
-            Identity("a1", "acc-1", "root", "k1"),
-            Identity("a2", "acc-2", "deploy", "k1"),
-            Identity("a3", "acc-3", "ci", "k2"),
-        )
-        assertEquals(listOf("a1", "a2"), VaultPresentation.accountsUsing("k1", accounts).map { it.id })
-        assertEquals(listOf("a3"), VaultPresentation.accountsUsing("k2", accounts).map { it.id })
-        assertTrue(VaultPresentation.accountsUsing("nope", accounts).isEmpty())
+    fun `counts live secrets per category`() {
+        assertEquals(2, VaultPresentation.count(VaultCategoryKind.SSH_KEYS, credentials))
+        assertEquals(1, VaultPresentation.count(VaultCategoryKind.PASSWORDS, credentials))
+        assertEquals(1, VaultPresentation.count(VaultCategoryKind.CERTIFICATES, credentials))
     }
 
     @Test
-    fun `hostsUsing returns only hosts referencing the account`() {
+    fun `hostsUsing returns only hosts referencing the credential`() {
         val hosts = listOf(
-            Host("h1", "web-01", "10.0.0.1", username = "root", identityId = "a1"),
-            Host("h2", "web-02", "10.0.0.2", username = "root", identityId = "a1"),
-            Host("h3", "db", "10.0.0.3", username = "root", identityId = "a2"),
-            Host("h4", "misc", "10.0.0.4", username = "root", identityId = null),
+            Host("h1", "web-01", "10.0.0.1", username = "root", credentialId = "k1"),
+            Host("h2", "web-02", "10.0.0.2", username = "root", credentialId = "k1"),
+            Host("h3", "db", "10.0.0.3", username = "root", credentialId = "k2"),
+            Host("h4", "misc", "10.0.0.4", username = "root", credentialId = null),
         )
-        assertEquals(listOf("web-01", "web-02"), VaultPresentation.hostsUsing("a1", hosts).map { it.label })
-        assertEquals(listOf("db"), VaultPresentation.hostsUsing("a2", hosts).map { it.label })
+        assertEquals(listOf("web-01", "web-02"), VaultPresentation.hostsUsing("k1", hosts).map { it.label })
+        assertEquals(listOf("db"), VaultPresentation.hostsUsing("k2", hosts).map { it.label })
         assertTrue(VaultPresentation.hostsUsing("nope", hosts).isEmpty())
     }
 }

@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
-import app.skerry.shared.vault.Identity
 import app.skerry.shared.vault.SshCertificateInfo
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
@@ -58,7 +57,6 @@ import app.skerry.ui.host.HostDraft
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
-import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
@@ -70,9 +68,9 @@ import kotlinx.coroutines.withContext
 /**
  * Vault view. С живым keychain ([LocalCredentials]) рисует реальные данные открытого vault:
  * три keychain-категории (SSH keys/Passwords/Certificates) — секреты [Credential] с панелью деталей
- * (публичный ключ, отпечаток, какие учётки/хосты используют), генерацией пары ([LocalSshKeyGenerator]),
- * добавлением пароля, импортом сертификата ([LocalSshCertificateInspector]), копированием/экспортом/
- * удалением; категория Identities — учётки [Identity] ([LocalIdentities], username + ссылка на секрет).
+ * (публичный ключ, отпечаток, какие хосты используют секрет напрямую через [Host.credentialId]),
+ * генерацией пары ([LocalSshKeyGenerator]), добавлением пароля, импортом сертификата
+ * ([LocalSshCertificateInspector]), копированием/экспортом/удалением.
  * Без keychain-контроллера (офскрин-рендер/превью) рисуется статичный макет [MockVaultView].
  */
 @Composable
@@ -90,10 +88,8 @@ fun VaultView() {
 @Composable
 private fun LiveVaultView(credentials: CredentialManagerController) {
     val mono = LocalFonts.current.mono
-    val identitiesController = LocalIdentities.current
     val hostsController = LocalHosts.current
     val hosts = hostsController?.hosts ?: emptyList()
-    val accounts = identitiesController?.identities ?: emptyList()
     val generator = LocalSshKeyGenerator.current
     val inspector = LocalSshCertificateInspector.current
     val clipboard = LocalClipboardManager.current
@@ -105,20 +101,14 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     var showGenerate by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
     var showImportCert by remember { mutableStateOf(false) }
-    // null + showIdentityDialog → создание; не-null → правка этой учётки.
-    var showIdentityDialog by remember { mutableStateOf(false) }
-    var editingAccount by remember { mutableStateOf<Identity?>(null) }
     var pendingDeleteCred by remember { mutableStateOf<Credential?>(null) }
-    var pendingDeleteAccount by remember { mutableStateOf<Identity?>(null) }
 
-    val isIdentities = category == VaultCategoryKind.IDENTITIES
     val credItems = VaultPresentation.credentialsIn(category, allCreds)
-    val selectedCred = if (isIdentities) null else credItems.firstOrNull { it.id == selectedId } ?: credItems.firstOrNull()
-    val selectedAccount = if (!isIdentities) null else accounts.firstOrNull { it.id == selectedId } ?: accounts.firstOrNull()
+    val selectedCred = credItems.firstOrNull { it.id == selectedId } ?: credItems.firstOrNull()
 
     Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
-            VaultSidebar(category, allCreds, accounts) { category = it; selectedId = null }
+            VaultSidebar(category, allCreds) { category = it; selectedId = null }
             VLine(D.line)
             Column(Modifier.weight(1f).fillMaxHeight().background(D.bg)) {
                 VaultHeader(
@@ -128,7 +118,6 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     onGenerate = { showGenerate = true },
                     onAddPassword = { showAddPassword = true },
                     onImportCert = { showImportCert = true },
-                    onNewIdentity = { editingAccount = null; showIdentityDialog = true },
                 )
                 HLine()
                 Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -136,65 +125,34 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                         Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        if (isIdentities) {
-                            if (accounts.isEmpty()) {
-                                VaultEmptyCategory(category)
-                            } else {
-                                accounts.forEach { account ->
-                                    AccountCard(
-                                        account = account,
-                                        credentialLabel = credentials.find(account.credentialId)?.label,
-                                        active = account.id == selectedAccount?.id,
-                                        usedByCount = VaultPresentation.hostsUsing(account.id, hosts).size,
-                                        mono = mono,
-                                        onClick = { selectedId = account.id },
-                                    )
-                                }
-                            }
+                        if (credItems.isEmpty()) {
+                            VaultEmptyCategory(category)
                         } else {
-                            if (credItems.isEmpty()) {
-                                VaultEmptyCategory(category)
-                            } else {
-                                credItems.forEach { credential ->
-                                    LiveSecretCard(
-                                        credential = credential,
-                                        active = credential.id == selectedCred?.id,
-                                        generator = generator,
-                                        inspector = inspector,
-                                        usedByCount = hostsForCredential(credential.id, accounts, hosts).size,
-                                        mono = mono,
-                                        onClick = { selectedId = credential.id },
-                                    )
-                                }
+                            credItems.forEach { credential ->
+                                LiveSecretCard(
+                                    credential = credential,
+                                    active = credential.id == selectedCred?.id,
+                                    generator = generator,
+                                    inspector = inspector,
+                                    usedByCount = VaultPresentation.hostsUsing(credential.id, hosts).size,
+                                    mono = mono,
+                                    onClick = { selectedId = credential.id },
+                                )
                             }
                         }
                     }
-                    if (isIdentities) {
-                        selectedAccount?.let { account ->
-                            VLine(D.line)
-                            AccountDetail(
-                                account = account,
-                                credentialLabel = credentials.find(account.credentialId)?.label,
-                                hosts = VaultPresentation.hostsUsing(account.id, hosts),
-                                mono = mono,
-                                onEdit = { editingAccount = account; showIdentityDialog = true },
-                                onDelete = { pendingDeleteAccount = account },
-                            )
-                        }
-                    } else {
-                        selectedCred?.let { credential ->
-                            VLine(D.line)
-                            LiveSecretDetail(
-                                credential = credential,
-                                generator = generator,
-                                inspector = inspector,
-                                hosts = hostsForCredential(credential.id, accounts, hosts),
-                                mono = mono,
-                                onCopy = { clipboard.setText(AnnotatedString(it)) },
-                                onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
-                                onDelete = { pendingDeleteCred = credential },
-                            )
-                        }
+                    selectedCred?.let { credential ->
+                        VLine(D.line)
+                        LiveSecretDetail(
+                            credential = credential,
+                            generator = generator,
+                            inspector = inspector,
+                            hosts = VaultPresentation.hostsUsing(credential.id, hosts),
+                            mono = mono,
+                            onCopy = { clipboard.setText(AnnotatedString(it)) },
+                            onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
+                            onDelete = { pendingDeleteCred = credential },
+                        )
                     }
                 }
             }
@@ -247,68 +205,33 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                 },
             )
         }
-        if (showIdentityDialog) {
-            IdentityDialog(
-                initial = editingAccount,
-                credentials = allCreds,
-                onDismiss = { showIdentityDialog = false },
-                onSave = { label, username, credentialId ->
-                    selectedId = identitiesController?.save(
-                        label = label,
-                        username = username,
-                        credentialId = credentialId,
-                        id = editingAccount?.id,
-                    )
-                    category = VaultCategoryKind.IDENTITIES
-                    showIdentityDialog = false
-                },
-            )
-        }
         pendingDeleteCred?.let { victim ->
-            // Удаление keychain-секрета каскадно: учётки, ссылающиеся на него, теряют смысл — их хосты
-            // развязываем (спросят пароль при коннекте), сами учётки удаляем, затем удаляем секрет.
-            val dependentAccounts = VaultPresentation.accountsUsing(victim.id, accounts)
-            val affectedHosts = dependentAccounts.flatMap { VaultPresentation.hostsUsing(it.id, hosts) }.distinctBy { it.id }
-            DeleteIdentityDialog(
-                label = victim.label,
-                boundHostCount = affectedHosts.size,
-                onDismiss = { pendingDeleteCred = null },
-                onConfirm = {
-                    affectedHosts.forEach { host -> hostsController?.save(host.unbindIdentity()) }
-                    dependentAccounts.forEach { account -> identitiesController?.delete(account.id) }
-                    credentials.delete(victim.id)
-                    if (selectedId == victim.id) selectedId = null
-                    pendingDeleteCred = null
-                },
-            )
-        }
-        pendingDeleteAccount?.let { victim ->
+            // Удаление keychain-секрета: хосты, привязанные к нему напрямую, развязываем
+            // (спросят пароль при коннекте), затем удаляем сам секрет.
             val bound = VaultPresentation.hostsUsing(victim.id, hosts)
-            DeleteIdentityDialog(
+            DeleteSecretDialog(
                 label = victim.label,
                 boundHostCount = bound.size,
-                onDismiss = { pendingDeleteAccount = null },
+                onDismiss = { pendingDeleteCred = null },
                 onConfirm = {
-                    // Сначала развязываем хосты (теряют привязку к учётке), потом удаляем учётку —
-                    // иначе профиль остался бы ссылаться на несуществующий id.
-                    bound.forEach { host -> hostsController?.save(host.unbindIdentity()) }
-                    identitiesController?.delete(victim.id)
-                    if (selectedId == victim.id) selectedId = null
-                    pendingDeleteAccount = null
+                    // Каскад целостен только при живом hostsController: иначе хосты остались бы
+                    // ссылаться на удалённый секрет. За гейтом он всегда есть; гард — защита от
+                    // гонки lock при открытом диалоге (тогда удаление отменяем целиком).
+                    val hc = hostsController
+                    if (hc != null) {
+                        bound.forEach { host -> hc.save(host.unbindCredential()) }
+                        credentials.delete(victim.id)
+                        if (selectedId == victim.id) selectedId = null
+                    }
+                    pendingDeleteCred = null
                 },
             )
         }
     }
 }
 
-/** Хосты, фактически использующие keychain-секрет: через учётки, ссылающиеся на него (транзитивно). */
-private fun hostsForCredential(credentialId: String, accounts: List<Identity>, hosts: List<Host>): List<Host> =
-    VaultPresentation.accountsUsing(credentialId, accounts)
-        .flatMap { VaultPresentation.hostsUsing(it.id, hosts) }
-        .distinctBy { it.id }
-
-private fun Host.unbindIdentity(): HostDraft =
-    HostDraft(id = id, label = label, address = address, port = port, username = username, group = group, identityId = null)
+private fun Host.unbindCredential(): HostDraft =
+    HostDraft(id = id, label = label, address = address, port = port, username = username, group = group, credentialId = null)
 
 // ---------------------------------------------------------------------------------------------
 // Левый sidebar категорий (живые счётчики) + шапка с действием категории.
@@ -318,16 +241,15 @@ private fun Host.unbindIdentity(): HostDraft =
 private fun VaultSidebar(
     active: VaultCategoryKind,
     credentials: List<Credential>,
-    accounts: List<Identity>,
     onSelect: (VaultCategoryKind) -> Unit,
 ) {
     Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
         Txt("VAULT", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
-        VaultCategoryKind.entries.forEach { kind ->
+        VaultPresentation.sidebarCategories.forEach { kind ->
             VaultCategoryRow(
                 icon = kind.icon,
                 label = kind.title,
-                count = VaultPresentation.count(kind, credentials, accounts).toString(),
+                count = VaultPresentation.count(kind, credentials).toString(),
                 active = kind == active,
                 onClick = { onSelect(kind) },
             )
@@ -371,7 +293,6 @@ private fun VaultHeader(
     onGenerate: () -> Unit,
     onAddPassword: () -> Unit,
     onImportCert: () -> Unit,
-    onNewIdentity: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
@@ -383,7 +304,6 @@ private fun VaultHeader(
             VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton("Generate key", onClick = onGenerate, icon = "add")
             VaultCategoryKind.PASSWORDS -> PrimaryButton("Add password", onClick = onAddPassword, icon = "add")
             VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton("Import certificate", onClick = onImportCert, icon = "add")
-            VaultCategoryKind.IDENTITIES -> PrimaryButton("New identity", onClick = onNewIdentity, icon = "add")
         }
     }
 }
@@ -451,32 +371,6 @@ private fun LiveSecretCard(
     }
 }
 
-@Composable
-private fun AccountCard(
-    account: Identity,
-    credentialLabel: String?,
-    active: Boolean,
-    usedByCount: Int,
-    mono: FontFamily,
-    onClick: () -> Unit,
-) {
-    val border = if (active) D.cyan.copy(alpha = 0.18f) else D.cyan08
-    val bg = if (active) D.cyan.copy(alpha = 0.04f) else Color.Transparent
-    val usedBy = if (usedByCount == 1) "used by 1 host" else "used by $usedByCount hosts"
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(bg).border(1.dp, border, RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SecretIcon("badge", tinted = true, color = D.cyanBright)
-        Column(Modifier.weight(1f)) {
-            Txt(account.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-            val secretLabel = credentialLabel ?: "missing credential"
-            Txt("${account.username} · $secretLabel · $usedBy", color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
-        }
-    }
-}
-
 /** Квадратная иконка секрета в карточке/деталях (cyan/moss-тон для ключей/сертификатов, нейтральный для пароля). */
 @Composable
 private fun SecretIcon(icon: String, tinted: Boolean, color: Color, size: Int = 38) {
@@ -497,7 +391,6 @@ private fun VaultEmptyCategory(category: VaultCategoryKind) {
                 VaultCategoryKind.SSH_KEYS -> "No SSH keys yet" to "Generate a key — it's sealed in your vault and ready to attach to hosts."
                 VaultCategoryKind.PASSWORDS -> "No passwords yet" to "Add a password — it's stored encrypted and reusable across hosts."
                 VaultCategoryKind.CERTIFICATES -> "No certificates yet" to "Import a CA-signed certificate with its private key — sealed in your vault and ready to attach to hosts."
-                VaultCategoryKind.IDENTITIES -> "No identities yet" to "An identity pairs a username with a keychain secret, so hosts share one login."
             }
             Txt(title, color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
             if (hint.isNotEmpty()) Txt(hint, color = D.faint, size = 11.5.sp)
@@ -595,37 +488,7 @@ private fun LiveSecretDetail(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AccountDetail(
-    account: Identity,
-    credentialLabel: String?,
-    hosts: List<Host>,
-    mono: FontFamily,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Column(Modifier.width(340.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
-        Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-            SecretIcon("badge", tinted = true, color = D.cyanBright, size = 40)
-            Column {
-                Txt(account.label, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
-                Txt("Identity", color = D.dim, size = 11.5.sp)
-            }
-        }
-        DetailLabel("Username")
-        Txt(account.username, color = D.textBright, size = 12.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
-        DetailLabel("Credential")
-        Txt(credentialLabel ?: "missing credential", color = if (credentialLabel != null) D.textBright else D.sunset, size = 12.sp, modifier = Modifier.padding(bottom = 16.dp))
-        UsedByHosts(hosts, mono)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton("Edit", onClick = onEdit, icon = "edit", modifier = Modifier.weight(1f))
-            GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-/** Блок «Used by · N hosts» с pill-ами имён хостов — общий для деталей секрета и учётки. */
+/** Блок «Used by · N hosts» с pill-ами имён хостов — для панели деталей секрета. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
@@ -723,7 +586,7 @@ private fun ImportCertificateDialog(
     VaultDialogScaffold("Import certificate", "A CA-signed certificate and its private key are sealed in your vault.", onDismiss) {
         DialogField("NAME", name, { name = it }, placeholder = "e.g. prod-access")
         Box(Modifier.padding(top = 16.dp)) {
-            DialogField("PRIVATE KEY (PEM)", pem, { pem = it }, placeholder = "-----BEGIN OPENSSH PRIVATE KEY-----", singleLine = false)
+            DialogField("PRIVATE KEY (PEM)", pem, { pem = it }, placeholder = "-----BEGIN OPENSSH PRIVATE KEY-----", singleLine = false, keyboardType = KeyboardType.Password)
         }
         Box(Modifier.padding(top = 16.dp)) {
             DialogField("CERTIFICATE (*-cert.pub)", certificate, { certificate = it }, placeholder = "ssh-…-cert-v01@openssh.com …", singleLine = false)
@@ -742,87 +605,8 @@ private fun ImportCertificateDialog(
     }
 }
 
-/** Человеческое имя типа keychain-секрета — для строки выбора в [IdentityDialog]. */
-private fun CredentialSecret.typeLabel(): String = when (this) {
-    is CredentialSecret.Password -> "Password"
-    is CredentialSecret.PrivateKey -> "SSH key"
-    is CredentialSecret.Certificate -> "Certificate"
-}
-
-/** Material-иконка типа keychain-секрета — для строки выбора в [IdentityDialog]. */
-private fun CredentialSecret.icon(): String = when (this) {
-    is CredentialSecret.Password -> "password"
-    is CredentialSecret.PrivateKey -> "key"
-    is CredentialSecret.Certificate -> "workspace_premium"
-}
-
-/**
- * Диалог создания/правки учётки (username + ссылка на keychain-секрет). [initial] == null — создание,
- * иначе правка (поля предзаполнены). Учётка обязана ссылаться на один [Credential] из [credentials];
- * если keychain пуст — сохранение недоступно с подсказкой завести секрет в keychain-разделе.
- */
 @Composable
-private fun IdentityDialog(
-    initial: Identity?,
-    credentials: List<Credential>,
-    onDismiss: () -> Unit,
-    onSave: (label: String, username: String, credentialId: String) -> Unit,
-) {
-    var label by remember { mutableStateOf(initial?.label ?: "") }
-    var username by remember { mutableStateOf(initial?.username ?: "") }
-    // Предвыбор: правка → текущий секрет (если ещё существует), создание → первый доступный.
-    var credentialId by remember {
-        mutableStateOf(
-            initial?.credentialId?.takeIf { id -> credentials.any { it.id == id } } ?: credentials.firstOrNull()?.id,
-        )
-    }
-    val valid = label.isNotBlank() && username.isNotBlank() && credentialId != null
-    val title = if (initial == null) "New identity" else "Edit identity"
-
-    VaultDialogScaffold(title, "A username paired with a keychain secret — reused across hosts.", onDismiss) {
-        DialogField("NAME", label, { label = it }, placeholder = "e.g. prod deploy")
-        Box(Modifier.padding(top = 16.dp)) {
-            DialogField("USERNAME", username, { username = it }, placeholder = "e.g. deploy")
-        }
-        Txt("CREDENTIAL", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 16.dp, bottom = 6.dp))
-        if (credentials.isEmpty()) {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(12.dp)) {
-                Txt("No keychain secrets yet — add an SSH key, password or certificate first.", color = D.faint, size = 11.5.sp, lineHeight = 16.sp)
-            }
-        } else {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 168.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                credentials.forEach { cred ->
-                    val active = cred.id == credentialId
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp))
-                            .background(if (active) D.cyan.copy(alpha = 0.06f) else Color.Transparent)
-                            .border(1.dp, if (active) D.cyan.copy(alpha = 0.4f) else D.cyan14, RoundedCornerShape(7.dp))
-                            .clickable { credentialId = cred.id }
-                            .padding(horizontal = 11.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Sym(cred.secret.icon(), size = 16.sp, color = if (active) D.cyanBright else D.dim)
-                        Txt(cred.label, color = if (active) D.text else D.dim, size = 12.5.sp, modifier = Modifier.weight(1f))
-                        Txt(cred.secret.typeLabel(), color = D.faint, size = 10.sp)
-                    }
-                }
-            }
-        }
-        DialogButtons(
-            confirmLabel = if (initial == null) "Create" else "Save",
-            confirmEnabled = valid,
-            onDismiss = onDismiss,
-            onConfirm = { credentialId?.let { onSave(label.trim(), username.trim(), it) } },
-        )
-    }
-}
-
-@Composable
-private fun DeleteIdentityDialog(label: String, boundHostCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     VaultDialogScaffold("Delete \"$label\"?", null, onDismiss) {
         val detail = if (boundHostCount == 0) {
             "This is removed from your vault. This can't be undone."
@@ -873,6 +657,9 @@ private fun DialogField(
     placeholder: String,
     password: Boolean = false,
     singleLine: Boolean = true,
+    // Явный override типа клавиатуры: для видимых, но чувствительных полей (PEM-ключ) ставим
+    // KeyboardType.Password — гасит автокоррект/словарь IME, не маскируя ввод визуально.
+    keyboardType: KeyboardType? = null,
 ) {
     val ui = LocalFonts.current.ui
     val mono = LocalFonts.current.mono
@@ -896,7 +683,7 @@ private fun DialogField(
                 textStyle = style,
                 cursorBrush = SolidColor(D.cyan),
                 visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default, keyboardType = if (password) KeyboardType.Password else KeyboardType.Text),
+                keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default, keyboardType = keyboardType ?: if (password) KeyboardType.Password else KeyboardType.Text),
                 keyboardActions = KeyboardActions(),
             )
         }
@@ -929,7 +716,6 @@ private fun MockVaultView() {
         Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
             Txt("VAULT", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
             VaultCategory("key", "SSH keys", "4", active = true)
-            VaultCategory("badge", "Identities", "3")
             VaultCategory("password", "Passwords", "12")
             VaultCategory("vpn_lock", "Certificates", "2")
             Spacer(Modifier.weight(1f))

@@ -7,13 +7,13 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
-import app.skerry.ui.identity.IdentityManagerController
 import app.skerry.ui.known.KnownHostsController
 
 /**
- * Граф зависимостей приложения, собираемый платформенной точкой входа и подаваемый в [App].
+ * Граф зависимостей приложения, собираемый платформенной точкой входа (desktop `main`) и подаваемый
+ * в корневой composable (`DesktopDesignApp`/`MobileDesignApp`).
  *
- * Единый держатель вместо россыпи nullable-аргументов [App]: новая подсистема — это поле здесь,
+ * Единый держатель вместо россыпи nullable-аргументов: новая подсистема — это поле здесь,
  * а не ещё один параметр корневого composable. `null` означает «подсистема ещё не реализована на
  * этой платформе» (паритет): desktop собирает полный граф (sshj-транспорт, файловый менеджер
  * хостов, файловый vault), мобильные таргеты пока подают пустой граф и показывают плейсхолдер.
@@ -22,7 +22,6 @@ data class AppDependencies(
     val transport: SshTransport? = null,
     val hosts: HostManagerController? = null,
     val vault: Vault? = null,
-    val identities: IdentityManagerController? = null,
     /** Менеджер keychain-секретов (ключи/пароли/сертификаты); `null` — подсистема не подключена. */
     val credentials: CredentialManagerController? = null,
     /** Менеджер known-hosts (доверенные ключи + события смены ключа); `null` — подсистема не подключена. */

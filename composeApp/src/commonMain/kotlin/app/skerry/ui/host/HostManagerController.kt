@@ -19,7 +19,7 @@ data class HostDraft(
     val port: Int = 22,
     val username: String,
     val group: String? = null,
-    val identityId: String? = null,
+    val credentialId: String? = null,
 )
 
 /**
@@ -43,7 +43,7 @@ class HostManagerController(
 
     /**
      * Перечитать список из стора. Нужно после записей в обход контроллера (например, миграция vault
-     * пишет перенаправленные [Host.identityId] прямо в [HostStore] при unlock).
+     * пишет перенаправленные [Host.credentialId] прямо в [HostStore] при unlock).
      */
     fun reload() {
         hosts = store.all()
@@ -64,7 +64,7 @@ class HostManagerController(
                 port = draft.port,
                 username = draft.username,
                 group = draft.group,
-                identityId = draft.identityId,
+                credentialId = draft.credentialId,
             ),
         )
         hosts = store.all()

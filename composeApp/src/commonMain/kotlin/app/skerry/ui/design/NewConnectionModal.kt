@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 
@@ -52,10 +53,9 @@ import app.skerry.ui.host.NewConnectionFormState
 fun NewConnectionModal(state: DesktopDesignState) {
     val noop = remember { MutableInteractionSource() }
     val hosts = LocalHosts.current
-    val identities = LocalIdentities.current
     val credentials = LocalCredentials.current
     val form = remember { NewConnectionFormState() }
-    // Гард повторного Save (Enter/двойной клик) до закрытия модалки — иначе дубль identity+host в vault.
+    // Гард повторного Save (Enter/двойной клик) до закрытия модалки — иначе дубль секрета+хоста в vault.
     var submitting by remember { mutableStateOf(false) }
     Box(
         Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = noop, indication = null, onClick = state::closeModal),
@@ -147,17 +147,16 @@ fun NewConnectionModal(state: DesktopDesignState) {
                         } else if (hosts == null) {
                             state.closeModal() // мок/превью: сохранять некуда
                         } else if (form.canSave) {
-                            // Новый секрет (пароль/ключ) сначала запечатывается в keychain, поверх
-                            // создаётся учётка (username из формы), её id привязывается к хосту;
-                            // ASK/мок-путь без vault → identityId = null.
+                            // Новый секрет (пароль/ключ) запечатывается в keychain, его id напрямую
+                            // привязывается к хосту; ASK/мок-путь без vault → credentialId = null.
                             submitting = true
-                            val identityId = form.resolveIdentityId(
+                            // Секрет создаём только при живом keychain: иначе он осел бы в vault без
+                            // ссылки на хост (orphan). За гейтом credentials всегда присутствует;
+                            // гард — fail-closed на рассинхрон.
+                            val credentialId = form.resolveCredentialId(
                                 saveCredential = { draft -> credentials?.save(draft) },
-                                saveAccount = { label, username, credentialId ->
-                                    identities?.save(label = label, username = username, credentialId = credentialId)
-                                },
                             )
-                            state.selectHost(hosts.save(form.toDraft(identityId = identityId)))
+                            state.selectHost(hosts.save(form.toDraft(credentialId = credentialId)))
                             state.closeModal()
                         }
                     },
@@ -234,19 +233,19 @@ private fun ModalTextField(
 
 /**
  * Выбор аутентификации хоста: рабочий дропдаун (Ask every time / новый пароль / новый ключ / уже
- * сохранённые identity из vault) + инлайн-поля под новый секрет. Список сохранённых берётся из
- * живого [LocalIdentities] (за гейтом vault); в мок-пути остаются только варианты без vault.
+ * сохранённые keychain-секреты из vault) + инлайн-поля под новый секрет. Список сохранённых берётся
+ * из живого [LocalCredentials] (за гейтом vault); в мок-пути остаются только варианты без vault.
  */
 @Composable
 private fun AuthPicker(form: NewConnectionFormState) {
-    val identities = LocalIdentities.current
-    val saved = identities?.identities ?: emptyList()
+    val credentials = LocalCredentials.current
+    val saved = credentials?.credentials ?: emptyList()
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
         AuthMode.ASK -> "Ask every time"
         AuthMode.NEW_PASSWORD -> "Password"
         AuthMode.NEW_KEY -> "Private key"
-        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingIdentityId }?.let { "${it.label} (saved)" } ?: "Select identity…"
+        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { "${it.label} (saved)" } ?: "Select credential…"
     }
     Column {
         Row(
@@ -270,9 +269,9 @@ private fun AuthPicker(form: NewConnectionFormState) {
                 }
                 if (saved.isNotEmpty()) {
                     HLine(modifier = Modifier.padding(vertical = 4.dp))
-                    saved.forEach { identity ->
-                        AuthOption("badge", identity.label, "saved identity", form.authMode == AuthMode.EXISTING && form.existingIdentityId == identity.id) {
-                            form.authMode = AuthMode.EXISTING; form.existingIdentityId = identity.id; menuOpen = false
+                    saved.forEach { cred ->
+                        AuthOption(cred.secret.pickerIcon(), cred.label, cred.secret.pickerTypeLabel(), form.authMode == AuthMode.EXISTING && form.existingCredentialId == cred.id) {
+                            form.authMode = AuthMode.EXISTING; form.existingCredentialId = cred.id; menuOpen = false
                         }
                     }
                 }
@@ -293,6 +292,20 @@ private fun AuthPicker(form: NewConnectionFormState) {
             else -> {}
         }
     }
+}
+
+/** Человеко-тип keychain-секрета для строки выбора в [AuthPicker]. */
+private fun CredentialSecret.pickerTypeLabel(): String = when (this) {
+    is CredentialSecret.Password -> "Password"
+    is CredentialSecret.PrivateKey -> "SSH key"
+    is CredentialSecret.Certificate -> "Certificate"
+}
+
+/** Material-иконка типа keychain-секрета для строки выбора в [AuthPicker]. */
+private fun CredentialSecret.pickerIcon(): String = when (this) {
+    is CredentialSecret.Password -> "password"
+    is CredentialSecret.PrivateKey -> "key"
+    is CredentialSecret.Certificate -> "workspace_premium"
 }
 
 /** Строка-вариант в дропдауне аутентификации: иконка + название + подпись + галочка выбранного. */

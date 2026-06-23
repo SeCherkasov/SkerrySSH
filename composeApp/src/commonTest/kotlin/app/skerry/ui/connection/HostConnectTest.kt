@@ -11,8 +11,8 @@ import kotlin.test.assertEquals
 /**
  * Чистые хелперы проводки хоста к сессии (host → адрес/ярлык, keychain-секрет → способ
  * аутентификации), общие для desktop-дизайн-слоя и мобильного UI. Color/Compose тут не участвуют —
- * только модели. Учётка ([app.skerry.shared.vault.Identity]) сама секрета не содержит: вызывающий
- * резолвит её `credentialId` в [Credential] и зовёт [toSshAuth].
+ * только модели. Хост ссылается на keychain-секрет по `credentialId`: вызывающий резолвит его в
+ * [Credential] и зовёт [toSshAuth].
  */
 class HostConnectTest {
 

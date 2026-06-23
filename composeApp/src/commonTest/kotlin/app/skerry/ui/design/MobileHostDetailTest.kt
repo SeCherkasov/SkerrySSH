@@ -16,14 +16,14 @@ class MobileHostDetailTest {
         port: Int = 22,
         username: String = "root",
         group: String? = "Production",
-        identityId: String? = null,
-    ) = Host("h1", "prod-web-01", address, port, username, group, identityId)
+        credentialId: String? = null,
+    ) = Host("h1", "prod-web-01", address, port, username, group, credentialId)
 
     @Test
     fun rows_are_address_port_auth_group_in_order() {
-        val rows = mobileHostDetailRows(host(identityId = "id-1"))
+        val rows = mobileHostDetailRows(host(credentialId = "cred-1"))
         assertEquals(listOf("Address", "Port", "Auth", "Group"), rows.map { it.label })
-        assertEquals(listOf("192.168.1.45", "22", "Saved identity", "Production"), rows.map { it.value })
+        assertEquals(listOf("192.168.1.45", "22", "Saved credential", "Production"), rows.map { it.value })
     }
 
     @Test
@@ -36,8 +36,8 @@ class MobileHostDetailTest {
     }
 
     @Test
-    fun auth_says_ask_on_connect_when_no_identity_bound() {
-        val auth = mobileHostDetailRows(host(identityId = null)).single { it.label == "Auth" }
+    fun auth_says_ask_on_connect_when_no_credential_bound() {
+        val auth = mobileHostDetailRows(host(credentialId = null)).single { it.label == "Auth" }
         assertEquals("Ask on connect", auth.value)
     }
 
