@@ -144,29 +144,43 @@ object SafBridge {
     private var launchCreate: ((String) -> Unit)? = null
 
     @Volatile
+    private var launchCreateText: ((String) -> Unit)? = null
+
+    @Volatile
     private var launchOpen: (() -> Unit)? = null
 
     @Volatile
     private var pending: CompletableDeferred<Uri?>? = null
 
-    /** Вызывается из `MainActivity.onCreate`: [launchCreate] получает имя файла, [launchOpen] — без аргументов. */
-    fun install(context: Context, launchCreate: (String) -> Unit, launchOpen: () -> Unit) {
+    /**
+     * Вызывается из `MainActivity.onCreate`: [launchCreate] (octet-stream — бинарный SFTP-download) и
+     * [launchCreateText] (text/plain — экспорт ключа/сертификата .pub) получают имя файла, [launchOpen] —
+     * без аргументов. Два create-лаунчера различаются только MIME (он фиксируется при регистрации
+     * контракта, не на запуске), что даёт файловому менеджеру верную иконку/обработчик для текстовых .pub.
+     */
+    fun install(context: Context, launchCreate: (String) -> Unit, launchCreateText: (String) -> Unit, launchOpen: () -> Unit) {
         // Освободить выбор, начатый прошлой (уничтоженной) Activity — иначе его await зависнет навсегда.
         pending?.complete(null)
         pending = null
         appContext = context.applicationContext
         this.launchCreate = launchCreate
+        this.launchCreateText = launchCreateText
         this.launchOpen = launchOpen
     }
 
     fun context(): Context? = appContext
 
-    /** Запустить CreateDocument с [suggestedName] и дождаться выбранного Uri (или null при отмене). */
-    suspend fun createDocument(suggestedName: String): Uri? = lock.withLock {
-        val launch = launchCreate ?: return null
+    /** Запустить CreateDocument (octet-stream) с [suggestedName] и дождаться выбранного Uri (или null при отмене). */
+    suspend fun createDocument(suggestedName: String): Uri? = createVia(launchCreate, suggestedName)
+
+    /** Запустить CreateDocument (text/plain) с [suggestedName] — для текстового экспорта ключа/сертификата. */
+    suspend fun createTextDocument(suggestedName: String): Uri? = createVia(launchCreateText, suggestedName)
+
+    private suspend fun createVia(launch: ((String) -> Unit)?, suggestedName: String): Uri? = lock.withLock {
+        val fire = launch ?: return null
         val deferred = CompletableDeferred<Uri?>()
         pending = deferred
-        launch(suggestedName)
+        fire(suggestedName)
         deferred.await()
     }
 
