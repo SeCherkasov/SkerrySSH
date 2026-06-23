@@ -12,8 +12,8 @@ import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.AndroidBiometricKeyStore
 import app.skerry.shared.vault.FileBioArtifactStore
+import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.FileVault
-import app.skerry.shared.vault.IdentityStore
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.initializeVaultCrypto
@@ -22,7 +22,7 @@ import app.skerry.ui.design.MobileDesignApp
 import app.skerry.ui.sftp.SafBridge
 import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
-import app.skerry.ui.identity.IdentityManagerController
+import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
@@ -80,7 +80,7 @@ class MainActivity : FragmentActivity() {
             deviceId(dir),
             FileSystem.SYSTEM,
         ) { System.currentTimeMillis().toString() }
-        val identities = IdentityManagerController(IdentityStore(vault)) { UUID.randomUUID().toString() }
+        val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
         // SSH-транспорт (sshj, общий JVM source set). TOFU: первый ключ хоста запоминается в
         // known_hosts (с отметкой времени), при смене ключа — отказ + запись события в
         // known_hosts_mismatches, чтобы менеджер known-hosts мог показать предупреждение и дать
@@ -107,7 +107,7 @@ class MainActivity : FragmentActivity() {
             transport = transport,
             hosts = hosts,
             vault = vault,
-            identities = identities,
+            credentials = credentials,
             knownHosts = knownHosts,
             biometrics = biometrics,
         )
