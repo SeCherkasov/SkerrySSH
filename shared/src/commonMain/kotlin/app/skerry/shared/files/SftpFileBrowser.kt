@@ -25,14 +25,36 @@ class SftpFileBrowser(
     override suspend fun mkdir(path: String): Unit = guard { sftp.mkdir(path) }
 
     /**
-     * Каталог снимается `rmdir` (только пустой); файл/симлинк/прочее — `remove` (`SSH_FXP_REMOVE`
-     * убирает сам линк, не цель). Exhaustive `when`: новый [FileItemType] заставит дописать ветку.
+     * Рекурсивное удаление: каталог сначала очищается изнутри (содержимое снимается тем же
+     * [deleteTree]), затем снимается пустым `rmdir`; файл/симлинк/прочее — `remove` (`SSH_FXP_REMOVE`
+     * убирает сам линк, не цель — в каталог-цель симлинка не заходим). Протокол SFTP сам по себе
+     * непустой каталог снять не умеет, поэтому обход — на клиенте. Глубину дерева не ограничиваем:
+     * патологически глубокие деревья (тысячи уровней) теоретически переполнят стек — приемлемо для MVP.
      */
     override suspend fun delete(item: FileItem): Unit = guard {
-        when (item.type) {
-            FileItemType.Directory -> sftp.rmdir(item.path)
-            FileItemType.File, FileItemType.Symlink, FileItemType.Other -> sftp.remove(item.path)
+        deleteTree(item.path, item.type == FileItemType.Directory)
+    }
+
+    /**
+     * Воркер обхода [delete]. Вызывается ТОЛЬКО из [delete] и опирается на его [guard]: все
+     * SFTP-вызовы здесь бросают [SftpException], которую заворачивает внешний [guard] (вся рекурсия
+     * исполняется внутри одного его try). Перед спуском к ребёнку проверяем, что его путь реально
+     * вложен в [path] — иначе сервер, вернувший в листинге путь вне каталога (по ошибке или злонамеренно),
+     * заставил бы удалить не то, что выбрал пользователь.
+     */
+    private suspend fun deleteTree(path: String, isDirectory: Boolean) {
+        if (!isDirectory) {
+            sftp.remove(path)
+            return
         }
+        val prefix = if (path.endsWith("/")) path else "$path/"
+        sftp.list(path).forEach { child ->
+            if (!child.path.startsWith(prefix)) {
+                throw SftpException("Листинг $path вернул путь вне каталога: ${child.path}")
+            }
+            deleteTree(child.path, child.type == SftpEntryType.Directory)
+        }
+        sftp.rmdir(path)
     }
 
     override suspend fun rename(from: String, to: String): Unit = guard { sftp.rename(from, to) }

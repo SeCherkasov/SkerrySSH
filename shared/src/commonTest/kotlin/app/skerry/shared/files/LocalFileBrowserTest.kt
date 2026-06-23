@@ -108,10 +108,20 @@ class LocalFileBrowserTest {
     }
 
     @Test
-    fun `delete of a non-empty directory throws FileBrowserException`() = runTest {
-        fs.createDirectories("/dir/full".toPath())
+    fun `delete of a non-empty directory removes it recursively`() = runTest {
+        fs.createDirectories("/dir/full/inner".toPath())
         fs.write("/dir/full/inside.txt".toPath()) { writeUtf8("x") }
+        fs.write("/dir/full/inner/deep.txt".toPath()) { writeUtf8("y") }
         val item = FileItem("full", "/dir/full", FileItemType.Directory, 0, 0)
+
+        browser().delete(item)
+
+        assertFalse(fs.exists("/dir/full".toPath()))
+    }
+
+    @Test
+    fun `delete of a missing path throws FileBrowserException`() = runTest {
+        val item = FileItem("nope", "/dir/nope", FileItemType.Directory, 0, 0)
 
         assertFailsWith<FileBrowserException> { browser().delete(item) }
     }

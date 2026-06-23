@@ -45,9 +45,10 @@ class LocalFileBrowser(
         fileSystem.createDirectory(path.toPath(), mustCreate = true)
     }
 
-    /** okio `delete` снимает и файл, и пустой каталог; непустой каталог — `IOException` (как SFTP rmdir). */
+    /** Рекурсивно: okio `deleteRecursively` снимает файл, симлинк (как линк) и непустой каталог;
+     *  отсутствующий путь — `IOException` → [FileBrowserException]. Паритет с SFTP-браузером. */
     override suspend fun delete(item: FileItem): Unit = io {
-        fileSystem.delete(item.path.toPath(), mustExist = true)
+        fileSystem.deleteRecursively(item.path.toPath(), mustExist = true)
     }
 
     override suspend fun rename(from: String, to: String): Unit = io {
