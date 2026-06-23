@@ -547,7 +547,12 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Txt(if (isDir) "Delete folder?" else "Delete file?", color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
-            Txt("«${entry.name}» will be removed permanently.", color = D.faint, size = 12.sp)
+            Txt(
+                if (isDir) "«${entry.name}» and everything inside it will be removed permanently."
+                else "«${entry.name}» will be removed permanently.",
+                color = D.faint,
+                size = 12.sp,
+            )
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),

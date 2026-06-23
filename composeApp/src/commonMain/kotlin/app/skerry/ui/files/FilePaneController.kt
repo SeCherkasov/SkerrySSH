@@ -88,7 +88,7 @@ class FilePaneController(
         reload()
     }
 
-    /** Удалить [item] (файл или пустой каталог). */
+    /** Удалить [item] (файл или каталог рекурсивно — со всем содержимым). */
     fun delete(item: FileItem) = op {
         browser.delete(item)
         reload()

@@ -52,9 +52,9 @@ interface FileBrowser {
     suspend fun mkdir(path: String)
 
     /**
-     * Удалить [item] — файл или ПУСТОЙ каталог (паритет с SFTP `rmdir`; рекурсивное удаление —
-     * отдельный шаг с пакетными операциями).
-     * @throws FileBrowserException пути нет, каталог не пуст или нет прав
+     * Удалить [item]. Каталог удаляется РЕКУРСИВНО (вместе с содержимым); файл/симлинк — как сам
+     * объект (по симлинку в цель не заходим). Подтверждение — на стороне UI.
+     * @throws FileBrowserException пути нет или нет прав
      */
     suspend fun delete(item: FileItem)
 

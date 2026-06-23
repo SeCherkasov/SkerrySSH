@@ -10,6 +10,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -61,12 +62,55 @@ class SftpFileBrowserTest {
     }
 
     @Test
-    fun `delete uses rmdir for directories and remove for files`() = runTest {
+    fun `delete uses rmdir for empty directories and remove for files`() = runTest {
+        client.listings["/d/sub"] = emptyList() // явно пустой каталог: сразу rmdir, без удаления содержимого
         browser().delete(FileItem("sub", "/d/sub", FileItemType.Directory, 0, 0))
         browser().delete(FileItem("a.txt", "/d/a.txt", FileItemType.File, 1, 0))
 
-        assertTrue("rmdir:/d/sub" in client.calls)
-        assertTrue("remove:/d/a.txt" in client.calls)
+        assertEquals(listOf("list:/d/sub", "rmdir:/d/sub", "remove:/d/a.txt"), client.calls)
+    }
+
+    @Test
+    fun `delete rejects a listing entry whose path escapes the directory`() = runTest {
+        // Сервер вернул в листинге путь ВНЕ удаляемого каталога — рекурсия не должна его удалять.
+        client.listings["/d/sub"] = listOf(
+            SftpEntry("evil", "/etc/passwd", SftpEntryType.File, 0, 0, 0),
+        )
+
+        assertFailsWith<FileBrowserException> {
+            browser().delete(FileItem("sub", "/d/sub", FileItemType.Directory, 0, 0))
+        }
+        assertFalse("remove:/etc/passwd" in client.calls)
+    }
+
+    @Test
+    fun `delete of a non-empty directory clears contents recursively then rmdir`() = runTest {
+        // /d/sub: файл, симлинк и вложенный непустой каталог.
+        client.listings["/d/sub"] = listOf(
+            SftpEntry("a.txt", "/d/sub/a.txt", SftpEntryType.File, 1, 0, 0),
+            SftpEntry("link", "/d/sub/link", SftpEntryType.Symlink, 0, 0, 0),
+            SftpEntry("inner", "/d/sub/inner", SftpEntryType.Directory, 0, 0, 0),
+        )
+        client.listings["/d/sub/inner"] = listOf(
+            SftpEntry("b.txt", "/d/sub/inner/b.txt", SftpEntryType.File, 2, 0, 0),
+        )
+
+        browser().delete(FileItem("sub", "/d/sub", FileItemType.Directory, 0, 0))
+
+        // Содержимое снимается до самого каталога; вложенный каталог — раньше своего родителя;
+        // симлинк удаляется как линк (remove), без захода в цель.
+        assertEquals(
+            listOf(
+                "list:/d/sub",
+                "remove:/d/sub/a.txt",
+                "remove:/d/sub/link",
+                "list:/d/sub/inner",
+                "remove:/d/sub/inner/b.txt",
+                "rmdir:/d/sub/inner",
+                "rmdir:/d/sub",
+            ),
+            client.calls,
+        )
     }
 
     @Test
@@ -89,6 +133,7 @@ class SftpFileBrowserTest {
 private class RecordingSftp : SftpClient {
     val calls = mutableListOf<String>()
     var listResult: List<SftpEntry> = emptyList()
+    val listings = mutableMapOf<String, List<SftpEntry>>()
     var failList = false
     var cancelList = false
 
@@ -96,7 +141,7 @@ private class RecordingSftp : SftpClient {
         if (cancelList) throw CancellationException("cancelled")
         if (failList) throw SftpException("boom")
         calls += "list:$path"
-        return listResult
+        return listings[path] ?: listResult
     }
 
     override suspend fun stat(path: String): SftpEntry? = null
