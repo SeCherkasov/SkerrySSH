@@ -104,6 +104,8 @@ fun MobileDesignApp(
         LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,
         LocalFeatures provides features,
+        // Инспектор SSH-ключей — таб Vault считает им отпечатки живых ключей keychain.
+        LocalSshKeyGenerator provides deps.keyGenerator,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             val vault = deps.vault
@@ -217,14 +219,15 @@ private fun openMobileSession(sessions: SessionsController?, state: MobileDesign
 // ──────────────────────────────── контент (плейсхолдеры слайса 1) ────────────────────────────────
 
 /**
- * Корневой экран текущего таба. Hosts/Files/More реализованы 1:1 (слайсы 2/4/5); Snippets/Vault —
- * заголовок макета (28sp) + плейсхолдер (Phase 2/позже). [onLock] прокидывается в хаб More («Lock Skerry»).
+ * Корневой экран текущего таба. Hosts/Files/Vault/More реализованы 1:1; Snippets — заголовок макета
+ * (28sp) + плейсхолдер (Phase 2). [onLock] прокидывается в хаб More («Lock Skerry»).
  */
 @Composable
 private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
     when (state.tab) {
         MobileTab.Hosts -> MobileHostsScreen(state)
         MobileTab.Files -> MobileFilesScreen()
+        MobileTab.Vault -> MobileVaultScreen()
         MobileTab.More -> MobileMoreScreen(state, onLock)
         else -> MobileTabPlaceholder(state.tab)
     }

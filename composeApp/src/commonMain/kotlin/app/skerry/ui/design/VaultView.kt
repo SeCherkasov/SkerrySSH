@@ -324,7 +324,7 @@ private fun LiveSecretCard(
 ) {
     val border = if (active) D.cyan.copy(alpha = 0.18f) else D.cyan08
     val bg = if (active) D.cyan.copy(alpha = 0.04f) else Color.Transparent
-    val usedBy = if (usedByCount == 1) "used by 1 host" else "used by $usedByCount hosts"
+    val usedBy = VaultPresentation.usedByLabel(usedByCount)
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(bg).border(1.dp, border, RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),

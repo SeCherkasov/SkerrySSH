@@ -137,7 +137,13 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     val knownHosts = if (live) seededKnownHosts() else null
     // Keychain засеваем для оверлея sheet (live) — чтобы пикер аутентификации показал сохранённые секреты.
     val credentials = if (live) seededVault(BouncyCastleSshKeyGenerator()) else null
-    val deps = if (hosts != null) AppDependencies(hosts = hosts, knownHosts = knownHosts, credentials = credentials) else AppDependencies()
+    // Генератор/инспектор ключей — таб Vault считает им отпечатки засеянных ключей в live-режиме.
+    val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
+    val deps = if (hosts != null) {
+        AppDependencies(hosts = hosts, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator)
+    } else {
+        AppDependencies()
+    }
     // Засеянные сессии (фейковый транспорт) для живого терминала — как в desktop-ветке; подаём в
     // MobileDesignApp внешним менеджером, чтобы офскрин показал реальный TerminalScreen без сети.
     val sessions = if (live && hosts != null) seededSessions(hosts) else null

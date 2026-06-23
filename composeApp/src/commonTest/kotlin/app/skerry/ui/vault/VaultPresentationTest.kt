@@ -45,6 +45,14 @@ class VaultPresentationTest {
     }
 
     @Test
+    fun `usedBy label is singular for one host and plural otherwise`() {
+        assertEquals("used by 0 hosts", VaultPresentation.usedByLabel(0))
+        assertEquals("used by 1 host", VaultPresentation.usedByLabel(1))
+        assertEquals("used by 2 hosts", VaultPresentation.usedByLabel(2))
+        assertEquals("used by 7 hosts", VaultPresentation.usedByLabel(7))
+    }
+
+    @Test
     fun `hostsUsing returns only hosts referencing the credential`() {
         val hosts = listOf(
             Host("h1", "web-01", "10.0.0.1", username = "root", credentialId = "k1"),

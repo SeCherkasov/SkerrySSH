@@ -47,4 +47,8 @@ object VaultPresentation {
     /** Хосты, привязанные к keychain-секрету [credentialId] (по [Host.credentialId]) — «used by» и развязка при удалении. */
     fun hostsUsing(credentialId: String, hosts: List<Host>): List<Host> =
         hosts.filter { it.credentialId == credentialId }
+
+    /** Подпись «used by N host(s)» с правильной формой числа для карточки секрета (desktop + mobile). */
+    fun usedByLabel(count: Int): String =
+        if (count == 1) "used by 1 host" else "used by $count hosts"
 }

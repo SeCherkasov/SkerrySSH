@@ -11,6 +11,7 @@ import app.skerry.shared.ssh.FileKnownHostsStore
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.AndroidBiometricKeyStore
+import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileBioArtifactStore
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.FileVault
@@ -109,6 +110,8 @@ class MainActivity : FragmentActivity() {
             vault = vault,
             credentials = credentials,
             knownHosts = knownHosts,
+            // Инспектор/генератор SSH-ключей (BouncyCastle, общий JVM source set) — отпечатки ключей в табе Vault.
+            keyGenerator = BouncyCastleSshKeyGenerator(),
             biometrics = biometrics,
         )
     }
