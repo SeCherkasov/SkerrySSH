@@ -1,5 +1,6 @@
 package app.skerry.shared.vault
 
+import app.skerry.shared.ssh.ensureCryptoProvider
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
@@ -33,6 +34,9 @@ class BouncyCastleSshKeyGenerator(
 ) : SshKeyGenerator {
 
     override fun generate(type: SshKeyType, comment: String): GeneratedSshKey {
+        // На Android системный BouncyCastle урезан — для совместимости разбора/использования ключа
+        // регистрируем полный провайдер (idempotent, no-op на desktop), как и SSH-транспорт.
+        ensureCryptoProvider()
         val pair = when (type) {
             SshKeyType.ED25519 -> Ed25519KeyPairGenerator().apply {
                 init(Ed25519KeyGenerationParameters(random))
@@ -58,6 +62,9 @@ class BouncyCastleSshKeyGenerator(
     }
 
     override fun inspect(privateKeyPem: String, passphrase: String?): SshPublicKeyInfo? = runCatching {
+        // sshj loadKeys идёт через JCE-провайдер «BC»; на Android он урезан и парсинг PEM падает
+        // («Key could not be read» в Vault). Регистрируем полный провайдер до разбора (idempotent).
+        ensureCryptoProvider()
         val pwdf = passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
         // SSHClient — Closeable; для loadKeys соединение не открывается, но ресурсы освобождаем через use.
         val publicKey = SSHClient().use { it.loadKeys(privateKeyPem, null, pwdf).public }

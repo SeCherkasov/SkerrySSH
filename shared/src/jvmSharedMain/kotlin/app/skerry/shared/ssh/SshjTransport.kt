@@ -141,8 +141,12 @@ private val cryptoProviderReady = AtomicBoolean(false)
  * («Не удалось подключиться к host:port»). Подменяем «BC» на полноценный провайдер из bcprov,
  * который бандлится с sshj. На desktop JVM проблемы нет — guard по наличию `android.os.Build`
  * делает функцию no-op, так что рабочее поведение desktop не меняется. Идемпотентно.
+ *
+ * `internal` (а не `private`): тот же урезанный системный BouncyCastle ломает не только KEX при
+ * коннекте, но и разбор приватного ключа (`SSHClient.loadKeys` в [app.skerry.shared.vault.BouncyCastleSshKeyGenerator.inspect]),
+ * поэтому генератор/инспектор ключей раздела Vault регистрирует полный провайдер этим же вызовом.
  */
-private fun ensureCryptoProvider() {
+internal fun ensureCryptoProvider() {
     if (!cryptoProviderReady.compareAndSet(false, true)) return
     val onAndroid = runCatching { Class.forName("android.os.Build") }.isSuccess
     if (!onAndroid) return

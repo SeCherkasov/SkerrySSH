@@ -1,5 +1,6 @@
 package app.skerry.shared.vault
 
+import app.skerry.shared.ssh.ensureCryptoProvider
 import com.hierynomus.sshj.userauth.certificate.Certificate
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
@@ -19,6 +20,9 @@ import java.util.Date
 class SshjCertificateInspector : SshCertificateInspector {
 
     override fun inspect(certificate: String): SshCertificateInfo? = runCatching {
+        // На Android урезанный системный BouncyCastle ломает разбор ключа сертификата — регистрируем
+        // полный провайдер до декодирования (idempotent, no-op на desktop), как генератор/транспорт.
+        ensureCryptoProvider()
         // Формат authorized_keys: "<type> <base64> [comment]" — берём второе поле как тело сертификата.
         val blob = certificate.trim().split(Regex("\\s+")).getOrNull(1)?.let { Base64.getDecoder().decode(it) }
             ?: return null
