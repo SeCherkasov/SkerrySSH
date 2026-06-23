@@ -642,6 +642,9 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
                 .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
                 // Гасим клик по карточке, чтобы он не закрывал диалог (как в DesktopPasswordDialog).
                 .clickable(onClick = {})
+                // Прокрутка содержимого: высокий диалог (импорт сертификата — 4 поля) под экранной
+                // клавиатурой не помещается; скролл оставляет поля и кнопки доступными. Desktop — не мешает.
+                .verticalScroll(rememberScrollState())
                 .padding(26.dp),
         ) {
             Txt(title, color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
