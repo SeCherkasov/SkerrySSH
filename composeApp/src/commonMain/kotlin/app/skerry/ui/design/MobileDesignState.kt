@@ -40,8 +40,14 @@ class MobileDesignState {
     /** Идентификатор хоста, открытого на [MobileRoute.HostDetail] — экран читает его из стора по id. */
     var selectedHostId: String? by mutableStateOf(null); private set
 
-    /** Таб-бар виден только на корневых экранах: push-экраны макета полноэкранные. */
-    val showTabs: Boolean get() = route == null
+    /**
+     * Открыт ли модальный оверлей таба (например, vault-диалог Generate/Import) — таб-бар при этом
+     * прячется, иначе он плавает поверх диалога и перекрывает нижние поля ввода над клавиатурой.
+     */
+    var modalOpen: Boolean by mutableStateOf(false)
+
+    /** Таб-бар виден только на корневых экранах без открытой модалки: push-экраны полноэкранные. */
+    val showTabs: Boolean get() = route == null && !modalOpen
 
     /** Переключить корневой таб — закрывает любой открытый push-экран и сбрасывает выбранный хост. */
     fun select(t: MobileTab) {

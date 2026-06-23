@@ -21,10 +21,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,17 +64,17 @@ import kotlinx.coroutines.withContext
  * keychain ([LocalCredentials] == null) — статичные карточки из макета для сверки.
  */
 @Composable
-fun MobileVaultScreen() {
+fun MobileVaultScreen(state: MobileDesignState) {
     when (val credentials = LocalCredentials.current) {
         null -> MobileVaultMock()
-        else -> MobileVaultLive(credentials)
+        else -> MobileVaultLive(state, credentials)
     }
 }
 
 // ──────────────────────────────────────── живой путь ────────────────────────────────────────
 
 @Composable
-private fun MobileVaultLive(credentials: CredentialManagerController) {
+private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialManagerController) {
     val mono = LocalFonts.current.mono
     val generator = LocalSshKeyGenerator.current
     val inspector = LocalSshCertificateInspector.current
@@ -91,6 +93,13 @@ private fun MobileVaultLive(credentials: CredentialManagerController) {
 
     val credItems = VaultPresentation.credentialsIn(category, allCreds)
     val selectedCred = credItems.firstOrNull { it.id == selectedId }
+
+    // Любой открытый оверлей (диалоги создания/удаления + лист деталей) прячет таб-бар: иначе он
+    // плавает поверх центрированного диалога и перекрывает нижние поля ввода над клавиатурой.
+    // DisposableEffect снимает флаг при уходе с таба, чтобы таб-бар не остался скрытым.
+    val modalOpen = showGenerate || showAddPassword || showImportCert || pendingDelete != null || selectedCred != null
+    SideEffect { state.modalOpen = modalOpen }
+    DisposableEffect(Unit) { onDispose { state.modalOpen = false } }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {

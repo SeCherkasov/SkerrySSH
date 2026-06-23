@@ -228,7 +228,7 @@ private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
     when (state.tab) {
         MobileTab.Hosts -> MobileHostsScreen(state)
         MobileTab.Files -> MobileFilesScreen()
-        MobileTab.Vault -> MobileVaultScreen()
+        MobileTab.Vault -> MobileVaultScreen(state)
         MobileTab.More -> MobileMoreScreen(state, onLock)
         else -> MobileTabPlaceholder(state.tab)
     }

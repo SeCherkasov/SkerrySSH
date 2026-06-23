@@ -1,8 +1,11 @@
 package app.skerry.ui.design
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,14 +29,21 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -63,6 +73,7 @@ import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -655,6 +666,7 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DialogField(
     label: String,
@@ -673,10 +685,34 @@ private fun DialogField(
     val style = remember(ui, mono, singleLine) {
         TextStyle(color = D.text, fontSize = if (singleLine) 13.sp else 11.sp, fontFamily = if (singleLine) ui else mono)
     }
+    // Автоподкрутка к фокусу над клавиатурой. Окно в режиме adjustResize (см. AndroidManifest) само
+    // ужимается при выезде клавиатуры, поэтому WindowInsets.ime тут всегда 0 — наблюдать за инсетом
+    // бесполезно, а единственный bring-into-view сработал бы ДО ресайза окна и промахнулся. Вместо
+    // этого, пока поле в фокусе, переподкручиваем его в видимую область на КАЖДОМ кадре первые ~450 мс
+    // (длительность анимации клавиатуры/ресайза) — поле гарантированно доводится над клавиатурой
+    // независимо от режима окна. На desktop клавиатуры нет: пара кадров bringIntoView безвредны (no-op).
+    val requester = remember { BringIntoViewRequester() }
+    var focused by remember { mutableStateOf(false) }
+    var fieldSize by remember { mutableStateOf(IntSize.Zero) }
+    // Зазор под полем при автоподкрутке — фокус всплывает НАД клавиатурой с воздухом, а не впритык.
+    val marginPx = with(LocalDensity.current) { 16.dp.toPx() }
+    LaunchedEffect(focused) {
+        if (!focused) return@LaunchedEffect
+        val start = withFrameNanos { it }
+        var now = start
+        while (now - start < 450_000_000L) {
+            val s = fieldSize
+            requester.bringIntoView(
+                if (s == IntSize.Zero) null
+                else Rect(0f, 0f, s.width.toFloat(), s.height.toFloat() + marginPx),
+            )
+            now = withFrameNanos { it }
+        }
+    }
     Column {
         Txt(label, color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
         Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+            Modifier.fillMaxWidth().bringIntoViewRequester(requester).onSizeChanged { fieldSize = it }.clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
                 .then(if (singleLine) Modifier else Modifier.heightIn(min = 72.dp, max = 132.dp))
                 .padding(horizontal = 11.dp, vertical = 10.dp),
         ) {
@@ -684,7 +720,9 @@ private fun DialogField(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth().then(if (singleLine) Modifier else Modifier.verticalScroll(rememberScrollState())),
+                modifier = Modifier.fillMaxWidth()
+                    .onFocusChanged { focused = it.isFocused }
+                    .then(if (singleLine) Modifier else Modifier.verticalScroll(rememberScrollState())),
                 singleLine = singleLine,
                 textStyle = style,
                 cursorBrush = SolidColor(D.cyan),
