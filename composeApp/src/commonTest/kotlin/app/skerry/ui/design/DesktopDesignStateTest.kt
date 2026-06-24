@@ -25,10 +25,37 @@ class DesktopDesignStateTest {
     }
 
     @Test
-    fun setView_switches_active_view() {
+    fun showView_session_level_sets_view_and_clears_overlay() {
         val s = DesktopDesignState()
-        s.showView(DesktopView.Vault)
-        assertEquals(DesktopView.Vault, s.view)
+        s.showView(DesktopView.Vault)        // сначала откроем app-overlay
+        s.showView(DesktopView.Sftp)         // session-level — должен сбросить overlay
+        assertEquals(DesktopView.Sftp, s.view)
+        assertNull(s.appOverlay)
+    }
+
+    @Test
+    fun showView_app_level_sets_overlay_keeping_session_view() {
+        val s = DesktopDesignState()
+        s.showView(DesktopView.Ports)        // session-вью = Ports
+        s.showView(DesktopView.Vault)        // app-level → overlay
+        assertEquals(DesktopView.Vault, s.appOverlay)
+        assertEquals(DesktopView.Ports, s.view) // session-вью сохранилась под оверлеем
+    }
+
+    @Test
+    fun default_has_no_app_overlay() {
+        assertNull(DesktopDesignState().appOverlay)
+    }
+
+    @Test
+    fun desktopView_isAppLevel_split() {
+        assertFalse(DesktopView.Terminal.isAppLevel)
+        assertFalse(DesktopView.Sftp.isAppLevel)
+        assertFalse(DesktopView.Ports.isAppLevel)
+        assertTrue(DesktopView.Snippets.isAppLevel)
+        assertTrue(DesktopView.Vault.isAppLevel)
+        assertTrue(DesktopView.Known.isAppLevel)
+        assertTrue(DesktopView.Teams.isAppLevel)
     }
 
     @Test

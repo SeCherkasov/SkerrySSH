@@ -6,9 +6,33 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
+import app.skerry.ui.session.SessionView
 
 /** Левый rail / основные view макета. */
 enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
+
+/**
+ * View уровня приложения (не привязаны к конкретной SSH-сессии): Snippets/Vault/Known/Teams.
+ * Они открываются «поверх» вкладок ([DesktopDesignState.appOverlay]) и общие на весь app, тогда
+ * как Terminal/SFTP/Ports — подвью активной вкладки ([app.skerry.ui.session.Session.view]).
+ */
+val DesktopView.isAppLevel: Boolean
+    get() = this == DesktopView.Snippets || this == DesktopView.Vault ||
+        this == DesktopView.Known || this == DesktopView.Teams
+
+/** DesktopView (rail) → подвью сессии; app-level/Terminal сводятся к Terminal. */
+fun DesktopView.asSessionView(): SessionView = when (this) {
+    DesktopView.Sftp -> SessionView.Sftp
+    DesktopView.Ports -> SessionView.Ports
+    else -> SessionView.Terminal
+}
+
+/** Подвью сессии → пункт rail для подсветки. */
+fun SessionView.asDesktopView(): DesktopView = when (this) {
+    SessionView.Terminal -> DesktopView.Terminal
+    SessionView.Sftp -> DesktopView.Sftp
+    SessionView.Ports -> DesktopView.Ports
+}
 
 /** Вкладки панели настроек. */
 enum class SettingsTab { Account, AI, Sync, Security, Appearance, Terminal, Keyboard, About }
@@ -39,7 +63,17 @@ class DesktopDesignState(
     initialInfoPanel: Boolean = true,
     private val onInfoPanelChange: (Boolean) -> Unit = {},
 ) {
+    // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
+    // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
     var view: DesktopView by mutableStateOf(DesktopView.Terminal); private set
+
+    /**
+     * Открытый app-level view поверх вкладок (Vault/Known/Teams/Snippets) или `null` — показываем
+     * подвью активной вкладки. Эти разделы общие на весь app, поэтому держатся отдельно от [view]
+     * и не зависят от того, какая вкладка активна (см. [DesktopView.isAppLevel]).
+     */
+    var appOverlay: DesktopView? by mutableStateOf(null); private set
+
     var locked: Boolean by mutableStateOf(false); private set
     var modalOpen: Boolean by mutableStateOf(false); private set
     var settingsOpen: Boolean by mutableStateOf(false); private set
@@ -73,7 +107,26 @@ class DesktopDesignState(
     var cmd: String by mutableStateOf(""); private set
     var termLines: List<TermLine> by mutableStateOf(emptyList()); private set
 
-    fun showView(v: DesktopView) { view = v }
+    /**
+     * Открыть view из rail: app-level (Vault/Known/Teams/Snippets) → поднимаем оверлей поверх
+     * вкладок; session-level (Terminal/SFTP/Ports) → сбрасываем оверлей и фиксируем подвью (для
+     * живого режима подвью также проставляет вызывающий на активной вкладке).
+     */
+    fun showView(v: DesktopView) {
+        if (v.isAppLevel) {
+            appOverlay = v
+        } else {
+            appOverlay = null
+            view = v
+        }
+    }
+
+    /**
+     * Снять app-оверлей, вернувшись к подвью активной вкладки, НЕ трогая [view]. В живом режиме
+     * подвью держит [app.skerry.ui.session.Session.view] — единственный источник правды; [view]
+     * остаётся лишь мок/превью-фолбэком и не должен переписываться при навигации с живыми сессиями.
+     */
+    fun clearOverlay() { appOverlay = null }
     fun selectHost(name: String) { selectedHost = name }
     fun setTab(i: Int) { if (i in tabs.indices) activeTab = i }
 

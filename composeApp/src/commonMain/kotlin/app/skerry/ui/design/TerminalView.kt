@@ -45,6 +45,7 @@ import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.groupHostsByFolder
 import app.skerry.ui.metrics.HostMetrics
 import app.skerry.ui.metrics.formatUptime
+import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.terminal.TerminalScreen
 
@@ -339,8 +340,9 @@ private fun SessionToolbar(state: DesktopDesignState) {
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconBtn("splitscreen_right", onClick = state::toggleSplit)
-                IconBtn("folder", onClick = { state.showView(DesktopView.Sftp) })
-                IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
+                // Переключают подвью АКТИВНОЙ вкладки (живой режим, + сброс оверлея) / мок-фолбэк state.view.
+                IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
+                IconBtn("lan", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Ports) } else state.showView(DesktopView.Ports) })
                 IconBtn("info", onClick = state::toggleInfo)
                 // Power: рвёт активную сессию (живой путь); в мок-режиме — no-op заглушка.
                 IconBtn("power_settings_new", onClick = { if (active != null) sessions.close(active.id) }, tint = D.sunset)
@@ -369,7 +371,9 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
     val active = sessions.active
     Box(modifier.fillMaxHeight().fillMaxWidth().background(D.terminalBg)) {
         when (val st = active?.controller?.uiState) {
-            null, ConnectionUiState.Form -> TerminalNotice("terminal", "No active session", "Pick a host from the sidebar to connect.")
+            null -> TerminalNotice("terminal", "No active session", "Pick a host from the sidebar to connect.")
+            // Form у активной вкладки = пустой таб («+»): соединение ещё не запускалось.
+            ConnectionUiState.Form -> TerminalNotice("terminal", "Not connected", "Pick a host from the sidebar or start a New connection.")
             ConnectionUiState.Connecting -> TerminalNotice("sync", "Connecting…", active.subtitle)
             is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
             is ConnectionUiState.Error -> TerminalNotice("error", "Connection failed", st.message, color = D.sunset)

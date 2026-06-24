@@ -25,6 +25,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -261,6 +262,93 @@ class SessionsControllerTest {
         assertTrue(sessions.sessions.isEmpty())
         assertNull(sessions.activeId)
         assertTrue(transport.connections.all { it.disconnected })
+        scope.cancel()
+    }
+
+    // --- Пустой таб без сессии + per-tab view + connect-reuse ---
+
+    @Test
+    fun `openBlank adds an active tab with no connection`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+
+        val id = sessions.openBlank()
+
+        assertEquals(1, sessions.sessions.size)
+        assertEquals(id, sessions.activeId)
+        val tab = sessions.active!!
+        assertTrue(tab.isBlank)
+        assertNull(tab.hostId)
+        assertIs<ConnectionUiState.Form>(tab.controller.uiState) // соединение не стартует
+        scope.cancel()
+    }
+
+    @Test
+    fun `a freshly opened (connected) session is not blank`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        sessions.open(hostId = "host-a")
+        assertFalse(sessions.active!!.isBlank)
+        scope.cancel()
+    }
+
+    @Test
+    fun `session view defaults to Terminal`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        sessions.open(hostId = "host-a")
+        assertEquals(SessionView.Terminal, sessions.active!!.view)
+        scope.cancel()
+    }
+
+    @Test
+    fun `setActiveView changes only the active session view`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val b = sessions.open(hostId = "host-b") // активна b
+
+        sessions.setActiveView(SessionView.Sftp)
+
+        assertEquals(SessionView.Sftp, sessions.sessions.first { it.id == b }.view)
+        assertEquals(SessionView.Terminal, sessions.sessions.first { it.id == a }.view) // соседа не трогает
+        scope.cancel()
+    }
+
+    @Test
+    fun `connect reuses the active blank tab in place`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val blank = sessions.openBlank()
+
+        val id = sessions.connect(hostId = "host-a", title = "host-a", subtitle = "u@h:22", target = target, auth = auth)
+
+        assertEquals(blank, id) // та же вкладка, новой не создалось
+        assertEquals(1, sessions.sessions.size)
+        val tab = sessions.active!!
+        assertEquals("host-a", tab.hostId)
+        assertEquals("host-a", tab.title)
+        assertFalse(tab.isBlank)
+        assertIs<ConnectionUiState.Connected>(tab.controller.uiState)
+        scope.cancel()
+    }
+
+    @Test
+    fun `connect opens a new tab when the active one is not blank`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a") // подключена, не пустая
+
+        val id = sessions.connect(hostId = "host-b", title = "host-b", subtitle = "u@h:22", target = target, auth = auth)
+
+        assertTrue(id != a)
+        assertEquals(2, sessions.sessions.size)
+        assertEquals(id, sessions.activeId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `connect opens a new tab when there is no active session`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+
+        val id = sessions.connect(hostId = "host-a", title = "host-a", subtitle = "u@h:22", target = target, auth = auth)
+
+        assertEquals(1, sessions.sessions.size)
+        assertEquals(id, sessions.activeId)
         scope.cancel()
     }
 

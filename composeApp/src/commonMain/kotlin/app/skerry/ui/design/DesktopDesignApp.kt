@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -211,16 +212,21 @@ private fun DesktopChrome(
     }
 }
 
-/** Открыть вкладку-сессию к [host] с [auth] и переключиться на терминал. */
+/**
+ * Подключиться к [host] с [auth]: если активна пустая вкладка («+») — коннект в неё, иначе новая
+ * вкладка ([SessionsController.connect]). Затем переключаемся на терминал (сбрасывая app-оверлей).
+ */
 private fun openHostSession(sessions: SessionsController?, state: DesktopDesignState, host: Host, auth: SshAuth) {
-    sessions?.open(
+    sessions?.connect(
         hostId = host.id,
         title = host.label,
         subtitle = host.connectionSubtitle(),
         target = host.toTarget(),
         auth = auth,
     )
-    state.showView(DesktopView.Terminal)
+    // Живой режим: подвью держит сама вкладка — лишь снимаем оверлей, чтобы показать её терминал.
+    // Мок/превью (нет сессий): фолбэк на Terminal через showView.
+    if (sessions != null) state.clearOverlay() else state.showView(DesktopView.Terminal)
 }
 
 @Composable
@@ -240,8 +246,8 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
         }
         Row(
             Modifier.weight(1f).fillMaxHeight(),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             // Живые вкладки из менеджера сессий (за гейтом vault); иначе — мок-вкладки макета.
             val sessions = LocalSessions.current
@@ -260,7 +266,24 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
                     SessionTabChip(tab.name, tab.dot, active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
                 }
             }
-            IconBtn("add", onClick = state::openModal, box = 26, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+            // «+» создаёт ПУСТУЮ вкладку без сессии (живой режим) и переключает на её терминал-
+            // плейсхолдер; первое подключение из сайдбара заполнит её ([SessionsController.connect]).
+            // В мок/превью (нет живых сессий) сохраняем прежнее поведение — открыть модалку.
+            IconBtn(
+                "add",
+                onClick = {
+                    if (sessions != null) {
+                        // Новая пустая вкладка стартует с подвью Terminal (дефолт Session.view);
+                        // снимаем оверлей, чтобы показать её терминал-плейсхолдер.
+                        sessions.openBlank()
+                        state.clearOverlay()
+                    } else {
+                        state.openModal()
+                    }
+                },
+                box = 26,
+                modifier = Modifier.padding(start = 4.dp),
+            )
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(
@@ -282,20 +305,23 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
     }
 }
 
+/**
+ * Вкладка-сессия как сегментная пилюля (стиль референса в палитре night-sea): активная — залитый
+ * cyan-фон с обводкой и ярким текстом, неактивная — приглушённая полупрозрачная пилюля с тусклым
+ * текстом. Слева статус-точка соединения, справа крестик закрытия. Полностью скруглённая (в отличие
+ * от прежней «вкладки-папки» со скруглением только сверху).
+ */
 @Composable
 private fun SessionTabChip(name: String, dot: Color, active: Boolean, onClick: () -> Unit, onClose: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
     Row(
         Modifier
-            .height(30.dp)
-            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-            .background(if (active) D.bg else Color.Transparent)
-            .border(
-                1.dp,
-                if (active) D.cyan14 else Color.Transparent,
-                RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp),
-            )
+            .height(28.dp)
+            .clip(shape)
+            .background(if (active) D.cyan10 else Color(0x08FFFFFF))
+            .border(1.dp, if (active) D.cyan20 else D.line, shape)
             .clickable(onClick = onClick)
-            .padding(start = 12.dp, end = 8.dp),
+            .padding(start = 11.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -304,17 +330,21 @@ private fun SessionTabChip(name: String, dot: Color, active: Boolean, onClick: (
             name,
             color = if (active) D.text else D.dim,
             size = 12.sp,
-            weight = FontWeight.Medium,
+            weight = if (active) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(120.dp),
+            modifier = Modifier.widthIn(max = 150.dp),
         )
-        IconBtn("close", onClick = onClose, box = 16, icon = 14.sp, tint = D.dim)
+        IconBtn("close", onClick = onClose, box = 16, icon = 14.sp, tint = if (active) D.dim else D.faint)
     }
 }
 
 @Composable
 private fun IconRail(state: DesktopDesignState) {
+    val sessions = LocalSessions.current
+    // Текущий session-level пункт для подсветки: подвью активной вкладки (живой режим) либо
+    // мок-фолбэк [state.view]. Под открытым app-оверлеем session-пункты не подсвечены.
+    val currentSessionView = sessions?.active?.view?.asDesktopView() ?: state.view
     Column(
         Modifier
             .width(62.dp)
@@ -325,11 +355,22 @@ private fun IconRail(state: DesktopDesignState) {
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         RAIL.forEach { item ->
+            val active = if (state.appOverlay != null) item.view == state.appOverlay
+            else item.view == currentSessionView
             RailButton(
                 icon = item.icon,
                 label = item.label,
-                active = state.view == item.view,
-                onClick = { state.showView(item.view) },
+                active = active,
+                onClick = {
+                    // App-level (Vault/Known/Teams/Snippets) → оверлей. Session-level: в живом режиме
+                    // правит ТОЛЬКО подвью активной вкладки (источник правды) + снимает оверлей, не
+                    // трогая мок-фолбэк state.view; без сессий — мок-путь через showView.
+                    when {
+                        item.view.isAppLevel -> state.showView(item.view)
+                        sessions != null -> { state.clearOverlay(); sessions.setActiveView(item.view.asSessionView()) }
+                        else -> state.showView(item.view)
+                    }
+                },
             )
         }
         Spacer(Modifier.weight(1f))
