@@ -113,9 +113,8 @@ class SshjTransport(
                 }
             } catch (e: UserAuthException) {
                 client.close()
-                throw SshAuthenticationException(
-                    "Сервер не принял учётные данные пользователя ${target.username}", e,
-                )
+                // Без имени пользователя в тексте: сообщение не должно нести идентификатор (логи/отчёты).
+                throw SshAuthenticationException("Сервер не принял учётные данные", e)
             } catch (e: IOException) {
                 client.close()
                 throw SshConnectionException("Обрыв соединения при аутентификации", e)

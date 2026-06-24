@@ -114,6 +114,7 @@ fun DesktopDesignApp(
         LocalSshKeyGenerator provides keyGenerator,
         LocalSshCertificateInspector provides certificateInspector,
         LocalCredentials provides credentials,
+        LocalTransport provides transport,
         LocalFeatures provides features,
     ) {
         if (vault != null) {

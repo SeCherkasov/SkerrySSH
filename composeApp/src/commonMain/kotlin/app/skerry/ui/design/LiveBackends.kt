@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.ui.host.HostManagerController
@@ -78,6 +79,12 @@ val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticC
  * открывает сессию. Поставляется корнем chrome ([DesktopDesignApp]); дефолт — no-op (мок-путь/превью).
  */
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
+
+/**
+ * SSH-транспорт для разовых проверок «Test connection» из формы (коннект без открытия сессии). `null`
+ * — мок-путь/превью без живого транспорта: кнопка Test недоступна. Поставляется [DesktopDesignApp].
+ */
+val LocalTransport: ProvidableCompositionLocal<SshTransport?> = staticCompositionLocalOf { null }
 
 /**
  * Действие «открыть SFTP хоста»: тот же путь подключения, что и [LocalConnectHost] (резолв секрета,
