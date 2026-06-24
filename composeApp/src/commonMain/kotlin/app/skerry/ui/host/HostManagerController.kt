@@ -20,6 +20,7 @@ data class HostDraft(
     val username: String,
     val group: String? = null,
     val credentialId: String? = null,
+    val tags: List<String> = emptyList(),
 )
 
 /**
@@ -65,6 +66,7 @@ class HostManagerController(
                 username = draft.username,
                 group = draft.group,
                 credentialId = draft.credentialId,
+                tags = draft.tags,
             ),
         )
         hosts = store.all()

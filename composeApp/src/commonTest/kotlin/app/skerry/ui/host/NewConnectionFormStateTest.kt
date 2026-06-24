@@ -174,4 +174,60 @@ class NewConnectionFormStateTest {
         assertEquals("", f.group)
         assertNull(f.resolveCredentialId { error("ask must not save a credential") })
     }
+
+    // --- Теги ---
+
+    @Test
+    fun normalizeTag_strips_hash_trims_lowercases_blank_to_null() {
+        assertEquals("prod", normalizeTag("  #Prod  "))
+        assertEquals("docker", normalizeTag("DOCKER"))
+        assertEquals("db", normalizeTag("# db"))
+        assertNull(normalizeTag("   "))
+        assertNull(normalizeTag("#"))
+    }
+
+    @Test
+    fun addTag_normalizes_dedupes_and_keeps_order() {
+        val f = NewConnectionFormState()
+        f.addTag("#Prod")
+        f.addTag("docker")
+        f.addTag("PROD") // дубль после нормализации — игнор
+        assertEquals(listOf("prod", "docker"), f.tags)
+    }
+
+    @Test
+    fun addTag_splits_on_commas() {
+        val f = NewConnectionFormState()
+        f.addTag("prod, #docker ,, db")
+        assertEquals(listOf("prod", "docker", "db"), f.tags)
+    }
+
+    @Test
+    fun addTag_blank_is_noop() {
+        val f = NewConnectionFormState()
+        f.addTag("   ")
+        f.addTag("#")
+        assertEquals(emptyList(), f.tags)
+    }
+
+    @Test
+    fun removeTag_drops_the_tag() {
+        val f = NewConnectionFormState().apply { addTag("prod"); addTag("docker") }
+        f.removeTag("prod")
+        assertEquals(listOf("docker"), f.tags)
+    }
+
+    @Test
+    fun toDraft_carries_tags() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u"; addTag("prod") }
+        assertEquals(listOf("prod"), f.toDraft().tags)
+        assertEquals(emptyList(), NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }.toDraft().tags)
+    }
+
+    @Test
+    fun fromHost_restores_tags() {
+        val host = Host(id = "h3", label = "box", address = "a", port = 22, username = "u", tags = listOf("prod", "db"))
+        val f = NewConnectionFormState.fromHost(host)
+        assertEquals(listOf("prod", "db"), f.tags)
+    }
 }

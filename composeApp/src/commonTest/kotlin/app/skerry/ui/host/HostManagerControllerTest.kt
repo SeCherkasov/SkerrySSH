@@ -69,6 +69,18 @@ class HostManagerControllerTest {
     }
 
     @Test
+    fun `save carries tags through to the stored host`() {
+        val store = FakeHostStore()
+        val controller = HostManagerController(store) { "gen-id" }
+
+        controller.save(
+            HostDraft(label = "prod", address = "10.0.0.5", port = 22, username = "deploy", tags = listOf("prod", "db")),
+        )
+
+        assertEquals(listOf("prod", "db"), controller.hosts.single().tags)
+    }
+
+    @Test
     fun `delete removes the host`() {
         val store = FakeHostStore(Host("1", "a", "a.local", 22, "u"), Host("2", "b", "b.local", 22, "u"))
         val controller = HostManagerController(store) { "x" }

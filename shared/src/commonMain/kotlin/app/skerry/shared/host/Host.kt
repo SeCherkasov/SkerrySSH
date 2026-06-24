@@ -13,6 +13,10 @@ import kotlinx.serialization.Serializable
  * (переиспользуемый секрет — один ключ/пароль на несколько хостов). `null` — секрет не
  * привязан, пароль вводится при подключении (прежнее поведение).
  *
+ * [tags] — необязательные метки для фильтрации списка хостов (чипсы #prod/#docker в макете).
+ * Хранятся в канонической форме (без `#`, нижний регистр, без дублей) — нормализацию делает
+ * форма ([app.skerry.ui.host.normalizeTag]); [group] (папка) и [tags] (метки) независимы.
+ *
  * [identityId] — legacy-указатель прежней двухуровневой модели (хост → учётка → секрет). Новый код
  * его НИКОГДА не пишет: он существует только чтобы [app.skerry.shared.vault.VaultMigration] могла
  * прочитать старые сохранённые файлы хостов (ключ `identityId`) и схлопнуть их в [credentialId],
@@ -28,4 +32,5 @@ data class Host(
     val group: String? = null,
     val credentialId: String? = null,
     val identityId: String? = null,
+    val tags: List<String> = emptyList(),
 )

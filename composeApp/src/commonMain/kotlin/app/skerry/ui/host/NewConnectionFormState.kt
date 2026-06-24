@@ -18,6 +18,15 @@ import app.skerry.ui.identity.CredentialKind
 enum class AuthMode { ASK, EXISTING, NEW_PASSWORD, NEW_KEY }
 
 /**
+ * Канонизировать тег хоста: trim, снять ведущие `#`, привести к нижнему регистру; пустой результат
+ * — `null` (тег не добавляется). Каноническая форма делает фильтрацию по чипсам сравнением строк и
+ * исключает дубли «Prod»/«#prod». Чистая функция — зафиксирована
+ * [app.skerry.ui.host.NewConnectionFormStateTest].
+ */
+fun normalizeTag(raw: String): String? =
+    raw.trim().trimStart('#').trim().lowercase().ifBlank { null }
+
+/**
  * Состояние формы «New connection» (модалка дизайн-слоя): редактируемые поля профиля как
  * Compose-state. Идентичность ([Host.id]) присваивает [HostManagerController] на сохранении,
  * поэтому форма оперирует черновиком и отдаёт [HostDraft] через [toDraft].
@@ -28,7 +37,8 @@ enum class AuthMode { ASK, EXISTING, NEW_PASSWORD, NEW_KEY }
  * Аутентификация ([authMode]) разворачивается в идентификатор keychain-секрета через
  * [resolveCredentialId]: для новых секретов форма не пишет в vault сама, а вызывает переданный
  * `saveCredential` (обычно [app.skerry.ui.identity.CredentialManagerController.save]) — побочный
- * эффект остаётся снаружи, логика выбора тестируема. AI-политика и теги в черновик пока не входят.
+ * эффект остаётся снаружи, логика выбора тестируема. Теги — каноническая форма ([normalizeTag]),
+ * правятся [addTag]/[removeTag] и идут в черновик; AI-политика в черновик пока не входит.
  */
 @Stable
 class NewConnectionFormState {
@@ -44,6 +54,25 @@ class NewConnectionFormState {
     var password: String by mutableStateOf("")
     var privateKeyPem: String by mutableStateOf("")
     var passphrase: String by mutableStateOf("")
+
+    /** Метки хоста в канонической форме (см. [normalizeTag]); правится только через [addTag]/[removeTag]. */
+    var tags: List<String> by mutableStateOf(emptyList())
+        private set
+
+    /**
+     * Добавить тег(и) из ввода: строка делится по запятым, каждая часть нормализуется ([normalizeTag]),
+     * пустые и уже присутствующие отбрасываются, порядок добавления сохраняется. UI вызывает по Enter/«,».
+     */
+    fun addTag(raw: String) {
+        val additions = raw.split(',').mapNotNull(::normalizeTag)
+        if (additions.isEmpty()) return
+        tags = LinkedHashSet(tags).apply { addAll(additions) }.toList()
+    }
+
+    /** Убрать тег (значение уже в канонической форме — то, что отрисовано на пилюле). */
+    fun removeTag(tag: String) {
+        tags = tags - tag
+    }
 
     /** Порт как валидное число в диапазоне TCP-портов, иначе `null`. */
     val portOrNull: Int? get() = port.trim().toIntOrNull()?.takeIf { it in 1..65535 }
@@ -95,6 +124,7 @@ class NewConnectionFormState {
         username = username.trim(),
         group = group.trim().ifBlank { null },
         credentialId = credentialId,
+        tags = tags,
     )
 
     companion object {
@@ -111,6 +141,7 @@ class NewConnectionFormState {
             port = host.port.toString()
             username = host.username
             group = host.group ?: ""
+            tags = host.tags
             if (host.credentialId != null) {
                 authMode = AuthMode.EXISTING
                 existingCredentialId = host.credentialId

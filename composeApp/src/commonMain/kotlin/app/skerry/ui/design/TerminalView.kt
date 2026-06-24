@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -75,6 +76,12 @@ fun TerminalView(state: DesktopDesignState) {
 @Composable
 private fun HostsSidebar(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
+    val liveHosts = LocalHosts.current
+    // Активный фильтр-чип (тег). Только для живого каталога; в мок-пути чипсы из макета статичны.
+    var activeChip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
+    val chips = liveHosts?.let { remember(it.hosts) { hostTagChips(it.hosts) } } ?: emptyList()
+    // Если активный тег исчез (хост отредактирован/удалён), фильтр откатывается к «All» — не зависает на пустом.
+    val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
     Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
             Row(
@@ -93,11 +100,18 @@ private fun HostsSidebar(state: DesktopDesignState) {
                     Txt("⌘K", color = D.faint, size = 10.sp, font = mono)
                 }
             }
-            Row(Modifier.padding(top = 9.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Chip("All", active = true)
-                Chip("#prod")
-                Chip("#docker")
-                Chip("#db")
+            Row(Modifier.padding(top = 9.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                if (liveHosts != null) {
+                    // Чипсы = теги живого каталога; клик переключает фильтр.
+                    chips.forEach { chip ->
+                        key(chip) {
+                            Chip(hostChipLabel(chip), active = chip == effectiveChip, onClick = { activeChip = chip })
+                        }
+                    }
+                } else {
+                    Chip("All", active = true)
+                    Chip("#prod"); Chip("#docker"); Chip("#db")
+                }
             }
         }
         HLine()
@@ -111,10 +125,11 @@ private fun HostsSidebar(state: DesktopDesignState) {
                 Sym("create_new_folder", size = 14.sp, color = D.faint)
             }
             // Живой каталог из HostManagerController, если подан (за гейтом vault); иначе мок-данные
-            // макета (путь офскрин-рендера/превью).
-            val liveHosts = LocalHosts.current
+            // макета (путь офскрин-рендера/превью). Папки — по группам, сузив активным тег-чипом.
             if (liveHosts != null) {
-                val folders = remember(liveHosts.hosts) { groupHostsByFolder(liveHosts.hosts) }
+                val folders = remember(liveHosts.hosts, effectiveChip) {
+                    groupHostsByFolder(filterHosts(liveHosts.hosts, effectiveChip))
+                }
                 folders.forEach { folder -> LiveHostFolder(folder, state, mono) }
             } else {
                 HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }

@@ -47,7 +47,7 @@ internal val MOBILE_PREVIEW_HOSTS = listOf(
 
 /**
  * Корневой экран таба Hosts мобильного макета `Skerry Mobile.html`, 1:1 с шаблоном: шапка с
- * заголовком и аватаром (→ More), строка поиска, лента фильтр-чипов групп, секции хостов и FAB
+ * заголовком и аватаром (→ More), строка поиска, лента фильтр-чипсов по тегам, секции хостов и FAB
  * «новое подключение». Каталог — живой [LocalHosts] (за гейтом vault), либо [MOBILE_PREVIEW_HOSTS]
  * на пути превью. Тап по хосту открывает [MobileRoute.HostDetail] (наполняется слайсом 2B); статус
  * соединения (живая точка) подключается со слайсом терминала.
@@ -135,7 +135,7 @@ private fun HostsSearch(query: String, onChange: (String) -> Unit) {
     )
 }
 
-/** Лента фильтр-чипов: «All» + группы; активный подсвечен cyan. Горизонтальный скролл, как в макете. */
+/** Лента фильтр-чипсов: «All» + теги (с префиксом `#`); активный подсвечен cyan. Горизонтальный скролл. */
 @Composable
 private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -> Unit) {
     Row(
@@ -161,7 +161,7 @@ private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -
                         .padding(horizontal = 13.dp, vertical = 5.dp),
                 ) {
                     Txt(
-                        chip,
+                        hostChipLabel(chip),
                         color = if (on) D.cyanBright else D.dim,
                         size = 12.5.sp,
                         weight = if (on) FontWeight.Medium else FontWeight.Normal,

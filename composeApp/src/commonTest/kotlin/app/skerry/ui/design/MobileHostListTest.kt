@@ -5,8 +5,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Чистая логика списка Hosts мобильного макета `Skerry Mobile.html`: фильтр-чипы групп, поиск и
- * группировка в секции. Поведение зафиксировано здесь, переиспользуется компоновкой экрана.
+ * Чистая логика списка Hosts мобильного макета `Skerry Mobile.html`: фильтр-чипсы по тегам, поиск и
+ * группировка в секции по группам. Поведение зафиксировано здесь, переиспользуется компоновкой
+ * экрана. Семантика чипсов/фильтра — общая ([HostChipsTest]); здесь проверяется связка с секциями.
  */
 class MobileHostListTest {
 
@@ -16,7 +17,8 @@ class MobileHostListTest {
         address: String = "10.0.0.1",
         username: String = "root",
         group: String? = null,
-    ) = Host(id = id, label = label, address = address, username = username, group = group)
+        tags: List<String> = emptyList(),
+    ) = Host(id = id, label = label, address = address, username = username, group = group, tags = tags)
 
     @Test
     fun empty_hosts_yield_only_all_chip_and_no_sections() {
@@ -26,21 +28,19 @@ class MobileHostListTest {
     }
 
     @Test
-    fun chips_are_all_plus_distinct_groups_in_first_appearance_order() {
+    fun chips_are_all_plus_distinct_tags() {
         val hosts = listOf(
-            host("1", "a", group = "Production"),
-            host("2", "b", group = "Homelab"),
-            host("3", "c", group = "Production"), // дубль группы не повторяется
-            host("4", "d", group = null), // безгруппные не дают чип
-            host("5", "e", group = "  "), // пустая группа не даёт чип
+            host("1", "a", tags = listOf("prod", "web")),
+            host("2", "b", tags = listOf("docker", "prod")), // дубль "prod" не повторяется
+            host("3", "c", tags = emptyList()), // без тегов — чипов не даёт
         )
-        assertEquals(listOf(ALL_HOSTS_CHIP, "Production", "Homelab"), buildMobileHostList(hosts).chips)
+        assertEquals(listOf(ALL_HOSTS_CHIP, "prod", "web", "docker"), buildMobileHostList(hosts).chips)
     }
 
     @Test
-    fun all_chip_keeps_every_host_grouped_into_sections() {
+    fun all_chip_keeps_every_host_grouped_into_sections_by_group() {
         val hosts = listOf(
-            host("1", "web", group = "Production"),
+            host("1", "web", group = "Production", tags = listOf("prod")),
             host("2", "pi", group = "Homelab"),
             host("3", "scratch", group = null),
         )
@@ -51,14 +51,15 @@ class MobileHostListTest {
     }
 
     @Test
-    fun active_group_chip_filters_to_that_group_only() {
+    fun active_tag_chip_filters_to_hosts_with_that_tag_keeping_group_sections() {
         val hosts = listOf(
-            host("1", "web", group = "Production"),
-            host("2", "pi", group = "Homelab"),
+            host("1", "web", group = "Production", tags = listOf("prod")),
+            host("2", "pi", group = "Homelab", tags = listOf("lab")),
+            host("3", "db", group = "Production", tags = listOf("prod")),
         )
-        val view = buildMobileHostList(hosts, activeChip = "Homelab")
-        assertEquals(listOf("Homelab"), view.sections.map { it.name })
-        assertEquals(listOf("pi"), view.sections.single().hosts.map { it.label })
+        val view = buildMobileHostList(hosts, activeChip = "prod")
+        assertEquals(listOf("Production"), view.sections.map { it.name })
+        assertEquals(listOf("web", "db"), view.sections.single().hosts.map { it.label })
     }
 
     @Test
@@ -76,11 +77,11 @@ class MobileHostListTest {
     @Test
     fun query_and_chip_combine_with_and_semantics() {
         val hosts = listOf(
-            host("1", "prod-web-01", group = "Production"),
-            host("2", "homelab-web", group = "Homelab"),
+            host("1", "prod-web-01", tags = listOf("prod")),
+            host("2", "homelab-web", tags = listOf("lab")),
         )
-        // запрос "web" совпал бы с обоими, но активный чип сужает до Homelab
-        val view = buildMobileHostList(hosts, query = "web", activeChip = "Homelab")
+        // запрос "web" совпал бы с обоими, но активный тег-чип сужает до lab
+        val view = buildMobileHostList(hosts, query = "web", activeChip = "lab")
         assertEquals(listOf("homelab-web"), view.allHosts().map { it.label })
     }
 

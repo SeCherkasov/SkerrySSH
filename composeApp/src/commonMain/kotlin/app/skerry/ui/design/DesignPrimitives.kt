@@ -17,18 +17,28 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 
 /**
  * Базовый текст макета на UI-шрифте (Space Grotesk по умолчанию). Тонкая обёртка над
@@ -85,13 +95,20 @@ fun Badge(
     }
 }
 
-/** Тег-чип (#prod, #docker): закруглённая пилюля 20dp. [active] — cyan-подсветка. */
+/** Тег-чип (#prod, #docker): закруглённая пилюля 20dp. [active] — cyan-подсветка; [onClick] — кликабельность. */
 @Composable
-fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier) {
+fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     Box(
         modifier
             .clip(RoundedCornerShape(20.dp))
             .background(if (active) D.cyan.copy(alpha = 0.12f) else Color(0x0AFFFFFF))
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 9.dp, vertical = 3.dp),
     ) {
         Txt(
@@ -100,6 +117,38 @@ fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier) {
             size = 10.5.sp,
             weight = if (active) FontWeight.Medium else FontWeight.Normal,
         )
+    }
+}
+
+/**
+ * Настоящий выпадающий список: [trigger] остаётся в потоке формы, а [menu] всплывает НАД контентом
+ * через [Popup] (не раздвигает форму). Меню позиционируется прямо под триггером ([gap] — зазор) и
+ * получает измеренную ширину триггера, чтобы совпадать с ним по краям. Тап мимо/Back закрывают
+ * ([onDismiss]). Применяется в пикерах аутентификации (desktop/mobile) и прочих селектах макета.
+ */
+@Composable
+fun AnchoredDropdown(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    gap: Dp = 6.dp,
+    trigger: @Composable () -> Unit,
+    menu: @Composable (anchorWidth: Dp) -> Unit,
+) {
+    var anchor by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
+    // Box оборачивает только триггер (Popup в поток разметки не попадает) → размер Box = размер триггера.
+    Box(Modifier.onGloballyPositioned { anchor = it.size }) {
+        trigger()
+        if (expanded) {
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = IntOffset(0, anchor.height + with(density) { gap.roundToPx() }),
+                onDismissRequest = onDismiss,
+                properties = PopupProperties(focusable = true),
+            ) {
+                menu(with(density) { anchor.width.toDp() })
+            }
+        }
     }
 }
 

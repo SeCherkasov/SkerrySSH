@@ -201,10 +201,10 @@ private fun seededHosts(boundCredentialId: String? = null): HostManagerControlle
         override fun remove(id: String) { items.remove(id) }
     }
     listOf(
-        Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production", credentialId = boundCredentialId),
-        Host("h2", "db-master", "192.168.1.50", 22, "root", "Production", credentialId = boundCredentialId),
-        Host("h3", "homelab-pi", "10.0.0.12", 22, "pi", "Homelab"),
-        Host("h4", "vps-edge", "vps.example.com", 2222, "deploy", null),
+        Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production", credentialId = boundCredentialId, tags = listOf("prod", "web")),
+        Host("h2", "db-master", "192.168.1.50", 22, "root", "Production", credentialId = boundCredentialId, tags = listOf("prod", "db")),
+        Host("h3", "homelab-pi", "10.0.0.12", 22, "pi", "Homelab", tags = listOf("docker")),
+        Host("h4", "vps-edge", "vps.example.com", 2222, "deploy", null, tags = listOf("edge")),
     ).forEach(store::put)
     var seq = 0
     return HostManagerController(store) { "gen-${seq++}" }
