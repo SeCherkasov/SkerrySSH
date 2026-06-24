@@ -10,7 +10,8 @@ import app.skerry.ui.session.SessionView
  */
 @Composable
 fun Viewport(state: DesktopDesignState) {
-    when (val overlay = state.appOverlay) {
+    when (state.appOverlay) {
+        DesktopView.Ports -> TunnelsView()
         DesktopView.Snippets -> SnippetsView()
         DesktopView.Vault -> VaultView()
         DesktopView.Known -> KnownHostsView()
@@ -23,7 +24,6 @@ fun Viewport(state: DesktopDesignState) {
             when (view) {
                 SessionView.Terminal -> TerminalView(state)
                 SessionView.Sftp -> SftpView()
-                SessionView.Ports -> TunnelsView()
             }
         }
     }

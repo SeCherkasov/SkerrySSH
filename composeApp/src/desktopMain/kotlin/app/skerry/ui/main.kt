@@ -22,9 +22,15 @@ import app.skerry.shared.vault.VaultMigration
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.initializeVaultCrypto
+import app.skerry.shared.tunnel.FileTunnelStore
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.tunnel.TunnelManager
+import app.skerry.ui.tunnel.resolveTunnel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -115,7 +121,19 @@ fun main() {
         val keyGenerator = BouncyCastleSshKeyGenerator()
         // Разбор импортированных SSH-сертификатов (раздел Vault → Certificates) — sshj поверх ssh-wire.
         val certificateInspector = SshjCertificateInspector()
-        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector)
+        // Глобальные туннели (привычная модель SSH-клиентов): сохранённые пробросы в tunnels.json. Активация ходит
+        // через ОТДЕЛЬНЫЙ probe-транспорт (read-only verifier): включить можно только уже доверенный
+        // хост — туннель открывается без терминала, поэтому тихого TOFU тут быть не должно. Резолв
+        // хоста/секрета — через граф (hosts + credentials в открытом vault). Scope живёт всё приложение.
+        val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
+        val tunnelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val tunnels = TunnelManager(
+            store = FileTunnelStore(dir.resolve("tunnels.json")),
+            transport = tunnelTransport,
+            resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
+            scope = tunnelScope,
+        ) { UUID.randomUUID().toString() }
+        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
@@ -145,6 +163,7 @@ fun main() {
                     knownHosts = deps.knownHosts,
                     keyGenerator = deps.keyGenerator,
                     certificateInspector = deps.certificateInspector,
+                    tunnels = deps.tunnels,
                     onVaultUnlocked = onVaultUnlocked,
                 )
             }

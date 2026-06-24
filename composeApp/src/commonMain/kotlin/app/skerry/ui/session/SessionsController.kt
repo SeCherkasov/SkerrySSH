@@ -9,8 +9,11 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 
-/** Подвью сессии (привязана к вкладке): что показано в её рабочей области. */
-enum class SessionView { Terminal, Sftp, Ports }
+/**
+ * Подвью сессии (привязана к вкладке): что показано в её рабочей области. Туннели сюда НЕ входят —
+ * это глобальный раздел (привычная модель SSH-клиентов), см. [app.skerry.ui.design.DesktopView.isAppLevel].
+ */
+enum class SessionView { Terminal, Sftp }
 
 /**
  * Одна открытая сессия — вкладка в titlebar. Владеет собственным [ConnectionController]

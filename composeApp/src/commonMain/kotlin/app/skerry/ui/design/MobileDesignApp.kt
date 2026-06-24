@@ -107,6 +107,7 @@ fun MobileDesignApp(
         // Инспектор/генератор SSH-ключей + инспектор сертификатов — таб Vault: отпечатки, генерация, разбор cert.
         LocalSshKeyGenerator provides deps.keyGenerator,
         LocalSshCertificateInspector provides deps.certificateInspector,
+        LocalTunnels provides deps.tunnels,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             val vault = deps.vault

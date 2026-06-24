@@ -8,8 +8,10 @@ import androidx.fragment.app.FragmentActivity
 import app.skerry.shared.host.FileHostStore
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.FileKnownHostsStore
+import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
+import app.skerry.shared.tunnel.FileTunnelStore
 import app.skerry.shared.vault.AndroidBiometricKeyStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileBioArtifactStore
@@ -26,6 +28,12 @@ import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.tunnel.TunnelManager
+import app.skerry.ui.tunnel.resolveTunnel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -42,6 +50,18 @@ import java.util.UUID
  * поэтому за гейтом — настройки vault (биометрия + lock) до прихода полноценного мобильного UI.
  */
 class MainActivity : FragmentActivity() {
+    // Scope менеджера туннелей: живёт на время Activity. Отменяется в onDestroy, чтобы при
+    // пересоздании (поворот и т.п.) старый scope с поллингом не оставался орфаном. Активные туннели
+    // при этом сбрасываются — приемлемо для текущего этапа (полное сохранение поверх пересоздания —
+    // отдельная задача через retained-холдер/ViewModel).
+    private var tunnelScope: CoroutineScope? = null
+
+    override fun onDestroy() {
+        tunnelScope?.cancel()
+        tunnelScope = null
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -110,6 +130,17 @@ class MainActivity : FragmentActivity() {
             artifacts = FileBioArtifactStore(dir.resolve("vault.bio").absolutePath.toPath(), FileSystem.SYSTEM),
             deviceId = deviceId(dir),
         )
+        // Глобальные туннели (привычная модель SSH-клиентов): сохранённые пробросы в tunnels.json. Активация — через
+        // ОТДЕЛЬНЫЙ probe-транспорт (read-only verifier): включить можно только уже доверенный хост,
+        // тихого TOFU тут быть не должно. Резолв хоста/секрета — через граф (hosts + credentials).
+        val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
+        val tunnels = TunnelManager(
+            store = FileTunnelStore(dir.resolve("tunnels.json").toPath()),
+            transport = tunnelTransport,
+            resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
+            scope = scope,
+        ) { UUID.randomUUID().toString() }
         return AppDependencies(
             transport = transport,
             hosts = hosts,
@@ -121,6 +152,7 @@ class MainActivity : FragmentActivity() {
             // Инспектор SSH-сертификатов (sshj) — раздел Vault → Certificates: разбор *-cert.pub.
             certificateInspector = SshjCertificateInspector(),
             biometrics = biometrics,
+            tunnels = tunnels,
         )
     }
 

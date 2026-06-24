@@ -8,6 +8,7 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.tunnel.TunnelManager
 
 /**
  * Граф зависимостей приложения, собираемый платформенной точкой входа (desktop `main`) и подаваемый
@@ -30,6 +31,8 @@ data class AppDependencies(
     val keyGenerator: SshKeyGenerator? = null,
     /** Инспектор SSH-сертификатов (раздел Vault → Certificates); `null` — платформа без разбора cert. */
     val certificateInspector: SshCertificateInspector? = null,
+    /** Менеджер глобальных сохранённых туннелей (раздел Tunnels); `null` — подсистема не подключена. */
+    val tunnels: TunnelManager? = null,
     /** Биометрическая разблокировка vault; `null` — платформа без биометрии (desktop MVP). */
     val biometrics: VaultBiometrics? = null,
 )

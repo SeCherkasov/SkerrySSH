@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.connection.ConnectionUiState
 
 /**
  * Корневой таб More мобильного макета `docs/new/Skerry Mobile.html` (слайс 5): заголовок + карточка
@@ -68,13 +67,10 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
 
 @Composable
 private fun portsSubtitle(): String {
-    val active = LocalSessions.current?.active ?: return mobileMorePortsSubtitle(null)
-    val controller = active.controller
-    if (controller.uiState !is ConnectionUiState.Connected) return mobileMorePortsSubtitle(null)
-    // runCatching: между проверкой uiState и openPortForwards() сессия могла отключиться с другого
-    // экрана (connection стал null → error()) — на гонке закрытия трактуем как «нет данных».
-    val count = runCatching { mobileActiveTunnelCount(controller.openPortForwards().forwards) }.getOrNull()
-    return mobileMorePortsSubtitle(count)
+    // Туннели — глобальный раздел (привычная модель SSH-клиентов): счёт активных берём из менеджера, без привязки
+    // к открытой сессии. null (нет менеджера: превью/офскрин) → пустой подзаголовок.
+    val manager = LocalTunnels.current ?: return mobileMorePortsSubtitle(null)
+    return mobileMorePortsSubtitle(mobileActiveTunnelCount(manager.tunnels))
 }
 
 @Composable

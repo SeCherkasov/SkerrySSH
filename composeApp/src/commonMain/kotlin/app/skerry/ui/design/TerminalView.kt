@@ -342,7 +342,8 @@ private fun SessionToolbar(state: DesktopDesignState) {
                 IconBtn("splitscreen_right", onClick = state::toggleSplit)
                 // Переключают подвью АКТИВНОЙ вкладки (живой режим, + сброс оверлея) / мок-фолбэк state.view.
                 IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
-                IconBtn("lan", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Ports) } else state.showView(DesktopView.Ports) })
+                // Tunnels — глобальный раздел (привычная модель SSH-клиентов), всегда открывается оверлеем.
+                IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
                 IconBtn("info", onClick = state::toggleInfo)
                 // Power: рвёт активную сессию (живой путь); в мок-режиме — no-op заглушка.
                 IconBtn("power_settings_new", onClick = { if (active != null) sessions.close(active.id) }, tint = D.sunset)
