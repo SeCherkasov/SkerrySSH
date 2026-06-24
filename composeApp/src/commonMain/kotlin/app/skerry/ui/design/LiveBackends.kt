@@ -11,6 +11,7 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.tunnel.TunnelManager
 
 /**
  * Фича-флаги отображения дизайн-слоя. Поставляются параметром в [DesktopDesignApp] и доступны
@@ -97,3 +98,11 @@ val LocalTestTransport: ProvidableCompositionLocal<SshTransport?> = staticCompos
  * чтобы кнопка SFTP детали хоста сразу показывала файлы без отдельного Connect. Дефолт — no-op (превью).
  */
 val LocalOpenSftp: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
+
+/**
+ * Менеджер глобальных сохранённых туннелей (модель Termius): список пробросов + включение/выключение,
+ * каждый сам открывает соединение к хосту. `null` — мок-путь/превью без бэкенда:
+ * [app.skerry.ui.design.TunnelsView] рисует статичный макет. Поставляется [DesktopDesignApp] за гейтом
+ * vault (резолв секрета хоста требует открытого vault).
+ */
+val LocalTunnels: ProvidableCompositionLocal<TunnelManager?> = staticCompositionLocalOf { null }

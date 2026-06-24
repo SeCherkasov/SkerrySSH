@@ -1,85 +1,63 @@
 package app.skerry.ui.design
 
-import app.skerry.ui.forward.ForwardDirection
-import app.skerry.ui.forward.ForwardEntry
-import app.skerry.ui.forward.ForwardStatus
+import app.skerry.shared.tunnel.Tunnel
+import app.skerry.shared.tunnel.TunnelDirection
+import app.skerry.ui.tunnel.TunnelEntry
+import app.skerry.ui.tunnel.TunnelStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Чистая логика мобильного экрана Port forwarding (слайс 5): режим экрана, проекция строки туннеля, счётчики хаба More. */
+/** Чистая логика мобильного экрана Port forwarding (глобальные туннели): проекция строки, счётчики хаба More. */
 class MobilePortsTest {
 
-    private fun entry(
-        direction: ForwardDirection,
-        destHost: String = "10.0.0.5",
-        destPort: Int = 80,
-        status: ForwardStatus = ForwardStatus.Active(8080),
-        paused: Boolean = false,
-    ): ForwardEntry = ForwardEntry(
-        id = 1,
-        direction = direction,
-        bindHost = "127.0.0.1",
-        requestedPort = 8080,
-        destHost = destHost,
-        destPort = destPort,
-    ).also {
-        it.status = status
-        it.paused = paused
-    }
+    private fun tunnel(
+        direction: TunnelDirection,
+        destHost: String? = "10.0.0.5",
+        destPort: Int? = 80,
+    ): Tunnel = Tunnel("1", "t", "h1", direction, "127.0.0.1", 8080, destHost, destPort)
 
-    // ── режим экрана по состоянию сессий (зеркалит mobileFilesMode) ──
-
-    @Test
-    fun ports_mode_picks_preview_without_session_manager() {
-        assertEquals(MobilePortsMode.Preview, mobilePortsMode(hasSessions = false, connected = false))
-        assertEquals(MobilePortsMode.Preview, mobilePortsMode(hasSessions = false, connected = true))
-    }
-
-    @Test
-    fun ports_mode_is_live_only_when_connected() {
-        assertEquals(MobilePortsMode.Live, mobilePortsMode(hasSessions = true, connected = true))
-        assertEquals(MobilePortsMode.NoSession, mobilePortsMode(hasSessions = true, connected = false))
-    }
+    private fun entry(direction: TunnelDirection, status: TunnelStatus = TunnelStatus.Active(8080)): TunnelEntry =
+        TunnelEntry(tunnel(direction)).also { it.status = status }
 
     // ── стрелка между source и dest ──
 
     @Test
     fun arrow_is_all_inclusive_for_dynamic_else_forward() {
-        assertEquals("arrow_forward", mobileTunnelArrow(ForwardDirection.Local))
-        assertEquals("arrow_forward", mobileTunnelArrow(ForwardDirection.Remote))
-        assertEquals("all_inclusive", mobileTunnelArrow(ForwardDirection.Dynamic))
+        assertEquals("arrow_forward", mobileTunnelArrow(TunnelDirection.Local))
+        assertEquals("arrow_forward", mobileTunnelArrow(TunnelDirection.Remote))
+        assertEquals("all_inclusive", mobileTunnelArrow(TunnelDirection.Dynamic))
     }
 
     // ── текст назначения: явный адрес или «dynamic proxy» для SOCKS ──
 
     @Test
     fun dest_text_shows_address_or_dynamic_proxy() {
-        assertEquals("10.0.0.5:80", mobileTunnelDest(entry(ForwardDirection.Local)))
-        assertEquals("localhost:3000", mobileTunnelDest(entry(ForwardDirection.Remote, destHost = "localhost", destPort = 3000)))
+        assertEquals("10.0.0.5:80", mobileTunnelDest(tunnel(TunnelDirection.Local)))
+        assertEquals("localhost:3000", mobileTunnelDest(tunnel(TunnelDirection.Remote, destHost = "localhost", destPort = 3000)))
         // У -D фиксированного назначения нет — показываем «dynamic proxy», как в макете.
-        assertEquals("dynamic proxy", mobileTunnelDest(entry(ForwardDirection.Dynamic)))
+        assertEquals("dynamic proxy", mobileTunnelDest(tunnel(TunnelDirection.Dynamic, destHost = null, destPort = null)))
     }
 
     // ── счётчик активных туннелей для подзаголовка хаба More ──
 
     @Test
-    fun active_count_excludes_paused_and_non_active() {
-        val forwards = listOf(
-            entry(ForwardDirection.Local, status = ForwardStatus.Active(8080)),
-            entry(ForwardDirection.Remote, status = ForwardStatus.Active(9000), paused = true),
-            entry(ForwardDirection.Dynamic, status = ForwardStatus.Starting),
-            entry(ForwardDirection.Local, status = ForwardStatus.Failed("boom")),
+    fun active_count_counts_only_active() {
+        val tunnels = listOf(
+            entry(TunnelDirection.Local, status = TunnelStatus.Active(8080)),
+            entry(TunnelDirection.Remote, status = TunnelStatus.Connecting),
+            entry(TunnelDirection.Dynamic, status = TunnelStatus.Inactive),
+            entry(TunnelDirection.Local, status = TunnelStatus.Failed("boom")),
         )
-        // Активен только первый: на паузе/поднимается/упал — не считаются.
-        assertEquals(1, mobileActiveTunnelCount(forwards))
+        // Активен только первый: поднимается/выключен/упал — не считаются.
+        assertEquals(1, mobileActiveTunnelCount(tunnels))
         assertEquals(0, mobileActiveTunnelCount(emptyList()))
     }
 
     // ── подзаголовок строки Port forwarding в More ──
 
     @Test
-    fun more_ports_subtitle_blank_without_session_else_count() {
-        // Нет подключённой сессии — нечего считать, строка без подписи.
+    fun more_ports_subtitle_blank_without_manager_else_count() {
+        // Нет менеджера (превью/офскрин) — нечего считать, строка без подписи.
         assertEquals("", mobileMorePortsSubtitle(null))
         assertEquals("0 active", mobileMorePortsSubtitle(0))
         assertEquals("1 active", mobileMorePortsSubtitle(1))

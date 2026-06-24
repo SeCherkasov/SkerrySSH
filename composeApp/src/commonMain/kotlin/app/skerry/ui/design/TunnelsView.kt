@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -33,20 +34,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.connection.ConnectionController
-import app.skerry.ui.connection.ConnectionUiState
-import app.skerry.ui.forward.ForwardDirection
-import app.skerry.ui.forward.ForwardEntry
-import app.skerry.ui.forward.ForwardStatus
-import app.skerry.ui.forward.PortForwardController
-import app.skerry.ui.forward.forwardDestText
-import app.skerry.ui.forward.forwardListenPort
-import app.skerry.ui.forward.forwardSourceText
-import app.skerry.ui.forward.forwardTypeLabel
+import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.forward.humanRate
-import app.skerry.ui.forward.parseBindPort
-import app.skerry.ui.forward.parseForwardInput
 import app.skerry.ui.forward.rateFraction
+import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.tunnel.TunnelEntry
+import app.skerry.ui.tunnel.TunnelManager
+import app.skerry.ui.tunnel.TunnelStatus
+import app.skerry.ui.tunnel.buildTunnelDraft
 
 private data class TunnelRule(
     val type: String, val typeBg: Color, val typeFg: Color,
@@ -61,25 +56,19 @@ private val TUNNELS = listOf(
 )
 
 /**
- * Port forwarding (Tunnels) view: заголовок + таблица правил + панель деталей туннеля. Когда есть
- * живая подключённая сессия ([LocalSessions]), таблица рендерится поверх живого
- * [PortForwardController] активной сессии (реальные пробросы, статусы Starting/Active/Failed), а
- * правая панель — рабочая форма добавления туннеля (`-L`/`-R`/`-D`). Без сессии (офскрин-рендер
- * дизайна) показывается мок ([TUNNELS] + статичная форма деталей).
+ * Port forwarding (Tunnels) — ГЛОБАЛЬНЫЙ раздел (модель Termius): список сохранённых туннелей с
+ * тумблерами on/off + редактор справа. Туннель самостоятелен (ссылается на хост по id) и при включении
+ * сам открывает SSH-соединение через [TunnelManager]. Когда менеджер подан ([LocalTunnels]) — живой
+ * список; без него (офскрин-рендер/превью) показывается статичный мок ([TUNNELS]).
  */
 @Composable
 fun TunnelsView() {
     val mono = LocalFonts.current.mono
-    val sessions = LocalSessions.current
-    val active = sessions?.active
-    val controller = active?.controller
-    val connected = controller?.uiState is ConnectionUiState.Connected
-    val live = sessions != null
+    val manager = LocalTunnels.current
+    val hosts = LocalHosts.current
 
-    // Состояние правой панели live-режима: выбранная строка и режим «добавить туннель» (кнопка
-    // New rule). По шаблону правая панель показывает детали выбранного туннеля; New rule переключает
-    // её на форму добавления.
-    var selectedId by remember { mutableStateOf<Long?>(null) }
+    // Состояние правой панели: выбранный туннель и режим «создать новый» (кнопка New tunnel).
+    var selectedId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(D.bg)) {
@@ -90,72 +79,82 @@ fun TunnelsView() {
         ) {
             Column {
                 Txt("Port forwarding", color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-                val subtitle =
-                    if (live) (active?.subtitle?.let { "$it · tunnels" } ?: "No active session")
-                    else "SSH tunnels — local, remote and dynamic (SOCKS) port forwards."
-                Txt(subtitle, color = D.dim, size = 12.sp, font = if (live) mono else FontFamily.Default, modifier = Modifier.padding(top = 2.dp))
+                Txt(
+                    "Saved tunnels — local, remote and dynamic (SOCKS) forwards.",
+                    color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp),
+                )
             }
-            PrimaryButton("New rule", onClick = { adding = true; selectedId = null }, icon = "add")
+            PrimaryButton("New tunnel", onClick = { adding = true; selectedId = null }, icon = "add")
         }
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            when {
-                !live -> MockTunnelsBody()
-                connected && controller != null -> LiveTunnelsBody(
-                    controller = controller,
-                    host = active?.title ?: "—",
+            if (manager == null) {
+                MockTunnelsBody()
+            } else {
+                GlobalTunnelsBody(
+                    manager = manager,
+                    hosts = hosts,
                     mono = mono,
                     adding = adding,
                     selectedId = selectedId,
                     onSelect = { selectedId = it; adding = false },
-                    onAddingChange = { adding = it },
+                    // После удаления возвращаемся в режим «New tunnel», а не прыгаем на случайный
+                    // оставшийся туннель: selectedId ещё держит снесённый id, и без сброса selected
+                    // резолвился бы в firstOrNull().
+                    onNew = { selectedId = null; adding = true },
                 )
-                else -> TunnelsNotice()
             }
         }
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Живой путь: таблица поверх PortForwardController активной сессии + форма добавления.
+// Живой путь: глобальный список сохранённых туннелей + редактор справа.
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun LiveTunnelsBody(
-    controller: ConnectionController,
-    host: String,
+private fun GlobalTunnelsBody(
+    manager: TunnelManager,
+    hosts: HostManagerController?,
     mono: FontFamily,
     adding: Boolean,
-    selectedId: Long?,
-    onSelect: (Long) -> Unit,
-    onAddingChange: (Boolean) -> Unit,
+    selectedId: String?,
+    onSelect: (String) -> Unit,
+    onNew: () -> Unit,
 ) {
-    // openPortForwards кэшируется на соединении и живёт на scope сессии — переключение вкладок/вида
-    // список не сбрасывает; все пробросы снимает disconnect().
-    val forwards = remember(controller) { controller.openPortForwards() }
-    val rules = forwards.forwards
-    val activeCount = rules.count { it.status is ForwardStatus.Active && !it.paused }
-    // Выбранная строка (по умолчанию первая) — для панели деталей справа.
-    val selected = rules.firstOrNull { it.id == selectedId } ?: rules.firstOrNull()
-    // Правая панель: форма добавления (New rule или пока туннелей нет), иначе детали выбранного.
-    val showForm = adding || selected == null
+    val tunnels = manager.tunnels
+    val activeCount = tunnels.count { it.status is TunnelStatus.Active }
+    val selected = tunnels.firstOrNull { it.id == selectedId } ?: tunnels.firstOrNull()
+    // Правая панель: редактор нового туннеля (New tunnel или пока список пуст), иначе правка выбранного.
+    val showNew = adding || selected == null
+
+    fun hostLabel(hostId: String): String = hosts?.find(hostId)?.label ?: hostId
 
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
-            if (rules.isEmpty()) {
+            if (tunnels.isEmpty()) {
                 EmptyTunnels()
             } else {
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
                     TunnelHeaderRow()
-                    rules.forEach { entry ->
+                    tunnels.forEach { entry ->
                         HLine()
-                        TunnelRowLive(
+                        // Лямбды стабилизируем по id: телеметрия активных туннелей тикает раз в секунду и
+                        // без remember пересоздавала бы onSelect/onToggle, перерисовывая весь список.
+                        val onRowSelect = remember(entry.id, onSelect) { { onSelect(entry.id) } }
+                        val onRowToggle = remember(entry.id, manager) {
+                            {
+                                if (entry.status is TunnelStatus.Active) manager.deactivate(entry.id)
+                                else manager.activate(entry.id)
+                            }
+                        }
+                        TunnelRowGlobal(
                             entry = entry,
-                            host = host,
+                            via = hostLabel(entry.tunnel.hostId),
                             mono = mono,
-                            selected = !showForm && entry.id == selected?.id,
-                            onSelect = { onSelect(entry.id) },
-                            onToggle = { if (entry.paused) forwards.resume(entry) else forwards.pause(entry) },
+                            selected = !showNew && entry.id == selected?.id,
+                            onSelect = onRowSelect,
+                            onToggle = onRowToggle,
                         )
                     }
                 }
@@ -166,11 +165,14 @@ private fun LiveTunnelsBody(
             }
         }
         VLine(D.line)
-        if (showForm) {
-            AddTunnelForm(forwards, mono, onAdded = { onSelect(it); onAddingChange(false) })
-        } else {
-            TunnelDetailLive(selected, host, mono, onRemove = { forwards.remove(selected) })
-        }
+        TunnelEditor(
+            manager = manager,
+            hosts = hosts,
+            mono = mono,
+            existing = if (showNew) null else selected,
+            onSaved = { onSelect(it) },
+            onRemoved = onNew,
+        )
     }
 }
 
@@ -180,28 +182,25 @@ private fun EmptyTunnels() {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym("lan", size = 26.sp, color = D.faint)
             Txt("No tunnels yet", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            Txt("Add a forward on the right →", color = D.faint, size = 11.5.sp)
+            Txt("Add a tunnel on the right →", color = D.faint, size = 11.5.sp)
         }
     }
 }
 
 @Composable
-private fun TunnelRowLive(
-    entry: ForwardEntry,
-    host: String,
+private fun TunnelRowGlobal(
+    entry: TunnelEntry,
+    via: String,
     mono: FontFamily,
     selected: Boolean,
     onSelect: () -> Unit,
     onToggle: () -> Unit,
 ) {
-    val (bg, fg) = when (entry.direction) {
-        ForwardDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
-        ForwardDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber
-        ForwardDirection.Dynamic -> D.moss.copy(alpha = 0.14f) to D.moss
-    }
-    val arrow = if (entry.direction == ForwardDirection.Dynamic) "all_inclusive" else "arrow_forward"
-    val dest = forwardDestText(entry)
-    val dim = entry.paused
+    val t = entry.tunnel
+    val (bg, fg) = directionColors(t.direction)
+    val arrow = if (t.direction == TunnelDirection.Dynamic) "all_inclusive" else "arrow_forward"
+    val dest = if (t.direction == TunnelDirection.Dynamic) null else "${t.destHost}:${t.destPort}"
+    val dim = entry.status !is TunnelStatus.Active
     Column(Modifier.fillMaxWidth().clickable(onClick = onSelect).background(if (selected) D.cyan08 else Color.Transparent)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp),
@@ -209,63 +208,86 @@ private fun TunnelRowLive(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Box(Modifier.width(76.dp)) {
-                Badge(forwardTypeLabel(entry.direction), bg = bg, fg = fg, radius = 4, size = 10.sp)
+                Badge(directionBadge(t.direction), bg = bg, fg = fg, radius = 4, size = 10.sp)
             }
-            Txt(forwardSourceText(entry), color = if (dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt(sourceText(entry), color = if (dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
             Box(Modifier.width(20.dp)) { Sym(arrow, size = 16.sp, color = D.faint) }
             Txt(dest ?: "dynamic proxy", color = if (dest == null || dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
-            Txt(host, color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.width(110.dp))
+            Txt(via, color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.width(110.dp))
             Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
-                ActiveCell(entry, onToggle)
+                ActiveCellGlobal(entry, onToggle)
             }
         }
-        (entry.status as? ForwardStatus.Failed)?.let {
+        (entry.status as? TunnelStatus.Failed)?.let {
             Txt(it.message, color = D.sunset, size = 11.sp, font = mono, modifier = Modifier.padding(start = 16.dp, bottom = 10.dp))
         }
     }
 }
 
-/**
- * Ячейка ACTIVE по статусу: активный — тумблер (вкл = идёт, выкл = на паузе; переключает pause/resume),
- * поднимается — индикатор песочных часов, ошибка — иконка ошибки (удаление — из панели деталей справа).
- */
+/** Источник: bind-адрес и порт слушателя (для активного — фактический boundPort, иначе запрошенный). */
+private fun sourceText(entry: TunnelEntry): String {
+    val port = (entry.status as? TunnelStatus.Active)?.boundPort ?: entry.tunnel.bindPort
+    return "${entry.tunnel.bindHost}:$port"
+}
+
+/** Ячейка ACTIVE: активный — тумблер вкл, подъём — песочные часы, иначе — тумблер выкл (включить/повторить). */
 @Composable
-private fun ActiveCell(entry: ForwardEntry, onToggle: () -> Unit) {
+private fun ActiveCellGlobal(entry: TunnelEntry, onToggle: () -> Unit) {
     when (entry.status) {
-        is ForwardStatus.Active -> Toggle(on = !entry.paused, onToggle = onToggle)
-        ForwardStatus.Starting -> Sym("hourglass_top", size = 16.sp, color = D.amber)
-        is ForwardStatus.Failed -> Sym("error", size = 16.sp, color = D.sunset)
+        is TunnelStatus.Active -> Toggle(on = true, onToggle = onToggle)
+        TunnelStatus.Connecting -> Sym("hourglass_top", size = 16.sp, color = D.amber)
+        else -> Toggle(on = false, onToggle = onToggle)
     }
 }
 
+/**
+ * Редактор туннеля (создание/правка): имя, тип, via-host (выпадающий список хостов), bind и dest.
+ * Save собирает [buildTunnelDraft] и пишет через [TunnelManager]; для существующего показаны Remove и
+ * live-throughput (когда активен). Поля сбрасываются при смене [existing] (через `key`).
+ */
 @Composable
-private fun AddTunnelForm(controller: PortForwardController, mono: FontFamily, onAdded: (Long) -> Unit) {
-    var direction by remember { mutableStateOf(ForwardDirection.Local) }
-    var bindHost by remember { mutableStateOf("127.0.0.1") }
-    var bindPort by remember { mutableStateOf("") }
-    var destHost by remember { mutableStateOf("") }
-    var destPort by remember { mutableStateOf("") }
+private fun TunnelEditor(
+    manager: TunnelManager,
+    hosts: HostManagerController?,
+    mono: FontFamily,
+    existing: TunnelEntry?,
+    onSaved: (String) -> Unit,
+    onRemoved: () -> Unit,
+) {
+    val editingId = existing?.id
+    val seed = existing?.tunnel
+    // Ключ = editingId: поля — изолированный буфер правки, заполняется один раз на выбранный туннель.
+    // Мутации entry.tunnel в обход (save из другого места для того же id) сюда намеренно НЕ долетают —
+    // приоритет у незавершённых правок пользователя.
+    var label by remember(editingId) { mutableStateOf(seed?.label ?: "") }
+    var direction by remember(editingId) { mutableStateOf(seed?.direction ?: TunnelDirection.Local) }
+    var hostId by remember(editingId) { mutableStateOf(seed?.hostId) }
+    var bindHost by remember(editingId) { mutableStateOf(seed?.bindHost ?: "127.0.0.1") }
+    var bindPort by remember(editingId) { mutableStateOf(seed?.bindPort?.toString() ?: "") }
+    var destHost by remember(editingId) { mutableStateOf(seed?.destHost ?: "") }
+    var destPort by remember(editingId) { mutableStateOf(seed?.destPort?.toString() ?: "") }
 
-    val isDynamic = direction == ForwardDirection.Dynamic
-    val request = if (isDynamic) null else parseForwardInput(bindPort, destHost, destPort)
-    val bind = parseBindPort(bindPort)
-    val canAdd = if (isDynamic) bind != null else request != null
-
-    val (badgeBg, badgeFg) = when (direction) {
-        ForwardDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
-        ForwardDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber
-        ForwardDirection.Dynamic -> D.moss.copy(alpha = 0.14f) to D.moss
-    }
+    val isDynamic = direction == TunnelDirection.Dynamic
+    val draft = buildTunnelDraft(editingId, label, hostId, direction, bindHost, bindPort, destHost, destPort)
+    val (badgeBg, badgeFg) = directionColors(direction)
+    val hostList = hosts?.hosts ?: emptyList()
+    val hostLabel = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: "Select host…"
 
     Column(
         Modifier.width(308.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
         Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Badge(forwardTypeLabel(direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
-            Txt("New tunnel", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Badge(directionBadge(direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
+            Txt(if (existing == null) "New tunnel" else "Tunnel detail", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
         }
+        FieldLabel("Name")
+        EditField(label, { label = it }, "web tunnel", mono)
+        Box(Modifier.padding(bottom = 12.dp))
         FieldLabel("Type")
         ClickableSelect(directionDisplay(direction)) { direction = direction.next() }
+        Box(Modifier.padding(bottom = 12.dp))
+        FieldLabel("Via host")
+        HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { hostId = it })
         Box(Modifier.padding(bottom = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) { FieldLabel("Bind address"); EditField(bindHost, { bindHost = it }, "127.0.0.1", mono) }
@@ -281,108 +303,91 @@ private fun AddTunnelForm(controller: PortForwardController, mono: FontFamily, o
             Box(Modifier.padding(bottom = 4.dp))
             Txt("SOCKS5 proxy — destination is chosen per connection by each client.", color = D.faint, size = 11.sp, lineHeight = 15.sp)
         }
+        if (existing != null && existing.status is TunnelStatus.Active) {
+            Box(Modifier.padding(bottom = 16.dp))
+            FieldLabel("Live throughput")
+            ThroughputRow("arrow_upward", D.cyanBright, rateFraction(existing.upRate), humanRate(existing.upRate), mono)
+            Box(Modifier.padding(bottom = 8.dp))
+            ThroughputRow("arrow_downward", D.moss, rateFraction(existing.downRate), humanRate(existing.downRate), mono)
+            Box(Modifier.padding(bottom = 10.dp))
+            // Правка активного туннеля сохраняется, но проброс уже поднят — новые параметры подхватятся
+            // при следующем включении (save не перезапускает соединение).
+            Txt("Changes apply after the tunnel is restarted.", color = D.faint, size = 11.sp, lineHeight = 15.sp)
+        }
         Box(Modifier.padding(bottom = 18.dp))
-        PrimaryButton(
-            label = "Add tunnel",
-            onClick = {
-                if (!canAdd) return@PrimaryButton
-                val host = bindHost.trim().ifEmpty { "127.0.0.1" }
-                when (direction) {
-                    ForwardDirection.Local -> request?.let { controller.addLocal(it.bindPort, it.destHost, it.destPort, host) }
-                    ForwardDirection.Remote -> request?.let { controller.addRemote(it.bindPort, it.destHost, it.destPort, host) }
-                    ForwardDirection.Dynamic -> bind?.let { controller.addDynamic(it, host) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PrimaryButton(
+                label = "Save",
+                onClick = { draft?.let { onSaved(manager.save(it)) } },
+                modifier = Modifier.weight(1f),
+                bg = if (draft != null) D.cyan else Color(0x14FFFFFF),
+                fg = if (draft != null) Color(0xFF0A1A26) else D.faint,
+            )
+            if (existing != null) {
+                GhostButton("Remove", onClick = { manager.delete(existing.id); onRemoved() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+/** Выпадающий список хостов поверх формы (через [AnchoredDropdown]); пустой — подсказка добавить хост. */
+@Composable
+private fun HostPicker(current: String, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { open = !open }.background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Txt(current, color = D.text, size = 12.5.sp)
+                Sym("expand_more", size = 16.sp, color = D.faint)
+            }
+        },
+        menu = { width ->
+            Column(
+                Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
+            ) {
+                if (options.isEmpty()) {
+                    Txt("No saved hosts", color = D.faint, size = 12.sp, modifier = Modifier.padding(12.dp))
+                } else {
+                    options.forEach { (id, name) ->
+                        Txt(
+                            name, color = D.text, size = 12.5.sp,
+                            modifier = Modifier.fillMaxWidth().clickable { onPick(id); open = false }.padding(horizontal = 12.dp, vertical = 9.dp),
+                        )
+                    }
                 }
-                bindPort = ""; destHost = ""; destPort = ""
-                // Новая строка добавляется в список синхронно — выбрать её и закрыть форму.
-                controller.forwards.lastOrNull()?.let { onAdded(it.id) }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            bg = if (canAdd) D.cyan else Color(0x14FFFFFF),
-            fg = if (canAdd) Color(0xFF0A1A26) else D.faint,
-        )
-    }
-}
-
-/**
- * Панель деталей выбранного живого туннеля по шаблону: тип/bind/destination (только чтение — живой
- * проброс переконфигурировать нельзя, поэтому Save неактивна), live-throughput up/down из счётчиков
- * телеметрии контроллера и рабочая кнопка Remove (снимает проброс). На паузе скорости естественно
- * падают в ноль.
- */
-@Composable
-private fun TunnelDetailLive(entry: ForwardEntry, host: String, mono: FontFamily, onRemove: () -> Unit) {
-    val (badgeBg, badgeFg) = when (entry.direction) {
-        ForwardDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
-        ForwardDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber
-        ForwardDirection.Dynamic -> D.moss.copy(alpha = 0.14f) to D.moss
-    }
-    val isDynamic = entry.direction == ForwardDirection.Dynamic
-    Column(
-        Modifier.width(308.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
-    ) {
-        Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Badge(forwardTypeLabel(entry.direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
-            Txt("Tunnel detail", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            if (entry.paused) {
-                Box(Modifier.weight(1f))
-                Badge("PAUSED", bg = D.amber.copy(alpha = 0.14f), fg = D.amber, radius = 4, size = 9.sp)
             }
-        }
-        FieldLabel("Type")
-        SelectField(directionDisplay(entry.direction))
-        Box(Modifier.padding(bottom = 12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) { FieldLabel("Bind address"); InputField(entry.bindHost, mono) }
-            Column(Modifier.width(70.dp)) { FieldLabel("Port"); InputField(forwardListenPort(entry).toString(), mono) }
-        }
-        if (!isDynamic) {
-            Box(Modifier.padding(bottom = 12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) { FieldLabel("Destination"); InputField(entry.destHost, mono) }
-                Column(Modifier.width(70.dp)) { FieldLabel("Port"); InputField(entry.destPort.toString(), mono) }
-            }
-        } else {
-            Box(Modifier.padding(bottom = 12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) { FieldLabel("Via host"); InputField(host, mono) }
-            }
-        }
-        Box(Modifier.padding(bottom = 16.dp))
-        FieldLabel("Live throughput")
-        ThroughputRow("arrow_upward", D.cyanBright, rateFraction(entry.upRate), humanRate(entry.upRate), mono)
-        Box(Modifier.padding(bottom = 8.dp))
-        ThroughputRow("arrow_downward", D.moss, rateFraction(entry.downRate), humanRate(entry.downRate), mono)
-        Box(Modifier.padding(bottom = 18.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Параметры живого проброса неизменны — Save показан по шаблону, но неактивен.
-            PrimaryButton("Save", onClick = {}, modifier = Modifier.weight(1f), bg = Color(0x14FFFFFF), fg = D.faint)
-            GhostButton("Remove", onClick = onRemove, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
-        }
-    }
+        },
+    )
 }
 
-private fun ForwardDirection.next(): ForwardDirection = when (this) {
-    ForwardDirection.Local -> ForwardDirection.Remote
-    ForwardDirection.Remote -> ForwardDirection.Dynamic
-    ForwardDirection.Dynamic -> ForwardDirection.Local
+private fun directionColors(direction: TunnelDirection): Pair<Color, Color> = when (direction) {
+    TunnelDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
+    TunnelDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber
+    TunnelDirection.Dynamic -> D.moss.copy(alpha = 0.14f) to D.moss
 }
 
-private fun directionDisplay(direction: ForwardDirection): String = when (direction) {
-    ForwardDirection.Local -> "Local forward (-L)"
-    ForwardDirection.Remote -> "Remote forward (-R)"
-    ForwardDirection.Dynamic -> "Dynamic SOCKS (-D)"
+private fun directionBadge(direction: TunnelDirection): String = when (direction) {
+    TunnelDirection.Local -> "LOCAL"
+    TunnelDirection.Remote -> "REMOTE"
+    TunnelDirection.Dynamic -> "SOCKS"
 }
 
-/** Тело без активной подключённой сессии. */
-@Composable
-private fun TunnelsNotice() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("lan", size = 28.sp, color = D.faint)
-            Txt("No active session", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            Txt("Connect a host to set up port forwarding", color = D.faint, size = 11.5.sp)
-        }
-    }
+private fun TunnelDirection.next(): TunnelDirection = when (this) {
+    TunnelDirection.Local -> TunnelDirection.Remote
+    TunnelDirection.Remote -> TunnelDirection.Dynamic
+    TunnelDirection.Dynamic -> TunnelDirection.Local
+}
+
+private fun directionDisplay(direction: TunnelDirection): String = when (direction) {
+    TunnelDirection.Local -> "Local forward (-L)"
+    TunnelDirection.Remote -> "Remote forward (-R)"
+    TunnelDirection.Dynamic -> "Dynamic SOCKS (-D)"
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -402,7 +407,7 @@ private fun MockTunnelsBody() {
             }
             Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Sym("bolt", size = 15.sp, color = D.moss)
-                Txt("2 active tunnels · 1.4 MB forwarded this session", color = D.faint, size = 11.5.sp)
+                Txt("2 active tunnels", color = D.faint, size = 11.5.sp)
             }
         }
         VLine(D.line)
@@ -464,6 +469,9 @@ private fun TunnelDetail() {
             Badge("LOCAL", bg = D.cyan.copy(alpha = 0.12f), fg = D.cyanBright, radius = 4, size = 10.sp)
             Txt("Tunnel detail", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
         }
+        FieldLabel("Name")
+        InputField("web tunnel", mono)
+        Box(Modifier.padding(bottom = 12.dp))
         FieldLabel("Type")
         SelectField("Local forward")
         Box(Modifier.padding(bottom = 12.dp))
@@ -528,7 +536,7 @@ private fun InputField(value: String, mono: FontFamily) {
     }
 }
 
-/** Редактируемое поле формы добавления туннеля (стиль [InputField] + плейсхолдер + ввод). */
+/** Редактируемое поле формы туннеля (стиль [InputField] + плейсхолдер + ввод). */
 @Composable
 private fun EditField(
     value: String,
@@ -538,7 +546,6 @@ private fun EditField(
     keyboardType: KeyboardType = KeyboardType.Text,
 ) {
     val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
-    // Рамка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,

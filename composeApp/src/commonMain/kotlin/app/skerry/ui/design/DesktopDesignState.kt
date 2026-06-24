@@ -12,18 +12,20 @@ import app.skerry.ui.session.SessionView
 enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
 
 /**
- * View уровня приложения (не привязаны к конкретной SSH-сессии): Snippets/Vault/Known/Teams.
- * Они открываются «поверх» вкладок ([DesktopDesignState.appOverlay]) и общие на весь app, тогда
- * как Terminal/SFTP/Ports — подвью активной вкладки ([app.skerry.ui.session.Session.view]).
+ * View уровня приложения (не привязаны к конкретной SSH-сессии): Ports(Tunnels)/Snippets/Vault/
+ * Known/Teams. Они открываются «поверх» вкладок ([DesktopDesignState.appOverlay]) и общие на весь
+ * app, тогда как Terminal/SFTP — подвью активной вкладки ([app.skerry.ui.session.Session.view]).
+ *
+ * Tunnels — глобальный список сохранённых пробросов (модель Termius): туннель самостоятелен и сам
+ * открывает соединение к хосту, поэтому раздел общий, а не часть открытой сессии.
  */
 val DesktopView.isAppLevel: Boolean
-    get() = this == DesktopView.Snippets || this == DesktopView.Vault ||
+    get() = this == DesktopView.Ports || this == DesktopView.Snippets || this == DesktopView.Vault ||
         this == DesktopView.Known || this == DesktopView.Teams
 
 /** DesktopView (rail) → подвью сессии; app-level/Terminal сводятся к Terminal. */
 fun DesktopView.asSessionView(): SessionView = when (this) {
     DesktopView.Sftp -> SessionView.Sftp
-    DesktopView.Ports -> SessionView.Ports
     else -> SessionView.Terminal
 }
 
@@ -31,7 +33,6 @@ fun DesktopView.asSessionView(): SessionView = when (this) {
 fun SessionView.asDesktopView(): DesktopView = when (this) {
     SessionView.Terminal -> DesktopView.Terminal
     SessionView.Sftp -> DesktopView.Sftp
-    SessionView.Ports -> DesktopView.Ports
 }
 
 /** Вкладки панели настроек. */

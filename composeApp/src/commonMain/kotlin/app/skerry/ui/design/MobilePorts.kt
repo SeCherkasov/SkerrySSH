@@ -1,39 +1,24 @@
 package app.skerry.ui.design
 
-import app.skerry.ui.forward.ForwardDirection
-import app.skerry.ui.forward.ForwardEntry
-import app.skerry.ui.forward.ForwardStatus
-import app.skerry.ui.forward.forwardDestText
-
-/**
- * Режим мобильного экрана Port forwarding (`docs/new/Skerry Mobile.html`, секция PORTS). Зеркалит
- * ветвление desktop-`TunnelsView`/мобильного `MobileFilesMode`:
- * - [Preview] — нет менеджера сессий (офскрин-рендер/превью без бэкенда) → статичный мок макета;
- * - [Live] — есть активная подключённая сессия → живые пробросы поверх [app.skerry.ui.forward.PortForwardController];
- * - [NoSession] — менеджер есть, но активная сессия не подключена → уведомление «нет сессии».
- */
-enum class MobilePortsMode { Preview, NoSession, Live }
-
-/** Выбрать режим экрана Ports по наличию менеджера сессий и факту подключения активной сессии. */
-fun mobilePortsMode(hasSessions: Boolean, connected: Boolean): MobilePortsMode = when {
-    !hasSessions -> MobilePortsMode.Preview
-    connected -> MobilePortsMode.Live
-    else -> MobilePortsMode.NoSession
-}
+import app.skerry.shared.tunnel.Tunnel
+import app.skerry.shared.tunnel.TunnelDirection
+import app.skerry.ui.tunnel.TunnelEntry
+import app.skerry.ui.tunnel.TunnelStatus
 
 /** Иконка-стрелка карточки туннеля: динамический (`-D`) → `all_inclusive`, иначе `arrow_forward`. */
-fun mobileTunnelArrow(direction: ForwardDirection): String =
-    if (direction == ForwardDirection.Dynamic) "all_inclusive" else "arrow_forward"
+fun mobileTunnelArrow(direction: TunnelDirection): String =
+    if (direction == TunnelDirection.Dynamic) "all_inclusive" else "arrow_forward"
 
 /**
- * Текст назначения карточки: явный `host:port` ([forwardDestText]) либо `dynamic proxy` для `-D`
- * (у SOCKS фиксированного назначения нет — его задаёт клиент), как в макете.
+ * Текст назначения карточки: явный `host:port` либо `dynamic proxy` для `-D` (у SOCKS фиксированного
+ * назначения нет — его задаёт клиент), как в макете.
  */
-fun mobileTunnelDest(entry: ForwardEntry): String = forwardDestText(entry) ?: "dynamic proxy"
+fun mobileTunnelDest(tunnel: Tunnel): String =
+    if (tunnel.direction == TunnelDirection.Dynamic) "dynamic proxy" else "${tunnel.destHost}:${tunnel.destPort}"
 
-/** Число живых активных туннелей (не на паузе) — для подзаголовка строки Port forwarding в хабе More. */
-fun mobileActiveTunnelCount(forwards: List<ForwardEntry>): Int =
-    forwards.count { it.status is ForwardStatus.Active && !it.paused }
+/** Число активных (включённых) сохранённых туннелей — для подзаголовка строки Port forwarding в More. */
+fun mobileActiveTunnelCount(tunnels: List<TunnelEntry>): Int =
+    tunnels.count { it.status is TunnelStatus.Active }
 
 /**
  * Подзаголовок строки Port forwarding в More: число активных туннелей подключённой сессии, либо

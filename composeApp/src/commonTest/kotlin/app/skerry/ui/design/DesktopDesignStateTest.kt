@@ -36,10 +36,10 @@ class DesktopDesignStateTest {
     @Test
     fun showView_app_level_sets_overlay_keeping_session_view() {
         val s = DesktopDesignState()
-        s.showView(DesktopView.Ports)        // session-вью = Ports
+        s.showView(DesktopView.Sftp)         // session-вью = Sftp
         s.showView(DesktopView.Vault)        // app-level → overlay
         assertEquals(DesktopView.Vault, s.appOverlay)
-        assertEquals(DesktopView.Ports, s.view) // session-вью сохранилась под оверлеем
+        assertEquals(DesktopView.Sftp, s.view) // session-вью сохранилась под оверлеем
     }
 
     @Test
@@ -51,7 +51,7 @@ class DesktopDesignStateTest {
     fun desktopView_isAppLevel_split() {
         assertFalse(DesktopView.Terminal.isAppLevel)
         assertFalse(DesktopView.Sftp.isAppLevel)
-        assertFalse(DesktopView.Ports.isAppLevel)
+        assertTrue(DesktopView.Ports.isAppLevel) // Tunnels — глобальный раздел (модель Termius)
         assertTrue(DesktopView.Snippets.isAppLevel)
         assertTrue(DesktopView.Vault.isAppLevel)
         assertTrue(DesktopView.Known.isAppLevel)

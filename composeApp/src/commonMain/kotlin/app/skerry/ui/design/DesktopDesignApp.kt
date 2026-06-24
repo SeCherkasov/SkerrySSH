@@ -53,6 +53,7 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.vault.VaultGate
 
 /**
@@ -85,6 +86,7 @@ fun DesktopDesignApp(
     knownHosts: KnownHostsController? = null,
     keyGenerator: SshKeyGenerator? = null,
     certificateInspector: SshCertificateInspector? = null,
+    tunnels: TunnelManager? = null,
     features: FeatureFlags = FeatureFlags(),
     // Вызывается один раз после разблокировки vault, до перечитывания списков — точка для миграции
     // данных (схлопывание двухуровневой модели → хост ссылается на keychain-секрет). No-op в мок/превью.
@@ -120,6 +122,7 @@ fun DesktopDesignApp(
         LocalSshCertificateInspector provides certificateInspector,
         LocalCredentials provides credentials,
         LocalTestTransport provides (testTransport ?: transport),
+        LocalTunnels provides tunnels,
         LocalFeatures provides features,
     ) {
         if (vault != null) {
@@ -172,13 +175,19 @@ private fun DesktopChrome(
         }
     }
 
+    // Лок vault должен снять все активные туннели: их соединения держат расшифрованный секрет, и после
+    // запирания висеть им нельзя (zero-knowledge). closeAll идемпотентен; для мок-пути (onLock==null)
+    // оборачивать нечего.
+    val tunnels = LocalTunnels.current
+    val onLockWithTunnels = onLock?.let { lock -> { tunnels?.closeAll(); lock() } }
+
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
         LocalCredentials provides credentials,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             Column(Modifier.fillMaxSize()) {
-                TitleBar(state, onLock)
+                TitleBar(state, onLockWithTunnels)
                 HLine()
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     IconRail(state)
