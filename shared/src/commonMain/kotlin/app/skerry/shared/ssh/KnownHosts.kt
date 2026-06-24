@@ -110,3 +110,22 @@ class TofuHostKeyVerifier(
         }
     }
 }
+
+/**
+ * Верификатор ключа хоста для разовой проверки связи («Test connection»): read-only по отношению к
+ * [store]. Доверенный совпадающий ключ принимается; несовпадение у уже известного хоста отвергается
+ * (защита от MITM на сохранённом хосте); ранее неизвестный хост принимается, но в [store] НЕ
+ * записывается — проба не должна оставлять следов в known_hosts и фиксировать постоянное доверие.
+ * Постоянное доверие ключу закрепляется только при реальном подключении ([TofuHostKeyVerifier]).
+ * Зафиксирован [app.skerry.shared.ssh.ProbeHostKeyVerifierTest].
+ */
+class ProbeHostKeyVerifier(
+    private val store: KnownHostsStore,
+) : HostKeyVerifier {
+    override fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean {
+        val existing = store.all().firstOrNull {
+            it.host == host && it.port == port && it.keyType == keyType
+        }
+        return existing == null || existing.fingerprint == fingerprint
+    }
+}

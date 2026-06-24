@@ -51,6 +51,10 @@ class SshjTransport(
         withContext(Dispatchers.IO) {
             ensureCryptoProvider()
             val client = SSHClient()
+            // TCP connect-timeout: у sshj дефолт 0 = ждать бесконечно. Без него «Test connection» к
+            // несуществующему/закрытому файрволом адресу висит без возможности отмены через UI.
+            // (Протокольный таймаут KEX/I/O — отдельно, дефолт sshj ~30 c; пинг round-trip — свой.)
+            client.connectTimeout = CONNECT_TIMEOUT_MILLIS
             // Согласованный при KEX шифр (client→server) перехватываем верификатором алгоритмов:
             // в sshj 0.40 он вызывается синхронно на IO-потоке внутри connect() (после NEWKEYS, до
             // возврата), а читаем после connect() — нужна потокобезопасная публикация, поэтому
@@ -83,12 +87,12 @@ class SshjTransport(
                 client.connect(target.host, target.port)
             } catch (e: IOException) {
                 client.close()
+                // Адрес хоста в текст сообщения не выносим (логи/краш-репортеры): метаданные коннекта
+                // чувствительны в zero-knowledge клиенте. Диагностический детайл остаётся в cause (e).
                 if (hostKeyRejected.get()) {
-                    throw SshHostKeyRejectedException(
-                        "Ключ хоста ${target.host}:${target.port} отвергнут верификатором",
-                    )
+                    throw SshHostKeyRejectedException("Ключ хоста отвергнут верификатором")
                 }
-                throw SshConnectionException("Не удалось подключиться к ${target.host}:${target.port}", e)
+                throw SshConnectionException("Не удалось установить соединение", e)
             }
 
             try {
@@ -128,6 +132,10 @@ class SshjTransport(
                 .getOrNull()?.takeIf { it.isNotBlank() }?.let { "SSH-2.0-$it" }
             SshjConnection(client, negotiatedCipher.get(), serverVersion)
         }
+
+    private companion object {
+        const val CONNECT_TIMEOUT_MILLIS = 10_000
+    }
 }
 
 /** Один раз на процесс: регистрация полного BouncyCastle (см. [ensureCryptoProvider]). */

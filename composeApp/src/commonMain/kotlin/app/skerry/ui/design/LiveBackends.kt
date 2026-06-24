@@ -81,10 +81,15 @@ val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticC
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
 /**
- * SSH-транспорт для разовых проверок «Test connection» из формы (коннект без открытия сессии). `null`
- * — мок-путь/превью без живого транспорта: кнопка Test недоступна. Поставляется [DesktopDesignApp].
+ * SSH-транспорт ИСКЛЮЧИТЕЛЬНО для разовых проверок «Test connection» из формы (коннект без открытия
+ * сессии). Намеренно отделён от транспорта живых сессий: за ним read-only verifier
+ * ([app.skerry.shared.ssh.ProbeHostKeyVerifier]), который НЕ заносит ключ нового хоста в known_hosts —
+ * проба не должна фиксировать постоянное доверие (это делает только реальный коннект через TOFU).
+ * Поэтому НЕ использовать этот слот для открытия настоящих сессий. `null` — мок-путь/превью без живого
+ * транспорта: кнопка Test недоступна. Поставляется [DesktopDesignApp]; единственный потребитель —
+ * [app.skerry.ui.design.NewConnectionModal].
  */
-val LocalTransport: ProvidableCompositionLocal<SshTransport?> = staticCompositionLocalOf { null }
+val LocalTestTransport: ProvidableCompositionLocal<SshTransport?> = staticCompositionLocalOf { null }
 
 /**
  * Действие «открыть SFTP хоста»: тот же путь подключения, что и [LocalConnectHost] (резолв секрета,

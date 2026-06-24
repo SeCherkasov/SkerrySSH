@@ -12,6 +12,7 @@ import java.awt.GraphicsEnvironment
 import app.skerry.shared.host.FileHostStore
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.FileKnownHostsStore
+import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
@@ -85,6 +86,10 @@ fun main() {
         val transport = SshjTransport(
             TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
         )
+        // «Test connection» из формы — отдельный транспорт с read-only verifier: проба пускает
+        // совпавший доверенный ключ, отвергает смену ключа у известного хоста, а новый хост принимает
+        // БЕЗ записи в known_hosts. Постоянное доверие фиксирует только реальный коннект (TOFU выше).
+        val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
         // Менеджер хостов: профили в hosts.json рядом с known_hosts; id — случайный UUID.
         val hostStore = FileHostStore(dir.resolve("hosts.json"))
@@ -135,6 +140,7 @@ fun main() {
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,
                     transport = deps.transport,
+                    testTransport = probeTransport,
                     credentials = deps.credentials,
                     knownHosts = deps.knownHosts,
                     keyGenerator = deps.keyGenerator,

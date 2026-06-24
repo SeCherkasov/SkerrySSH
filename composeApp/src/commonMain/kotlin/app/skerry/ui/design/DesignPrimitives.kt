@@ -139,7 +139,9 @@ fun AnchoredDropdown(
     // Box оборачивает только триггер (Popup в поток разметки не попадает) → размер Box = размер триггера.
     Box(Modifier.onGloballyPositioned { anchor = it.size }) {
         trigger()
-        if (expanded) {
+        // Гейт по anchor != Zero: до первого замера размер триггера неизвестен и Popup мигнул бы один
+        // кадр в (0,0). Дожидаемся первого onGloballyPositioned, затем показываем под триггером.
+        if (expanded && anchor != IntSize.Zero) {
             Popup(
                 alignment = Alignment.TopStart,
                 offset = IntOffset(0, anchor.height + with(density) { gap.roundToPx() }),

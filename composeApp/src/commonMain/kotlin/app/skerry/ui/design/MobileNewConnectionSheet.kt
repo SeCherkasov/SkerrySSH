@@ -46,7 +46,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 
@@ -401,20 +400,6 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
             else -> {}
         }
     }
-}
-
-/** Человеко-тип keychain-секрета для строки выбора в [MobileAuthPicker]. */
-private fun CredentialSecret.pickerTypeLabel(): String = when (this) {
-    is CredentialSecret.Password -> "Password"
-    is CredentialSecret.PrivateKey -> "SSH key"
-    is CredentialSecret.Certificate -> "Certificate"
-}
-
-/** Material-иконка типа keychain-секрета для строки выбора в [MobileAuthPicker]. */
-private fun CredentialSecret.pickerIcon(): String = when (this) {
-    is CredentialSecret.Password -> "password"
-    is CredentialSecret.PrivateKey -> "key"
-    is CredentialSecret.Certificate -> "workspace_premium"
 }
 
 /** Строка-вариант в дропдауне аутентификации: иконка + название + подпись + галочка выбранного. */

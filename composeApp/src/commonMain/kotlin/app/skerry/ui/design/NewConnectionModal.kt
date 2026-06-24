@@ -25,8 +25,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,7 +49,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
-import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.ConnectionTestController
 import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.toSshAuth
@@ -78,9 +79,12 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
     var tagDraft by remember(editHost) { mutableStateOf("") }
     // «Test connection»: разовый коннект без открытия сессии. Только при живом транспорте (за гейтом vault);
     // в мок/превью tester == null и кнопка недоступна.
-    val transport = LocalTransport.current
+    val transport = LocalTestTransport.current
     val testScope = rememberCoroutineScope()
-    val tester = remember(transport) { transport?.let { ConnectionTestController(it, testScope) } }
+    val tester = remember(transport, testScope) { transport?.let { ConnectionTestController(it, testScope) } }
+    // При смене транспорта (новый tester) или закрытии модалки отменяем in-flight проверку прежнего
+    // tester — иначе осиротевший коннект-пробник тянул бы сеть до своего таймаута.
+    DisposableEffect(tester) { onDispose { tester?.reset() } }
     // Готов ли способ аутентификации для теста — БЕЗ материализации секрета (его собираем только в onClick,
     // чтобы копия пароля/ключа жила лишь на время коннекта, а не весь срок открытой модалки).
     val hasTestSecret = when (form.authMode) {
@@ -150,7 +154,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        form.tags.forEach { tag -> RemovableTagPill(tag) { form.removeTag(tag) } }
+                        form.tags.forEach { tag -> key(tag) { RemovableTagPill(tag) { form.removeTag(tag) } } }
                         TagInput(
                             value = tagDraft,
                             // Запятая фиксирует тег(и) сразу; одиночный тег — по Enter (onCommit).
@@ -229,6 +233,10 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                             )
                             // editHost?.id != null → обновление существующего профиля по месту.
                             state.selectHost(hosts.save(form.toDraft(id = editHost?.id, credentialId = credentialId)))
+                            // Секрет уже запечатан в vault — снимаем ссылки на него из state формы, сокращая
+                            // окно жизни ключа/пароля в куче (String на JVM не занулить на месте, но ссылку
+                            // убираем). Тот же приём, что в мобильном MobileNewConnectionSheet.
+                            form.password = ""; form.privateKeyPem = ""; form.passphrase = ""
                             state.closeModal()
                         }
                     },
@@ -371,20 +379,6 @@ private fun AuthPicker(form: NewConnectionFormState) {
             else -> {}
         }
     }
-}
-
-/** Человеко-тип keychain-секрета для строки выбора в [AuthPicker]. */
-private fun CredentialSecret.pickerTypeLabel(): String = when (this) {
-    is CredentialSecret.Password -> "Password"
-    is CredentialSecret.PrivateKey -> "SSH key"
-    is CredentialSecret.Certificate -> "Certificate"
-}
-
-/** Material-иконка типа keychain-секрета для строки выбора в [AuthPicker]. */
-private fun CredentialSecret.pickerIcon(): String = when (this) {
-    is CredentialSecret.Password -> "password"
-    is CredentialSecret.PrivateKey -> "key"
-    is CredentialSecret.Certificate -> "workspace_premium"
 }
 
 /** Строка-вариант в дропдауне аутентификации: иконка + название + подпись + галочка выбранного. */

@@ -175,16 +175,7 @@ class NewConnectionFormStateTest {
         assertNull(f.resolveCredentialId { error("ask must not save a credential") })
     }
 
-    // --- Теги ---
-
-    @Test
-    fun normalizeTag_strips_hash_trims_lowercases_blank_to_null() {
-        assertEquals("prod", normalizeTag("  #Prod  "))
-        assertEquals("docker", normalizeTag("DOCKER"))
-        assertEquals("db", normalizeTag("# db"))
-        assertNull(normalizeTag("   "))
-        assertNull(normalizeTag("#"))
-    }
+    // --- Теги --- (канонизация одиночного тега — в app.skerry.shared.host.HostTagsTest)
 
     @Test
     fun addTag_normalizes_dedupes_and_keeps_order() {
@@ -200,6 +191,13 @@ class NewConnectionFormStateTest {
         val f = NewConnectionFormState()
         f.addTag("prod, #docker ,, db")
         assertEquals(listOf("prod", "docker", "db"), f.tags)
+    }
+
+    @Test
+    fun addTag_caps_total_count() {
+        val f = NewConnectionFormState()
+        f.addTag((1..50).joinToString(",") { "tag$it" })
+        assertEquals(app.skerry.shared.host.MAX_TAGS_PER_HOST, f.tags.size)
     }
 
     @Test

@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.MAX_TAGS_PER_HOST
+import app.skerry.shared.host.normalizeTag
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 
@@ -16,15 +18,6 @@ import app.skerry.ui.identity.CredentialKind
  *   к нему хост.
  */
 enum class AuthMode { ASK, EXISTING, NEW_PASSWORD, NEW_KEY }
-
-/**
- * Канонизировать тег хоста: trim, снять ведущие `#`, привести к нижнему регистру; пустой результат
- * — `null` (тег не добавляется). Каноническая форма делает фильтрацию по чипсам сравнением строк и
- * исключает дубли «Prod»/«#prod». Чистая функция — зафиксирована
- * [app.skerry.ui.host.NewConnectionFormStateTest].
- */
-fun normalizeTag(raw: String): String? =
-    raw.trim().trimStart('#').trim().lowercase().ifBlank { null }
 
 /**
  * Состояние формы «New connection» (модалка дизайн-слоя): редактируемые поля профиля как
@@ -66,7 +59,8 @@ class NewConnectionFormState {
     fun addTag(raw: String) {
         val additions = raw.split(',').mapNotNull(::normalizeTag)
         if (additions.isEmpty()) return
-        tags = LinkedHashSet(tags).apply { addAll(additions) }.toList()
+        // Кап на число тегов (защита от вставки тысяч меток): сверх [MAX_TAGS_PER_HOST] отбрасываем.
+        tags = LinkedHashSet(tags).apply { addAll(additions) }.take(MAX_TAGS_PER_HOST)
     }
 
     /** Убрать тег (значение уже в канонической форме — то, что отрисовано на пилюле). */

@@ -75,6 +75,10 @@ fun DesktopDesignApp(
     biometrics: VaultBiometrics? = null,
     hosts: HostManagerController? = null,
     transport: SshTransport? = null,
+    // Транспорт для разовой проверки «Test connection»: отдельный от [transport] (живых сессий),
+    // потому что проба НЕ должна заносить ключ хоста в known_hosts (read-only verifier). `null` —
+    // использовать [transport] (офскрин-рендер/превью, где enroll-побочки нет). См. main.kt.
+    testTransport: SshTransport? = null,
     credentials: CredentialManagerController? = null,
     sessions: SessionsController? = null,
     knownHosts: KnownHostsController? = null,
@@ -114,7 +118,7 @@ fun DesktopDesignApp(
         LocalSshKeyGenerator provides keyGenerator,
         LocalSshCertificateInspector provides certificateInspector,
         LocalCredentials provides credentials,
-        LocalTransport provides transport,
+        LocalTestTransport provides (testTransport ?: transport),
         LocalFeatures provides features,
     ) {
         if (vault != null) {
