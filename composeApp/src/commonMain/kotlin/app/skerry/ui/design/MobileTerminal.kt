@@ -17,6 +17,7 @@ fun mobileTerminalStatusText(state: ConnectionUiState?): String = when (state) {
     is ConnectionUiState.Connected -> "connected"
     ConnectionUiState.Connecting -> "connecting…"
     is ConnectionUiState.Error -> "disconnected"
+    is ConnectionUiState.Disconnected -> "disconnected"
     else -> "no session"
 }
 

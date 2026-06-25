@@ -491,7 +491,38 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
             ConnectionUiState.Connecting -> TerminalNotice("sync", "Connecting…", active.subtitle)
             is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
             is ConnectionUiState.Error -> TerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+            // Обрыв: экран застыл на момент потери ([ConnectionUiState.Disconnected.terminal]) — показываем
+            // его под баннером разрыва, чтобы вывод не пропал, а статус (реконнект/сдача) был ясен.
+            is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
+                TerminalScreen(st.terminal, Modifier.fillMaxSize())
+                DisconnectedBanner(st, Modifier.align(Alignment.TopCenter))
+            }
         }
+    }
+}
+
+/**
+ * Плашка-индикатор обрыва поверх застывшего терминала. Пока идёт авто-реконнект — янтарная
+ * «Reconnecting… #N»; когда попытки исчерпаны — закатная «Connection lost».
+ */
+@Composable
+private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: Modifier = Modifier) {
+    val mono = LocalFonts.current.mono
+    val color = if (state.reconnecting) D.amber else D.sunset
+    val icon = if (state.reconnecting) "sync" else "link_off"
+    val text = if (state.reconnecting) "Reconnecting… #${state.attempt}" else "Connection lost"
+    Row(
+        modifier
+            .padding(top = 10.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xCC1A0E0E))
+            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Sym(icon, size = 14.sp, color = color)
+        Txt(text, color = color, size = 11.5.sp, font = mono)
     }
 }
 
@@ -722,6 +753,10 @@ private fun LiveSplitPane(sessions: SessionsController, modifier: Modifier = Mod
                 ConnectionUiState.Connecting -> TerminalNotice("sync", "Connecting…", split.subtitle)
                 is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
                 is ConnectionUiState.Error -> TerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+                is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
+                    TerminalScreen(st.terminal, Modifier.fillMaxSize())
+                    DisconnectedBanner(st, Modifier.align(Alignment.TopCenter))
+                }
             }
         }
     }

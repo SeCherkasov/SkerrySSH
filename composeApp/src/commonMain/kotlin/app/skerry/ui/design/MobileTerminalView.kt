@@ -110,6 +110,10 @@ fun MobileTerminalScreen(state: MobileDesignState) {
             }
             is ConnectionUiState.Error ->
                 MobileTerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+            // Обрыв: застывший экран на момент потери, без keybar (канал мёртв). Статус в шапке —
+            // «disconnected» красным. Детальный мобильный паритет (авто-реконнект) — отдельной задачей.
+            is ConnectionUiState.Disconnected ->
+                TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
         }
     }
 }

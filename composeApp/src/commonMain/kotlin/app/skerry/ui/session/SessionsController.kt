@@ -185,6 +185,17 @@ class SessionsController(
     }
 
     /**
+     * Переставить вкладку с [fromIndex] на позицию [toIndex] (drag-reorder в titlebar, модель Termius).
+     * Оба индекса должны быть валидны; перенос «на место» — no-op. [activeId] адресует вкладку по id,
+     * поэтому активная при переносе не меняется.
+     */
+    fun moveTab(fromIndex: Int, toIndex: Int) {
+        val indices = sessions.indices
+        if (fromIndex !in indices || toIndex !in indices || fromIndex == toIndex) return
+        sessions = sessions.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+    }
+
+    /**
      * Переключить split-область вкладки [id] (по умолчанию активной): нет split → открыть пустую
      * (покажет пикер хостов); есть → закрыть через [closeSplit] (порвав вторичное соединение).
      */

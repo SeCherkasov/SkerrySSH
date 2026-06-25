@@ -24,9 +24,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -207,6 +209,13 @@ private fun DesktopChrome(
             pendingSplitHost = null
             pendingSplitParent = null
             tunnels?.closeAll()
+            // Сессии переживают lock (открытый сокет жить остаётся), но авто-реконнект после lock
+            // переаутентифицировался бы устаревшим секретом на запертом vault — запрещаем его,
+            // сбрасывая сохранённые учётки у всех сессий и их split-панелей (zero-knowledge).
+            sessions?.sessions?.forEach { s ->
+                s.controller.clearReconnectCredentials()
+                s.splitSession?.controller?.clearReconnectCredentials()
+            }
             lock()
         }
     }
@@ -319,7 +328,15 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
             // Живые вкладки из менеджера сессий (за гейтом vault); иначе — мок-вкладки макета.
             val sessions = LocalSessions.current
             if (sessions != null) {
-                sessions.sessions.forEach { s ->
+                // Состояние drag-reorder вкладок (модель Termius): перетаскивание чипов местами.
+                val tabDrag = remember { TabDragState() }
+                // rememberUpdatedState: pointerInput пересоздаётся лишь по ключу tabId, поэтому лямбда
+                // ids() должна читать свежий список через .value, иначе onDragEnd взял бы устаревший
+                // порядок (как сделано для drag хостов).
+                val tabIds = rememberUpdatedState(sessions.sessions.map { it.id })
+                sessions.sessions.forEachIndexed { index, s ->
+                    // Линия вставки перед чипом, над которым сейчас зависла перетаскиваемая вкладка.
+                    if (tabDrag.insertLineIndex == index) TabInsertLine()
                     // При сплите чип показывает сфокусированную панель (модель Termius): имя меняется
                     // при переключении фокуса между основной и split-панелью.
                     val focused = if (s.splitOpen && s.focusedSplit) s.splitSession ?: s else s
@@ -329,9 +346,15 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
                         split = s.splitOpen,
                         active = s.id == sessions.activeId,
                         onClick = { sessions.activate(s.id) },
-                        onClose = { sessions.close(s.id) },
+                        onClose = { tabDrag.clearBounds(s.id); sessions.close(s.id) },
+                        dragging = tabDrag.draggingTabId == s.id,
+                        modifier = Modifier
+                            .tabBoundsAnchor(tabDrag, s.id)
+                            .draggableTab(tabDrag, s.id, ids = { tabIds.value }) { from, to -> sessions.moveTab(from, to) },
                     )
                 }
+                // Линия вставки в самом конце ряда (перенос вкладки в хвост).
+                if (tabDrag.insertLineIndex == sessions.sessions.size) TabInsertLine()
             } else {
                 state.tabs.forEachIndexed { i, tab ->
                     SessionTabChip(tab.name, tab.dot, active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
@@ -383,10 +406,21 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
  * от прежней «вкладки-папки» со скруглением только сверху).
  */
 @Composable
-private fun SessionTabChip(name: String, dot: Color, active: Boolean, onClick: () -> Unit, onClose: () -> Unit, split: Boolean = false) {
+private fun SessionTabChip(
+    name: String,
+    dot: Color,
+    active: Boolean,
+    onClick: () -> Unit,
+    onClose: () -> Unit,
+    split: Boolean = false,
+    dragging: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
     val shape = RoundedCornerShape(8.dp)
     Row(
-        Modifier
+        modifier
+            // Перетаскиваемый чип приглушаем (alpha), чтобы было видно, что он «оторван» от ряда.
+            .alpha(if (dragging) 0.5f else 1f)
             .height(28.dp)
             .clip(shape)
             .background(if (active) D.cyan10 else Color(0x08FFFFFF))
@@ -410,6 +444,12 @@ private fun SessionTabChip(name: String, dot: Color, active: Boolean, onClick: (
         )
         IconBtn("close", onClick = onClose, box = 16, icon = 14.sp, tint = if (active) D.dim else D.faint)
     }
+}
+
+/** Вертикальная линия-индикатор позиции вставки при drag-reorder вкладок (cyan-акцент макета). */
+@Composable
+private fun TabInsertLine() {
+    Box(Modifier.width(2.dp).height(22.dp).clip(RoundedCornerShape(1.dp)).background(D.cyan))
 }
 
 @Composable

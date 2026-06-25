@@ -61,6 +61,12 @@ fun ConnectionScreen(transport: SshTransport, modifier: Modifier = Modifier) {
                 message = state.message,
                 onBack = controller::dismissError,
             )
+
+            // Обрыв соединения: показываем застывший терминал и даём закрыть сессию (вернуться к форме).
+            is ConnectionUiState.Disconnected -> Column(Modifier.fillMaxSize()) {
+                SessionBar(onDisconnect = controller::disconnect)
+                TerminalScreen(state.terminal, Modifier.weight(1f))
+            }
         }
     }
 }

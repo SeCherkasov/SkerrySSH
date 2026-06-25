@@ -13,6 +13,7 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
+import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.terminal.ThroughputController
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
@@ -25,11 +26,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.coroutineContext
 
 /** Состояние экрана подключения. */
 sealed interface ConnectionUiState {
@@ -44,6 +48,22 @@ sealed interface ConnectionUiState {
 
     /** Подключиться не удалось; [message] для показа пользователю. */
     data class Error(val message: String) : ConnectionUiState
+
+    /**
+     * Сессия была установлена, но shell закрылся НЕ по нашей инициативе (EOF/обрыв транспорта). Наш
+     * [disconnect] сюда не приводит — он отменяет session-scope раньше, чем наблюдатель дождётся
+     * закрытия, и переходит в [Form]. [terminal] — застывший экран на момент потери: UI продолжает
+     * показывать его, пока авто-реконнект восстанавливает живую сессию поверх.
+     *
+     * [reconnecting] — идёт ли сейчас попытка авто-реконнекта (true между обрывом и успехом/сдачей);
+     * [attempt] — номер текущей/последней попытки (для баннера «Reconnecting… #N»). После исчерпания
+     * лимита попыток состояние остаётся [Disconnected] с `reconnecting=false` (связь не восстановлена).
+     */
+    data class Disconnected(
+        val terminal: TerminalScreenState,
+        val reconnecting: Boolean,
+        val attempt: Int,
+    ) : ConnectionUiState
 }
 
 /**
@@ -65,6 +85,13 @@ class ConnectionController(
     private val scope: CoroutineScope,
     private val newSessionScope: () -> CoroutineScope = {
         CoroutineScope(SupervisorJob(scope.coroutineContext[Job]) + Dispatchers.Default)
+    },
+    // Политика авто-реконнекта при обрыве (не по нашей инициативе). Лимит попыток защищает от
+    // бесконечного цикла на наглухо упавшем хосте; backoff — экспоненциальный с потолком 30с.
+    // Тесты задают свои значения (нулевой backoff, малый лимит) для детерминизма.
+    private val maxReconnectAttempts: Int = 6,
+    private val reconnectDelayMillis: (attempt: Int) -> Long = { attempt ->
+        minOf(30_000L, 1_000L shl (attempt - 1).coerceIn(0, 16))
     },
 ) {
     var uiState: ConnectionUiState by mutableStateOf(ConnectionUiState.Form)
@@ -88,6 +115,10 @@ class ConnectionController(
         private set
 
     private var connectJob: Job? = null
+    // Цель/учётка последнего connect — для авто-реконнекта после обрыва (переподключаемся к тому же).
+    private var lastTarget: SshTarget? = null
+    private var lastAuth: SshAuth? = null
+    private var reconnectJob: Job? = null
     private var connection: SshConnection? = null
     private var shellChannel: ShellChannel? = null
     private var sessionScope: CoroutineScope? = null
@@ -103,34 +134,49 @@ class ConnectionController(
         // Стартуем только из формы: пока идёт подключение или есть открытая сессия,
         // повторный connect игнорируется — иначе можно утечь scope и соединение.
         if (uiState !is ConnectionUiState.Form) return
+        lastTarget = target
+        lastAuth = auth
         uiState = ConnectionUiState.Connecting
         connectJob = scope.launch {
-            var conn: SshConnection? = null
             try {
-                conn = transport.connect(target, auth)
-                ensureActive()
-                val channel = conn.openShell()
-                ensureActive()
-                val sScope = newSessionScope()
-                connection = conn
-                // ВАЖНО: канал должен быть выставлен ДО uiState = Connected — статус-бар по этому
-                // переходу зовёт openThroughput(), который требует живой shellChannel (иначе бросит).
-                shellChannel = channel
-                cipher = conn.cipher
-                serverVersion = conn.serverVersion
-                sessionScope = sScope
-                uiState = ConnectionUiState.Connected(
-                    TerminalScreenState(ShellTerminalSession(channel, sScope), sScope),
-                )
+                establishSession(target, auth)
             } catch (e: CancellationException) {
-                // disconnect() во время подключения: закрываем полуоткрытое соединение,
-                // uiState уже выставлен в Form самим disconnect().
-                conn?.let(::closeConnectionQuietly)
+                // disconnect() во время подключения: полуоткрытое соединение уже закрыто внутри
+                // establishSession; uiState выставлен в Form самим disconnect().
                 throw e
             } catch (e: Exception) {
-                conn?.let(::closeConnectionQuietly)
                 uiState = ConnectionUiState.Error(e.message ?: "Не удалось подключиться")
             }
+        }
+    }
+
+    /**
+     * Установить живую сессию к [target]/[auth]: открыть соединение и shell, собрать терминал, перейти
+     * в [ConnectionUiState.Connected] и подписать наблюдателя обрыва. При любой ошибке закрывает
+     * полуоткрытое соединение и пробрасывает исключение (вызывающий решает: показать [Error] или
+     * повторить попытку реконнекта). Используется и первичным [connect], и авто-реконнектом.
+     */
+    private suspend fun establishSession(target: SshTarget, auth: SshAuth) {
+        var conn: SshConnection? = null
+        try {
+            conn = transport.connect(target, auth)
+            coroutineContext.ensureActive()
+            val channel = conn.openShell()
+            coroutineContext.ensureActive()
+            val sScope = newSessionScope()
+            connection = conn
+            // ВАЖНО: канал должен быть выставлен ДО uiState = Connected — статус-бар по этому
+            // переходу зовёт openThroughput(), который требует живой shellChannel (иначе бросит).
+            shellChannel = channel
+            cipher = conn.cipher
+            serverVersion = conn.serverVersion
+            sessionScope = sScope
+            val terminal = TerminalScreenState(ShellTerminalSession(channel, sScope), sScope)
+            uiState = ConnectionUiState.Connected(terminal)
+            watchForSessionLoss(terminal, sScope)
+        } catch (e: Exception) {
+            conn?.let(::closeConnectionQuietly)
+            throw e
         }
     }
 
@@ -230,10 +276,101 @@ class ConnectionController(
         ).also { it.start(); ping = it }
     }
 
-    /** Закрыть сессию (если есть) и вернуться к форме. */
+    /** Закрыть сессию (если есть) и вернуться к форме. Отменяет и активный connect, и авто-реконнект. */
     fun disconnect() {
         connectJob?.cancel()
         connectJob = null
+        reconnectJob?.cancel()
+        reconnectJob = null
+        // Сразу отпускаем ссылку на секрет (auth может нести пароль/ключ) — не держим его на heap
+        // дольше жизни соединения.
+        lastAuth = null
+        lastTarget = null
+        releaseSessionResources()
+        uiState = ConnectionUiState.Form
+    }
+
+    /**
+     * Запретить авто-реконнект, НЕ трогая живую сессию: отменяет ожидающий реконнект и сбрасывает
+     * сохранённые цель/учётку. Вызывается при lock vault — открытый сокет остаётся жить (решение
+     * проекта), но новый auth-хендшейк после обрыва на запертом vault недопустим (zero-knowledge):
+     * без [lastAuth] обрыв приведёт в [ConnectionUiState.Disconnected] без попыток, и пользователь
+     * переподключится вручную после разблокировки.
+     */
+    fun clearReconnectCredentials() {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        lastAuth = null
+        lastTarget = null
+    }
+
+    /**
+     * Следить за закрытием shell этой сессии: дождавшись [TerminalState.Closed], запускаем обработку
+     * потери [onSessionLost]. Наблюдатель живёт на session-scope, поэтому наш [disconnect] (отменяющий
+     * этот scope) гасит его ДО прихода Closed — сюда попадаем ТОЛЬКО при обрыве со стороны сервера,
+     * что и отличает ненамеренную потерю (→ авто-реконнект) от намеренного закрытия (→ Form).
+     */
+    private fun watchForSessionLoss(terminal: TerminalScreenState, sScope: CoroutineScope) {
+        sScope.launch {
+            terminal.state.first { it == TerminalState.Closed }
+            // Обработку потери диспатчим в основной [scope] — тот же, где идёт [disconnect]. Иначе
+            // onSessionLost бежал бы на session-scope (Dispatchers.Default), и запись reconnectJob
+            // гонялась бы с чтением/отменой из disconnect на UI-потоке. На одном scope они сериализованы.
+            scope.launch { onSessionLost(terminal) }
+        }
+    }
+
+    /**
+     * Обрыв сессии не по нашей инициативе: освобождаем ресурсы упавшего соединения (оставляя [frozen]
+     * экран для показа) и запускаем авто-реконнект к последним [lastTarget]/[lastAuth]. Гард на
+     * Connected защищает от повторного входа. Без сохранённых цели/учётки реконнект невозможен —
+     * остаёмся в [ConnectionUiState.Disconnected] без попыток.
+     */
+    private fun onSessionLost(frozen: TerminalScreenState) {
+        if (uiState !is ConnectionUiState.Connected) return
+        releaseSessionResources()
+        val target = lastTarget
+        val auth = lastAuth
+        if (target == null || auth == null) {
+            uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
+            return
+        }
+        startReconnect(frozen, target, auth)
+    }
+
+    /**
+     * Цикл авто-реконнекта: до [maxReconnectAttempts] попыток с backoff ([reconnectDelayMillis]) между
+     * ними. На каждой попытке показываем [ConnectionUiState.Disconnected] с `reconnecting=true`, ждём
+     * backoff и пробуем [establishSession] (он сам поставит [ConnectionUiState.Connected] и подпишет
+     * нового наблюдателя обрыва при успехе). Исчерпав лимит, остаёмся в Disconnected с
+     * `reconnecting=false`. Гоняется на основном [scope] (переживает teardown старой сессии); [disconnect]
+     * отменяет [reconnectJob].
+     */
+    private fun startReconnect(frozen: TerminalScreenState, target: SshTarget, auth: SshAuth) {
+        reconnectJob = scope.launch {
+            var attempt = 1
+            while (attempt <= maxReconnectAttempts) {
+                uiState = ConnectionUiState.Disconnected(frozen, reconnecting = true, attempt = attempt)
+                delay(reconnectDelayMillis(attempt))
+                try {
+                    establishSession(target, auth)
+                    return@launch // успех: establishSession перевёл в Connected и переподписал наблюдателя
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    attempt++
+                }
+            }
+            uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = maxReconnectAttempts)
+        }
+    }
+
+    /**
+     * Освободить ресурсы текущего соединения (туннели/SFTP/метрики/поллеры/session-scope/само
+     * соединение), НЕ трогая [uiState]. Общий teardown для [disconnect] (далее → Form) и потери связи
+     * (далее → реконнект). Идемпотентен: повторный вызов на уже очищенном контроллере безопасен.
+     */
+    private fun releaseSessionResources() {
         val conn = connection
         portForwards?.closeAll()
         portForwards = null
@@ -254,7 +391,6 @@ class ConnectionController(
         serverVersion = null
         if (sftp != null) closeSftpQuietly(sftp)
         if (conn != null) closeConnectionQuietly(conn)
-        uiState = ConnectionUiState.Form
     }
 
     /** Сбросить ошибку и вернуться к форме. */
