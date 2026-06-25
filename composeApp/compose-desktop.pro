@@ -24,3 +24,45 @@
 -keepclasseswithmembernames,includedescriptorclasses class * {
     native <methods>;
 }
+
+# --- kotlinx.serialization: сгенерированные сериализаторы и Companion ---
+# Без этих правил ProGuard в release выкидывает/переименовывает синтетические
+# `$serializer` и `Companion` у @Serializable-классов. Тогда Json.encode/decode
+# валится, и vault.json/hosts.json/tunnels.json не читаются: vault на старте
+# показывает форму разблокировки уже существующего файла и падает в «файл
+# повреждён или не читается» (UnlockResult.Corrupted). Правила — канон из README
+# kotlinx.serialization (поддерживаются и ProGuard через `-if`).
+
+# Аннотации сериализации читаются в рантайме.
+-keepattributes RuntimeVisibleAnnotations,AnnotationDefault
+
+# Companion-объект @Serializable-классов (через него резолвится serializer()).
+-if @kotlinx.serialization.Serializable class **
+-keepclassmembers class <1> {
+    static <1>$Companion Companion;
+}
+
+# Метод serializer() на companion-объекте @Serializable-классов.
+-if @kotlinx.serialization.Serializable class ** {
+    static **$* *;
+}
+-keepclassmembers class <2>$<3> {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# serializer() у @Serializable-объектов (object).
+-if @kotlinx.serialization.Serializable class ** {
+    public static ** INSTANCE;
+}
+-keepclassmembers class <1> {
+    public static <1> INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Синтетические $serializer-классы целиком (вместе с дескрипторами полей).
+-keep,includedescriptorclasses class **$$serializer { *; }
+
+# Рантайм kotlinx.serialization не обфусцировать.
+-keep class kotlinx.serialization.** { *; }
+-keepclassmembers class kotlinx.serialization.** { *; }
+-dontwarn kotlinx.serialization.**
