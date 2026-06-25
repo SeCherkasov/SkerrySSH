@@ -39,6 +39,18 @@ class FileHostStore(private val path: Path) : HostStore {
         if (entries.removeAll { it.id == id }) persist()
     }
 
+    @Synchronized
+    override fun reorder(transform: (List<Host>) -> List<Host>) {
+        val updated = transform(entries.toList())
+        require(updated.map { it.id }.toSet() == entries.map { it.id }.toSet()) {
+            // Без самих Host в сообщении — у них есть credentialId.
+            "reorder must preserve the id set (had ${entries.size}, got ${updated.size})"
+        }
+        entries.clear()
+        entries += updated
+        persist()
+    }
+
     private fun persist() {
         path.parent?.let { Files.createDirectories(it) }
         val tmp = path.resolveSibling("${path.fileName}.tmp")

@@ -77,4 +77,23 @@ class HostManagerController(
         store.remove(id)
         hosts = store.all()
     }
+
+    /**
+     * Ручная сортировка (drag-and-drop): переставить хост [hostId] в папку [targetGroup] на позицию
+     * [targetIndexInGroup] среди её хостов. Покрывает и переупорядочивание внутри папки, и перенос в
+     * другую (с переписыванием [Host.group]). Пересчёт — чистой [moveHostToGroup], фиксация — атомарным
+     * [HostStore.replaceAll].
+     */
+    fun moveHost(hostId: String, targetGroup: String?, targetIndexInGroup: Int) {
+        // Пересчёт внутри store.reorder — над актуальным снимком стора под его блокировкой, а не над
+        // (потенциально устаревшим) Compose-state hosts; иначе гонка с конкурентной записью (миграция).
+        store.reorder { moveHostToGroup(it, hostId, targetGroup, targetIndexInGroup) }
+        hosts = store.all()
+    }
+
+    /** Ручная сортировка: переставить целую папку [group] на позицию [targetGroupIndex] среди папок. */
+    fun moveFolder(group: String?, targetGroupIndex: Int) {
+        store.reorder { moveGroup(it, group, targetGroupIndex) }
+        hosts = store.all()
+    }
 }

@@ -6,6 +6,7 @@ import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class FileHostStoreTest {
 
@@ -95,6 +96,39 @@ class FileHostStoreTest {
         file.writeText("{ not json at all ][")
 
         assertEquals(emptyList(), FileHostStore(file).all())
+    }
+
+    @Test
+    fun `reorder rewrites the whole set in the given order and persists`() {
+        val store = FileHostStore(file)
+        store.put(Host("1", "a", "a.local", 22, "u", "Prod"))
+        store.put(Host("2", "b", "b.local", 22, "u", "Prod"))
+
+        // Перенос «b» в начало с новой группой — как делает ручная сортировка.
+        store.reorder {
+            listOf(
+                Host("2", "b", "b.local", 22, "u", "Lab"),
+                Host("1", "a", "a.local", 22, "u", "Prod"),
+            )
+        }
+
+        assertEquals(
+            listOf("2" to "Lab", "1" to "Prod"),
+            FileHostStore(file).all().map { it.id to it.group },
+        )
+    }
+
+    @Test
+    fun `reorder rejects a result that changes the id set`() {
+        val store = FileHostStore(file)
+        store.put(Host("1", "a", "a.local", 22, "u"))
+        store.put(Host("2", "b", "b.local", 22, "u"))
+
+        assertFailsWith<IllegalArgumentException> {
+            store.reorder { it.filter { host -> host.id == "1" } } // потеря «2»
+        }
+        // Файл не тронут — оба профиля на месте.
+        assertEquals(listOf("1", "2"), FileHostStore(file).all().map { it.id })
     }
 
     @Test

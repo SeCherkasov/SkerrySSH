@@ -105,6 +105,47 @@ class HostManagerControllerTest {
     }
 
     @Test
+    fun `moveHost reorders within a folder and persists to the store`() {
+        val store = FakeHostStore(
+            Host("1", "a", "a.local", 22, "u", "Prod"),
+            Host("2", "b", "b.local", 22, "u", "Prod"),
+        )
+        val controller = HostManagerController(store) { "x" }
+
+        controller.moveHost("2", targetGroup = "Prod", targetIndexInGroup = 0)
+
+        assertEquals(listOf("2", "1"), controller.hosts.map { it.id })
+        assertEquals(controller.hosts, store.all())
+    }
+
+    @Test
+    fun `moveHost into another folder rewrites the group`() {
+        val store = FakeHostStore(
+            Host("1", "a", "a.local", 22, "u", "Prod"),
+            Host("2", "x", "x.local", 22, "u", "Lab"),
+        )
+        val controller = HostManagerController(store) { "x" }
+
+        controller.moveHost("1", targetGroup = "Lab", targetIndexInGroup = 1)
+
+        assertEquals(listOf("2", "1"), controller.hosts.map { it.id })
+        assertEquals("Lab", controller.find("1")?.group)
+    }
+
+    @Test
+    fun `moveFolder reorders whole folder blocks`() {
+        val store = FakeHostStore(
+            Host("1", "a", "a.local", 22, "u", "Prod"),
+            Host("2", "x", "x.local", 22, "u", "Lab"),
+        )
+        val controller = HostManagerController(store) { "x" }
+
+        controller.moveFolder("Lab", targetGroupIndex = 0)
+
+        assertEquals(listOf("2", "1"), controller.hosts.map { it.id })
+    }
+
+    @Test
     fun `find returns a host by id or null`() {
         val store = FakeHostStore(Host("1", "a", "a.local", 22, "u"))
         val controller = HostManagerController(store) { "x" }
@@ -127,5 +168,11 @@ private class FakeHostStore(vararg initial: Host) : HostStore {
 
     override fun remove(id: String) {
         entries.removeAll { it.id == id }
+    }
+
+    override fun reorder(transform: (List<Host>) -> List<Host>) {
+        val updated = transform(entries.toList())
+        entries.clear()
+        entries += updated
     }
 }

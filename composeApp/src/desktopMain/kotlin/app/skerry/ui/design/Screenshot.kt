@@ -199,6 +199,11 @@ private fun seededHosts(boundCredentialId: String? = null): HostManagerControlle
         override fun all(): List<Host> = items.values.toList()
         override fun put(host: Host) { items[host.id] = host }
         override fun remove(id: String) { items.remove(id) }
+        override fun reorder(transform: (List<Host>) -> List<Host>) {
+            val updated = transform(items.values.toList())
+            items.clear()
+            updated.forEach { items[it.id] = it }
+        }
     }
     listOf(
         Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production", credentialId = boundCredentialId, tags = listOf("prod", "web")),

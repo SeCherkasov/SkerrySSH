@@ -54,4 +54,9 @@ internal class FakeHostStore : HostStore {
     override fun all(): List<Host> = hosts.values.toList()
     override fun put(host: Host) { hosts[host.id] = host }
     override fun remove(id: String) { hosts.remove(id) }
+    override fun reorder(transform: (List<Host>) -> List<Host>) {
+        val updated = transform(hosts.values.toList())
+        hosts.clear()
+        updated.forEach { hosts[it.id] = it }
+    }
 }
