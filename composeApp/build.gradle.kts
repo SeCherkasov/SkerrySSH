@@ -67,6 +67,13 @@ compose.desktop {
             packageName = "Skerry"
             packageVersion = "1.0.0"
         }
+
+        // Release-дистрибутив гоняет ProGuard. JNA/libsodium ищут методы из нативного
+        // кода по имени — без keep-правил это валит запуск (UnsatisfiedLinkError на
+        // Native.initIDs/dispose). См. compose-desktop.pro.
+        buildTypes.release.proguard {
+            configurationFiles.from(project.file("compose-desktop.pro"))
+        }
     }
 }
 
