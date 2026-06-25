@@ -407,6 +407,50 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
+    // --- Drag-reorder вкладок (привычная модель SSH-клиентов: вкладки можно перетаскивать местами) ---
+
+    @Test
+    fun `moveTab reorders tabs and keeps the active one`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val b = sessions.open(hostId = "host-b")
+        val c = sessions.open(hostId = "host-c")
+        sessions.activate(a)
+
+        sessions.moveTab(fromIndex = 0, toIndex = 2) // a уезжает в конец
+
+        assertEquals(listOf(b, c, a), sessions.sessions.map { it.id })
+        assertEquals(a, sessions.activeId) // активная вкладка не меняется при переносе
+        scope.cancel()
+    }
+
+    @Test
+    fun `moveTab can move a tab to the front`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val b = sessions.open(hostId = "host-b")
+        val c = sessions.open(hostId = "host-c")
+
+        sessions.moveTab(fromIndex = 2, toIndex = 0) // c в начало
+
+        assertEquals(listOf(c, a, b), sessions.sessions.map { it.id })
+        scope.cancel()
+    }
+
+    @Test
+    fun `moveTab ignores out-of-range or no-op moves`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val b = sessions.open(hostId = "host-b")
+
+        sessions.moveTab(fromIndex = 0, toIndex = 0) // на месте
+        sessions.moveTab(fromIndex = 5, toIndex = 0) // мимо
+        sessions.moveTab(fromIndex = 0, toIndex = 9) // за край
+
+        assertEquals(listOf(a, b), sessions.sessions.map { it.id })
+        scope.cancel()
+    }
+
     @Test
     fun `effectiveTabTitle prefers live OSC title over fallback`() {
         assertEquals("vim ~/app", effectiveTabTitle(liveTitle = "vim ~/app", fallback = "web-1"))

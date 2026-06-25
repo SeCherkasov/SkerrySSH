@@ -12,5 +12,8 @@ fun sessionDotColor(state: ConnectionUiState?): Color = when (state) {
     is ConnectionUiState.Connected -> D.moss
     ConnectionUiState.Connecting -> D.amber
     is ConnectionUiState.Error -> D.sunset
+    // Потеря связи: пока идёт авто-реконнект — янтарный (как Connecting, «работаем над этим»); когда
+    // попытки исчерпаны — закатный, как ошибка (живой сессии нет).
+    is ConnectionUiState.Disconnected -> if (state.reconnecting) D.amber else D.sunset
     else -> D.faint
 }
