@@ -193,9 +193,11 @@ fun TerminalScreen(
 
     // Подсчёт кликов мышью для двойного (слово) / тройного (строка) выделения: запоминаем время и
     // позицию предыдущего клика; повтор в той же ячейке за порог времени наращивает счётчик.
-    var clickCount by remember { mutableStateOf(0) }
-    var lastClickMark by remember { mutableStateOf<TimeMark?>(null) }
-    var lastClickPos by remember { mutableStateOf<TerminalPos?>(null) }
+    // Ключ по state — при смене активной вкладки счётчик сбрасывается, иначе первый клик на новой
+    // вкладке в той же позиции и в пределах порога ошибочно посчитался бы двойным/тройным.
+    var clickCount by remember(state) { mutableStateOf(0) }
+    var lastClickMark by remember(state) { mutableStateOf<TimeMark?>(null) }
+    var lastClickPos by remember(state) { mutableStateOf<TerminalPos?>(null) }
 
     // Размер моноширинной ячейки в пикселях — единственный источник правды по геометрии: глифы,
     // фон, выделение, курсор, мышь и маркеры считаются от него арифметикой (col*cellWidth /
@@ -679,7 +681,7 @@ fun TerminalScreen(
                     }
                 }
             }
-            .pointerInput(metrics) {
+            .pointerInput(state, metrics) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     textToolbar.hide()
