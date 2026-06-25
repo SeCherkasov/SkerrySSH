@@ -180,73 +180,128 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
-    @Test
-    fun `starts with no split session`() = runTest {
-        val (sessions, scope) = sessionsWith(FakeTransport())
-        assertNull(sessions.splitId)
-        assertNull(sessions.split)
-        scope.cancel()
-    }
+    // --- Split: независимая вторичная сессия внутри вкладки (привычная модель SSH-клиентов) ---
+
+    private fun SessionsController.connectSplit(parentId: String, hostId: String?) =
+        connectSplit(parentId = parentId, hostId = hostId, title = hostId ?: "", subtitle = "u@h:22", target = target, auth = auth)
 
     @Test
-    fun `setSplit pins a second session shown alongside the active one`() = runTest {
+    fun `a fresh session has no split open and no secondary`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         sessions.open(hostId = "host-a")
-        val b = sessions.open(hostId = "host-b")
-
-        sessions.setSplit(b)
-
-        assertEquals(b, sessions.splitId)
-        assertEquals(b, sessions.split!!.id)
+        assertFalse(sessions.active!!.splitOpen)
+        assertNull(sessions.active!!.splitSession)
+        assertFalse(sessions.active!!.focusedSplit)
         scope.cancel()
     }
 
     @Test
-    fun `setSplit ignores an unknown id`() = runTest {
+    fun `toggleSplit opens then closes the split area on the active session`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         sessions.open(hostId = "host-a")
 
-        sessions.setSplit("does-not-exist")
+        sessions.toggleSplit()
+        assertTrue(sessions.active!!.splitOpen)
+        assertNull(sessions.active!!.splitSession) // пусто — покажет пикер
 
-        assertNull(sessions.splitId)
+        sessions.toggleSplit()
+        assertFalse(sessions.active!!.splitOpen)
         scope.cancel()
     }
 
     @Test
-    fun `setSplit null clears the split`() = runTest {
+    fun `connectSplit attaches an independent secondary session and focuses it`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
-        sessions.setSplit(a)
+        sessions.toggleSplit()
 
-        sessions.setSplit(null)
+        sessions.connectSplit(parentId = a, hostId = "host-b")
 
-        assertNull(sessions.splitId)
-        assertNull(sessions.split)
+        val parent = sessions.active!!
+        assertTrue(parent.splitOpen)
+        val secondary = parent.splitSession!!
+        assertTrue(parent.focusedSplit)
+        assertEquals("host-b", secondary.hostId)
+        // независимый контроллер, отдельный от основной сессии
+        assertTrue(secondary.controller !== parent.controller)
+        assertIs<ConnectionUiState.Connected>(secondary.controller.uiState)
         scope.cancel()
     }
 
     @Test
-    fun `closing the split session clears the split id`() = runTest {
-        val (sessions, scope) = sessionsWith(FakeTransport())
-        sessions.open(hostId = "host-a")
-        val b = sessions.open(hostId = "host-b")
-        sessions.setSplit(b)
-
-        sessions.close(b)
-
-        assertNull(sessions.splitId)
-        scope.cancel()
-    }
-
-    @Test
-    fun `disconnectAll clears the split`() = runTest {
+    fun `connectSplit does not add the secondary session to the tab list`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
-        sessions.setSplit(a)
+        sessions.toggleSplit()
+
+        sessions.connectSplit(parentId = a, hostId = "host-b")
+
+        assertEquals(listOf(a), sessions.sessions.map { it.id }) // вторичная не в баре
+        scope.cancel()
+    }
+
+    @Test
+    fun `closeSplit disconnects the secondary and resets split flags`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        sessions.toggleSplit()
+        sessions.connectSplit(parentId = a, hostId = "host-b")
+        val secondaryConn = transport.connections[1]
+
+        sessions.closeSplit(a)
+
+        val parent = sessions.active!!
+        assertFalse(parent.splitOpen)
+        assertNull(parent.splitSession)
+        assertFalse(parent.focusedSplit)
+        assertTrue(secondaryConn.disconnected)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing a tab disconnects its split session`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        sessions.toggleSplit()
+        sessions.connectSplit(parentId = a, hostId = "host-b")
+        val secondaryConn = transport.connections[1]
+
+        sessions.close(a)
+
+        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(secondaryConn.disconnected)
+        scope.cancel()
+    }
+
+    @Test
+    fun `disconnectAll disconnects split sessions too`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        sessions.toggleSplit()
+        sessions.connectSplit(parentId = a, hostId = "host-b")
 
         sessions.disconnectAll()
 
-        assertNull(sessions.splitId)
+        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(transport.connections.all { it.disconnected }) // и основная, и вторичная
+        scope.cancel()
+    }
+
+    @Test
+    fun `focusPane switches the focused pane`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.toggleSplit()
+        sessions.connectSplit(parentId = a, hostId = "host-b")
+
+        sessions.focusPane(a, split = false)
+        assertFalse(sessions.active!!.focusedSplit)
+
+        sessions.focusPane(a, split = true)
+        assertTrue(sessions.active!!.focusedSplit)
         scope.cancel()
     }
 

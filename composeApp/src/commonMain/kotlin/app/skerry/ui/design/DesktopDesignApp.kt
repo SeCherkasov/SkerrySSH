@@ -160,6 +160,11 @@ private fun DesktopChrome(
 
     // Хост, для которого нет привязанного секрета → спрашиваем пароль перед подключением.
     var pendingHost by remember { mutableStateOf<Host?>(null) }
+    // То же, но подключение пойдёт в split-панель целевой вкладки (а не новой вкладкой). Целевую
+    // вкладку фиксируем в момент выбора хоста, а не submit — иначе при переключении вкладок во время
+    // ввода пароля split откроется не там, где его запросили.
+    var pendingSplitHost by remember { mutableStateOf<Host?>(null) }
+    var pendingSplitParent by remember { mutableStateOf<String?>(null) }
 
     // Стабильная лямбда коннекта: без remember она пересоздавалась бы на каждой рекомпозиции и,
     // уходя в staticCompositionLocalOf, инвалидировала бы всех потребителей [LocalConnectHost].
@@ -175,14 +180,40 @@ private fun DesktopChrome(
         }
     }
 
+    // Тот же резолв, но в split-панель активной вкладки (новая независимая вторичная сессия).
+    val connectSplitHost = remember(sessions, credentials) {
+        { host: Host ->
+            val parentId = sessions?.activeId
+            val credential = credentials?.find(host.credentialId)
+            if (credential != null) {
+                openSplitSession(sessions, parentId, host, credential.toSshAuth())
+            } else {
+                pendingSplitHost = host
+                pendingSplitParent = parentId
+            }
+        }
+    }
+
     // Лок vault должен снять все активные туннели: их соединения держат расшифрованный секрет, и после
     // запирания висеть им нельзя (zero-knowledge). closeAll идемпотентен; для мок-пути (onLock==null)
     // оборачивать нечего.
     val tunnels = LocalTunnels.current
-    val onLockWithTunnels = onLock?.let { lock -> { tunnels?.closeAll(); lock() } }
+    // Лок снимает активные туннели (их соединения держат расшифрованный секрет — zero-knowledge), но
+    // СЕССИИ ВКЛАДОК (включая split) намеренно ПЕРЕЖИВАЮТ lock: после разблокировки терминалы на месте.
+    // Висящие диалоги запроса пароля сбрасываем (не оставлять ввод пароля под lock-экраном).
+    val onLockWithTunnels = onLock?.let { lock ->
+        {
+            pendingHost = null
+            pendingSplitHost = null
+            pendingSplitParent = null
+            tunnels?.closeAll()
+            lock()
+        }
+    }
 
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
+        LocalConnectSplit provides connectSplitHost,
         LocalCredentials provides credentials,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
@@ -205,6 +236,17 @@ private fun DesktopChrome(
                     host = host,
                     onDismiss = { pendingHost = null },
                     onConnect = { pw -> pendingHost = null; openHostSession(sessions, state, host, SshAuth.Password(pw)) },
+                )
+            }
+            pendingSplitHost?.let { host ->
+                DesktopPasswordDialog(
+                    host = host,
+                    onDismiss = { pendingSplitHost = null; pendingSplitParent = null },
+                    onConnect = { pw ->
+                        val parentId = pendingSplitParent
+                        pendingSplitHost = null; pendingSplitParent = null
+                        openSplitSession(sessions, parentId, host, SshAuth.Password(pw))
+                    },
                 )
             }
             // Подтверждение удаления профиля хоста (вызывается из контекстного меню сайдбара).
@@ -238,6 +280,22 @@ private fun openHostSession(sessions: SessionsController?, state: DesktopDesignS
     if (sessions != null) state.clearOverlay() else state.showView(DesktopView.Terminal)
 }
 
+/**
+ * Подключить [host] с [auth] в split-панель активной вкладки (новая независимая вторичная сессия,
+ * привычная модель SSH-клиентов). Без активной вкладки — no-op. См. [SessionsController.connectSplit].
+ */
+private fun openSplitSession(sessions: SessionsController?, parentId: String?, host: Host, auth: SshAuth) {
+    if (sessions == null || parentId == null) return
+    sessions.connectSplit(
+        parentId = parentId,
+        hostId = host.id,
+        title = host.label,
+        subtitle = host.connectionSubtitle(),
+        target = host.toTarget(),
+        auth = auth,
+    )
+}
+
 @Composable
 private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
     Row(
@@ -262,9 +320,13 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
             val sessions = LocalSessions.current
             if (sessions != null) {
                 sessions.sessions.forEach { s ->
+                    // При сплите чип показывает сфокусированную панель (привычная модель SSH-клиентов): имя меняется
+                    // при переключении фокуса между основной и split-панелью.
+                    val focused = if (s.splitOpen && s.focusedSplit) s.splitSession ?: s else s
                     SessionTabChip(
-                        name = s.displayTitle,
-                        dot = sessionDotColor(s.controller.uiState),
+                        name = focused.displayTitle,
+                        dot = sessionDotColor(focused.controller.uiState),
+                        split = s.splitOpen,
                         active = s.id == sessions.activeId,
                         onClick = { sessions.activate(s.id) },
                         onClose = { sessions.close(s.id) },
@@ -321,7 +383,7 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
  * от прежней «вкладки-папки» со скруглением только сверху).
  */
 @Composable
-private fun SessionTabChip(name: String, dot: Color, active: Boolean, onClick: () -> Unit, onClose: () -> Unit) {
+private fun SessionTabChip(name: String, dot: Color, active: Boolean, onClick: () -> Unit, onClose: () -> Unit, split: Boolean = false) {
     val shape = RoundedCornerShape(8.dp)
     Row(
         Modifier
@@ -335,6 +397,8 @@ private fun SessionTabChip(name: String, dot: Color, active: Boolean, onClick: (
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Dot(dot)
+        // Значок split: вкладка держит две панели (привычная модель SSH-клиентов).
+        if (split) Sym("splitscreen_right", size = 13.sp, color = if (active) D.cyan else D.faint)
         Txt(
             name,
             color = if (active) D.text else D.dim,

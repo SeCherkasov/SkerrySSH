@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -31,6 +33,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -54,20 +59,40 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.terminal.TerminalScreen
 
+/** Общая высота шапки панели (основной и split) — чтобы заголовки были вровень. */
+private val PANE_HEADER_HEIGHT = 40.dp
+
 /** Терминальный view: hosts-sidebar + main (toolbar, панели, AI-bar) + info-panel. */
 @Composable
 fun TerminalView(state: DesktopDesignState) {
     Row(Modifier.fillMaxSize()) {
         HostsSidebar(state)
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            SessionToolbar(state)
             Row(Modifier.weight(1f).fillMaxWidth()) {
-                TerminalPane(state, Modifier.weight(1f))
-                if (state.split) {
+                // Живой режим: split привязан к активной вкладке (своя вторичная сессия). Мок/превью —
+                // глобальный флаг макета.
+                val sessions = LocalSessions.current
+                val activeId = sessions?.active?.id
+                val showSplit = if (sessions != null) sessions.active?.splitOpen == true else state.split
+                // В режиме split акцентная рамка (primary cyan) обводит сфокусированную панель — явно
+                // показывает, с какой панелью идёт работа (привычная модель SSH-клиентов). focusedSplit=false → основная.
+                val focusedSplit = sessions?.active?.focusedSplit == true
+                fun paneFocusBorder(focused: Boolean): Modifier =
+                    if (showSplit && focused) Modifier.border(1.dp, D.cyan.copy(alpha = 0.35f)) else Modifier
+                // Пока split открыт — клик по основной панели возвращает ей фокус (заголовок чипа).
+                val primaryMod = Modifier.weight(1f).fillMaxHeight()
+                    .then(if (sessions != null && activeId != null && showSplit) Modifier.focusPaneOnPress(sessions, activeId, split = false) else Modifier)
+                    .then(paneFocusBorder(!focusedSplit))
+                // Основная панель = свой заголовок (тулбар) + терминал, симметрично split-панели: обе
+                // шапки на одном уровне (привычная модель SSH-клиентов), без «перекоса».
+                Column(primaryMod) {
+                    SessionToolbar(state)
+                    TerminalPane(state, Modifier.weight(1f).fillMaxWidth())
+                }
+                if (showSplit) {
                     Box(Modifier.width(1.dp).fillMaxHeight().background(D.cyan14))
-                    // Живой split (за гейтом vault) — вторая сессия с пикером; иначе мок-демо макета.
-                    val sessions = LocalSessions.current
-                    if (sessions != null) LiveSplitPane(sessions, Modifier.weight(1f)) else SplitPane(Modifier.weight(1f))
+                    val splitMod = Modifier.weight(1f).then(paneFocusBorder(focusedSplit))
+                    if (sessions != null) LiveSplitPane(sessions, splitMod) else SplitPane(splitMod)
                 }
                 if (state.infoPanel) InfoPanel()
             }
@@ -272,7 +297,10 @@ private fun LiveHostFolder(
                     ) {
                         HostEntryRow(
                             label = host.label,
-                            selected = sessions?.active?.hostId == host.id,
+                            // Подсветку «хост активной вкладки» убрали (привычная модель SSH-клиентов): при split
+                            // активных хостов два — подсветка одного вводила бы в заблуждение. Статус
+                            // живого соединения по-прежнему показывает точка справа.
+                            selected = false,
                             dot = sessionDotColor(sessions?.statusFor(host.id)),
                             badge = null,
                             onClick = onClick,
@@ -392,18 +420,20 @@ private fun SessionToolbar(state: DesktopDesignState) {
     val active = sessions?.active
     Column {
         Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 8.dp),
+            // Фиксированная высота шапки — общая со split-панелью (PANE_HEADER_HEIGHT), чтобы обе шапки
+            // были вровень независимо от контента (слева крупнее из-за кнопок-иконок).
+            Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).background(D.surface2).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (active != null) {
                     // Живой заголовок: ярлык хоста + user@addr:port + точка состояния соединения.
+                    // Зазоры/паддинги синхронизированы со split-шапкой (LiveSplitPane), чтобы обе панели
+                    // выглядели одинаково.
                     Txt(active.title, color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Txt(active.subtitle, color = D.dim, size = 11.5.sp, font = mono)
-                        Dot(sessionDotColor(active.controller.uiState))
-                    }
+                    Txt(active.subtitle, color = D.dim, size = 11.5.sp, font = mono)
+                    Dot(sessionDotColor(active.controller.uiState))
                 } else if (sessions != null) {
                     // Живой режим без активной сессии: честное пустое состояние, без фейкового хоста.
                     Txt("No active session", color = D.faint, size = 12.sp, font = mono)
@@ -420,7 +450,9 @@ private fun SessionToolbar(state: DesktopDesignState) {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconBtn("splitscreen_right", onClick = state::toggleSplit)
+                // Split: живой режим переключает split АКТИВНОЙ вкладки (своя вторичная сессия);
+                // мок/превью — глобальный флаг макета.
+                IconBtn("splitscreen_right", onClick = { if (sessions != null) sessions.toggleSplit() else state.toggleSplit() })
                 // Переключают подвью АКТИВНОЙ вкладки (живой режим, + сброс оверлея) / мок-фолбэк state.view.
                 IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
                 // Tunnels — глобальный раздел (привычная модель SSH-клиентов), всегда открывается оверлеем.
@@ -633,41 +665,59 @@ private fun AiSuggestionCard() {
 // ──────────────────────────────── split pane ────────────────────────────────
 
 /**
- * Живая split-панель: показывает рядом вторую сессию ([SessionsController.split]). Заголовок —
- * пикер: клик раскрывает список открытых сессий ([Popup]), выбор назначает её в панель
- * ([SessionsController.setSplit]). Тело рендерит терминал выбранной сессии по её состоянию
- * соединения — тем же приёмом, что [LiveTerminalPane]; пока сессия не выбрана — подсказка.
+ * Живая split-панель (привычная модель SSH-клиентов): вторая НЕЗАВИСИМАЯ сессия активной вкладки
+ * ([Session.splitSession], своё соединение/терминал/выделение). Шапка показывает её хост и крестик
+ * закрытия ([SessionsController.closeSplit]); пока хост не выбран — пикер каталога ([SplitHostPicker]),
+ * выбор подключает новую сессию через [LocalConnectSplit]. Клик по телу фокусирует split-панель
+ * (заголовок чипа вкладки следует за фокусом).
  */
 @Composable
 private fun LiveSplitPane(sessions: SessionsController, modifier: Modifier = Modifier) {
     val mono = LocalFonts.current.mono
+    val parent = sessions.active ?: return
     var pickerOpen by remember { mutableStateOf(false) }
-    val split = sessions.split
-    Column(modifier.fillMaxHeight().background(D.terminalBg)) {
-        Box(Modifier.fillMaxWidth().background(D.panel)) {
+    val split = parent.splitSession
+    Column(
+        modifier.fillMaxHeight().background(D.terminalBg)
+            .focusPaneOnPress(sessions, parent.id, split = true),
+    ) {
+        Box(Modifier.fillMaxWidth().background(D.surface2)) {
             Row(
-                Modifier.fillMaxWidth().clickable { pickerOpen = !pickerOpen }.padding(horizontal = 14.dp, vertical = 6.dp),
+                Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Dot(sessionDotColor(split?.controller?.uiState))
-                Txt(
-                    split?.subtitle ?: "Select a session…",
-                    color = if (split != null) D.dim else D.faint,
-                    size = 11.sp, font = mono, modifier = Modifier.weight(1f),
-                )
-                Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+                // Заголовок-селектор как у основной панели: клик раскрывает пикер каталога — выбрать
+                // хост (пусто) или ЗАМЕНИТЬ текущий (connectSplit рвёт прежнюю вторичную сессию).
+                // Зазоры/паддинги совпадают с SessionToolbar — панели выглядят одинаково.
+                Row(
+                    Modifier.weight(1f).clickable { pickerOpen = !pickerOpen },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (split != null) {
+                        Txt(split.title, color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
+                        Txt(split.subtitle, color = D.dim, size = 11.5.sp, font = mono)
+                        Dot(sessionDotColor(split.controller.uiState))
+                        Spacer(Modifier.weight(1f))
+                    } else {
+                        Txt("Select a host…", color = D.faint, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+                    }
+                    Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+                }
+                // Крестик в шапке закрывает split этой вкладки (рвёт вторичное соединение).
+                IconBtn("close", onClick = { sessions.closeSplit(parent.id) }, box = 22)
             }
             if (pickerOpen) {
                 Popup(alignment = Alignment.BottomStart, onDismissRequest = { pickerOpen = false }) {
-                    SplitSessionPicker(sessions, split?.id) { id -> sessions.setSplit(id); pickerOpen = false }
+                    SplitHostPicker { pickerOpen = false }
                 }
             }
         }
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val st = split?.controller?.uiState) {
-                null -> TerminalNotice("splitscreen_right", "No session selected", "Pick a session to show it side by side.")
+                null -> TerminalNotice("splitscreen_right", "No host selected", "Pick a host to open it side by side.")
                 ConnectionUiState.Form -> TerminalNotice("terminal", "Session closed", split.subtitle)
                 ConnectionUiState.Connecting -> TerminalNotice("sync", "Connecting…", split.subtitle)
                 is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
@@ -677,47 +727,60 @@ private fun LiveSplitPane(sessions: SessionsController, modifier: Modifier = Mod
     }
 }
 
-/** Выпадающий список сессий для split-пикера: каждая строка назначает её в панель; «Clear» снимает. */
+/**
+ * Пикер хостов из каталога ([LocalHosts]) для split-панели: клик по хосту открывает в ней новую
+ * независимую сессию через [LocalConnectSplit] (тот же путь резолва секрета, что и у основного
+ * подключения). Вне гейта vault (нет живого каталога) — пусто.
+ */
 @Composable
-private fun SplitSessionPicker(sessions: SessionsController, selectedId: String?, onPick: (String?) -> Unit) {
+private fun SplitHostPicker(onPicked: () -> Unit) {
     val mono = LocalFonts.current.mono
+    val hosts = LocalHosts.current?.hosts ?: emptyList()
+    val connectSplit = LocalConnectSplit.current
     Column(
         Modifier
             .width(240.dp)
+            .heightIn(max = 280.dp)
             .clip(RoundedCornerShape(7.dp))
             .background(D.surface2)
             .border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+            .verticalScroll(rememberScrollState())
             .padding(4.dp),
     ) {
-        sessions.sessions.forEach { s ->
-            val selected = s.id == selectedId
+        if (hosts.isEmpty()) {
+            Txt("No hosts in catalog", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
+        }
+        hosts.forEach { host ->
             Row(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(5.dp))
-                    .background(if (selected) D.cyan10 else Color.Transparent)
-                    .clickable { onPick(s.id) }
+                    .clickable { connectSplit(host); onPicked() }
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Dot(sessionDotColor(s.controller.uiState))
-                Txt(s.title, color = if (selected) D.cyanBright else D.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
-            }
-        }
-        if (selectedId != null) {
-            HLine()
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp)).clickable { onPick(null) }.padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("close", size = 14.sp, color = D.faint)
-                Txt("Clear split", color = D.faint, size = 11.5.sp)
+                Sym("dns", size = 14.sp, color = D.cyanBright)
+                Txt(host.label, color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
             }
         }
     }
 }
+
+/**
+ * Перехват нажатия в [PointerEventPass.Initial] (НЕ потребляя событие): фокусирует панель [split]
+ * вкладки [parentId], чтобы заголовок чипа следовал за активной панелью. Клавиатуру маршрутизирует
+ * сам [TerminalScreen] (свой focusRequester на pointer-down).
+ */
+private fun Modifier.focusPaneOnPress(sessions: SessionsController, parentId: String, split: Boolean): Modifier =
+    this.pointerInput(sessions, parentId, split) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                if (event.type == PointerEventType.Press) sessions.focusPane(parentId, split)
+            }
+        }
+    }
 
 @Composable
 private fun SplitPane(modifier: Modifier = Modifier) {

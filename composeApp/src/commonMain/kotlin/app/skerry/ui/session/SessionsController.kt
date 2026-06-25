@@ -48,6 +48,20 @@ class Session(
         private set
 
     /**
+     * Split (привычная модель SSH-клиентов): вкладка может держать рядом ВТОРУЮ независимую сессию. [splitOpen] —
+     * показана ли split-область (включается кнопкой split на тулбаре); [splitSession] — вторичная
+     * панель со своим [ConnectionController] (своё соединение/терминал/выделение), `null` пока хост
+     * не выбран (тогда панель показывает пикер хостов). [focusedSplit] — какая панель в фокусе
+     * (false=основная, true=split): определяет, какой хост показывает чип вкладки.
+     */
+    var splitOpen: Boolean by mutableStateOf(false)
+        private set
+    var splitSession: Session? by mutableStateOf(null)
+        private set
+    var focusedSplit: Boolean by mutableStateOf(false)
+        private set
+
+    /**
      * Пустая вкладка без сессии: хост не выбран и соединение ещё не запускалось (контроллер в
      * [ConnectionUiState.Form]). Именно такую создаёт кнопка «+»; первое подключение её заполняет.
      * После [ConnectionController.disconnect] вкладка с уже выбранным хостом пустой не становится.
@@ -55,6 +69,10 @@ class Session(
     val isBlank: Boolean get() = hostId == null && controller.uiState is ConnectionUiState.Form
 
     internal fun setView(v: SessionView) { view = v }
+
+    internal fun setSplitOpen(open: Boolean) { splitOpen = open }
+    internal fun setSplitSession(session: Session?) { splitSession = session }
+    internal fun setFocusedSplit(focused: Boolean) { focusedSplit = focused }
 
     /**
      * Заполнить пустую вкладку профилем перед первым подключением (см. [SessionsController.connect]).
@@ -113,17 +131,7 @@ class SessionsController(
     var activeId: String? by mutableStateOf(null)
         private set
 
-    /**
-     * Вторая сессия, показываемая рядом в split-панели терминала (focus-модель: пользователь сам
-     * назначает её через пикер). `null` — split-панель пуста. Может совпадать с активной либо
-     * указывать на любую открытую сессию; сбрасывается, когда выбранная сессия закрывается.
-     */
-    var splitId: String? by mutableStateOf(null)
-        private set
-
     val active: Session? get() = sessions.firstOrNull { it.id == activeId }
-
-    val split: Session? get() = sessions.firstOrNull { it.id == splitId }
 
     /**
      * Открыть новую сессию к [target] и сделать её активной; подключение стартует сразу.
@@ -177,19 +185,49 @@ class SessionsController(
     }
 
     /**
-     * Назначить сессию [id] в split-панель (или `null`, чтобы очистить её). Неизвестный id
-     * игнорируется — в панель нельзя поставить несуществующую сессию.
+     * Переключить split-область вкладки [id] (по умолчанию активной): нет split → открыть пустую
+     * (покажет пикер хостов); есть → закрыть через [closeSplit] (порвав вторичное соединение).
      */
-    fun setSplit(id: String?) {
-        if (id == null || sessions.any { it.id == id }) splitId = id
+    fun toggleSplit(id: String? = activeId) {
+        val tab = sessions.firstOrNull { it.id == id } ?: return
+        if (tab.splitOpen) closeSplit(tab.id) else tab.setSplitOpen(true)
     }
 
-    /** Закрыть сессию [id]: разорвать соединение, убрать вкладку, при необходимости выбрать соседа. */
+    /**
+     * Подключить НОВУЮ независимую вторичную сессию в split-панель вкладки [parentId]: своя
+     * [ConnectionController] (своё соединение/терминал), кладётся в [Session.splitSession] и
+     * получает фокус. Вторичная сессия НЕ попадает в [sessions] — ею владеет родительская вкладка.
+     */
+    fun connectSplit(parentId: String, hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth) {
+        val parent = sessions.firstOrNull { it.id == parentId } ?: return
+        parent.splitSession?.controller?.disconnect() // заменяем прежнюю вторичную, если была
+        val secondary = Session(newId(), hostId, title, subtitle, controllerFactory())
+        parent.setSplitOpen(true)
+        parent.setSplitSession(secondary)
+        parent.setFocusedSplit(true)
+        secondary.controller.connect(target, auth)
+    }
+
+    /** Закрыть split вкладки [id]: порвать вторичное соединение и сбросить split-флаги. */
+    fun closeSplit(id: String) {
+        val tab = sessions.firstOrNull { it.id == id } ?: return
+        tab.splitSession?.controller?.disconnect()
+        tab.setSplitSession(null)
+        tab.setSplitOpen(false)
+        tab.setFocusedSplit(false)
+    }
+
+    /** Сфокусировать панель вкладки [id]: false — основная, true — split. Определяет заголовок чипа. */
+    fun focusPane(id: String, split: Boolean) {
+        sessions.firstOrNull { it.id == id }?.setFocusedSplit(split)
+    }
+
+    /** Закрыть сессию [id]: разорвать соединение (вместе с её split), убрать вкладку, выбрать соседа. */
     fun close(id: String) {
         val index = sessions.indexOfFirst { it.id == id }
         if (index < 0) return
         sessions[index].controller.disconnect()
-        if (splitId == id) splitId = null
+        sessions[index].splitSession?.controller?.disconnect()
         val remaining = sessions.toMutableList().apply { removeAt(index) }
         if (activeId == id) {
             // Сосед справа сместился на освободившийся индекс; иначе берём слева, иначе пусто.
@@ -202,11 +240,13 @@ class SessionsController(
     fun statusFor(hostId: String): ConnectionUiState? =
         sessions.lastOrNull { it.hostId == hostId }?.controller?.uiState
 
-    /** Закрыть все сессии — вызывать при teardown экрана, чтобы не утекли сокеты. */
+    /** Закрыть все сессии (вместе с их split) — вызывать при teardown экрана, чтобы не утекли сокеты. */
     fun disconnectAll() {
-        sessions.forEach { it.controller.disconnect() }
+        sessions.forEach {
+            it.controller.disconnect()
+            it.splitSession?.controller?.disconnect()
+        }
         sessions = emptyList()
         activeId = null
-        splitId = null
     }
 }

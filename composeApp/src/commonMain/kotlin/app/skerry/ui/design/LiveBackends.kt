@@ -82,6 +82,13 @@ val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticC
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
 /**
+ * Действие «открыть хост в split-панели активной вкладки»: тот же резолв секрета, что и
+ * [LocalConnectHost], но открывает НОВУЮ независимую вторичную сессию рядом (привычная модель SSH-клиентов), а не
+ * новую вкладку. Поставляется [DesktopDesignApp]; дефолт — no-op (мок-путь/превью).
+ */
+val LocalConnectSplit: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
+
+/**
  * SSH-транспорт ИСКЛЮЧИТЕЛЬНО для разовых проверок «Test connection» из формы (коннект без открытия
  * сессии). Намеренно отделён от транспорта живых сессий: за ним read-only verifier
  * ([app.skerry.shared.ssh.ProbeHostKeyVerifier]), который НЕ заносит ключ нового хоста в known_hosts —
