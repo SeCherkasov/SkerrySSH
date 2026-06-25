@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,13 +22,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -42,6 +46,7 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.shortCipher
 import kotlin.math.roundToInt
 import app.skerry.ui.host.HostFolder
+import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.groupHostsByFolder
 import app.skerry.ui.metrics.HostMetrics
 import app.skerry.ui.metrics.formatUptime
@@ -78,6 +83,8 @@ fun TerminalView(state: DesktopDesignState) {
 private fun HostsSidebar(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
     val liveHosts = LocalHosts.current
+    // Состояние ручной сортировки (drag-and-drop) живого каталога; в мок-пути не используется.
+    val dragState = remember { HostDragState() }
     // Активный фильтр-чип (тег). Только для живого каталога; в мок-пути чипсы из макета статичны.
     var activeChip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
     val chips = liveHosts?.let { remember(it.hosts) { hostTagChips(it.hosts) } } ?: emptyList()
@@ -131,7 +138,19 @@ private fun HostsSidebar(state: DesktopDesignState) {
                 val folders = remember(liveHosts.hosts, effectiveChip) {
                     groupHostsByFolder(filterHosts(liveHosts.hosts, effectiveChip))
                 }
-                folders.forEach { folder -> LiveHostFolder(folder, state, mono) }
+                // Свежий список папок для drag-целей (жест фиксируется по ключу строки/папки).
+                val foldersUpdated = rememberUpdatedState(folders)
+                // Линия вставки при перетаскивании папки: перед папкой на целевом индексе (или в конце).
+                val otherFolders = folders.filter { it.name != dragState.draggingFolderName }
+                val folderLineIndex = dragState.draggingFolderName?.let { dragState.activeFolderDropIndex }
+                val folderLineBefore = folderLineIndex?.takeIf { it < otherFolders.size }?.let { otherFolders[it].name }
+                folders.forEach { folder ->
+                    key(folder.name) {
+                        if (folder.name == folderLineBefore) DropLine()
+                        LiveHostFolder(folder, state, mono, dragState, liveHosts) { foldersUpdated.value }
+                    }
+                }
+                if (folderLineIndex != null && folderLineIndex == otherFolders.size) DropLine()
             } else {
                 HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }
             }
@@ -188,39 +207,101 @@ private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, mono: Fo
  * хосту запускает подключение ([LocalConnectHost]); точка статуса и подсветка берутся из живых
  * сессий ([LocalSessions]) — хост подсвечен, если он у активной вкладки, цвет точки = состояние
  * соединения свежайшей его сессии.
+ *
+ * Ручная сортировка ([dragState]): заголовок папки перетаскивается для смены порядка папок, строки
+ * хостов — для переупорядочивания внутри папки и переноса в другую (см. [HostSidebarDnd]). Сброс
+ * фиксируется через [controller]; [foldersProvider] отдаёт свежий список папок на момент жеста.
  */
 @Composable
-private fun LiveHostFolder(folder: HostFolder, state: DesktopDesignState, mono: FontFamily) {
+private fun LiveHostFolder(
+    folder: HostFolder,
+    state: DesktopDesignState,
+    mono: FontFamily,
+    dragState: HostDragState,
+    controller: HostManagerController,
+    foldersProvider: () -> List<HostFolder>,
+) {
     val sessions = LocalSessions.current
     val connect = LocalConnectHost.current
-    Column(Modifier.padding(bottom = 2.dp)) {
-        FolderHeader(folder.name, folder.hosts.size)
+    val group = folder.hosts.firstOrNull()?.group
+    // Подсветка целевой папки, пока над ней тащат хост.
+    val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
+    val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
+    // Линия вставки внутри папки: индекс считается без перетаскиваемого хоста (как moveHostToGroup),
+    // поэтому к визуальным строкам он привязывается по соседям из того же отфильтрованного списка.
+    val others = folder.hosts.filter { it.id != dragState.draggingHostId }
+    val dropIndex = if (isDropTarget) dragState.activeHostDrop?.index?.coerceIn(0, others.size) else null
+    val lineBeforeId = dropIndex?.takeIf { it < others.size }?.let { others[it].id }
+    Column(
+        Modifier
+            .padding(bottom = 2.dp)
+            .alpha(folderAlpha)
+            .clip(RoundedCornerShape(6.dp))
+            // После clip — bounds совпадают с видимой (скруглённой) областью папки, а не с её углами.
+            .folderRangeAnchor(dragState, folder.name)
+            .border(1.dp, if (isDropTarget) D.cyan else Color.Transparent, RoundedCornerShape(6.dp)),
+    ) {
+        Box(
+            Modifier.folderHeaderAnchor(dragState, folder.name)
+                .draggableFolderHeader(dragState, folder.name, foldersProvider) { index ->
+                    controller.moveFolder(group, index)
+                },
+        ) {
+            FolderHeader(folder.name, folder.hosts.size)
+        }
         Column(Modifier.padding(start = 22.dp)) {
             // key(host.id): позиционная идентичность строк фиксируется на хосте — открытое меню/состояние
             // строки не «переезжает» на соседа при переупорядочивании каталога после правки.
             folder.hosts.forEach { host ->
                 key(host.id) {
+                    if (host.id == lineBeforeId) DropLine()
                     // Лямбды стабилизируем по (host, …): иначе каждая рекомпозиция папки пересоздавала бы
                     // их и заставляла строку (nullable-функции нестабильны) перерисовываться впустую.
                     val onClick = remember(host, connect) { { connect(host) } }
                     val onEdit = remember(host, state) { { state.openEditModal(host) } }
                     val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
-                    HostEntryRow(
-                        label = host.label,
-                        selected = sessions?.active?.hostId == host.id,
-                        dot = sessionDotColor(sessions?.statusFor(host.id)),
-                        badge = null,
-                        onClick = onClick,
-                        mono = mono,
-                        // Правка/удаление профиля — через контекстное меню (right-click/long-press),
-                        // как в шаблоне без отдельных кнопок/⋮.
-                        onEdit = onEdit,
-                        onDelete = onDelete,
-                    )
+                    // Забываем геометрию строки, когда хост уходит из списка (удаление/фильтр).
+                    DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
+                    Box(
+                        Modifier
+                            .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
+                            .hostBoundsAnchor(dragState, host.id)
+                            .draggableHostRow(dragState, host.id, foldersProvider) { drop ->
+                                controller.moveHost(host.id, drop.group, drop.index)
+                            },
+                    ) {
+                        HostEntryRow(
+                            label = host.label,
+                            selected = sessions?.active?.hostId == host.id,
+                            dot = sessionDotColor(sessions?.statusFor(host.id)),
+                            badge = null,
+                            onClick = onClick,
+                            mono = mono,
+                            // Правка/удаление профиля — через контекстное меню (right-click/long-press),
+                            // как в шаблоне без отдельных кнопок/⋮.
+                            onEdit = onEdit,
+                            onDelete = onDelete,
+                        )
+                    }
                 }
             }
+            // Сброс в конец папки — линия после последней строки.
+            if (dropIndex != null && dropIndex == others.size) DropLine()
         }
     }
+}
+
+/** Cyan-линия-индикатор позиции, куда вставится перетаскиваемый хост/папка. */
+@Composable
+private fun DropLine() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(end = 8.dp, top = 2.dp, bottom = 2.dp)
+            .height(2.dp)
+            .clip(RoundedCornerShape(1.dp))
+            .background(D.cyan),
+    )
 }
 
 @Composable
