@@ -63,6 +63,11 @@ class DesktopDesignState(
     // сохраняют прежнее поведение для мок/превью/тестов.
     initialInfoPanel: Boolean = true,
     private val onInfoPanelChange: (Boolean) -> Unit = {},
+    // Схлопнутые папки хостов в сайдбаре (имена групп). Стартовое значение читается из персиста при
+    // запуске, колбэк пишет его обратно — состояние папок переживает перезапуск. Дефолты (всё
+    // развёрнуто, no-op) сохраняют прежнее поведение для мок/превью/тестов.
+    initialCollapsedGroups: Set<String> = emptySet(),
+    private val onCollapsedGroupsChange: (Set<String>) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -81,6 +86,9 @@ class DesktopDesignState(
     var settingsTab: SettingsTab by mutableStateOf(SettingsTab.AI); private set
     var split: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
+
+    /** Имена схлопнутых папок хостов в сайдбаре (свёрнут список их хостов). */
+    var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
     var selectedHost: String by mutableStateOf("prod-web-01"); private set
     var activeTab: Int by mutableStateOf(0); private set
     var modalPolicy: AiPolicy by mutableStateOf(AiPolicy.Strict); private set
@@ -158,6 +166,15 @@ class DesktopDesignState(
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
+
+    /** Свёрнута ли папка [name] (её список хостов скрыт). */
+    fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
+
+    /** Свернуть/развернуть папку [name] и сообщить новый набор наружу (для персиста). */
+    fun toggleGroupCollapsed(name: String) {
+        collapsedGroups = if (name in collapsedGroups) collapsedGroups - name else collapsedGroups + name
+        onCollapsedGroupsChange(collapsedGroups)
+    }
     fun toggleSanitize() { sanitize = !sanitize }
     fun togglePreview() { preview = !preview }
     fun toggleConfirm() { confirm = !confirm }

@@ -191,4 +191,33 @@ class DesktopDesignStateTest {
         assertEquals(listOf(false, true), seen)
         assertTrue(s.infoPanel)
     }
+
+    // --- Персист схлопнутых групп хостов ---
+
+    @Test
+    fun collapsed_groups_default_empty() {
+        val s = DesktopDesignState()
+        assertTrue(s.collapsedGroups.isEmpty())
+        assertFalse(s.isGroupCollapsed("Uran SecureNet"))
+    }
+
+    @Test
+    fun collapsed_groups_honour_initial_value() {
+        val s = DesktopDesignState(initialCollapsedGroups = setOf("Uran SecureNet"))
+        assertTrue(s.isGroupCollapsed("Uran SecureNet"))
+        assertFalse(s.isGroupCollapsed("Other"))
+    }
+
+    @Test
+    fun toggleGroupCollapsed_flips_membership_and_reports_to_callback() {
+        val seen = mutableListOf<Set<String>>()
+        val s = DesktopDesignState(onCollapsedGroupsChange = { seen += it })
+        s.toggleGroupCollapsed("A") // добавили
+        assertTrue(s.isGroupCollapsed("A"))
+        s.toggleGroupCollapsed("B") // добавили вторую
+        s.toggleGroupCollapsed("A") // убрали первую
+        assertFalse(s.isGroupCollapsed("A"))
+        assertTrue(s.isGroupCollapsed("B"))
+        assertEquals(listOf(setOf("A"), setOf("A", "B"), setOf("B")), seen)
+    }
 }

@@ -200,15 +200,24 @@ private fun HostsSidebar(state: DesktopDesignState) {
     }
 }
 
-/** Заголовок папки хостов: стрелка + иконка + имя + счётчик. */
+/**
+ * Заголовок папки хостов: шеврон-кнопка свёртки + иконка + имя + счётчик. Шеврон ([collapsed] →
+ * `chevron_right`, иначе `expand_more`) кликабелен и переключает свёрнутость папки ([onToggle]) —
+ * клик ловится строго на иконке, чтобы не мешать drag-перетаскиванию заголовка (reorder папок).
+ */
 @Composable
-private fun FolderHeader(name: String, count: Int) {
+private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Sym("expand_more", size = 16.sp, color = D.faint)
+        Box(
+            Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
+            contentAlignment = Alignment.Center,
+        ) {
+            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = D.faint)
+        }
         Sym("folder_open", size = 15.sp, color = D.cyanBright)
         Txt(name, color = D.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
@@ -219,10 +228,14 @@ private fun FolderHeader(name: String, count: Int) {
 
 @Composable
 private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, mono: FontFamily) {
+    val collapsed = state.isGroupCollapsed(group.name)
+    val onToggleCollapsed = remember(state, group.name) { { state.toggleGroupCollapsed(group.name) } }
     Column(Modifier.padding(bottom = 2.dp)) {
-        FolderHeader(group.name, group.hosts.size)
-        Column(Modifier.padding(start = 22.dp)) {
-            group.hosts.forEach { host -> HostRow(host, state, mono) }
+        FolderHeader(group.name, group.hosts.size, collapsed, onToggleCollapsed)
+        if (!collapsed) {
+            Column(Modifier.padding(start = 22.dp)) {
+                group.hosts.forEach { host -> HostRow(host, state, mono) }
+            }
         }
     }
 }
@@ -249,6 +262,10 @@ private fun LiveHostFolder(
     val sessions = LocalSessions.current
     val connect = LocalConnectHost.current
     val group = folder.hosts.firstOrNull()?.group
+    val collapsed = state.isGroupCollapsed(folder.name)
+    // Лямбду свёртки стабилизируем по (state, имя папки) — как и прочие лямбды строк ниже: иначе при
+    // каждой рекомпозиции папки (а во время любого drag это каждый кадр) заголовок перерисовывался бы.
+    val onToggleCollapsed = remember(state, folder.name) { { state.toggleGroupCollapsed(folder.name) } }
     // Подсветка целевой папки, пока над ней тащат хост.
     val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
     val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
@@ -272,9 +289,10 @@ private fun LiveHostFolder(
                     controller.moveFolder(group, index)
                 },
         ) {
-            FolderHeader(folder.name, folder.hosts.size)
+            FolderHeader(folder.name, folder.hosts.size, collapsed, onToggleCollapsed)
         }
-        Column(Modifier.padding(start = 22.dp)) {
+        // Свёрнутая папка показывает только заголовок; список хостов (и его drag-цели) скрыт.
+        if (!collapsed) Column(Modifier.padding(start = 22.dp)) {
             // key(host.id): позиционная идентичность строк фиксируется на хосте — открытое меню/состояние
             // строки не «переезжает» на соседа при переупорядочивании каталога после правки.
             folder.hosts.forEach { host ->
