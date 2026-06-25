@@ -34,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -75,6 +76,27 @@ private fun writeInfoPanel(dir: Path, visible: Boolean) {
     runCatching {
         Files.createDirectories(dir)
         Files.writeString(dir.resolve("info_panel"), if (visible) "1" else "0")
+    }
+}
+
+/**
+ * Свёрнутые папки хостов сайдбара, переживающие перезапуск: имена групп хранятся в файле
+ * `collapsed_groups` по одному на строку рядом с прочей конфигурацией. Отсутствует/нечитаем →
+ * пусто (все папки развёрнуты, как в макете). Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readCollapsedGroups(dir: Path): Set<String> {
+    val file = dir.resolve("collapsed_groups")
+    return runCatching {
+        Files.readAllLines(file, StandardCharsets.UTF_8).map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }.getOrDefault(emptySet())
+}
+
+private fun writeCollapsedGroups(dir: Path, groups: Set<String>) {
+    runCatching {
+        Files.createDirectories(dir)
+        // Имена с переносами строк не хранимы построчно — исключаем их, чтобы файл не «расщепился»
+        // при readAllLines (он рвёт строки и по \n, и по \r, и по \r\n).
+        Files.writeString(dir.resolve("collapsed_groups"), groups.filterNot { it.contains('\n') || it.contains('\r') }.joinToString("\n"))
     }
 }
 
@@ -154,6 +176,8 @@ fun main() {
                 app.skerry.ui.design.DesktopDesignApp(
                     initialInfoPanel = readInfoPanel(dir),
                     onInfoPanelChange = { writeInfoPanel(dir, it) },
+                    initialCollapsedGroups = readCollapsedGroups(dir),
+                    onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,

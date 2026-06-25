@@ -74,7 +74,12 @@ fun DesktopDesignApp(
     // Видимость info-панели персистится снаружи (desktop main): стартовое значение + колбэк записи.
     initialInfoPanel: Boolean = true,
     onInfoPanelChange: (Boolean) -> Unit = {},
-    state: DesktopDesignState = remember { DesktopDesignState(initialInfoPanel, onInfoPanelChange) },
+    // Схлопнутые папки хостов — так же персистятся снаружи (desktop main): стартовый набор + колбэк записи.
+    initialCollapsedGroups: Set<String> = emptySet(),
+    onCollapsedGroupsChange: (Set<String>) -> Unit = {},
+    state: DesktopDesignState = remember {
+        DesktopDesignState(initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange)
+    },
     vault: Vault? = null,
     biometrics: VaultBiometrics? = null,
     hosts: HostManagerController? = null,
