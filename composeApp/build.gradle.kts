@@ -68,10 +68,21 @@ compose.desktop {
             packageVersion = "1.0.0"
         }
 
-        // Release-дистрибутив гоняет ProGuard. JNA/libsodium ищут методы из нативного
-        // кода по имени — без keep-правил это валит запуск (UnsatisfiedLinkError на
-        // Native.initIDs/dispose). См. compose-desktop.pro.
+        // ProGuard для release ОТКЛЮЧЁН осознанно. Для крипто-стека этого SSH-клиента
+        // минификация давала только release-only поломки, неустранимые в рамках .pro:
+        //   1) JNA/libsodium — рефлексивный доступ из нативного кода (UnsatisfiedLinkError);
+        //   2) okio — оптимизация специализировала тип возврата → VerifyError «Bad return
+        //      type» на первом же чтении файла (выглядело как «Storage is damaged»);
+        //   3) BouncyCastle — ленивая регистрация провайдера «BC» не срабатывала → NPE;
+        //   4) BouncyCastle — bcprov это ПОДПИСАННЫЙ jar: ProGuard переписывает байткод
+        //      классов, но тащит старый META-INF с подписью → JarVerifier роняет
+        //      «SHA-256 digest error for .../BouncyCastleProvider.class». Снять подпись
+        //      чужого jar чисто через .pro нельзя (это фильтры -injars Compose-плагина).
+        // Размер дистрибутива для desktop-приложения некритичен; корректность крипты —
+        // критична. Так release ведёт себя как debug. Правила сохранены в compose-desktop.pro
+        // на случай повторного включения (тогда потребуется обработка подписи bcprov).
         buildTypes.release.proguard {
+            isEnabled.set(false)
             configurationFiles.from(project.file("compose-desktop.pro"))
         }
     }

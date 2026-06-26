@@ -165,13 +165,18 @@ internal fun ensureCryptoProvider() {
     if (cryptoProviderReady) return
     synchronized(cryptoProviderLock) {
         if (cryptoProviderReady) return
-        val onAndroid = runCatching { Class.forName("android.os.Build") }.isSuccess
-        if (onAndroid) {
-            val existing = Security.getProvider("BC")
-            if (existing == null || existing.javaClass != BouncyCastleProvider::class.java) {
-                Security.removeProvider("BC")
-                Security.insertProviderAt(BouncyCastleProvider(), 1)
-            }
+        // Явно ставим полный bcprov-провайдер «BC» первым на ОБЕИХ платформах — единообразно,
+        // не полагаясь на ленивую саморегистрацию sshj:
+        // - Android: системный «BC» урезан (com.android.org.bouncycastle) — не хватает шифров/KEX,
+        //   его обязательно нужно заместить полным bcprov.
+        // - Desktop: подстраховка — если «BC» отсутствует или это не наш bcprov, sshj.DefaultConfig
+        //   .initCipherFactories запросит шифр через несуществующий «BC» → NoSuchProviderException
+        //   (cause=null) → NPE рушит SSHClient(); ставим провайдер заранее, чтобы этого не случилось.
+        // В обоих случаях ставим полный провайдер первым, если текущий «BC» — не наш bcprov.
+        val existing = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
+        if (existing == null || existing.javaClass != BouncyCastleProvider::class.java) {
+            Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+            Security.insertProviderAt(BouncyCastleProvider(), 1)
         }
         cryptoProviderReady = true
     }

@@ -3,6 +3,18 @@
 # ищут из нативного кода по имени через рефлексию (Native.initIDs → dispose),
 # что валит запуск: UnsatisfiedLinkError "Can't obtain static method dispose".
 
+# --- okio (файловый I/O: vault/hosts/tunnels/known_hosts) ---
+# ПЕРВОПРИЧИНА «Storage is damaged» в release: ProGuard-оптимизация специализировала
+# тип возврата okio (создавала `Okio.buffer$...` с возвратом RealBufferedSource при теле,
+# отдающем BufferedSource) → JVM роняла класс VerifyError «Bad return type» на ПЕРВОМ же
+# чтении файла (`fileSystem.read` в FileVault.unlock), что выглядело как битый vault.
+# Keep сохраняет API okio, а отключение специализации типов/слияния классов убирает
+# источник VerifyError (эти оптимизации systematically ломают okio-байткод).
+-keep class okio.** { *; }
+-keepclassmembers class okio.** { *; }
+-dontwarn okio.**
+-optimizations !method/specialization/*,!class/merging/*
+
 # --- JNA: нативные методы и рефлексия из C-кода ---
 -keep class com.sun.jna.** { *; }
 -keepclassmembers class com.sun.jna.** { *; }
@@ -24,6 +36,32 @@
 -keepclasseswithmembernames,includedescriptorclasses class * {
     native <methods>;
 }
+
+# --- SSH-стек: sshj + BouncyCastle (крипто) ---
+# Без этих правил release-сборка коннектится с ошибкой вида
+# «Cannot invoke java.lang.Throwable.getMessage() because getCause() is null»:
+# sshj резолвит фабрики шифров/KEX/подписей и крипто-провайдер BouncyCastle по
+# именам классов через рефлексию (SecurityUtils → Class.forName(BouncyCastleProvider),
+# Factory.Named). ProGuard переименовывает/выкидывает эти классы — согласование
+# алгоритмов падает, реальное исключение теряет cause, и наверх всплывает голый NPE.
+# BouncyCastle регистрируется как JCE-провайдер и грузит алгоритмы рефлексивно —
+# трогать его внутренности нельзя.
+-keep class org.bouncycastle.** { *; }
+-keepclassmembers class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**
+
+# sshj и его ASN.1-стек (com.hierynomus:asn-one). Пакеты net.schmizz.keepalive
+# и net.schmizz.concurrent — соседи net.schmizz.sshj, а не подпакеты, поэтому
+# берём весь net.schmizz.** (иначе KeepAliveProvider/Event/Promise теряются).
+-keep class net.schmizz.** { *; }
+-keepclassmembers class net.schmizz.** { *; }
+-keep class com.hierynomus.** { *; }
+-keepclassmembers class com.hierynomus.** { *; }
+-dontwarn net.schmizz.**
+-dontwarn com.hierynomus.**
+
+# slf4j: фасад логирования sshj/BouncyCastle (без биндинга в дистрибутиве — no-op).
+-dontwarn org.slf4j.**
 
 # --- kotlinx.serialization: сгенерированные сериализаторы и Companion ---
 # Без этих правил ProGuard в release выкидывает/переименовывает синтетические
@@ -66,3 +104,18 @@
 -keep class kotlinx.serialization.** { *; }
 -keepclassmembers class kotlinx.serialization.** { *; }
 -dontwarn kotlinx.serialization.**
+
+# --- Наши @Serializable-модели целиком ---
+# Канонических правил выше хватает для большинства моделей (hosts.json/tunnels.json
+# читаются), но НЕ для vault: `VaultFileBody`/`VaultMeta` — internal data class, а
+# `RecordType` — @Serializable enum (его сериализатор kotlinx кэширует в синтетических
+# членах самого enum-класса — `$$serializer`/Companion-правила их не держат). В release
+# ProGuard ломал именно decode VaultFileBody → vault показывал «Storage is damaged»
+# даже на свежесозданном файле (decode при этом успешно проходит в debug). Модели
+# приложения малы — держим их и сгенерированные сериализаторы целиком.
+-keep @kotlinx.serialization.Serializable class app.skerry.** { *; }
+-keepclassmembers class app.skerry.** {
+    *** Companion;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep class app.skerry.**$$serializer { *; }
