@@ -36,14 +36,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
@@ -69,6 +72,8 @@ import app.skerry.ui.host.NewConnectionFormState
 fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
     val noop = remember { MutableInteractionSource() }
     val hosts = LocalHosts.current
+    // Уже созданные хосты — источник подсказок для пикеров Group/Tags (в мок/превью список пуст).
+    val allHosts = hosts?.hosts ?: emptyList()
     val credentials = LocalCredentials.current
     // Ключ по editHost: открытие модалки на правку (или смена цели) пересоздаёт форму из профиля.
     val form = remember(editHost) { editHost?.let { NewConnectionFormState.fromHost(it) } ?: NewConnectionFormState() }
@@ -141,7 +146,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 Spacer14()
                 Field("Authentication") { AuthPicker(form) }
                 Spacer14()
-                Field("Group") { ModalTextField(form.group, { form.group = it }, "Production (optional)") }
+                Field("Group") { GroupPicker(form, allHosts) }
                 Spacer14()
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Field("Jump host (optional)", Modifier.weight(1f)) { ModalSelect("None — direct") }
@@ -149,19 +154,37 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 }
                 Spacer14()
                 Field("Tags") {
-                    FlowRow(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        form.tags.forEach { tag -> key(tag) { RemovableTagPill(tag) { form.removeTag(tag) } } }
-                        TagInput(
-                            value = tagDraft,
-                            // Запятая фиксирует тег(и) сразу; одиночный тег — по Enter (onCommit).
-                            onValueChange = { v -> if (v.contains(',')) { form.addTag(v); tagDraft = "" } else tagDraft = v },
-                            onCommit = { form.addTag(tagDraft); tagDraft = "" },
-                        )
-                    }
+                    // Подсказки = теги других хостов, ещё не добавленные сюда, сужённые набранным черновиком.
+                    var tagFocused by remember(editHost) { mutableStateOf(false) }
+                    val tagSugs = remember(allHosts, form.tags, tagDraft) { tagSuggestions(allHosts, form.tags, tagDraft) }
+                    AnchoredDropdown(
+                        expanded = tagFocused && tagSugs.isNotEmpty(),
+                        onDismiss = { tagFocused = false },
+                        focusable = false, // не красть фокус у поля ввода тега
+                        trigger = {
+                            FlowRow(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                form.tags.forEach { tag -> key(tag) { RemovableTagPill(tag) { form.removeTag(tag) } } }
+                                TagInput(
+                                    value = tagDraft,
+                                    // Запятая фиксирует тег(и) сразу; одиночный тег — по Enter (onCommit).
+                                    onValueChange = { v -> if (v.contains(',')) { form.addTag(v); tagDraft = "" } else tagDraft = v },
+                                    onCommit = { form.addTag(tagDraft); tagDraft = "" },
+                                    onFocusChanged = { tagFocused = it },
+                                )
+                            }
+                        },
+                        menu = { width ->
+                            SuggestionMenu(width) {
+                                // Клик по подсказке добавляет тег; фокус остаётся на поле — можно набирать дальше,
+                                // меню пересчитается без только что добавленного.
+                                tagSugs.forEach { tag -> key(tag) { SuggestionRow("#$tag") { form.addTag(tag); tagDraft = "" } } }
+                            }
+                        },
+                    )
                 }
                 // Выбор AI-политики — фича MVP2 за фича-флагом; в MVP1 (дефолт) его в форме нет.
                 if (LocalFeatures.current.ai) {
@@ -274,6 +297,8 @@ private fun ModalTextField(
     singleLine: Boolean = true,
     mono: Boolean = false,
     minHeightDp: Int? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    onFocusChanged: ((Boolean) -> Unit)? = null,
 ) {
     val fonts = LocalFonts.current
     val family = if (mono) fonts.mono else fonts.ui
@@ -290,7 +315,7 @@ private fun ModalTextField(
         cursorBrush = SolidColor(D.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
         decorationBox = { inner ->
             Row(
                 Modifier
@@ -306,6 +331,7 @@ private fun ModalTextField(
                     if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
                     inner()
                 }
+                if (trailing != null) trailing()
             }
         },
     )
@@ -410,6 +436,59 @@ private fun ModalSelect(value: String) {
     }
 }
 
+/**
+ * Поле «Group»: свободный ввод + выпадающий список уже созданных групп ([groupSuggestions]). Меню —
+ * type-ahead (focusable=false, чтобы не прерывать набор), показывается пока поле в фокусе и есть что
+ * предложить; выбор пункта заполняет поле и снимает фокус (меню закрывается). Скрываем подсказку,
+ * дословно совпадающую с введённым, — выбирать в ней нечего.
+ */
+@Composable
+private fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
+    val focusManager = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    val suggestions = remember(allHosts, form.group) {
+        groupSuggestions(allHosts, form.group)
+            .filterNot { it.equals(form.group.trim(), ignoreCase = true) }
+    }
+    AnchoredDropdown(
+        expanded = focused && suggestions.isNotEmpty(),
+        onDismiss = { focused = false },
+        focusable = false,
+        trigger = {
+            ModalTextField(
+                form.group, { form.group = it }, "Production (optional)",
+                onFocusChanged = { focused = it },
+                trailing = { Sym("expand_more", size = 16.sp, color = D.faint) },
+            )
+        },
+        menu = { width ->
+            SuggestionMenu(width) {
+                suggestions.forEach { group -> key(group) { SuggestionRow(group) { form.group = group; focusManager.clearFocus() } } }
+            }
+        },
+    )
+}
+
+/** Контейнер выпадающих подсказок (group/tags): ширина триггера, скролл при переполнении, стиль меню. */
+@Composable
+private fun SuggestionMenu(width: Dp, content: @Composable () -> Unit) {
+    Column(
+        Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+            .heightIn(max = 240.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+    ) { content() }
+}
+
+/** Строка-подсказка в выпадающем списке: одна метка, клик — выбор. */
+@Composable
+private fun SuggestionRow(label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Txt(label, color = D.text, size = 12.5.sp)
+    }
+}
+
 /** Пилюля тега с крестиком удаления; [tag] — каноническая форма, на экране с префиксом `#`. */
 @Composable
 private fun RemovableTagPill(tag: String, onRemove: () -> Unit) {
@@ -450,7 +529,7 @@ private fun TestStatusLabel(status: ConnectionTestStatus) {
 
 /** Инлайн-ввод нового тега внутри блока Tags: Enter ([onCommit]) или запятая фиксирует пилюлю. */
 @Composable
-private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: () -> Unit) {
+private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: () -> Unit, onFocusChanged: ((Boolean) -> Unit)? = null) {
     val fonts = LocalFonts.current
     val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = fonts.ui) }
     BasicTextField(
@@ -461,7 +540,7 @@ private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: (
         cursorBrush = SolidColor(D.cyan),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onCommit() }),
-        modifier = Modifier.widthIn(min = 72.dp),
+        modifier = Modifier.widthIn(min = 72.dp).onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty()) Txt("add tag…", color = D.faint, size = 12.5.sp)

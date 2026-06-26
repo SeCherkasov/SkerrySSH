@@ -131,6 +131,9 @@ fun AnchoredDropdown(
     expanded: Boolean,
     onDismiss: () -> Unit,
     gap: Dp = 6.dp,
+    // focusable = false — для type-ahead-пикеров (group/tags): меню не должно красть фокус у поля
+    // ввода, иначе набор текста прерывается. Закрытие у таких пикеров завязано на потерю фокуса поля.
+    focusable: Boolean = true,
     trigger: @Composable () -> Unit,
     menu: @Composable (anchorWidth: Dp) -> Unit,
 ) {
@@ -146,7 +149,7 @@ fun AnchoredDropdown(
                 alignment = Alignment.TopStart,
                 offset = IntOffset(0, anchor.height + with(density) { gap.roundToPx() }),
                 onDismissRequest = onDismiss,
-                properties = PopupProperties(focusable = true),
+                properties = PopupProperties(focusable = focusable),
             ) {
                 menu(with(density) { anchor.width.toDp() })
             }
