@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -33,9 +34,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
 import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
 
@@ -104,15 +107,76 @@ fun DesktopCreateScreen(
 ) {
     var pwd by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    val submit = { if (pwd.isNotEmpty() && confirm.isNotEmpty()) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
+    // Утрата мастер-пароля = безвозвратная утрата vault (zero-knowledge): требуем явного признания
+    // этого до создания, чтобы «нет восстановления» не осталось незамеченным мелким текстом.
+    var acknowledged by remember { mutableStateOf(false) }
+    // Минимум длины — тот же, что форсирует VaultGateController, чтобы кнопка не была активна до отказа.
+    val canCreate = pwd.length >= MIN_MASTER_PASSWORD_LENGTH && confirm.isNotEmpty() && acknowledged
+    val submit = { if (canCreate) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
     LockScaffold(
         title = "Set a master password",
         subtitle = "It encrypts this vault and never leaves the device — there is no recovery.",
         error = error,
     ) {
         LockPasswordField(pwd, { pwd = it }, "Master password", ImeAction.Next)
+        passwordStrength(pwd)?.let { PasswordStrengthMeter(it) }
         LockPasswordField(confirm, { confirm = it }, "Repeat password", ImeAction.Done, onSubmit = submit)
-        PrimaryButton("Create vault", onClick = submit, modifier = Modifier.fillMaxWidth())
+        NoRecoveryAcknowledge(acknowledged) { acknowledged = !acknowledged }
+        PrimaryButton(
+            "Create vault",
+            onClick = submit,
+            modifier = Modifier.fillMaxWidth(),
+            bg = if (canCreate) D.cyan else Color(0x14FFFFFF),
+            fg = if (canCreate) Color(0xFF0A1A26) else D.faint,
+            enabled = canCreate,
+        )
+    }
+}
+
+/** Полоска силы мастер-пароля (4 сегмента) + подпись; цвет по [PasswordStrength]. */
+@Composable
+private fun PasswordStrengthMeter(strength: PasswordStrength) {
+    val (filled, color, label) = when (strength) {
+        PasswordStrength.Weak -> Triple(1, D.storm, "Weak")
+        PasswordStrength.Fair -> Triple(2, D.amber, "Fair")
+        PasswordStrength.Good -> Triple(3, D.cyan, "Good")
+        PasswordStrength.Strong -> Triple(4, D.moss, "Strong")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            repeat(4) { i ->
+                Box(
+                    Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp))
+                        .background(if (i < filled) color else D.cyan14),
+                )
+            }
+        }
+        Txt("Password strength: $label", color = color, size = 11.sp)
+    }
+}
+
+/** Чекбокс-подтверждение «пароль невосстановим», гейтит создание vault. */
+@Composable
+private fun NoRecoveryAcknowledge(checked: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp))
+            .toggleable(value = checked, onValueChange = { onToggle() }, role = Role.Checkbox)
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            Modifier.size(18.dp).clip(RoundedCornerShape(4.dp))
+                .background(if (checked) D.cyan.copy(alpha = 0.15f) else Color.Transparent)
+                .border(1.dp, if (checked) D.cyan else D.faint, RoundedCornerShape(4.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (checked) Sym("check", size = 13.sp, color = D.cyan)
+        }
+        Txt(
+            "I understand my master password can't be recovered or reset. If I lose it, this vault is gone.",
+            color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.weight(1f),
+        )
     }
 }
 

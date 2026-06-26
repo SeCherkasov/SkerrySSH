@@ -156,7 +156,9 @@ private fun MismatchBanner(mismatch: HostKeyMismatch, onReview: () -> Unit, onDi
             )
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ClickableSmallButton("Review fingerprint", D.sunset, D.sunset.copy(alpha = 0.4f), bold = true, onClick = onReview)
-                ClickableSmallButton("Dismiss", D.dim, D.cyan14, onClick = onDismiss)
+                // «Dismiss» здесь = reject (баннер прячется, ключ блокируется). Честная подпись, чтобы
+                // пользователь не блокировал легитимную смену ключа, думая, что лишь скрывает уведомление.
+                ClickableSmallButton("Reject & block", D.dim, D.cyan14, onClick = onDismiss)
             }
         }
     }
@@ -249,13 +251,16 @@ private fun LiveMismatchPanel(mismatch: HostKeyMismatch, mono: FontFamily, onAcc
             Sym("info", size = 15.sp, color = D.sunset)
             Txt("If you recently re-installed this host, accepting is safe. Otherwise treat this as a possible interception.", color = D.dim, size = 11.sp, lineHeight = 16.sp)
         }
+        // Безопасный выбор — primary и первым: при возможном перехвате пользователь рефлекторно жмёт
+        // верхнюю/привычную кнопку, поэтому ею должен быть «Reject & block», а не «Accept». Принятие
+        // нового ключа — опасное действие, оформлено danger-стилем (sunset) вторым.
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            GhostButton("Accept new key", onClick = onAccept, modifier = Modifier.fillMaxWidth())
+            PrimaryButton("Reject & block", onClick = onReject, modifier = Modifier.fillMaxWidth())
             Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.sunset.copy(alpha = 0.12f)).border(1.dp, D.sunset, RoundedCornerShape(7.dp)).clickable(onClick = onReject).padding(vertical = 9.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.sunset.copy(alpha = 0.12f)).border(1.dp, D.sunset, RoundedCornerShape(7.dp)).clickable(onClick = onAccept).padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt("Reject & block", color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
+                Txt("Accept new key", color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
             }
         }
     }
@@ -357,13 +362,14 @@ private fun MismatchPanel(mono: FontFamily) {
             Sym("info", size = 15.sp, color = D.sunset)
             Txt("If you recently re-installed this host, accepting is safe. Otherwise treat this as a possible interception.", color = D.dim, size = 11.sp, lineHeight = 16.sp)
         }
+        // Зеркалит безопасный порядок live-панели (см. LiveMismatchPanel): Reject — primary первой.
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            GhostButton("Accept new key", onClick = {}, modifier = Modifier.fillMaxWidth())
+            PrimaryButton("Reject & block", onClick = {}, modifier = Modifier.fillMaxWidth())
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.sunset.copy(alpha = 0.12f)).border(1.dp, D.sunset, RoundedCornerShape(7.dp)).padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt("Reject & block", color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
+                Txt("Accept new key", color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
             }
         }
     }

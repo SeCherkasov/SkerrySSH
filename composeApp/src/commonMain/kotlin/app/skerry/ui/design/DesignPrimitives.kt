@@ -249,12 +249,13 @@ fun PrimaryButton(
     icon: String? = null,
     bg: Color = D.cyan,
     fg: Color = Color(0xFF0A1A26),
+    enabled: Boolean = true,
 ) {
     Row(
         modifier
             .clip(RoundedCornerShape(7.dp))
             .background(bg)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
