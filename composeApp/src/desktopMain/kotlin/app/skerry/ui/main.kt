@@ -100,6 +100,27 @@ private fun writeCollapsedGroups(dir: Path, groups: Set<String>) {
     }
 }
 
+/**
+ * Недавние подключения (секция RECENT сайдбара), переживающие перезапуск: id хостов в файле
+ * `recent_connections` по одному на строку, новейший — первым (порядок значим). Отсутствует/нечитаем →
+ * пусто. Запись best-effort: сбой персиста не роняет UI. Стейл-id (удалённые хосты) безвредны —
+ * при рендере они отсеиваются резолвом к каталогу, а из файла вытесняются новыми коннектами (кап 8).
+ */
+private fun readRecentHostIds(dir: Path): List<String> {
+    val file = dir.resolve("recent_connections")
+    return runCatching {
+        Files.readAllLines(file, StandardCharsets.UTF_8).map { it.trim() }.filter { it.isNotEmpty() }
+    }.getOrDefault(emptyList())
+}
+
+private fun writeRecentHostIds(dir: Path, ids: List<String>) {
+    runCatching {
+        Files.createDirectories(dir)
+        // id — UUID без переносов, но фильтруем на всякий случай, чтобы файл не «расщепился» построчно.
+        Files.writeString(dir.resolve("recent_connections"), ids.filterNot { it.contains('\n') || it.contains('\r') }.joinToString("\n"))
+    }
+}
+
 fun main() {
     // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
     // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
@@ -178,6 +199,8 @@ fun main() {
                     onInfoPanelChange = { writeInfoPanel(dir, it) },
                     initialCollapsedGroups = readCollapsedGroups(dir),
                     onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
+                    initialRecentHostIds = readRecentHostIds(dir),
+                    onRecentHostIdsChange = { writeRecentHostIds(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,

@@ -77,8 +77,11 @@ fun DesktopDesignApp(
     // Схлопнутые папки хостов — так же персистятся снаружи (desktop main): стартовый набор + колбэк записи.
     initialCollapsedGroups: Set<String> = emptySet(),
     onCollapsedGroupsChange: (Set<String>) -> Unit = {},
+    // Недавние подключения (секция RECENT) — тоже персистятся снаружи (desktop main): стартовый порядок + колбэк записи.
+    initialRecentHostIds: List<String> = emptyList(),
+    onRecentHostIdsChange: (List<String>) -> Unit = {},
     state: DesktopDesignState = remember {
-        DesktopDesignState(initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange)
+        DesktopDesignState(initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange, initialRecentHostIds, onRecentHostIdsChange)
     },
     vault: Vault? = null,
     biometrics: VaultBiometrics? = null,
@@ -188,12 +191,12 @@ private fun DesktopChrome(
     }
 
     // Тот же резолв, но в split-панель активной вкладки (новая независимая вторичная сессия).
-    val connectSplitHost = remember(sessions, credentials) {
+    val connectSplitHost = remember(sessions, credentials, state) {
         { host: Host ->
             val parentId = sessions?.activeId
             val credential = credentials?.find(host.credentialId)
             if (credential != null) {
-                openSplitSession(sessions, parentId, host, credential.toSshAuth())
+                openSplitSession(sessions, state, parentId, host, credential.toSshAuth())
             } else {
                 pendingSplitHost = host
                 pendingSplitParent = parentId
@@ -259,7 +262,7 @@ private fun DesktopChrome(
                     onConnect = { pw ->
                         val parentId = pendingSplitParent
                         pendingSplitHost = null; pendingSplitParent = null
-                        openSplitSession(sessions, parentId, host, SshAuth.Password(pw))
+                        openSplitSession(sessions, state, parentId, host, SshAuth.Password(pw))
                     },
                 )
             }
@@ -282,6 +285,8 @@ private fun DesktopChrome(
  * вкладка ([SessionsController.connect]). Затем переключаемся на терминал (сбрасывая app-оверлей).
  */
 private fun openHostSession(sessions: SessionsController?, state: DesktopDesignState, host: Host, auth: SshAuth) {
+    // Отмечаем хост в секции RECENT сайдбара (новейший — первым, переживает перезапуск).
+    state.recordRecentHost(host.id)
     sessions?.connect(
         hostId = host.id,
         title = host.label,
@@ -298,8 +303,10 @@ private fun openHostSession(sessions: SessionsController?, state: DesktopDesignS
  * Подключить [host] с [auth] в split-панель активной вкладки (новая независимая вторичная сессия,
  * модель Termius). Без активной вкладки — no-op. См. [SessionsController.connectSplit].
  */
-private fun openSplitSession(sessions: SessionsController?, parentId: String?, host: Host, auth: SshAuth) {
+private fun openSplitSession(sessions: SessionsController?, state: DesktopDesignState, parentId: String?, host: Host, auth: SshAuth) {
     if (sessions == null || parentId == null) return
+    // Подключение во вторичную панель — тоже реальный коннект к хосту: отмечаем его в RECENT.
+    state.recordRecentHost(host.id)
     sessions.connectSplit(
         parentId = parentId,
         hostId = host.id,

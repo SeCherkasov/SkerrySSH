@@ -220,4 +220,57 @@ class DesktopDesignStateTest {
         assertTrue(s.isGroupCollapsed("B"))
         assertEquals(listOf(setOf("A"), setOf("A", "B"), setOf("B")), seen)
     }
+
+    // --- Персист недавних подключений (секция RECENT в сайдбаре) ---
+
+    @Test
+    fun recent_hosts_default_empty() {
+        val s = DesktopDesignState()
+        assertTrue(s.recentHostIds.isEmpty())
+    }
+
+    @Test
+    fun recent_hosts_honour_initial_value() {
+        val s = DesktopDesignState(initialRecentHostIds = listOf("h1", "h2"))
+        assertEquals(listOf("h1", "h2"), s.recentHostIds)
+    }
+
+    @Test
+    fun recordRecentHost_prepends_newest_and_dedupes_reporting_to_callback() {
+        val seen = mutableListOf<List<String>>()
+        val s = DesktopDesignState(onRecentHostIdsChange = { seen += it })
+        s.recordRecentHost("a")
+        s.recordRecentHost("b")
+        s.recordRecentHost("a") // повторный коннект двигает «a» в начало, без дубля
+        assertEquals(listOf("a", "b"), s.recentHostIds)
+        assertEquals(listOf(listOf("a"), listOf("b", "a"), listOf("a", "b")), seen)
+    }
+
+    @Test
+    fun recordRecentHost_caps_at_eight_keeping_most_recent() {
+        val s = DesktopDesignState()
+        (1..9).forEach { s.recordRecentHost("h$it") }
+        assertEquals(8, s.recentHostIds.size)
+        assertEquals("h9", s.recentHostIds.first())
+        assertFalse("h1" in s.recentHostIds) // самый старый вытеснен
+    }
+
+    @Test
+    fun recordRecentHost_noop_when_already_at_front() {
+        val seen = mutableListOf<List<String>>()
+        val s = DesktopDesignState(onRecentHostIdsChange = { seen += it })
+        s.recordRecentHost("a")
+        s.recordRecentHost("a") // уже первый — ни записи, ни колбэка
+        assertEquals(listOf("a"), s.recentHostIds)
+        assertEquals(listOf(listOf("a")), seen)
+    }
+
+    @Test
+    fun recordRecentHost_ignores_blank_id() {
+        val seen = mutableListOf<List<String>>()
+        val s = DesktopDesignState(onRecentHostIdsChange = { seen += it })
+        s.recordRecentHost("")
+        assertTrue(s.recentHostIds.isEmpty())
+        assertTrue(seen.isEmpty())
+    }
 }

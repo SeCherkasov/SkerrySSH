@@ -41,12 +41,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import app.skerry.shared.host.Host
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.shortCipher
 import kotlin.math.roundToInt
@@ -179,18 +181,29 @@ private fun HostsSidebar(state: DesktopDesignState) {
             } else {
                 HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }
             }
-            Txt(
-                "RECENT",
-                color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
-                modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 16.dp, bottom = 4.dp),
-            )
-            Row(
-                Modifier.padding(start = 16.dp).padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("history", size = 14.sp, color = D.faint)
-                Txt("user@vps.example.com", color = D.dim, size = 11.5.sp, font = mono)
+            // Живой каталог: секция RECENT из реальной истории подключений ([DesktopDesignState.recentHostIds]),
+            // резолвится в текущие профили — удалённые/неизвестные id просто скрыты. Пусто → секции нет.
+            // Мок/превью (нет живого каталога): статичная строка из макета.
+            if (liveHosts != null) {
+                // Мемоизируем по (порядок недавних, состав каталога) — как соседний `folders`: иначе
+                // резолв пересчитывался бы на каждой рекомпозиции сайдбара (drag/смена чипа/таба).
+                val recent = remember(state.recentHostIds, liveHosts.hosts) {
+                    state.recentHostIds.mapNotNull { liveHosts.find(it) }
+                }
+                if (recent.isNotEmpty()) {
+                    RecentSectionHeader()
+                    recent.forEach { host -> key(host.id) { RecentHostRow(host, mono) } }
+                }
+            } else {
+                RecentSectionHeader()
+                Row(
+                    Modifier.padding(start = 16.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Sym("history", size = 14.sp, color = D.faint)
+                    Txt("user@vps.example.com", color = D.dim, size = 11.5.sp, font = mono)
+                }
             }
         }
         HLine()
@@ -223,6 +236,45 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
             Txt(count.toString(), color = D.faint, size = 10.sp)
         }
+    }
+}
+
+/** Заголовок секции RECENT в сайдбаре (общий для живого и мок-пути). */
+@Composable
+private fun RecentSectionHeader() {
+    Txt(
+        "RECENT",
+        color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
+        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 16.dp, bottom = 4.dp),
+    )
+}
+
+/**
+ * Строка недавнего подключения: иконка истории + `user@address` (моноширинный, как в макете). Клик
+ * переподключает к хосту через [LocalConnectHost] — тот же путь, что клик по строке в каталоге.
+ */
+@Composable
+private fun RecentHostRow(host: Host, mono: FontFamily) {
+    val connect = LocalConnectHost.current
+    // Стабилизируем лямбду по (host, connect) — как строки каталога: без remember она пересоздавалась
+    // бы на каждой рекомпозиции строки.
+    val onClick = remember(host, connect) { { connect(host) } }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Sym("history", size = 14.sp, color = D.faint)
+        Txt(
+            "${host.username}@${host.address}",
+            color = D.dim, size = 11.5.sp, font = mono,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
     }
 }
 

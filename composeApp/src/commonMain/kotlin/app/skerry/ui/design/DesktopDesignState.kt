@@ -68,6 +68,11 @@ class DesktopDesignState(
     // развёрнуто, no-op) сохраняют прежнее поведение для мок/превью/тестов.
     initialCollapsedGroups: Set<String> = emptySet(),
     private val onCollapsedGroupsChange: (Set<String>) -> Unit = {},
+    // Недавние подключения (секция RECENT в сайдбаре): id хостов в порядке свежести, новейший —
+    // первым. Стартовое значение читается из персиста, колбэк пишет обратно, чтобы список переживал
+    // перезапуск. Дефолты (пусто, no-op) сохраняют прежнее поведение для мок/превью/тестов.
+    initialRecentHostIds: List<String> = emptyList(),
+    private val onRecentHostIdsChange: (List<String>) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -89,6 +94,9 @@ class DesktopDesignState(
 
     /** Имена схлопнутых папок хостов в сайдбаре (свёрнут список их хостов). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
+
+    /** Id недавно подключённых хостов, новейший — первым (секция RECENT в сайдбаре). */
+    var recentHostIds: List<String> by mutableStateOf(initialRecentHostIds); private set
     var selectedHost: String by mutableStateOf("prod-web-01"); private set
     var activeTab: Int by mutableStateOf(0); private set
     var modalPolicy: AiPolicy by mutableStateOf(AiPolicy.Strict); private set
@@ -175,6 +183,19 @@ class DesktopDesignState(
         collapsedGroups = if (name in collapsedGroups) collapsedGroups - name else collapsedGroups + name
         onCollapsedGroupsChange(collapsedGroups)
     }
+    /**
+     * Отметить хост [id] как недавно подключённый: двигаем его в начало списка (без дубля),
+     * обрезаем до [MAX_RECENT_HOSTS] и сообщаем наружу (для персиста). Повторный коннект к уже
+     * первому хосту — no-op (ни мутации, ни записи). Пустой id игнорируется.
+     */
+    fun recordRecentHost(id: String) {
+        if (id.isBlank()) return
+        val next = (listOf(id) + recentHostIds.filterNot { it == id }).take(MAX_RECENT_HOSTS)
+        if (next == recentHostIds) return
+        recentHostIds = next
+        onRecentHostIdsChange(recentHostIds)
+    }
+
     fun toggleSanitize() { sanitize = !sanitize }
     fun togglePreview() { preview = !preview }
     fun toggleConfirm() { confirm = !confirm }
@@ -200,6 +221,9 @@ class DesktopDesignState(
     }
 
     private companion object {
+        /** Максимум записей в секции RECENT сайдбара — старейшие вытесняются новыми коннектами. */
+        const val MAX_RECENT_HOSTS = 8
+
         val DEMO_OUTPUT = mapOf(
             "ls" to "app  deploy  logs  backup.tar.gz",
             "ls -la" to "total 24\ndrwxr-xr-x  5 root root  app\ndrwxr-xr-x  2 root root  deploy\n-rw-r--r--  1 root root  backup.tar.gz",
