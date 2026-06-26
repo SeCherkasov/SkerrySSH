@@ -98,6 +98,9 @@ class DesktopDesignState(
     /** Id недавно подключённых хостов, новейший — первым (секция RECENT в сайдбаре). */
     var recentHostIds: List<String> by mutableStateOf(initialRecentHostIds); private set
     var selectedHost: String by mutableStateOf("prod-web-01"); private set
+
+    /** Текст поиска в сайдбаре хостов (по имени/адресу/пользователю/группе/тегам). Пусто — без фильтра. */
+    var hostSearchQuery: String by mutableStateOf(""); private set
     var activeTab: Int by mutableStateOf(0); private set
     var modalPolicy: AiPolicy by mutableStateOf(AiPolicy.Strict); private set
 
@@ -145,6 +148,7 @@ class DesktopDesignState(
      */
     fun clearOverlay() { appOverlay = null }
     fun selectHost(name: String) { selectedHost = name }
+    fun onHostSearch(value: String) { hostSearchQuery = value }
     fun setTab(i: Int) { if (i in tabs.indices) activeTab = i }
 
     /**
@@ -161,7 +165,7 @@ class DesktopDesignState(
         activeTab = a
     }
 
-    fun lock() { locked = true }
+    fun lock() { locked = true; hostSearchQuery = "" }
     fun unlock() { locked = false }
     fun openModal() { editingHost = null; modalOpen = true }
     fun openEditModal(host: Host) { editingHost = host; modalOpen = true }
