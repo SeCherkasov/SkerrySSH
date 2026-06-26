@@ -19,6 +19,13 @@ import app.skerry.shared.vault.VaultBiometrics
  */
 const val MIN_MASTER_PASSWORD_LENGTH: Int = 12
 
+/**
+ * Слово, которое пользователь должен вписать на экране сброса (type-to-confirm), чтобы подтвердить
+ * безвозвратное стирание vault. Единый источник и для UI-поля, и для проверки — как удаление репозитория
+ * в GitHub: барьер от случайного клика по деструктивному действию.
+ */
+const val RESET_CONFIRM_WORD: String = "RESET"
+
 /** Экран гейта мастер-пароля поверх [Vault]. */
 enum class VaultGateState {
     /** Файла vault ещё нет — показываем форму создания мастер-пароля. */
@@ -27,8 +34,28 @@ enum class VaultGateState {
     /** Vault существует, но заблокирован — показываем форму разблокировки. */
     NeedsUnlock,
 
+    /** Файл vault не читается — тупик: вводить пароль бессмысленно, показываем экран сброса. */
+    Corrupted,
+
+    /** Пользователь подтверждает безвозвратный сброс (забыл пароль / битый файл). */
+    Resetting,
+
     /** Vault разблокирован — пропускаем к остальному UI. */
     Unlocked,
+}
+
+/**
+ * Что стирать при сбросе vault. Сам vault удаляется всегда (контракт [Vault.reset]); этот выбор
+ * управляет только внешними данными, не входящими в файл vault. Решение принимает пользователь на
+ * экране сброса, исполнение внешней чистки — инжектируемый колбэк `onReset` (контроллер про хосты
+ * не знает: гейт остаётся над одним [Vault]).
+ */
+enum class ResetScope {
+    /** Стереть только секреты (файл vault). Профили хостов и known_hosts остаются. */
+    SecretsOnly,
+
+    /** Заводской сброс: vault + профили хостов + known_hosts + локальные настройки. */
+    Everything,
 }
 
 /**
@@ -66,6 +93,12 @@ class VaultGateController(
     private val vault: Vault,
     private val biometrics: VaultBiometrics? = null,
     private val minPasswordLength: Int = MIN_MASTER_PASSWORD_LENGTH,
+    /**
+     * Внешняя чистка при сбросе (хосты/known_hosts/настройки по [ResetScope]). Вызывается ПОСЛЕ
+     * [Vault.reset], когда vault уже стёрт. Контроллер про эти данные не знает — их предоставляет
+     * платформенная проводка (desktop `main`). По умолчанию no-op (мок/превью).
+     */
+    private val onReset: (ResetScope) -> Unit = {},
 ) {
     var state: VaultGateState by mutableStateOf(
         if (vault.exists()) VaultGateState.NeedsUnlock else VaultGateState.NeedsCreate,
@@ -74,6 +107,9 @@ class VaultGateController(
 
     var error: VaultGateError? by mutableStateOf(null)
         private set
+
+    /** Куда вернуться, если пользователь отменил экран сброса (на форму входа или экран Corrupted). */
+    private var resetReturnState: VaultGateState = VaultGateState.NeedsUnlock
 
     /** Включена ли биометрия для этого vault (реактивно — тумблер обновляет интерфейс). */
     var biometricEnabled: Boolean by mutableStateOf(biometrics?.isEnabled() == true)
@@ -124,7 +160,8 @@ class VaultGateController(
             when (vault.unlock(password)) {
                 UnlockResult.Success -> state = VaultGateState.Unlocked
                 UnlockResult.WrongPassword -> error = VaultGateError.WrongPassword
-                UnlockResult.Corrupted -> error = VaultGateError.Corrupted
+                // Битый файл — не ошибка формы, а тупик: уводим на отдельный экран сброса.
+                UnlockResult.Corrupted -> state = VaultGateState.Corrupted
             }
         } finally {
             password.fill(' ')
@@ -136,6 +173,46 @@ class VaultGateController(
         vault.lock()
         error = null
         state = VaultGateState.NeedsUnlock
+    }
+
+    /**
+     * Открыть экран подтверждения сброса (из формы входа — «забыл пароль», или с экрана [Corrupted]).
+     * Запоминает текущее состояние, чтобы [cancelReset] вернул ровно на него.
+     */
+    fun beginReset() {
+        resetReturnState = state
+        error = null
+        state = VaultGateState.Resetting
+    }
+
+    /** Отменить сброс — вернуться на форму входа или экран Corrupted, откуда пришли. */
+    fun cancelReset() {
+        error = null
+        state = resetReturnState
+    }
+
+    /**
+     * Безвозвратно сбросить vault и начать заново. Стирает файл vault ([Vault.reset]), снимает
+     * биометрию (`vault.bio` бесполезен без vault), затем чистит внешние данные по [scope] через
+     * [onReset]. Итог — форма создания нового мастер-пароля ([VaultGateState.NeedsCreate]).
+     */
+    fun confirmReset(scope: ResetScope) {
+        // vault.reset() уже удалил файл — что бы дальше ни упало, в Resetting застрять нельзя:
+        // переход на форму создания гарантируем в finally (на холодном старте vault.exists()==false
+        // и так дал бы NeedsCreate, но в этой сессии экран не должен зависнуть).
+        try {
+            vault.reset()
+            // disable() идемпотентен; его сбой не должен срывать чистку внешних данных и переход.
+            runCatching { biometrics?.disable() }
+            // Чистка внешних данных — best-effort: её сбой (I/O при записи hosts.json и т.п.) не должен
+            // ронять UI-обработчик клика. vault уже стёрт; в худшем случае у хостов останутся висячие
+            // ссылки на секреты (коннект просто спросит пароль), но приложение не падает и не зависает.
+            runCatching { onReset(scope) }
+        } finally {
+            biometricEnabled = false
+            error = null
+            state = VaultGateState.NeedsCreate
+        }
     }
 
     /** Зафиксировать активность пользователя — перезапускает таймер авто-лока по простою. */
@@ -167,7 +244,7 @@ class VaultGateController(
                     biometricEnabled = false
                     error = VaultGateError.BiometricReset
                 }
-                BiometricUnlockResult.Corrupted -> error = VaultGateError.Corrupted
+                BiometricUnlockResult.Corrupted -> state = VaultGateState.Corrupted
                 // Cancelled / Failed / Unavailable / NotEnabled — остаёмся на форме пароля молча.
                 else -> Unit
             }

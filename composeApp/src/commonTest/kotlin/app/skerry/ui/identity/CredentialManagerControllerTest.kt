@@ -109,6 +109,7 @@ private class FakeCredVault : Vault {
     override fun create(password: CharArray) = Unit
     override fun unlock(password: CharArray): UnlockResult = UnlockResult.Success
     override fun lock() = Unit
+    override fun reset() { payloads.clear(); records.clear() }
 
     override fun records(): List<VaultRecord> = records.values.toList()
     override fun openPayload(id: String): ByteArray? =

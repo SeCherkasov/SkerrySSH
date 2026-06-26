@@ -39,6 +39,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
+import app.skerry.ui.vault.RESET_CONFIRM_WORD
+import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
 
@@ -74,6 +76,7 @@ fun DesktopUnlockScreen(
     canUseBiometric: Boolean,
     onUnlock: (CharArray) -> Unit,
     onBiometric: () -> Unit,
+    onForgotPassword: () -> Unit,
 ) {
     var pwd by remember { mutableStateOf("") }
     val submit = { if (pwd.isNotEmpty()) onUnlock(pwd.toCharArray()) }
@@ -91,6 +94,108 @@ fun DesktopUnlockScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PrimaryButton("Unlock", onClick = submit, modifier = Modifier.weight(1f))
             if (canUseBiometric) BiometricButton(onClick = onBiometric)
+        }
+        // Тупик забытого пароля расшивается только сбросом (zero-knowledge): ненавязчивая ссылка
+        // под кнопкой ведёт на экран подтверждения.
+        Txt(
+            "Forgot your master password?",
+            color = D.faint,
+            size = 12.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onForgotPassword)
+                .padding(vertical = 4.dp),
+        )
+    }
+}
+
+/**
+ * Экран повреждённого файла vault (стиль макета). Файл не читается → пароль ввести нельзя; единственное
+ * действие — уйти на подтверждение сброса ([onReset]). Иконка-предупреждение amber (lighthouse-момент).
+ */
+@Composable
+fun DesktopCorruptedScreen(onReset: () -> Unit) {
+    LockScaffold(
+        title = "Storage is damaged",
+        subtitle = "The vault file can't be read or decrypted. To use Skerry again you'll need to reset it.",
+    ) {
+        PrimaryButton("Reset Skerry", onClick = onReset, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+/**
+ * Экран подтверждения безвозвратного сброса (стиль макета): выбор объёма ([ResetScope]) +
+ * type-to-confirm — кнопка сброса активна только когда вписано [RESET_CONFIRM_WORD]. Удаление
+ * необратимо (модель Bitwarden/1Password), поэтому барьер от случайного клика жёсткий.
+ */
+@Composable
+fun DesktopResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
+    var scope by remember { mutableStateOf(ResetScope.SecretsOnly) }
+    var confirmText by remember { mutableStateOf("") }
+    val canConfirm = confirmText.trim() == RESET_CONFIRM_WORD
+    LockScaffold(
+        title = "Reset Skerry",
+        subtitle = "This is permanent. Saved passwords, keys and identities are erased — there is no recovery.",
+    ) {
+        ResetScopeRow(
+            selected = scope == ResetScope.SecretsOnly,
+            title = "Secrets only",
+            subtitle = "Keep host profiles and known_hosts.",
+            onSelect = { scope = ResetScope.SecretsOnly },
+        )
+        ResetScopeRow(
+            selected = scope == ResetScope.Everything,
+            title = "Erase everything",
+            subtitle = "Also remove host profiles, known_hosts and settings.",
+            onSelect = { scope = ResetScope.Everything },
+        )
+        LockTextField(confirmText, { confirmText = it }, "Type $RESET_CONFIRM_WORD to confirm", ImeAction.Done) {
+            if (canConfirm) onConfirm(scope)
+        }
+        PrimaryButton(
+            "Reset permanently",
+            onClick = { if (canConfirm) onConfirm(scope) },
+            modifier = Modifier.fillMaxWidth(),
+            bg = if (canConfirm) D.storm else Color(0x14FFFFFF),
+            fg = if (canConfirm) Color(0xFF0A1A26) else D.faint,
+            enabled = canConfirm,
+        )
+        Txt(
+            "Cancel",
+            color = D.dim,
+            size = 12.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onCancel)
+                .padding(vertical = 6.dp),
+        )
+    }
+}
+
+/** Строка выбора объёма сброса: радио-точка + заголовок/подзаголовок, кликабельна целиком. */
+@Composable
+private fun ResetScopeRow(selected: Boolean, title: String, subtitle: String, onSelect: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(7.dp))
+            .border(1.dp, if (selected) D.cyan else D.line, RoundedCornerShape(7.dp))
+            .clickable(onClick = onSelect)
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            Modifier.size(16.dp).clip(RoundedCornerShape(8.dp))
+                .border(1.dp, if (selected) D.cyan else D.faint, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(D.cyan))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = D.dim, size = 11.5.sp, lineHeight = 15.sp)
         }
     }
 }
@@ -263,6 +368,42 @@ private fun LockPasswordField(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Sym("lock", size = 18.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 14.sp)
+                    innerTextField()
+                }
+            }
+        },
+    )
+}
+
+/** Плоское текстовое поле макета (без маскирования) — для type-to-confirm на экране сброса. */
+@Composable
+private fun LockTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    imeAction: ImeAction,
+    onSubmit: () -> Unit = {},
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = TextStyle(color = D.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(D.cyan),
+        keyboardOptions = KeyboardOptions(imeAction = imeAction),
+        keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { innerTextField ->
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(D.surface2)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Box(Modifier.weight(1f)) {
                     if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 14.sp)
                     innerTextField()

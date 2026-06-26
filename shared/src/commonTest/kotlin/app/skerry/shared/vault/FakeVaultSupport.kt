@@ -18,6 +18,7 @@ internal class FakeVault : Vault {
     override fun create(password: CharArray) = Unit
     override fun unlock(password: CharArray): UnlockResult = UnlockResult.Success
     override fun lock() = Unit
+    override fun reset() { entries.clear() }
 
     override fun records(): List<VaultRecord> = entries.values.map { it.record }
 

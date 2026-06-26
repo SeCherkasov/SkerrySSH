@@ -253,6 +253,49 @@ class FileVaultTest {
     }
 
     @Test
+    fun `reset deletes the file and locks the vault`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("host-1", RecordType.HOST, "data".encodeToByteArray())
+        }
+
+        v.reset()
+
+        assertFalse(v.exists())
+        assertFalse(v.isUnlocked)
+        // После сброса CRUD недоступен (vault заблокирован), а файла на диске больше нет.
+        assertFailsWith<IllegalStateException> { v.records() }
+        assertFalse(fs.exists(file))
+    }
+
+    @Test
+    fun `reset removes a corrupted file and lets a fresh vault be created`() = vaultTest {
+        fs.write(file) { writeUtf8("{ this is not valid vault json") }
+        val v = vault()
+        // Битый файл нельзя разблокировать — единственный выход через сброс.
+        assertEquals(UnlockResult.Corrupted, v.unlock("master".toCharArray()))
+
+        v.reset()
+        assertFalse(v.exists())
+
+        // Сразу после сброса можно создать новый vault с нуля — тупик расшит.
+        v.create("fresh-pass".toCharArray())
+        assertTrue(v.exists())
+        assertTrue(v.isUnlocked)
+    }
+
+    @Test
+    fun `reset with no existing file is a no-op`() = vaultTest {
+        val v = vault()
+        assertFalse(v.exists())
+
+        v.reset() // не должно бросать на отсутствующем файле
+
+        assertFalse(v.exists())
+        assertFalse(v.isUnlocked)
+    }
+
+    @Test
     fun `changePassword with a wrong old password fails`() = vaultTest {
         val v = vault().apply { create("old-pass".toCharArray()) }
 

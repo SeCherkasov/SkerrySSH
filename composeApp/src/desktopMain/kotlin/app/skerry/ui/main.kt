@@ -28,6 +28,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
+import app.skerry.ui.vault.ResetScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
@@ -176,6 +177,29 @@ fun main() {
             resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
             scope = tunnelScope,
         ) { UUID.randomUUID().toString() }
+        // Внешняя чистка при безвозвратном сбросе vault (забытый пароль / битый файл). Файл vault уже
+        // стёрт контроллером (Vault.reset) и теперь заблокирован, поэтому credentials.reload() здесь НЕ
+        // зовём (он требует открытого vault) — список секретов перечитается при создании нового vault.
+        val onVaultReset: (ResetScope) -> Unit = { scope ->
+            when (scope) {
+                // Только секреты: профили хостов остаются, но их ссылки на секреты теперь висячие —
+                // зануляем credentialId/identityId, чтобы коннект снова спрашивал пароль (auth=Ask),
+                // а не падал на «секрет не найден». reorder сохраняет набор id (требование контракта).
+                ResetScope.SecretsOnly ->
+                    hostStore.reorder { list -> list.map { it.copy(credentialId = null, identityId = null) } }
+                // Заводской сброс: сносим профили хостов, доверенные ключи, туннели и локальные настройки.
+                ResetScope.Everything -> {
+                    tunnels.closeAll()
+                    tunnels.tunnels.toList().forEach { tunnels.delete(it.id) }
+                    knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
+                    knownHosts.entries.toList().forEach { knownHosts.forget(it) }
+                    hostStore.all().forEach { hostStore.remove(it.id) }
+                    writeRecentHostIds(dir, emptyList())
+                    writeCollapsedGroups(dir, emptySet())
+                }
+            }
+            hosts.reload()
+        }
         val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
@@ -212,6 +236,7 @@ fun main() {
                     certificateInspector = deps.certificateInspector,
                     tunnels = deps.tunnels,
                     onVaultUnlocked = onVaultUnlocked,
+                    onVaultReset = onVaultReset,
                 )
             }
         }

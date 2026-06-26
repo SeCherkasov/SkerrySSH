@@ -131,14 +131,71 @@ class VaultGateControllerTest {
     }
 
     @Test
-    fun `unlock surfaces a corrupted vault file`() {
+    fun `unlock of a corrupted vault moves to the Corrupted screen`() {
         val vault = FakeVault(exists = true, unlockResult = UnlockResult.Corrupted)
         val controller = VaultGateController(vault)
 
         controller.unlock("whatever".toCharArray())
 
-        assertEquals(VaultGateState.NeedsUnlock, controller.state)
-        assertEquals(VaultGateError.Corrupted, controller.error)
+        // Битый файл — тупик: вводить пароль бессмысленно, уходим на отдельный экран сброса.
+        assertEquals(VaultGateState.Corrupted, controller.state)
+    }
+
+    @Test
+    fun `beginReset opens the reset screen and cancelReset returns to where it started`() {
+        // С формы входа («забыл пароль»).
+        val fromUnlock = VaultGateController(FakeVault(exists = true))
+        fromUnlock.beginReset()
+        assertEquals(VaultGateState.Resetting, fromUnlock.state)
+        fromUnlock.cancelReset()
+        assertEquals(VaultGateState.NeedsUnlock, fromUnlock.state)
+
+        // С экрана Corrupted: отмена возвращает на Corrupted, а не на бесполезную форму входа.
+        val fromCorrupted = VaultGateController(FakeVault(exists = true, unlockResult = UnlockResult.Corrupted))
+        fromCorrupted.unlock("x".toCharArray())
+        assertEquals(VaultGateState.Corrupted, fromCorrupted.state)
+        fromCorrupted.beginReset()
+        fromCorrupted.cancelReset()
+        assertEquals(VaultGateState.Corrupted, fromCorrupted.state)
+    }
+
+    @Test
+    fun `confirmReset wipes the vault, runs external cleanup with the scope, and goes to NeedsCreate`() {
+        val vault = FakeVault(exists = true)
+        var cleanedScope: ResetScope? = null
+        val controller = VaultGateController(vault, onReset = { cleanedScope = it })
+        controller.beginReset()
+
+        controller.confirmReset(ResetScope.Everything)
+
+        assertEquals(1, vault.resetCalls)
+        assertEquals(ResetScope.Everything, cleanedScope)
+        assertEquals(VaultGateState.NeedsCreate, controller.state)
+        assertNull(controller.error)
+    }
+
+    @Test
+    fun `confirmReset still reaches NeedsCreate when external cleanup throws`() {
+        // Файл vault уже стёрт к моменту onReset — застрять на Resetting нельзя, даже если чистка
+        // хостов упала: переход на форму создания гарантирован finally.
+        val vault = FakeVault(exists = true)
+        val controller = VaultGateController(vault, onReset = { error("cleanup failed") })
+
+        controller.confirmReset(ResetScope.Everything)
+
+        assertEquals(1, vault.resetCalls)
+        assertEquals(VaultGateState.NeedsCreate, controller.state)
+    }
+
+    @Test
+    fun `confirmReset forwards SecretsOnly scope to external cleanup`() {
+        val vault = FakeVault(exists = true)
+        var cleanedScope: ResetScope? = null
+        val controller = VaultGateController(vault, onReset = { cleanedScope = it })
+
+        controller.confirmReset(ResetScope.SecretsOnly)
+
+        assertEquals(ResetScope.SecretsOnly, cleanedScope)
     }
 
     @Test
@@ -263,6 +320,15 @@ private class FakeVault(
     override fun lock() {
         lockCalls++
         isUnlocked = false
+    }
+
+    var resetCalls = 0
+        private set
+
+    override fun reset() {
+        resetCalls++
+        isUnlocked = false
+        fileExists = false
     }
 
     override fun records(): List<VaultRecord> = emptyList()

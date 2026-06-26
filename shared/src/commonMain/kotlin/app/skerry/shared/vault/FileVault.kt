@@ -125,6 +125,18 @@ class FileVault(
         records.clear()
     }
 
+    override fun reset(): Unit = synchronized(lock) {
+        dataKey?.bytes?.fill(0)
+        dataKey = null
+        // wrappedDataKey — обёрнутый под мастер-паролем ключ (ciphertext, бесполезен без пароля); при
+        // безвозвратном сбросе затираем и его, чтобы не оставлять материал ключа в куче после wipe.
+        meta?.wrappedDataKey?.fill(0)
+        meta = null
+        records.clear()
+        // mustExist=false: сброс идемпотентен и не должен падать на уже отсутствующем/битом файле.
+        fileSystem.delete(path, mustExist = false)
+    }
+
     override fun records(): List<VaultRecord> = synchronized(lock) {
         requireUnlocked()
         records.toList()

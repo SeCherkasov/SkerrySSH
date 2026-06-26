@@ -54,6 +54,7 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
@@ -80,6 +81,10 @@ fun MobileDesignApp(
     // Точка миграции данных при разблокировке vault (паритет с desktop `main`/`DesktopDesignApp`).
     // No-op в превью/офскрине; Android-точка входа подставит вызов VaultMigration, когда появится.
     onVaultUnlocked: () -> Unit = {},
+    // Внешняя чистка при безвозвратном сбросе vault (хосты/known_hosts/настройки по [ResetScope]).
+    // Явный шов паритета с desktop: Android-точка входа подставит реальную чистку (как `onVaultReset`
+    // в desktop `main`), когда мобильный граф vault будет проведён. No-op в превью/офскрине.
+    onVaultReset: (ResetScope) -> Unit = {},
 ) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
@@ -115,9 +120,10 @@ fun MobileDesignApp(
                 VaultGate(
                     vault = vault,
                     biometrics = deps.biometrics,
+                    onReset = onVaultReset,
                     createForm = { error, onCreate -> MobileCreateScreen(error, onCreate) },
-                    unlockForm = { error, canBio, onUnlock, onBio ->
-                        MobileUnlockScreen(error, canBio, onUnlock, onBio)
+                    unlockForm = { error, canBio, onUnlock, onBio, onForgot ->
+                        MobileUnlockScreen(error, canBio, onUnlock, onBio, onForgot)
                     },
                 ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked) }
             } else {
@@ -354,6 +360,7 @@ fun MobileUnlockScreen(
     canUseBiometric: Boolean,
     onUnlock: (CharArray) -> Unit,
     onBiometric: () -> Unit,
+    onForgotPassword: () -> Unit,
 ) {
     var pwd by remember { mutableStateOf("") }
     val submit = { if (pwd.isNotEmpty()) onUnlock(pwd.toCharArray()) }
@@ -372,6 +379,14 @@ fun MobileUnlockScreen(
                 Txt("Use biometrics", color = D.dim, size = 14.sp)
             }
         }
+        // Тупик забытого пароля расшивается только сбросом (zero-knowledge); ведёт на дефолтный экран сброса.
+        Spacer(Modifier.height(18.dp))
+        Txt(
+            "Forgot your master password?",
+            color = D.faint,
+            size = 13.sp,
+            modifier = Modifier.clickable(onClick = onForgotPassword),
+        )
     }
 }
 

@@ -56,6 +56,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.tunnel.TunnelManager
+import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 
 /**
@@ -101,6 +102,9 @@ fun DesktopDesignApp(
     // Вызывается один раз после разблокировки vault, до перечитывания списков — точка для миграции
     // данных (схлопывание двухуровневой модели → хост ссылается на keychain-секрет). No-op в мок/превью.
     onVaultUnlocked: () -> Unit = {},
+    // Внешняя чистка при сбросе vault (хосты/known_hosts/настройки по [ResetScope]). Вызывается после
+    // стирания файла vault; реальную реализацию подставляет desktop `main`. No-op в мок/превью.
+    onVaultReset: (ResetScope) -> Unit = {},
 ) {
     val fonts = DesignFonts(
         ui = rememberSpaceGrotesk(),
@@ -139,8 +143,13 @@ fun DesktopDesignApp(
             VaultGate(
                 vault = vault,
                 biometrics = biometrics,
+                onReset = onVaultReset,
                 createForm = { error, onCreate -> DesktopCreateScreen(error, onCreate) },
-                unlockForm = { error, canBio, onUnlock, onBio -> DesktopUnlockScreen(error, canBio, onUnlock, onBio) },
+                unlockForm = { error, canBio, onUnlock, onBio, onForgot ->
+                    DesktopUnlockScreen(error, canBio, onUnlock, onBio, onForgot)
+                },
+                corruptedForm = { onReset -> DesktopCorruptedScreen(onReset) },
+                resetForm = { onConfirm, onCancel -> DesktopResetScreen(onConfirm, onCancel) },
             ) { onLock -> DesktopChrome(state, onLock, liveSessions, credentials, onVaultUnlocked) }
         } else {
             DesktopChrome(state, onLock = null, sessions = liveSessions, credentials = credentials, onVaultUnlocked = onVaultUnlocked)

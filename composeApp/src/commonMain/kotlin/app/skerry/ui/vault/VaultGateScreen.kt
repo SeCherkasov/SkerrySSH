@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -16,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,6 +29,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +90,9 @@ fun VaultGate(
     vault: Vault,
     biometrics: VaultBiometrics? = null,
     modifier: Modifier = Modifier,
+    // Внешняя чистка при сбросе (хосты/known_hosts/настройки по выбранному [ResetScope]). Вызывается
+    // после стирания vault; платформенная проводка (desktop `main`) подставляет реальную реализацию.
+    onReset: (ResetScope) -> Unit = {},
     createForm: @Composable (error: VaultGateError?, onCreate: (CharArray, CharArray) -> Unit) -> Unit =
         { error, onCreate ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CreateVaultForm(error, onCreate) }
@@ -96,15 +102,32 @@ fun VaultGate(
         canUseBiometric: Boolean,
         onUnlock: (CharArray) -> Unit,
         onBiometric: () -> Unit,
+        onForgotPassword: () -> Unit,
     ) -> Unit =
-        { error, canUseBiometric, onUnlock, onBiometric ->
+        { error, canUseBiometric, onUnlock, onBiometric, onForgotPassword ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                UnlockVaultForm(error, canUseBiometric, onUnlock, onBiometric)
+                UnlockVaultForm(error, canUseBiometric, onUnlock, onBiometric, onForgotPassword)
             }
+        },
+    // Экран повреждённого файла: единственное действие — уйти на подтверждение сброса ([onReset]).
+    corruptedForm: @Composable (onReset: () -> Unit) -> Unit =
+        { onResetClick ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CorruptedVaultForm(onResetClick) }
+        },
+    // Экран подтверждения сброса: выбор объёма + явное подтверждение, затем onConfirm/onCancel.
+    resetForm: @Composable (onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) -> Unit =
+        { onConfirm, onCancel ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { ResetVaultForm(onConfirm, onCancel) }
         },
     content: @Composable (onLock: () -> Unit) -> Unit,
 ) {
-    val controller = remember(vault, biometrics) { VaultGateController(vault, biometrics) }
+    // onReset не должен быть ключом remember (контроллер пересоздавать на каждой смене лямбды нельзя —
+    // потерялись бы состояние/ввод). rememberUpdatedState даёт контроллеру всегда свежий колбэк, не
+    // делая его ключом: иначе inline-лямбда вызывающего «застыла» бы на первой композиции.
+    val currentOnReset by rememberUpdatedState(onReset)
+    val controller = remember(vault, biometrics) {
+        VaultGateController(vault, biometrics, onReset = { currentOnReset(it) })
+    }
     val scope = rememberCoroutineScope()
 
     // Авто-лок при уходе приложения в фон: чужие руки на разблокированном устройстве не должны
@@ -147,7 +170,13 @@ fun VaultGate(
                     controller.canUnlockWithBiometric(),
                     { password -> controller.unlock(password) },
                     { scope.launch { controller.unlockWithBiometric(UNLOCK_PROMPT) } },
+                    { controller.beginReset() },
                 )
+
+            VaultGateState.Corrupted -> corruptedForm { controller.beginReset() }
+
+            VaultGateState.Resetting ->
+                resetForm({ scope -> controller.confirmReset(scope) }, { controller.cancelReset() })
 
             // lock() переводит гейт в NeedsUnlock; key(state) рушит поддерево content, чей
             // DisposableEffect рвёт живую SSH-сессию — блокировка заодно закрывает сессии.
@@ -199,6 +228,7 @@ private fun UnlockVaultForm(
     canUseBiometric: Boolean,
     onUnlock: (CharArray) -> Unit,
     onBiometric: () -> Unit,
+    onForgotPassword: () -> Unit,
 ) {
     var password by remember { mutableStateOf("") }
     val canSubmit = password.isNotEmpty()
@@ -225,6 +255,89 @@ private fun UnlockVaultForm(
             OutlinedButton(onClick = onBiometric, modifier = Modifier.fillMaxWidth()) {
                 Text("Разблокировать биометрией")
             }
+        }
+        TextButton(onClick = onForgotPassword, modifier = Modifier.fillMaxWidth()) {
+            Text("Забыли мастер-пароль?")
+        }
+    }
+}
+
+/**
+ * Экран повреждённого файла vault (Material-дефолт). Тупик: пароль ввести нельзя, единственный выход —
+ * безвозвратный сброс. Кнопка лишь уводит на экран подтверждения [ResetVaultForm].
+ */
+@Composable
+private fun CorruptedVaultForm(onReset: () -> Unit) {
+    VaultFormScaffold(
+        title = "Хранилище повреждено",
+        subtitle = "Файл хранилища не читается, и расшифровать его нельзя. Чтобы пользоваться " +
+            "приложением, придётся сбросить хранилище и начать заново.",
+        error = null,
+    ) {
+        Button(onClick = onReset, modifier = Modifier.fillMaxWidth()) {
+            Text("Сбросить хранилище")
+        }
+    }
+}
+
+/**
+ * Экран подтверждения безвозвратного сброса (Material-дефолт): выбор объёма ([ResetScope]) и
+ * type-to-confirm — кнопка активна только когда вписано слово `RESET`. Список потерь — в подзаголовке.
+ */
+@Composable
+private fun ResetVaultForm(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
+    var scope by remember { mutableStateOf(ResetScope.SecretsOnly) }
+    var confirmText by remember { mutableStateOf("") }
+    val canConfirm = confirmText.trim() == RESET_CONFIRM_WORD
+
+    VaultFormScaffold(
+        title = "Сбросить хранилище",
+        subtitle = "Это необратимо. Сохранённые пароли, ключи и учётные данные будут стёрты без " +
+            "возможности восстановления — мастер-пароль их не защищает, а пересоздаёт.",
+        error = null,
+    ) {
+        ResetScopeOption(
+            selected = scope == ResetScope.SecretsOnly,
+            title = "Только секреты",
+            subtitle = "Профили хостов и known_hosts останутся.",
+            onSelect = { scope = ResetScope.SecretsOnly },
+        )
+        ResetScopeOption(
+            selected = scope == ResetScope.Everything,
+            title = "Стереть всё",
+            subtitle = "Также удалить профили хостов, known_hosts и настройки.",
+            onSelect = { scope = ResetScope.Everything },
+        )
+        OutlinedTextField(
+            value = confirmText,
+            onValueChange = { confirmText = it },
+            label = { Text("Впишите $RESET_CONFIRM_WORD для подтверждения") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            onClick = { if (canConfirm) onConfirm(scope) },
+            enabled = canConfirm,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Сбросить безвозвратно")
+        }
+        TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+            Text("Отмена")
+        }
+    }
+}
+
+@Composable
+private fun ResetScopeOption(selected: Boolean, title: String, subtitle: String, onSelect: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().selectable(selected = selected, onClick = onSelect),
+        verticalAlignment = Alignment.Top,
+    ) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Column(modifier = Modifier.padding(top = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

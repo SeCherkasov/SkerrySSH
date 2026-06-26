@@ -102,7 +102,9 @@ fun main() {
 
     val content: @Composable () -> Unit = when (overlay) {
         "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null) { _, _ -> } } } }
-        "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}) } } }
+        "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}, onForgotPassword = {}) } } }
+        "corrupted" -> { { GateScreenPreview { DesktopCorruptedScreen(onReset = {}) } } }
+        "reset" -> { { GateScreenPreview { DesktopResetScreen(onConfirm = {}, onCancel = {}) } } }
         else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector) } }
     }
 
@@ -267,6 +269,7 @@ private class InMemoryVault : Vault {
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Success
     override fun exportDataKey(): DataKey? = null
     override fun lock() = Unit
+    override fun reset() { records.clear(); payloads.clear() }
     override fun records(): List<VaultRecord> = records.values.filterNot { it.deleted }
     override fun openPayload(id: String): ByteArray? = payloads[id]
     override fun put(id: String, type: RecordType, payload: ByteArray) {
