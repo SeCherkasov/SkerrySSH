@@ -25,6 +25,24 @@ class DesktopDesignStateTest {
     }
 
     @Test
+    fun host_search_query_starts_empty_and_updates() {
+        val s = DesktopDesignState()
+        assertEquals("", s.hostSearchQuery)
+        s.onHostSearch("prod")
+        assertEquals("prod", s.hostSearchQuery)
+        s.onHostSearch("")
+        assertEquals("", s.hostSearchQuery)
+    }
+
+    @Test
+    fun lock_clears_host_search_query() {
+        val s = DesktopDesignState()
+        s.onHostSearch("prod")
+        s.lock()
+        assertEquals("", s.hostSearchQuery)
+    }
+
+    @Test
     fun showView_session_level_sets_view_and_clears_overlay() {
         val s = DesktopDesignState()
         s.showView(DesktopView.Vault)        // сначала откроем app-overlay

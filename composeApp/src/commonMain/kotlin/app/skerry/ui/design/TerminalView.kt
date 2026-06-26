@@ -119,22 +119,7 @@ private fun HostsSidebar(state: DesktopDesignState) {
     val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
     Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(Color(0x08FFFFFF))
-                    .border(1.dp, D.line, RoundedCornerShape(7.dp))
-                    .padding(horizontal = 9.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("search", size = 16.sp, color = D.faint)
-                Txt("Search hosts, tags, IPs…", color = D.faint, size = 12.5.sp, modifier = Modifier.weight(1f))
-                Box(Modifier.border(1.dp, D.cyan14, RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Txt("⌘K", color = D.faint, size = 10.sp, font = mono)
-                }
-            }
+            HostSearchField(state, mono)
             Row(Modifier.padding(top = 9.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 if (liveHosts != null) {
                     // Чипсы = теги живого каталога; клик переключает фильтр.
@@ -162,8 +147,18 @@ private fun HostsSidebar(state: DesktopDesignState) {
             // Живой каталог из HostManagerController, если подан (за гейтом vault); иначе мок-данные
             // макета (путь офскрин-рендера/превью). Папки — по группам, сузив активным тег-чипом.
             if (liveHosts != null) {
-                val folders = remember(liveHosts.hosts, effectiveChip) {
-                    groupHostsByFolder(filterHosts(liveHosts.hosts, effectiveChip))
+                val query = state.hostSearchQuery
+                val folders = remember(liveHosts.hosts, effectiveChip, query) {
+                    groupHostsByFolder(filterHosts(liveHosts.hosts, effectiveChip, query))
+                }
+                // Сужение поиском/тегом ничего не нашло → подсказка вместо немой пустоты (в отличие от
+                // пустого каталога, где ниже всё равно покажется секция RECENT/кнопка New connection).
+                if (folders.isEmpty() && (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP)) {
+                    Txt(
+                        "No hosts match",
+                        color = D.faint, size = 12.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp),
+                    )
                 }
                 // Свежий список папок для drag-целей (жест фиксируется по ключу строки/папки).
                 val foldersUpdated = rememberUpdatedState(folders)
@@ -211,6 +206,55 @@ private fun HostsSidebar(state: DesktopDesignState) {
             PrimaryButton("New connection", onClick = state::openModal, icon = "add_link", modifier = Modifier.fillMaxWidth())
         }
     }
+}
+
+/**
+ * Поле поиска по сайдбару хостов (имя/адрес/пользователь/группа/теги). Рамка/иконка/плейсхолдер —
+ * в decorationBox, чтобы клик по всей площади ставил каретку (см. правило для рукописных полей).
+ * Пока пусто — справа бейдж `⌘K` (как в макете); при вводе он сменяется крестиком очистки.
+ */
+@Composable
+private fun HostSearchField(state: DesktopDesignState, mono: FontFamily) {
+    val query = state.hostSearchQuery
+    BasicTextField(
+        value = query,
+        onValueChange = state::onHostSearch,
+        singleLine = true,
+        textStyle = TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(D.cyan),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(Color(0x08FFFFFF))
+                    .border(1.dp, D.line, RoundedCornerShape(7.dp))
+                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Sym("search", size = 16.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (query.isEmpty()) Txt("Search hosts, tags, IPs…", color = D.faint, size = 12.5.sp)
+                    inner()
+                }
+                if (query.isEmpty()) {
+                    Box(Modifier.border(1.dp, D.cyan14, RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                        Txt("⌘K", color = D.faint, size = 10.sp, font = mono)
+                    }
+                } else {
+                    val onClear = remember(state) { { state.onHostSearch("") } }
+                    Box(
+                        Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onClear),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Sym("close", size = 14.sp, color = D.faint)
+                    }
+                }
+            }
+        },
+    )
 }
 
 /**
