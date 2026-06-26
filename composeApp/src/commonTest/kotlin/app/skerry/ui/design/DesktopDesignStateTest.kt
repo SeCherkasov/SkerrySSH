@@ -35,6 +35,25 @@ class DesktopDesignStateTest {
     }
 
     @Test
+    fun request_and_dismiss_close_session_confirmation() {
+        val s = DesktopDesignState()
+        assertNull(s.pendingClose)
+        s.requestCloseSession("sess-1")
+        assertEquals(PendingClose.Session("sess-1"), s.pendingClose)
+        s.dismissClose()
+        assertNull(s.pendingClose)
+    }
+
+    @Test
+    fun request_close_split_confirmation() {
+        val s = DesktopDesignState()
+        s.requestCloseSplit("sess-2")
+        assertEquals(PendingClose.Split("sess-2"), s.pendingClose)
+        s.dismissClose()
+        assertNull(s.pendingClose)
+    }
+
+    @Test
     fun lock_clears_host_search_query() {
         val s = DesktopDesignState()
         s.onHostSearch("prod")
