@@ -94,7 +94,7 @@ fun TerminalView(state: DesktopDesignState) {
                 if (showSplit) {
                     Box(Modifier.width(1.dp).fillMaxHeight().background(D.cyan14))
                     val splitMod = Modifier.weight(1f).then(paneFocusBorder(focusedSplit))
-                    if (sessions != null) LiveSplitPane(sessions, splitMod) else SplitPane(splitMod)
+                    if (sessions != null) LiveSplitPane(sessions, state, splitMod) else SplitPane(splitMod)
                 }
                 if (state.infoPanel) InfoPanel()
             }
@@ -572,8 +572,9 @@ private fun SessionToolbar(state: DesktopDesignState) {
                 // Tunnels — глобальный раздел (привычная модель SSH-клиентов), всегда открывается оверлеем.
                 IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
                 IconBtn("info", onClick = state::toggleInfo)
-                // Power: рвёт активную сессию (живой путь); в мок-режиме — no-op заглушка.
-                IconBtn("power_settings_new", onClick = { if (active != null) sessions.close(active.id) }, tint = D.sunset)
+                // Power: рвёт активную сессию (живой путь) — спрашиваем подтверждение (деструктивно, без
+                // авто-реконнекта); в мок-режиме — no-op заглушка.
+                IconBtn("power_settings_new", onClick = { if (active != null) state.requestCloseSession(active.id) }, tint = D.sunset)
             }
         }
         HLine()
@@ -817,7 +818,7 @@ private fun AiSuggestionCard() {
  * (заголовок чипа вкладки следует за фокусом).
  */
 @Composable
-private fun LiveSplitPane(sessions: SessionsController, modifier: Modifier = Modifier) {
+private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignState, modifier: Modifier = Modifier) {
     val mono = LocalFonts.current.mono
     val parent = sessions.active ?: return
     var pickerOpen by remember { mutableStateOf(false) }
@@ -850,8 +851,13 @@ private fun LiveSplitPane(sessions: SessionsController, modifier: Modifier = Mod
                     }
                     Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
                 }
-                // Крестик в шапке закрывает split этой вкладки (рвёт вторичное соединение).
-                IconBtn("close", onClick = { sessions.closeSplit(parent.id) }, box = 22)
+                // Крестик в шапке закрывает split этой вкладки (рвёт вторичное соединение) —
+                // подтверждаем только когда есть что рвать (хост уже выбран); пустую панель закрываем сразу.
+                IconBtn(
+                    "close",
+                    onClick = { if (split != null) state.requestCloseSplit(parent.id) else sessions.closeSplit(parent.id) },
+                    box = 22,
+                )
             }
             if (pickerOpen) {
                 Popup(alignment = Alignment.BottomStart, onDismissRequest = { pickerOpen = false }) {

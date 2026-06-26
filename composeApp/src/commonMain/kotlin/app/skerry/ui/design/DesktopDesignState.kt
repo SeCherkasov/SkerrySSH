@@ -41,6 +41,18 @@ enum class SettingsTab { Account, AI, Sync, Security, Appearance, Terminal, Keyb
 /** AI-политика подключения (модалка New connection). */
 enum class AiPolicy { Strict, Balanced, Permissive, Off }
 
+/**
+ * Запрошенное деструктивное действие над сессией, ждущее подтверждения ([ConfirmActionDialog]).
+ * Само действие (close/closeSplit) выполняет [DesktopChrome] — там доступен менеджер сессий.
+ */
+sealed interface PendingClose {
+    /** Разрыв сессии-вкладки целиком (кнопка power в тулбаре). */
+    data class Session(val id: String) : PendingClose
+
+    /** Закрытие split-панели вкладки [parentId] (крестик в шапке split). */
+    data class Split(val parentId: String) : PendingClose
+}
+
 /** Вкладка сессии в titlebar: имя хоста + цвет статус-точки. */
 @Stable
 data class SessionTab(val name: String, val dot: Color)
@@ -110,6 +122,9 @@ class DesktopDesignState(
     /** Хост, для которого показан диалог подтверждения удаления (null — диалога нет). */
     var pendingDeleteHost: Host? by mutableStateOf(null); private set
 
+    /** Деструктивное действие над сессией, ждущее подтверждения (null — диалога нет). */
+    var pendingClose: PendingClose? by mutableStateOf(null); private set
+
     var tabs: List<SessionTab> by mutableStateOf(
         listOf(
             SessionTab("prod-web-01", D.moss),
@@ -172,6 +187,9 @@ class DesktopDesignState(
     fun closeModal() { modalOpen = false; editingHost = null }
     fun requestDeleteHost(host: Host) { pendingDeleteHost = host }
     fun dismissDeleteHost() { pendingDeleteHost = null }
+    fun requestCloseSession(id: String) { pendingClose = PendingClose.Session(id) }
+    fun requestCloseSplit(parentId: String) { pendingClose = PendingClose.Split(parentId) }
+    fun dismissClose() { pendingClose = null }
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
     fun openSettings() { settingsOpen = true }
     fun closeSettings() { settingsOpen = false }

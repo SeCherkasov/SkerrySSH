@@ -216,6 +216,9 @@ private fun DesktopChrome(
             pendingHost = null
             pendingSplitHost = null
             pendingSplitParent = null
+            // Висящее подтверждение разрыва/закрытия сбрасываем тоже — после unlock действие требует
+            // свежего намерения пользователя (как pendingHost), а не «всплывает» поверх.
+            state.dismissClose()
             tunnels?.closeAll()
             // Сессии переживают lock (открытый сокет жить остаётся), но авто-реконнект после lock
             // переаутентифицировался бы устаревшим секретом на запертом vault — запрещаем его,
@@ -275,6 +278,29 @@ private fun DesktopChrome(
                     onDismiss = state::dismissDeleteHost,
                     onConfirm = { hosts?.delete(host.id); state.dismissDeleteHost() },
                 )
+            }
+            // Подтверждение разрыва сессии (power) / закрытия split-панели — деструктивно, без авто-реконнекта.
+            when (val pc = state.pendingClose) {
+                is PendingClose.Session -> {
+                    val name = sessions?.sessions?.firstOrNull { it.id == pc.id }?.displayTitle ?: "this session"
+                    ConfirmActionDialog(
+                        title = "Disconnect \"$name\"?",
+                        message = "The SSH session and its terminal close now. Auto-reconnect won't bring it back — you'll need to connect again.",
+                        confirmLabel = "Disconnect",
+                        onConfirm = { sessions?.close(pc.id); state.dismissClose() },
+                        onDismiss = state::dismissClose,
+                    )
+                }
+                is PendingClose.Split -> {
+                    ConfirmActionDialog(
+                        title = "Close split panel?",
+                        message = "The second session in this tab disconnects and the panel closes. The main session stays connected.",
+                        confirmLabel = "Close panel",
+                        onConfirm = { sessions?.closeSplit(pc.parentId); state.dismissClose() },
+                        onDismiss = state::dismissClose,
+                    )
+                }
+                null -> {}
             }
         }
     }

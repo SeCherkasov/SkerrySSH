@@ -130,49 +130,68 @@ private fun GlobalTunnelsBody(
 
     fun hostLabel(hostId: String): String = hosts?.find(hostId)?.label ?: hostId
 
-    Row(Modifier.fillMaxSize()) {
-        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
-            if (tunnels.isEmpty()) {
-                EmptyTunnels()
-            } else {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
-                    TunnelHeaderRow()
-                    tunnels.forEach { entry ->
-                        HLine()
-                        // Лямбды стабилизируем по id: телеметрия активных туннелей тикает раз в секунду и
-                        // без remember пересоздавала бы onSelect/onToggle, перерисовывая весь список.
-                        val onRowSelect = remember(entry.id, onSelect) { { onSelect(entry.id) } }
-                        val onRowToggle = remember(entry.id, manager) {
-                            {
-                                if (entry.status is TunnelStatus.Active) manager.deactivate(entry.id)
-                                else manager.activate(entry.id)
+    // Туннель, для которого показан диалог подтверждения удаления (null — диалога нет). Локально: удаление
+    // самодостаточно (manager.delete), глобальное состояние не нужно — в отличие от close сессий.
+    var pendingRemove by remember { mutableStateOf<TunnelEntry?>(null) }
+
+    Box(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
+                if (tunnels.isEmpty()) {
+                    EmptyTunnels()
+                } else {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
+                        TunnelHeaderRow()
+                        tunnels.forEach { entry ->
+                            HLine()
+                            // Лямбды стабилизируем по id: телеметрия активных туннелей тикает раз в секунду и
+                            // без remember пересоздавала бы onSelect/onToggle, перерисовывая весь список.
+                            val onRowSelect = remember(entry.id, onSelect) { { onSelect(entry.id) } }
+                            val onRowToggle = remember(entry.id, manager) {
+                                {
+                                    if (entry.status is TunnelStatus.Active) manager.deactivate(entry.id)
+                                    else manager.activate(entry.id)
+                                }
                             }
+                            TunnelRowGlobal(
+                                entry = entry,
+                                via = hostLabel(entry.tunnel.hostId),
+                                mono = mono,
+                                selected = !showNew && entry.id == selected?.id,
+                                onSelect = onRowSelect,
+                                onToggle = onRowToggle,
+                            )
                         }
-                        TunnelRowGlobal(
-                            entry = entry,
-                            via = hostLabel(entry.tunnel.hostId),
-                            mono = mono,
-                            selected = !showNew && entry.id == selected?.id,
-                            onSelect = onRowSelect,
-                            onToggle = onRowToggle,
-                        )
+                    }
+                    Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Sym("bolt", size = 15.sp, color = D.moss)
+                        Txt("$activeCount active ${if (activeCount == 1) "tunnel" else "tunnels"}", color = D.faint, size = 11.5.sp)
                     }
                 }
-                Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Sym("bolt", size = 15.sp, color = D.moss)
-                    Txt("$activeCount active ${if (activeCount == 1) "tunnel" else "tunnels"}", color = D.faint, size = 11.5.sp)
-                }
             }
+            VLine(D.line)
+            TunnelEditor(
+                manager = manager,
+                hosts = hosts,
+                mono = mono,
+                existing = if (showNew) null else selected,
+                onSaved = { onSelect(it) },
+                onRequestRemove = { selected?.let { pendingRemove = it } },
+            )
         }
-        VLine(D.line)
-        TunnelEditor(
-            manager = manager,
-            hosts = hosts,
-            mono = mono,
-            existing = if (showNew) null else selected,
-            onSaved = { onSelect(it) },
-            onRemoved = onNew,
-        )
+        pendingRemove?.let { entry ->
+            ConfirmActionDialog(
+                title = "Remove \"${entry.tunnel.label}\"?",
+                message = if (entry.status is TunnelStatus.Active) {
+                    "This tunnel is active — it will be disconnected and deleted. This can't be undone."
+                } else {
+                    "This saved tunnel is deleted. This can't be undone."
+                },
+                confirmLabel = "Remove",
+                onConfirm = { manager.delete(entry.id); pendingRemove = null; onNew() },
+                onDismiss = { pendingRemove = null },
+            )
+        }
     }
 }
 
@@ -252,7 +271,7 @@ private fun TunnelEditor(
     mono: FontFamily,
     existing: TunnelEntry?,
     onSaved: (String) -> Unit,
-    onRemoved: () -> Unit,
+    onRequestRemove: () -> Unit,
 ) {
     val editingId = existing?.id
     val seed = existing?.tunnel
@@ -324,7 +343,7 @@ private fun TunnelEditor(
                 fg = if (draft != null) Color(0xFF0A1A26) else D.faint,
             )
             if (existing != null) {
-                GhostButton("Remove", onClick = { manager.delete(existing.id); onRemoved() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                GhostButton("Remove", onClick = onRequestRemove, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
             }
         }
     }
