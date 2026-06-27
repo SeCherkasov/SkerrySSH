@@ -51,6 +51,22 @@ fun moveHostToGroup(
 }
 
 /**
+ * Переименовать группу [oldName] → [newName] во всех профилях. Сопоставление по канону группы
+ * (пустое/`null` сводится к `null`); пустой/`null` [newName] разгруппировывает хосты (`Host.group`=
+ * `null`) — этим же путём «удаляется» группа: её хосты переезжают в Ungrouped, сами профили остаются.
+ * Результат уплощается через корзины групп — как [moveGroup]/[moveHostToGroup], чтобы сохранить
+ * инвариант «хосты одной группы идут непрерывным блоком» даже при слиянии в существующую группу.
+ * Неизвестная/пустая [oldName] или совпадение old==new — список без изменений (порядок и id целы).
+ */
+fun renameHostGroup(hosts: List<Host>, oldName: String?, newName: String?): List<Host> {
+    val from = oldName.canonicalGroup() ?: return hosts
+    val to = newName.canonicalGroup()
+    if (from == to) return hosts
+    val renamed = hosts.map { if (it.group.canonicalGroup() == from) it.copy(group = to) else it }
+    return bucketize(renamed).values.flatten()
+}
+
+/**
  * Переставить целую папку [group] на позицию [targetGroupIndex] среди папок (порядок хостов внутри
  * сохраняется). Индекс зажимается; неизвестная [group] — список без изменений.
  */

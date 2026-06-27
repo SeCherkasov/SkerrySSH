@@ -7,13 +7,16 @@ import app.skerry.shared.host.Host
 @Immutable
 data class HostFolder(val name: String, val hosts: List<Host>)
 
+/** Имя синтетической корзины для профилей без группы (`Host.group` пуст/`null`). */
+const val UNGROUPED_LABEL = "Ungrouped"
+
 /**
  * Сгруппировать профили по [Host.group] для сайдбара. Папки идут в порядке первого появления
  * группы во входном списке, хосты внутри — в исходном порядке. Пустая/`null`-группа сводится в
  * корзину [ungroupedLabel]. Чистая функция (без Compose) — зафиксирована
  * [app.skerry.ui.host.HostGroupingTest], переиспользуется desktop/мобильным сайдбаром.
  */
-fun groupHostsByFolder(hosts: List<Host>, ungroupedLabel: String = "Ungrouped"): List<HostFolder> {
+fun groupHostsByFolder(hosts: List<Host>, ungroupedLabel: String = UNGROUPED_LABEL): List<HostFolder> {
     val buckets = LinkedHashMap<String, MutableList<Host>>()
     for (host in hosts) {
         val key = host.group?.takeIf { it.isNotBlank() } ?: ungroupedLabel

@@ -96,4 +96,23 @@ class HostManagerController(
         store.reorder { moveGroup(it, group, targetGroupIndex) }
         hosts = store.all()
     }
+
+    /**
+     * Переименовать группу [oldName] → [newName] во всех профилях. Чистый пересчёт [renameHostGroup]
+     * под блокировкой стора (как и прочие сортировки); набор id сохраняется. Side-channel пустых/
+     * схлопнутых групп правит вызывающий UI отдельно.
+     */
+    fun renameGroup(oldName: String, newName: String) {
+        store.reorder { renameHostGroup(it, oldName, newName) }
+        hosts = store.all()
+    }
+
+    /**
+     * «Удалить» группу [name]: её хосты разгруппировываются (`Host.group`=`null`, переезжают в
+     * Ungrouped) — сами профили и их секреты не трогаются. Реализация — [renameHostGroup] в `null`.
+     */
+    fun deleteGroup(name: String) {
+        store.reorder { renameHostGroup(it, name, null) }
+        hosts = store.all()
+    }
 }

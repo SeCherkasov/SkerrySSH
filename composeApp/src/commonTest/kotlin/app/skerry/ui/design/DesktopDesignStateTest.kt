@@ -310,4 +310,90 @@ class DesktopDesignStateTest {
         assertTrue(s.recentHostIds.isEmpty())
         assertTrue(seen.isEmpty())
     }
+
+    // --- Пользовательские (пустые) группы хостов ---
+
+    @Test
+    fun custom_groups_default_empty() {
+        assertTrue(DesktopDesignState().customGroups.isEmpty())
+    }
+
+    @Test
+    fun addCustomGroup_appends_trimmed_and_reports() {
+        val seen = mutableListOf<List<String>>()
+        val s = DesktopDesignState(onCustomGroupsChange = { seen += it })
+        s.addCustomGroup("  Prod  ")
+        s.addCustomGroup("Dev")
+        assertEquals(listOf("Prod", "Dev"), s.customGroups)
+        assertEquals(listOf(listOf("Prod"), listOf("Prod", "Dev")), seen)
+    }
+
+    @Test
+    fun addCustomGroup_ignores_blank_and_exact_duplicate_but_allows_other_case() {
+        val seen = mutableListOf<List<String>>()
+        val s = DesktopDesignState(onCustomGroupsChange = { seen += it })
+        s.addCustomGroup("Prod")
+        s.addCustomGroup("   ")
+        s.addCustomGroup("Prod") // точный дубль — игнор
+        // Иной регистр — это иная группа (Host.group/папки сопоставляются по регистру), поэтому добавляется.
+        s.addCustomGroup("prod")
+        assertEquals(listOf("Prod", "prod"), s.customGroups)
+        assertEquals(listOf(listOf("Prod"), listOf("Prod", "prod")), seen)
+    }
+
+    @Test
+    fun renameGroupName_updates_custom_and_collapsed() {
+        val groups = mutableListOf<List<String>>()
+        val collapsed = mutableListOf<Set<String>>()
+        val s = DesktopDesignState(
+            initialCollapsedGroups = setOf("Prod"),
+            onCollapsedGroupsChange = { collapsed += it },
+            initialCustomGroups = listOf("Prod"),
+            onCustomGroupsChange = { groups += it },
+        )
+        s.renameGroupName("Prod", "Production")
+        assertEquals(listOf("Production"), s.customGroups)
+        assertTrue(s.isGroupCollapsed("Production"))
+        assertFalse(s.isGroupCollapsed("Prod"))
+        assertEquals(listOf(listOf("Production")), groups)
+        assertEquals(listOf(setOf("Production")), collapsed)
+    }
+
+    @Test
+    fun renameGroupName_ignores_blank_or_unchanged() {
+        val s = DesktopDesignState(initialCustomGroups = listOf("Prod"))
+        s.renameGroupName("Prod", "  ")
+        s.renameGroupName("Prod", "Prod") // точно то же имя — no-op
+        assertEquals(listOf("Prod"), s.customGroups)
+    }
+
+    @Test
+    fun renameGroupName_applies_case_only_change() {
+        val s = DesktopDesignState(initialCustomGroups = listOf("Prod"))
+        s.renameGroupName("Prod", "prod") // правка только регистра — реальное переименование
+        assertEquals(listOf("prod"), s.customGroups)
+    }
+
+    @Test
+    fun removeCustomGroup_drops_from_custom_and_collapsed() {
+        val s = DesktopDesignState(
+            initialCollapsedGroups = setOf("Prod"),
+            initialCustomGroups = listOf("Prod", "Dev"),
+        )
+        s.removeCustomGroup("Prod")
+        assertEquals(listOf("Dev"), s.customGroups)
+        assertFalse(s.isGroupCollapsed("Prod"))
+    }
+
+    @Test
+    fun group_dialog_open_and_dismiss() {
+        val s = DesktopDesignState()
+        assertEquals(null, s.groupDialog)
+        s.openCreateGroup()
+        assertEquals(GroupDialog.Create, s.groupDialog)
+        s.openRenameGroup("Prod")
+        assertEquals(GroupDialog.Rename("Prod"), s.groupDialog)
+        s.dismissGroupDialog()
+        assertEquals(null, s.groupDialog)
+    }
 }

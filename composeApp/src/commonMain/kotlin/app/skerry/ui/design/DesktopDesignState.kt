@@ -53,6 +53,18 @@ sealed interface PendingClose {
     data class Split(val parentId: String) : PendingClose
 }
 
+/**
+ * Открытый диалог управления группой хостов сайдбара: создание новой ([Create]) либо правка
+ * существующей по имени ([Rename]). `null` в [DesktopDesignState.groupDialog] — диалога нет.
+ */
+sealed interface GroupDialog {
+    /** Создание новой (пока пустой) группы. */
+    data object Create : GroupDialog
+
+    /** Правка группы [name]: переименование либо удаление (разгруппировать её хосты). */
+    data class Rename(val name: String) : GroupDialog
+}
+
 /** Вкладка сессии в titlebar: имя хоста + цвет статус-точки. */
 @Stable
 data class SessionTab(val name: String, val dot: Color)
@@ -85,6 +97,11 @@ class DesktopDesignState(
     // перезапуск. Дефолты (пусто, no-op) сохраняют прежнее поведение для мок/превью/тестов.
     initialRecentHostIds: List<String> = emptyList(),
     private val onRecentHostIdsChange: (List<String>) -> Unit = {},
+    // Пользовательские группы хостов, ещё не имеющие профилей (созданы кнопкой «+папка» до того, как
+    // в них перетащили/завели хост). Группы с хостами выводятся из [Host.group], а пустые жить там не
+    // могут — поэтому держим их именами здесь и персистим. Дефолты (пусто, no-op) — для мок/превью/тестов.
+    initialCustomGroups: List<String> = emptyList(),
+    private val onCustomGroupsChange: (List<String>) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -109,6 +126,12 @@ class DesktopDesignState(
 
     /** Id недавно подключённых хостов, новейший — первым (секция RECENT в сайдбаре). */
     var recentHostIds: List<String> by mutableStateOf(initialRecentHostIds); private set
+
+    /** Имена пользовательских (пока пустых) групп хостов — показываются как папки наравне с выводимыми из хостов. */
+    var customGroups: List<String> by mutableStateOf(initialCustomGroups); private set
+
+    /** Открытый диалог управления группой (создание/правка) или `null`. */
+    var groupDialog: GroupDialog? by mutableStateOf(null); private set
     var selectedHost: String by mutableStateOf("prod-web-01"); private set
 
     /** Текст поиска в сайдбаре хостов (по имени/адресу/пользователю/группе/тегам). Пусто — без фильтра. */
@@ -216,6 +239,56 @@ class DesktopDesignState(
         if (next == recentHostIds) return
         recentHostIds = next
         onRecentHostIdsChange(recentHostIds)
+    }
+
+    fun openCreateGroup() { groupDialog = GroupDialog.Create }
+    fun openRenameGroup(name: String) { groupDialog = GroupDialog.Rename(name) }
+    fun dismissGroupDialog() { groupDialog = null }
+
+    /**
+     * Завести новую (пока пустую) группу. Имя триммится, переносы строк вырезаются (они не хранимы
+     * построчно в персисте). Пустое или точно совпадающее с существующей пользовательской группой —
+     * игнорируется. Сопоставление точное (по регистру) — как `Host.group`/[groupHostsByFolder]/
+     * [collapsedGroups] во всей системе; дубль с группой, выводимой из хостов (точное имя), отсеётся
+     * при рендере слиянием папок. Персист — через колбэк.
+     */
+    fun addCustomGroup(name: String) {
+        val n = name.trim().filterNot { it == '\n' || it == '\r' }
+        if (n.isEmpty() || n in customGroups) return
+        customGroups = customGroups + n
+        onCustomGroupsChange(customGroups)
+    }
+
+    /**
+     * Переименование группы в side-channel: правит список пустых групп и набор схлопнутых ([old]→[new]).
+     * Переписывание `Host.group` у реальных профилей делает [app.skerry.ui.host.HostManagerController.renameGroup]
+     * — вызывающий UI зовёт обе стороны. Сопоставление точное (по регистру), как в
+     * [app.skerry.ui.host.renameHostGroup], чтобы side-channel не разъезжался с профилями (включая
+     * правку только регистра). Имя триммится+чистится от переносов; пустое/неизменное [new] — no-op.
+     */
+    fun renameGroupName(old: String, new: String) {
+        val n = new.trim().filterNot { it == '\n' || it == '\r' }
+        if (n.isEmpty() || n == old) return
+        if (old in customGroups) {
+            customGroups = customGroups.map { if (it == old) n else it }.distinct()
+            onCustomGroupsChange(customGroups)
+        }
+        if (old in collapsedGroups) {
+            collapsedGroups = collapsedGroups - old + n
+            onCollapsedGroupsChange(collapsedGroups)
+        }
+    }
+
+    /** Снять пользовательскую группу [name] из side-channel (список пустых + набор схлопнутых). */
+    fun removeCustomGroup(name: String) {
+        if (name in customGroups) {
+            customGroups = customGroups.filterNot { it == name }
+            onCustomGroupsChange(customGroups)
+        }
+        if (name in collapsedGroups) {
+            collapsedGroups = collapsedGroups - name
+            onCollapsedGroupsChange(collapsedGroups)
+        }
     }
 
     fun toggleSanitize() { sanitize = !sanitize }

@@ -13,6 +13,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import app.skerry.ui.host.FolderBounds
 import app.skerry.ui.host.HostDrop
 import app.skerry.ui.host.HostFolder
+import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.folderDropTarget
 import app.skerry.ui.host.hostDropTarget
 
@@ -82,7 +83,10 @@ class HostDragState {
     fun hostFolderBounds(folders: List<HostFolder>): List<FolderBounds> = folders.mapNotNull { folder ->
         val range = folderRange[folder.name] ?: return@mapNotNull null
         FolderBounds(
-            group = folder.hosts.firstOrNull()?.group,
+            // Пустая папка хостов не имеет (выводимую из них) группу — берём её имя как ключ группы,
+            // чтобы сброс хоста в свежесозданную пустую группу проставлял Host.group=её имя, а не null
+            // (иначе хост уехал бы в Ungrouped). Синтетический «Ungrouped» как группа остаётся null.
+            group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL },
             top = range.top,
             bottom = range.bottom,
             otherHostCentersY = folder.hosts
