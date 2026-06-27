@@ -1060,7 +1060,7 @@ private fun InfoPanel() {
     // (id сессии + флаг connected) пересоздают его при смене сессии/подключения, без условного
     // вызова remember. openMetrics идемпотентен (кэш в ConnectionController).
     val liveMetrics = remember(active, connected) {
-        if (connected && active != null) active.controller.openMetrics() else null
+        if (connected) active.controller.openMetrics() else null
     }?.metrics
     Column(Modifier.width(268.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState())) {
         Row(

@@ -79,8 +79,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // плашка «Session closed»). Обрыв транспорта сюда не попадает (cleanExit=false) — там экран живёт.
     val cleanlyExited = (active?.controller?.uiState as? ConnectionUiState.Disconnected)?.cleanExit == true
     LaunchedEffect(active?.id, cleanlyExited) {
-        if (cleanlyExited && active != null) {
-            sessions?.close(active.id)
+        if (cleanlyExited) {
+            sessions.close(active.id)
             state.pop()
         }
     }
