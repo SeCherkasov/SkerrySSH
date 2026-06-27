@@ -434,18 +434,66 @@ class TerminalEmulatorTest {
     }
 
     @Test
-    fun `erase display 2J clears the screen but keeps grid size`() {
+    fun `erase display 2J moves the screen into scrollback and clears the grid`() {
         val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2", "$esc[2J"))
+        // Видимая сетка (нижние rows строк) очищена, но прежний вывод ушёл в scrollback — его
+        // можно прокрутить вверх (поведение gnome-terminal/VTE), а не потерян.
+        assertEquals(6, emu.lines.size) // 2 в scrollback + 4 пустых экранных
+        assertEquals("line1", emu.lines[0].joinToString("") { it.text }.trimEnd())
+        assertEquals("line2", emu.lines[1].joinToString("") { it.text }.trimEnd())
+        assertTrue(emu.lines.takeLast(4).all { row -> row.all { it.text == " " } }, "экран очищен")
+        // ED 2 курсор не двигает: cy остаётся на 1 → абсолютно scrollback.size(2) + 1.
+        assertEquals(3, emu.cursorRow)
+    }
+
+    @Test
+    fun `erase display 2J blanks in place on the alternate screen`() {
+        // На альт-экране scrollback'а нет — полноэкранные TUI очищают на месте, без переноса в историю.
+        val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("$esc[?1049h", "line1\r\nline2", "$esc[2J"))
         assertEquals("", emu.asText())
         assertEquals(4, emu.lines.size)
     }
 
     @Test
-    fun `erase display 3 also clears scrollback`() {
+    fun `erase display 3 keeps scrollback so clear preserves history`() {
         val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("a\r\nb\r\nc\r\nd"))
-        assertTrue(emu.lines.size > 2) // накопился scrollback
+        val before = emu.lines.size
+        assertTrue(before > 2) // накопился scrollback
         emu.feed("$esc[3J".encodeToByteArray())
-        assertEquals(2, emu.lines.size)
+        // ED 3 («erase saved lines») историю НЕ вытирает — она остаётся прокручиваемой.
+        assertTrue(emu.lines.size >= before, "scrollback сохранён")
+    }
+
+    @Test
+    fun `clear sequence blanks the screen yet keeps prior output scrollable`() {
+        // Ровно то, что шлёт команда `clear`: домой, очистить экран, очистить saved lines.
+        val emu = emulate(cols = 10, rows = 3, chunks = arrayOf("alpha\r\nbeta\r\ngamma", "$esc[H$esc[2J$esc[3J"))
+        // Прежний вывод доступен в истории...
+        val text = emu.lines.joinToString("\n") { row -> row.joinToString("") { it.text }.trimEnd() }
+        assertTrue("alpha" in text && "beta" in text && "gamma" in text, "история сохранена")
+        // ...а видимая сетка (нижние 3 строки) пуста, курсор — в её начале (домой).
+        assertTrue(emu.lines.takeLast(3).all { row -> row.all { it.text == " " } }, "экран очищен")
+        assertEquals(3, emu.cursorRow)
+        assertEquals(0, emu.cursorCol)
+    }
+
+    @Test
+    fun `clear keeps a background-colored blank row in history`() {
+        // Строка из пробелов с цветным фоном (BCE) — это содержимое, не пустота: при clear она
+        // должна уйти в scrollback, а не обрезаться как хвостовая пустая.
+        val emu = emulate(cols = 4, rows = 3, chunks = arrayOf("ab\r\n", "$esc[41m    $esc[m"))
+        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray())
+        assertEquals(5, emu.lines.size) // "ab" + цветная строка в scrollback + 3 пустых экранных
+        assertEquals(TermColor.Red, emu.lines[1][0].style.bg)
+    }
+
+    @Test
+    fun `repeated clear does not flood scrollback with blank lines`() {
+        val emu = emulate(cols = 10, rows = 3, chunks = arrayOf("x\r\ny"))
+        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray())
+        val afterFirst = emu.lines.size
+        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // очистка уже пустого экрана
+        assertEquals(afterFirst, emu.lines.size, "повторный clear не плодит пустые строки в истории")
     }
 
     // Вставка / удаление

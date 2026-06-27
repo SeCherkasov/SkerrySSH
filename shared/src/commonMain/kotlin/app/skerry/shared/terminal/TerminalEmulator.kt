@@ -117,7 +117,8 @@ enum class CursorShape { Block, Underline, Bar }
  *
  * Покрыто: печать с автопереносом (DECAWM) и pending-wrap; CR/LF/BS/HT/BEL; IND/NEL/RI/HTS/RIS;
  * DECSC/DECRC; адресация курсора (CUU/CUD/CUF/CUB/CNL/CPL/CHA/CUP/VPA/HPA/CHT/CBT); стирание
- * (EL/ED, включая очистку scrollback по `ED 3`); вставка/удаление (ICH/DCH/ECH/IL/DL/SU/SD);
+ * (EL/ED; `ED 2`/`ED 3` уносят экран в scrollback, историю не вытирают — clear/Ctrl+L её хранят);
+ * вставка/удаление (ICH/DCH/ECH/IL/DL/SU/SD);
  * регион прокрутки (DECSTBM); insert-режим (IRM); полный SGR (атрибуты + 16/256/truecolor);
  * приватные режимы (DECCKM/DECOM/DECAWM/?25/alt-screen 47/1047/1049/mouse 1000-1006/bracketed
  * paste 2004); табстопы; ответы DSR/DA и заголовок окна (OSC 0/1/2). Неизвестные
@@ -1014,9 +1015,34 @@ class TerminalEmulator(
         when (mode) {
             0 -> { eraseLine(0); for (r in cy + 1 until rows) blankLine(r) }
             1 -> { for (r in 0 until cy) blankLine(r); eraseLine(1) }
-            2 -> for (r in 0 until rows) blankLine(r)
-            3 -> { for (r in 0 until rows) blankLine(r); scrollback.clear() }
+            // ED 2/3 гасят весь экран. На основном буфере прежний экран уносим в scrollback, чтобы
+            // `clear`/`Ctrl+L` оставляли вывод прокручиваемым вверх (как gnome-terminal/VTE), а не
+            // теряли его. ED 3 («erase saved lines») историю НАМЕРЕННО не вытираем — clear шлёт его
+            // следом за ED 2, к этому моменту экран уже пуст, поэтому лишних строк в историю не уйдёт.
+            2, 3 -> clearScreenToScrollback()
         }
+    }
+
+    /**
+     * Погасить видимый экран, перенеся его в scrollback (только основной буфер) — прежний вывод
+     * остаётся прокручиваемым вверх. Хвостовые пустые строки в историю не уносим, иначе каждый
+     * `clear` плодил бы экран пустых строк. На альт-экране scrollback'а нет — чистим на месте.
+     */
+    private fun clearScreenToScrollback() {
+        if (altScreen) {
+            for (r in 0 until rows) blankLine(r)
+            return
+        }
+        // Хвостовые ВИЗУАЛЬНО пустые строки в историю не уносим (иначе каждый clear плодил бы экран
+        // пустых строк). «Пусто» = пробелы без фонового цвета: строку с BCE-фоном (цветная полоса)
+        // считаем содержимым и сохраняем.
+        var last = rows - 1
+        while (last >= 0 && grid[last].all { it.text == " " && it.style.bg == TermColor.Default && !it.style.inverse }) last--
+        // Граница перенесённого экрана и свежей пустой сетки не должна склеиться при reflow: снимаем
+        // wrapped с последней уносимой строки, иначе ресайз приклеит к ней пустую строку сетки.
+        if (last >= 0) grid[last].wrapped = false
+        for (r in 0..last) pushScrollback(grid[r])
+        for (r in 0 until rows) grid[r] = blankRow()
     }
 
     private fun eraseChars(n: Int) {

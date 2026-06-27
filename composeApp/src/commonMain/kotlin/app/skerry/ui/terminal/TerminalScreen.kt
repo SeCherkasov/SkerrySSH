@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -25,7 +26,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -227,9 +230,16 @@ fun TerminalScreen(
     // клавишная панель спецклавиш работает и без неё (шлёт в PTY напрямую).
     LaunchedEffect(state) { if (!closed && !imeInput) focusRequester.requestFocus() }
 
-    // Автоскролл вниз по мере нового вывода. Ключ — монотонный snapshotVersion, а НЕ state.screen:
-    // Compose сравнивает список структурно, и два подряд одинаковых снимка не перезапустили бы эффект.
-    LaunchedEffect(state.snapshotVersion) { scroll.scrollTo(scroll.maxValue) }
+    // Автоскролл вниз по мере нового вывода. Следим И за snapshotVersion (новый вывод), И за самим
+    // scroll.maxValue: высоту контента layout пересчитывает в фазе размещения, ПОЗЖЕ снимка, поэтому
+    // читать maxValue прямо в момент снимка нельзя — он устаревший. Особенно при `clear`, где высота
+    // резко меняется: по старому maxValue скролл уезжает мимо нового низа (виден старый текст — «экран
+    // не очистился») или в пустоту. snapshotFlow до-эмитит уже пересчитанное значение, поэтому всегда
+    // приземляемся на фактический низ (или на верх при сжатии контента).
+    LaunchedEffect(state) {
+        snapshotFlow { state.snapshotVersion to scroll.maxValue }
+            .collect { (_, max) -> scroll.scrollTo(max) }
+    }
 
     // OSC 52: приложение (tmux/vim) просит положить текст в системный буфер — кладём на UI-потоке.
     // (Запрос чтения буфера сервером эмулятор не пропускает — утечки буфера пользователя нет.)
@@ -301,12 +311,23 @@ fun TerminalScreen(
     val cursorRow = state.cursorRow
     val cursorCol = state.cursorCol
 
-    // Структурная подложка под Text: лишь задаёт высоту контента для прокрутки (по числу строк) и
-    // несёт модификаторы ввода/IME — глифы рисует отдельный пер-клеточный оверлей (см. ниже), а сам
-    // текст невидим. Высота = число строк (scrollback + экран); ширину даёт fillMaxWidth.
-    val structural = remember(screen.size) {
-        AnnotatedString("\n".repeat((screen.size - 1).coerceAtLeast(0)))
+    // Нижний «слак» прокрутки: сетка из rows строк короче вьюпорта на остаток деления его высоты на
+    // строку (floor в gridSizeFor). Без компенсации при прокрутке вниз в этот зазор сверху подглядывает
+    // последняя строка scrollback — после `clear` это та самая строка с командой, которая должна уйти
+    // вверх. Добавляем пустой зазор ПОД контентом: тогда maxValue == высоте scrollback, и живая сетка
+    // приклеивается к верху вьюпорта (история прячется вверх, как в настоящем терминале).
+    val bottomSlack = with(density) {
+        (viewportSize.height - 2 * paddingPx - state.rows * metrics.cellHeight).coerceAtLeast(0f).toDp()
     }
+
+    // Высота прокручиваемого контента ЗАДАЁТСЯ ЯВНО в пикселях (число строк × cellHeight), а НЕ числом
+    // строк невидимого Text: реальная высота строки Text на разных платформах (Compose/Skia на desktop
+    // vs Android) может расходиться с cellHeight, по которому рисует Canvas. На длинном scrollback дрейф
+    // копится и сбивает maxValue ≈ на строку — тогда прокрутка вниз недокручивает и сверху подглядывает
+    // строка scrollback (после `clear` — строка с командой). От метрик шрифта так не зависим.
+    val contentHeight = with(density) { (screen.size * metrics.cellHeight).toDp() }
+    // Сам Text-подложка невидим: задаёт зону ввода/IME и фокус — глифы рисует отдельный оверлей (ниже).
+    val structural = remember { AnnotatedString("") }
 
     // Кэш TextStyle глифа по TermStyle: toGlyphStyle делает merge() (аллокация SpanStyle+TextStyle) на
     // каждый ран. Строк/ранов на кадр — сотни, но различных стилей мало, поэтому мемоизируем. Сбрасываем
@@ -460,7 +481,10 @@ fun TerminalScreen(
       if (sized && screen.isNotEmpty()) {
           val sel = state.selection
           val palette = state.palette // OSC 4/104 переопределения индексов; пусто — дефолты темы
-          Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
+          // clipToBounds ПОСЛЕ padding: строка scrollback на границе прокрутки рисуется с top=-chh и
+          // иначе вылезала бы в зону верхнего паддинга (на desktop клипа по умолчанию нет, в отличие от
+          // Android) — после `clear` так подглядывала строка с командой. Клип режет её по краю контента.
+          Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp).clipToBounds()) {
               val scrollPx = scroll.value.toFloat()
               val cw = metrics.cellWidth
               val chh = metrics.cellHeight
@@ -529,7 +553,11 @@ fun TerminalScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scroll)
-            .padding(PADDING_DP.dp)
+            // bottom += bottomSlack — пустой зазор под контентом, чтобы живая сетка приклеивалась к
+            // верху вьюпорта, а не оставляла сверху подсмотренную строку scrollback (см. bottomSlack).
+            .padding(start = PADDING_DP.dp, top = PADDING_DP.dp, end = PADDING_DP.dp, bottom = PADDING_DP.dp + bottomSlack)
+            // Высота прокрутки задаётся явно (contentHeight) от cellHeight, а не метрик шрифта Text.
+            .height(contentHeight)
             .fillMaxWidth()
             .focusRequester(focusRequester)
             // Focus reporting (DEC 1004): vim/tmux получают ESC[I/ESC[O при фокусе окна терминала.
