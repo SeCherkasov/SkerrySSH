@@ -139,6 +139,28 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `clean shell exit closes the session without auto-reconnect`() = runTest {
+        val channel = FakeShellChannel()
+        val transport = ScriptedTransport(listOf(Result.success(FakeSshConnection(channel))))
+        // Даже с разрешённым реконнектом штатный exit его НЕ запускает.
+        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
+        controller.connect(target, SshAuth.Password("pw"))
+        val connected = controller.uiState
+        assertIs<ConnectionUiState.Connected>(connected)
+
+        channel.exit() // пользователь сам завершил shell (`exit`): EOF, не обрыв
+        advanceUntilIdle()
+
+        val st = controller.uiState
+        assertIs<ConnectionUiState.Disconnected>(st)
+        assertTrue(st.cleanExit)
+        assertFalse(st.reconnecting)
+        assertSame(connected.terminal, st.terminal) // экран застыл на финальном выводе (logout)
+        assertEquals(1, transport.connectCalls) // ни одной попытки реконнекта
+        scope.cancel()
+    }
+
+    @Test
     fun `our disconnect goes to Form and never flips to Disconnected on channel close`() = runTest {
         val channel = FakeShellChannel()
         val conn = FakeSshConnection(channel)
@@ -499,15 +521,24 @@ private class CountingSshConnection(private val channel: ShellChannel) : SshConn
 
 private class FakeShellChannel : ShellChannel {
     private val emissions = Channel<ByteArray>(Channel.UNLIMITED)
+    private var eof = false
     override val isOpen: Boolean = true
+    override val endedWithEof: Boolean get() = eof
     override val output: Flow<ByteArray> = flow { for (chunk in emissions) emit(chunk) }
 
     suspend fun emit(chunk: ByteArray) {
         emissions.send(chunk)
     }
 
+    /** Штатный выход shell (`exit`): EOF канала — endedWithEof=true. */
+    fun exit() {
+        eof = true
+        emissions.close()
+    }
+
     override suspend fun write(data: ByteArray) {}
     override suspend fun resize(size: PtySize) {}
+    /** Обрыв со стороны сервера / транспорта: канал завершается БЕЗ EOF (кандидат на реконнект). */
     override suspend fun close() {
         emissions.close()
     }

@@ -115,21 +115,22 @@ class TerminalSessionTest {
     }
 
     @Test
-    fun `state becomes closed when channel output completes`() = runTest {
+    fun `clean EOF closes the session with cleanExit true`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val channel = FakeShellChannel()
         val session = ShellTerminalSession(channel, scope)
         scope.launch { session.output.collect {} } // сбор канала стартует по подписке
 
-        channel.eof()
+        channel.eof() // штатный EOF (shell сделал `exit`)
 
-        assertEquals(TerminalState.Closed, session.state.value)
+        // Штатный выход shell → cleanExit=true: вызывающий закроет сессию, не реконнектя.
+        assertEquals(TerminalState.Closed(cleanExit = true), session.state.value)
         scope.cancel()
     }
 
     @Test
-    fun `close closes the channel and moves to closed`() = runTest {
+    fun `close closes the channel and moves to closed without cleanExit`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val channel = FakeShellChannel()
@@ -138,12 +139,13 @@ class TerminalSessionTest {
         session.close()
 
         assertTrue(channel.closed)
-        assertEquals(TerminalState.Closed, session.state.value)
+        // Наше закрытие — не штатный выход shell: cleanExit=false.
+        assertEquals(TerminalState.Closed(cleanExit = false), session.state.value)
         scope.cancel()
     }
 
     @Test
-    fun `transport error closes session without crashing the scope`() = runTest {
+    fun `transport error closes session without crashing the scope and without cleanExit`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val channel = ThrowingShellChannel()
@@ -151,8 +153,8 @@ class TerminalSessionTest {
         scope.launch { session.output.collect {} } // сбор канала стартует по подписке
 
         // Сбор вывода стартует с подпиской; обрыв транспорта (не отмена) должен перевести
-        // сессию в Closed, но не уронить scope, в котором живёт сбор.
-        assertEquals(TerminalState.Closed, session.state.value)
+        // сессию в Closed (без cleanExit — это обрыв, кандидат на реконнект), но не уронить scope.
+        assertEquals(TerminalState.Closed(cleanExit = false), session.state.value)
         assertTrue(scope.isActive, "обрыв транспорта не должен отменять scope")
         scope.cancel()
     }
@@ -179,11 +181,13 @@ private class FakeShellChannel : ShellChannel {
     val resizes = mutableListOf<PtySize>()
     var closed = false
         private set
+    private var eof = false
 
     private val emissions = Channel<ByteArray>(Channel.UNLIMITED)
     private var collected = false
 
     override val isOpen: Boolean get() = !closed
+    override val endedWithEof: Boolean get() = eof
 
     override val output: Flow<ByteArray> = flow {
         check(!collected) { "second collector" }
@@ -195,7 +199,9 @@ private class FakeShellChannel : ShellChannel {
         emissions.send(chunk)
     }
 
+    /** Штатный EOF канала (сервер закрыл shell сам — `exit`): помечаем endedWithEof перед закрытием. */
     fun eof() {
+        eof = true
         emissions.close()
     }
 

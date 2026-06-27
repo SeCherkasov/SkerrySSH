@@ -58,11 +58,15 @@ sealed interface ConnectionUiState {
      * [reconnecting] — идёт ли сейчас попытка авто-реконнекта (true между обрывом и успехом/сдачей);
      * [attempt] — номер текущей/последней попытки (для баннера «Reconnecting… #N»). После исчерпания
      * лимита попыток состояние остаётся [Disconnected] с `reconnecting=false` (связь не восстановлена).
+     *
+     * [cleanExit] — shell завершился штатно (EOF, например по команде `exit`): авто-реконнекта НЕТ
+     * (сессию просто закрываем), баннер нейтральный «Session closed». false — обрыв транспорта.
      */
     data class Disconnected(
         val terminal: TerminalScreenState,
         val reconnecting: Boolean,
         val attempt: Int,
+        val cleanExit: Boolean = false,
     ) : ConnectionUiState
 }
 
@@ -312,23 +316,32 @@ class ConnectionController(
      */
     private fun watchForSessionLoss(terminal: TerminalScreenState, sScope: CoroutineScope) {
         sScope.launch {
-            terminal.state.first { it == TerminalState.Closed }
+            val closed = terminal.state.first { it is TerminalState.Closed } as TerminalState.Closed
             // Обработку потери диспатчим в основной [scope] — тот же, где идёт [disconnect]. Иначе
             // onSessionLost бежал бы на session-scope (Dispatchers.Default), и запись reconnectJob
             // гонялась бы с чтением/отменой из disconnect на UI-потоке. На одном scope они сериализованы.
-            scope.launch { onSessionLost(terminal) }
+            scope.launch { onSessionLost(terminal, closed.cleanExit) }
         }
     }
 
     /**
-     * Обрыв сессии не по нашей инициативе: освобождаем ресурсы упавшего соединения (оставляя [frozen]
-     * экран для показа) и запускаем авто-реконнект к последним [lastTarget]/[lastAuth]. Гард на
-     * Connected защищает от повторного входа. Без сохранённых цели/учётки реконнект невозможен —
-     * остаёмся в [ConnectionUiState.Disconnected] без попыток.
+     * Закрытие сессии не по нашей инициативе: освобождаем ресурсы (оставляя [frozen] экран для показа).
+     * При штатном выходе shell ([cleanExit] — команда `exit`/EOF) реконнекта НЕТ: сбрасываем
+     * сохранённую учётку и показываем нейтральный «Session closed». Иначе (обрыв транспорта) запускаем
+     * авто-реконнект к последним [lastTarget]/[lastAuth]; без сохранённых цели/учётки остаёмся в
+     * [ConnectionUiState.Disconnected] без попыток. Гард на Connected защищает от повторного входа.
      */
-    private fun onSessionLost(frozen: TerminalScreenState) {
+    private fun onSessionLost(frozen: TerminalScreenState, cleanExit: Boolean) {
         if (uiState !is ConnectionUiState.Connected) return
         releaseSessionResources()
+        if (cleanExit) {
+            // Пользователь сам завершил shell (`exit`) — сессию закрываем, не реконнектим. Отпускаем
+            // секрет (auth может нести пароль/ключ): держать его незачем, нового коннекта не будет.
+            lastAuth = null
+            lastTarget = null
+            uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0, cleanExit = true)
+            return
+        }
         val target = lastTarget
         val auth = lastAuth
         if (target == null || auth == null) {

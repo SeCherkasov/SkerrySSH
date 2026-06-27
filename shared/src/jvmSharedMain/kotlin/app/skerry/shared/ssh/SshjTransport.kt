@@ -579,6 +579,10 @@ private class SshjShellChannel(
 
     private val outputClaimed = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
+    // Выставляется циклом [output] при достижении EOF (read<0 = сервер закрыл shell штатно, напр.
+    // `exit`). Обрыв транспорта/наш close() роняют read как IOException и флаг не трогают.
+    private val eofReached = AtomicBoolean(false)
+    override val endedWithEof: Boolean get() = eofReached.get()
 
     // Счётчики трафика канала (для индикатора скорости): пишутся из IO-потоков чтения/записи,
     // читаются из поллера на другой корутине — AtomicLong для потокобезопасной видимости.
@@ -605,7 +609,10 @@ private class SshjShellChannel(
             } catch (_: IOException) {
                 break
             }
-            if (read < 0) break
+            if (read < 0) {
+                eofReached.set(true) // штатный EOF: сервер закрыл shell (напр. `exit`)
+                break
+            }
             if (read > 0) {
                 _bytesDown.addAndGet(read.toLong())
                 emit(buffer.copyOf(read))

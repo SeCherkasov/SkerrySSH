@@ -18,7 +18,8 @@ fun mobileTerminalStatusText(state: ConnectionUiState?): String = when (state) {
     is ConnectionUiState.Connected -> "connected"
     ConnectionUiState.Connecting -> "connecting…"
     is ConnectionUiState.Error -> "disconnected"
-    is ConnectionUiState.Disconnected -> "disconnected"
+    // Штатный выход shell (`exit`) — нейтральное «closed»; обрыв транспорта — «disconnected».
+    is ConnectionUiState.Disconnected -> if (state.cleanExit) "closed" else "disconnected"
     else -> "no session"
 }
 
