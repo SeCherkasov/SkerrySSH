@@ -1,9 +1,11 @@
 package app.skerry.ui.design
 
+import app.skerry.shared.host.Host
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class MobileDesignStateTest {
@@ -118,4 +120,46 @@ class MobileDesignStateTest {
         s.closeSheet()
         assertFalse(s.sheetNewConn)
     }
+
+    @Test
+    fun open_new_conn_starts_in_create_mode() {
+        // Создание нового хоста: лист открыт без редактируемого профиля (форма пустая).
+        val s = MobileDesignState()
+        s.openNewConn()
+        assertTrue(s.sheetNewConn)
+        assertNull(s.editingHost)
+    }
+
+    @Test
+    fun open_edit_conn_opens_sheet_with_editing_host() {
+        // Edit с экрана детали: тот же лист, но в режиме правки конкретного профиля.
+        val s = MobileDesignState()
+        val host = sampleHost()
+        s.openEditConn(host)
+        assertTrue(s.sheetNewConn)
+        assertSame(host, s.editingHost)
+    }
+
+    @Test
+    fun open_new_conn_clears_editing_host_after_edit() {
+        // После правки повторный «+ New» открывает чистую форму, а не залипает на прежнем хосте.
+        val s = MobileDesignState()
+        s.openEditConn(sampleHost())
+        s.openNewConn()
+        assertTrue(s.sheetNewConn)
+        assertNull(s.editingHost)
+    }
+
+    @Test
+    fun close_sheet_clears_editing_host() {
+        // Закрытие листа сбрасывает режим правки — иначе следующий «+ New» унаследовал бы id.
+        val s = MobileDesignState()
+        s.openEditConn(sampleHost())
+        s.closeSheet()
+        assertFalse(s.sheetNewConn)
+        assertNull(s.editingHost)
+    }
+
+    private fun sampleHost(): Host =
+        Host(id = "host-42", label = "prod-web-01", address = "192.168.1.45", username = "root")
 }

@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.host.Host
 
 /**
  * Нижняя навигация мобильного макета `docs/new/Skerry Mobile.html` — ровно 5 корневых табов
@@ -36,6 +37,13 @@ class MobileDesignState {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
     var route: MobileRoute? by mutableStateOf(null); private set
     var sheetNewConn: Boolean by mutableStateOf(false); private set
+
+    /**
+     * Профиль, открытый листом New connection в режиме правки (Edit с экрана детали), либо `null` —
+     * лист в режиме создания. Лист предзаполняет форму из него ([NewConnectionFormState.fromHost]) и
+     * удерживает [Host.id] при сохранении (паритет desktop-модалки с её параметром `editHost`).
+     */
+    var editingHost: Host? by mutableStateOf(null); private set
 
     /** Идентификатор хоста, открытого на [MobileRoute.HostDetail] — экран читает его из стора по id. */
     var selectedHostId: String? by mutableStateOf(null); private set
@@ -75,6 +83,11 @@ class MobileDesignState {
         selectedHostId = null
     }
 
-    fun openNewConn() { sheetNewConn = true }
-    fun closeSheet() { sheetNewConn = false }
+    /** Открыть лист в режиме создания нового хоста (форма пустая). */
+    fun openNewConn() { editingHost = null; sheetNewConn = true }
+
+    /** Открыть лист в режиме правки [host] (форма предзаполняется, сохранение удерживает его id). */
+    fun openEditConn(host: Host) { editingHost = host; sheetNewConn = true }
+
+    fun closeSheet() { sheetNewConn = false; editingHost = null }
 }

@@ -68,12 +68,16 @@ private val SheetPanel = Color(0xFF0E1B26)
 fun MobileNewConnectionSheet(state: MobileDesignState) {
     val hosts = LocalHosts.current
     val credentials = LocalCredentials.current
-    val form = remember { NewConnectionFormState() }
+    // Режим правки: лист предзаполняется из профиля и удерживает его id (паритет desktop NewConnectionModal).
+    val editHost = state.editingHost
+    // Ключ по editHost: открытие листа на правку (или смена цели) пересоздаёт форму из профиля.
+    val form = remember(editHost) { editHost?.let { NewConnectionFormState.fromHost(it) } ?: NewConnectionFormState() }
     val canSave = hosts == null || form.canSave
     // Гард повторного Save (двойной тап) до закрытия листа — иначе дубль секрета+хоста в vault (как desktop).
-    var submitting by remember { mutableStateOf(false) }
+    // Ключ по editHost вместе с form: смена цели сбрасывает гард, а не залипает на прежней.
+    var submitting by remember(editHost) { mutableStateOf(false) }
     // Незакоммиченный ввод тега (пилюля ещё не создана); Save дофиксирует его, чтобы не потерялся.
-    var tagDraft by remember { mutableStateOf("") }
+    var tagDraft by remember(editHost) { mutableStateOf("") }
     val onSave = {
         if (submitting) {
             // повторное нажатие до закрытия — игнорируем
@@ -84,8 +88,10 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             if (tagDraft.isNotBlank()) { form.addTag(tagDraft); tagDraft = "" }
             // Новый секрет создаём только при живом keychain (иначе он осел бы в vault без ссылки на хост);
             // ASK/мок-путь → credentialId = null. EXISTING-привязка возвращается как есть (не пересоздаём).
+            // В режиме правки EXISTING-привязка возвращается как есть (секрет не пересоздаётся).
             val credentialId = form.resolveCredentialId(saveCredential = { draft -> credentials?.save(draft) })
-            hosts.save(form.toDraft(credentialId = credentialId))
+            // editHost?.id != null → обновление существующего профиля по месту, иначе создание нового.
+            hosts.save(form.toDraft(id = editHost?.id, credentialId = credentialId))
             // Секрет уже запечатан в vault — снимаем ссылки на него из state формы, сокращая окно
             // жизни ключа/пароля в куче (String на JVM не занулить на месте, но ссылку убираем).
             form.password = ""; form.privateKeyPem = ""; form.passphrase = ""
@@ -125,7 +131,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt("New connection", color = D.text, size = 20.sp, weight = FontWeight.Bold)
+                Txt(if (editHost != null) "Edit connection" else "New connection", color = D.text, size = 20.sp, weight = FontWeight.Bold)
                 Sym(
                     "close",
                     size = 24.sp,
@@ -186,7 +192,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt("Save connection", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+                Txt(if (editHost != null) "Save changes" else "Save connection", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
             }
         }
     }

@@ -179,8 +179,29 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             }
         }
 
-        // Delete host: удаляет профиль из живого каталога и возвращает к списку (вне гейта — недоступно).
-        Box(Modifier.padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 30.dp)) {
+        // Edit host: открыть лист New connection в режиме правки этого профиля (вне гейта — недоступно,
+        // сохранять некуда). Delete: удалить профиль из живого каталога и вернуться к списку.
+        Column(
+            Modifier.padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 30.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (controller != null) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(13.dp))
+                        .border(1.dp, D.cyan.copy(alpha = 0.4f), RoundedCornerShape(13.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { state.openEditConn(host) },
+                        )
+                        .padding(13.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Txt("Edit host", color = D.cyanBright, size = 14.sp, weight = FontWeight.Medium)
+                }
+            }
             val onDelete = controller?.let { ctrl -> { ctrl.delete(host.id); state.pop() } }
             Box(
                 Modifier
