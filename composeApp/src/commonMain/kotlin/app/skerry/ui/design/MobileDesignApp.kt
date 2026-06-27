@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -38,9 +39,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -54,6 +57,7 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.vault.RESET_CONFIRM_WORD
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.vault.VaultGateError
@@ -125,6 +129,8 @@ fun MobileDesignApp(
                     unlockForm = { error, canBio, onUnlock, onBio, onForgot ->
                         MobileUnlockScreen(error, canBio, onUnlock, onBio, onForgot)
                     },
+                    corruptedForm = { onReset -> MobileCorruptedScreen(onReset) },
+                    resetForm = { onConfirm, onCancel -> MobileResetScreen(onConfirm, onCancel) },
                 ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked) }
             } else {
                 MobileChrome(state, onLock = null, sessions = liveSessions, credentials = deps.credentials, onVaultUnlocked = onVaultUnlocked)
@@ -398,7 +404,7 @@ fun MobileUnlockScreen(
                 Txt("Use biometrics", color = D.dim, size = 14.sp)
             }
         }
-        // Тупик забытого пароля расшивается только сбросом (zero-knowledge); ведёт на дефолтный экран сброса.
+        // Тупик забытого пароля расшивается только сбросом (zero-knowledge); ведёт на [MobileResetScreen].
         Spacer(Modifier.height(18.dp))
         Txt(
             "Forgot your master password?",
@@ -429,6 +435,104 @@ fun MobileCreateScreen(error: VaultGateError?, onCreate: (CharArray, CharArray) 
         MobileLockField(confirm, { confirm = it }, "Repeat password", ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
         MobileWideButton("Create vault", onClick = submit)
+    }
+}
+
+/**
+ * Экран повреждённого файла vault (мобильный визуал, паритет [DesktopCorruptedScreen]). Файл не
+ * читается → пароль ввести нельзя; единственное действие — уйти на подтверждение сброса ([onReset]).
+ */
+@Composable
+fun MobileCorruptedScreen(onReset: () -> Unit) {
+    MobileLockScaffold(
+        title = "Storage is damaged",
+        subtitle = "The vault file can't be read or decrypted. To use Skerry again you'll need to reset it.",
+        error = null,
+    ) {
+        MobileWideButton("Reset Skerry", onClick = onReset)
+    }
+}
+
+/**
+ * Экран подтверждения безвозвратного сброса (мобильный визуал, паритет [DesktopResetScreen]): выбор
+ * объёма ([ResetScope]) + type-to-confirm — danger-кнопка активна только когда вписано
+ * [RESET_CONFIRM_WORD]. Удаление необратимо (zero-knowledge), поэтому барьер от случайного тапа жёсткий.
+ */
+@Composable
+fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
+    var scope by remember { mutableStateOf(ResetScope.SecretsOnly) }
+    var confirmText by remember { mutableStateOf("") }
+    val canConfirm = confirmText.trim() == RESET_CONFIRM_WORD
+    MobileLockScaffold(
+        title = "Reset Skerry",
+        subtitle = "This is permanent. Saved passwords, keys and identities are erased — there is no recovery.",
+        error = null,
+    ) {
+        MobileResetScopeRow(
+            selected = scope == ResetScope.SecretsOnly,
+            title = "Secrets only",
+            subtitle = "Keep host profiles and known_hosts.",
+            onSelect = { scope = ResetScope.SecretsOnly },
+        )
+        Spacer(Modifier.height(10.dp))
+        MobileResetScopeRow(
+            selected = scope == ResetScope.Everything,
+            title = "Erase everything",
+            subtitle = "Also remove host profiles, known_hosts and settings.",
+            onSelect = { scope = ResetScope.Everything },
+        )
+        Spacer(Modifier.height(14.dp))
+        MobileLockPlainField(confirmText, { confirmText = it }, "Type $RESET_CONFIRM_WORD to confirm", ImeAction.Done) {
+            if (canConfirm) onConfirm(scope)
+        }
+        Spacer(Modifier.height(14.dp))
+        MobileWideButton(
+            "Reset permanently",
+            onClick = { if (canConfirm) onConfirm(scope) },
+            bg = if (canConfirm) D.storm else Color(0x14FFFFFF),
+            fg = if (canConfirm) Color(0xFF0A1A26) else D.faint,
+            enabled = canConfirm,
+        )
+        Spacer(Modifier.height(16.dp))
+        // Единственный выход из необратимого экрана — тап-зона на всю ширину (паритет desktop),
+        // иначе промах пальцем оставляет на danger-экране без очевидного отступления.
+        Txt(
+            "Cancel",
+            color = D.dim,
+            size = 13.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onCancel)
+                .padding(vertical = 10.dp),
+        )
+    }
+}
+
+/** Строка выбора объёма сброса (мобильный визуал): радио-точка + заголовок/подзаголовок, кликабельна целиком. */
+@Composable
+private fun MobileResetScopeRow(selected: Boolean, title: String, subtitle: String, onSelect: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(11.dp))
+            .border(1.dp, if (selected) D.cyan else D.line, RoundedCornerShape(11.dp))
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            Modifier.size(18.dp).clip(RoundedCornerShape(9.dp))
+                .border(1.dp, if (selected) D.cyan else D.faint, RoundedCornerShape(9.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Box(Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(D.cyan))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = D.dim, size = 12.sp, lineHeight = 16.sp)
+        }
     }
 }
 
@@ -518,18 +622,71 @@ private fun MobileLockField(
     )
 }
 
-/** Primary-кнопка на всю ширину (cyan-фон, тёмный текст, радиус 13) — стиль кнопок мобильного макета. */
+/** Плоское поле ввода макета (без маскирования/иконки) — для type-to-confirm на экране сброса. */
 @Composable
-private fun MobileWideButton(label: String, onClick: () -> Unit) {
+private fun MobileLockPlainField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    imeAction: ImeAction,
+    onSubmit: () -> Unit = {},
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(D.cyan),
+        // Слово подтверждения — заглавное (RESET): глушим автокоррекцию (иначе IME перепишет в «Reset»
+        // и сравнение никогда не совпадёт) и сразу включаем верхний регистр.
+        keyboardOptions = KeyboardOptions(
+            imeAction = imeAction,
+            autoCorrectEnabled = false,
+            capitalization = KeyboardCapitalization.Characters,
+        ),
+        keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(13.dp))
+                    .background(D.surface2)
+                    .border(1.dp, D.cyan.copy(alpha = 0.16f), RoundedCornerShape(13.dp))
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
+                    inner()
+                }
+            }
+        },
+    )
+}
+
+/**
+ * Primary-кнопка на всю ширину (по умолчанию cyan-фон, тёмный текст, радиус 13) — стиль кнопок
+ * мобильного макета. [bg]/[fg]/[enabled] переопределяются для danger-варианта (сброс vault): пока
+ * не вписано слово подтверждения, кнопка приглушена и не кликается.
+ */
+@Composable
+private fun MobileWideButton(
+    label: String,
+    onClick: () -> Unit,
+    bg: Color = D.cyan,
+    fg: Color = Color(0xFF0A1A26),
+    enabled: Boolean = true,
+) {
     Box(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(13.dp))
-            .background(D.cyan)
-            .clickable(onClick = onClick)
+            .background(bg)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 15.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Txt(label, color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+        Txt(label, color = fg, size = 16.sp, weight = FontWeight.Bold)
     }
 }

@@ -32,6 +32,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
+import app.skerry.ui.vault.ResetScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,6 +59,11 @@ class MainActivity : FragmentActivity() {
     // при этом сбрасываются — приемлемо для текущего этапа (полное сохранение поверх пересоздания —
     // отдельная задача через retained-холдер/ViewModel).
     private var tunnelScope: CoroutineScope? = null
+
+    // Внешняя чистка при безвозвратном сбросе vault (забытый пароль / битый файл). Vault уже стёрт
+    // контроллером и заблокирован, поэтому здесь чистим только данные ВНЕ vault (профили хостов,
+    // known_hosts, туннели). Заполняется в [buildDependencies]; передаётся в [MobileDesignApp].
+    private var onVaultReset: (ResetScope) -> Unit = {}
 
     override fun onDestroy() {
         tunnelScope?.cancel()
@@ -106,7 +112,7 @@ class MainActivity : FragmentActivity() {
             initialCollapsedGroups = readCollapsedGroups(dir),
             onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
         )
-        setContent { MobileDesignApp(deps, state = designState) }
+        setContent { MobileDesignApp(deps, state = designState, onVaultReset = onVaultReset) }
     }
 
     /**
@@ -147,9 +153,8 @@ class MainActivity : FragmentActivity() {
             TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
-        val hosts = HostManagerController(FileHostStore(dir.resolve("hosts.json").toPath())) {
-            UUID.randomUUID().toString()
-        }
+        val hostStore = FileHostStore(dir.resolve("hosts.json").toPath())
+        val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
         // Биометрия: ключ в AndroidKeyStore, промпт хостит эта Activity. Слабая ссылка — стор не
         // удерживает Activity и при пересоздании отдаёт null, а не уничтоженную (промпт тогда NoActivity).
         val activityRef = WeakReference(this)
@@ -170,6 +175,27 @@ class MainActivity : FragmentActivity() {
             resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
             scope = scope,
         ) { UUID.randomUUID().toString() }
+        // Чистка данных вне vault при сбросе (паритет desktop `main.kt`). Файл vault уже стёрт и
+        // заблокирован — секреты перечитаются при создании нового vault, поэтому credentials тут не трогаем.
+        onVaultReset = { scope ->
+            when (scope) {
+                // Только секреты: профили хостов остаются, но их ссылки на стёртые секреты висячие —
+                // зануляем credentialId/identityId, чтобы коннект снова спрашивал пароль (auth=Ask),
+                // а не падал на «секрет не найден». reorder сохраняет набор id (требование контракта).
+                ResetScope.SecretsOnly ->
+                    hostStore.reorder { list -> list.map { it.copy(credentialId = null, identityId = null) } }
+                // Заводской сброс: сносим профили хостов, доверенные ключи, туннели и свёрнутые папки.
+                ResetScope.Everything -> {
+                    tunnels.closeAll()
+                    tunnels.tunnels.toList().forEach { tunnels.delete(it.id) }
+                    knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
+                    knownHosts.entries.toList().forEach { knownHosts.forget(it) }
+                    hostStore.all().forEach { hostStore.remove(it.id) }
+                    writeCollapsedGroups(dir, emptySet())
+                }
+            }
+            hosts.reload()
+        }
         return AppDependencies(
             transport = transport,
             hosts = hosts,
