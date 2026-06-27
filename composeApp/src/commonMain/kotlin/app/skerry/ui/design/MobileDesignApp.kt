@@ -117,6 +117,9 @@ fun MobileDesignApp(
         LocalSshKeyGenerator provides deps.keyGenerator,
         LocalSshCertificateInspector provides deps.certificateInspector,
         LocalTunnels provides deps.tunnels,
+        // Vault + биометрия — экрану More для тумблера «разблокировка биометрией» (включить/перенастроить).
+        LocalVault provides deps.vault,
+        LocalVaultBiometrics provides deps.biometrics,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             val vault = deps.vault
@@ -131,6 +134,7 @@ fun MobileDesignApp(
                     },
                     corruptedForm = { onReset -> MobileCorruptedScreen(onReset) },
                     resetForm = { onConfirm, onCancel -> MobileResetScreen(onConfirm, onCancel) },
+                    offerBiometricForm = { inFlight, onEnable, onSkip -> MobileBiometricOfferScreen(inFlight, onEnable, onSkip) },
                 ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked) }
             } else {
                 MobileChrome(state, onLock = null, sessions = liveSessions, credentials = deps.credentials, onVaultUnlocked = onVaultUnlocked)
@@ -435,6 +439,29 @@ fun MobileCreateScreen(error: VaultGateError?, onCreate: (CharArray, CharArray) 
         MobileLockField(confirm, { confirm = it }, "Repeat password", ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
         MobileWideButton("Create vault", onClick = submit)
+    }
+}
+
+/**
+ * Разовое предложение включить биометрию сразу после создания vault (мобильный визуал). Vault уже
+ * открыт — шаг необязательный: «Use biometrics» запускает системный промпт, «Not now» пускает в
+ * приложение. Кнопки гаснут на время промпта ([inFlight]). Биометрию всегда можно настроить позже в More.
+ */
+@Composable
+fun MobileBiometricOfferScreen(inFlight: Boolean, onEnable: () -> Unit, onSkip: () -> Unit) {
+    MobileLockScaffold(
+        title = "Quick unlock",
+        subtitle = "Open Skerry with your fingerprint instead of the master password.",
+        error = null,
+    ) {
+        MobileWideButton("Use biometrics", onClick = { if (!inFlight) onEnable() }, enabled = !inFlight)
+        Spacer(Modifier.height(14.dp))
+        Box(
+            Modifier.fillMaxWidth().clickable(enabled = !inFlight, onClick = onSkip).padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Txt("Not now", color = D.dim, size = 14.sp, weight = FontWeight.Medium)
+        }
     }
 }
 

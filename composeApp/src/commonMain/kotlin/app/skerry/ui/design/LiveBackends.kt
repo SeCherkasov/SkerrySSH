@@ -7,6 +7,8 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
+import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
@@ -113,3 +115,15 @@ val LocalOpenSftp: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositio
  * vault (резолв секрета хоста требует открытого vault).
  */
 val LocalTunnels: ProvidableCompositionLocal<TunnelManager?> = staticCompositionLocalOf { null }
+
+/**
+ * Открытый [Vault] за гейтом мастер-пароля — нужен экрану настроек (More), чтобы включить/выключить
+ * разблокировку биометрией (обёртка `dataKey` под `bioKey`). `null` — мок-путь/превью без vault.
+ */
+val LocalVault: ProvidableCompositionLocal<Vault?> = staticCompositionLocalOf { null }
+
+/**
+ * Оркестратор биометрии vault. `null` — биометрия не сконфигурирована на платформе (desktop без
+ * железа/офскрин): экран настроек прячет тумблер. Поставляется за гейтом vault теми же провайдерами.
+ */
+val LocalVaultBiometrics: ProvidableCompositionLocal<VaultBiometrics?> = staticCompositionLocalOf { null }

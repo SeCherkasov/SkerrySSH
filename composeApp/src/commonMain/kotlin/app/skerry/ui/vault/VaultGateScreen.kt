@@ -119,6 +119,19 @@ fun VaultGate(
         { onConfirm, onCancel ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { ResetVaultForm(onConfirm, onCancel) }
         },
+    // Разовое предложение включить биометрию сразу после создания vault. onEnable запускает промпт
+    // (включает биометрию), onSkip — пропускает; оба ведут в приложение. inFlight гасит кнопки во
+    // время промпта. Показывается только когда биометрия доступна (см. [VaultGateState.OfferBiometric]).
+    offerBiometricForm: @Composable (
+        inFlight: Boolean,
+        onEnable: () -> Unit,
+        onSkip: () -> Unit,
+    ) -> Unit =
+        { inFlight, onEnable, onSkip ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                OfferBiometricForm(inFlight, onEnable, onSkip)
+            }
+        },
     content: @Composable (onLock: () -> Unit) -> Unit,
 ) {
     // onReset не должен быть ключом remember (контроллер пересоздавать на каждой смене лямбды нельзя —
@@ -178,6 +191,15 @@ fun VaultGate(
             VaultGateState.Resetting ->
                 resetForm({ scope -> controller.confirmReset(scope) }, { controller.cancelReset() })
 
+            // Включение/отказ оба ведут в приложение: при отказе или сбое промпта vault уже открыт,
+            // биометрию можно настроить позже в разделе More. dismissBiometricOffer вызываем в любом исходе.
+            VaultGateState.OfferBiometric ->
+                offerBiometricForm(
+                    controller.biometricInFlight,
+                    { scope.launch { controller.enableBiometric(ENABLE_PROMPT); controller.dismissBiometricOffer() } },
+                    { controller.dismissBiometricOffer() },
+                )
+
             // lock() переводит гейт в NeedsUnlock; key(state) рушит поддерево content, чей
             // DisposableEffect рвёт живую SSH-сессию — блокировка заодно закрывает сессии.
             VaultGateState.Unlocked -> Box(
@@ -218,6 +240,28 @@ private fun CreateVaultForm(error: VaultGateError?, onCreate: (CharArray, CharAr
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Создать хранилище")
+        }
+    }
+}
+
+/**
+ * Разовое предложение включить биометрию после создания vault (Material-дефолт; мобильный слой даёт
+ * свой визуал). Vault уже открыт — это необязательный шаг: «Включить» запускает промпт, «Пропустить»
+ * пускает в приложение. Кнопки гаснут на время промпта ([inFlight]).
+ */
+@Composable
+private fun OfferBiometricForm(inFlight: Boolean, onEnable: () -> Unit, onSkip: () -> Unit) {
+    VaultFormScaffold(
+        title = "Быстрая разблокировка",
+        subtitle = "Включите вход по биометрии, чтобы открывать хранилище без ввода мастер-пароля. " +
+            "Это можно изменить позже в настройках.",
+        error = null,
+    ) {
+        Button(onClick = onEnable, enabled = !inFlight, modifier = Modifier.fillMaxWidth()) {
+            Text("Включить биометрию")
+        }
+        TextButton(onClick = onSkip, enabled = !inFlight, modifier = Modifier.fillMaxWidth()) {
+            Text("Не сейчас")
         }
     }
 }

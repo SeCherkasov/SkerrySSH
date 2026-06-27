@@ -271,6 +271,46 @@ class VaultGateControllerTest {
         assertFalse(controller.biometricEnabled)
         assertFalse(artifacts.exists())
     }
+
+    @Test
+    fun `create offers biometric enrollment when the device can enable it`() {
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.Available),
+            minPasswordLength = 8,
+        )
+
+        controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
+
+        assertEquals(VaultGateState.OfferBiometric, controller.state)
+    }
+
+    @Test
+    fun `create unlocks directly when biometrics are unavailable on the device`() {
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.NotEnrolled),
+            minPasswordLength = 8,
+        )
+
+        controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
+
+        assertEquals(VaultGateState.Unlocked, controller.state)
+    }
+
+    @Test
+    fun `dismissBiometricOffer moves from the offer to Unlocked`() {
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.Available),
+            minPasswordLength = 8,
+        )
+        controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
+
+        controller.dismissBiometricOffer()
+
+        assertEquals(VaultGateState.Unlocked, controller.state)
+    }
 }
 
 private val PROMPT = BiometricPrompt(title = "Включить биометрию", cancelLabel = "Отмена")

@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.ui.vault.VaultGateController
+import kotlinx.coroutines.launch
 
 /**
  * Корневой таб More мобильного макета `docs/new/Skerry Mobile.html` (слайс 5): заголовок + карточка
@@ -59,6 +63,9 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             MoreRow("auto_awesome", D.amber, "AI & privacy", "Local", D.dim, onClick = null)
             MoreRow("palette", D.cyanBright, "Appearance", "Night Sea", D.dim, onClick = null)
             MoreRow("shield_lock", D.cyanBright, "Security & sync", if (preview) "Synced" else "Local only", D.dim, onClick = null)
+            // Тумблер биометрии — живой путь за гейтом (vault открыт). Прячется, если биометрия
+            // недоступна на устройстве (нет железа/не зачислен отпечаток) или это превью/офскрин.
+            if (!preview) BiometricUnlockRow()
             MoreRow("lock", D.sunset, "Lock Skerry", null, D.dim, labelColor = D.sunset, divider = false, onClick = onLock)
         }
         Spacer(Modifier.height(96.dp))
@@ -112,6 +119,58 @@ private fun MoreRow(
         if (onClick != null && labelColor != D.sunset) Sym("chevron_right", size = 20.sp, color = D.faint)
     }
     if (divider) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+}
+
+/** Промпт включения биометрии для vault (англоязычный — под мобильный UI). */
+private val MOBILE_ENABLE_BIOMETRIC_PROMPT = BiometricPrompt(
+    title = "Enable biometric unlock",
+    cancelLabel = "Cancel",
+    subtitle = "Confirm your biometrics to unlock Skerry without typing the master password.",
+)
+
+/**
+ * Живой тумблер «Unlock with biometrics» (за гейтом vault, vault открыт). Включение оборачивает
+ * `dataKey` под аппаратный `bioKey` (требует биометрического подтверждения), выключение удаляет
+ * артефакт. Строка целиком скрыта, если на устройстве нет доступной биометрии — тогда настраивать
+ * нечего. Контроллер собственный (vault/биометрия общие): нам нужны только реактивные
+ * `biometricEnabled`/`biometricInFlight` и enable/disable, не навигация гейта.
+ */
+@Composable
+private fun BiometricUnlockRow() {
+    val vault = LocalVault.current ?: return
+    val biometrics = LocalVaultBiometrics.current ?: return
+    val controller = remember(vault, biometrics) { VaultGateController(vault, biometrics) }
+    if (!controller.canEnableBiometric()) return
+    val scope = rememberCoroutineScope()
+
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Sym("fingerprint", size = 21.sp, color = D.cyanBright)
+        Column(Modifier.weight(1f)) {
+            Txt("Unlock with biometrics", color = D.text, size = 14.5.sp)
+            Txt(
+                if (controller.biometricEnabled) "Enabled on this device" else "Skip the master password",
+                color = D.dim, size = 11.sp, modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Toggle(
+            on = controller.biometricEnabled,
+            onToggle = {
+                if (controller.biometricInFlight) return@Toggle
+                scope.launch {
+                    if (controller.biometricEnabled) {
+                        controller.disableBiometric()
+                    } else {
+                        controller.enableBiometric(MOBILE_ENABLE_BIOMETRIC_PROMPT)
+                    }
+                }
+            },
+        )
+    }
+    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
 }
 
 // Профиль.

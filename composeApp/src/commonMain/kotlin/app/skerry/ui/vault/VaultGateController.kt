@@ -40,6 +40,13 @@ enum class VaultGateState {
     /** Пользователь подтверждает безвозвратный сброс (забыл пароль / битый файл). */
     Resetting,
 
+    /**
+     * Vault только что создан и уже открыт, но прежде чем пустить в приложение — разовое предложение
+     * включить разблокировку биометрией. Показывается лишь когда биометрия доступна на устройстве;
+     * любой исход (включил/отказался) ведёт в [Unlocked].
+     */
+    OfferBiometric,
+
     /** Vault разблокирован — пропускаем к остальному UI. */
     Unlocked,
 }
@@ -140,7 +147,9 @@ class VaultGateController(
                 !password.contentEquals(confirm) -> error = VaultGateError.PasswordMismatch
                 else -> {
                     vault.create(password)
-                    state = VaultGateState.Unlocked
+                    // Новый vault открыт. Если устройство умеет биометрию — разовое предложение её
+                    // включить (экран [VaultGateState.OfferBiometric]); иначе сразу в приложение.
+                    state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
                 }
             }
         } finally {
@@ -271,5 +280,13 @@ class VaultGateController(
         val bio = biometrics ?: return
         bio.disable()
         biometricEnabled = bio.isEnabled()
+    }
+
+    /**
+     * Закрыть разовое предложение биометрии после создания vault ([VaultGateState.OfferBiometric]) —
+     * пустить в приложение независимо от того, включил пользователь биометрию или отказался.
+     */
+    fun dismissBiometricOffer() {
+        if (state == VaultGateState.OfferBiometric) state = VaultGateState.Unlocked
     }
 }
