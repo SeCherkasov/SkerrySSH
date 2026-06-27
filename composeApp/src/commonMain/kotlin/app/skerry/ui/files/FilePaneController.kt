@@ -51,6 +51,21 @@ class FilePaneController(
     var selection: Set<String> by mutableStateOf(emptySet())
         private set
 
+    /**
+     * Путь строки под курсором — текущая позиция клавиатурной навигации (mc-режим), отдельная от
+     * [selection]: курсор есть всегда (если каталог непустой), выделение может быть пустым. Стрелки
+     * двигают курсор, Insert/Space помечают строку под курсором, Enter входит в каталог под курсором.
+     */
+    var cursor: String? by mutableStateOf(null)
+        private set
+
+    /** Курсор стоит на синтетической строке «..» (переход в родитель). Взаимоисключающе с [cursor]. */
+    var cursorOnParent: Boolean by mutableStateOf(false)
+        private set
+
+    /** Доступна ли строка «..» (мы не в корне) — она открывает пространство навигации сверху. */
+    val hasParent: Boolean get() = path != "/"
+
     /** Якорь Shift-диапазона — путь последней одиночно выбранной/тогглнутой строки. Snapshot-стейт,
      *  чтобы чтение в [selectTo] было согласовано с записью [selection] в той же транзакции. */
     private var anchor: String? by mutableStateOf(null)
@@ -74,10 +89,12 @@ class FilePaneController(
     /** Перечитать текущий каталог. */
     fun refresh() = op { reload() }
 
-    /** Создать подкаталог [name] в текущем каталоге. */
+    /** Создать подкаталог [name] в текущем каталоге и навести курсор на него (как в mc). */
     fun mkdir(name: String) = op {
-        browser.mkdir(childPath(name))
+        val created = childPath(name)
+        browser.mkdir(created)
         reload()
+        loadedEntries().firstOrNull { it.path == created }?.let { setCursor(it) }
     }
 
     /** Удалить [item] (файл или каталог рекурсивно — со всем содержимым). */
@@ -130,6 +147,63 @@ class FilePaneController(
     /** Снять всё выделение. */
     fun clearSelection() = resetSelection()
 
+    /** Сдвинуть курсор на [delta] строк (с зажимом по краям). Пространство навигации включает «..». */
+    fun moveCursor(delta: Int) {
+        if (combinedCount() == 0) {
+            cursor = null
+            cursorOnParent = false
+            return
+        }
+        val current = cursorCombinedIndex().let { if (it < 0) 0 else it }
+        setCombined(current + delta)
+    }
+
+    /** Курсор на первую строку (Home) — это «..», если мы не в корне. */
+    fun cursorToFirst() = setCombined(0)
+
+    /** Курсор на последнюю строку (End). */
+    fun cursorToLast() = setCombined(combinedCount() - 1)
+
+    /** Явно поставить курсор на [item] (клик мышью наводит курсор на строку). */
+    fun setCursor(item: FileItem) {
+        cursor = item.path
+        cursorOnParent = false
+    }
+
+    /** Поставить курсор на строку «..» (родитель), если она доступна (мы не в корне). */
+    fun setCursorOnParent() {
+        if (hasParent) {
+            cursorOnParent = true
+            cursor = null
+        }
+    }
+
+    /** Элемент под курсором, либо null (курсор на «..»/пустой каталог/курсор исчез). */
+    fun cursoredItem(): FileItem? =
+        if (cursorOnParent) null else loadedEntries().firstOrNull { it.path == cursor }
+
+    /** Enter: «..» — наверх; каталог — войти; файл — no-op (просмотр появится с F3). */
+    fun enterCursored() {
+        if (cursorOnParent) goUp() else cursoredItem()?.let(::open)
+    }
+
+    /** Space: пометить/снять строку под курсором, не двигая курсор. «..» не помечается. */
+    fun markCursored() {
+        if (cursorOnParent) return
+        cursoredItem()?.let(::toggle)
+    }
+
+    /** Insert: пометить/снять строку под курсором и сдвинуть курсор вниз. На «..» только сдвиг. */
+    fun markCursoredAndAdvance() {
+        if (cursorOnParent) {
+            moveCursor(1)
+            return
+        }
+        val item = cursoredItem() ?: return
+        toggle(item)
+        moveCursor(1)
+    }
+
     /** Выделенные элементы текущего листинга в порядке отображения (для пакетных операций/передачи). */
     fun selectedItems(): List<FileItem> =
         (state as? FilePaneState.Loaded)?.entries?.filter { it.path in selection } ?: emptyList()
@@ -147,6 +221,9 @@ class FilePaneController(
         path = target
         state = next
         resetSelection() // новый каталог — выделение пустое; pruneSelection не нужен (нечего чистить)
+        // Курсор на первый реальный файл (не на «..»), как при открытии каталога в mc.
+        cursor = (next as? FilePaneState.Loaded)?.entries?.firstOrNull()?.path
+        cursorOnParent = false
     }
 
     /** Перечитать текущий [path] на месте (refresh/после mkdir/rename/delete — путь не меняется). */
@@ -155,6 +232,56 @@ class FilePaneController(
         // На Error выделение сохраняется намеренно (no-op): пользователь видит ошибку и прежнюю
         // подсветку, может повторить. Чистим только при успешном листинге.
         pruneSelection()
+        clampCursor()
+    }
+
+    /** Список загруженного каталога либо пусто (Loading/Error/пустой каталог). */
+    private fun loadedEntries(): List<FileItem> = (state as? FilePaneState.Loaded)?.entries ?: emptyList()
+
+    /** Сдвиг entries в объединённом пространстве: 0 в корне, 1 когда сверху есть «..». */
+    private fun parentOffset(): Int = if (hasParent) 1 else 0
+
+    /** Размер пространства навигации: entries плюс строка «..» (если доступна). */
+    private fun combinedCount(): Int = loadedEntries().size + parentOffset()
+
+    /** Индекс курсора в объединённом пространстве [.. , entries…], либо -1. */
+    private fun cursorCombinedIndex(): Int {
+        if (cursorOnParent && hasParent) return 0
+        val c = cursor ?: return -1
+        val idx = loadedEntries().indexOfFirst { it.path == c }
+        return if (idx < 0) -1 else idx + parentOffset()
+    }
+
+    /** Поставить курсор по индексу объединённого пространства (с зажимом по краям). */
+    private fun setCombined(index: Int) {
+        val total = combinedCount()
+        if (total == 0) {
+            cursor = null
+            cursorOnParent = false
+            return
+        }
+        val i = index.coerceIn(0, total - 1)
+        if (hasParent && i == 0) {
+            cursorOnParent = true
+            cursor = null
+        } else {
+            cursorOnParent = false
+            cursor = loadedEntries()[i - parentOffset()].path
+        }
+    }
+
+    /** После перечитывания: если курсорная строка исчезла (удаление/переименование) — на первую. */
+    private fun clampCursor() {
+        if (cursorOnParent) {
+            if (!hasParent) setCombined(0) // оказались в корне — «..» исчезла, перевели на первую
+            return
+        }
+        val entries = loadedEntries()
+        if (entries.isEmpty()) {
+            cursor = null
+            return
+        }
+        if (cursor == null || entries.none { it.path == cursor }) cursor = entries.first().path
     }
 
     /** Загрузить и отсортировать листинг [target] в [FilePaneState] (без записи в поля стора). */

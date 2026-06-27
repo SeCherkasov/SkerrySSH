@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -28,9 +33,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -126,6 +138,10 @@ private fun LiveSftpView(controller: ConnectionController, subtitle: String, mon
     var coord by remember(controller) { mutableStateOf<TransferCoordinator?>(null) }
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
+    var active by remember(controller) { mutableStateOf(ActivePane.Local) }
+    val localList = rememberLazyListState()
+    val remoteList = rememberLazyListState()
+    val focus = remember(controller) { FocusRequester() }
     // UI-scope только для показа нативного пикера файла (fallback Upload); сама передача живёт на
     // scope сессии внутри координатора и переживёт уход вью из композиции.
     val uiScope = rememberCoroutineScope()
@@ -141,7 +157,57 @@ private fun LiveSftpView(controller: ConnectionController, subtitle: String, mon
     }
 
     val c = coord
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    // Как только координатор открыт — даём панелям фокус, чтобы стрелки/Tab работали без клика.
+    LaunchedEffect(c) { if (c != null) focus.requestFocus() }
+
+    // Единая точка для F-клавиш: и нажатие клавиши, и клик по строке нижней панели идут сюда.
+    // Слайс 2 — только раскладка/MkDir; View/Copy/Move/Delete/Menu/Quit подключаются в слайсе 3.
+    val fKey: (Int) -> Unit = fKey@{ n ->
+        if (c == null) return@fKey
+        when (n) {
+            7 -> creatingFolder = true
+            else -> {} // TODO(slice 3): F3 View, F5 Copy, F6 Move, F8 Delete, F9 Menu, F10 Quit
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(D.bg)
+            .focusRequester(focus)
+            .onPreviewKeyEvent { event ->
+                if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val pane = if (active == ActivePane.Local) c.local else c.remote
+                val listState = if (active == ActivePane.Local) localList else remoteList
+                val page = (listState.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(1)
+                when (event.key) {
+                    Key.DirectionUp -> pane.moveCursor(-1)
+                    Key.DirectionDown -> pane.moveCursor(1)
+                    Key.PageUp -> pane.moveCursor(-page)
+                    Key.PageDown -> pane.moveCursor(page)
+                    Key.MoveHome -> pane.cursorToFirst()
+                    Key.MoveEnd -> pane.cursorToLast()
+                    Key.Enter, Key.NumPadEnter -> pane.enterCursored()
+                    Key.DirectionRight -> pane.cursoredItem()?.let(pane::open)
+                    Key.DirectionLeft, Key.Backspace -> pane.goUp()
+                    Key.Insert -> pane.markCursoredAndAdvance()
+                    Key.Spacebar -> pane.markCursored()
+                    Key.Escape -> pane.clearSelection()
+                    Key.Tab -> active = if (active == ActivePane.Local) ActivePane.Remote else ActivePane.Local
+                    Key.F3 -> fKey(3)
+                    Key.F4 -> fKey(4)
+                    Key.F5 -> fKey(5)
+                    Key.F6 -> fKey(6)
+                    Key.F7 -> fKey(7)
+                    Key.F8 -> fKey(8)
+                    Key.F9 -> fKey(9)
+                    Key.F10 -> fKey(10)
+                    else -> return@onPreviewKeyEvent false
+                }
+                true
+            }
+            .focusable(),
+    ) {
         // Шапка ровно по шаблону: слева «File transfer» + подзаголовок, справа Upload + New folder.
         Row(
             Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
@@ -183,10 +249,20 @@ private fun LiveSftpView(controller: ConnectionController, subtitle: String, mon
             }
             else -> {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
-                    LivePane(c.local, "computer", D.dim, "Local", mono, onDownload = null, modifier = Modifier.weight(1f))
+                    LivePane(
+                        c.local, "computer", D.dim, "Local", mono,
+                        listState = localList,
+                        active = active == ActivePane.Local,
+                        onActivate = { active = ActivePane.Local; focus.requestFocus() },
+                        onDownload = null,
+                        modifier = Modifier.weight(1f),
+                    )
                     VLine(D.line)
                     LivePane(
                         c.remote, "dns", D.moss, "Remote", mono,
+                        listState = remoteList,
+                        active = active == ActivePane.Remote,
+                        onActivate = { active = ActivePane.Remote; focus.requestFocus() },
                         onDownload = { item -> c.remote.selectOnly(item); c.downloadSelection() },
                         modifier = Modifier.weight(1f),
                     )
@@ -194,16 +270,87 @@ private fun LiveSftpView(controller: ConnectionController, subtitle: String, mon
                 LiveTransferStrip(c.transfer, mono, onDismiss = c::clearTransfer)
             }
         }
+        HLine()
+        FKeyBar(enabled = c != null, onKey = fKey, mono = mono)
     }
 
     if (creatingFolder && c != null) {
+        // New folder создаётся в АКТИВНОЙ панели (F7/тулбар) — а не всегда в remote, иначе из локальной
+        // панели папка «улетала» в remote и казалось, что мы провалились в чужой каталог.
+        val target = if (active == ActivePane.Local) c.local else c.remote
         NameDialog(
             title = "New folder",
             confirmLabel = "Create",
             initial = "",
-            onConfirm = { c.remote.mkdir(it); creatingFolder = false },
+            existing = (target.state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet(),
+            onConfirm = { target.mkdir(it); creatingFolder = false },
             onDismiss = { creatingFolder = false },
         )
+    }
+}
+
+/**
+ * Раскладка нижней панели F-клавиш в стиле mc (классика, адаптированная под Skerry).
+ * [done] = клавиша реально что-то делает; false — заглушка (слайс 3). Нерабочие помечены «*»
+ * в панели, чтобы было видно, что подключено, а что ещё нет.
+ */
+private data class FKeyDef(val n: Int, val label: String, val done: Boolean)
+
+private val FKEY_LABELS = listOf(
+    FKeyDef(3, "View", done = false),
+    FKeyDef(4, "Edit", done = false),
+    FKeyDef(5, "Copy", done = false),
+    FKeyDef(6, "Move", done = false),
+    FKeyDef(7, "MkDir", done = true),
+    FKeyDef(8, "Delete", done = false),
+    FKeyDef(9, "Menu", done = false),
+    FKeyDef(10, "Quit", done = false),
+)
+
+/**
+ * Нижняя панель горячих клавиш (mc/Total Commander): строка ячеек «F3 View … F10 Quit».
+ * И клик по ячейке, и нажатие F-клавиши идут через общий [onKey]. [enabled] гасит панель,
+ * пока SFTP-координатор не открыт.
+ */
+@Composable
+private fun FKeyBar(enabled: Boolean, onKey: (Int) -> Unit, mono: FontFamily) {
+    Row(
+        Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 6.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        FKEY_LABELS.forEach { def ->
+            FKeyCell(def, enabled, mono, onClick = { onKey(def.n) }, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun FKeyCell(
+    def: FKeyDef,
+    enabled: Boolean,
+    mono: FontFamily,
+    onClick: () -> Unit,
+    modifier: Modifier,
+) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(D.panel)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Txt("F${def.n}", color = if (enabled) D.cyanBright else D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, font = mono)
+        Txt(
+            def.label,
+            color = if (enabled) D.text else D.faint,
+            size = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // «*» — пометка нерабочей заглушки (слайс 3): сразу видно, что подключено, а что нет.
+        if (!def.done) Txt("*", color = D.sunset, size = 11.sp, weight = FontWeight.SemiBold)
     }
 }
 
@@ -219,20 +366,46 @@ private fun LivePane(
     iconColor: Color,
     label: String,
     mono: FontFamily,
+    listState: LazyListState,
+    active: Boolean,
+    onActivate: () -> Unit,
     onDownload: ((FileItem) -> Unit)?,
     modifier: Modifier,
 ) {
     var renaming by remember(pane) { mutableStateOf<FileItem?>(null) }
     var deleting by remember(pane) { mutableStateOf<FileItem?>(null) }
 
-    Column(modifier.fillMaxHeight()) {
+    // Держим курсорную строку в видимой области при навигации с клавиатуры. Индекс в LazyColumn
+    // сдвинут на синтетическую строку «..» (она идёт перед entries, когда мы не в корне).
+    LaunchedEffect(pane.cursor, pane.cursorOnParent, pane.state) {
+        val st = pane.state as? FilePaneState.Loaded ?: return@LaunchedEffect
+        val target = if (pane.cursorOnParent) {
+            0 // строка «..» всегда сверху
+        } else {
+            val idx = st.entries.indexOfFirst { it.path == pane.cursor }
+            if (idx < 0) return@LaunchedEffect
+            idx + if (pane.path != "/") 1 else 0
+        }
+        val visible = listState.layoutInfo.visibleItemsInfo
+        val first = visible.firstOrNull()?.index ?: 0
+        val last = visible.lastOrNull()?.index ?: 0
+        if (visible.isEmpty() || target < first || target > last) listState.scrollToItem(target)
+    }
+
+    Column(modifier.fillMaxHeight().clickable(onClick = onActivate)) {
         Row(
             Modifier.fillMaxWidth().background(D.panel).padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Sym(icon, size = 16.sp, color = iconColor)
-            Txt(label.uppercase(), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+            Sym(icon, size = 16.sp, color = if (active) iconColor else D.faint)
+            Txt(
+                label.uppercase(),
+                color = if (active) D.cyanBright else D.faint,
+                size = 11.sp,
+                weight = FontWeight.SemiBold,
+                letterSpacing = 0.5.sp,
+            )
             Txt(
                 pane.path,
                 color = D.textBright,
@@ -252,6 +425,9 @@ private fun LivePane(
                     pane = pane,
                     entries = st.entries,
                     mono = mono,
+                    listState = listState,
+                    active = active,
+                    onActivate = onActivate,
                     onDownload = onDownload,
                     onRename = { renaming = it },
                     onDelete = { deleting = it },
@@ -265,6 +441,7 @@ private fun LivePane(
             title = "Rename",
             confirmLabel = "Rename",
             initial = entry.name,
+            existing = (pane.state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet(),
             onConfirm = { pane.rename(entry, it); renaming = null },
             onDismiss = { renaming = null },
         )
@@ -283,20 +460,30 @@ private fun LivePaneList(
     pane: FilePaneController,
     entries: List<FileItem>,
     mono: FontFamily,
+    listState: LazyListState,
+    active: Boolean,
+    onActivate: () -> Unit,
     onDownload: ((FileItem) -> Unit)?,
     onRename: (FileItem) -> Unit,
     onDelete: (FileItem) -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(6.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(6.dp), state = listState) {
         if (pane.path != "/") {
-            val onUp = remember(pane) { pane::goUp }
-            LiveFileRow("arrow_upward", D.faint, "..", "", false, mono, onClick = onUp, menuItems = null, onMenuOpen = null)
+            item(key = "..") {
+                LiveFileRow(
+                    "arrow_upward", D.faint, "..", "", selected = false, cursored = pane.cursorOnParent, active = active, mono,
+                    onClick = { onActivate(); pane.goUp() }, menuItems = null, onMenuOpen = null,
+                )
+            }
         }
-        entries.forEach { entry ->
+        items(entries, key = { it.path }) { entry ->
             val isDir = entry.type == FileItemType.Directory
-            // Каталог открываем, файл — добавляем/убираем из выделения (Upload берёт выделение).
-            val onClick = remember(pane, entry.path, isDir) {
-                { if (isDir) pane.open(entry) else pane.toggle(entry) }
+            // Клик активирует панель, наводит курсор и: каталог открываем, файл — добавляем/убираем из
+            // выделения (Upload берёт выделение). setCursor — чтобы курсор шёл за мышью, как в mc.
+            val onClick = {
+                onActivate()
+                pane.setCursor(entry)
+                if (isDir) pane.open(entry) else pane.toggle(entry)
             }
             // Действия строки — в контекстном меню (long-press/right-click), как в шаблоне без ⋮.
             val menuItems = buildList {
@@ -313,11 +500,13 @@ private fun LivePaneList(
                 name = entry.name,
                 meta = if (entry.type == FileItemType.File) humanSize(entry.size) else "",
                 selected = entry.path in pane.selection,
+                cursored = entry.path == pane.cursor,
+                active = active,
                 mono = mono,
                 onClick = onClick,
                 menuItems = menuItems,
                 // При открытии меню выделяем строку — видно, к какому файлу относятся действия.
-                onMenuOpen = remember(pane, entry.path) { { pane.selectOnly(entry) } },
+                onMenuOpen = { onActivate(); pane.selectOnly(entry) },
             )
         }
     }
@@ -331,6 +520,9 @@ private data class MenuAction(val label: String, val color: Color, val onClick: 
  * open(каталог)/select(файл); long-press/right-click открывает контекстное меню [menuItems]
  * (Download/Rename/Delete) — действия есть, но в обычном состоянии строка чистая, как в макете.
  */
+/** Какая из двух панелей активна (получает клавиатуру и курсорную подсветку). */
+private enum class ActivePane { Local, Remote }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LiveFileRow(
@@ -339,6 +531,8 @@ private fun LiveFileRow(
     name: String,
     meta: String,
     selected: Boolean,
+    cursored: Boolean,
+    active: Boolean,
     mono: FontFamily,
     onClick: () -> Unit,
     menuItems: List<MenuAction>?,
@@ -351,12 +545,20 @@ private fun LiveFileRow(
     val hasMenu = !menuItems.isNullOrEmpty()
     // Открыть меню: сначала выделить строку (подсветка показывает цель действий), затем показать меню.
     val openMenu = { onMenuOpen?.invoke(); menuOpen = true }
+    // Курсор (позиция навигации) и выделение (помеченные файлы) — разные сущности mc: курсор активной
+    // панели — яркая полоса, неактивной — рамка; выделение — подсветка + жирное имя.
+    val rowBg = when {
+        cursored && active -> D.cyan.copy(alpha = 0.22f)
+        selected -> D.cyan06
+        else -> Color.Transparent
+    }
     Box {
         Row(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(5.dp))
-                .background(if (selected) D.cyan06 else Color.Transparent)
+                .background(rowBg)
+                .then(if (cursored && !active) Modifier.border(1.dp, D.lineStrong, RoundedCornerShape(5.dp)) else Modifier)
                 // Right-click (desktop) открывает контекстное меню; long-press — для тача.
                 .then(
                     if (hasMenu) {
@@ -389,9 +591,14 @@ private fun LiveFileRow(
             Sym(icon, size = 17.sp, color = iconColor)
             Txt(
                 name,
-                color = if (name == "..") D.dim else D.textBright,
+                color = when {
+                    name == ".." -> D.dim
+                    selected -> D.cyanBright
+                    else -> D.textBright
+                },
                 size = 12.sp,
                 font = mono,
+                weight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -492,11 +699,16 @@ internal fun NameDialog(
     initial: String,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
+    existing: Set<String> = emptySet(),
 ) {
     // Ключ initial: при повторном показе под другой entry (rename без выхода из композиции) поле
     // должно сброситься на новое имя, а не сохранить прежнее.
     var name by remember(initial) { mutableStateOf(initial) }
     val trimmed = name.trim()
+    // Конфликт имён ловим заранее (имя уже есть в каталоге) — иначе mkdir/rename упал бы в Error и
+    // панель «прыгнула» бы; вместо этого показываем сообщение в диалоге и держим его открытым.
+    // initial разрешён (rename в то же имя — no-op, не конфликт).
+    val conflict = trimmed.isNotEmpty() && trimmed != initial && trimmed in existing
     // Отвергаем пустое имя, разделитель пути, «.»/«..» и управляющие символы (null-байт/перевод
     // строки) — последние ломают пути на POSIX-ФС/SFTP-сервере и вёрстку строки.
     val valid = trimmed.isNotEmpty() &&
@@ -505,6 +717,11 @@ internal fun NameDialog(
         trimmed != ".." &&
         trimmed.none { it == '\u0000' || it == '\n' || it == '\r' }
     val mono = LocalFonts.current.mono
+    val ok = valid && !conflict
+    val submit = { if (ok) onConfirm(trimmed) }
+    // Автофокус: поле должно быть готово к вводу сразу при открытии диалога, без клика.
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { fieldFocus.requestFocus() }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -523,7 +740,18 @@ internal fun NameDialog(
                 singleLine = true,
                 textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono),
                 cursorBrush = SolidColor(D.cyan),
-                modifier = Modifier.fillMaxWidth(),
+                // Enter подтверждает (если имя валидно), Esc закрывает — обработчик ДО focusable поля.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(fieldFocus)
+                    .onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (event.key) {
+                            Key.Enter, Key.NumPadEnter -> { submit(); true }
+                            Key.Escape -> { onDismiss(); true }
+                            else -> false
+                        }
+                    },
                 decorationBox = { inner ->
                     Box(
                         Modifier
@@ -535,6 +763,7 @@ internal fun NameDialog(
                     ) { inner() }
                 },
             )
+            if (conflict) Txt("«$trimmed» already exists", color = D.sunset, size = 11.5.sp)
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -543,8 +772,8 @@ internal fun NameDialog(
                 GhostButton("Cancel", onClick = onDismiss)
                 PrimaryButton(
                     confirmLabel,
-                    onClick = { if (valid) onConfirm(trimmed) },
-                    bg = if (valid) D.cyan else D.whiteFaint,
+                    onClick = submit,
+                    bg = if (ok) D.cyan else D.whiteFaint,
                 )
             }
         }

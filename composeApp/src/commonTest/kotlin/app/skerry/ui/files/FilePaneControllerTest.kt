@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -173,6 +174,15 @@ class FilePaneControllerTest {
     }
 
     @Test
+    fun `mkdir lands the cursor on the new directory`() = runTest {
+        val c = started()
+        c.mkdir("newdir")
+        advanceUntilIdle()
+        assertFalse(c.cursorOnParent)
+        assertEquals("newdir", c.cursoredItem()?.name)
+    }
+
+    @Test
     fun `delete removes a file`() = runTest {
         val c = started()
         c.delete(c.entry("readme.txt"))
@@ -267,5 +277,162 @@ class FilePaneControllerTest {
         c.delete(c.entry("readme.txt"))
         advanceUntilIdle()
         assertTrue("$HOME/readme.txt" !in c.selection)
+    }
+
+    // Курсор и клавиатурная навигация (mc-режим)
+
+    @Test
+    fun `start places the cursor on the first entry`() = runTest {
+        val c = started()
+        assertEquals("$HOME/alpha", c.cursor)
+    }
+
+    @Test
+    fun `moveCursor steps down and up the listing`() = runTest {
+        val c = started()
+        // порядок: alpha(0), zeta(1), build.log(2), readme.txt(3)
+        c.moveCursor(1)
+        assertEquals("$HOME/zeta", c.cursor)
+        c.moveCursor(2)
+        assertEquals("$HOME/readme.txt", c.cursor)
+        c.moveCursor(-1)
+        assertEquals("$HOME/build.log", c.cursor)
+    }
+
+    @Test
+    fun `moveCursor clamps at the bottom and stops on the parent row at the top`() = runTest {
+        val c = started()
+        c.moveCursor(-5) // вверх за первый файл — попадаем на «..»
+        assertTrue(c.cursorOnParent)
+        assertEquals(null, c.cursor)
+        c.moveCursor(99)
+        assertFalse(c.cursorOnParent)
+        assertEquals("$HOME/readme.txt", c.cursor)
+    }
+
+    @Test
+    fun `cursorToFirst lands on the parent row and cursorToLast on the last entry`() = runTest {
+        val c = started()
+        c.cursorToLast()
+        assertEquals("$HOME/readme.txt", c.cursor)
+        c.cursorToFirst() // самый верх — строка «..»
+        assertTrue(c.cursorOnParent)
+    }
+
+    @Test
+    fun `moveCursor up from the first entry lands on the parent row`() = runTest {
+        val c = started() // курсор на alpha
+        c.moveCursor(-1)
+        assertTrue(c.cursorOnParent)
+    }
+
+    @Test
+    fun `moveCursor down from the parent row returns to the first entry`() = runTest {
+        val c = started()
+        c.setCursorOnParent()
+        c.moveCursor(1)
+        assertFalse(c.cursorOnParent)
+        assertEquals("$HOME/alpha", c.cursor)
+    }
+
+    @Test
+    fun `enterCursored on the parent row goes up`() = runTest {
+        val c = started()
+        c.setCursorOnParent()
+        c.enterCursored()
+        advanceUntilIdle()
+        assertEquals("/home", c.path)
+    }
+
+    @Test
+    fun `markCursored on the parent row does nothing`() = runTest {
+        val c = started()
+        c.setCursorOnParent()
+        c.markCursored()
+        assertTrue(c.selection.isEmpty())
+    }
+
+    @Test
+    fun `setCursor points at a specific row`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("build.log"))
+        assertEquals("$HOME/build.log", c.cursor)
+        assertEquals("build.log", c.cursoredItem()?.name)
+    }
+
+    @Test
+    fun `navigation resets the cursor to the first row of the new directory`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.moveCursor(2)
+        c.open(c.entry("alpha"))
+        advanceUntilIdle()
+        assertEquals("$HOME/alpha/inside.txt", c.cursor)
+    }
+
+    @Test
+    fun `enterCursored on a directory navigates into it`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.setCursor(c.entry("alpha"))
+        c.enterCursored()
+        advanceUntilIdle()
+        assertEquals("$HOME/alpha", c.path)
+    }
+
+    @Test
+    fun `enterCursored on a file keeps the path`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("readme.txt"))
+        c.enterCursored()
+        advanceUntilIdle()
+        assertEquals(HOME, c.path)
+    }
+
+    @Test
+    fun `markCursored toggles the selection of the cursored row`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("zeta"))
+        c.markCursored()
+        assertEquals(setOf("$HOME/zeta"), c.selection)
+        c.markCursored()
+        assertTrue(c.selection.isEmpty())
+    }
+
+    @Test
+    fun `markCursoredAndAdvance marks the row and moves the cursor down`() = runTest {
+        val c = started()
+        // курсор на alpha
+        c.markCursoredAndAdvance()
+        assertEquals(setOf("$HOME/alpha"), c.selection)
+        assertEquals("$HOME/zeta", c.cursor)
+    }
+
+    @Test
+    fun `refresh keeps the cursor when the entry still exists`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("build.log"))
+        c.refresh()
+        advanceUntilIdle()
+        assertEquals("$HOME/build.log", c.cursor)
+    }
+
+    @Test
+    fun `deleting the cursored entry leaves the cursor on a valid row`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("readme.txt"))
+        c.delete(c.entry("readme.txt"))
+        advanceUntilIdle()
+        val present = c.loaded().entries.map { it.path }
+        assertTrue(c.cursor in present)
+    }
+
+    @Test
+    fun `cursor is null in an empty directory`() = runTest {
+        val fake = FakeSftpClient(startDir = HOME).apply { seedDir("$HOME/empty") }
+        val c = started(SftpFileBrowser(fake, label = "prod-web-01"))
+        c.open(c.entry("empty"))
+        advanceUntilIdle()
+        assertEquals(null, c.cursor)
+        c.moveCursor(1) // не должно падать на пустом листинге
+        assertEquals(null, c.cursor)
     }
 }

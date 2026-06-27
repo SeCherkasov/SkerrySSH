@@ -1,7 +1,9 @@
 package app.skerry.ui.files
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,6 +28,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +37,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,13 +63,55 @@ import app.skerry.ui.theme.SkerryColors
  * передачи, снизу — полоса прогресса. Клик по каталогу входит внутрь, по файлу — добавляет/убирает
  * из выделения; «Загрузить» шлёт выделение локальной панели в каталог удалённой, «Скачать» — наоборот.
  */
+/** Какая из двух панелей активна (получает клавиатуру и курсорную подсветку). */
+private enum class ActivePane { Local, Remote }
+
 @Composable
 fun DualPaneSftpScreen(
     coordinator: TransferCoordinator,
     mono: FontFamily,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(SkerryColors.nightSea)) {
+    var active by remember { mutableStateOf(ActivePane.Local) }
+    val localList = rememberLazyListState()
+    val remoteList = rememberLazyListState()
+    val focus = remember { FocusRequester() }
+
+    fun controller() = if (active == ActivePane.Local) coordinator.local else coordinator.remote
+    fun listState() = if (active == ActivePane.Local) localList else remoteList
+
+    // На desktop сразу даём фокус панелям, чтобы стрелки работали без предварительного клика.
+    LaunchedEffect(Unit) { focus.requestFocus() }
+
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(SkerryColors.nightSea)
+            .focusRequester(focus)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val c = controller()
+                val page = (listState().layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(1)
+                when (event.key) {
+                    Key.DirectionUp -> c.moveCursor(-1)
+                    Key.DirectionDown -> c.moveCursor(1)
+                    Key.PageUp -> c.moveCursor(-page)
+                    Key.PageDown -> c.moveCursor(page)
+                    Key.MoveHome -> c.cursorToFirst()
+                    Key.MoveEnd -> c.cursorToLast()
+                    Key.Enter, Key.NumPadEnter -> c.enterCursored()
+                    Key.DirectionLeft, Key.Backspace -> c.goUp()
+                    Key.DirectionRight -> c.cursoredItem()?.let(c::open)
+                    Key.Insert -> c.markCursoredAndAdvance()
+                    Key.Spacebar -> c.markCursored()
+                    Key.Escape -> c.clearSelection()
+                    Key.Tab -> active = if (active == ActivePane.Local) ActivePane.Remote else ActivePane.Local
+                    else -> return@onPreviewKeyEvent false
+                }
+                true
+            }
+            .focusable(),
+    ) {
         DualTransferBar(
             uploadEnabled = coordinator.local.selection.isNotEmpty(),
             downloadEnabled = coordinator.remote.selection.isNotEmpty(),
@@ -67,9 +121,23 @@ fun DualPaneSftpScreen(
         Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
 
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            FilePane(coordinator.local, mono, Modifier.weight(1f).fillMaxHeight())
+            FilePane(
+                controller = coordinator.local,
+                mono = mono,
+                listState = localList,
+                active = active == ActivePane.Local,
+                onActivate = { active = ActivePane.Local; focus.requestFocus() },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
             Box(Modifier.width(1.dp).fillMaxHeight().background(SkerryColors.line))
-            FilePane(coordinator.remote, mono, Modifier.weight(1f).fillMaxHeight())
+            FilePane(
+                controller = coordinator.remote,
+                mono = mono,
+                listState = remoteList,
+                active = active == ActivePane.Remote,
+                onActivate = { active = ActivePane.Remote; focus.requestFocus() },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
         }
 
         TransferStrip(coordinator.transfer, mono, onDismiss = coordinator::clearTransfer)
@@ -110,19 +178,42 @@ private fun DirectionButton(icon: SkerryIconKind, label: String, enabled: Boolea
     }
 }
 
-/** Одна панель: заголовок (метка источника + путь), тулбар, колонки и список с выделением. */
+/** Одна панель: заголовок (метка источника + путь), тулбар, колонки и список с курсором/выделением. */
 @Composable
-private fun FilePane(controller: FilePaneController, mono: FontFamily, modifier: Modifier = Modifier) {
+private fun FilePane(
+    controller: FilePaneController,
+    mono: FontFamily,
+    listState: LazyListState,
+    active: Boolean,
+    onActivate: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var creating by remember { mutableStateOf(false) }
 
-    Column(modifier.background(SkerryColors.nightSea)) {
+    // Держим курсорную строку в видимой области при навигации с клавиатуры.
+    LaunchedEffect(controller.cursor, controller.state) {
+        val entries = (controller.state as? FilePaneState.Loaded)?.entries ?: return@LaunchedEffect
+        val idx = entries.indexOfFirst { it.path == controller.cursor }
+        if (idx < 0) return@LaunchedEffect
+        val visible = listState.layoutInfo.visibleItemsInfo
+        val first = visible.firstOrNull()?.index ?: 0
+        val last = visible.lastOrNull()?.index ?: 0
+        if (visible.isEmpty() || idx < first || idx > last) listState.scrollToItem(idx)
+    }
+
+    Column(modifier.background(SkerryColors.nightSea).clickable(onClick = onActivate)) {
         Row(
             Modifier.fillMaxWidth().background(SkerryColors.nightSeaSoft).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            SkerryIcon(SkerryIconKind.Folder, tint = SkerryColors.cyan, size = 15.dp)
-            Text(controller.label, color = SkerryColors.text, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            SkerryIcon(SkerryIconKind.Folder, tint = if (active) SkerryColors.cyan else SkerryColors.textDim, size = 15.dp)
+            Text(
+                controller.label,
+                color = if (active) SkerryColors.text else SkerryColors.textDim,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
             Text(
                 controller.path,
                 color = SkerryColors.textDim,
@@ -141,7 +232,7 @@ private fun FilePane(controller: FilePaneController, mono: FontFamily, modifier:
             ChromeIconButton(SkerryIconKind.Refresh, onClick = controller::refresh)
             ChromeIconButton(SkerryIconKind.Add, onClick = { creating = true }, tint = SkerryColors.cyan)
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(SkerryColors.line))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(if (active) SkerryColors.lineStrong else SkerryColors.line))
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when (val state = controller.state) {
@@ -157,13 +248,17 @@ private fun FilePane(controller: FilePaneController, mono: FontFamily, modifier:
                     TextButton(onClick = controller::refresh) { Text("Повторить") }
                 }
 
-                is FilePaneState.Loaded -> LazyColumn(Modifier.fillMaxSize()) {
+                is FilePaneState.Loaded -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
                     items(state.entries, key = { it.path }) { entry ->
                         FilePaneRow(
                             entry = entry,
                             mono = mono,
                             selected = entry.path in controller.selection,
+                            cursored = entry.path == controller.cursor,
+                            active = active,
                             onClick = {
+                                onActivate()
+                                controller.setCursor(entry)
                                 if (entry.type == FileItemType.Directory) controller.open(entry)
                                 else controller.toggle(entry)
                             },
@@ -184,13 +279,28 @@ private fun FilePane(controller: FilePaneController, mono: FontFamily, modifier:
 }
 
 @Composable
-private fun FilePaneRow(entry: FileItem, mono: FontFamily, selected: Boolean, onClick: () -> Unit) {
+private fun FilePaneRow(
+    entry: FileItem,
+    mono: FontFamily,
+    selected: Boolean,
+    cursored: Boolean,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
     val isDir = entry.type == FileItemType.Directory
-    val rowBg = if (selected) SkerryColors.cyan.copy(alpha = 0.18f) else SkerryColors.nightSea
+    // Курсор (позиция навигации) и выделение (помеченные файлы) — разные сущности mc: курсор активной
+    // панели — яркая полоса, неактивной — приглушённая рамка; выделение всегда цветом/жирным имени.
+    val rowBg = when {
+        cursored && active -> SkerryColors.cyan.copy(alpha = 0.22f)
+        selected -> SkerryColors.cyan.copy(alpha = 0.10f)
+        else -> SkerryColors.nightSea
+    }
+    val cursorBorder = if (cursored && !active) Modifier.border(1.dp, SkerryColors.lineStrong) else Modifier
     Row(
         Modifier
             .fillMaxWidth()
             .background(rowBg)
+            .then(cursorBorder)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -203,9 +313,10 @@ private fun FilePaneRow(entry: FileItem, mono: FontFamily, selected: Boolean, on
         )
         Text(
             entry.name,
-            color = if (selected) SkerryColors.cyan else SkerryColors.text,
+            color = if (selected) SkerryColors.cyanBright else SkerryColors.text,
             fontFamily = mono,
             fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
