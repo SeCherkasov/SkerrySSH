@@ -141,6 +141,23 @@ private fun writeCustomGroups(dir: Path, groups: List<String>) {
     }
 }
 
+/**
+ * Показ скрытых объектов (dotfiles) в SFTP (тоггл Ctrl+H), переживающий перезапуск: один символ в
+ * файле `sftp_show_hidden` (`0`/`1`). Отсутствует/нечитаем → дефолт `true` (показывать, как в mc).
+ * Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readSftpShowHidden(dir: Path): Boolean {
+    val file = dir.resolve("sftp_show_hidden")
+    return runCatching { Files.readString(file).trim() != "0" }.getOrDefault(true)
+}
+
+private fun writeSftpShowHidden(dir: Path, show: Boolean) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("sftp_show_hidden"), if (show) "1" else "0")
+    }
+}
+
 fun main() {
     // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
     // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
@@ -247,6 +264,8 @@ fun main() {
                     onRecentHostIdsChange = { writeRecentHostIds(dir, it) },
                     initialCustomGroups = readCustomGroups(dir),
                     onCustomGroupsChange = { writeCustomGroups(dir, it) },
+                    initialSftpShowHidden = readSftpShowHidden(dir),
+                    onSftpShowHiddenChange = { writeSftpShowHidden(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,

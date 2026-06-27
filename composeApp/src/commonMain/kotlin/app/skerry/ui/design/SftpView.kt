@@ -1,10 +1,8 @@
 package app.skerry.ui.design
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,9 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -50,11 +52,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.Popup
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.ui.connection.ConnectionController
@@ -70,7 +70,6 @@ import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.sftp.pickUploadSource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.math.roundToInt
 
 private data class FileEntry(val icon: String, val iconColor: Color, val name: String, val meta: String, val selected: Boolean = false)
 
@@ -154,8 +153,14 @@ private fun LiveSftpView(
     // текста/выполнения). null — диалог закрыт.
     var deleteTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
     var moveTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
+    // Цель F5 Copy — активная панель в момент вызова (источник; назначение — противоположная панель).
+    var copyTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
+    // Цель F2 Rename — пара (панель, строка под курсором) на момент нажатия. null — диалог закрыт.
+    var renameTarget by remember(controller) { mutableStateOf<Pair<FilePaneController, FileItem>?>(null) }
     val localList = rememberLazyListState()
     val remoteList = rememberLazyListState()
+    // Персистентная настройка показа скрытых (Ctrl+H) — единый источник правды для обеих панелей.
+    val sftpPrefs = LocalSftpPrefs.current
     val focus = remember(controller) { FocusRequester() }
     // UI-scope только для показа нативного пикера файла (fallback Upload); сама передача живёт на
     // scope сессии внутри координатора и переживёт уход вью из композиции.
@@ -174,6 +179,14 @@ private fun LiveSftpView(
     val c = coord
     // Как только координатор открыт — даём панелям фокус, чтобы стрелки/Tab работали без клика.
     LaunchedEffect(c) { if (c != null) focus.requestFocus() }
+    // Применяем сохранённую настройку показа скрытых к обеим панелям: при открытии координатора и при
+    // каждом переключении Ctrl+H (sftpPrefs.showHidden — ключ эффекта).
+    LaunchedEffect(c, sftpPrefs.showHidden) {
+        if (c != null) {
+            c.local.setShowHidden(sftpPrefs.showHidden)
+            c.remote.setShowHidden(sftpPrefs.showHidden)
+        }
+    }
 
     // Единая точка для F-клавиш: и нажатие клавиши, и клик по строке нижней панели идут сюда. Операции
     // работают над АКТИВНОЙ панелью, цель — её operands() (выделение либо строка под курсором, mc-стиль).
@@ -182,9 +195,10 @@ private fun LiveSftpView(
         val coord = c ?: return@fKey
         val pane = if (active == ActivePane.Local) coord.local else coord.remote
         when (n) {
-            5 -> { // Copy: залить выделение/курсор активной панели в другую (upload/download)
+            2 -> pane.cursoredItem()?.let { renameTarget = pane to it } // Rename строки под курсором
+            5 -> { // Copy: выделение/курсор активной панели в другую (upload/download), с подтверждением
                 ensureOperandSelection(pane)
-                if (active == ActivePane.Local) coord.uploadSelection() else coord.downloadSelection()
+                if (pane.operands().isNotEmpty()) copyTarget = pane
             }
             6 -> { // Move: copy + delete источника, с подтверждением
                 ensureOperandSelection(pane)
@@ -208,6 +222,12 @@ private fun LiveSftpView(
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
                 if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Ctrl+H — показать/скрыть скрытые объекты (dotfiles); меняем персистентную настройку,
+                // а её применение к обеим панелям делает LaunchedEffect ниже (единый источник правды).
+                if (event.isCtrlPressed && event.key == Key.H) {
+                    sftpPrefs.setShowHidden(!sftpPrefs.showHidden)
+                    return@onPreviewKeyEvent true
+                }
                 val pane = if (active == ActivePane.Local) c.local else c.remote
                 val listState = if (active == ActivePane.Local) localList else remoteList
                 val page = (listState.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(1)
@@ -225,6 +245,7 @@ private fun LiveSftpView(
                     Key.Spacebar -> pane.markCursored()
                     Key.Escape -> pane.clearSelection()
                     Key.Tab -> active = if (active == ActivePane.Local) ActivePane.Remote else ActivePane.Local
+                    Key.F2 -> fKey(2)
                     Key.F3 -> fKey(3)
                     Key.F4 -> fKey(4)
                     Key.F5 -> fKey(5)
@@ -285,7 +306,6 @@ private fun LiveSftpView(
                         listState = localList,
                         active = active == ActivePane.Local,
                         onActivate = { active = ActivePane.Local; focus.requestFocus() },
-                        onDownload = null,
                         modifier = Modifier.weight(1f),
                     )
                     VLine(D.line)
@@ -294,7 +314,6 @@ private fun LiveSftpView(
                         listState = remoteList,
                         active = active == ActivePane.Remote,
                         onActivate = { active = ActivePane.Remote; focus.requestFocus() },
-                        onDownload = { item -> c.remote.selectOnly(item); c.downloadSelection() },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -354,6 +373,41 @@ private fun LiveSftpView(
             )
         }
     }
+
+    // F5 Copy активной панели в другую (upload/download), с подтверждением. Назначение — текущий
+    // каталог противоположной панели.
+    copyTarget?.let { pane ->
+        val coord = c
+        val items = pane.operands()
+        if (coord == null || items.isEmpty()) {
+            LaunchedEffect(pane) { copyTarget = null }
+        } else {
+            val fromLocal = pane === coord.local
+            val destPath = if (fromLocal) coord.remote.path else coord.local.path
+            ConfirmCopyDialog(
+                items = items,
+                destLabel = if (fromLocal) "Remote" else "Local",
+                destPath = destPath,
+                onConfirm = {
+                    if (fromLocal) coord.uploadSelection() else coord.downloadSelection()
+                    copyTarget = null
+                },
+                onDismiss = { copyTarget = null },
+            )
+        }
+    }
+
+    // F2 Rename строки под курсором активной панели (классика mc — клавиатурный путь, без меню).
+    renameTarget?.let { (pane, item) ->
+        NameDialog(
+            title = "Rename",
+            confirmLabel = "Rename",
+            initial = item.name,
+            existing = (pane.state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet(),
+            onConfirm = { pane.rename(item, it); renameTarget = null },
+            onDismiss = { renameTarget = null },
+        )
+    }
 }
 
 /**
@@ -372,6 +426,7 @@ private fun ensureOperandSelection(pane: FilePaneController) {
 private data class FKeyDef(val n: Int, val label: String, val done: Boolean)
 
 private val FKEY_LABELS = listOf(
+    FKeyDef(2, "Rename", done = true),
     FKeyDef(3, "View", done = false),
     FKeyDef(4, "Edit", done = false),
     FKeyDef(5, "Copy", done = true),
@@ -431,8 +486,8 @@ private fun FKeyCell(
 
 /**
  * Одна живая панель поверх [FilePaneController]: шапка [label] + путь (ровно как в шаблоне, без
- * тулбара — навигация вверх строкой «..»), листинг и диалоги переименования/удаления. [onDownload]
- * задаётся только для remote-панели (скачать файл из контекстного меню строки).
+ * тулбара — навигация вверх строкой «..») и листинг. Файловые операции — через нижнюю панель F-клавиш,
+ * выделение — ЛКМ (toggle) и rubber-band зажатой ПКМ.
  */
 @Composable
 private fun LivePane(
@@ -444,12 +499,8 @@ private fun LivePane(
     listState: LazyListState,
     active: Boolean,
     onActivate: () -> Unit,
-    onDownload: ((FileItem) -> Unit)?,
     modifier: Modifier,
 ) {
-    var renaming by remember(pane) { mutableStateOf<FileItem?>(null) }
-    var deleting by remember(pane) { mutableStateOf<FileItem?>(null) }
-
     // Держим курсорную строку в видимой области при навигации с клавиатуры. Индекс в LazyColumn
     // сдвинут на синтетическую строку «..» (она идёт перед entries, когда мы не в корне).
     LaunchedEffect(pane.cursor, pane.cursorOnParent, pane.state) {
@@ -503,30 +554,9 @@ private fun LivePane(
                     listState = listState,
                     active = active,
                     onActivate = onActivate,
-                    onDownload = onDownload,
-                    onRename = { renaming = it },
-                    onDelete = { deleting = it },
                 )
             }
         }
-    }
-
-    renaming?.let { entry ->
-        NameDialog(
-            title = "Rename",
-            confirmLabel = "Rename",
-            initial = entry.name,
-            existing = (pane.state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet(),
-            onConfirm = { pane.rename(entry, it); renaming = null },
-            onDismiss = { renaming = null },
-        )
-    }
-    deleting?.let { entry ->
-        ConfirmDeleteDialog(
-            entry = entry,
-            onConfirm = { pane.delete(entry); deleting = null },
-            onDismiss = { deleting = null },
-        )
     }
 }
 
@@ -538,36 +568,30 @@ private fun LivePaneList(
     listState: LazyListState,
     active: Boolean,
     onActivate: () -> Unit,
-    onDownload: ((FileItem) -> Unit)?,
-    onRename: (FileItem) -> Unit,
-    onDelete: (FileItem) -> Unit,
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(6.dp), state = listState) {
         if (pane.path != "/") {
             item(key = "..") {
                 LiveFileRow(
                     "arrow_upward", D.faint, "..", "", selected = false, cursored = pane.cursorOnParent, active = active, mono,
-                    onClick = { onActivate(); pane.goUp() }, menuItems = null, onMenuOpen = null,
+                    // Одиночный клик только ставит курсор на «..»; вверх — двойным кликом (как вход в каталог).
+                    onPress = { onActivate(); pane.setCursorOnParent() },
+                    onDoubleClick = { onActivate(); pane.goUp() },
+                    rubberBand = null, // строку «..» нельзя пометить — rubber-band на ней не нужен
                 )
             }
         }
         items(entries, key = { it.path }) { entry ->
-            val isDir = entry.type == FileItemType.Directory
-            // Клик активирует панель, наводит курсор и: каталог открываем, файл — добавляем/убираем из
-            // выделения (Upload берёт выделение). setCursor — чтобы курсор шёл за мышью, как в mc.
-            val onClick = {
+            // Одиночный клик (по нажатию): активировать панель и навести курсор — НЕ помечает и НЕ входит.
+            // Вход в каталог — двойным кликом (open; для файла no-op). Выделение — ПКМ/Space/Insert.
+            val onPress = {
                 onActivate()
                 pane.setCursor(entry)
-                if (isDir) pane.open(entry) else pane.toggle(entry)
             }
-            // Действия строки — в контекстном меню (long-press/right-click), как в шаблоне без ⋮.
-            val menuItems = buildList {
-                // Download — для файлов и каталогов (каталог скачивается рекурсивно), но не для симлинков/прочего.
-                if (onDownload != null && (entry.type == FileItemType.File || entry.type == FileItemType.Directory)) {
-                    add(MenuAction("Download", D.text) { onDownload(entry) })
-                }
-                add(MenuAction("Rename", D.text) { onRename(entry) })
-                add(MenuAction("Delete", D.sunset) { onDelete(entry) })
+            val onDoubleClick = {
+                onActivate()
+                pane.setCursor(entry)
+                pane.open(entry)
             }
             LiveFileRow(
                 icon = fileItemIcon(entry.type),
@@ -578,27 +602,63 @@ private fun LivePaneList(
                 cursored = entry.path == pane.cursor,
                 active = active,
                 mono = mono,
-                onClick = onClick,
-                menuItems = menuItems,
-                // При открытии меню выделяем строку — видно, к какому файлу относятся действия.
-                onMenuOpen = { onActivate(); pane.selectOnly(entry) },
+                onPress = onPress,
+                onDoubleClick = onDoubleClick,
+                rubberBand = RowRubberBand(entry, pane, listState, entries, onActivate),
             )
         }
     }
 }
 
-/** Действие контекстного меню строки. */
-private data class MenuAction(val label: String, val color: Color, val onClick: () -> Unit)
+/**
+ * Жест rubber-band строки (выделение зажатой ПКМ в стиле mc). Нажатие красит строку-[entry] (toggle
+ * по её текущему состоянию), протяжка вниз/вверх красит весь диапазон в тот же знак. Курсор мыши,
+ * захваченный строкой нажатия, переводим в координаты списка через смещение строки в [listState],
+ * затем ищем строку под ним в [listState] и красим до неё. Скролл при протяжке у краёв не делаем
+ * (правая кнопка список не прокручивает) — смещения стабильны на всё время жеста.
+ */
+private class RowRubberBand(
+    val entry: FileItem,
+    val pane: FilePaneController,
+    val listState: LazyListState,
+    val entries: List<FileItem>,
+    val onActivate: () -> Unit,
+) {
+    // Member-extension на restricted-scope AwaitPointerEventScope — иначе awaitPointerEvent() звать нельзя.
+    suspend fun AwaitPointerEventScope.dragSelect(press: PointerEvent) {
+        onActivate() // красим в этой панели — делаем её активной (F-клавиши пойдут сюда)
+        // Знак фиксируем по строке под нажатием: не помечена → красим, помечена → стираем.
+        val select = entry.path !in pane.selection
+        pane.rubberBandTo(entry, entry, select)
+        press.changes.forEach { it.consume() }
+        val anchorOffset = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { it.key == entry.path }?.offset ?: 0
+        while (true) {
+            val drag = awaitPointerEvent()
+            if (!drag.buttons.isSecondaryPressed) break // ПКМ отпущена — конец жеста
+            val listY = anchorOffset + drag.changes.first().position.y
+            val key = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { listY >= it.offset && listY < it.offset + it.size }?.key as? String
+            key?.let { k -> entries.firstOrNull { it.path == k } }
+                ?.let { target -> pane.rubberBandTo(entry, target, select) }
+            drag.changes.forEach { it.consume() }
+        }
+    }
+}
 
 /**
- * Строка живого листинга — визуально идентична шаблону (иконка + имя + размер, без ⋮). Клик:
- * open(каталог)/select(файл); long-press/right-click открывает контекстное меню [menuItems]
- * (Download/Rename/Delete) — действия есть, но в обычном состоянии строка чистая, как в макете.
+ * Строка живого листинга — визуально идентична шаблону (иконка + имя + размер, без ⋮). ЛКМ просто
+ * ставит курсор (НЕ помечает и НЕ входит в каталог) — реагирует мгновенно по нажатию ([onPress]),
+ * чтобы не было задержки распознавания двойного клика. Двойной клик — вход в каталог ([onDoubleClick]).
+ * Выделение — ПКМ-нажатие/протяжка (rubber-band, [RowRubberBand]) либо Space/Insert. Контекстного
+ * меню нет: действия идут через нижнюю панель F-клавиш.
  */
 /** Какая из двух панелей активна (получает клавиатуру и курсорную подсветку). */
 private enum class ActivePane { Local, Remote }
 
-@OptIn(ExperimentalFoundationApi::class)
+/** Порог двойного клика по строке (мс между двумя нажатиями ЛКМ → вход в каталог). */
+private const val DOUBLE_CLICK_MS = 350L
+
 @Composable
 private fun LiveFileRow(
     icon: String,
@@ -609,17 +669,15 @@ private fun LiveFileRow(
     cursored: Boolean,
     active: Boolean,
     mono: FontFamily,
-    onClick: () -> Unit,
-    menuItems: List<MenuAction>?,
-    onMenuOpen: (() -> Unit)?,
+    onPress: () -> Unit,
+    onDoubleClick: () -> Unit,
+    // Данные для rubber-band зажатой ПКМ (mc): строка-якорь, контроллер, состояние списка для
+    // перевода позиции курсора в строку, и текущий листинг. null для синтетической строки «..».
+    rubberBand: RowRubberBand?,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-    // Позиция курсора в момент нажатия (локально к строке) — чтобы меню открылось под курсором, а не
-    // в углу строки. Обновляется на каждом Press, так что и right-click, и long-press берут точку нажатия.
-    var pressOffset by remember { mutableStateOf(Offset.Zero) }
-    val hasMenu = !menuItems.isNullOrEmpty()
-    // Открыть меню: сначала выделить строку (подсветка показывает цель действий), затем показать меню.
-    val openMenu = { onMenuOpen?.invoke(); menuOpen = true }
+    // Последние колбэки без перезапуска жеста (pointerInput ключуем на Unit — он живёт всю жизнь строки).
+    val currentPress by rememberUpdatedState(onPress)
+    val currentDouble by rememberUpdatedState(onDoubleClick)
     // Курсор (позиция навигации) и выделение (помеченные файлы) — разные сущности mc: курсор активной
     // панели — яркая полоса, неактивной — рамка; выделение — подсветка + жирное имя.
     val rowBg = when {
@@ -627,90 +685,75 @@ private fun LiveFileRow(
         selected -> D.cyan06
         else -> Color.Transparent
     }
-    Box {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(5.dp))
-                .background(rowBg)
-                .then(if (cursored && !active) Modifier.border(1.dp, D.lineStrong, RoundedCornerShape(5.dp)) else Modifier)
-                // Right-click (desktop) открывает контекстное меню; long-press — для тача.
-                .then(
-                    if (hasMenu) {
-                        Modifier.pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    if (event.type == PointerEventType.Press) {
-                                        pressOffset = event.changes.first().position
-                                        if (event.buttons.isSecondaryPressed) {
-                                            event.changes.forEach { it.consume() }
-                                            openMenu()
-                                        }
-                                    }
-                                }
-                            }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(5.dp))
+            .background(rowBg)
+            .then(if (cursored && !active) Modifier.border(1.dp, D.lineStrong, RoundedCornerShape(5.dp)) else Modifier)
+            // ЛКМ: свой разбор тапов в одном цикле — надёжнее detectTapGestures (тот терял двойной клик
+            // из-за slop/тайм-аутов). Каждое нажатие ЛКМ мгновенно ставит курсор (currentPress); два
+            // нажатия подряд ближе DOUBLE_CLICK_MS — это двойной клик (вход в каталог). Время берём из
+            // самого события (uptimeMillis) — детерминированно. ПКМ пропускаем (её ведёт rubber-band ниже).
+            .pointerInput(Unit) {
+                var lastDownMs = 0L
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        if (e.type != PointerEventType.Press || e.buttons.isSecondaryPressed) continue
+                        val t = e.changes.first().uptimeMillis
+                        currentPress()
+                        if (t - lastDownMs <= DOUBLE_CLICK_MS) {
+                            currentDouble()
+                            lastDownMs = 0L // сброс, чтобы тройной клик не дал второй вход
+                        } else {
+                            lastDownMs = t
                         }
-                    } else {
-                        Modifier
-                    },
-                )
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = if (hasMenu) openMenu else null,
-                )
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Sym(icon, size = 17.sp, color = iconColor)
-            Txt(
-                name,
-                color = when {
-                    name == ".." -> D.dim
-                    selected -> D.cyanBright
-                    else -> D.textBright
-                },
-                size = 12.sp,
-                font = mono,
-                weight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (meta.isNotEmpty()) Txt(meta, color = D.faint, size = 11.sp)
-        }
-        if (menuOpen && !menuItems.isNullOrEmpty()) {
-            Popup(
-                alignment = Alignment.TopStart,
-                offset = IntOffset(pressOffset.x.roundToInt(), pressOffset.y.roundToInt()),
-                onDismissRequest = { menuOpen = false },
-            ) {
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(D.surface2)
-                        .border(1.dp, D.lineStrong, RoundedCornerShape(7.dp))
-                        .padding(4.dp),
-                ) {
-                    menuItems.forEach { action ->
-                        MenuItem(action.label, action.color) { menuOpen = false; action.onClick() }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun MenuItem(label: String, color: Color, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(5.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
+            // ПКМ (mc): нажатие красит строку (toggle по знаку), протяжка вниз/вверх красит диапазон в
+            // тот же знак — rubber-band. Идёт ПОСЛЕ детектора тапов (inner) и потребляет правую кнопку
+            // в Main-проходе раньше — поэтому detectTapGestures (requireUnconsumed) её игнорирует, а ЛКМ
+            // не трогает (без consume) и достаётся детектору тапов.
+            .then(
+                if (rubberBand != null) {
+                    // Ключ — якорь+листинг (стабильны во время протяжки: смена selection их не трогает,
+                    // поэтому жест не перезапускается прямо посреди rubber-band).
+                    Modifier.pointerInput(rubberBand.entry, rubberBand.entries) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val press = awaitPointerEvent()
+                                if (press.type != PointerEventType.Press) continue
+                                if (!press.buttons.isSecondaryPressed) continue
+                                with(rubberBand) { dragSelect(press) }
+                            }
+                        }
+                    }
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Txt(label, color = color, size = 12.sp)
+        Sym(icon, size = 17.sp, color = iconColor)
+        Txt(
+            name,
+            color = when {
+                name == ".." -> D.dim
+                selected -> D.cyanBright
+                else -> D.textBright
+            },
+            size = 12.sp,
+            font = mono,
+            weight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (meta.isNotEmpty()) Txt(meta, color = D.faint, size = 11.sp)
     }
 }
 
@@ -876,6 +919,30 @@ private fun ConfirmDeleteItemsDialog(items: List<FileItem>, onConfirm: () -> Uni
         else -> "${items.size} items will be removed permanently."
     }
     ConfirmDangerDialog(title, body, "Delete", onConfirm, onDismiss)
+}
+
+/**
+ * Подтверждение копирования пакета [items] в каталог [destPath] панели [destLabel] (F5).
+ */
+@Composable
+private fun ConfirmCopyDialog(
+    items: List<FileItem>,
+    destLabel: String,
+    destPath: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val single = items.singleOrNull()
+    val what = if (single != null) "«${single.name}»" else "${items.size} items"
+    ConfirmDangerDialog(
+        title = "Copy to $destLabel?",
+        body = "$what → $destPath",
+        confirmLabel = "Copy",
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        confirmBg = D.cyan,
+        confirmFg = Color(0xFF0A1A26),
+    )
 }
 
 /**
