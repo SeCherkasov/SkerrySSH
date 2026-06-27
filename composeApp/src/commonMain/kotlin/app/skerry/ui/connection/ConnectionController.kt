@@ -228,6 +228,7 @@ class ConnectionController(
                 TransferCoordinator(
                     sftp = client,
                     local = FilePaneController(localBrowser, scope),
+                    localBrowser = localBrowser,
                     remote = FilePaneController(SftpFileBrowser(client, hostLabel), scope),
                     scope = scope,
                 ).also {

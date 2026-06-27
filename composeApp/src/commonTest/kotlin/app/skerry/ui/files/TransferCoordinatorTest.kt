@@ -44,6 +44,7 @@ class TransferCoordinatorTest {
     private class Rig(
         val local: FilePaneController,
         val remote: FilePaneController,
+        val localFake: FakeSftpClient,
         val remoteFake: FakeSftpClient,
         val coordinator: TransferCoordinator,
     )
@@ -52,11 +53,12 @@ class TransferCoordinatorTest {
         local: FakeSftpClient = localFake(),
         remote: FakeSftpClient = remoteFake(),
     ): Rig {
-        val localCtl = FilePaneController(SftpFileBrowser(local, "This Mac"), scope())
+        val localBrowser = SftpFileBrowser(local, "This Mac")
+        val localCtl = FilePaneController(localBrowser, scope())
         val remoteCtl = FilePaneController(SftpFileBrowser(remote, "prod-web-01"), scope())
         localCtl.start(); remoteCtl.start(); advanceUntilIdle()
-        val coordinator = TransferCoordinator(remote, localCtl, remoteCtl, scope())
-        return Rig(localCtl, remoteCtl, remote, coordinator)
+        val coordinator = TransferCoordinator(remote, localCtl, localBrowser, remoteCtl, scope())
+        return Rig(localCtl, remoteCtl, local, remote, coordinator)
     }
 
     private fun FilePaneController.entry(name: String) =
@@ -100,6 +102,65 @@ class TransferCoordinatorTest {
         assertEquals("$RHOME/r.txt" to "$LHOME/r.txt", r.remoteFake.lastDownload)
         assertEquals(TransferState.Idle, r.coordinator.transfer)
         assertTrue(r.remote.selection.isEmpty())
+    }
+
+    @Test
+    fun `downloadSelection downloads a directory recursively, recreating the local tree`() = runTest {
+        val remote = remoteFake().apply {
+            seedDir("$RHOME/proj")
+            seedFile("$RHOME/proj/top.txt", size = 5)
+            seedDir("$RHOME/proj/nested")
+            seedFile("$RHOME/proj/nested/deep.txt", size = 7)
+        }
+        val r = rig(remote = remote)
+        r.remote.toggle(r.remote.entry("proj"))
+
+        r.coordinator.downloadSelection()
+        advanceUntilIdle()
+
+        // Локальные подкаталоги воссозданы.
+        val localTop = r.localFake.list(LHOME).map { it.name }
+        assertTrue("proj" in localTop, "ожидали локальный каталог proj, есть: $localTop")
+        val localNested = r.localFake.list("$LHOME/proj").map { it.name }
+        assertTrue("nested" in localNested, "ожидали локальный каталог proj/nested, есть: $localNested")
+
+        // Оба файла дерева скачаны в соответствующие локальные пути.
+        assertTrue("$RHOME/proj/top.txt" to "$LHOME/proj/top.txt" in r.remoteFake.downloads)
+        assertTrue("$RHOME/proj/nested/deep.txt" to "$LHOME/proj/nested/deep.txt" in r.remoteFake.downloads)
+
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+        assertTrue(r.remote.selection.isEmpty())
+    }
+
+    @Test
+    fun `downloadSelection recreates an empty remote directory locally with no file transfers`() = runTest {
+        val remote = remoteFake().apply { seedDir("$RHOME/empty") }
+        val r = rig(remote = remote)
+        r.remote.toggle(r.remote.entry("empty"))
+
+        r.coordinator.downloadSelection()
+        advanceUntilIdle()
+
+        assertTrue("empty" in r.localFake.list(LHOME).map { it.name })
+        assertTrue(r.remoteFake.downloads.isEmpty())
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+    }
+
+    @Test
+    fun `downloadSelection rejects a malicious listing name that escapes the local directory`() = runTest {
+        // Недоверенный сервер вернул в листинге имя с разделителем пути Windows — попытка traversal.
+        val remote = remoteFake().apply {
+            seedDir("$RHOME/proj")
+            seedFile("$RHOME/proj/..\\evil.txt", size = 9)
+        }
+        val r = rig(remote = remote)
+        r.remote.toggle(r.remote.entry("proj"))
+
+        r.coordinator.downloadSelection()
+        advanceUntilIdle()
+
+        assertIs<TransferState.Failed>(r.coordinator.transfer)
+        assertTrue(r.remoteFake.downloads.none { it.first.endsWith("evil.txt") })
     }
 
     /** Тест-цель скачивания «Save to…»: фиксирует staging-путь и финализацию/откат. */

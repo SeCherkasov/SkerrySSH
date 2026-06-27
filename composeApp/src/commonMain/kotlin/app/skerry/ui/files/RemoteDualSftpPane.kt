@@ -91,9 +91,11 @@ fun RemoteDualSftpPane(
             // Включи её в ключ — и смена строки подзаголовка пересоздала бы координатор поверх старого
             // [paneScope] (тот keyed только на client), потеряв путь/выделение панелей и пересоздав start().
             val coordinator = remember(client) {
+                val localBrowser = platformLocalBrowser()
                 TransferCoordinator(
                     sftp = client,
-                    local = FilePaneController(platformLocalBrowser(), paneScope),
+                    local = FilePaneController(localBrowser, paneScope),
+                    localBrowser = localBrowser,
                     remote = FilePaneController(SftpFileBrowser(client, hostLabel), paneScope),
                     scope = paneScope,
                 )

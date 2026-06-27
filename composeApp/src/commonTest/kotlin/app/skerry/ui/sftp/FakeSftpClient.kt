@@ -62,6 +62,9 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
     var lastDownload: Pair<String, String>? = null
         private set
 
+    /** Все вызовы download в порядке поступления: (remotePath, localPath). Для проверки рекурсии. */
+    val downloads = mutableListOf<Pair<String, String>>()
+
     /** Последний вызов upload: (localPath, remotePath). */
     var lastUpload: Pair<String, String>? = null
         private set
@@ -83,6 +86,7 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
         val entry = children[parentOf(norm)]?.get(nameOf(norm)) ?: throw SftpException("Нет файла $remotePath")
         if (entry.type == SftpEntryType.Directory) throw SftpException("$remotePath — каталог, не файл")
         lastDownload = remotePath to localPath
+        downloads += remotePath to localPath
         emitProgress(onProgress, entry.size)
     }
 
