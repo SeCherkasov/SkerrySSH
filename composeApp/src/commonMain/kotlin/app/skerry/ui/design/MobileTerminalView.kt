@@ -375,20 +375,9 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
                 .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .background(Color(0xFF0E1B26))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 30.dp),
+                .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
         ) {
-            // Полноширинная зона захвата вокруг полоски — комфортный тач-таргет для перетаскивания.
-            Box(
-                Modifier.fillMaxWidth().then(drag.handle).padding(bottom = 16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(width = 38.dp, height = 5.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0x2EFFFFFF)),
-                )
-            }
+            SheetHandle(drag)
             Txt(host.label, color = D.text, size = 20.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(3.dp))
             Txt("${host.username}@${host.address}:${host.port}", color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono)

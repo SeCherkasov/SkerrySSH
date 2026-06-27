@@ -408,13 +408,7 @@ private fun MobileSecretDetailSheet(
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .imePadding(),
         ) {
-            // Хват: тянем лист вниз пальцем; за порогом отпускание закрывает, иначе — возврат на место.
-            Box(
-                Modifier.fillMaxWidth().then(drag.handle).padding(top = 10.dp, bottom = 6.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(Modifier.size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(D.lineStrong))
-            }
+            SheetHandle(drag)
             // weight(fill = false): при коротком содержимом колонка обнимает контент, при длинном —
             // упирается в остаток высоты шторки и скроллится (а не вылезает за край).
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {

@@ -314,20 +314,9 @@ private fun MobileTunnelEditorSheet(
                 .background(SheetPanel)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .verticalScroll(rememberScrollState())
-                .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 30.dp),
+                .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
         ) {
-            // Полноширинная зона захвата вокруг полоски — комфортный тач-таргет для перетаскивания.
-            Box(
-                Modifier.fillMaxWidth().then(drag.handle).padding(bottom = 16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(width = 38.dp, height = 5.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0x2EFFFFFF)),
-                )
-            }
+            SheetHandle(drag)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Badge(directionBadge(direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 9.5.sp)
@@ -417,35 +406,37 @@ private fun MobileTunnelEditorSheet(
     }
 }
 
-/** Пикер хоста в листе: тап раскрывает список сохранённых хостов поверх (Popup). */
+/** Пикер хоста в листе: меню всплывает строго ПОД триггером и по его ширине (через [AnchoredDropdown]). */
 @Composable
 private fun MobileHostPicker(current: String, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Box {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Txt(current, color = D.text, size = 15.sp)
-            Sym("expand_more", size = 20.sp, color = D.faint)
-        }
-        if (open) {
-            Popup(alignment = Alignment.TopStart, onDismissRequest = { open = false }) {
-                Column(
-                    Modifier.width(260.dp).clip(RoundedCornerShape(11.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
-                ) {
-                    if (options.isEmpty()) {
-                        Txt("No saved hosts", color = D.faint, size = 13.sp, modifier = Modifier.padding(14.dp))
-                    } else {
-                        options.forEach { (id, name) ->
-                            Txt(name, color = D.text, size = 15.sp, modifier = Modifier.fillMaxWidth().clickable { onPick(id); open = false }.padding(horizontal = 14.dp, vertical = 11.dp))
-                        }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Txt(current, color = D.text, size = 15.sp)
+                Sym(if (open) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+            }
+        },
+        menu = { width ->
+            Column(
+                Modifier.width(width).clip(RoundedCornerShape(11.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).heightIn(max = 260.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            ) {
+                if (options.isEmpty()) {
+                    Txt("No saved hosts", color = D.faint, size = 13.sp, modifier = Modifier.padding(14.dp))
+                } else {
+                    options.forEach { (id, name) ->
+                        Txt(name, color = D.text, size = 15.sp, modifier = Modifier.fillMaxWidth().clickable { onPick(id); open = false }.padding(horizontal = 14.dp, vertical = 11.dp))
                     }
                 }
             }
-        }
-    }
+        },
+    )
 }
 
 private fun directionDisplay(direction: TunnelDirection): String = when (direction) {
@@ -492,36 +483,38 @@ private fun PortInput(value: String, onValueChange: (String) -> Unit, placeholde
     )
 }
 
-/** Селект типа туннеля: тап раскрывает список `-L`/`-R`/`-D` поверх (Popup), как [MobileHostPicker]. */
+/** Селект типа туннеля: меню `-L`/`-R`/`-D` всплывает ПОД триггером и по его ширине (через [AnchoredDropdown]). */
 @Composable
 private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Box {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Txt(directionDisplay(direction), color = D.text, size = 15.sp)
-            Sym("expand_more", size = 20.sp, color = D.faint)
-        }
-        if (open) {
-            Popup(alignment = Alignment.TopStart, onDismissRequest = { open = false }) {
-                Column(
-                    Modifier.width(260.dp).clip(RoundedCornerShape(11.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)),
-                ) {
-                    listOf(TunnelDirection.Local, TunnelDirection.Remote, TunnelDirection.Dynamic).forEach { option ->
-                        Txt(
-                            directionDisplay(option),
-                            color = if (option == direction) D.cyanBright else D.text,
-                            size = 15.sp,
-                            modifier = Modifier.fillMaxWidth().clickable { onPick(option); open = false }.padding(horizontal = 14.dp, vertical = 11.dp),
-                        )
-                    }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Txt(directionDisplay(direction), color = D.text, size = 15.sp)
+                Sym(if (open) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+            }
+        },
+        menu = { width ->
+            Column(
+                Modifier.width(width).clip(RoundedCornerShape(11.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(vertical = 4.dp),
+            ) {
+                listOf(TunnelDirection.Local, TunnelDirection.Remote, TunnelDirection.Dynamic).forEach { option ->
+                    Txt(
+                        directionDisplay(option),
+                        color = if (option == direction) D.cyanBright else D.text,
+                        size = 15.sp,
+                        modifier = Modifier.fillMaxWidth().clickable { onPick(option); open = false }.padding(horizontal = 14.dp, vertical = 11.dp),
+                    )
                 }
             }
-        }
-    }
+        },
+    )
 }
 
 // New tunnel button.

@@ -124,20 +124,9 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 .background(SheetPanel)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .verticalScroll(rememberScrollState())
-                .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 30.dp),
+                .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
         ) {
-            // Полноширинная зона захвата вокруг полоски — комфортный тач-таргет для перетаскивания.
-            Box(
-                Modifier.fillMaxWidth().then(drag.handle).padding(bottom = 16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(width = 38.dp, height = 5.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0x2EFFFFFF)),
-                )
-            }
+            SheetHandle(drag)
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,

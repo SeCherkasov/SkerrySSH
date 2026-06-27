@@ -5,15 +5,24 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
@@ -115,6 +124,26 @@ class SheetDrag internal constructor(
                     dragY.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow))
                 }
             },
+        )
+    }
+}
+
+/**
+ * Единый хват нижнего листа: полноширинная тач-зона (ловит [SheetDrag.handle]) и центрированная
+ * полоска одного размера/цвета/скругления на всех мобильных листах. Сам владеет вертикальными
+ * отступами (над/под полоской), поэтому колонке листа верхний паддинг для хвата задавать не нужно.
+ */
+@Composable
+fun SheetHandle(drag: SheetDrag, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth().then(drag.handle).padding(top = 10.dp, bottom = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(width = 38.dp, height = 5.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color(0x2EFFFFFF)),
         )
     }
 }
