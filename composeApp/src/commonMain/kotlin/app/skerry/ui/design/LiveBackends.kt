@@ -13,6 +13,7 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.tunnel.TunnelManager
 
 /**
@@ -129,6 +130,13 @@ val LocalOpenSftp: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositio
  * vault (резолв секрета хоста требует открытого vault).
  */
 val LocalTunnels: ProvidableCompositionLocal<TunnelManager?> = staticCompositionLocalOf { null }
+
+/**
+ * Менеджер сохранённых сниппетов (привычная модель SSH-клиентов): библиотека команд + запуск в активном терминале.
+ * `null` — мок-путь/превью без бэкенда: [app.skerry.ui.design.SnippetsView] рисует статичный макет.
+ * Поставляется [DesktopDesignApp] (сниппеты — plain-конфиг, vault не требуют).
+ */
+val LocalSnippets: ProvidableCompositionLocal<SnippetManager?> = staticCompositionLocalOf { null }
 
 /**
  * Открытый [Vault] за гейтом мастер-пароля — нужен экрану настроек (More), чтобы включить/выключить
