@@ -7,14 +7,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -393,25 +391,10 @@ private fun MobileSecretDetailSheet(
     // Скрим на весь экран; тап мимо листа закрывает. Сам лист гасит клик, чтобы не закрываться.
     // Лист подгоняется под содержимое (короткий пароль ⇒ невысокая шторка), но не выше 85% экрана —
     // тогда контент скроллится. Фиксированная высота раздувала бы пустую шторку для секрета без тела.
-    BoxWithConstraints(
-        Modifier.fillMaxSize().background(Color(0xB3060E16))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
-        contentAlignment = Alignment.BottomCenter,
-    ) {
-        val maxSheetHeight = maxHeight * 0.85f
-        val drag = rememberSheetDrag(onDismiss)
-        Column(
-            Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)
-                .then(drag.sheet)
-                .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                .background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                .imePadding(),
-        ) {
-            SheetHandle(drag)
-            // weight(fill = false): при коротком содержимом колонка обнимает контент, при длинном —
-            // упирается в остаток высоты шторки и скроллится (а не вылезает за край).
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
+    MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.85f) {
+        // weight(fill = false): при коротком содержимом колонка обнимает контент, при длинном —
+        // упирается в остаток высоты шторки и скроллится (а не вылезает за край).
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                     SecretIcon(icon, tinted = tinted, color = color, size = 40)
                     Column {
@@ -459,41 +442,6 @@ private fun MobileSecretDetailSheet(
                 Spacer(Modifier.height(8.dp))
             }
         }
-    }
-}
-
-/**
- * Кнопка действий нижнего листа Vault в мобильной метрике (паритет с [MobileNewConnectionSheet]):
- * 12-dp скругление, vertical 13-dp, 15-sp — крупный тач-таргет, а не desktop-[PrimaryButton] (8-dp/12-sp),
- * который на телефоне выглядел мелким. [filled] — залитая cyan; иначе контурная. [danger] красит контур/текст
- * в [D.sunset] (удаление).
- */
-@Composable
-private fun MobileSheetButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    icon: String? = null,
-    filled: Boolean = true,
-    danger: Boolean = false,
-) {
-    val fg = when {
-        filled -> Color(0xFF0A1A26)
-        danger -> D.sunset
-        else -> D.text
-    }
-    val base = Modifier.clip(RoundedCornerShape(12.dp))
-        .then(if (filled) Modifier.background(D.cyan) else Modifier.border(1.dp, if (danger) D.sunset.copy(alpha = 0.3f) else D.cyan14, RoundedCornerShape(12.dp)))
-    Row(
-        modifier.then(base)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 13.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icon != null) Sym(icon, size = 17.sp, color = fg)
-        Txt(label, color = fg, size = 15.sp, weight = if (filled) FontWeight.Bold else FontWeight.Medium)
-    }
 }
 
 // Превью (макет).

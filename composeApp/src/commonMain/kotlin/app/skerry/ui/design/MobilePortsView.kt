@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.rateFraction
@@ -52,9 +51,6 @@ import app.skerry.ui.tunnel.buildTunnelDraft
 
 /** Фон карточки туннеля (белый 3%) макета PORTS. */
 private val TunnelCardBg = Color(0x08FFFFFF)
-
-/** Панель нижнего листа (`#0E1B26`) — та же, что лист New connection. */
-private val SheetPanel = Color(0xFF0E1B26)
 
 /**
  * Push-экран Port forwarding мобильного макета `docs/new/Skerry Mobile.html`: шапка-назад + карточки
@@ -191,46 +187,41 @@ private fun LiveTunnelCard(
     val (bg, fg) = tunnelBadgeColors(t.direction)
     val dim = entry.status !is TunnelStatus.Active
     val port = (entry.status as? TunnelStatus.Active)?.boundPort ?: t.bindPort
-    Box {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(TunnelCardBg)
-                .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
-                .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
-                .padding(14.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Badge(directionBadge(t.direction), bg = bg, fg = fg, radius = 4, size = 9.5.sp)
-                Txt("via $via", color = D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
-                TunnelStatusControl(entry, onToggle)
-            }
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Txt("${t.bindHost}:$port", color = if (dim) D.dim else D.text, size = 12.5.sp, font = mono)
-                Sym(mobileTunnelArrow(t.direction), size = 16.sp, color = D.faint)
-                Txt(mobileTunnelDest(t), color = if (dim) D.faint else D.textBright, size = 12.5.sp, font = mono)
-            }
-            (entry.status as? TunnelStatus.Failed)?.let {
-                Spacer(Modifier.height(6.dp))
-                Txt(it.message, color = D.sunset, size = 11.sp, font = mono)
-            }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(TunnelCardBg)
+            .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
+            .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Badge(directionBadge(t.direction), bg = bg, fg = fg, radius = 4, size = 9.5.sp)
+            Txt("via $via", color = D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
+            TunnelStatusControl(entry, onToggle)
         }
-        if (menuOpen) {
-            Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(D.surface2)
-                        .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
-                        .padding(4.dp),
-                ) {
-                    PortMenuItem("Edit", D.text) { menuOpen = false; onEdit() }
-                    PortMenuItem("Remove", D.sunset) { menuOpen = false; onRemove() }
-                }
-            }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Txt("${t.bindHost}:$port", color = if (dim) D.dim else D.text, size = 12.5.sp, font = mono)
+            Sym(mobileTunnelArrow(t.direction), size = 16.sp, color = D.faint)
+            Txt(mobileTunnelDest(t), color = if (dim) D.faint else D.textBright, size = 12.5.sp, font = mono)
         }
+        (entry.status as? TunnelStatus.Failed)?.let {
+            Spacer(Modifier.height(6.dp))
+            Txt(it.message, color = D.sunset, size = 11.sp, font = mono)
+        }
+    }
+    if (menuOpen) {
+        MobileActionSheet(
+            title = t.label.ifBlank { "Tunnel" },
+            subtitle = "via $via",
+            actions = listOf(
+                MobileSheetAction("Edit", onClick = onEdit, icon = "edit"),
+                MobileSheetAction("Remove", onClick = onRemove, icon = "delete", danger = true),
+            ),
+            onDismiss = { menuOpen = false },
+        )
     }
 }
 
@@ -241,15 +232,6 @@ private fun TunnelStatusControl(entry: TunnelEntry, onToggle: () -> Unit) {
         is TunnelStatus.Active -> Toggle(on = true, onToggle = onToggle)
         TunnelStatus.Connecting -> Sym("hourglass_top", size = 18.sp, color = D.amber)
         else -> Toggle(on = false, onToggle = onToggle)
-    }
-}
-
-@Composable
-private fun PortMenuItem(label: String, color: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp),
-    ) {
-        Txt(label, color = color, size = 13.sp)
     }
 }
 
@@ -298,26 +280,13 @@ private fun MobileTunnelEditorSheet(
     val hostList = hosts?.hosts ?: emptyList()
     val hostName = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: "Select host…"
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0x8C04080C))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
-        contentAlignment = Alignment.BottomCenter,
+    MobileBottomSheet(
+        onDismiss = onDismiss,
+        panelModifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
     ) {
-        val drag = rememberSheetDrag(onDismiss)
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .then(drag.sheet)
-                .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .background(SheetPanel)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                .verticalScroll(rememberScrollState())
-                .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
-        ) {
-            SheetHandle(drag)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Badge(directionBadge(direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 9.5.sp)
                     Txt(if (existing == null) "New tunnel" else "Edit tunnel", color = D.text, size = 20.sp, weight = FontWeight.Bold)
@@ -403,7 +372,6 @@ private fun MobileTunnelEditorSheet(
                 }
             }
         }
-    }
 }
 
 /** Пикер хоста в листе: меню всплывает строго ПОД триггером и по его ширине (через [AnchoredDropdown]). */

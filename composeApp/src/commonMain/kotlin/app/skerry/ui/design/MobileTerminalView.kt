@@ -39,7 +39,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import app.skerry.shared.host.Host
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
@@ -197,40 +196,24 @@ private fun MobileTerminalHeader(
                     }
                 }
             }
-            Box {
-                Sym(
-                    "more_horiz",
-                    size = 21.sp,
-                    color = D.dim,
-                    modifier = Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { menuOpen = !menuOpen },
+            Sym(
+                "more_horiz",
+                size = 21.sp,
+                color = D.dim,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { menuOpen = !menuOpen },
+                ),
+            )
+            if (menuOpen && onDisconnect != null) {
+                MobileActionSheet(
+                    title = title,
+                    actions = listOf(
+                        MobileSheetAction("Disconnect", onClick = onDisconnect, icon = "power_settings_new", danger = true),
                     ),
+                    onDismiss = { menuOpen = false },
                 )
-                if (menuOpen && onDisconnect != null) {
-                    Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
-                        Column(
-                            Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(D.surface2)
-                                .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
-                                .padding(4.dp),
-                        ) {
-                            Row(
-                                Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable { menuOpen = false; onDisconnect() }
-                                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Sym("power_settings_new", size = 17.sp, color = D.sunset)
-                                Txt("Disconnect", color = D.sunset, size = 13.sp)
-                            }
-                        }
-                    }
-                }
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan08))
@@ -360,25 +343,11 @@ private fun KeyCapIcon(icon: String, onClick: () -> Unit) {
 fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -> Unit) {
     var password by remember { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0x8C04080C))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
-        contentAlignment = Alignment.BottomCenter,
+    MobileBottomSheet(
+        onDismiss = onDismiss,
+        panelModifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
     ) {
-        val drag = rememberSheetDrag(onDismiss)
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .then(drag.sheet)
-                .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .background(Color(0xFF0E1B26))
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
-        ) {
-            SheetHandle(drag)
-            Txt(host.label, color = D.text, size = 20.sp, weight = FontWeight.Bold)
+        Txt(host.label, color = D.text, size = 20.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(3.dp))
             Txt("${host.username}@${host.address}:${host.port}", color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono)
             Spacer(Modifier.height(18.dp))
@@ -418,5 +387,4 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
                 Txt("Connect", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
             }
         }
-    }
 }

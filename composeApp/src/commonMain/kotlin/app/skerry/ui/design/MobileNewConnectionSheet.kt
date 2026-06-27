@@ -52,8 +52,6 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 
-/** Панель листа (`#0E1B26`); фон полей ввода — `#07141E` = [D.bg]. */
-private val SheetPanel = Color(0xFF0E1B26)
 
 /**
  * Нижний лист «New connection» мобильного макета `Skerry Mobile.html`: затемнение + панель снизу с
@@ -105,29 +103,15 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
         }
     }
 
-    // Затемнение на весь экран — тап мимо панели закрывает лист.
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0x8C04080C))
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = state::closeSheet),
-        contentAlignment = Alignment.BottomCenter,
+    // Панель фиксированной высоты (0.92 экрана), скроллится; общая обвязка листа — в MobileBottomSheet.
+    MobileBottomSheet(
+        onDismiss = state::closeSheet,
+        panelModifier = Modifier
+            .fillMaxHeight(0.92f)
+            .verticalScroll(rememberScrollState())
+            .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
     ) {
-        val drag = rememberSheetDrag(state::closeSheet)
-        // Панель: перехватывает тап (не закрывается), скроллится, прижата к низу.
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .then(drag.sheet)
-                .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .background(SheetPanel)
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                .verticalScroll(rememberScrollState())
-                .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
-        ) {
-            SheetHandle(drag)
-            Row(
+        Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -201,14 +185,13 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             ) {
                 Txt(if (editHost != null) "Save changes" else "Save connection", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
             }
-        }
-        // Оверлей «New group» — на корне листа (поверх панели), чтобы корректно подниматься над клавиатурой.
-        if (createGroupOpen) {
-            MobileGroupCreateDialog(
-                onDismiss = { createGroupOpen = false },
-                onCreate = { name -> form.group = name.trim(); createGroupOpen = false },
-            )
-        }
+    }
+    // Оверлей «New group» — сиблингом над листом (свой полноэкранный скрим), чтобы корректно подниматься над клавиатурой.
+    if (createGroupOpen) {
+        MobileGroupCreateDialog(
+            onDismiss = { createGroupOpen = false },
+            onCreate = { name -> form.group = name.trim(); createGroupOpen = false },
+        )
     }
 }
 

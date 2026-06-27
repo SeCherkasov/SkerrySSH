@@ -36,7 +36,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.ui.connection.ConnectionController
@@ -289,54 +288,36 @@ private fun MobileFileRow(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val isDir = entry.type == FileItemType.Directory
-    Box {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(11.dp))
-                .background(if (selected) D.cyan06 else Color.Transparent)
-                .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
-                .padding(horizontal = 12.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(13.dp),
-        ) {
-            Sym(mobileFileIcon(entry), size = 23.sp, color = if (isDir) D.cyanBright else D.dim)
-            Column(Modifier.weight(1f)) {
-                Txt(entry.name, color = D.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val meta = mobileFileRowMeta(entry)
-                if (meta.isNotEmpty()) Txt(meta, color = D.faint, size = 11.sp)
-            }
-            Sym(mobileFileTrailingIcon(entry.type), size = 20.sp, color = D.faint)
-        }
-        if (menuOpen) {
-            Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(D.surface2)
-                        .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
-                        .padding(4.dp),
-                ) {
-                    onDownloadHere?.let { dl ->
-                        MobileMenuItem("Download to device", D.text) { menuOpen = false; dl() }
-                    }
-                    MobileMenuItem("Rename", D.text) { menuOpen = false; onRename() }
-                    MobileMenuItem("Delete", D.sunset) { menuOpen = false; onDelete() }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MobileMenuItem(label: String, color: Color, onClick: () -> Unit) {
-    Box(
+    Row(
         Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(11.dp))
+            .background(if (selected) D.cyan06 else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
+            .padding(horizontal = 12.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
-        Txt(label, color = color, size = 13.sp)
+        Sym(mobileFileIcon(entry), size = 23.sp, color = if (isDir) D.cyanBright else D.dim)
+        Column(Modifier.weight(1f)) {
+            Txt(entry.name, color = D.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val meta = mobileFileRowMeta(entry)
+            if (meta.isNotEmpty()) Txt(meta, color = D.faint, size = 11.sp)
+        }
+        Sym(mobileFileTrailingIcon(entry.type), size = 20.sp, color = D.faint)
+    }
+    if (menuOpen) {
+        MobileActionSheet(
+            title = entry.name,
+            actions = buildList {
+                onDownloadHere?.let { dl ->
+                    add(MobileSheetAction("Download to device", onClick = dl, icon = "download"))
+                }
+                add(MobileSheetAction("Rename", onClick = onRename, icon = "edit"))
+                add(MobileSheetAction("Delete", onClick = onDelete, icon = "delete", danger = true))
+            },
+            onDismiss = { menuOpen = false },
+        )
     }
 }
 

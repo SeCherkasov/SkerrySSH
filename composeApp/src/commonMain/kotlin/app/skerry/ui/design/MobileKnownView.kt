@@ -32,7 +32,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import app.skerry.ui.known.KnownHostEntry
 import app.skerry.ui.known.KnownHostStatus
 import app.skerry.ui.known.KnownHostsController
@@ -131,32 +130,27 @@ private fun LiveMobileKnownBody(controller: KnownHostsController, mono: FontFami
     }
 }
 
-/** Живая строка доверенного ключа: имя + подпись (тип·отпечаток / тип·changed) + иконка статуса; long-press → Forget. */
+/** Живая строка доверенного ключа: имя + подпись (тип·отпечаток / тип·changed) + иконка статуса; long-press → лист Forget. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LiveKnownRow(entry: KnownHostEntry, mono: FontFamily, onForget: () -> Unit) {
     var menuOpen by remember(entry.host.host, entry.host.port, entry.host.keyType) { mutableStateOf(false) }
-    Box {
-        KnownRowContent(
-            name = entry.host.host,
+    KnownRowContent(
+        name = entry.host.host,
+        subtitle = mobileKnownSubtitle(entry),
+        status = entry.status,
+        mono = mono,
+        modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menuOpen = true }),
+    )
+    if (menuOpen) {
+        MobileActionSheet(
+            title = entry.host.host,
             subtitle = mobileKnownSubtitle(entry),
-            status = entry.status,
-            mono = mono,
-            modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { menuOpen = true }),
+            actions = listOf(
+                MobileSheetAction("Forget key", onClick = onForget, icon = "delete", danger = true),
+            ),
+            onDismiss = { menuOpen = false },
         )
-        if (menuOpen) {
-            Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
-                Column(
-                    Modifier.clip(RoundedCornerShape(8.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).padding(4.dp),
-                ) {
-                    Box(
-                        Modifier.clip(RoundedCornerShape(6.dp)).clickable { menuOpen = false; onForget() }.padding(horizontal = 14.dp, vertical = 9.dp),
-                    ) {
-                        Txt("Forget key", color = D.sunset, size = 13.sp)
-                    }
-                }
-            }
-        }
     }
 }
 
