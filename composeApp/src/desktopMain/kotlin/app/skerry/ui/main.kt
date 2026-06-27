@@ -122,6 +122,25 @@ private fun writeRecentHostIds(dir: Path, ids: List<String>) {
     }
 }
 
+/**
+ * Пользовательские (пока пустые) группы хостов сайдбара, переживающие перезапуск: имена групп в файле
+ * `custom_groups` по одному на строку (порядок значим — папки идут в этом порядке). Отсутствует/нечитаем
+ * → пусто. Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readCustomGroups(dir: Path): List<String> {
+    val file = dir.resolve("custom_groups")
+    return runCatching {
+        Files.readAllLines(file, StandardCharsets.UTF_8).map { it.trim() }.filter { it.isNotEmpty() }
+    }.getOrDefault(emptyList())
+}
+
+private fun writeCustomGroups(dir: Path, groups: List<String>) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("custom_groups"), groups.filterNot { it.contains('\n') || it.contains('\r') }.joinToString("\n"))
+    }
+}
+
 fun main() {
     // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
     // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
@@ -196,6 +215,7 @@ fun main() {
                     hostStore.all().forEach { hostStore.remove(it.id) }
                     writeRecentHostIds(dir, emptyList())
                     writeCollapsedGroups(dir, emptySet())
+                    writeCustomGroups(dir, emptyList())
                 }
             }
             hosts.reload()
@@ -225,6 +245,8 @@ fun main() {
                     onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
                     initialRecentHostIds = readRecentHostIds(dir),
                     onRecentHostIdsChange = { writeRecentHostIds(dir, it) },
+                    initialCustomGroups = readCustomGroups(dir),
+                    onCustomGroupsChange = { writeCustomGroups(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,

@@ -153,6 +153,35 @@ class HostManagerControllerTest {
         assertEquals("a", controller.find("1")?.label)
         assertNull(controller.find("missing"))
     }
+
+    @Test
+    fun `renameGroup rewrites group on all member hosts`() {
+        val store = FakeHostStore(
+            Host("1", "a", "a.local", 22, "u", "Prod"),
+            Host("2", "b", "b.local", 22, "u", "Dev"),
+            Host("3", "c", "c.local", 22, "u", "Prod"),
+        )
+        val controller = HostManagerController(store) { "x" }
+
+        controller.renameGroup("Prod", "Production")
+
+        assertEquals(listOf("Production", "Production", "Dev"), controller.hosts.map { it.group })
+    }
+
+    @Test
+    fun `deleteGroup ungroups its hosts but keeps the profiles`() {
+        val store = FakeHostStore(
+            Host("1", "a", "a.local", 22, "u", "Prod"),
+            Host("2", "b", "b.local", 22, "u", "Dev"),
+        )
+        val controller = HostManagerController(store) { "x" }
+
+        controller.deleteGroup("Prod")
+
+        assertEquals(setOf("1", "2"), controller.hosts.map { it.id }.toSet())
+        assertEquals(null, controller.find("1")?.group)
+        assertEquals("Dev", controller.find("2")?.group)
+    }
 }
 
 /** In-memory [HostStore] с семантикой upsert/remove по id, как у файловой реализации. */

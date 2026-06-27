@@ -156,4 +156,45 @@ class HostReorderingTest {
 
         assertEquals(listOf("a", "loose"), result.map { it.id })
     }
+
+    // ──────────────────────────────── renameHostGroup ────────────────────────────────
+
+    @Test
+    fun renames_group_on_all_its_hosts() {
+        val hosts = listOf(host("a", "Prod"), host("b", "Dev"), host("c", "Prod"))
+
+        val result = renameHostGroup(hosts, oldName = "Prod", newName = "Production")
+
+        assertEquals(listOf("Production", "Production", "Dev"), result.groupsOf())
+        // Состав id сохранён (требование контракта reorder).
+        assertEquals(setOf("a", "b", "c"), result.map { it.id }.toSet())
+    }
+
+    @Test
+    fun rename_to_blank_ungroups_hosts() {
+        val hosts = listOf(host("a", "Prod"), host("b", "Prod"))
+
+        val result = renameHostGroup(hosts, oldName = "Prod", newName = "")
+
+        assertEquals(listOf(null, null), result.groupsOf())
+    }
+
+    @Test
+    fun rename_merging_into_existing_group_keeps_blocks_contiguous() {
+        val hosts = listOf(host("a", "Foo"), host("b", "Bar"), host("c", "Baz"))
+
+        val result = renameHostGroup(hosts, oldName = "Baz", newName = "Foo")
+
+        // c сливается в Foo; блок Foo остаётся непрерывным (a, c), затем Bar.
+        assertEquals(listOf("Foo", "Foo", "Bar"), result.groupsOf())
+        assertEquals(listOf("a", "c", "b"), result.map { it.id })
+    }
+
+    @Test
+    fun renaming_unknown_or_same_group_leaves_the_list_unchanged() {
+        val hosts = listOf(host("a", "Prod"))
+
+        assertEquals(hosts, renameHostGroup(hosts, oldName = "Nope", newName = "X"))
+        assertEquals(hosts, renameHostGroup(hosts, oldName = "Prod", newName = "Prod"))
+    }
 }

@@ -54,6 +54,7 @@ import app.skerry.ui.connection.shortCipher
 import kotlin.math.roundToInt
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.groupHostsByFolder
 import app.skerry.ui.metrics.HostMetrics
 import app.skerry.ui.metrics.formatUptime
@@ -142,14 +143,27 @@ private fun HostsSidebar(state: DesktopDesignState) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Txt("HOSTS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
-                Sym("create_new_folder", size = 14.sp, color = D.faint)
+                // Создать новую (пока пустую) группу — в живом каталоге; в мок-пути иконка декоративна.
+                if (liveHosts != null) {
+                    IconBtn("create_new_folder", onClick = state::openCreateGroup, box = 20, icon = 14.sp, tint = D.faint)
+                } else {
+                    Sym("create_new_folder", size = 14.sp, color = D.faint)
+                }
             }
             // Живой каталог из HostManagerController, если подан (за гейтом vault); иначе мок-данные
             // макета (путь офскрин-рендера/превью). Папки — по группам, сузив активным тег-чипом.
             if (liveHosts != null) {
                 val query = state.hostSearchQuery
-                val folders = remember(liveHosts.hosts, effectiveChip, query) {
-                    groupHostsByFolder(filterHosts(liveHosts.hosts, effectiveChip, query))
+                val folders = remember(liveHosts.hosts, effectiveChip, query, state.customGroups) {
+                    val base = groupHostsByFolder(filterHosts(liveHosts.hosts, effectiveChip, query))
+                    // Пустые пользовательские группы показываем как папки без хостов — но только вне
+                    // фильтра (поиск/тег сужают по хостам, а пустой папке там нечем совпасть).
+                    if (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP) {
+                        base
+                    } else {
+                        val present = base.map { it.name }.toSet()
+                        base + state.customGroups.filter { it !in present }.map { HostFolder(it, emptyList()) }
+                    }
                 }
                 // Сужение поиском/тегом ничего не нашло → подсказка вместо немой пустоты (в отличие от
                 // пустого каталога, где ниже всё равно покажется секция RECENT/кнопка New connection).
@@ -263,7 +277,7 @@ private fun HostSearchField(state: DesktopDesignState, mono: FontFamily) {
  * клик ловится строго на иконке, чтобы не мешать drag-перетаскиванию заголовка (reorder папок).
  */
 @Composable
-private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
+private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit, onEdit: (() -> Unit)? = null) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -277,6 +291,8 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
         }
         Sym("folder_open", size = 15.sp, color = D.cyanBright)
         Txt(name, color = D.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        // Переименовать/удалить группу (живой каталог; не для синтетического «Ungrouped»).
+        if (onEdit != null) IconBtn("edit", onClick = onEdit, box = 20, icon = 13.sp, tint = D.faint)
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
             Txt(count.toString(), color = D.faint, size = 10.sp)
         }
@@ -357,11 +373,16 @@ private fun LiveHostFolder(
 ) {
     val sessions = LocalSessions.current
     val connect = LocalConnectHost.current
-    val group = folder.hosts.firstOrNull()?.group
+    // Ключ группы папки: у пустой берём её имя (как FolderBounds), иначе группу первого хоста.
+    // Синтетический «Ungrouped» — это null-группа.
+    val group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL }
     val collapsed = state.isGroupCollapsed(folder.name)
     // Лямбду свёртки стабилизируем по (state, имя папки) — как и прочие лямбды строк ниже: иначе при
     // каждой рекомпозиции папки (а во время любого drag это каждый кадр) заголовок перерисовывался бы.
     val onToggleCollapsed = remember(state, folder.name) { { state.toggleGroupCollapsed(folder.name) } }
+    // Карандаш правки в заголовке — кроме синтетической корзины «Ungrouped» (её не переименовать).
+    val onEditGroup = if (folder.name == UNGROUPED_LABEL) null
+        else remember(state, folder.name) { { state.openRenameGroup(folder.name) } }
     // Подсветка целевой папки, пока над ней тащат хост.
     val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
     val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
@@ -385,7 +406,7 @@ private fun LiveHostFolder(
                     controller.moveFolder(group, index)
                 },
         ) {
-            FolderHeader(folder.name, folder.hosts.size, collapsed, onToggleCollapsed)
+            FolderHeader(folder.name, folder.hosts.size, collapsed, onToggleCollapsed, onEditGroup)
         }
         // Свёрнутая папка показывает только заголовок; список хостов (и его drag-цели) скрыт.
         if (!collapsed) Column(Modifier.padding(start = 22.dp)) {

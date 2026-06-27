@@ -81,8 +81,14 @@ fun DesktopDesignApp(
     // Недавние подключения (секция RECENT) — тоже персистятся снаружи (desktop main): стартовый порядок + колбэк записи.
     initialRecentHostIds: List<String> = emptyList(),
     onRecentHostIdsChange: (List<String>) -> Unit = {},
+    // Пользовательские (пустые) группы хостов — тоже персистятся снаружи (desktop main): стартовый список + колбэк записи.
+    initialCustomGroups: List<String> = emptyList(),
+    onCustomGroupsChange: (List<String>) -> Unit = {},
     state: DesktopDesignState = remember {
-        DesktopDesignState(initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange, initialRecentHostIds, onRecentHostIdsChange)
+        DesktopDesignState(
+            initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
+            initialRecentHostIds, onRecentHostIdsChange, initialCustomGroups, onCustomGroupsChange,
+        )
     },
     vault: Vault? = null,
     biometrics: VaultBiometrics? = null,
@@ -287,6 +293,32 @@ private fun DesktopChrome(
                     onDismiss = state::dismissDeleteHost,
                     onConfirm = { hosts?.delete(host.id); state.dismissDeleteHost() },
                 )
+            }
+            // Создание/правка группы хостов (кнопка «+папка» и карандаш в заголовке папки). Rename
+            // одновременно переписывает Host.group через контроллер и правит side-channel пустых/
+            // схлопнутых групп в state; delete разгруппировывает хосты (профили целы).
+            when (val gd = state.groupDialog) {
+                GroupDialog.Create -> GroupDialog(
+                    initialName = "",
+                    onDismiss = state::dismissGroupDialog,
+                    onSave = { name -> state.addCustomGroup(name); state.dismissGroupDialog() },
+                    onDelete = null,
+                )
+                is GroupDialog.Rename -> GroupDialog(
+                    initialName = gd.name,
+                    onDismiss = state::dismissGroupDialog,
+                    onSave = { name ->
+                        hosts?.renameGroup(gd.name, name)
+                        state.renameGroupName(gd.name, name)
+                        state.dismissGroupDialog()
+                    },
+                    onDelete = {
+                        hosts?.deleteGroup(gd.name)
+                        state.removeCustomGroup(gd.name)
+                        state.dismissGroupDialog()
+                    },
+                )
+                null -> {}
             }
             // Подтверждение разрыва сессии (power) / закрытия split-панели — деструктивно, без авто-реконнекта.
             when (val pc = state.pendingClose) {
