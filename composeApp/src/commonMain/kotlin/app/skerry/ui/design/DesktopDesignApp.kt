@@ -472,8 +472,6 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
                 Sym("lock_open", size = 14.sp, color = D.cyan)
                 Txt("Unlocked", color = D.cyan, size = 11.sp, weight = FontWeight.Medium)
             }
-            IconBtn("tune", onClick = state::openSettings)
-            IconBtn("more_vert", onClick = {})
         }
     }
 }
