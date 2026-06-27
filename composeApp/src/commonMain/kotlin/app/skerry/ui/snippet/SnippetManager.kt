@@ -56,6 +56,17 @@ class SnippetManager(
     }
 
     /**
+     * Другой сниппет, уже занявший горячую клавишу [shortcut], или `null`. [excludingId] — id
+     * редактируемого сниппета (его собственный хоткей коллизией не считаем). Пустой/`null` хоткей —
+     * всегда `null` (нечему конфликтовать). Используется редактором, чтобы не дать назначить один
+     * аккорд дважды (иначе [forShortcut] молча взял бы первый).
+     */
+    fun shortcutConflict(shortcut: String?, excludingId: String?): SnippetEntry? {
+        if (shortcut.isNullOrBlank()) return null
+        return snippets.firstOrNull { it.id != excludingId && it.snippet.shortcut == shortcut }
+    }
+
+    /**
      * Создать (если [SnippetDraft.id] == null) или обновить сниппет и записать в стор. Возвращает
      * назначенный id. Правка существующего обновляет строку на месте.
      */

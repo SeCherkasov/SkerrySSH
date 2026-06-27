@@ -117,6 +117,34 @@ class SnippetManagerTest {
     }
 
     @Test
+    fun `shortcutConflict finds another snippet holding the hotkey`() {
+        val manager = managerWith()
+        val owner = manager.save(draft(label = "Disk").copy(shortcut = "Ctrl+Shift+D"))
+
+        val conflict = manager.shortcutConflict("Ctrl+Shift+D", excludingId = null)
+
+        assertEquals(owner, conflict?.id)
+    }
+
+    @Test
+    fun `shortcutConflict ignores the snippet being edited`() {
+        val manager = managerWith()
+        val id = manager.save(draft().copy(shortcut = "Ctrl+Shift+D"))
+
+        assertNull(manager.shortcutConflict("Ctrl+Shift+D", excludingId = id))
+    }
+
+    @Test
+    fun `shortcutConflict is null for blank or free hotkey`() {
+        val manager = managerWith()
+        manager.save(draft().copy(shortcut = "Ctrl+Shift+D"))
+
+        assertNull(manager.shortcutConflict(null, excludingId = null))
+        assertNull(manager.shortcutConflict("", excludingId = null))
+        assertNull(manager.shortcutConflict("Ctrl+Shift+X", excludingId = null))
+    }
+
+    @Test
     fun `find returns null for null or unknown id`() {
         val manager = managerWith()
         manager.save(draft())
