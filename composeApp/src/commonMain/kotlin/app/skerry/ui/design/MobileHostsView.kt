@@ -348,12 +348,15 @@ private fun MobileFolderHeader(
 }
 
 /**
- * Строка хоста: иконка-плашка + имя + `user@address` моноширинно + точка статуса. Иконка и точка
- * статуса в живой модели общие (нет per-host иконки/AI-политики/онлайна) — плашка `dns`, точка
- * нейтральная до подключения живых сессий (слайс терминала).
+ * Строка хоста: иконка-плашка + имя + `user@address` моноширинно + точка статуса. Плашка `dns`
+ * общая (нет per-host иконки/AI-политики), а цвет точки — живой: берётся из состояния самой свежей
+ * сессии хоста ([SessionsController.statusFor]) через общий с desktop [sessionDotColor] (подключено —
+ * зелёный, connect — янтарный, ошибка/обрыв — закатный, нет сессии — приглушённый). Чтение uiState
+ * внутри композиции подписывает строку на смену статуса — точка обновляется по факту коннекта.
  */
 @Composable
 private fun MobileHostRow(host: Host, onClick: () -> Unit) {
+    val dotColor = sessionDotColor(LocalSessions.current?.statusFor(host.id))
     Row(
         Modifier
             .fillMaxWidth()
@@ -386,7 +389,7 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
                 maxLines = 1,
             )
         }
-        Box(Modifier.size(8.dp).clip(CircleShape).background(D.faint))
+        Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
     }
 }
 
