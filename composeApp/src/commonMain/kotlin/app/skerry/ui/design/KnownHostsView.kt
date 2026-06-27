@@ -1,10 +1,11 @@
 package app.skerry.ui.design
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,14 +28,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.isSecondaryPressed
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import app.skerry.shared.ssh.HostKeyMismatch
 import app.skerry.ui.known.KnownHostEntry
 import app.skerry.ui.known.KnownHostStatus
@@ -52,9 +50,9 @@ private val KNOWN = listOf(
 /**
  * Known hosts view. С живым [KnownHostsController] ([LocalKnownHosts]) рисует доверенные ключи из
  * стора (host/тип/отпечаток/первое доверие/статус), предупреждения о смене ключа и рабочую панель
- * сравнения отпечатков (Accept new key / Reject & block); забыть ключ — через контекстное меню строки
- * (right-click/long-press), как в шаблоне без ⋮. Без контроллера (офскрин-рендер/превью) показывается
- * статичный макет [KNOWN].
+ * сравнения отпечатков (Accept new key / Reject & block); забыть ключ — кнопкой «Forget key», которая
+ * проявляется в строке при наведении мыши (desktop). Без контроллера (офскрин-рендер/превью)
+ * показывается статичный макет [KNOWN].
  */
 @Composable
 fun KnownHostsView() {
@@ -82,7 +80,7 @@ private fun KnownHostsTableHeader() {
         KHeader("KEY TYPE", Modifier.width(90.dp))
         KHeader("FINGERPRINT (SHA256)", Modifier.weight(1.4f))
         KHeader("FIRST SEEN", Modifier.width(100.dp))
-        KHeader("STATUS", Modifier.width(80.dp), end = true)
+        KHeader("STATUS", Modifier.width(80.dp))
     }
 }
 
@@ -90,6 +88,8 @@ private fun KnownHostsTableHeader() {
 
 @Composable
 private fun LiveKnownHostsView(controller: KnownHostsController) {
+    // Экран мог открыться после того, как реконнект записал новый ключ в общий стор — перечитываем.
+    LaunchedEffect(Unit) { controller.refresh() }
     val mono = LocalFonts.current.mono
     val entries = controller.entries
     val mismatches = controller.mismatches
@@ -162,30 +162,22 @@ private fun MismatchBanner(mismatch: HostKeyMismatch, onReview: () -> Unit, onDi
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -> Unit) {
     val host = entry.host
     val changed = entry.status == KnownHostStatus.Changed
-    var menuOpen by remember { mutableStateOf(false) }
-    Box {
+    // Forget — действие в строке, проявляется при наведении мыши (desktop): в покое таблица читается
+    // как в макете, на hover строка подсвечивается и в правом конце выезжает кнопка «Forget key».
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .hoverable(interaction)
+            .background(if (hovered) D.cyan.copy(alpha = 0.04f) else Color.Transparent),
+    ) {
         Row(
-            Modifier
-                .fillMaxWidth()
-                // Действие Forget — в контекстном меню (right-click/long-press), как в шаблоне без ⋮.
-                .pointerInput(host.host, host.port, host.keyType) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                                event.changes.forEach { it.consume() }
-                                menuOpen = true
-                            }
-                        }
-                    }
-                }
-                .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -193,27 +185,34 @@ private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -
             Txt(displayKeyType(host.keyType), color = D.dim, size = 12.sp, modifier = Modifier.width(90.dp))
             Txt(shortFingerprint(host.fingerprint), color = if (changed) D.sunset else D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1.4f))
             Txt(displayFirstSeen(host.firstSeen), color = D.faint, size = 12.sp, modifier = Modifier.width(100.dp))
+            // Статус прячется на hover, уступая место кнопке Forget (она перекрывает его правый край).
             Row(Modifier.width(80.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (changed) {
-                    Sym("error", size = 14.sp, color = D.sunset)
-                    Txt("Changed", color = D.sunset, size = 11.sp)
-                } else {
-                    Sym("verified", size = 14.sp, color = D.moss)
-                    Txt("Verified", color = D.moss, size = 11.sp)
+                if (!hovered) {
+                    if (changed) {
+                        Sym("error", size = 14.sp, color = D.sunset)
+                        Txt("Changed", color = D.sunset, size = 11.sp)
+                    } else {
+                        Sym("verified", size = 14.sp, color = D.moss)
+                        Txt("Verified", color = D.moss, size = 11.sp)
+                    }
                 }
             }
         }
-        if (menuOpen) {
-            Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
-                Column(
-                    Modifier.clip(RoundedCornerShape(7.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
-                ) {
-                    Box(
-                        Modifier.clip(RoundedCornerShape(5.dp)).clickable { menuOpen = false; onForget() }.padding(horizontal = 14.dp, vertical = 7.dp),
-                    ) {
-                        Txt("Forget key", color = D.sunset, size = 12.sp)
-                    }
-                }
+        if (hovered) {
+            Row(
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(D.sunset.copy(alpha = 0.12f))
+                    .border(1.dp, D.sunset.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                    .clickable(onClick = onForget)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Sym("delete", size = 14.sp, color = D.sunset)
+                Txt("Forget key", color = D.sunset, size = 11.5.sp)
             }
         }
     }

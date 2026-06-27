@@ -79,7 +79,12 @@ class KnownHostsController(
         refresh()
     }
 
-    private fun refresh() {
+    /**
+     * Перечитать обе проекции из сторов. Вызывается при открытии экрана known-hosts: TOFU-верификатор
+     * пишет новые/изменившиеся ключи в тот же стор из потока sshj во время сессии, а контроллер живёт
+     * дольше экрана — без явного refresh такие записи проявились бы только при перезапуске приложения.
+     */
+    fun refresh() {
         val pending = mismatchStore.all()
         mismatches = pending
         entries = store.all().map { host ->
