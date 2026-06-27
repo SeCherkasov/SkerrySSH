@@ -35,3 +35,10 @@ actual fun copyPasswordToClipboard(password: String) {
         }
     }, CLIPBOARD_CLEAR_SECONDS * 1000L)
 }
+
+/** Не-секретный текст: обычный клип без sensitive-пометки и автоочистки. */
+actual fun copyTextToClipboard(text: String) {
+    val ctx = SafBridge.context() ?: return
+    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+    cm.setPrimaryClip(ClipData.newPlainText("text", text))
+}

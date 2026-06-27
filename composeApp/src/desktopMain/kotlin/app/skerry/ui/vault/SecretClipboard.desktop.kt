@@ -11,3 +11,8 @@ import java.awt.datatransfer.StringSelection
 actual fun copyPasswordToClipboard(password: String) {
     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(password), null)
 }
+
+/** Не-секретный текст: тот же путь к системному буферу, что и для пароля (на desktop разницы нет). */
+actual fun copyTextToClipboard(text: String) {
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+}

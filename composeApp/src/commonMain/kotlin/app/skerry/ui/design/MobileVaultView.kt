@@ -33,8 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +47,7 @@ import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.vault.copyPasswordToClipboard
+import app.skerry.ui.vault.copyTextToClipboard
 import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,7 +81,6 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     val inspector = LocalSshCertificateInspector.current
     val hostsController = LocalHosts.current
     val hosts = hostsController?.hosts ?: emptyList()
-    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
 
@@ -208,7 +206,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 credential = credential,
                 hosts = VaultPresentation.hostsUsing(credential.id, hosts),
                 mono = mono,
-                onCopy = { clipboard.setText(AnnotatedString(it)) },
+                onCopy = { copyTextToClipboard(it) },
                 onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
                 // Закрываем лист деталей перед показом диалога подтверждения: иначе шторка (рисуется
                 // поверх) перекрыла бы центрированный DeleteSecretDialog, и виден был лишь его край.
@@ -401,15 +399,20 @@ private fun MobileSecretDetailSheet(
         contentAlignment = Alignment.BottomCenter,
     ) {
         val maxSheetHeight = maxHeight * 0.85f
+        val drag = rememberSheetDrag(onDismiss)
         Column(
             Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)
+                .then(drag.sheet)
                 .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
                 .background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .imePadding(),
         ) {
-            // Хват + закрыть
-            Box(Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) {
+            // Хват: тянем лист вниз пальцем; за порогом отпускание закрывает, иначе — возврат на место.
+            Box(
+                Modifier.fillMaxWidth().then(drag.handle).padding(top = 10.dp, bottom = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
                 Box(Modifier.size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(D.lineStrong))
             }
             // weight(fill = false): при коротком содержимом колонка обнимает контент, при длинном —

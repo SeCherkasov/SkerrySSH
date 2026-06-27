@@ -305,23 +305,29 @@ private fun MobileTunnelEditorSheet(
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.BottomCenter,
     ) {
+        val drag = rememberSheetDrag(onDismiss)
         Column(
             Modifier
                 .fillMaxWidth()
+                .then(drag.sheet)
                 .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .background(SheetPanel)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .verticalScroll(rememberScrollState())
                 .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 30.dp),
         ) {
+            // Полноширинная зона захвата вокруг полоски — комфортный тач-таргет для перетаскивания.
             Box(
-                Modifier
-                    .padding(bottom = 16.dp)
-                    .align(Alignment.CenterHorizontally)
-                    .size(width = 38.dp, height = 5.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0x2EFFFFFF)),
-            )
+                Modifier.fillMaxWidth().then(drag.handle).padding(bottom = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 38.dp, height = 5.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0x2EFFFFFF)),
+                )
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Badge(directionBadge(direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 9.5.sp)

@@ -47,8 +47,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -73,6 +71,7 @@ import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.vault.copyPasswordToClipboard
+import app.skerry.ui.vault.copyTextToClipboard
 import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -104,7 +103,6 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     val hosts = hostsController?.hosts ?: emptyList()
     val generator = LocalSshKeyGenerator.current
     val inspector = LocalSshCertificateInspector.current
-    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
 
@@ -161,7 +159,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                             inspector = inspector,
                             hosts = VaultPresentation.hostsUsing(credential.id, hosts),
                             mono = mono,
-                            onCopy = { clipboard.setText(AnnotatedString(it)) },
+                            onCopy = { copyTextToClipboard(it) },
                             onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
                             onDelete = { pendingDeleteCred = credential },
                         )

@@ -155,7 +155,7 @@ private fun GlobalTunnelsBody(
                                 entry = entry,
                                 via = hostLabel(entry.tunnel.hostId),
                                 mono = mono,
-                                selected = !showNew && entry.id == selected?.id,
+                                selected = !showNew && entry.id == selected.id,
                                 onSelect = onRowSelect,
                                 onToggle = onRowToggle,
                             )

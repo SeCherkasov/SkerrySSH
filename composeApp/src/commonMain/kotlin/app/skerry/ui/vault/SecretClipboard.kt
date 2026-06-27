@@ -11,5 +11,12 @@ package app.skerry.ui.vault
  */
 expect fun copyPasswordToClipboard(password: String)
 
+/**
+ * Копирование не-секретного текста (открытый ключ, сертификат, отпечаток) в системный буфер — без
+ * пометки sensitive и без автоочистки. Замена прежнего `LocalClipboardManager` для публичного
+ * материала: единый платформенный путь и без deprecated Compose-API.
+ */
+expect fun copyTextToClipboard(text: String)
+
 /** Через сколько секунд после Copy password буфер автоматически очищается (Android). */
 const val CLIPBOARD_CLEAR_SECONDS: Int = 30
