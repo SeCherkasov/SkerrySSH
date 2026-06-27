@@ -154,6 +154,15 @@ interface ShellChannel {
      */
     val output: Flow<ByteArray>
 
+    /**
+     * После завершения [output]: true, если канал дошёл до штатного EOF (сервер закрыл shell сам —
+     * например, по команде `exit`), false — если [output] оборвался ошибкой транспорта либо канал
+     * закрыли через [close]. До завершения [output] значение не определено. По умолчанию false
+     * (фейки/тесты, не сообщающие причину закрытия). Нужно, чтобы отличать штатный выход (→ закрыть
+     * сессию) от обрыва (→ авто-реконнект); см. [app.skerry.shared.terminal.TerminalState.Closed].
+     */
+    val endedWithEof: Boolean get() = false
+
     /** @throws SshConnectionException канал закрыт или обрыв транспорта */
     suspend fun write(data: ByteArray)
 

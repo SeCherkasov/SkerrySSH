@@ -10,11 +10,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
-/** Жизненный цикл сессии. Closed — канал закрыт (EOF, обрыв или [TerminalSession.close]). */
-enum class TerminalState { Open, Closed }
+/** Жизненный цикл сессии. */
+sealed interface TerminalState {
+    /** Канал открыт, сессия живая. */
+    data object Open : TerminalState
+
+    /**
+     * Канал закрыт. [cleanExit] = true, если сервер штатно завершил shell (EOF — например, по
+     * команде `exit`): сессию закрываем без авто-реконнекта. false — канал оборвался ошибкой
+     * транспорта либо его закрыл наш [TerminalSession.close]; для обрыва вызывающий запускает
+     * авто-реконнект.
+     */
+    data class Closed(val cleanExit: Boolean = false) : TerminalState
+}
 
 /**
  * Интерактивная терминальная сессия поверх [ShellChannel].
@@ -43,7 +55,8 @@ interface TerminalSession {
 
 /**
  * Реализация поверх открытого [channel]. Сбор вывода живёт в [scope]: его завершение
- * (EOF, отмена, исключение) переводит сессию в [TerminalState.Closed]. Отмена [scope]
+ * (EOF, отмена, исключение) переводит сессию в [TerminalState.Closed]. Штатный EOF канала
+ * (shell сделал `exit`) даёт `cleanExit=true` — см. [ShellChannel.endedWithEof]. Отмена [scope]
  * извне останавливает сессию вместе со сбором.
  */
 class ShellTerminalSession(
@@ -51,7 +64,7 @@ class ShellTerminalSession(
     scope: CoroutineScope,
 ) : TerminalSession {
 
-    private val _state = MutableStateFlow(TerminalState.Open)
+    private val _state = MutableStateFlow<TerminalState>(TerminalState.Open)
     override val state: StateFlow<TerminalState> = _state.asStateFlow()
 
     private val _output = MutableSharedFlow<ByteArray>(extraBufferCapacity = 256)
@@ -75,7 +88,9 @@ class ShellTerminalSession(
                 // Обрыв транспорта завершает сессию (см. finally), но не должен ронять
                 // scope, в котором живёт сбор вывода.
             } finally {
-                _state.value = TerminalState.Closed
+                // Штатный EOF канала (сервер закрыл shell сам — `exit`) даёт cleanExit=true: вызывающий
+                // не реконнектит. Обрыв транспорта/отмена оставляют endedWithEof=false → cleanExit=false.
+                _state.value = TerminalState.Closed(cleanExit = channel.endedWithEof)
             }
         }
     }
@@ -88,6 +103,11 @@ class ShellTerminalSession(
         // Состояние закрываем явно: сбор канала мог ещё не стартовать (нет подписчика),
         // и тогда [finally] сборщика не отработал бы, а сессия уже закрыта.
         channel.close()
-        _state.value = TerminalState.Closed
+        // Наше закрытие — не штатный выход shell: cleanExit=false (вызывающий уже инициатор закрытия).
+        // Но не затираем уже выставленный сбором [Closed]: если сервер успел прислать штатный EOF
+        // (cleanExit=true), это значение должно дойти до наблюдателя обрыва. Переходим только из Open.
+        _state.update { current ->
+            if (current == TerminalState.Open) TerminalState.Closed(cleanExit = false) else current
+        }
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,6 +73,16 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // возвращает на список — back-стрелка сессию оставляет живой, Disconnect её закрывает.
     val onDisconnect = remember(active?.id, sessions) {
         active?.let { s -> { sessions.close(s.id); state.pop() } }
+    }
+    // Штатный выход shell (`exit`) на телефоне: закрываем сессию и возвращаемся на список хостов —
+    // полноэкранному push-терминалу незачем висеть застывшим (в отличие от desktop, где остаётся
+    // плашка «Session closed»). Обрыв транспорта сюда не попадает (cleanExit=false) — там экран живёт.
+    val cleanlyExited = (active?.controller?.uiState as? ConnectionUiState.Disconnected)?.cleanExit == true
+    LaunchedEffect(active?.id, cleanlyExited) {
+        if (cleanlyExited && active != null) {
+            sessions?.close(active.id)
+            state.pop()
+        }
     }
     // sticky-ctrl поднят на уровень экрана, чтобы армирование клавишной панели влияло И на ввод с
     // софт-клавиатуры (IME-путь идёт мимо панели). Сбрасывается при смене сессии.

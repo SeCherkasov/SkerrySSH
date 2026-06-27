@@ -518,7 +518,7 @@ class TerminalScreenStateTest {
 
 /** Фейк-сессия: ручная эмиссия вывода, перехват send/resize. */
 private class FakeTerminalSession : TerminalSession {
-    private val _state = MutableStateFlow(TerminalState.Open)
+    private val _state = MutableStateFlow<TerminalState>(TerminalState.Open)
     override val state: StateFlow<TerminalState> = _state
 
     private val emissions = Channel<ByteArray>(Channel.UNLIMITED)
@@ -546,7 +546,7 @@ private class FakeTerminalSession : TerminalSession {
     }
 
     override suspend fun close() {
-        _state.value = TerminalState.Closed
+        _state.value = TerminalState.Closed()
         emissions.close()
     }
 }

@@ -173,7 +173,7 @@ fun TerminalScreen(
         )
     }
     val sessionState by state.state.collectAsState()
-    val closed = sessionState == TerminalState.Closed
+    val closed = sessionState is TerminalState.Closed
     val scroll = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
     // Скрытое IME-поле (тач-ввод): держит фокус/клавиатуру, всегда сброшено к якорю.

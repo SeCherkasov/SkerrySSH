@@ -675,15 +675,28 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
 }
 
 /**
- * Плашка-индикатор обрыва поверх застывшего терминала. Пока идёт авто-реконнект — янтарная
- * «Reconnecting… #N»; когда попытки исчерпаны — закатная «Connection lost».
+ * Плашка-индикатор закрытия поверх застывшего терминала. Штатный выход shell (`exit`) — нейтральная
+ * «Session closed»; пока идёт авто-реконнект — янтарная «Reconnecting… #N»; когда попытки исчерпаны —
+ * закатная «Connection lost».
  */
 @Composable
 private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: Modifier = Modifier) {
     val mono = LocalFonts.current.mono
-    val color = if (state.reconnecting) D.amber else D.sunset
-    val icon = if (state.reconnecting) "sync" else "link_off"
-    val text = if (state.reconnecting) "Reconnecting… #${state.attempt}" else "Connection lost"
+    val color = when {
+        state.cleanExit -> D.dim
+        state.reconnecting -> D.amber
+        else -> D.sunset
+    }
+    val icon = when {
+        state.cleanExit -> "power_settings_new"
+        state.reconnecting -> "sync"
+        else -> "link_off"
+    }
+    val text = when {
+        state.cleanExit -> "Session closed"
+        state.reconnecting -> "Reconnecting… #${state.attempt}"
+        else -> "Connection lost"
+    }
     Row(
         modifier
             .padding(top = 10.dp)
