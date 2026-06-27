@@ -79,13 +79,12 @@ class SnippetManagerTest {
     }
 
     @Test
-    fun `save persists runOnHostId and shortcut`() {
+    fun `save persists shortcut`() {
         val manager = managerWith()
 
-        val id = manager.save(draft().copy(runOnHostId = "host-7", shortcut = "Ctrl+Shift+D"))
+        val id = manager.save(draft().copy(shortcut = "Ctrl+Shift+D"))
 
         val s = manager.find(id)!!.snippet
-        assertEquals("host-7", s.runOnHostId)
         assertEquals("Ctrl+Shift+D", s.shortcut)
     }
 

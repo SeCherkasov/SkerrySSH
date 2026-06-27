@@ -484,6 +484,8 @@ private fun LiveHostFolder(
                             badge = null,
                             onClick = onClick,
                             mono = mono,
+                            // Объект хоста — для пункта «Run snippet…» (запуск сниппета на этом хосте).
+                            host = host,
                             // Правка/удаление профиля — через контекстное меню (right-click/long-press),
                             // как в шаблоне без отдельных кнопок/⋮.
                             onEdit = onEdit,
@@ -525,9 +527,11 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
 
 /**
  * Общая строка хоста в сайдбаре (мок и живой каталог): точка статуса + имя + опц. бейдж. Клик по
- * строке — подключение ([onClick]). Когда переданы [onEdit]/[onDelete] (живой каталог), в конце
- * строки появляется кнопка «⋮», открывающая выпадающее меню Edit/Delete; её собственный клик
- * перехватывается раньше [onClick], поэтому открытие меню не запускает подключение.
+ * строке — подключение ([onClick]). Когда переданы [onEdit]/[onDelete] (живой каталог) или доступен
+ * запуск сниппета на хосте ([host] != null + [LocalSnippets] подан), в конце строки появляется кнопка
+ * «⋮», открывающая выпадающее меню (Run snippet…/Edit/Delete); её собственный клик перехватывается
+ * раньше [onClick], поэтому открытие меню не запускает подключение. «Run snippet…» открывает палитру
+ * выбора сниппета и выполняет его на [host] через [LocalRunSnippetOnHost].
  */
 @Composable
 private fun HostEntryRow(
@@ -537,11 +541,16 @@ private fun HostEntryRow(
     badge: String?,
     onClick: () -> Unit,
     mono: FontFamily,
+    host: Host? = null,
     onEdit: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
-    val hasMenu = onEdit != null || onDelete != null
+    val snippets = LocalSnippets.current
+    val runSnippetOnHost = LocalRunSnippetOnHost.current
+    val canRunSnippet = host != null && snippets != null
+    val hasMenu = onEdit != null || onDelete != null || canRunSnippet
     var menuOpen by remember { mutableStateOf(false) }
+    var snippetPickerOpen by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -566,12 +575,29 @@ private fun HostEntryRow(
                         Column(
                             Modifier.clip(RoundedCornerShape(7.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
                         ) {
+                            if (canRunSnippet) {
+                                HostMenuItem("Run snippet…", D.text) { menuOpen = false; snippetPickerOpen = true }
+                            }
                             onEdit?.let { edit ->
                                 HostMenuItem("Edit", D.text) { menuOpen = false; edit() }
                             }
                             onDelete?.let { delete ->
                                 HostMenuItem("Delete", D.sunset) { menuOpen = false; delete() }
                             }
+                        }
+                    }
+                }
+                // Палитра выбора сниппета: запуск на этом хосте (открывает/использует сессию и
+                // выполняет команду после подключения). Пустая библиотека показывает «No snippets yet».
+                if (snippetPickerOpen && host != null && snippets != null) {
+                    Popup(
+                        alignment = Alignment.TopEnd,
+                        onDismissRequest = { snippetPickerOpen = false },
+                        properties = PopupProperties(focusable = true),
+                    ) {
+                        SnippetPalette(snippets) { entry ->
+                            runSnippetOnHost(host, entry.snippet.command)
+                            snippetPickerOpen = false
                         }
                     }
                 }

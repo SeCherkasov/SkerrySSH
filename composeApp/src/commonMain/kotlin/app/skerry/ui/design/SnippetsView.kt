@@ -52,8 +52,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.host.Host
-import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.snippet.SnippetDraft
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
@@ -70,9 +68,10 @@ private val MOCK_SNIPPETS = listOf(
 
 /**
  * Snippets — ГЛОБАЛЬНЫЙ раздел (привычная модель SSH-клиентов): библиотека сохранённых команд (sidebar) + редактор
- * (main). Сниппет самостоятелен (plain-конфиг, секретов не содержит); «Run now» вставляет команду в
- * активный терминал. Когда менеджер подан ([LocalSnippets]) — живой список; без него (офскрин-рендер/
- * превью) показывается статичный мок ([MOCK_SNIPPETS]).
+ * (main). Сниппет самостоятелен (plain-конфиг, секретов не содержит); редактор — чистая форма, а
+ * запуск делается из палитры терминала, хоткеем или пунктом «Run snippet…» в контекстном меню хоста.
+ * Когда менеджер подан ([LocalSnippets]) — живой список; без него (офскрин-рендер/превью) показывается
+ * статичный мок ([MOCK_SNIPPETS]).
  */
 @Composable
 fun SnippetsView(state: DesktopDesignState) {
@@ -82,13 +81,13 @@ fun SnippetsView(state: DesktopDesignState) {
         MockSnippetsView(mono)
         return
     }
-    LiveSnippetsView(manager, state, mono)
+    LiveSnippetsView(manager, mono)
 }
 
 // Живой путь: библиотека сниппетов + редактор справа.
 
 @Composable
-private fun LiveSnippetsView(manager: SnippetManager, state: DesktopDesignState, mono: FontFamily) {
+private fun LiveSnippetsView(manager: SnippetManager, mono: FontFamily) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -144,7 +143,6 @@ private fun LiveSnippetsView(manager: SnippetManager, state: DesktopDesignState,
                     SnippetEditor(
                         entry = selected,
                         manager = manager,
-                        state = state,
                         mono = mono,
                         onSaved = { id -> selectedId = id; adding = false },
                         onDeleted = { selectedId = null; adding = false },
@@ -186,7 +184,6 @@ private fun LiveSnippetRow(entry: SnippetEntry, selected: Boolean, mono: FontFam
 private fun SnippetEditor(
     entry: SnippetEntry?,
     manager: SnippetManager,
-    state: DesktopDesignState,
     mono: FontFamily,
     onSaved: (String) -> Unit,
     onDeleted: () -> Unit,
@@ -195,34 +192,23 @@ private fun SnippetEditor(
     var command by remember { mutableStateOf(entry?.snippet?.command ?: "") }
     var tags by remember { mutableStateOf(entry?.snippet?.tags ?: emptyList()) }
     var tagDraft by remember { mutableStateOf("") }
-    var runOnHostId by remember { mutableStateOf(entry?.snippet?.runOnHostId) }
     var shortcut by remember { mutableStateOf(entry?.snippet?.shortcut) }
 
     val canSave = label.isNotBlank() && command.isNotBlank()
-
-    // Активный терминал для «Run now» в текущую вкладку. «Run on host» открывает собственную сессию,
-    // поэтому от активного терминала не зависит.
-    val sessions = LocalSessions.current
-    val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-    val hosts = LocalHosts.current
-    val runOnHost = LocalRunSnippetOnHost.current
-    // Выбранный хост «Run on» (если назначен и ещё существует в каталоге).
-    val targetHost = runOnHostId?.let { id -> hosts?.hosts?.firstOrNull { it.id == id } }
-    // Бежать можно: в текущую вкладку — нужна подключённая сессия; на хост — он должен существовать.
-    val canRun = canSave && (if (runOnHostId == null) terminal != null else targetHost != null)
 
     fun addTags(raw: String) {
         tags = (tags + parseSnippetTags(raw)).distinct()
         tagDraft = ""
     }
 
+    // Редактор — чистая форма: запуск делается из палитры терминала (активная сессия), хоткеем или
+    // из контекстного меню хоста («Run snippet…»), а не отсюда.
     fun persist(): String = manager.save(
         SnippetDraft(
             id = entry?.id,
             label = label.trim(),
             command = command,
             tags = tags,
-            runOnHostId = runOnHostId,
             shortcut = shortcut,
         ),
     )
@@ -257,39 +243,16 @@ private fun SnippetEditor(
                     onRemove = { tag -> tags = tags - tag },
                 )
             }
-            Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column(Modifier.weight(1f)) {
-                    FieldLabelSnip("Run on")
-                    RunOnPicker(hosts?.hosts ?: emptyList(), runOnHostId) { runOnHostId = it }
-                }
-                Column(Modifier.weight(1f)) {
-                    FieldLabelSnip("Shortcut")
-                    ShortcutField(shortcut, mono) { shortcut = it }
-                }
+            Column(Modifier.padding(top = 20.dp).width(220.dp)) {
+                FieldLabelSnip("Shortcut")
+                ShortcutField(shortcut, mono) { shortcut = it }
             }
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrimaryButton(
-                    "Run now",
-                    onClick = {
-                        // Запуск сохраняет текущий черновик (что видишь — то и бежит), затем выполняет
-                        // его в выбранной цели и показывает терминал, чтобы был виден вывод.
-                        val id = persist()
-                        onSaved(id)
-                        if (runOnHostId == null) {
-                            manager.run(id) { text -> terminal?.send(text) }
-                        } else {
-                            targetHost?.let { runOnHost(it, command) }
-                        }
-                        state.clearOverlay()
-                    },
-                    icon = "play_arrow",
-                    enabled = canRun,
-                    bg = if (canRun) D.cyan else D.cyan.copy(alpha = 0.3f),
-                )
-                GhostButton(
                     "Save",
                     onClick = { if (canSave) onSaved(persist()) },
-                    fg = if (canSave) D.text else D.faint,
+                    enabled = canSave,
+                    bg = if (canSave) D.cyan else D.cyan.copy(alpha = 0.3f),
                 )
                 if (entry != null) {
                     GhostButton("Delete", onClick = { manager.delete(entry.id); onDeleted() }, fg = D.storm, border = D.storm.copy(alpha = 0.4f))
@@ -312,48 +275,6 @@ private fun parseSnippetTags(text: String): List<String> =
         .map { it.trim().removePrefix("#") }
         .filter { it.isNotEmpty() }
         .distinct()
-
-// --- Run on: выбор цели запуска (текущая вкладка или конкретный хост) ---
-
-@Composable
-private fun RunOnPicker(hosts: List<Host>, selectedId: String?, onSelect: (String?) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val label = selectedId?.let { id -> hosts.firstOrNull { it.id == id }?.label } ?: "Current host"
-    AnchoredDropdown(
-        expanded = open,
-        onDismiss = { open = false },
-        trigger = {
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).clickable { open = !open }.padding(horizontal = 11.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Txt(label, color = D.text, size = 13.sp)
-                Sym("expand_more", size = 16.sp, color = D.faint)
-            }
-        },
-        menu = { width ->
-            Column(
-                Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(7.dp)).padding(vertical = 4.dp).heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
-            ) {
-                RunOnRow("Current host", selectedId == null) { onSelect(null); open = false }
-                hosts.forEach { h -> key(h.id) { RunOnRow(h.label, selectedId == h.id) { onSelect(h.id); open = false } } }
-            }
-        },
-    )
-}
-
-@Composable
-private fun RunOnRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Txt(label, color = if (selected) D.cyanBright else D.text, size = 12.5.sp)
-        if (selected) Sym("check", size = 14.sp, color = D.cyanBright)
-    }
-}
 
 // --- Теги чипсами (как в New connection) ---
 
@@ -496,19 +417,12 @@ private fun MockSnippetsView(mono: FontFamily) {
                     Txt("head", color = D.moss, size = 13.sp, font = mono)
                     Txt(" -n 10", color = D.textBright, size = 13.sp, font = mono)
                 }
-                Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        FieldLabelSnip("Run on")
-                        SnipSelect("Current host")
-                    }
-                    Column(Modifier.weight(1f)) {
-                        FieldLabelSnip("Shortcut")
-                        SnipInput("⌘⇧D", mono)
-                    }
+                Column(Modifier.padding(top = 20.dp).width(220.dp)) {
+                    FieldLabelSnip("Shortcut")
+                    SnipInput("⌘⇧D", mono)
                 }
                 Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PrimaryButton("Run now", onClick = {}, icon = "play_arrow")
-                    GhostButton("Save", onClick = {})
+                    PrimaryButton("Save", onClick = {})
                 }
             }
         }
@@ -604,18 +518,6 @@ private fun SnipSearchField(value: String, onValueChange: (String) -> Unit, mono
             }
         },
     )
-}
-
-@Composable
-private fun SnipSelect(value: String) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Txt(value, color = D.text, size = 13.sp)
-        Sym("expand_more", size = 16.sp, color = D.faint)
-    }
 }
 
 @Composable
