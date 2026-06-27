@@ -117,6 +117,8 @@ fun MobileDesignApp(
         LocalSshKeyGenerator provides deps.keyGenerator,
         LocalSshCertificateInspector provides deps.certificateInspector,
         LocalTunnels provides deps.tunnels,
+        // Сохранённые сниппеты — таб Snippets (библиотека команд + запуск в активный терминал).
+        LocalSnippets provides deps.snippets,
         // Vault + биометрия — экрану More для тумблера «разблокировка биометрией» (включить/перенастроить).
         LocalVault provides deps.vault,
         LocalVaultBiometrics provides deps.biometrics,
@@ -272,33 +274,17 @@ private fun openMobileSession(
 // Контент: корневые табы и push-экраны.
 
 /**
- * Корневой экран текущего таба. Hosts/Files/Vault/More реализованы 1:1; Snippets — заголовок макета
- * (28sp) + плейсхолдер (Phase 2). [onLock] прокидывается в хаб More («Lock Skerry»).
+ * Корневой экран текущего таба. Все табы реализованы 1:1 с макетом. [onLock] прокидывается в хаб
+ * More («Lock Skerry»).
  */
 @Composable
 private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
     when (state.tab) {
         MobileTab.Hosts -> MobileHostsScreen(state)
         MobileTab.Files -> MobileFilesScreen()
+        MobileTab.Snippets -> MobileSnippetsScreen(state)
         MobileTab.Vault -> MobileVaultScreen(state)
         MobileTab.More -> MobileMoreScreen(state, onLock)
-        else -> MobileTabPlaceholder(state.tab)
-    }
-}
-
-@Composable
-private fun MobileTabPlaceholder(tab: MobileTab) {
-    val title = when (tab) {
-        MobileTab.Hosts -> "Hosts"
-        MobileTab.Files -> "Files"
-        MobileTab.Snippets -> "Snippets"
-        MobileTab.Vault -> "Vault"
-        MobileTab.More -> "More"
-    }
-    Column(Modifier.fillMaxSize().padding(start = 22.dp, end = 22.dp, top = 6.dp)) {
-        Txt(title, color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
-        Spacer(Modifier.height(20.dp))
-        Txt("Скоро — слайс этого раздела", color = D.faint, size = 13.sp)
     }
 }
 

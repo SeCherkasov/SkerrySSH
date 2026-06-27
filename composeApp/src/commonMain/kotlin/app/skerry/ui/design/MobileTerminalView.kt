@@ -99,34 +99,52 @@ fun MobileTerminalScreen(state: MobileDesignState) {
             out
         }
     }
-    Column(Modifier.fillMaxSize().background(D.terminalBg)) {
-        MobileTerminalHeader(
-            title = active?.displayTitle ?: "Terminal",
-            status = active?.controller?.uiState,
-            controller = active?.controller,
-            onBack = state::pop,
-            onDisconnect = onDisconnect,
-        )
-        when (val st = active?.controller?.uiState) {
-            null, ConnectionUiState.Form ->
-                MobileTerminalNotice("terminal", "No active session", "Open a host and tap Connect.")
-            ConnectionUiState.Connecting ->
-                MobileTerminalNotice("sync", "Connecting…", active.subtitle)
-            is ConnectionUiState.Connected -> {
-                TerminalScreen(
-                    st.terminal,
-                    Modifier.weight(1f).fillMaxWidth(),
-                    imeInput = true,
-                    imeTransform = imeTransform,
-                )
-                MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
+    // Палитра запуска сниппета (иконка `bolt` в шапке) живёт на верхнем уровне Box, НЕ внутри шапки —
+    // иначе инлайновый лист участвовал бы в раскладке Row и ломал её. Доступна только в коннекте и
+    // когда подключена библиотека сниппетов.
+    var paletteOpen by remember(active?.id) { mutableStateOf(false) }
+    val snippets = LocalSnippets.current
+    val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+    val canRunSnippet = snippets != null && activeTerminal != null
+
+    Box(Modifier.fillMaxSize().background(D.terminalBg)) {
+        Column(Modifier.fillMaxSize()) {
+            MobileTerminalHeader(
+                title = active?.displayTitle ?: "Terminal",
+                status = active?.controller?.uiState,
+                controller = active?.controller,
+                onBack = state::pop,
+                onDisconnect = onDisconnect,
+                onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
+            )
+            when (val st = active?.controller?.uiState) {
+                null, ConnectionUiState.Form ->
+                    MobileTerminalNotice("terminal", "No active session", "Open a host and tap Connect.")
+                ConnectionUiState.Connecting ->
+                    MobileTerminalNotice("sync", "Connecting…", active.subtitle)
+                is ConnectionUiState.Connected -> {
+                    TerminalScreen(
+                        st.terminal,
+                        Modifier.weight(1f).fillMaxWidth(),
+                        imeInput = true,
+                        imeTransform = imeTransform,
+                    )
+                    MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
+                }
+                is ConnectionUiState.Error ->
+                    MobileTerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+                // Обрыв: застывший экран на момент потери, без keybar (канал мёртв). Статус в шапке —
+                // «disconnected» красным. Детальный мобильный паритет (авто-реконнект) — отдельной задачей.
+                is ConnectionUiState.Disconnected ->
+                    TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
             }
-            is ConnectionUiState.Error ->
-                MobileTerminalNotice("error", "Connection failed", st.message, color = D.sunset)
-            // Обрыв: застывший экран на момент потери, без keybar (канал мёртв). Статус в шапке —
-            // «disconnected» красным. Детальный мобильный паритет (авто-реконнект) — отдельной задачей.
-            is ConnectionUiState.Disconnected ->
-                TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
+        }
+        if (paletteOpen && snippets != null && activeTerminal != null) {
+            MobileSnippetRunSheet(
+                manager = snippets,
+                onRun = { entry -> snippets.run(entry.id) { text -> activeTerminal.send(text) }; paletteOpen = false },
+                onDismiss = { paletteOpen = false },
+            )
         }
     }
 }
@@ -148,6 +166,7 @@ private fun MobileTerminalHeader(
     controller: ConnectionController?,
     onBack: () -> Unit,
     onDisconnect: (() -> Unit)?,
+    onSnippets: (() -> Unit)?,
 ) {
     val mono = LocalFonts.current.mono
     var menuOpen by remember { mutableStateOf(false) }
@@ -195,6 +214,18 @@ private fun MobileTerminalHeader(
                         MobileTerminalMetric("arrow_downward", mobileRateLabel(throughput?.downRate), mono)
                     }
                 }
+            }
+            if (onSnippets != null) {
+                Sym(
+                    "bolt",
+                    size = 21.sp,
+                    color = D.dim,
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onSnippets,
+                    ),
+                )
             }
             Sym(
                 "more_horiz",

@@ -12,6 +12,7 @@ import app.skerry.shared.ssh.FileKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
+import app.skerry.shared.snippet.FileSnippetStore
 import app.skerry.shared.tunnel.FileTunnelStore
 import app.skerry.shared.vault.AndroidBiometricKeyStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
@@ -30,6 +31,7 @@ import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
 import app.skerry.ui.vault.ResetScope
@@ -175,6 +177,9 @@ class MainActivity : FragmentActivity() {
             resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
             scope = scope,
         ) { UUID.randomUUID().toString() }
+        // Сохранённые сниппеты (привычная модель SSH-клиентов): библиотека команд в snippets.json. Plain-конфиг —
+        // секретов не содержат, vault не требуют; запуск идёт в активный терминал из самого UI.
+        val snippets = SnippetManager(FileSnippetStore(dir.resolve("snippets.json").toPath())) { UUID.randomUUID().toString() }
         // Чистка данных вне vault при сбросе (паритет desktop `main.kt`). Файл vault уже стёрт и
         // заблокирован — секреты перечитаются при создании нового vault, поэтому credentials тут не трогаем.
         onVaultReset = { scope ->
@@ -188,6 +193,7 @@ class MainActivity : FragmentActivity() {
                 ResetScope.Everything -> {
                     tunnels.closeAll()
                     tunnels.tunnels.toList().forEach { tunnels.delete(it.id) }
+                    snippets.snippets.toList().forEach { snippets.delete(it.id) }
                     knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
                     knownHosts.entries.toList().forEach { knownHosts.forget(it) }
                     hostStore.all().forEach { hostStore.remove(it.id) }
@@ -208,6 +214,7 @@ class MainActivity : FragmentActivity() {
             certificateInspector = SshjCertificateInspector(),
             biometrics = biometrics,
             tunnels = tunnels,
+            snippets = snippets,
         )
     }
 
