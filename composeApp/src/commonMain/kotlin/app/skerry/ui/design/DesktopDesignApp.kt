@@ -613,13 +613,13 @@ private fun StatusBar() {
     // (сессия + флаг connected) пересоздают его при смене сессии/подключения; openThroughput
     // идемпотентен (кэш в ConnectionController).
     val throughput = remember(active, connected) {
-        if (connected && active != null) active.controller.openThroughput() else null
+        if (connected) active.controller.openThroughput() else null
     }
     val upRate = throughput?.upRate
     val downRate = throughput?.downRate
     // RTT-пинг активной сессии (тот же приём, что throughput); до первого замера/при сбое — null.
     val ping = remember(active, connected) {
-        if (connected && active != null) active.controller.openPing() else null
+        if (connected) active.controller.openPing() else null
     }
     val rttMs = ping?.rttMs
     // Размер сетки — живой cols×rows активного терминала; вне коннекта остаётся мок-метка макета.
@@ -644,7 +644,7 @@ private fun StatusBar() {
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             // Версия сервера — live ident активной сессии (до коннекта/если транспорт молчит — «—»).
-            StatusItem("memory", if (live) (sessions?.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
+            StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
             Txt("UTF-8 · LF", color = D.faint, size = 10.5.sp, font = mono)
             Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
         }

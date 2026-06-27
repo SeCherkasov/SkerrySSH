@@ -229,7 +229,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                             AuthMode.ASK -> null
                         }
                         if (canTest && auth != null) {
-                            tester?.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim()), auth)
+                            tester.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim()), auth)
                         }
                     },
                     fg = if (canTest) D.text else D.faint,
