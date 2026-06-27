@@ -341,7 +341,7 @@ private fun MobileTunnelEditorSheet(
             Spacer(Modifier.height(18.dp))
             PortField("Name") { PortInput(label, { label = it }, "web tunnel", mono) }
             Spacer(Modifier.height(14.dp))
-            PortField("Type") { PortTypeSelect(direction) { direction = direction.next() } }
+            PortField("Type") { PortTypeSelect(direction) { direction = it } }
             Spacer(Modifier.height(14.dp))
             PortField("Via host") { MobileHostPicker(hostName, hostList.map { it.id to it.label }) { hostId = it } }
             Spacer(Modifier.height(14.dp))
@@ -442,12 +442,6 @@ private fun MobileHostPicker(current: String, options: List<Pair<String, String>
     }
 }
 
-private fun TunnelDirection.next(): TunnelDirection = when (this) {
-    TunnelDirection.Local -> TunnelDirection.Remote
-    TunnelDirection.Remote -> TunnelDirection.Dynamic
-    TunnelDirection.Dynamic -> TunnelDirection.Local
-}
-
 private fun directionDisplay(direction: TunnelDirection): String = when (direction) {
     TunnelDirection.Local -> "Local forward (-L)"
     TunnelDirection.Remote -> "Remote forward (-R)"
@@ -492,16 +486,35 @@ private fun PortInput(value: String, onValueChange: (String) -> Unit, placeholde
     )
 }
 
-/** Кликабельный селект типа: тап циклически меняет `-L`→`-R`→`-D` (на телефоне дропдаун ни к чему). */
+/** Селект типа туннеля: тап раскрывает список `-L`/`-R`/`-D` поверх (Popup), как [MobileHostPicker]. */
 @Composable
-private fun PortTypeSelect(direction: TunnelDirection, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Txt(directionDisplay(direction), color = D.text, size = 15.sp)
-        Sym("expand_more", size = 20.sp, color = D.faint)
+private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Txt(directionDisplay(direction), color = D.text, size = 15.sp)
+            Sym("expand_more", size = 20.sp, color = D.faint)
+        }
+        if (open) {
+            Popup(alignment = Alignment.TopStart, onDismissRequest = { open = false }) {
+                Column(
+                    Modifier.width(260.dp).clip(RoundedCornerShape(11.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)),
+                ) {
+                    listOf(TunnelDirection.Local, TunnelDirection.Remote, TunnelDirection.Dynamic).forEach { option ->
+                        Txt(
+                            directionDisplay(option),
+                            color = if (option == direction) D.cyanBright else D.text,
+                            size = 15.sp,
+                            modifier = Modifier.fillMaxWidth().clickable { onPick(option); open = false }.padding(horizontal = 14.dp, vertical = 11.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
