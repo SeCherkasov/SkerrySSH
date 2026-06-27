@@ -84,6 +84,9 @@ fun DesktopDesignApp(
     // Пользовательские (пустые) группы хостов — тоже персистятся снаружи (desktop main): стартовый список + колбэк записи.
     initialCustomGroups: List<String> = emptyList(),
     onCustomGroupsChange: (List<String>) -> Unit = {},
+    // Показ скрытых в SFTP (Ctrl+H) — персистится снаружи (desktop main): стартовое значение + колбэк записи.
+    initialSftpShowHidden: Boolean = true,
+    onSftpShowHiddenChange: (Boolean) -> Unit = {},
     state: DesktopDesignState = remember {
         DesktopDesignState(
             initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
@@ -117,6 +120,13 @@ fun DesktopDesignApp(
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
+    // Настройка показа скрытых в SFTP: держим в стейте, чтобы Ctrl+H обновлял UI мгновенно, и пишем
+    // наружу (персист) при каждом изменении.
+    var sftpShowHidden by remember { mutableStateOf(initialSftpShowHidden) }
+    val sftpPrefs = SftpPrefs(sftpShowHidden) { value ->
+        sftpShowHidden = value
+        onSftpShowHiddenChange(value)
+    }
     // Менеджер сессий: либо подан снаружи (офскрин-рендер с фейковым транспортом), либо строится
     // из живого транспорта — один shell на вкладку, как в [app.skerry.ui.mobile.MobileApp]. Свой
     // граф закрываем при dispose; внешний — собственность вызывающего, не трогаем.
@@ -144,6 +154,7 @@ fun DesktopDesignApp(
         LocalTestTransport provides (testTransport ?: transport),
         LocalTunnels provides tunnels,
         LocalFeatures provides features,
+        LocalSftpPrefs provides sftpPrefs,
     ) {
         if (vault != null) {
             VaultGate(

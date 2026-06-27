@@ -33,6 +33,20 @@ data class FeatureFlags(
 val LocalFeatures: ProvidableCompositionLocal<FeatureFlags> = staticCompositionLocalOf { FeatureFlags() }
 
 /**
+ * Настройки двухпанельного SFTP, переживающие перезапуск. [showHidden] — показывать ли скрытые
+ * объекты (dotfiles), как в mc; [setShowHidden] меняет значение И персистит его. Поставляется
+ * [DesktopDesignApp] из платформенного хранилища; дефолт — показывать, без персиста (мок/превью).
+ */
+@Immutable
+data class SftpPrefs(
+    val showHidden: Boolean = true,
+    val setShowHidden: (Boolean) -> Unit = {},
+)
+
+/** Текущие SFTP-настройки; дефолт — скрытые показаны, изменения никуда не пишутся (мок-путь/превью). */
+val LocalSftpPrefs: ProvidableCompositionLocal<SftpPrefs> = staticCompositionLocalOf { SftpPrefs() }
+
+/**
  * Живые бэкенды, подаваемые в дизайн-слой через CompositionLocal (тем же приёмом, что [LocalFonts]) —
  * чтобы не протаскивать контроллеры параметрами через каждый composable макета. `null` означает
  * мок-путь (офскрин-рендер/превью): composable рисует статичные данные [DesktopMockData].
