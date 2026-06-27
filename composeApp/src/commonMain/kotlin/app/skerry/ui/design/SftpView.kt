@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -37,6 +38,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -55,6 +57,7 @@ import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.sftp.pickUploadSource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.roundToInt
 
 private data class FileEntry(val icon: String, val iconColor: Color, val name: String, val meta: String, val selected: Boolean = false)
 
@@ -287,7 +290,7 @@ private fun LivePaneList(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(6.dp)) {
         if (pane.path != "/") {
             val onUp = remember(pane) { pane::goUp }
-            LiveFileRow("arrow_upward", D.faint, "..", "", false, mono, onClick = onUp, menuItems = null)
+            LiveFileRow("arrow_upward", D.faint, "..", "", false, mono, onClick = onUp, menuItems = null, onMenuOpen = null)
         }
         entries.forEach { entry ->
             val isDir = entry.type == FileItemType.Directory
@@ -297,7 +300,8 @@ private fun LivePaneList(
             }
             // Действия строки — в контекстном меню (long-press/right-click), как в шаблоне без ⋮.
             val menuItems = buildList {
-                if (onDownload != null && entry.type == FileItemType.File) {
+                // Download — для файлов и каталогов (каталог скачивается рекурсивно), но не для симлинков/прочего.
+                if (onDownload != null && (entry.type == FileItemType.File || entry.type == FileItemType.Directory)) {
                     add(MenuAction("Download", D.text) { onDownload(entry) })
                 }
                 add(MenuAction("Rename", D.text) { onRename(entry) })
@@ -312,6 +316,8 @@ private fun LivePaneList(
                 mono = mono,
                 onClick = onClick,
                 menuItems = menuItems,
+                // При открытии меню выделяем строку — видно, к какому файлу относятся действия.
+                onMenuOpen = remember(pane, entry.path) { { pane.selectOnly(entry) } },
             )
         }
     }
@@ -336,9 +342,15 @@ private fun LiveFileRow(
     mono: FontFamily,
     onClick: () -> Unit,
     menuItems: List<MenuAction>?,
+    onMenuOpen: (() -> Unit)?,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    // Позиция курсора в момент нажатия (локально к строке) — чтобы меню открылось под курсором, а не
+    // в углу строки. Обновляется на каждом Press, так что и right-click, и long-press берут точку нажатия.
+    var pressOffset by remember { mutableStateOf(Offset.Zero) }
     val hasMenu = !menuItems.isNullOrEmpty()
+    // Открыть меню: сначала выделить строку (подсветка показывает цель действий), затем показать меню.
+    val openMenu = { onMenuOpen?.invoke(); menuOpen = true }
     Box {
         Row(
             Modifier
@@ -352,9 +364,12 @@ private fun LiveFileRow(
                             awaitPointerEventScope {
                                 while (true) {
                                     val event = awaitPointerEvent()
-                                    if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                                        event.changes.forEach { it.consume() }
-                                        menuOpen = true
+                                    if (event.type == PointerEventType.Press) {
+                                        pressOffset = event.changes.first().position
+                                        if (event.buttons.isSecondaryPressed) {
+                                            event.changes.forEach { it.consume() }
+                                            openMenu()
+                                        }
                                     }
                                 }
                             }
@@ -365,7 +380,7 @@ private fun LiveFileRow(
                 )
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
+                    onLongClick = if (hasMenu) openMenu else null,
                 )
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -384,7 +399,11 @@ private fun LiveFileRow(
             if (meta.isNotEmpty()) Txt(meta, color = D.faint, size = 11.sp)
         }
         if (menuOpen && !menuItems.isNullOrEmpty()) {
-            Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = IntOffset(pressOffset.x.roundToInt(), pressOffset.y.roundToInt()),
+                onDismissRequest = { menuOpen = false },
+            ) {
                 Column(
                     Modifier
                         .clip(RoundedCornerShape(7.dp))
