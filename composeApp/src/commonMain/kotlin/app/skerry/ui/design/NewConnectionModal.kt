@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -49,6 +48,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
@@ -297,8 +298,6 @@ private fun ModalTextField(
     singleLine: Boolean = true,
     mono: Boolean = false,
     minHeightDp: Int? = null,
-    trailing: (@Composable () -> Unit)? = null,
-    onFocusChanged: ((Boolean) -> Unit)? = null,
 ) {
     val fonts = LocalFonts.current
     val family = if (mono) fonts.mono else fonts.ui
@@ -315,7 +314,7 @@ private fun ModalTextField(
         cursorBrush = SolidColor(D.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
-        modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
+        modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
             Row(
                 Modifier
@@ -331,7 +330,6 @@ private fun ModalTextField(
                     if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
                     inner()
                 }
-                if (trailing != null) trailing()
             }
         },
     )
@@ -437,36 +435,99 @@ private fun ModalSelect(value: String) {
 }
 
 /**
- * Поле «Group»: свободный ввод + выпадающий список уже созданных групп ([groupSuggestions]). Меню —
- * type-ahead (focusable=false, чтобы не прерывать набор), показывается пока поле в фокусе и есть что
- * предложить; выбор пункта заполняет поле и снимает фокус (меню закрывается). Скрываем подсказку,
- * дословно совпадающую с введённым, — выбирать в ней нечего.
+ * Поле «Group»: выпадающий селект (как [AuthPicker]) — «No group», уже созданные группы каталога
+ * ([groupSuggestions]) и «New group…», открывающий диалог создания. Выбранная группа хранится в
+ * [NewConnectionFormState.group]; создание новой просто проставляет её имя (профиль заведёт папку при
+ * сохранении). Свободного ввода в самом поле нет — только список + явное создание, чтобы не плодить
+ * опечатки-дубли групп.
  */
 @Composable
 private fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
-    val focusManager = LocalFocusManager.current
-    var focused by remember { mutableStateOf(false) }
-    val suggestions = remember(allHosts, form.group) {
-        groupSuggestions(allHosts, form.group)
-            .filterNot { it.equals(form.group.trim(), ignoreCase = true) }
-    }
+    var menuOpen by remember { mutableStateOf(false) }
+    var createOpen by remember { mutableStateOf(false) }
+    val groups = remember(allHosts) { groupSuggestions(allHosts) }
+    val hasGroup = form.group.isNotBlank()
     AnchoredDropdown(
-        expanded = focused && suggestions.isNotEmpty(),
-        onDismiss = { focused = false },
-        focusable = false,
+        expanded = menuOpen,
+        onDismiss = { menuOpen = false },
         trigger = {
-            ModalTextField(
-                form.group, { form.group = it }, "Production (optional)",
-                onFocusChanged = { focused = it },
-                trailing = { Sym("expand_more", size = 16.sp, color = D.faint) },
-            )
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Txt(if (hasGroup) form.group else "No group", color = if (hasGroup) D.text else D.faint, size = 13.sp)
+                Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+            }
         },
         menu = { width ->
             SuggestionMenu(width) {
-                suggestions.forEach { group -> key(group) { SuggestionRow(group) { form.group = group; focusManager.clearFocus() } } }
+                GroupOption("No group", selected = !hasGroup) { form.group = ""; menuOpen = false }
+                groups.forEach { group ->
+                    key(group) { GroupOption(group, selected = form.group == group) { form.group = group; menuOpen = false } }
+                }
+                HLine(modifier = Modifier.padding(vertical = 4.dp))
+                GroupOption("New group…", selected = false, icon = "add") { menuOpen = false; createOpen = true }
             }
         },
     )
+    if (createOpen) {
+        GroupCreateDialog(onDismiss = { createOpen = false }, onCreate = { name -> form.group = name.trim(); createOpen = false })
+    }
+}
+
+/** Строка-вариант селекта группы: опц. иконка + название + галочка выбранного. */
+@Composable
+private fun GroupOption(title: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(if (selected) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        if (icon != null) Sym(icon, size = 15.sp, color = D.cyanBright)
+        Txt(title, color = if (selected) D.cyanBright else D.text, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
+        if (selected) Sym("check", size = 15.sp, color = D.cyanBright)
+    }
+}
+
+/**
+ * Модальный диалог создания новой группы (Popup поверх модалки коннекта): поле имени + Cancel/Create.
+ * Пустое имя не создаёт (кнопка неактивна). Имя только проставляется в форму — папка появится в
+ * каталоге при сохранении хоста.
+ */
+@Composable
+private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    val canCreate = name.isNotBlank()
+    Popup(alignment = Alignment.Center, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
+        Box(
+            Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                Modifier
+                    .widthIn(max = 360.dp)
+                    .fillMaxWidth()
+                    .padding(20.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(D.surfaceDeep)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
+                    .padding(22.dp),
+            ) {
+                Txt("New group", color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+                Spacer14()
+                ModalTextField(name, { name = it }, "Production")
+                Spacer14()
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+                    Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
+                        Txt("Cancel", color = D.dim, size = 12.5.sp)
+                    }
+                    PrimaryButton("Create", onClick = { if (canCreate) onCreate(name) }, bg = if (canCreate) D.cyan else D.cyan.copy(alpha = 0.4f))
+                }
+            }
+        }
+    }
 }
 
 /** Контейнер выпадающих подсказок (group/tags): ширина триггера, скролл при переполнении, стиль меню. */

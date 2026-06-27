@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.host.Host
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 
@@ -78,6 +80,9 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
     var submitting by remember(editHost) { mutableStateOf(false) }
     // Незакоммиченный ввод тега (пилюля ещё не создана); Save дофиксирует его, чтобы не потерялся.
     var tagDraft by remember(editHost) { mutableStateOf("") }
+    // Открыт ли диалог «New group» — держим на уровне листа, чтобы оверлей рисовался на корне (не в
+    // скролле формы) и корректно поднимался над клавиатурой.
+    var createGroupOpen by remember(editHost) { mutableStateOf(false) }
     val onSave = {
         if (submitting) {
             // повторное нажатие до закрытия — игнорируем
@@ -166,6 +171,9 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             Spacer(Modifier.height(14.dp))
             SheetField("Authentication") { MobileAuthPicker(form) }
             Spacer(Modifier.height(14.dp))
+            // Подсказки группы — из уже созданных хостов (паритет desktop GroupPicker); в превью список пуст.
+            SheetField("Group") { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
+            Spacer(Modifier.height(14.dp))
             SheetField("Tags") {
                 SheetTags(
                     tags = form.tags,
@@ -194,6 +202,13 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             ) {
                 Txt(if (editHost != null) "Save changes" else "Save connection", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
             }
+        }
+        // Оверлей «New group» — на корне листа (поверх панели), чтобы корректно подниматься над клавиатурой.
+        if (createGroupOpen) {
+            MobileGroupCreateDialog(
+                onDismiss = { createGroupOpen = false },
+                onCreate = { name -> form.group = name.trim(); createGroupOpen = false },
+            )
         }
     }
 }
@@ -404,6 +419,142 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
                 SheetInput(form.passphrase, { form.passphrase = it }, "key passphrase (optional)", masked = true)
             }
             else -> {}
+        }
+    }
+}
+
+/**
+ * Поле «Group» листа: выпадающий селект (паритет [MobileAuthPicker]) — пункт «No group», уже созданные
+ * группы каталога ([groupSuggestions]) и «New group…», открывающий диалог создания. Выбранная группа
+ * хранится в [NewConnectionFormState.group]; создание новой просто проставляет её имя (профиль заведёт
+ * папку при сохранении). Свободного ввода в самом поле нет — только список + явное создание, чтобы не
+ * плодить опечатки-дубли групп на телефоне.
+ */
+@Composable
+private fun MobileGroupPicker(form: NewConnectionFormState, allHosts: List<Host>, onCreateGroup: () -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val groups = remember(allHosts) { groupSuggestions(allHosts) }
+    val hasGroup = form.group.isNotBlank()
+    Column {
+        AnchoredDropdown(
+            expanded = menuOpen,
+            onDismiss = { menuOpen = false },
+            trigger = {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(D.bg)
+                        .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menuOpen = !menuOpen }
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Txt(if (hasGroup) form.group else "No group", color = if (hasGroup) D.text else D.faint, size = 15.sp)
+                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+                }
+            },
+            menu = { width ->
+                Column(
+                    Modifier
+                        .width(width)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(SheetPanel)
+                        .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(vertical = 4.dp),
+                ) {
+                    MobileGroupOption("No group", selected = !hasGroup) { form.group = ""; menuOpen = false }
+                    groups.forEach { group ->
+                        key(group) {
+                            MobileGroupOption(group, selected = form.group == group) { form.group = group; menuOpen = false }
+                        }
+                    }
+                    HLine(modifier = Modifier.padding(vertical = 4.dp))
+                    MobileGroupOption("New group…", selected = false, icon = "add") { menuOpen = false; onCreateGroup() }
+                }
+            },
+        )
+    }
+}
+
+/** Строка-вариант селекта группы: опц. иконка + название + галочка выбранного. */
+@Composable
+private fun MobileGroupOption(title: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (selected) D.cyan10 else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(11.dp),
+    ) {
+        if (icon != null) Sym(icon, size = 18.sp, color = D.cyanBright)
+        Txt(title, color = if (selected) D.cyanBright else D.text, size = 14.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
+        if (selected) Sym("check", size = 17.sp, color = D.cyanBright)
+    }
+}
+
+/**
+ * Маленький модальный диалог создания новой группы — полноэкранный оверлей на корне листа (не в
+ * скролле формы), центрируется над клавиатурой через [imePadding]: поле имени + Cancel/Create.
+ * Пустое имя не создаёт (кнопка неактивна). Имя только проставляется в форму — папка появится в
+ * каталоге при сохранении хоста.
+ */
+@Composable
+private fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    val canCreate = name.isNotBlank()
+    val submit = { if (canCreate) onCreate(name) }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xB304080C))
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+            .imePadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .padding(horizontal = 32.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(SheetPanel)
+                .border(1.dp, D.cyan14, RoundedCornerShape(18.dp))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
+                .padding(20.dp),
+        ) {
+            Txt("New group", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Spacer(Modifier.height(14.dp))
+            SheetInput(name, { name = it }, "Production")
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+                        .padding(vertical = 13.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Txt("Cancel", color = D.dim, size = 15.sp, weight = FontWeight.Medium)
+                }
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (canCreate) D.cyan else D.cyan.copy(alpha = 0.4f))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
+                        .padding(vertical = 13.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Txt("Create", color = Color(0xFF0A1A26), size = 15.sp, weight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
