@@ -81,6 +81,43 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `connect invokes onConnected once with the live terminal`() = runTest {
+        val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))
+        var calls = 0
+        var received: Any? = null
+
+        controller.connect(target, SshAuth.Password("pw")) { t -> calls++; received = t }
+
+        val state = controller.uiState
+        assertIs<ConnectionUiState.Connected>(state)
+        assertEquals(1, calls)
+        assertSame(state.terminal, received)
+        scope.cancel()
+    }
+
+    @Test
+    fun `auto-reconnect does not re-invoke onConnected`() = runTest {
+        val ch1 = FakeShellChannel()
+        val ch2 = FakeShellChannel()
+        val transport = ScriptedTransport(
+            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(ch2))),
+        )
+        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
+        var calls = 0
+
+        controller.connect(target, SshAuth.Password("pw")) { calls++ }
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+        assertEquals(1, calls)
+
+        ch1.close() // обрыв → авто-реконнект восстанавливает сессию
+        advanceUntilIdle()
+
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+        assertEquals(1, calls) // команда «Run on host» не повторяется при реконнекте
+        scope.cancel()
+    }
+
+    @Test
     fun `connect failure transitions to Error with message`() = runTest {
         val transport = FakeSshTransport(error = SshAuthenticationException("нет доступа"))
         val (controller, scope) = controllerWith(transport)

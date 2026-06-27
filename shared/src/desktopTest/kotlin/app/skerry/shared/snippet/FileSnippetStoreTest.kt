@@ -94,6 +94,27 @@ class FileSnippetStoreTest {
     }
 
     @Test
+    fun `persists runOnHostId and shortcut across instances`() {
+        val s = Snippet("1", "Disk usage", "df -h", tags = listOf("disk"), runOnHostId = "host-7", shortcut = "Ctrl+Shift+D")
+
+        FileSnippetStore(file).put(s)
+
+        assertEquals(listOf(s), FileSnippetStore(file).all())
+    }
+
+    @Test
+    fun `reads legacy snippets without the new fields`() {
+        // Старый файл (до полей runOnHostId/shortcut): должен читаться, новые поля = null.
+        file.writeText("""[{"id":"1","label":"a","command":"ls","tags":["fs"]}]""")
+
+        val loaded = FileSnippetStore(file).all().single()
+
+        assertEquals(snip("1", "a", command = "ls", tags = listOf("fs")), loaded)
+        assertEquals(null, loaded.runOnHostId)
+        assertEquals(null, loaded.shortcut)
+    }
+
+    @Test
     fun `starts empty when the file is corrupt`() {
         file.writeText("{ not json at all ][")
 

@@ -122,6 +122,11 @@ class ConnectionController(
     // Цель/учётка последнего connect — для авто-реконнекта после обрыва (переподключаемся к тому же).
     private var lastTarget: SshTarget? = null
     private var lastAuth: SshAuth? = null
+    // Одноразовое действие при ПЕРВОМ переходе в Connected этого connect (например «Run on host» из
+    // сниппета: выполнить команду в только что открытой сессии). Срабатывает и обнуляется в
+    // establishSession при успехе; авто-реконнект через establishSession его НЕ выставляет, поэтому
+    // команда не повторяется при восстановлении связи.
+    private var pendingOnConnected: ((TerminalScreenState) -> Unit)? = null
     private var reconnectJob: Job? = null
     private var connection: SshConnection? = null
     private var shellChannel: ShellChannel? = null
@@ -134,12 +139,19 @@ class ConnectionController(
     private var throughput: ThroughputController? = null
     private var ping: PingController? = null
 
-    fun connect(target: SshTarget, auth: SshAuth) {
+    /**
+     * Подключиться к [target]/[auth]. [onConnected] (если задан) вызывается РОВНО ОДИН РАЗ при первом
+     * переходе в [ConnectionUiState.Connected] с готовым терминалом — точка для действия «выполнить
+     * команду сразу после открытия сессии» (см. «Run on host» сниппетов). При авто-реконнекте после
+     * обрыва не повторяется (реконнект не несёт этого колбэка).
+     */
+    fun connect(target: SshTarget, auth: SshAuth, onConnected: ((TerminalScreenState) -> Unit)? = null) {
         // Стартуем только из формы: пока идёт подключение или есть открытая сессия,
         // повторный connect игнорируется — иначе можно утечь scope и соединение.
         if (uiState !is ConnectionUiState.Form) return
         lastTarget = target
         lastAuth = auth
+        pendingOnConnected = onConnected
         uiState = ConnectionUiState.Connecting
         connectJob = scope.launch {
             try {
@@ -177,6 +189,9 @@ class ConnectionController(
             sessionScope = sScope
             val terminal = TerminalScreenState(ShellTerminalSession(channel, sScope), sScope)
             uiState = ConnectionUiState.Connected(terminal)
+            // Одноразовое действие первого подключения (Run on host): берём и обнуляем ДО возможного
+            // обрыва, чтобы реконнект через этот же establishSession его не повторил.
+            pendingOnConnected?.let { action -> pendingOnConnected = null; action(terminal) }
             watchForSessionLoss(terminal, sScope)
         } catch (e: Exception) {
             conn?.let(::closeConnectionQuietly)
@@ -293,6 +308,8 @@ class ConnectionController(
         // дольше жизни соединения.
         lastAuth = null
         lastTarget = null
+        // Отменён до Connected — отбрасываем неотработавшее одноразовое действие (Run on host).
+        pendingOnConnected = null
         releaseSessionResources()
         uiState = ConnectionUiState.Form
     }
@@ -309,6 +326,9 @@ class ConnectionController(
         reconnectJob = null
         lastAuth = null
         lastTarget = null
+        // Lock отменяет и отложенное действие первого подключения (Run on host): команда сниппета не
+        // должна «выстрелить» в терминал, если хендшейк завершится уже на запертом vault.
+        pendingOnConnected = null
     }
 
     /**

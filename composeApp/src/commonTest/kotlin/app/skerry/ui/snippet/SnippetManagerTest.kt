@@ -79,6 +79,45 @@ class SnippetManagerTest {
     }
 
     @Test
+    fun `save persists runOnHostId and shortcut`() {
+        val manager = managerWith()
+
+        val id = manager.save(draft().copy(runOnHostId = "host-7", shortcut = "Ctrl+Shift+D"))
+
+        val s = manager.find(id)!!.snippet
+        assertEquals("host-7", s.runOnHostId)
+        assertEquals("Ctrl+Shift+D", s.shortcut)
+    }
+
+    @Test
+    fun `save normalizes a blank shortcut to null`() {
+        val manager = managerWith()
+
+        val id = manager.save(draft().copy(shortcut = "   "))
+
+        assertNull(manager.find(id)!!.snippet.shortcut)
+    }
+
+    @Test
+    fun `forShortcut finds the snippet bound to a hotkey`() {
+        val manager = managerWith()
+        val id = manager.save(draft(label = "Disk").copy(shortcut = "Ctrl+Shift+D"))
+        manager.save(draft(label = "Mem")) // без хоткея
+
+        assertEquals(id, manager.forShortcut("Ctrl+Shift+D")?.id)
+    }
+
+    @Test
+    fun `forShortcut returns null for blank or unmatched`() {
+        val manager = managerWith()
+        manager.save(draft().copy(shortcut = "Ctrl+Shift+D"))
+
+        assertNull(manager.forShortcut(null))
+        assertNull(manager.forShortcut(""))
+        assertNull(manager.forShortcut("Ctrl+Shift+X"))
+    }
+
+    @Test
     fun `find returns null for null or unknown id`() {
         val manager = managerWith()
         manager.save(draft())

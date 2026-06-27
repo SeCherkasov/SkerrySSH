@@ -8,6 +8,7 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.terminal.TerminalScreenState
 
 /**
  * Подвью сессии (привязана к вкладке): что показано в её рабочей области. Туннели сюда НЕ входят —
@@ -137,12 +138,19 @@ class SessionsController(
      * Открыть новую сессию к [target] и сделать её активной; подключение стартует сразу.
      * Возвращает id созданной вкладки.
      */
-    fun open(hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth): String {
+    fun open(
+        hostId: String?,
+        title: String,
+        subtitle: String,
+        target: SshTarget,
+        auth: SshAuth,
+        onConnected: ((TerminalScreenState) -> Unit)? = null,
+    ): String {
         val controller = controllerFactory()
         val session = Session(newId(), hostId, title, subtitle, controller)
         sessions = sessions + session
         activeId = session.id
-        controller.connect(target, auth)
+        controller.connect(target, auth, onConnected)
         return session.id
     }
 
@@ -164,14 +172,21 @@ class SessionsController(
      * вкладки, в которой стартовало соединение. Поведение «+→пустой таб, затем выбор хоста коннектит
      * в него же».
      */
-    fun connect(hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth): String {
+    fun connect(
+        hostId: String?,
+        title: String,
+        subtitle: String,
+        target: SshTarget,
+        auth: SshAuth,
+        onConnected: ((TerminalScreenState) -> Unit)? = null,
+    ): String {
         val blank = active?.takeIf { it.isBlank }
         if (blank != null) {
             blank.bind(hostId, title, subtitle)
-            blank.controller.connect(target, auth)
+            blank.controller.connect(target, auth, onConnected)
             return blank.id
         }
-        return open(hostId, title, subtitle, target, auth)
+        return open(hostId, title, subtitle, target, auth, onConnected)
     }
 
     /** Сменить подвью активной вкладки (Terminal/SFTP); без активной — no-op. */

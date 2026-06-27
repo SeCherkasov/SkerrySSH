@@ -16,6 +16,8 @@ data class SnippetDraft(
     val label: String,
     val command: String,
     val tags: List<String> = emptyList(),
+    val runOnHostId: String? = null,
+    val shortcut: String? = null,
 )
 
 /** Одна строка списка сниппетов: сохранённый [snippet], обновляется через [SnippetManager.save]. */
@@ -44,6 +46,17 @@ class SnippetManager(
     fun find(id: String?): SnippetEntry? = id?.let { wanted -> snippets.firstOrNull { it.id == wanted } }
 
     /**
+     * Сниппет с заданной горячей клавишей [shortcut] (каноничная форма, см. [Snippet.shortcut]) или
+     * `null`. Используется глобальным обработчиком хоткеев. Пустой/`null` запрос — всегда `null`
+     * (не матчим сниппеты без назначенного хоткея). При коллизии берём первый — UI не даёт назначить
+     * один хоткей дважды, но на чтении не полагаемся на это.
+     */
+    fun forShortcut(shortcut: String?): SnippetEntry? {
+        if (shortcut.isNullOrBlank()) return null
+        return snippets.firstOrNull { it.snippet.shortcut == shortcut }
+    }
+
+    /**
      * Создать (если [SnippetDraft.id] == null) или обновить сниппет и записать в стор. Возвращает
      * назначенный id. Правка существующего обновляет строку на месте.
      */
@@ -54,6 +67,8 @@ class SnippetManager(
             label = draft.label,
             command = draft.command,
             tags = draft.tags,
+            runOnHostId = draft.runOnHostId,
+            shortcut = draft.shortcut?.takeIf { it.isNotBlank() },
         )
         store.put(snippet)
         val existing = find(id)

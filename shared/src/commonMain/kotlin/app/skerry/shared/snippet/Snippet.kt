@@ -9,6 +9,12 @@ import kotlinx.serialization.Serializable
  * вставляется в активный терминал и исполняется (с переводом строки). [tags] — пользовательские
  * метки для группировки/поиска (#monitoring, #disk).
  *
+ * [runOnHostId] — куда «Run now» отправляет команду по умолчанию: `null` — текущий активный
+ * терминал (вставка на месте); непустой id — конкретный хост из каталога (открыть/использовать
+ * сессию к нему и выполнить там). [shortcut] — глобальная горячая клавиша запуска в каноничном
+ * виде (`Ctrl+Shift+D`), `null` — без хоткея. Оба поля с дефолтами: старый `snippets.json` без
+ * них читается как есть (backward-compat).
+ *
  * Секретов сниппет не содержит и в vault не хранится — это plain-конфиг рядом с хостами/туннелями.
  */
 @Serializable
@@ -17,4 +23,6 @@ data class Snippet(
     val label: String,
     val command: String,
     val tags: List<String> = emptyList(),
+    val runOnHostId: String? = null,
+    val shortcut: String? = null,
 )
