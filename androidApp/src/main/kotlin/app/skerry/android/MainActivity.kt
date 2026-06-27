@@ -5,6 +5,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import app.skerry.shared.host.FileHostStore
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.FileKnownHostsStore
@@ -23,6 +24,7 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.design.MobileDesignApp
+import app.skerry.ui.design.MobileDesignState
 import app.skerry.ui.sftp.SafBridge
 import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
@@ -34,6 +36,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -95,7 +98,33 @@ class MainActivity : FragmentActivity() {
         runBlocking { initializeVaultCrypto() }
 
         val deps = buildDependencies()
-        setContent { MobileDesignApp(deps) }
+        // Состояние макета с персистом свёрнутых папок хостов (как desktop `main.kt` через
+        // DesktopDesignState): набор имён переживает перезапуск. Создаётся один раз здесь и
+        // удерживается composition (переживание поворота берёт на себя файл-персист).
+        val dir = filesDir
+        val designState = MobileDesignState(
+            initialCollapsedGroups = readCollapsedGroups(dir),
+            onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
+        )
+        setContent { MobileDesignApp(deps, state = designState) }
+    }
+
+    /**
+     * Свёрнутые папки хостов, переживающие перезапуск: имена групп в файле `collapsed_groups` по
+     * одному на строку рядом с прочим состоянием (зеркало desktop). Отсутствует/нечитаем → пусто (все
+     * папки развёрнуты). Запись best-effort: сбой персиста не роняет UI.
+     */
+    private fun readCollapsedGroups(dir: File): Set<String> = runCatching {
+        File(dir, "collapsed_groups").readLines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }.getOrDefault(emptySet())
+
+    private fun writeCollapsedGroups(dir: File, groups: Set<String>) {
+        // Имена с переносами строк не хранимы построчно — исключаем, чтобы файл не «расщепился».
+        // Снимок берём синхронно (до ухода в IO), запись — вне UI-потока (иначе StrictMode/джанк).
+        val snapshot = groups.filterNot { it.contains('\n') || it.contains('\r') }.joinToString("\n")
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "collapsed_groups").writeText(snapshot) }
+        }
     }
 
     private fun buildDependencies(): AppDependencies {

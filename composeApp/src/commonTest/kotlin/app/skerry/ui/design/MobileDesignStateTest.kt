@@ -160,6 +160,35 @@ class MobileDesignStateTest {
         assertNull(s.editingHost)
     }
 
+    // Схлопывание папок хостов + персист (паритет desktop)
+
+    @Test
+    fun collapsed_groups_default_empty() {
+        val s = MobileDesignState()
+        assertTrue(s.collapsedGroups.isEmpty())
+        assertFalse(s.isGroupCollapsed("Production"))
+    }
+
+    @Test
+    fun collapsed_groups_honour_initial_value() {
+        val s = MobileDesignState(initialCollapsedGroups = setOf("Production"))
+        assertTrue(s.isGroupCollapsed("Production"))
+        assertFalse(s.isGroupCollapsed("Homelab"))
+    }
+
+    @Test
+    fun toggle_group_collapsed_flips_membership_and_reports_to_callback() {
+        val seen = mutableListOf<Set<String>>()
+        val s = MobileDesignState(onCollapsedGroupsChange = { seen += it })
+        s.toggleGroupCollapsed("A") // свернули
+        assertTrue(s.isGroupCollapsed("A"))
+        s.toggleGroupCollapsed("B") // свернули вторую
+        s.toggleGroupCollapsed("A") // развернули первую
+        assertFalse(s.isGroupCollapsed("A"))
+        assertTrue(s.isGroupCollapsed("B"))
+        assertEquals(listOf(setOf("A"), setOf("A", "B"), setOf("B")), seen)
+    }
+
     private fun sampleHost(): Host =
         Host(id = "host-42", label = "prod-web-01", address = "192.168.1.45", username = "root")
 }

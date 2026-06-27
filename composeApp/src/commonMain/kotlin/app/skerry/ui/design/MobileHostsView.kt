@@ -21,21 +21,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
+import app.skerry.ui.host.HostFolder
+import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.UNGROUPED_LABEL
 
 /** Превью-каталог для пути без живого [LocalHosts] (офскрин/превью) — состав и группы из макета. */
 internal val MOBILE_PREVIEW_HOSTS = listOf(
@@ -59,6 +66,11 @@ fun MobileHostsScreen(state: MobileDesignState) {
     var query by remember { mutableStateOf("") }
     var chip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
     val list = remember(hosts, query, chip) { buildMobileHostList(hosts, query, chip) }
+    // Состояние ручной сортировки (тач-DnD): жест отдаёт цель, перестановку фиксирует контроллер.
+    // Общее ядро с desktop ([HostDragState] + чистая геометрия [hostDropTarget]/[folderDropTarget]).
+    val dragState = remember { HostDragState() }
+    // Свежий список папок для drag-целей: жест читает его на момент отпускания (а не на старте).
+    val foldersUpdated = rememberUpdatedState(list.sections)
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -66,14 +78,17 @@ fun MobileHostsScreen(state: MobileDesignState) {
             HostsSearch(query, onChange = { query = it })
             HostsChips(list.chips, active = chip, onSelect = { chip = it })
             Spacer(Modifier.height(2.dp))
+            // Линия вставки при перетаскивании папки: перед папкой на целевом индексе (или в конце).
+            val otherFolders = list.sections.filter { it.name != dragState.draggingFolderName }
+            val folderLineIndex = dragState.draggingFolderName?.let { dragState.activeFolderDropIndex }
+            val folderLineBefore = folderLineIndex?.takeIf { it < otherFolders.size }?.let { otherFolders[it].name }
             list.sections.forEach { folder ->
-                HostsSectionLabel(folder.name)
-                Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    folder.hosts.forEach { host ->
-                        MobileHostRow(host, onClick = { state.openHost(host.id) })
-                    }
+                key(folder.name) {
+                    if (folder.name == folderLineBefore) MobileDropLine()
+                    MobileHostFolder(folder, state, controller, dragState) { foldersUpdated.value }
                 }
             }
+            if (folderLineIndex != null && folderLineIndex == otherFolders.size) MobileDropLine()
             Spacer(Modifier.height(96.dp)) // место под таб-бар и FAB
         }
         HostsFab(
@@ -81,6 +96,100 @@ fun MobileHostsScreen(state: MobileDesignState) {
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
         )
     }
+}
+
+/**
+ * Папка хостов: заголовок со схлопыванием (шеврон) + список строк, оба с drag-перетаскиванием для
+ * ручной сортировки. Зеркалит desktop-`LiveHostFolder`, но в мобильной вёрстке. Drag и линии-вставки
+ * активны только в живом каталоге ([controller] != null) — в превью (мок-хосты) сортировать нечего и
+ * нечем (стор отсутствует). Свёрнутая папка скрывает список хостов (и их drag-цели).
+ */
+@Composable
+private fun MobileHostFolder(
+    folder: HostFolder,
+    state: MobileDesignState,
+    controller: HostManagerController?,
+    dragState: HostDragState,
+    foldersProvider: () -> List<HostFolder>,
+) {
+    // Ключ группы папки: у пустой берём её имя (как FolderBounds), иначе группу первого хоста.
+    // Синтетический «Ungrouped» — это null-группа.
+    val group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL }
+    val collapsed = state.isGroupCollapsed(folder.name)
+    val onToggle = remember(state, folder.name) { { state.toggleGroupCollapsed(folder.name) } }
+    // Подсветка целевой папки, пока над ней тащат хост.
+    val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
+    val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
+    // Линия вставки внутри папки: индекс — без перетаскиваемого хоста (как moveHostToGroup).
+    val others = folder.hosts.filter { it.id != dragState.draggingHostId }
+    val dropIndex = if (isDropTarget) dragState.activeHostDrop?.index?.coerceIn(0, others.size) else null
+    val lineBeforeId = dropIndex?.takeIf { it < others.size }?.let { others[it].id }
+    Column(
+        Modifier
+            .alpha(folderAlpha)
+            .let { if (controller != null) it.folderRangeAnchor(dragState, folder.name) else it },
+    ) {
+        val headerMod = if (controller != null) {
+            Modifier
+                .folderHeaderAnchor(dragState, folder.name)
+                .draggableFolderHeader(dragState, folder.name, foldersProvider, longPress = true) { index ->
+                    controller.moveFolder(group, index)
+                }
+        } else {
+            Modifier
+        }
+        Box(headerMod) {
+            MobileFolderHeader(folder.name, folder.hosts.size, collapsed, isDropTarget, onToggle)
+        }
+        // Свёрнутая папка показывает только заголовок; список хостов (и его drag-цели) скрыт.
+        if (!collapsed) {
+            Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                folder.hosts.forEach { host ->
+                    key(host.id) {
+                        if (host.id == lineBeforeId) MobileDropLine(horizontal = 0.dp)
+                        // Забываем геометрию строки, когда хост уходит из списка (перенос/фильтр).
+                        // clearHostBounds безопасен и без drag (map.remove) → эффект безусловный, как desktop.
+                        DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
+                        // Лямбду открытия стабилизируем: каждый кадр drag меняет draggingHostId/activeHostDrop
+                        // и перерисовывает папку — без remember лямбда пересоздавалась бы и дёргала строку.
+                        val onOpen = remember(host.id, state) { { state.openHost(host.id) } }
+                        val rowMod = if (controller != null) {
+                            Modifier
+                                .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
+                                .hostBoundsAnchor(dragState, host.id)
+                                .draggableHostRow(dragState, host.id, foldersProvider, longPress = true) { drop ->
+                                    controller.moveHost(host.id, drop.group, drop.index)
+                                }
+                        } else {
+                            Modifier
+                        }
+                        Box(rowMod) {
+                            MobileHostRow(host, onClick = onOpen)
+                        }
+                    }
+                }
+                // Сброс в конец папки — линия после последней строки.
+                if (dropIndex != null && dropIndex == others.size) MobileDropLine(horizontal = 0.dp)
+            }
+        }
+    }
+}
+
+/**
+ * Cyan-линия-индикатор позиции, куда вставится перетаскиваемый хост/папка (паритет desktop).
+ * [horizontal] — боковой отступ: 18dp на уровне папок (внешняя колонка без отступа), 0dp внутри
+ * колонки хостов (она уже даёт `padding(horizontal = 18.dp)`, иначе линия была бы вдвое у́же строк).
+ */
+@Composable
+private fun MobileDropLine(horizontal: Dp = 18.dp) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontal, vertical = 3.dp)
+            .height(2.dp)
+            .clip(RoundedCornerShape(1.dp))
+            .background(D.cyan),
+    )
 }
 
 /** Шапка: «Hosts» (28sp) + круглый аватар-аккаунт справа (ведёт на таб More). */
@@ -172,17 +281,41 @@ private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -
     }
 }
 
-/** Заголовок секции-папки: капс, разрядка, приглушённый цвет. */
+/**
+ * Заголовок секции-папки: шеврон свёртки + капс-имя + счётчик хостов. Клик переключает свёрнутость —
+ * хит-зона строго на шевроне ([onToggle]), чтобы тап-свёртка не конфликтовала с drag-перетаскиванием
+ * заголовка (reorder папок), как на desktop. [dropTarget] подсвечивает капс-имя при сбросе хоста сюда.
+ */
 @Composable
-private fun HostsSectionLabel(name: String) {
-    Txt(
-        name.uppercase(),
-        color = D.faint,
-        size = 12.sp,
-        weight = FontWeight.SemiBold,
-        letterSpacing = 0.6.sp,
-        modifier = Modifier.padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
-    )
+private fun MobileFolderHeader(name: String, count: Int, collapsed: Boolean, dropTarget: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            Modifier
+                .size(22.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onToggle,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = D.faint)
+        }
+        Txt(
+            name.uppercase(),
+            color = if (dropTarget) D.cyanBright else D.faint,
+            size = 12.sp,
+            weight = FontWeight.SemiBold,
+            letterSpacing = 0.6.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Txt(count.toString(), color = D.faint, size = 11.sp)
+    }
 }
 
 /**

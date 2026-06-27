@@ -33,7 +33,13 @@ enum class MobileRoute { Terminal, HostDetail, Ports, Known, Team }
  * [app.skerry.ui.session.SessionsController]. Блокировка vault живёт в `VaultGate`, а не здесь.
  */
 @Stable
-class MobileDesignState {
+class MobileDesignState(
+    // Свёрнутые папки хостов в списке (имена групп). Стартовое значение читается из персиста при
+    // запуске, колбэк пишет его обратно — состояние папок переживает перезапуск. Дефолты (всё
+    // развёрнуто, no-op) сохраняют прежнее поведение для превью/тестов. Зеркалит [DesktopDesignState].
+    initialCollapsedGroups: Set<String> = emptySet(),
+    private val onCollapsedGroupsChange: (Set<String>) -> Unit = {},
+) {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
     var route: MobileRoute? by mutableStateOf(null); private set
     var sheetNewConn: Boolean by mutableStateOf(false); private set
@@ -81,6 +87,18 @@ class MobileDesignState {
     fun pop() {
         route = null
         selectedHostId = null
+    }
+
+    /** Имена свёрнутых папок хостов (их список хостов скрыт). */
+    var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
+
+    /** Свёрнута ли папка [name] (её список хостов скрыт). */
+    fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
+
+    /** Свернуть/развернуть папку [name] и сообщить новый набор наружу (для персиста). */
+    fun toggleGroupCollapsed(name: String) {
+        collapsedGroups = if (name in collapsedGroups) collapsedGroups - name else collapsedGroups + name
+        onCollapsedGroupsChange(collapsedGroups)
     }
 
     /** Открыть лист в режиме создания нового хоста (форма пустая). */

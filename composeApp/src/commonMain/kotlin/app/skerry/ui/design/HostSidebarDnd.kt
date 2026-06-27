@@ -1,12 +1,15 @@
 package app.skerry.ui.design
 
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -138,63 +141,74 @@ fun Modifier.folderHeaderAnchor(state: HostDragState, name: String): Modifier =
 
 /**
  * Делает строку хоста перетаскиваемой. [folders] читается лениво (на момент жеста — свежий список),
- * [onDrop] получает целевую папку и индекс и переставляет хост через контроллер.
+ * [onDrop] получает целевую папку и индекс и переставляет хост через контроллер. [longPress] выбирает
+ * старт жеста: на desktop — сразу по drag (мышь), на тач (mobile) — после долгого нажатия, иначе drag
+ * перехватывал бы вертикальный скролл списка вместо его прокрутки.
  */
 fun Modifier.draggableHostRow(
     state: HostDragState,
     hostId: String,
     folders: () -> List<HostFolder>,
+    longPress: Boolean = false,
     onDrop: (HostDrop) -> Unit,
-): Modifier = pointerInput(hostId) {
+): Modifier = pointerInput(hostId, longPress) {
     var moved = false
-    detectDragGestures(
-        onDragStart = { offset ->
-            moved = false
-            state.startHostDrag(hostId, offset.y)
-            state.refreshHostDrop(folders())
-        },
-        onDrag = { change, amount ->
-            change.consume()
-            moved = true
-            state.dragBy(amount.y)
-            state.refreshHostDrop(folders())
-        },
-        onDragEnd = {
-            // Без реального перемещения (микро-жест на тапе) не трогаем каталог и диск.
-            if (moved) state.currentHostDrop(folders())?.let(onDrop)
-            state.endDrag()
-        },
-        onDragCancel = { state.endDrag() },
-    )
+    val onStart = { offset: Offset ->
+        moved = false
+        state.startHostDrag(hostId, offset.y)
+        state.refreshHostDrop(folders())
+    }
+    val onMove = { change: PointerInputChange, amount: Offset ->
+        change.consume()
+        moved = true
+        state.dragBy(amount.y)
+        state.refreshHostDrop(folders())
+    }
+    val onEnd = {
+        // Без реального перемещения (микро-жест на тапе) не трогаем каталог и диск.
+        if (moved) state.currentHostDrop(folders())?.let(onDrop)
+        state.endDrag()
+    }
+    val onCancel = { state.endDrag() }
+    if (longPress) {
+        detectDragGesturesAfterLongPress(onDragStart = onStart, onDrag = onMove, onDragEnd = onEnd, onDragCancel = onCancel)
+    } else {
+        detectDragGestures(onDragStart = onStart, onDrag = onMove, onDragEnd = onEnd, onDragCancel = onCancel)
+    }
 }
 
 /**
- * Делает заголовок папки перетаскиваемым. [onDrop] получает целевой индекс среди папок и
- * переставляет блок через контроллер.
+ * Делает заголовок папки перетаскиваемым. [onDrop] получает целевой индекс среди папок и переставляет
+ * блок через контроллер. [longPress] — см. [draggableHostRow]: тач-старт по долгому нажатию, чтобы не
+ * мешать скроллу.
  */
 fun Modifier.draggableFolderHeader(
     state: HostDragState,
     name: String,
     folders: () -> List<HostFolder>,
+    longPress: Boolean = false,
     onDrop: (Int) -> Unit,
-): Modifier = pointerInput(name) {
+): Modifier = pointerInput(name, longPress) {
     var moved = false
-    detectDragGestures(
-        onDragStart = { offset ->
-            moved = false
-            state.startFolderDrag(name, offset.y)
-            state.refreshFolderDrop(folders())
-        },
-        onDrag = { change, amount ->
-            change.consume()
-            moved = true
-            state.dragBy(amount.y)
-            state.refreshFolderDrop(folders())
-        },
-        onDragEnd = {
-            if (moved) onDrop(state.currentFolderDropIndex(folders()))
-            state.endDrag()
-        },
-        onDragCancel = { state.endDrag() },
-    )
+    val onStart = { offset: Offset ->
+        moved = false
+        state.startFolderDrag(name, offset.y)
+        state.refreshFolderDrop(folders())
+    }
+    val onMove = { change: PointerInputChange, amount: Offset ->
+        change.consume()
+        moved = true
+        state.dragBy(amount.y)
+        state.refreshFolderDrop(folders())
+    }
+    val onEnd = {
+        if (moved) onDrop(state.currentFolderDropIndex(folders()))
+        state.endDrag()
+    }
+    val onCancel = { state.endDrag() }
+    if (longPress) {
+        detectDragGesturesAfterLongPress(onDragStart = onStart, onDrag = onMove, onDragEnd = onEnd, onDragCancel = onCancel)
+    } else {
+        detectDragGestures(onDragStart = onStart, onDrag = onMove, onDragEnd = onEnd, onDragCancel = onCancel)
+    }
 }
