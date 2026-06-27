@@ -26,6 +26,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -51,6 +54,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.host.Host
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.shortCipher
@@ -61,8 +65,11 @@ import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.groupHostsByFolder
 import app.skerry.ui.metrics.HostMetrics
 import app.skerry.ui.metrics.formatUptime
+import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.snippet.SnippetEntry
+import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.terminal.TerminalScreen
 
 /** Общая высота шапки панели (основной и split) — чтобы заголовки были вровень. */
@@ -629,6 +636,8 @@ private fun SessionToolbar(state: DesktopDesignState) {
                 IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
                 // Tunnels — глобальный раздел (привычная модель SSH-клиентов), всегда открывается оверлеем.
                 IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
+                // Быстрый запуск сниппета в активную сессию без ухода в раздел Snippets.
+                SnippetPaletteButton(active)
                 IconBtn("info", onClick = state::toggleInfo)
                 // Power: рвёт активную сессию (живой путь) — спрашиваем подтверждение (деструктивно, без
                 // авто-реконнекта); в мок-режиме — no-op заглушка.
@@ -636,6 +645,86 @@ private fun SessionToolbar(state: DesktopDesignState) {
             }
         }
         HLine()
+    }
+}
+
+// Палитра сниппетов: быстрый запуск сохранённой команды в активный терминал прямо из тулбара.
+
+@Composable
+private fun SnippetPaletteButton(active: Session?) {
+    val manager = LocalSnippets.current
+    val terminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+    // Ключ active: при переключении вкладок палитра не должна оставаться открытой над чужим тулбаром.
+    var open by remember(active) { mutableStateOf(false) }
+    if (manager == null) return
+    Box {
+        // Без подключённой сессии бежать некуда — кнопка приглушена и не открывается.
+        IconBtn("bolt", onClick = { if (terminal != null) open = !open }, tint = if (terminal != null) D.dim else D.faint)
+        if (open && terminal != null) {
+            Popup(
+                alignment = Alignment.TopEnd,
+                onDismissRequest = { open = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                SnippetPalette(manager) { entry ->
+                    manager.run(entry.id) { text -> terminal.send(text) }
+                    open = false
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> Unit) {
+    val mono = LocalFonts.current.mono
+    var query by remember { mutableStateOf("") }
+    val all = manager.snippets
+    val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
+    // Автофокус строки поиска при открытии — палитра задумана для запуска с клавиатуры.
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { searchFocus.requestFocus() }
+    Column(
+        Modifier.width(320.dp).clip(RoundedCornerShape(9.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(9.dp)).padding(6.dp),
+    ) {
+        val style = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Sym("search", size = 15.sp, color = D.faint)
+            Box(Modifier.weight(1f)) {
+                if (query.isEmpty()) Txt("Run a snippet…", color = D.faint, size = 12.5.sp, font = mono)
+                BasicTextField(query, { query = it }, singleLine = true, textStyle = style, cursorBrush = SolidColor(D.cyan), modifier = Modifier.fillMaxWidth().focusRequester(searchFocus))
+            }
+        }
+        Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
+            if (filtered.isEmpty()) {
+                Txt(if (all.isEmpty()) "No snippets yet" else "No matches", color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+            } else {
+                filtered.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Unit) {
+    val s = entry.snippet
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = 7.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Sym("code_blocks", size = 14.sp, color = D.dim)
+            Txt(s.label.ifBlank { "Untitled" }, color = D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+            if (!s.shortcut.isNullOrBlank()) {
+                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(D.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                    Txt(s.shortcut!!, color = D.faint, size = 10.sp, font = mono)
+                }
+            }
+        }
+        Txt(s.command, color = D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
     }
 }
 

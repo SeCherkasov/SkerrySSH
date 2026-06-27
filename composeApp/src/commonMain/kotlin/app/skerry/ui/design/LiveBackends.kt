@@ -139,6 +139,14 @@ val LocalTunnels: ProvidableCompositionLocal<TunnelManager?> = staticComposition
 val LocalSnippets: ProvidableCompositionLocal<SnippetManager?> = staticCompositionLocalOf { null }
 
 /**
+ * Действие «Run on host» сниппета: открыть/использовать сессию к [Host] и выполнить переданную команду
+ * сразу после подключения (привычная модель SSH-клиентов — запуск на выбранном хосте, а не только в активном
+ * терминале). Резолвит секрет тем же путём, что [LocalConnectHost] (keychain или запрос пароля).
+ * Поставляется [DesktopDesignApp]; дефолт — no-op (мок-путь/превью).
+ */
+val LocalRunSnippetOnHost: ProvidableCompositionLocal<(Host, String) -> Unit> = staticCompositionLocalOf { { _, _ -> } }
+
+/**
  * Открытый [Vault] за гейтом мастер-пароля — нужен экрану настроек (More), чтобы включить/выключить
  * разблокировку биометрией (обёртка `dataKey` под `bioKey`). `null` — мок-путь/превью без vault.
  */

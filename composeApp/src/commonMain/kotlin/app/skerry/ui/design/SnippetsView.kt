@@ -4,6 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,8 +17,11 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,17 +32,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.host.Host
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.snippet.SnippetDraft
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.snippet.SnippetShortcut
 
 private data class MockSnippet(val icon: String, val title: String, val cmd: String, val selected: Boolean = false)
 
@@ -134,7 +155,7 @@ private fun LiveSnippetsView(manager: SnippetManager, state: DesktopDesignState,
     }
 }
 
-private fun SnippetEntry.matches(query: String): Boolean {
+internal fun SnippetEntry.matches(query: String): Boolean {
     val q = query.trim().lowercase()
     return snippet.label.lowercase().contains(q) ||
         snippet.command.lowercase().contains(q) ||
@@ -172,19 +193,38 @@ private fun SnippetEditor(
 ) {
     var label by remember { mutableStateOf(entry?.snippet?.label ?: "") }
     var command by remember { mutableStateOf(entry?.snippet?.command ?: "") }
-    var tagsText by remember { mutableStateOf(entry?.snippet?.tags?.joinToString(", ") ?: "") }
+    var tags by remember { mutableStateOf(entry?.snippet?.tags ?: emptyList()) }
+    var tagDraft by remember { mutableStateOf("") }
+    var runOnHostId by remember { mutableStateOf(entry?.snippet?.runOnHostId) }
+    var shortcut by remember { mutableStateOf(entry?.snippet?.shortcut) }
 
-    val tags = remember(tagsText) { parseSnippetTags(tagsText) }
     val canSave = label.isNotBlank() && command.isNotBlank()
 
-    // Активный терминал для «Run now»: команда уходит в живую сессию вкладки. Нет подключённой
-    // сессии — кнопка недоступна (бежать некуда).
+    // Активный терминал для «Run now» в текущую вкладку. «Run on host» открывает собственную сессию,
+    // поэтому от активного терминала не зависит.
     val sessions = LocalSessions.current
     val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-    val canRun = canSave && terminal != null
+    val hosts = LocalHosts.current
+    val runOnHost = LocalRunSnippetOnHost.current
+    // Выбранный хост «Run on» (если назначен и ещё существует в каталоге).
+    val targetHost = runOnHostId?.let { id -> hosts?.hosts?.firstOrNull { it.id == id } }
+    // Бежать можно: в текущую вкладку — нужна подключённая сессия; на хост — он должен существовать.
+    val canRun = canSave && (if (runOnHostId == null) terminal != null else targetHost != null)
+
+    fun addTags(raw: String) {
+        tags = (tags + parseSnippetTags(raw)).distinct()
+        tagDraft = ""
+    }
 
     fun persist(): String = manager.save(
-        SnippetDraft(id = entry?.id, label = label.trim(), command = command, tags = tags),
+        SnippetDraft(
+            id = entry?.id,
+            label = label.trim(),
+            command = command,
+            tags = tags,
+            runOnHostId = runOnHostId,
+            shortcut = shortcut,
+        ),
     )
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -209,27 +249,37 @@ private fun SnippetEditor(
             }
             Column(Modifier.padding(top = 20.dp)) {
                 FieldLabelSnip("Tags")
-                SnipEditField(tagsText, { tagsText = it }, "monitoring, disk", mono)
+                SnipTagsField(
+                    tags = tags,
+                    draft = tagDraft,
+                    onDraftChange = { v -> if (v.contains(',')) addTags(v) else tagDraft = v },
+                    onCommit = { addTags(tagDraft) },
+                    onRemove = { tag -> tags = tags - tag },
+                )
             }
             Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
                     FieldLabelSnip("Run on")
-                    SnipSelect("Current host")
+                    RunOnPicker(hosts?.hosts ?: emptyList(), runOnHostId) { runOnHostId = it }
                 }
                 Column(Modifier.weight(1f)) {
                     FieldLabelSnip("Shortcut")
-                    SnipInput("—", mono)
+                    ShortcutField(shortcut, mono) { shortcut = it }
                 }
             }
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrimaryButton(
                     "Run now",
                     onClick = {
-                        // Запуск сохраняет текущий черновик (что видишь — то и бежит), затем шлёт его
-                        // команду в терминал и показывает вкладку, чтобы был виден вывод.
+                        // Запуск сохраняет текущий черновик (что видишь — то и бежит), затем выполняет
+                        // его в выбранной цели и показывает терминал, чтобы был виден вывод.
                         val id = persist()
                         onSaved(id)
-                        manager.run(id) { text -> terminal?.send(text) }
+                        if (runOnHostId == null) {
+                            manager.run(id) { text -> terminal?.send(text) }
+                        } else {
+                            targetHost?.let { runOnHost(it, command) }
+                        }
                         state.clearOverlay()
                     },
                     icon = "play_arrow",
@@ -262,6 +312,135 @@ private fun parseSnippetTags(text: String): List<String> =
         .map { it.trim().removePrefix("#") }
         .filter { it.isNotEmpty() }
         .distinct()
+
+// --- Run on: выбор цели запуска (текущая вкладка или конкретный хост) ---
+
+@Composable
+private fun RunOnPicker(hosts: List<Host>, selectedId: String?, onSelect: (String?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val label = selectedId?.let { id -> hosts.firstOrNull { it.id == id }?.label } ?: "Current host"
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).clickable { open = !open }.padding(horizontal = 11.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Txt(label, color = D.text, size = 13.sp)
+                Sym("expand_more", size = 16.sp, color = D.faint)
+            }
+        },
+        menu = { width ->
+            Column(
+                Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(7.dp)).padding(vertical = 4.dp).heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
+            ) {
+                RunOnRow("Current host", selectedId == null) { onSelect(null); open = false }
+                hosts.forEach { h -> key(h.id) { RunOnRow(h.label, selectedId == h.id) { onSelect(h.id); open = false } } }
+            }
+        },
+    )
+}
+
+@Composable
+private fun RunOnRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Txt(label, color = if (selected) D.cyanBright else D.text, size = 12.5.sp)
+        if (selected) Sym("check", size = 14.sp, color = D.cyanBright)
+    }
+}
+
+// --- Теги чипсами (как в New connection) ---
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SnipTagsField(
+    tags: List<String>,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    onCommit: () -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    val mono = LocalFonts.current.mono
+    FlowRow(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        tags.forEach { tag -> key(tag) { SnipTagPill(tag) { onRemove(tag) } } }
+        val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
+        BasicTextField(
+            value = draft,
+            onValueChange = onDraftChange,
+            singleLine = true,
+            textStyle = textStyle,
+            cursorBrush = SolidColor(D.cyan),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onCommit() }),
+            modifier = Modifier.widthIn(min = 72.dp),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (draft.isEmpty()) Txt("add tag…", color = D.faint, size = 12.5.sp, font = mono)
+                    inner()
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SnipTagPill(tag: String, onRemove: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(start = 9.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Txt("#$tag", color = D.cyanBright, size = 11.sp)
+        Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(2.dp), contentAlignment = Alignment.Center) {
+            Sym("close", size = 12.sp, color = D.cyanBright)
+        }
+    }
+}
+
+// --- Захват горячей клавиши сниппета ---
+
+@Composable
+private fun ShortcutField(value: String?, mono: FontFamily, onCapture: (String?) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val requester = remember { FocusRequester() }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(7.dp))
+            .background(D.bg)
+            .border(1.dp, if (focused) D.cyan else D.cyan14, RoundedCornerShape(7.dp))
+            .focusRequester(requester)
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    // Очистка хоткея: Esc/Backspace/Delete снимают назначение.
+                    Key.Escape, Key.Backspace, Key.Delete -> { onCapture(null); true }
+                    else -> {
+                        val s = SnippetShortcut.format(
+                            event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
+                        )
+                        if (s != null) { onCapture(s); true } else false
+                    }
+                }
+            }
+            .clickable { requester.requestFocus() }
+            .padding(horizontal = 11.dp, vertical = 9.dp),
+    ) {
+        val text = value ?: if (focused) "Press keys…" else "—"
+        Txt(text, color = if (value != null) D.text else D.faint, size = 13.sp, font = mono)
+    }
+}
 
 // --- Статичный мок (офскрин-рендер/превью без менеджера) ---
 

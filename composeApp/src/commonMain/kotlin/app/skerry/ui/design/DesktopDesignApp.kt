@@ -32,6 +32,15 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +65,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.snippet.SnippetShortcut
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
@@ -205,6 +215,11 @@ private fun DesktopChrome(
     var pendingSplitHost by remember { mutableStateOf<Host?>(null) }
     var pendingSplitParent by remember { mutableStateOf<String?>(null) }
 
+    // «Run on host» сниппета без привязанного секрета → спрашиваем пароль, запоминая И команду, чтобы
+    // после ввода открыть сессию к хосту и выполнить её там (см. runSnippetOnHost / DesktopPasswordDialog).
+    var pendingSnippetHost by remember { mutableStateOf<Host?>(null) }
+    var pendingSnippetCommand by remember { mutableStateOf("") }
+
     // Стабильная лямбда коннекта: без remember она пересоздавалась бы на каждой рекомпозиции и,
     // уходя в staticCompositionLocalOf, инвалидировала бы всех потребителей [LocalConnectHost].
     // Резолв одноуровневый: хост → keychain-секрет по credentialId → SshAuth; нет привязки → пароль.
@@ -215,6 +230,20 @@ private fun DesktopChrome(
                 openHostSession(sessions, state, host, credential.toSshAuth())
             } else {
                 pendingHost = host
+            }
+        }
+    }
+
+    // «Run on host» сниппета: открыть сессию к хосту и выполнить команду после подключения. Резолв
+    // секрета как у connectHost; без привязки — запрос пароля с сохранённой командой.
+    val runSnippetOnHost = remember(sessions, credentials, state) {
+        { host: Host, command: String ->
+            val credential = credentials?.find(host.credentialId)
+            if (credential != null) {
+                openHostSession(sessions, state, host, credential.toSshAuth()) { it.send(command + "\n") }
+            } else {
+                pendingSnippetHost = host
+                pendingSnippetCommand = command
             }
         }
     }
@@ -245,6 +274,8 @@ private fun DesktopChrome(
             pendingHost = null
             pendingSplitHost = null
             pendingSplitParent = null
+            pendingSnippetHost = null
+            pendingSnippetCommand = ""
             // Висящее подтверждение разрыва/закрытия сбрасываем тоже — после unlock действие требует
             // свежего намерения пользователя (как pendingHost), а не «всплывает» поверх.
             state.dismissClose()
@@ -263,9 +294,22 @@ private fun DesktopChrome(
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
         LocalConnectSplit provides connectSplitHost,
+        LocalRunSnippetOnHost provides runSnippetOnHost,
         LocalCredentials provides credentials,
     ) {
-        Box(Modifier.fillMaxSize().background(D.bg)) {
+        // Глобальный хоткей сниппета: preview-события идут от корня к фокусу, поэтому корневой Box
+        // перехватывает аккорд раньше терминала. Совпал сохранённый shortcut и есть подключённая
+        // сессия — выполняем команду в её терминале и гасим событие. ГЕЙТ: срабатывает только когда
+        // на экране живая сессия (нет app-оверлея/модалки/настроек) — иначе аккорд, набранный в полях
+        // редактора сниппета (Command/ShortcutField) или New connection, ушёл бы командой в терминал.
+        val snippets = LocalSnippets.current
+        val onRootKey = remember(snippets, sessions, state) {
+            { event: KeyEvent ->
+                if (state.appOverlay != null || state.modalOpen || state.settingsOpen) false
+                else runSnippetHotkey(event, snippets, sessions)
+            }
+        }
+        Box(Modifier.fillMaxSize().background(D.bg).onPreviewKeyEvent(onRootKey)) {
             Column(Modifier.fillMaxSize()) {
                 TitleBar(state, onLockWithTunnels)
                 HLine()
@@ -295,6 +339,17 @@ private fun DesktopChrome(
                         val parentId = pendingSplitParent
                         pendingSplitHost = null; pendingSplitParent = null
                         openSplitSession(sessions, state, parentId, host, SshAuth.Password(pw))
+                    },
+                )
+            }
+            pendingSnippetHost?.let { host ->
+                DesktopPasswordDialog(
+                    host = host,
+                    onDismiss = { pendingSnippetHost = null; pendingSnippetCommand = "" },
+                    onConnect = { pw ->
+                        val command = pendingSnippetCommand
+                        pendingSnippetHost = null; pendingSnippetCommand = ""
+                        openHostSession(sessions, state, host, SshAuth.Password(pw)) { it.send(command + "\n") }
                     },
                 )
             }
@@ -362,10 +417,32 @@ private fun DesktopChrome(
 }
 
 /**
+ * Глобальный хоткей сниппета: на KeyDown сериализует аккорд ([SnippetShortcut]), ищет сниппет с этим
+ * хоткеем и, если есть подключённая сессия, выполняет его команду в её терминале. Возвращает `true`
+ * (событие поглощено) только при реальном запуске — иначе клавиша уходит дальше (в терминал и т.д.).
+ */
+private fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, sessions: SessionsController?): Boolean {
+    if (event.type != KeyEventType.KeyDown || manager == null) return false
+    val combo = SnippetShortcut.format(
+        event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
+    ) ?: return false
+    val entry = manager.forShortcut(combo) ?: return false
+    val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
+    manager.run(entry.id) { terminal.send(it) }
+    return true
+}
+
+/**
  * Подключиться к [host] с [auth]: если активна пустая вкладка («+») — коннект в неё, иначе новая
  * вкладка ([SessionsController.connect]). Затем переключаемся на терминал (сбрасывая app-оверлей).
  */
-private fun openHostSession(sessions: SessionsController?, state: DesktopDesignState, host: Host, auth: SshAuth) {
+private fun openHostSession(
+    sessions: SessionsController?,
+    state: DesktopDesignState,
+    host: Host,
+    auth: SshAuth,
+    onConnected: ((app.skerry.ui.terminal.TerminalScreenState) -> Unit)? = null,
+) {
     // Отмечаем хост в секции RECENT сайдбара (новейший — первым, переживает перезапуск).
     state.recordRecentHost(host.id)
     sessions?.connect(
@@ -374,6 +451,7 @@ private fun openHostSession(sessions: SessionsController?, state: DesktopDesignS
         subtitle = host.connectionSubtitle(),
         target = host.toTarget(),
         auth = auth,
+        onConnected = onConnected,
     )
     // Живой режим: подвью держит сама вкладка — лишь снимаем оверлей, чтобы показать её терминал.
     // Мок/превью (нет сессий): фолбэк на Terminal через showView.
