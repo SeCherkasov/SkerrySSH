@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -29,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -121,7 +124,32 @@ private fun HostsSidebar(state: DesktopDesignState) {
     Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
             HostSearchField(state, mono)
-            Row(Modifier.padding(top = 9.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            // Лента тегов-фильтров уезжает за край (узкий сайдбар) — прокручиваем по горизонтали. На
+            // desktop вертикальное колесо мыши само в горизонталь не переводится, поэтому ловим Scroll
+            // и крутим [chipScroll] вручную (delta.y, а если ось горизонтальная — delta.x); на тач/Android
+            // прокрутка работает обычным drag через horizontalScroll.
+            val chipScroll = rememberScrollState()
+            val chipScope = rememberCoroutineScope()
+            Row(
+                Modifier
+                    .padding(top = 9.dp)
+                    .horizontalScroll(chipScroll)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.type != PointerEventType.Scroll) continue
+                                val d = event.changes.firstOrNull()?.scrollDelta ?: continue
+                                val delta = if (d.y != 0f) d.y else d.x
+                                if (delta != 0f) {
+                                    chipScope.launch { chipScroll.scrollBy(delta * 64f) }
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+                        }
+                    },
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
                 if (liveHosts != null) {
                     // Чипсы = теги живого каталога; клик переключает фильтр.
                     chips.forEach { chip ->
@@ -310,8 +338,10 @@ private fun RecentSectionHeader() {
 }
 
 /**
- * Строка недавнего подключения: иконка истории + `user@address` (моноширинный, как в макете). Клик
- * переподключает к хосту через [LocalConnectHost] — тот же путь, что клик по строке в каталоге.
+ * Строка недавнего подключения: иконка истории + имя хоста ([Host.label]) с `user@address` вторичной
+ * подписью под ним — иначе по голому `root@192.168.0.1` непонятно, какой именованный хост это (адреса
+ * повторяются/безлики). Клик переподключает к хосту через [LocalConnectHost] — тот же путь, что клик
+ * по строке в каталоге.
  */
 @Composable
 private fun RecentHostRow(host: Host, mono: FontFamily) {
@@ -330,11 +360,18 @@ private fun RecentHostRow(host: Host, mono: FontFamily) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Sym("history", size = 14.sp, color = D.faint)
-        Txt(
-            "${host.username}@${host.address}",
-            color = D.dim, size = 11.5.sp, font = mono,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-        )
+        Column(Modifier.weight(1f)) {
+            Txt(
+                host.label,
+                color = D.dim, size = 12.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            Txt(
+                "${host.username}@${host.address}",
+                color = D.faint, size = 10.5.sp, font = mono,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
