@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -91,6 +92,8 @@ private fun MobileKnownHeader(onBack: () -> Unit) {
  */
 @Composable
 private fun LiveMobileKnownBody(controller: KnownHostsController, mono: FontFamily) {
+    // Экран мог открыться после того, как реконнект записал новый ключ в общий стор — перечитываем.
+    LaunchedEffect(Unit) { controller.refresh() }
     val mismatches = controller.mismatches
     val entries = controller.entries
     Column(

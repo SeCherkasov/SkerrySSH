@@ -79,6 +79,20 @@ class KnownHostsControllerTest {
     }
 
     @Test
+    fun `refresh picks up keys added to the store after construction`() {
+        // Реконнект пишет новый ключ в общий стор из потока TOFU — view должен подхватить его, когда
+        // экран снова откроется и вызовет refresh(), а не только после перезапуска приложения.
+        val store = fakeStore(KnownHost("prod", 22, ed, "SHA256:AAA", ""))
+        val controller = KnownHostsController(store, fakeMismatches())
+        assertEquals(listOf("prod"), controller.entries.map { it.host.host })
+
+        store.add(KnownHost("db", 22, ed, "SHA256:DB", ""))
+        controller.refresh()
+
+        assertEquals(listOf("prod", "db"), controller.entries.map { it.host.host })
+    }
+
+    @Test
     fun `shortFingerprint strips the prefix and elides the middle`() {
         assertEquals("8c3F1a2bQz…wQ1z", shortFingerprint("SHA256:8c3F1a2bQzABCDEFwQ1z"))
         assertEquals("short", shortFingerprint("SHA256:short"))
