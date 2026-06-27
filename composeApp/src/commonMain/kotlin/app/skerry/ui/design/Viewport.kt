@@ -12,7 +12,7 @@ import app.skerry.ui.session.SessionView
 fun Viewport(state: DesktopDesignState) {
     when (state.appOverlay) {
         DesktopView.Ports -> TunnelsView()
-        DesktopView.Snippets -> SnippetsView()
+        DesktopView.Snippets -> SnippetsView(state)
         DesktopView.Vault -> VaultView()
         DesktopView.Known -> KnownHostsView()
         DesktopView.Teams -> TeamsView()

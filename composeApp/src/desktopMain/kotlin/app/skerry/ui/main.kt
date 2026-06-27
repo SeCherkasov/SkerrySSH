@@ -22,10 +22,12 @@ import app.skerry.shared.vault.VaultMigration
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.initializeVaultCrypto
+import app.skerry.shared.snippet.FileSnippetStore
 import app.skerry.shared.tunnel.FileTunnelStore
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
 import app.skerry.ui.vault.ResetScope
@@ -213,6 +215,9 @@ fun main() {
             resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
             scope = tunnelScope,
         ) { UUID.randomUUID().toString() }
+        // Сохранённые сниппеты (модель Termius): библиотека команд в snippets.json. Plain-конфиг —
+        // секретов не содержат, vault не требуют; запуск идёт в активный терминал из самого UI.
+        val snippets = SnippetManager(FileSnippetStore(dir.resolve("snippets.json"))) { UUID.randomUUID().toString() }
         // Внешняя чистка при безвозвратном сбросе vault (забытый пароль / битый файл). Файл vault уже
         // стёрт контроллером (Vault.reset) и теперь заблокирован, поэтому credentials.reload() здесь НЕ
         // зовём (он требует открытого vault) — список секретов перечитается при создании нового vault.
@@ -227,6 +232,7 @@ fun main() {
                 ResetScope.Everything -> {
                     tunnels.closeAll()
                     tunnels.tunnels.toList().forEach { tunnels.delete(it.id) }
+                    snippets.snippets.toList().forEach { snippets.delete(it.id) }
                     knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
                     knownHosts.entries.toList().forEach { knownHosts.forget(it) }
                     hostStore.all().forEach { hostStore.remove(it.id) }
@@ -237,7 +243,7 @@ fun main() {
             }
             hosts.reload()
         }
-        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels)
+        val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
@@ -276,6 +282,7 @@ fun main() {
                     keyGenerator = deps.keyGenerator,
                     certificateInspector = deps.certificateInspector,
                     tunnels = deps.tunnels,
+                    snippets = deps.snippets,
                     onVaultUnlocked = onVaultUnlocked,
                     onVaultReset = onVaultReset,
                 )

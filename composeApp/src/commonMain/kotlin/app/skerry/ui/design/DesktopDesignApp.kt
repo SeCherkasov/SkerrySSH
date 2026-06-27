@@ -55,6 +55,7 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
@@ -107,6 +108,7 @@ fun DesktopDesignApp(
     keyGenerator: SshKeyGenerator? = null,
     certificateInspector: SshCertificateInspector? = null,
     tunnels: TunnelManager? = null,
+    snippets: SnippetManager? = null,
     features: FeatureFlags = FeatureFlags(),
     // Вызывается один раз после разблокировки vault, до перечитывания списков — точка для миграции
     // данных (схлопывание двухуровневой модели → хост ссылается на keychain-секрет). No-op в мок/превью.
@@ -153,6 +155,7 @@ fun DesktopDesignApp(
         LocalCredentials provides credentials,
         LocalTestTransport provides (testTransport ?: transport),
         LocalTunnels provides tunnels,
+        LocalSnippets provides snippets,
         LocalFeatures provides features,
         LocalSftpPrefs provides sftpPrefs,
     ) {

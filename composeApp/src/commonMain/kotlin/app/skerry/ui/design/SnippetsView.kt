@@ -2,6 +2,7 @@ package app.skerry.ui.design
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,34 +10,263 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.snippet.SnippetDraft
+import app.skerry.ui.snippet.SnippetEntry
+import app.skerry.ui.snippet.SnippetManager
 
-private data class Snippet(val icon: String, val title: String, val cmd: String, val selected: Boolean = false)
+private data class MockSnippet(val icon: String, val title: String, val cmd: String, val selected: Boolean = false)
 
-private val SNIPPETS = listOf(
-    Snippet("monitoring", "Disk usage report", "df -h | sort -k5 -r", selected = true),
-    Snippet("memory", "Top memory procs", "ps aux --sort=-%mem | head"),
-    Snippet("restart_alt", "Restart nginx", "sudo systemctl reload nginx"),
-    Snippet("cleaning_services", "Clear docker cache", "docker system prune -af"),
+private val MOCK_SNIPPETS = listOf(
+    MockSnippet("monitoring", "Disk usage report", "df -h | sort -k5 -r", selected = true),
+    MockSnippet("memory", "Top memory procs", "ps aux --sort=-%mem | head"),
+    MockSnippet("restart_alt", "Restart nginx", "sudo systemctl reload nginx"),
+    MockSnippet("cleaning_services", "Clear docker cache", "docker system prune -af"),
 )
 
-/** Snippets view: библиотека сниппетов (sidebar) + редактор (main). */
+/**
+ * Snippets — ГЛОБАЛЬНЫЙ раздел (модель Termius): библиотека сохранённых команд (sidebar) + редактор
+ * (main). Сниппет самостоятелен (plain-конфиг, секретов не содержит); «Run now» вставляет команду в
+ * активный терминал. Когда менеджер подан ([LocalSnippets]) — живой список; без него (офскрин-рендер/
+ * превью) показывается статичный мок ([MOCK_SNIPPETS]).
+ */
 @Composable
-fun SnippetsView() {
+fun SnippetsView(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
+    val manager = LocalSnippets.current
+    if (manager == null) {
+        MockSnippetsView(mono)
+        return
+    }
+    LiveSnippetsView(manager, state, mono)
+}
+
+// Живой путь: библиотека сниппетов + редактор справа.
+
+@Composable
+private fun LiveSnippetsView(manager: SnippetManager, state: DesktopDesignState, mono: FontFamily) {
+    var selectedId by remember { mutableStateOf<String?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+
+    val all = manager.snippets
+    val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
+    // Выбранный сниппет: явный selectedId, иначе первый в списке (если не в режиме создания).
+    val selected = if (adding) null else (manager.find(selectedId) ?: all.firstOrNull())
+
+    Row(Modifier.fillMaxSize()) {
+        Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
+            Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
+                SnipSearchField(query, { query = it }, mono)
+            }
+            HLine()
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 8.dp)) {
+                Txt("LIBRARY", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp))
+                if (filtered.isEmpty()) {
+                    Txt(
+                        if (all.isEmpty()) "No snippets yet" else "No matches",
+                        color = D.faint, size = 11.5.sp, font = mono,
+                        modifier = Modifier.padding(start = 10.dp, top = 6.dp),
+                    )
+                } else {
+                    Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        filtered.forEach { entry ->
+                            // Стабильный onClick на id: иначе клик по любой строке (меняет selectedId
+                            // → рекомпозиция списка) пересоздавал бы лямбды у всех строк и перерисовывал их.
+                            val onClick = remember(entry.id) { { selectedId = entry.id; adding = false } }
+                            LiveSnippetRow(
+                                entry = entry,
+                                selected = !adding && entry.id == selected?.id,
+                                mono = mono,
+                                onClick = onClick,
+                            )
+                        }
+                    }
+                }
+            }
+            HLine()
+            Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                PrimaryButton("New snippet", onClick = { adding = true; selectedId = null }, icon = "add", modifier = Modifier.fillMaxWidth())
+            }
+        }
+        VLine(D.line)
+        Box(Modifier.weight(1f).fillMaxHeight().background(D.bg)) {
+            if (!adding && selected == null) {
+                EmptyEditorHint()
+            } else {
+                // key по идентичности правимого сниппета: при смене выбора/входе в «создать» поля
+                // редактора пересоздаются с нуля, а не тянут значения предыдущего.
+                key(selected?.id, adding) {
+                    SnippetEditor(
+                        entry = selected,
+                        manager = manager,
+                        state = state,
+                        mono = mono,
+                        onSaved = { id -> selectedId = id; adding = false },
+                        onDeleted = { selectedId = null; adding = false },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun SnippetEntry.matches(query: String): Boolean {
+    val q = query.trim().lowercase()
+    return snippet.label.lowercase().contains(q) ||
+        snippet.command.lowercase().contains(q) ||
+        snippet.tags.any { it.lowercase().contains(q) }
+}
+
+@Composable
+private fun LiveSnippetRow(entry: SnippetEntry, selected: Boolean, mono: FontFamily, onClick: () -> Unit) {
+    val s = entry.snippet
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (selected) D.cyan10 else Color.Transparent)
+            .border(1.dp, if (selected) D.cyan.copy(alpha = 0.18f) else Color.Transparent, RoundedCornerShape(7.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 9.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            Sym("code_blocks", size = 15.sp, color = if (selected) D.cyanBright else D.dim)
+            Txt(s.label.ifBlank { "Untitled" }, color = if (selected) D.cyanBright else D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+        }
+        Txt(s.command, color = if (selected) D.dim else D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+@Composable
+private fun SnippetEditor(
+    entry: SnippetEntry?,
+    manager: SnippetManager,
+    state: DesktopDesignState,
+    mono: FontFamily,
+    onSaved: (String) -> Unit,
+    onDeleted: () -> Unit,
+) {
+    var label by remember { mutableStateOf(entry?.snippet?.label ?: "") }
+    var command by remember { mutableStateOf(entry?.snippet?.command ?: "") }
+    var tagsText by remember { mutableStateOf(entry?.snippet?.tags?.joinToString(", ") ?: "") }
+
+    val tags = remember(tagsText) { parseSnippetTags(tagsText) }
+    val canSave = label.isNotBlank() && command.isNotBlank()
+
+    // Активный терминал для «Run now»: команда уходит в живую сессию вкладки. Нет подключённой
+    // сессии — кнопка недоступна (бежать некуда).
+    val sessions = LocalSessions.current
+    val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+    val canRun = canSave && terminal != null
+
+    fun persist(): String = manager.save(
+        SnippetDraft(id = entry?.id, label = label.trim(), command = command, tags = tags),
+    )
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Sym("code_blocks", size = 20.sp, color = D.cyanBright)
+                Txt(label.ifBlank { "New snippet" }, color = D.text, size = 17.sp, weight = FontWeight.SemiBold)
+            }
+            if (tags.isNotEmpty()) {
+                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    tags.forEach { Chip("#$it") }
+                }
+            }
+        }
+        HLine()
+        Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
+            FieldLabelSnip("Name")
+            SnipEditField(label, { label = it }, "Disk usage report", mono)
+            Column(Modifier.padding(top = 20.dp)) {
+                FieldLabelSnip("Command")
+                SnipCommandField(command, { command = it }, "df -h | sort -k5 -r", mono)
+            }
+            Column(Modifier.padding(top = 20.dp)) {
+                FieldLabelSnip("Tags")
+                SnipEditField(tagsText, { tagsText = it }, "monitoring, disk", mono)
+            }
+            Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.weight(1f)) {
+                    FieldLabelSnip("Run on")
+                    SnipSelect("Current host")
+                }
+                Column(Modifier.weight(1f)) {
+                    FieldLabelSnip("Shortcut")
+                    SnipInput("—", mono)
+                }
+            }
+            Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PrimaryButton(
+                    "Run now",
+                    onClick = {
+                        // Запуск сохраняет текущий черновик (что видишь — то и бежит), затем шлёт его
+                        // команду в терминал и показывает вкладку, чтобы был виден вывод.
+                        val id = persist()
+                        onSaved(id)
+                        manager.run(id) { text -> terminal?.send(text) }
+                        state.clearOverlay()
+                    },
+                    icon = "play_arrow",
+                    enabled = canRun,
+                    bg = if (canRun) D.cyan else D.cyan.copy(alpha = 0.3f),
+                )
+                GhostButton(
+                    "Save",
+                    onClick = { if (canSave) onSaved(persist()) },
+                    fg = if (canSave) D.text else D.faint,
+                )
+                if (entry != null) {
+                    GhostButton("Delete", onClick = { manager.delete(entry.id); onDeleted() }, fg = D.storm, border = D.storm.copy(alpha = 0.4f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyEditorHint() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Txt("Select a snippet or create a new one.", color = D.faint, size = 13.sp)
+    }
+}
+
+/** Парсинг строки тегов в список: разделители — запятая/пробел/перевод строки, ведущий `#` снимаем. */
+private fun parseSnippetTags(text: String): List<String> =
+    text.split(',', ' ', '\n', '\t')
+        .map { it.trim().removePrefix("#") }
+        .filter { it.isNotEmpty() }
+        .distinct()
+
+// --- Статичный мок (офскрин-рендер/превью без менеджера) ---
+
+@Composable
+private fun MockSnippetsView(mono: FontFamily) {
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
             Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
@@ -53,7 +283,7 @@ fun SnippetsView() {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 8.dp)) {
                 Txt("LIBRARY", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp))
                 Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SNIPPETS.forEach { SnippetRow(it, mono) }
+                    MOCK_SNIPPETS.forEach { MockSnippetRow(it, mono) }
                 }
             }
             HLine()
@@ -107,7 +337,7 @@ fun SnippetsView() {
 }
 
 @Composable
-private fun SnippetRow(snippet: Snippet, mono: FontFamily) {
+private fun MockSnippetRow(snippet: MockSnippet, mono: FontFamily) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -124,9 +354,77 @@ private fun SnippetRow(snippet: Snippet, mono: FontFamily) {
     }
 }
 
+// --- Поля редактора ---
+
 @Composable
 private fun FieldLabelSnip(text: String) {
     Txt(text.uppercase(), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
+}
+
+/** Однострочное редактируемое поле (стиль [SnipInput] + плейсхолдер + ввод). */
+@Composable
+private fun SnipEditField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
+    val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono) }
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(D.cyan),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
+                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp, font = mono)
+                inner()
+            }
+        },
+    )
+}
+
+/** Многострочное поле команды (моноширинное, тёмный фон терминала как в макете). */
+@Composable
+private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
+    val textStyle = remember(mono) { TextStyle(color = D.textBright, fontSize = 13.sp, fontFamily = mono) }
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(D.cyan),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(D.terminalBg).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
+                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp, font = mono)
+                inner()
+            }
+        },
+    )
+}
+
+/** Поле поиска по библиотеке (стиль строки поиска макета + ввод). */
+@Composable
+private fun SnipSearchField(value: String, onValueChange: (String) -> Unit, mono: FontFamily) {
+    val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(D.cyan),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Color(0x08FFFFFF)).border(1.dp, D.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Sym("search", size = 16.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt("Search snippets…", color = D.faint, size = 12.5.sp, font = mono)
+                    inner()
+                }
+            }
+        },
+    )
 }
 
 @Composable
