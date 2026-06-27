@@ -16,7 +16,6 @@ data class SnippetDraft(
     val label: String,
     val command: String,
     val tags: List<String> = emptyList(),
-    val runOnHostId: String? = null,
     val shortcut: String? = null,
 )
 
@@ -67,7 +66,6 @@ class SnippetManager(
             label = draft.label,
             command = draft.command,
             tags = draft.tags,
-            runOnHostId = draft.runOnHostId,
             shortcut = draft.shortcut?.takeIf { it.isNotBlank() },
         )
         store.put(snippet)

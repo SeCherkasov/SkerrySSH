@@ -94,8 +94,8 @@ class FileSnippetStoreTest {
     }
 
     @Test
-    fun `persists runOnHostId and shortcut across instances`() {
-        val s = Snippet("1", "Disk usage", "df -h", tags = listOf("disk"), runOnHostId = "host-7", shortcut = "Ctrl+Shift+D")
+    fun `persists shortcut across instances`() {
+        val s = Snippet("1", "Disk usage", "df -h", tags = listOf("disk"), shortcut = "Ctrl+Shift+D")
 
         FileSnippetStore(file).put(s)
 
@@ -103,14 +103,14 @@ class FileSnippetStoreTest {
     }
 
     @Test
-    fun `reads legacy snippets without the new fields`() {
-        // Старый файл (до полей runOnHostId/shortcut): должен читаться, новые поля = null.
-        file.writeText("""[{"id":"1","label":"a","command":"ls","tags":["fs"]}]""")
+    fun `reads legacy snippets ignoring the removed runOnHostId field`() {
+        // Старый файл с уже удалённым полем runOnHostId: лишнее поле игнорируется (ignoreUnknownKeys),
+        // shortcut при отсутствии = null.
+        file.writeText("""[{"id":"1","label":"a","command":"ls","tags":["fs"],"runOnHostId":"host-7"}]""")
 
         val loaded = FileSnippetStore(file).all().single()
 
         assertEquals(snip("1", "a", command = "ls", tags = listOf("fs")), loaded)
-        assertEquals(null, loaded.runOnHostId)
         assertEquals(null, loaded.shortcut)
     }
 
