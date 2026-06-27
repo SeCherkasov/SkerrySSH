@@ -435,4 +435,56 @@ class FilePaneControllerTest {
         c.moveCursor(1) // не должно падать на пустом листинге
         assertEquals(null, c.cursor)
     }
+
+    @Test
+    fun `operands returns the selected entries in display order`() = runTest {
+        val c = started()
+        c.selectOnly(c.entry("readme.txt"))
+        c.toggle(c.entry("alpha"))
+        assertEquals(listOf("alpha", "readme.txt"), c.operands().map { it.name })
+    }
+
+    @Test
+    fun `operands falls back to the cursored entry when nothing is selected`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("build.log"))
+        assertEquals(listOf("build.log"), c.operands().map { it.name })
+    }
+
+    @Test
+    fun `operands is empty on the parent row with no selection`() = runTest {
+        val c = started()
+        c.setCursorOnParent()
+        assertTrue(c.operands().isEmpty())
+    }
+
+    @Test
+    fun `deleteSelected removes every selected entry and clears the selection`() = runTest {
+        val c = started()
+        c.selectOnly(c.entry("readme.txt"))
+        c.toggle(c.entry("build.log"))
+        c.deleteSelected()
+        advanceUntilIdle()
+        val names = c.loaded().entries.map { it.name }
+        assertTrue("readme.txt" !in names && "build.log" !in names, "ожидали удаления обоих, есть: $names")
+        assertTrue(c.selection.isEmpty())
+    }
+
+    @Test
+    fun `deleteSelected falls back to the cursored entry when nothing is selected`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("alpha"))
+        c.deleteSelected()
+        advanceUntilIdle()
+        assertTrue("alpha" !in c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `deleteSelected on the parent row with no selection is a no-op`() = runTest {
+        val c = started()
+        c.setCursorOnParent()
+        c.deleteSelected()
+        advanceUntilIdle()
+        assertEquals(listOf("alpha", "zeta", "build.log", "readme.txt"), c.loaded().entries.map { it.name })
+    }
 }

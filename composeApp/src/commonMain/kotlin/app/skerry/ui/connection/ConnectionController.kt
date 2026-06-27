@@ -225,11 +225,13 @@ class ConnectionController(
             transferCoordinator ?: run {
                 val client = (connection ?: error("Нет активного соединения для SFTP")).openSftp()
                 sftpClient = client
+                val remoteBrowser = SftpFileBrowser(client, hostLabel)
                 TransferCoordinator(
                     sftp = client,
                     local = FilePaneController(localBrowser, scope),
                     localBrowser = localBrowser,
-                    remote = FilePaneController(SftpFileBrowser(client, hostLabel), scope),
+                    remote = FilePaneController(remoteBrowser, scope),
+                    remoteBrowser = remoteBrowser,
                     scope = scope,
                 ).also {
                     it.local.start()

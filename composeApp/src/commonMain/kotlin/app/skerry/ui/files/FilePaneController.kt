@@ -103,6 +103,34 @@ class FilePaneController(
         reload()
     }
 
+    /**
+     * Цель пакетных операций активной панели (F5/F6/F8) в стиле mc: помеченные строки, если выделение
+     * непусто; иначе — строка под курсором (одиночный объект). На «..»/пустом каталоге без выделения —
+     * пусто. Порядок — как в листинге (через [selectedItems]).
+     */
+    fun operands(): List<FileItem> =
+        selectedItems().ifEmpty { cursoredItem()?.let { listOf(it) } ?: emptyList() }
+
+    /**
+     * Удалить все [operands] (F8): выделенные строки, либо одну под курсором. Каждый объект снимается
+     * рекурсивно (каталог — со всем содержимым). После удаления один [reload]; пустые [operands] —
+     * no-op (на пустом каталоге/«..»). Подтверждение — на стороне UI.
+     */
+    fun deleteSelected() = op {
+        val targets = operands()
+        if (targets.isEmpty()) return@op
+        targets.forEach { item ->
+            // Удаляем по пути, пересобранному из текущего [path] + проверенного имени, а НЕ по
+            // server-controlled item.path: вредоносный листинг иначе увёл бы remove/rmdir из каталога.
+            val name = item.name
+            if (name.isEmpty() || "/" in name || "\\" in name || name == "." || name == "..") {
+                throw FileBrowserException("Недопустимое имя в листинге: $name")
+            }
+            browser.delete(item.copy(path = childPath(name)))
+        }
+        reload()
+    }
+
     /** Переименовать [item] в [newName] (в пределах текущего каталога). */
     fun rename(item: FileItem, newName: String) = op {
         browser.rename(item.path, childPath(newName))

@@ -92,11 +92,13 @@ fun RemoteDualSftpPane(
             // [paneScope] (тот keyed только на client), потеряв путь/выделение панелей и пересоздав start().
             val coordinator = remember(client) {
                 val localBrowser = platformLocalBrowser()
+                val remoteBrowser = SftpFileBrowser(client, hostLabel)
                 TransferCoordinator(
                     sftp = client,
                     local = FilePaneController(localBrowser, paneScope),
                     localBrowser = localBrowser,
-                    remote = FilePaneController(SftpFileBrowser(client, hostLabel), paneScope),
+                    remote = FilePaneController(remoteBrowser, paneScope),
+                    remoteBrowser = remoteBrowser,
                     scope = paneScope,
                 )
             }

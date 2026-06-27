@@ -64,6 +64,7 @@ import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.TransferState
 import app.skerry.ui.files.platformLocalBrowser
+import app.skerry.ui.session.SessionView
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.sftp.pickUploadSource
@@ -106,7 +107,12 @@ fun SftpView() {
     when {
         sessions == null -> MockSftpView(mono)
         active != null && active.controller.uiState is ConnectionUiState.Connected ->
-            LiveSftpView(active.controller, active.subtitle, mono)
+            LiveSftpView(
+                active.controller,
+                active.subtitle,
+                mono,
+                onQuit = { sessions.setActiveView(SessionView.Terminal) },
+            )
         else -> NoSessionSftpView(mono)
     }
 }
@@ -134,11 +140,20 @@ private fun SftpTopBar(subtitle: String, mono: FontFamily) {
  * удалённой панели.
  */
 @Composable
-private fun LiveSftpView(controller: ConnectionController, subtitle: String, mono: FontFamily) {
+private fun LiveSftpView(
+    controller: ConnectionController,
+    subtitle: String,
+    mono: FontFamily,
+    onQuit: () -> Unit,
+) {
     var coord by remember(controller) { mutableStateOf<TransferCoordinator?>(null) }
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
     var active by remember(controller) { mutableStateOf(ActivePane.Local) }
+    // Цели F8 Delete / F6 Move — активная панель в момент вызова (диалог читает её operands() для
+    // текста/выполнения). null — диалог закрыт.
+    var deleteTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
+    var moveTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
     val localList = rememberLazyListState()
     val remoteList = rememberLazyListState()
     val focus = remember(controller) { FocusRequester() }
@@ -160,15 +175,31 @@ private fun LiveSftpView(controller: ConnectionController, subtitle: String, mon
     // Как только координатор открыт — даём панелям фокус, чтобы стрелки/Tab работали без клика.
     LaunchedEffect(c) { if (c != null) focus.requestFocus() }
 
-    // Единая точка для F-клавиш: и нажатие клавиши, и клик по строке нижней панели идут сюда.
-    // Слайс 2 — только раскладка/MkDir; View/Copy/Move/Delete/Menu/Quit подключаются в слайсе 3.
-    val fKey: (Int) -> Unit = fKey@{ n ->
-        if (c == null) return@fKey
+    // Единая точка для F-клавиш: и нажатие клавиши, и клик по строке нижней панели идут сюда. Операции
+    // работают над АКТИВНОЙ панелью, цель — её operands() (выделение либо строка под курсором, mc-стиль).
+    // F3 View / F4 Edit пока заглушки (нужно чтение файла в контракте FileBrowser — следующий слайс).
+    val fKey: (Int) -> Unit = remember(c) { fKey@{ n ->
+        val coord = c ?: return@fKey
+        val pane = if (active == ActivePane.Local) coord.local else coord.remote
         when (n) {
-            7 -> creatingFolder = true
-            else -> {} // TODO(slice 3): F3 View, F5 Copy, F6 Move, F8 Delete, F9 Menu, F10 Quit
+            5 -> { // Copy: залить выделение/курсор активной панели в другую (upload/download)
+                ensureOperandSelection(pane)
+                if (active == ActivePane.Local) coord.uploadSelection() else coord.downloadSelection()
+            }
+            6 -> { // Move: copy + delete источника, с подтверждением
+                ensureOperandSelection(pane)
+                if (pane.operands().isNotEmpty()) moveTarget = pane
+            }
+            7 -> creatingFolder = true // MkDir
+            8 -> { // Delete активной панели, с подтверждением
+                ensureOperandSelection(pane)
+                if (pane.operands().isNotEmpty()) deleteTarget = pane
+            }
+            9 -> { coord.local.refresh(); coord.remote.refresh() } // Refresh обеих панелей
+            10 -> onQuit() // Quit: назад в терминал этой вкладки
+            else -> {} // F3 View / F4 Edit — следующий слайс
         }
-    }
+    } }
 
     Column(
         Modifier
@@ -287,6 +318,50 @@ private fun LiveSftpView(controller: ConnectionController, subtitle: String, mon
             onDismiss = { creatingFolder = false },
         )
     }
+
+    // F8 Delete активной панели: подтверждение по operands() (выделение или строка под курсором).
+    // Если цель внезапно опустела (фоновый refresh между нажатием и кадром) — закрываем через эффект,
+    // а не записью стейта прямо в композиции.
+    deleteTarget?.let { pane ->
+        val items = pane.operands()
+        if (items.isEmpty()) {
+            LaunchedEffect(pane) { deleteTarget = null }
+        } else {
+            ConfirmDeleteItemsDialog(
+                items = items,
+                onConfirm = { pane.deleteSelected(); deleteTarget = null },
+                onDismiss = { deleteTarget = null },
+            )
+        }
+    }
+
+    // F6 Move активной панели в другую: copy + delete источника, с подтверждением. Назначение —
+    // текущий каталог противоположной панели.
+    moveTarget?.let { pane ->
+        val coord = c
+        val items = pane.operands()
+        if (coord == null || items.isEmpty()) {
+            LaunchedEffect(pane) { moveTarget = null }
+        } else {
+            val fromLocal = pane === coord.local
+            val destPath = if (fromLocal) coord.remote.path else coord.local.path
+            ConfirmMoveDialog(
+                items = items,
+                destLabel = if (fromLocal) "Remote" else "Local",
+                destPath = destPath,
+                onConfirm = { coord.moveSelection(fromLocal); moveTarget = null },
+                onDismiss = { moveTarget = null },
+            )
+        }
+    }
+}
+
+/**
+ * Цель пакетных F-операций активной панели: если ничего не помечено — выделить строку под курсором
+ * (mc копирует/двигает/удаляет объект под курсором, когда нет выделения). На «..»/пустом — no-op.
+ */
+private fun ensureOperandSelection(pane: FilePaneController) {
+    if (pane.selection.isEmpty()) pane.cursoredItem()?.let { pane.selectOnly(it) }
 }
 
 /**
@@ -299,12 +374,12 @@ private data class FKeyDef(val n: Int, val label: String, val done: Boolean)
 private val FKEY_LABELS = listOf(
     FKeyDef(3, "View", done = false),
     FKeyDef(4, "Edit", done = false),
-    FKeyDef(5, "Copy", done = false),
-    FKeyDef(6, "Move", done = false),
+    FKeyDef(5, "Copy", done = true),
+    FKeyDef(6, "Move", done = true),
     FKeyDef(7, "MkDir", done = true),
-    FKeyDef(8, "Delete", done = false),
-    FKeyDef(9, "Menu", done = false),
-    FKeyDef(10, "Quit", done = false),
+    FKeyDef(8, "Delete", done = true),
+    FKeyDef(9, "Refresh", done = true),
+    FKeyDef(10, "Quit", done = true),
 )
 
 /**
@@ -349,7 +424,7 @@ private fun FKeyCell(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        // «*» — пометка нерабочей заглушки (слайс 3): сразу видно, что подключено, а что нет.
+        // «*» — пометка нерабочей заглушки (F3 View / F4 Edit — следующий слайс).
         if (!def.done) Txt("*", color = D.sunset, size = 11.sp, weight = FontWeight.SemiBold)
     }
 }
@@ -778,6 +853,120 @@ internal fun NameDialog(
             }
         }
     }
+}
+
+/**
+ * Подтверждение удаления пакета [items] (F8 над активной панелью): один объект — конкретное имя,
+ * несколько — счётчик. Текст предупреждает о рекурсии, если в пакете есть каталог.
+ */
+@Composable
+private fun ConfirmDeleteItemsDialog(items: List<FileItem>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val single = items.singleOrNull()
+    val hasDir = items.any { it.type == FileItemType.Directory }
+    val title = when {
+        single != null && single.type == FileItemType.Directory -> "Delete folder?"
+        single != null -> "Delete file?"
+        else -> "Delete ${items.size} items?"
+    }
+    val body = when {
+        single != null && single.type == FileItemType.Directory ->
+            "«${single.name}» and everything inside it will be removed permanently."
+        single != null -> "«${single.name}» will be removed permanently."
+        hasDir -> "${items.size} items (folders with their contents) will be removed permanently."
+        else -> "${items.size} items will be removed permanently."
+    }
+    ConfirmDangerDialog(title, body, "Delete", onConfirm, onDismiss)
+}
+
+/**
+ * Подтверждение перемещения пакета [items] в каталог [destPath] панели [destLabel] (F6). Перемещение
+ * между ФС = копирование + удаление источника, поэтому подтверждаем явно.
+ */
+@Composable
+private fun ConfirmMoveDialog(
+    items: List<FileItem>,
+    destLabel: String,
+    destPath: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val single = items.singleOrNull()
+    val what = if (single != null) "«${single.name}»" else "${items.size} items"
+    ConfirmDangerDialog(
+        title = "Move to $destLabel?",
+        body = "$what → $destPath",
+        confirmLabel = "Move",
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        confirmBg = D.cyan,
+        confirmFg = Color(0xFF0A1A26),
+    )
+}
+
+/**
+ * Общий каркас диалога подтверждения (заголовок + текст + Cancel/действие) в дизайн-стиле. Управляется
+ * с клавиатуры (mc-стиль): по умолчанию фокус на действии — Enter сразу подтверждает (F8→Enter удаляет);
+ * ←/→/Tab переключают между Cancel и действием, Esc отменяет. Фокусированная кнопка обведена рамкой.
+ */
+@Composable
+private fun ConfirmDangerDialog(
+    title: String,
+    body: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    confirmBg: Color = D.sunset,
+    confirmFg: Color = Color(0xFF0A1A26),
+) {
+    var focusConfirm by remember { mutableStateOf(true) }
+    val dialogFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { dialogFocus.requestFocus() }
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .width(340.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(D.surface)
+                .border(1.dp, D.line, RoundedCornerShape(12.dp))
+                .padding(18.dp)
+                .focusRequester(dialogFocus)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Enter, Key.NumPadEnter -> { if (focusConfirm) onConfirm() else onDismiss(); true }
+                        Key.Escape -> { onDismiss(); true }
+                        Key.DirectionLeft, Key.DirectionRight, Key.Tab -> { focusConfirm = !focusConfirm; true }
+                        else -> false
+                    }
+                }
+                .focusable(),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
+            Txt(body, color = D.faint, size = 12.sp)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DialogButtonFocus(focused = !focusConfirm) { GhostButton("Cancel", onClick = onDismiss) }
+                DialogButtonFocus(focused = focusConfirm) {
+                    PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmBg, fg = confirmFg)
+                }
+            }
+        }
+    }
+}
+
+/** Обводка кнопки диалога рамкой, когда она в фокусе клавиатуры (←/→/Tab). */
+@Composable
+private fun DialogButtonFocus(focused: Boolean, content: @Composable () -> Unit) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(9.dp))
+            .then(if (focused) Modifier.border(1.5.dp, D.cyanBright, RoundedCornerShape(9.dp)) else Modifier)
+            .padding(1.5.dp),
+    ) { content() }
 }
 
 /** Подтверждение удаления файла/каталога в дизайн-стиле. */

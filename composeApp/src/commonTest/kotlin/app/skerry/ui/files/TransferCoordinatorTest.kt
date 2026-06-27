@@ -35,6 +35,7 @@ class TransferCoordinatorTest {
         seedFile("$LHOME/a.txt", size = 10)
         seedFile("$LHOME/b.txt", size = 20)
         seedDir("$LHOME/sub")
+        seedFile("$LHOME/sub/inner.txt", size = 7)
     }
 
     private fun remoteFake() = FakeSftpClient(startDir = RHOME).apply {
@@ -54,10 +55,11 @@ class TransferCoordinatorTest {
         remote: FakeSftpClient = remoteFake(),
     ): Rig {
         val localBrowser = SftpFileBrowser(local, "This Mac")
+        val remoteBrowser = SftpFileBrowser(remote, "prod-web-01")
         val localCtl = FilePaneController(localBrowser, scope())
-        val remoteCtl = FilePaneController(SftpFileBrowser(remote, "prod-web-01"), scope())
+        val remoteCtl = FilePaneController(remoteBrowser, scope())
         localCtl.start(); remoteCtl.start(); advanceUntilIdle()
-        val coordinator = TransferCoordinator(remote, localCtl, localBrowser, remoteCtl, scope())
+        val coordinator = TransferCoordinator(remote, localCtl, localBrowser, remoteCtl, remoteBrowser, scope())
         return Rig(localCtl, remoteCtl, local, remote, coordinator)
     }
 
@@ -80,15 +82,20 @@ class TransferCoordinatorTest {
     }
 
     @Test
-    fun `uploadSelection skips directories in the selection`() = runTest {
+    fun `uploadSelection uploads a directory recursively, recreating the remote tree`() = runTest {
         val r = rig()
-        r.local.toggle(r.local.entry("sub")) // каталог — должен быть пропущен
+        r.local.toggle(r.local.entry("sub"))
 
         r.coordinator.uploadSelection()
         advanceUntilIdle()
 
-        val remoteNames = (r.remote.state as FilePaneState.Loaded).entries.map { it.name }
-        assertTrue("sub" !in remoteNames)
+        // Удалённый каталог воссоздан вместе с вложенным файлом.
+        val remoteTop = r.remoteFake.list(RHOME).map { it.name }
+        assertTrue("sub" in remoteTop, "ожидали remote-каталог sub, есть: $remoteTop")
+        val remoteSub = r.remoteFake.list("$RHOME/sub").map { it.name }
+        assertTrue("inner.txt" in remoteSub, "ожидали remote sub/inner.txt, есть: $remoteSub")
+        assertEquals("$LHOME/sub/inner.txt" to "$RHOME/sub/inner.txt", r.remoteFake.lastUpload)
+        assertTrue(r.local.selection.isEmpty())
     }
 
     @Test
@@ -263,6 +270,82 @@ class TransferCoordinatorTest {
         r.coordinator.uploadSelection()
         advanceUntilIdle()
         assertEquals(TransferState.Idle, r.coordinator.transfer)
+    }
+
+    @Test
+    fun `moveSelection from local uploads the files then deletes the local sources`() = runTest {
+        val r = rig()
+        r.local.toggle(r.local.entry("a.txt"))
+        r.local.toggle(r.local.entry("b.txt"))
+
+        r.coordinator.moveSelection(fromLocal = true)
+        advanceUntilIdle()
+
+        val remoteNames = (r.remote.state as FilePaneState.Loaded).entries.map { it.name }
+        assertTrue("a.txt" in remoteNames && "b.txt" in remoteNames, "ожидали на remote, есть: $remoteNames")
+        val localNames = (r.local.state as FilePaneState.Loaded).entries.map { it.name }
+        assertTrue("a.txt" !in localNames && "b.txt" !in localNames, "ожидали удаления с local, есть: $localNames")
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+        assertTrue(r.local.selection.isEmpty())
+    }
+
+    @Test
+    fun `moveSelection from local moves a directory recursively then deletes it`() = runTest {
+        val r = rig()
+        r.local.toggle(r.local.entry("sub"))
+
+        r.coordinator.moveSelection(fromLocal = true)
+        advanceUntilIdle()
+
+        assertTrue("sub" in r.remoteFake.list(RHOME).map { it.name })
+        assertTrue("inner.txt" in r.remoteFake.list("$RHOME/sub").map { it.name })
+        assertTrue("sub" !in (r.local.state as FilePaneState.Loaded).entries.map { it.name })
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+    }
+
+    @Test
+    fun `moveSelection from remote downloads then deletes the remote source`() = runTest {
+        val r = rig()
+        r.remote.toggle(r.remote.entry("r.txt"))
+
+        r.coordinator.moveSelection(fromLocal = false)
+        advanceUntilIdle()
+
+        assertEquals("$RHOME/r.txt" to "$LHOME/r.txt", r.remoteFake.lastDownload)
+        val remoteNames = (r.remote.state as FilePaneState.Loaded).entries.map { it.name }
+        assertTrue("r.txt" !in remoteNames, "ожидали удаления с remote, есть: $remoteNames")
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+        assertTrue(r.remote.selection.isEmpty())
+    }
+
+    @Test
+    fun `moveSelection moves a remote directory then deletes it`() = runTest {
+        val remote = remoteFake().apply {
+            seedDir("$RHOME/proj")
+            seedFile("$RHOME/proj/top.txt", size = 5)
+        }
+        val r = rig(remote = remote)
+        r.remote.toggle(r.remote.entry("proj"))
+
+        r.coordinator.moveSelection(fromLocal = false)
+        advanceUntilIdle()
+
+        assertTrue("proj" in r.localFake.list(LHOME).map { it.name })
+        assertTrue("proj" !in (r.remote.state as FilePaneState.Loaded).entries.map { it.name })
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+    }
+
+    @Test
+    fun `moveSelection keeps the source when the transfer fails`() = runTest {
+        val remote = remoteFake().apply { uploadError = "диск переполнен" }
+        val r = rig(remote = remote)
+        r.local.toggle(r.local.entry("a.txt"))
+
+        r.coordinator.moveSelection(fromLocal = true)
+        advanceUntilIdle()
+
+        assertIs<TransferState.Failed>(r.coordinator.transfer)
+        assertTrue("a.txt" in (r.local.state as FilePaneState.Loaded).entries.map { it.name })
     }
 
     @Test
