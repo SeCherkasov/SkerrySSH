@@ -25,7 +25,7 @@ object Db {
 
     fun createSchema(database: Database) {
         transaction(database) {
-            SchemaUtils.create(Accounts, Devices, Records, Pairing)
+            SchemaUtils.create(Accounts, Devices, Records, Pairing, ActivityLog)
         }
     }
 }

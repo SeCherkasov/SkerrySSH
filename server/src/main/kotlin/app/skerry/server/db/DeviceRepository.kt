@@ -1,6 +1,7 @@
 package app.skerry.server.db
 
 import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -43,6 +44,18 @@ class DeviceRepository(private val db: Database) {
 
     fun list(accountId: String): List<DeviceRow> = transaction(db) {
         Devices.selectAll().where { Devices.accountId eq accountId }.map { it.toDeviceRow() }
+    }
+
+    /**
+     * Устройства инстанса для админ-консоли (zero-knowledge: только метаданные). Самые активные
+     * первыми и с верхней границей [limit] — устройства не удаляются (только отзываются), поэтому
+     * без лимита список и JSON-ответ росли бы безгранично (kotlin-ревью L).
+     */
+    fun listAll(limit: Int = 200): List<DeviceRow> = transaction(db) {
+        Devices.selectAll()
+            .orderBy(Devices.lastSeenAt to SortOrder.DESC)
+            .limit(limit)
+            .map { it.toDeviceRow() }
     }
 
     fun find(accountId: String, deviceId: String): DeviceRow? = transaction(db) {

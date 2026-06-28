@@ -1,6 +1,8 @@
 package app.skerry.server.routes
 
 import app.skerry.server.configureServer
+import app.skerry.server.model.AdminActivityResponse
+import app.skerry.server.model.AdminDevicesResponse
 import app.skerry.server.model.ChallengeRequest
 import app.skerry.server.model.ChallengeResponse
 import app.skerry.server.model.DevicesResponse
@@ -184,6 +186,83 @@ class RoutesTest {
                 setBody(PairingClaimRequest(start.code, "devC", "C"))
             }.status,
         )
+    }
+
+    @Test
+    fun `admin lists devices across accounts and revokes by id`() = testApplication {
+        val services = testServices(adminToken = "s3cret")
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val reg = srpRegister(accountId, password)
+        client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
+        }
+
+        // список закрыт admin-токеном
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/devices").status)
+
+        val listed: AdminDevicesResponse = client.get("/admin/devices") {
+            header("X-Admin-Token", "s3cret")
+        }.body()
+        assertEquals(1, listed.devices.size)
+        val d = listed.devices.single()
+        assertEquals("devA", d.id)
+        assertEquals(accountId, d.accountId)
+        assertEquals("Laptop A", d.name)
+        assertEquals(false, d.revoked)
+
+        // отзыв тоже под токеном
+        assertEquals(
+            HttpStatusCode.Unauthorized,
+            client.delete("/admin/devices/devA?accountId=$accountId").status,
+        )
+        assertEquals(
+            HttpStatusCode.NoContent,
+            client.delete("/admin/devices/devA?accountId=$accountId") { header("X-Admin-Token", "s3cret") }.status,
+        )
+
+        // после отзыва устройство видно как revoked и не аутентифицируется
+        val after: AdminDevicesResponse = client.get("/admin/devices") {
+            header("X-Admin-Token", "s3cret")
+        }.body()
+        assertTrue(after.devices.single().revoked)
+
+        // неизвестное устройство → 404
+        assertEquals(
+            HttpStatusCode.NotFound,
+            client.delete("/admin/devices/nope?accountId=$accountId") { header("X-Admin-Token", "s3cret") }.status,
+        )
+    }
+
+    @Test
+    fun `admin activity logs metadata events behind the token`() = testApplication {
+        val services = testServices(adminToken = "s3cret")
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val reg = srpRegister(accountId, password)
+        val tokens: TokenResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
+        }.body()
+        client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
+        }
+
+        // закрыто токеном
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/activity").status)
+
+        val activity: AdminActivityResponse = client.get("/admin/activity") {
+            header("X-Admin-Token", "s3cret")
+        }.body()
+        // свежее первым: push после register
+        assertEquals(listOf("sync.push", "auth.register"), activity.events.map { it.event })
+        val push = activity.events.first()
+        assertEquals("devA", push.deviceId)
+        assertTrue(push.detail.contains("1 records"))
+        assertTrue(push.detail.contains("cursor 1"))
     }
 
     @Test

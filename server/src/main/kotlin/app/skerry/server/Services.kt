@@ -4,6 +4,7 @@ import app.skerry.server.auth.SrpService
 import app.skerry.server.auth.TokenService
 import app.skerry.server.config.ServerConfig
 import app.skerry.server.db.AccountRepository
+import app.skerry.server.db.ActivityRepository
 import app.skerry.server.db.DeviceRepository
 import app.skerry.server.db.PairingRepository
 import app.skerry.server.db.RecordRepository
@@ -19,6 +20,7 @@ class Services(val config: ServerConfig, val database: Database) {
     val records = RecordRepository(database, lockAccountRow = config.isPostgres)
     val pairing = PairingRepository(database)
     val stats = StatsRepository(database)
+    val activity = ActivityRepository(database)
     val srp = SrpService()
     val tokens = TokenService(config)
     val notifier = ChangeNotifier()

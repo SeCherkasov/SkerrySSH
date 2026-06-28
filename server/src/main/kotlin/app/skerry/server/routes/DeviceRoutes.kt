@@ -31,6 +31,9 @@ fun Route.deviceRoutes(services: Services) {
             return@delete
         }
         val revoked = services.devices.revoke(principal.accountId, target)
+        if (revoked) {
+            services.activity.record(principal.accountId, "device.revoked", "revoked $target", deviceId = principal.deviceId)
+        }
         call.respond(if (revoked) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
     }
 }

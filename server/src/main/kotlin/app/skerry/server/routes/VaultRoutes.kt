@@ -42,6 +42,13 @@ fun Route.vaultRoutes(services: Services) {
         services.devices.touch(principal.accountId, principal.deviceId)
         val delta = services.records.delta(principal.accountId, since)
         val cursor = delta.lastOrNull()?.serverSeq ?: since
+        // Логируем только содержательные pull'ы — пустые поллинги не засоряют аудит-лог.
+        if (delta.isNotEmpty()) {
+            services.activity.record(
+                principal.accountId, "sync.pull", "delta since $since · ${delta.size} records",
+                deviceId = principal.deviceId,
+            )
+        }
         call.respond(RecordsResponse(delta.map { it.toDto() }, cursor))
     }
 
@@ -53,6 +60,10 @@ fun Route.vaultRoutes(services: Services) {
 
         services.devices.touch(principal.accountId, principal.deviceId)
         val result = services.records.upsert(principal.accountId, req.records.map { it.toIncoming() })
+        services.activity.record(
+            principal.accountId, "sync.push", "${req.records.size} records · cursor ${result.cursor}",
+            deviceId = principal.deviceId,
+        )
         // Уведомляем другие устройства аккаунта: «есть изменения до cursor» (без содержимого).
         services.notifier.publish(principal.accountId, result.cursor)
         call.respond(PushResponse(result.records.map { it.toDto() }, result.cursor))

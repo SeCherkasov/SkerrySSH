@@ -87,6 +87,37 @@ data class DeviceDto(
 @Serializable
 data class DevicesResponse(val devices: List<DeviceDto>)
 
+/**
+ * Устройство в админ-консоли: те же открытые метаданные, что и в [DeviceDto], плюс `accountId`
+ * (консоль видит все аккаунты инстанса и отзывает по паре accountId+id — deviceId уникален лишь
+ * в пределах аккаунта). Содержимого по-прежнему нет.
+ */
+@Serializable
+data class AdminDeviceDto(
+    val accountId: String,
+    val id: String,
+    val name: String,
+    val createdAt: Long,
+    val lastSeenAt: Long,
+    val revoked: Boolean,
+)
+
+@Serializable
+data class AdminDevicesResponse(val devices: List<AdminDeviceDto>)
+
+/** Событие аудит-лога для консоли: только метаданные синхронизации, `createdAt` — epoch millis. */
+@Serializable
+data class AdminActivityDto(
+    val accountId: String,
+    val deviceId: String?,
+    val event: String,
+    val detail: String,
+    val createdAt: Long,
+)
+
+@Serializable
+data class AdminActivityResponse(val events: List<AdminActivityDto>)
+
 // --- pairing (вариант B) ---
 
 @Serializable

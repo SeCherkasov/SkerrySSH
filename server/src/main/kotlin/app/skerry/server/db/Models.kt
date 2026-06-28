@@ -40,3 +40,13 @@ data class PairingRow(
     val expiresAt: Long,
     val consumed: Boolean,
 )
+
+/** Строка аудит-лога (только метаданные синхронизации, без содержимого записей). */
+data class ActivityRow(
+    val seq: Long,
+    val accountId: String,
+    val deviceId: String?,
+    val event: String,
+    val detail: String,
+    val createdAt: Long,
+)

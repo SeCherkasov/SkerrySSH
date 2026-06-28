@@ -49,14 +49,23 @@ SKERRY_JWT_SECRET=dev-secret SKERRY_ADMIN_TOKEN=admin ./gradlew :server:run
 | `WS` | `/sync` | push «появились изменения» (только курсор, без содержимого) |
 | `GET/DELETE` | `/devices`, `/devices/{id}` | список устройств и отзыв |
 | `POST` | `/pairing/start` (auth) → `/pairing/claim` | быстрый локальный паринг (вариант B) |
-| `GET` | `/admin/health`, `/admin/stats` | статус и агрегаты (stats — под `SKERRY_ADMIN_TOKEN`) |
+| `GET` | `/admin/health` | liveness (открыт) |
+| `GET` | `/admin/stats`, `/admin/devices`, `/admin/activity` | агрегаты, список устройств, аудит-лог (под `SKERRY_ADMIN_TOKEN`) |
+| `DELETE` | `/admin/devices/{id}?accountId=` | отзыв устройства из консоли |
 
 Все шифроблобы (`blob`, `wrappedDataKey`, `encryptedDataKey`) передаются как base64.
 
 ## Админ-консоль
 
-Статическая страница на `http://localhost:8080/console` — показывает только агрегаты
-(счётчики аккаунтов/устройств/записей), требует `SKERRY_ADMIN_TOKEN`. Доступа к содержимому нет.
+Статическая страница на `http://localhost:8080/console` (требует `SKERRY_ADMIN_TOKEN`), вкладки:
+**Обзор** (счётчики), **Устройства** (список + отзыв) и **Активность** (аудит-лог событий
+синхронизации). Zero-knowledge сохраняется: консоль видит только метаданные — событие, устройство
+и сводку (счётчики/курсоры), но не содержимое записей, мастер-пароль или `dataKey`.
+
+> ⚠️ Метаданные содержат `accountId` (это e-mail) и удерживаются в аудит-логе (последние 2000
+> событий). Для single-user self-host оператор и есть субъект данных — приемлемо. Admin-токен
+> ходит в заголовке `X-Admin-Token` открытым текстом: обязательно поставьте TLS-терминатор
+> (см. ниже), иначе токен виден в сети.
 
 ## Безопасность в проде
 

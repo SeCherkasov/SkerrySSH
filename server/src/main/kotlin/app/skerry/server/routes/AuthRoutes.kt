@@ -38,6 +38,7 @@ fun Route.authRoutes(services: Services) {
             return@post
         }
         services.devices.register(req.accountId, req.deviceId, req.deviceName)
+        services.activity.record(req.accountId, "auth.register", "new account + device", deviceId = req.deviceId)
         call.respond(
             TokenResponse(
                 accessToken = services.tokens.issueAccess(req.accountId, req.deviceId),
@@ -65,6 +66,7 @@ fun Route.authRoutes(services: Services) {
             return@post
         }
         services.devices.register(verified.accountId, req.deviceId, req.deviceName)
+        services.activity.record(verified.accountId, "auth.login", "srp login", deviceId = req.deviceId)
         call.respond(
             VerifyResponse(
                 m2 = verified.m2,

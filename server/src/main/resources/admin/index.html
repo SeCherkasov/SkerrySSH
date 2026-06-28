@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!--
   Skerry Sync — админ-консоль (self-hosted). Статическая страница, отдаётся самим Ktor.
-  Zero-knowledge: показывает только агрегаты (счётчики), к содержимому доступа нет.
+  Zero-knowledge: показывает только метаданные (счётчики, устройства, аудит-лог событий) —
+  к содержимому записей, мастер-паролю и dataKey доступа нет по определению.
   Палитра «night sea» — единый источник правды по токенам, см. CLAUDE.md.
 -->
 <html lang="ru">
@@ -11,7 +12,7 @@
   <title>Skerry Sync — консоль</title>
   <style>
     :root {
-      --bg: #07141E; --panel: #0C1F2C; --line: #16313F;
+      --bg: #07141E; --panel: #0C1F2C; --panel-2: #0A1A26; --line: #16313F;
       --cyan: #2BBDEE; --amber: #F2A65A; --ok: #5DCE9E; --err: #E94B4B;
       --text: #DCE7EE; --muted: #6E8595;
     }
@@ -24,20 +25,56 @@
     header .dot.up { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
     header h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: .3px; }
     header .ver { color: var(--muted); font-size: 13px; }
-    main { max-width: 760px; margin: 0 auto; padding: 32px; }
-    .auth { display: flex; gap: 10px; margin-bottom: 28px; }
+    main { max-width: 880px; margin: 0 auto; padding: 32px; }
+    .auth { display: flex; gap: 10px; margin-bottom: 24px; }
     input { flex: 1; background: var(--panel); border: 1px solid var(--line); color: var(--text);
       padding: 12px 14px; border-radius: 10px; font-size: 14px; }
     input:focus { outline: none; border-color: var(--cyan); }
     button { background: var(--cyan); color: #04222E; border: none; padding: 12px 20px;
       border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; }
     button:hover { filter: brightness(1.08); }
+
+    nav { display: flex; gap: 6px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
+    nav button { background: transparent; color: var(--muted); border: none; border-bottom: 2px solid transparent;
+      border-radius: 0; padding: 10px 14px; font-size: 14px; font-weight: 600; }
+    nav button:hover { color: var(--text); filter: none; }
+    nav button.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
     .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
     .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
     .card .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .6px; }
     .card .value { font-size: 34px; font-weight: 600; margin-top: 8px;
       font-family: "JetBrains Mono", monospace; color: var(--cyan); }
-    .msg { margin-top: 18px; font-size: 13px; min-height: 18px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .5px; color: var(--muted); border-bottom: 1px solid var(--line); }
+    td { padding: 11px 12px; border-bottom: 1px solid var(--line); color: var(--text); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .mono { font-family: "JetBrains Mono", monospace; color: var(--muted); }
+    .empty { padding: 28px; text-align: center; color: var(--muted); font-size: 14px; }
+
+    .badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .3px;
+      padding: 3px 9px; border-radius: 6px; }
+    .badge.active { background: rgba(93,206,158,.12); color: var(--ok); }
+    .badge.stale { background: rgba(242,166,90,.12); color: var(--amber); }
+    .badge.revoked { background: rgba(233,75,75,.12); color: var(--err); }
+    .ev { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+    .ev.push, .ev.register { color: var(--ok); }
+    .ev.pull { color: var(--cyan); }
+    .ev.login { color: var(--cyan); }
+    .ev.revoked, .ev.stale { color: var(--amber); }
+
+    .revoke { background: transparent; border: 1px solid rgba(233,75,75,.35); color: var(--err);
+      border-radius: 8px; padding: 5px 12px; font-size: 12px; }
+    .revoke:hover { background: rgba(233,75,75,.1); filter: none; }
+    .revoke:disabled { opacity: .4; cursor: default; }
+
+    .msg { margin-top: 16px; font-size: 13px; min-height: 18px; }
     .msg.err { color: var(--err); }
     .foot { margin-top: 32px; color: var(--muted); font-size: 12px; line-height: 1.6; }
   </style>
@@ -53,19 +90,85 @@
       <input id="token" type="password" placeholder="Admin token (SKERRY_ADMIN_TOKEN)" autocomplete="off"/>
       <button id="load">Обновить</button>
     </div>
-    <div class="grid">
-      <div class="card"><div class="label">Аккаунты</div><div class="value" id="accounts">—</div></div>
-      <div class="card"><div class="label">Устройства</div><div class="value" id="devices">—</div></div>
-      <div class="card"><div class="label">Записи (шифроблобы)</div><div class="value" id="records">—</div></div>
-      <div class="card"><div class="label">Pairing-сессии</div><div class="value" id="pairing">—</div></div>
+
+    <nav>
+      <button data-view="v-overview" class="active">Обзор</button>
+      <button data-view="v-devices">Устройства</button>
+      <button data-view="v-activity">Активность</button>
+    </nav>
+
+    <div class="view active" id="v-overview">
+      <div class="grid">
+        <div class="card"><div class="label">Аккаунты</div><div class="value" id="accounts">—</div></div>
+        <div class="card"><div class="label">Устройства</div><div class="value" id="devices">—</div></div>
+        <div class="card"><div class="label">Записи (шифроблобы)</div><div class="value" id="records">—</div></div>
+        <div class="card"><div class="label">Pairing-сессии</div><div class="value" id="pairing">—</div></div>
+      </div>
     </div>
+
+    <div class="view" id="v-devices">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Устройство</th><th>Аккаунт</th><th>Активность</th><th>Статус</th><th></th></tr></thead>
+          <tbody id="devices-rows"><tr><td colspan="5" class="empty">Введите admin-токен и нажмите «Обновить».</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="view" id="v-activity">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Время</th><th>Событие</th><th>Устройство</th><th>Детали</th></tr></thead>
+          <tbody id="activity-rows"><tr><td colspan="4" class="empty">Введите admin-токен и нажмите «Обновить».</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="msg" id="msg"></div>
     <div class="foot">
       Zero-knowledge: сервер хранит только шифротекст и метаданные синхронизации. Содержимое
       записей, имена хостов, мастер-пароль и dataKey недоступны серверу и этой консоли.
+      Аудит-лог фиксирует только событие, устройство и сводку (счётчики/курсоры) — без содержимого.
     </div>
   </main>
+
   <script>
+    const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+    let token = '';
+
+    function tokenValue() { return document.getElementById('token').value.trim(); }
+    function setMsg(text, isErr) {
+      const m = document.getElementById('msg');
+      m.textContent = text || '';
+      m.className = isErr ? 'msg err' : 'msg';
+    }
+
+    function relTime(ms) {
+      const diff = Date.now() - ms;
+      if (diff < 60_000) return 'только что';
+      const min = Math.floor(diff / 60_000);
+      if (min < 60) return min + ' мин назад';
+      const h = Math.floor(min / 60);
+      if (h < 24) return h + ' ч назад';
+      const d = Math.floor(h / 24);
+      return d + ' дн назад';
+    }
+    function clockTime(ms) {
+      const d = new Date(ms);
+      const p = n => String(n).padStart(2, '0');
+      return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    }
+
+    async function adminGet(path) {
+      const r = await fetch(path, { headers: { 'X-Admin-Token': token } });
+      if (r.status === 401) { setMsg('Неверный admin-токен.', true); return null; }
+      if (!r.ok) { setMsg('Ошибка ' + r.status, true); return null; }
+      return r.json();
+    }
+
     async function health() {
       try {
         const r = await fetch('/admin/health');
@@ -74,22 +177,100 @@
         document.getElementById('ver').textContent = 'v' + j.version;
       } catch (e) { /* health недоступен — точка остаётся серой */ }
     }
-    async function load() {
-      const token = document.getElementById('token').value.trim();
-      const msg = document.getElementById('msg');
-      msg.textContent = ''; msg.className = 'msg';
-      try {
-        const r = await fetch('/admin/stats', { headers: { 'X-Admin-Token': token } });
-        if (r.status === 401) { msg.textContent = 'Неверный admin-токен.'; msg.className = 'msg err'; return; }
-        const j = await r.json();
-        document.getElementById('accounts').textContent = j.accounts;
-        document.getElementById('devices').textContent = j.devices;
-        document.getElementById('records').textContent = j.records;
-        document.getElementById('pairing').textContent = j.pairingSessions;
-      } catch (e) { msg.textContent = 'Ошибка запроса: ' + e; msg.className = 'msg err'; }
+
+    async function loadStats() {
+      const j = await adminGet('/admin/stats');
+      if (!j) return;
+      document.getElementById('accounts').textContent = j.accounts;
+      document.getElementById('devices').textContent = j.devices;
+      document.getElementById('records').textContent = j.records;
+      document.getElementById('pairing').textContent = j.pairingSessions;
     }
-    document.getElementById('load').addEventListener('click', load);
-    document.getElementById('token').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+
+    function deviceStatus(d) {
+      if (d.revoked) return { cls: 'revoked', text: 'ОТОЗВАНО' };
+      if (Date.now() - d.lastSeenAt > STALE_MS) return { cls: 'stale', text: 'НЕАКТИВНО' };
+      return { cls: 'active', text: 'АКТИВНО' };
+    }
+
+    async function loadDevices() {
+      const j = await adminGet('/admin/devices');
+      const tbody = document.getElementById('devices-rows');
+      if (!j) return;
+      if (!j.devices.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Пока нет устройств.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = j.devices.map(d => {
+        const st = deviceStatus(d);
+        const revokeBtn = d.revoked
+          ? '<button class="revoke" disabled>—</button>'
+          : `<button class="revoke" data-account="${esc(d.accountId)}" data-id="${esc(d.id)}">Отозвать</button>`;
+        return `<tr>
+          <td>${esc(d.name)} <span class="mono">${esc(d.id)}</span></td>
+          <td class="mono">${esc(d.accountId)}</td>
+          <td class="mono">${relTime(d.lastSeenAt)}</td>
+          <td><span class="badge ${st.cls}">${st.text}</span></td>
+          <td>${revokeBtn}</td>
+        </tr>`;
+      }).join('');
+      tbody.querySelectorAll('.revoke[data-id]').forEach(btn => {
+        btn.addEventListener('click', () => revokeDevice(btn.dataset.account, btn.dataset.id));
+      });
+    }
+
+    async function revokeDevice(accountId, id) {
+      if (!confirm(`Отозвать устройство ${id}? Оно перестанет синхронизироваться.`)) return;
+      const url = '/admin/devices/' + encodeURIComponent(id) + '?accountId=' + encodeURIComponent(accountId);
+      const r = await fetch(url, { method: 'DELETE', headers: { 'X-Admin-Token': token } });
+      if (r.status === 401) { setMsg('Неверный admin-токен.', true); return; }
+      if (r.status === 204) { setMsg('Устройство отозвано.'); loadDevices(); loadStats(); return; }
+      if (r.status === 404) { setMsg('Устройство не найдено.', true); return; }
+      setMsg('Ошибка ' + r.status, true);
+    }
+
+    async function loadActivity() {
+      const j = await adminGet('/admin/activity');
+      const tbody = document.getElementById('activity-rows');
+      if (!j) return;
+      if (!j.events.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty">Событий пока нет.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = j.events.map(e => {
+        const evClass = esc(e.event.split('.')[1] || e.event);
+        return `<tr>
+          <td class="mono">${clockTime(e.createdAt)}</td>
+          <td><span class="ev ${evClass}">${esc(e.event)}</span></td>
+          <td class="mono">${e.deviceId ? esc(e.deviceId) : '—'}</td>
+          <td>${esc(e.detail)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function activeView() {
+      const v = document.querySelector('.view.active');
+      return v ? v.id : 'v-overview';
+    }
+    function refresh() {
+      token = tokenValue();
+      if (!token) { setMsg('Введите admin-токен.', true); return; }
+      setMsg('');
+      loadStats();
+      loadDevices();
+      loadActivity();
+    }
+
+    document.querySelectorAll('nav button').forEach(b => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('nav button').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        document.getElementById(b.dataset.view).classList.add('active');
+      });
+    });
+    document.getElementById('load').addEventListener('click', refresh);
+    document.getElementById('token').addEventListener('keydown', e => { if (e.key === 'Enter') refresh(); });
     health();
   </script>
 </body>

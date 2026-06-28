@@ -64,6 +64,23 @@ object Records : Table("records") {
     }
 }
 
+/**
+ * Аудит-лог метаданных для админ-консоли (`docs/skerry-sync-prototype.html` → Recent activity).
+ * Append-only, zero-knowledge: пишем только событие, устройство и человекочитаемую сводку
+ * ([detail] — счётчики/курсоры, никогда содержимое записей). Без FK на [Accounts]: лог
+ * переживает удаление аккаунта и допускает события до его создания. Удержание — [ActivityRepository].
+ */
+object ActivityLog : Table("activity_log") {
+    val seq = long("seq").autoIncrement()
+    val accountId = varchar("account_id", 320)
+    val deviceId = varchar("device_id", 64).nullable()
+    val event = varchar("event", 32)
+    val detail = text("detail")
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(seq)
+}
+
 /** Одноразовые pairing-сессии (вариант B): dataKey, зашифрованный transferKey, с TTL. */
 object Pairing : Table("pairing") {
     val code = varchar("code", 64)
