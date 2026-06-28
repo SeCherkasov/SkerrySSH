@@ -5,6 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.host.Host
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TerminalFont
 
 /**
  * Нижняя навигация мобильного макета `docs/new/Skerry Mobile.html` — ровно 5 корневых табов
@@ -24,7 +27,7 @@ enum class MobileTab(val icon: String, val label: String) {
  * `isHostDetail`, `isPorts`, `isKnown`, `isTeam`: терминал и деталь хоста открываются из Hosts,
  * а Ports/Known/Team — из таба More. Контент экранов наполняется в следующих слайсах.
  */
-enum class MobileRoute { Terminal, HostDetail, Ports, Known, Team }
+enum class MobileRoute { Terminal, HostDetail, Ports, Known, Team, Appearance }
 
 /**
  * Состояние мобильного макета `docs/new/Skerry Mobile.html` — навигация (текущий таб + открытый
@@ -39,6 +42,13 @@ class MobileDesignState(
     // развёрнуто, no-op) сохраняют прежнее поведение для превью/тестов. Зеркалит [DesktopDesignState].
     initialCollapsedGroups: Set<String> = emptySet(),
     private val onCollapsedGroupsChange: (Set<String>) -> Unit = {},
+    // Шрифт терминала (More → Appearance → Font) и его кегль. Стартовые значения читаются из персиста
+    // при запуске, колбэки пишут обратно — выбор переживает перезапуск. Дефолты (Hack 13px, no-op) —
+    // для превью/тестов. Зеркалит [DesktopDesignState].
+    initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
+    private val onTerminalFontChange: (TerminalFont) -> Unit = {},
+    initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
+    private val onTerminalFontSizeChange: (Int) -> Unit = {},
 ) {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
     var route: MobileRoute? by mutableStateOf(null); private set
@@ -143,4 +153,27 @@ class MobileDesignState(
     fun openEditConn(host: Host) { editingHost = host; sheetNewConn = true }
 
     fun closeSheet() { sheetNewConn = false; editingHost = null }
+
+    /** Выбранный шрифт терминала (More → Appearance → Font). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalAppearance]. */
+    var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
+
+    /** Кегль шрифта терминала, px (More → Appearance → Font size). */
+    var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
+
+    /** Выбрать шрифт терминала и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    fun chooseTerminalFont(font: TerminalFont) {
+        if (font == terminalFont) return
+        terminalFont = font
+        onTerminalFontChange(font)
+    }
+
+    /**
+     * Задать кегль шрифта терминала и сообщить наружу (для персиста). Значение вне [TERMINAL_FONT_SIZES]
+     * и повтор текущего — no-op (ни записи, ни колбэка).
+     */
+    fun chooseTerminalFontSize(px: Int) {
+        if (px == terminalFontSize || px !in TERMINAL_FONT_SIZES) return
+        terminalFontSize = px
+        onTerminalFontSizeChange(px)
+    }
 }

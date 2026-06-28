@@ -14,21 +14,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.vault.VaultGateController
 import kotlinx.coroutines.launch
 
@@ -61,7 +68,7 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             MoreRow("fingerprint", D.cyanBright, "Known hosts", known, if (knownWarn) D.sunset else D.moss, onClick = { state.push(MobileRoute.Known) })
             MoreRow("groups", D.cyanBright, "Team", if (preview) "Platform crew" else null, D.dim, onClick = { state.push(MobileRoute.Team) })
             MoreRow("auto_awesome", D.amber, "AI & privacy", "Local", D.dim, onClick = null)
-            MoreRow("palette", D.cyanBright, "Appearance", "Night Sea", D.dim, onClick = null)
+            MoreRow("palette", D.cyanBright, "Appearance", "Night Sea", D.dim, onClick = { state.push(MobileRoute.Appearance) })
             MoreRow("shield_lock", D.cyanBright, "Security & sync", if (preview) "Synced" else "Local only", D.dim, onClick = null)
             // Тумблер биометрии — живой путь за гейтом (vault открыт). Прячется, если биометрия
             // недоступна на устройстве (нет железа/не зачислен отпечаток) или это превью/офскрин.
@@ -171,6 +178,119 @@ private fun BiometricUnlockRow() {
         )
     }
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+}
+
+// Appearance (push-экран More → Appearance).
+
+/**
+ * Push-экран More → Appearance: выбор шрифта терминала и кегля (паритет desktop Settings → Appearance).
+ * Отступление от мобильного мока (там строка Appearance вела только к теме) — добавлено по явному
+ * запросу пользователя. Тема пока не редактируется (вне текущего объёма). Оба шрифта рендерятся без
+ * лигатур (см. [app.skerry.ui.terminal.TerminalAppearance]).
+ */
+@Composable
+fun MobileAppearanceScreen(state: MobileDesignState) {
+    Column(Modifier.fillMaxSize().background(D.bg)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
+            Txt("Appearance", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+        }
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
+            Txt("TERMINAL", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp))
+            FontSettingRow("Font") {
+                MobileFontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+            FontSettingRow("Font size") {
+                MobileFontSizePicker(state.terminalFontSize, onPick = state::chooseTerminalFontSize)
+            }
+        }
+    }
+}
+
+/** Строка настройки: подпись слева + контрол (дропдаун) справа фиксированной ширины. */
+@Composable
+private fun FontSettingRow(label: String, control: @Composable () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Txt(label, color = D.text, size = 14.5.sp, modifier = Modifier.weight(1f))
+        Box(Modifier.width(180.dp)) { control() }
+    }
+}
+
+/** Выпадающий список шрифта терминала (Hack / JetBrains Mono) — оба без лигатур. */
+@Composable
+private fun MobileFontPicker(current: TerminalFont, onPick: (TerminalFont) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger(current.displayName, onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                TerminalFont.entries.forEach { option ->
+                    MobileDropdownOption(option.displayName, selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Выпадающий список кегля шрифта терминала ([TERMINAL_FONT_SIZES], px). */
+@Composable
+private fun MobileFontSizePicker(current: Int, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger("$current px", onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                TERMINAL_FONT_SIZES.forEach { size ->
+                    MobileDropdownOption("$size px", selected = size == current) { onPick(size); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Триггер селекта: значение слева, шеврон справа. */
+@Composable
+private fun MobileSelectTrigger(value: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Txt(value, color = D.text, size = 13.sp)
+        Sym("expand_more", size = 18.sp, color = D.faint)
+    }
+}
+
+/** Колонка-меню выпадающего списка (поверхность + обводка макета). */
+@Composable
+private fun MobileDropdownMenu(width: Dp, content: @Composable () -> Unit) {
+    Column(
+        Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)),
+    ) { content() }
+}
+
+/** Пункт выпадающего списка; выбранный подсвечен cyan. */
+@Composable
+private fun MobileDropdownOption(label: String, selected: Boolean, onClick: () -> Unit) {
+    Txt(
+        label,
+        color = if (selected) D.cyanBright else D.text,
+        size = 13.sp,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 11.dp),
+    )
 }
 
 // Профиль.

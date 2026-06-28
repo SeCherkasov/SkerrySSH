@@ -32,6 +32,9 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
 import app.skerry.ui.vault.ResetScope
@@ -113,6 +116,10 @@ class MainActivity : FragmentActivity() {
         val designState = MobileDesignState(
             initialCollapsedGroups = readCollapsedGroups(dir),
             onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
+            initialTerminalFont = readTerminalFont(dir),
+            onTerminalFontChange = { writeTerminalFont(dir, it) },
+            initialTerminalFontSize = readTerminalFontSize(dir),
+            onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
         )
         setContent { MobileDesignApp(deps, state = designState, onVaultReset = onVaultReset) }
     }
@@ -132,6 +139,38 @@ class MainActivity : FragmentActivity() {
         val snapshot = groups.filterNot { it.contains('\n') || it.contains('\r') }.joinToString("\n")
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "collapsed_groups").writeText(snapshot) }
+        }
+    }
+
+    /**
+     * Шрифт терминала (More → Appearance → Font), переживающий перезапуск: стабильный id
+     * ([TerminalFont.id]) в файле `terminal_font` (зеркало desktop `main.kt`). Отсутствует/нечитаем/
+     * неизвестен → дефолт ([TerminalFont.DEFAULT] = Hack). Запись best-effort вне UI-потока.
+     */
+    private fun readTerminalFont(dir: File): TerminalFont = runCatching {
+        TerminalFont.fromId(File(dir, "terminal_font").readText().trim())
+    }.getOrDefault(TerminalFont.DEFAULT)
+
+    private fun writeTerminalFont(dir: File, font: TerminalFont) {
+        val id = font.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_font").writeText(id) }
+        }
+    }
+
+    /**
+     * Кегль шрифта терминала, px (More → Appearance → Font size): число в файле `terminal_font_size`.
+     * Отсутствует/нечитаем/вне [TERMINAL_FONT_SIZES] → дефолт ([DEFAULT_TERMINAL_FONT_SIZE]).
+     */
+    private fun readTerminalFontSize(dir: File): Int {
+        val px = runCatching { File(dir, "terminal_font_size").readText().trim().toInt() }
+            .getOrDefault(DEFAULT_TERMINAL_FONT_SIZE)
+        return if (px in TERMINAL_FONT_SIZES) px else DEFAULT_TERMINAL_FONT_SIZE
+    }
+
+    private fun writeTerminalFontSize(dir: File, px: Int) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_font_size").writeText(px.toString()) }
         }
     }
 
@@ -198,6 +237,8 @@ class MainActivity : FragmentActivity() {
                     knownHosts.entries.toList().forEach { knownHosts.forget(it) }
                     hostStore.all().forEach { hostStore.remove(it.id) }
                     writeCollapsedGroups(dir, emptySet())
+                    writeTerminalFont(dir, TerminalFont.DEFAULT)
+                    writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
                 }
             }
             hosts.reload()
