@@ -141,6 +141,16 @@ class DesktopDesignState(
     /** Имена пользовательских (пока пустых) групп хостов — показываются как папки наравне с выводимыми из хостов. */
     var customGroups: List<String> by mutableStateOf(initialCustomGroups); private set
 
+    /**
+     * Заменить список пустых папок целиком БЕЗ обратной записи ([onCustomGroupsChange]). Это загрузка
+     * извне, а не правка пользователя: вызывается после разблокировки vault, когда пустые папки
+     * прочитаны из синхронизируемой записи-макета ([app.skerry.shared.vault.WorkspaceLayout]) —
+     * на старте vault залочен и список пуст. Писать обратно тут нельзя (затёрли бы синканутое).
+     */
+    fun loadCustomGroups(groups: List<String>) {
+        customGroups = groups
+    }
+
     /** Выбранный шрифт терминала (Appearance → Font). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalAppearance]. */
     var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
 

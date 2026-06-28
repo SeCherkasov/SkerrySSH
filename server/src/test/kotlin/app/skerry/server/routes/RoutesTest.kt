@@ -79,6 +79,36 @@ class RoutesTest {
     }
 
     @Test
+    fun `push accepts TUNNEL record type and rejects an unknown type`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val reg = srpRegister(accountId, password)
+        val tokens: TokenResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(7).b64(), "devA", "Laptop A"))
+        }.body()
+
+        // TUNNEL — новый тип рабочего пространства (Phase A). Сервер хранит type как строку, но
+        // фильтрует по белому списку — TUNNEL должен в нём быть, иначе синк туннелей невозможен.
+        val ok = client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("t1", "TUNNEL", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
+        }
+        assertEquals(HttpStatusCode.OK, ok.status)
+
+        // Произвольный тип по-прежнему отвергается (защита от мусора/несовместимых клиентов).
+        val bad = client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("x1", "BOGUS", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
+        }
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
+    }
+
+    @Test
     fun `vault routes reject missing token`() = testApplication {
         val services = testServices()
         application { configureServer(services) }

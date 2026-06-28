@@ -141,6 +141,9 @@ fun DesktopDesignApp(
     // Вызывается один раз после разблокировки vault, до перечитывания списков — точка для миграции
     // данных (схлопывание двухуровневой модели → хост ссылается на keychain-секрет). No-op в мок/превью.
     onVaultUnlocked: () -> Unit = {},
+    // Пустые папки хостов синкаются в записи-макете vault (Phase A): на старте vault залочен, поэтому
+    // после unlock (и миграции в [onVaultUnlocked]) перечитываем их отсюда в состояние. No-op в мок/превью.
+    customGroupsProvider: () -> List<String> = { emptyList() },
     // Внешняя чистка при сбросе vault (хосты/known_hosts/настройки по [ResetScope]). Вызывается после
     // стирания файла vault; реальную реализацию подставляет desktop `main`. No-op в мок/превью.
     onVaultReset: (ResetScope) -> Unit = {},
@@ -212,9 +215,9 @@ fun DesktopDesignApp(
                 },
                 corruptedForm = { onReset -> DesktopCorruptedScreen(onReset) },
                 resetForm = { onConfirm, onCancel -> DesktopResetScreen(onConfirm, onCancel) },
-            ) { onLock -> DesktopChrome(state, onLock, liveSessions, credentials, onVaultUnlocked) }
+            ) { onLock -> DesktopChrome(state, onLock, liveSessions, credentials, onVaultUnlocked, customGroupsProvider) }
         } else {
-            DesktopChrome(state, onLock = null, sessions = liveSessions, credentials = credentials, onVaultUnlocked = onVaultUnlocked)
+            DesktopChrome(state, onLock = null, sessions = liveSessions, credentials = credentials, onVaultUnlocked = onVaultUnlocked, customGroupsProvider = customGroupsProvider)
         }
     }
 }
@@ -231,12 +234,14 @@ private fun DesktopChrome(
     sessions: SessionsController?,
     credentials: CredentialManagerController?,
     onVaultUnlocked: () -> Unit,
+    customGroupsProvider: () -> List<String>,
 ) {
     // Keychain-секреты живут в открытом vault — за гейтом мастер-пароля сперва прогоняем
-    // миграцию данных ([onVaultUnlocked]), затем перечитываем.
+    // миграцию данных ([onVaultUnlocked]), затем перечитываем (секреты + синканутые пустые папки).
     LaunchedEffect(credentials) {
         onVaultUnlocked()
         credentials?.reload()
+        state.loadCustomGroups(customGroupsProvider())
     }
 
     // Хост, для которого нет привязанного секрета → спрашиваем пароль перед подключением.

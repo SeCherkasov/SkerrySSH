@@ -9,10 +9,10 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import app.skerry.ui.design.optimalWindowSize
 import java.awt.GraphicsEnvironment
-import app.skerry.shared.host.FileHostStore
+import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.io.PrivateConfig
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
-import app.skerry.shared.ssh.FileKnownHostsStore
+import app.skerry.shared.ssh.VaultKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
@@ -20,12 +20,14 @@ import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.VaultMigration
+import app.skerry.shared.vault.WorkspaceLayoutStore
+import app.skerry.shared.vault.WorkspaceMigration
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.initializeVaultCrypto
-import app.skerry.shared.snippet.FileSnippetStore
+import app.skerry.shared.snippet.VaultSnippetStore
 import app.skerry.shared.sync.KtorSyncClient
-import app.skerry.shared.tunnel.FileTunnelStore
+import app.skerry.shared.tunnel.VaultTunnelStore
 import app.skerry.ui.sync.FileSyncConfigStore
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.host.HostManagerController
@@ -210,10 +212,20 @@ fun main() {
     runBlocking { initializeVaultCrypto() }
     application {
         val dir = configDir()
-        // TOFU: первый ключ хоста запоминается в known_hosts (с отметкой времени), при смене ключа —
-        // отказ + запись события в known_hosts_mismatches, чтобы менеджер known-hosts мог показать
-        // предупреждение и дать принять/отклонить новый ключ. Часы штампуют firstSeen/observedAt.
-        val knownHostsStore = FileKnownHostsStore(dir.resolve("known_hosts"))
+        // Локальный зашифрованный vault создаётся ПЕРВЫМ: всё рабочее пространство (хосты/группы/
+        // сниппеты/туннели/known-hosts) живёт его записями (Phase A) и E2E-синкается. Гейт мастер-пароля
+        // (App → VaultGate) закрывает им весь UI, поэтому к моменту коннекта/чтения vault разблокирован.
+        val vault = FileVault(
+            dir.resolve("vault.json").toString().toPath(),
+            IonspinVaultCrypto(),
+            deviceId(dir),
+            FileSystem.SYSTEM,
+        ) { Instant.now().toString() }
+        // TOFU: первый ключ хоста запоминается в vault (RecordType.KNOWN_HOST — синкается между
+        // устройствами, как в Termius), при смене ключа — отказ + запись события в локальный (НЕ
+        // синкаемый) known_hosts_mismatches, чтобы менеджер мог показать предупреждение и дать
+        // принять/отклонить. Часы штампуют firstSeen/observedAt.
+        val knownHostsStore = VaultKnownHostsStore(vault)
         val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches"))
         val transport = SshjTransport(
             TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
@@ -223,16 +235,14 @@ fun main() {
         // БЕЗ записи в known_hosts. Постоянное доверие фиксирует только реальный коннект (TOFU выше).
         val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
-        // Менеджер хостов: профили в hosts.json рядом с known_hosts; id — случайный UUID.
-        val hostStore = FileHostStore(dir.resolve("hosts.json"))
+        // Менеджер хостов: профили — записи HOST в vault, порядок дерева — в записи-макете
+        // ([VaultHostStore]/[WorkspaceLayout]). На старте vault залочен (список пуст), после unlock
+        // контроллер перечитывает через reload(). id — случайный UUID.
+        val hostStore = VaultHostStore(vault)
         val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
-        // Локальный зашифрованный vault: гейт мастер-пароля (App → VaultGate) закрывает им весь UI.
-        val vault = FileVault(
-            dir.resolve("vault.json").toString().toPath(),
-            IonspinVaultCrypto(),
-            deviceId(dir),
-            FileSystem.SYSTEM,
-        ) { Instant.now().toString() }
+        // Макет рабочего пространства в vault (Phase A): пустые папки (и порядок дерева) синкаются как
+        // одна запись. Пустые папки читаем после unlock (vault залочен на старте) и пишем при изменении.
+        val workspaceLayout = WorkspaceLayoutStore(vault)
         // Одноуровневая модель vault: keychain-секреты (записи CREDENTIAL). Хост ссылается на секрет
         // напрямую через credentialId.
         val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
@@ -248,15 +258,6 @@ fun main() {
             deviceIdProvider = { deviceId(dir) },
             deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
         )
-        // Разовая миграция старых данных (секрет под IDENTITY → CREDENTIAL, хост → прямой credentialId,
-        // снос учёток-обёрток) при разблокировке vault; идемпотентна. После неё обновляем кэш хостов.
-        val onVaultUnlocked: () -> Unit = {
-            // Сбой миграции не должен мешать показать уже доступные данные — гасим и перечитываем хосты.
-            runCatching { VaultMigration(vault, hostStore).migrate() }
-            hosts.reload()
-            // keep-connected: vault открыт → есть dataKey, можно бесшумно восстановить sync-сессию.
-            sync.restoreSession()
-        }
         // Генерация SSH-ключей в разделе Vault: BouncyCastle поверх sshj-формата (тот же, что читает транспорт).
         val keyGenerator = BouncyCastleSshKeyGenerator()
         // Разбор импортированных SSH-сертификатов (раздел Vault → Certificates) — sshj поверх ssh-wire.
@@ -268,40 +269,52 @@ fun main() {
         val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
         val tunnelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val tunnels = TunnelManager(
-            store = FileTunnelStore(dir.resolve("tunnels.json")),
+            store = VaultTunnelStore(vault),
             transport = tunnelTransport,
             resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
             scope = tunnelScope,
         ) { UUID.randomUUID().toString() }
-        // Сохранённые сниппеты: библиотека команд в snippets.json. Plain-конфиг —
-        // секретов не содержат, vault не требуют; запуск идёт в активный терминал из самого UI.
-        val snippets = SnippetManager(FileSnippetStore(dir.resolve("snippets.json"))) { UUID.randomUUID().toString() }
+        // Сохранённые сниппеты: библиотека команд — записи SNIPPET в vault (команды могут содержать
+        // inline-креды, поэтому под общим шифрованием и E2E-синком). Запуск идёт в активный терминал.
+        val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
+        // Разовый перенос старого локального рабочего пространства (hosts/snippets/tunnels.json) в vault
+        // + миграция секретов (IDENTITY → CREDENTIAL, хост → прямой credentialId) при разблокировке;
+        // обе идемпотентны. После — перечитываем менеджеры и бесшумно восстанавливаем sync-сессию.
+        val onVaultUnlocked: () -> Unit = {
+            runCatching { WorkspaceMigration(vault, dir).migrate() }
+            runCatching { VaultMigration(vault, hostStore).migrate() }
+            hosts.reload()
+            snippets.reload()
+            tunnels.reload()
+            knownHosts.refresh()
+            // keep-connected: vault открыт → есть dataKey, можно бесшумно восстановить sync-сессию.
+            sync.restoreSession()
+        }
         // Внешняя чистка при безвозвратном сбросе vault (забытый пароль / битый файл). Файл vault уже
         // стёрт контроллером (Vault.reset) и теперь заблокирован, поэтому credentials.reload() здесь НЕ
         // зовём (он требует открытого vault) — список секретов перечитается при создании нового vault.
-        val onVaultReset: (ResetScope) -> Unit = { scope ->
-            when (scope) {
-                // Только секреты: профили хостов остаются, но их ссылки на секреты теперь висячие —
-                // зануляем credentialId/identityId, чтобы коннект снова спрашивал пароль (auth=Ask),
-                // а не падал на «секрет не найден». reorder сохраняет набор id (требование контракта).
-                ResetScope.SecretsOnly ->
-                    hostStore.reorder { list -> list.map { it.copy(credentialId = null, identityId = null) } }
-                // Заводской сброс: сносим профили хостов, доверенные ключи, туннели и локальные настройки.
-                ResetScope.Everything -> {
-                    tunnels.closeAll()
-                    tunnels.tunnels.toList().forEach { tunnels.delete(it.id) }
-                    snippets.snippets.toList().forEach { snippets.delete(it.id) }
-                    knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
-                    knownHosts.entries.toList().forEach { knownHosts.forget(it) }
-                    hostStore.all().forEach { hostStore.remove(it.id) }
-                    writeRecentHostIds(dir, emptyList())
-                    writeCollapsedGroups(dir, emptySet())
-                    writeCustomGroups(dir, emptyList())
-                    writeTerminalFont(dir, TerminalFont.DEFAULT)
-                    writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
-                }
+        // Сброс vault (забытый пароль / битый файл). Phase A: хосты/сниппеты/туннели — записи vault,
+        // поэтому Vault.reset() уже стёр их вместе с секретами (zero-knowledge: без мастер-пароля их не
+        // восстановить — «только секреты, профили оставить» технически невозможно). Здесь чистим лишь
+        // данные ВНЕ vault и отражаем опустевший vault в менеджерах. Vault на этот момент заблокирован.
+        val onVaultReset: (ResetScope) -> Unit = { resetScope ->
+            tunnels.closeAll()
+            // Хосты/группы стёрты вместе с vault при ЛЮБОМ сбросе → чистим и их локальные UI-следы
+            // (недавние, свёрнутость, пустые папки): иначе в открытом виде остались бы имена групп и
+            // UUID хостов, которых уже нет (security L1/I1).
+            writeRecentHostIds(dir, emptyList())
+            writeCollapsedGroups(dir, emptySet())
+            writeCustomGroups(dir, emptyList())
+            // Заводской сброс: дополнительно сносим доверенные ключи (не-vault) и настройки терминала.
+            if (resetScope == ResetScope.Everything) {
+                knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
+                knownHosts.entries.toList().forEach { knownHosts.forget(it) }
+                writeTerminalFont(dir, TerminalFont.DEFAULT)
+                writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
             }
             hosts.reload()
+            snippets.reload()
+            tunnels.reload()
         }
         val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
@@ -327,8 +340,11 @@ fun main() {
                     onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
                     initialRecentHostIds = readRecentHostIds(dir),
                     onRecentHostIdsChange = { writeRecentHostIds(dir, it) },
-                    initialCustomGroups = readCustomGroups(dir),
-                    onCustomGroupsChange = { writeCustomGroups(dir, it) },
+                    // Пустые папки синкаются в vault: стартуем пусто (vault залочен), читаем через
+                    // customGroupsProvider после unlock, пишем изменения в запись-макет.
+                    initialCustomGroups = emptyList(),
+                    onCustomGroupsChange = { groups -> workspaceLayout.write(workspaceLayout.read().copy(groups = groups)) },
+                    customGroupsProvider = { workspaceLayout.read().groups },
                     initialSftpShowHidden = readSftpShowHidden(dir),
                     onSftpShowHiddenChange = { writeSftpShowHidden(dir, it) },
                     initialTerminalFont = readTerminalFont(dir),

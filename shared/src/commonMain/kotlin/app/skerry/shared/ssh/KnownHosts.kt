@@ -1,5 +1,7 @@
 package app.skerry.shared.ssh
 
+import kotlinx.serialization.Serializable
+
 /**
  * Запись об известном ключе хоста. Идентичность ключа — тройка (host, port, keyType):
  * один хост может предъявлять ключи разных типов. [fingerprint] — формат OpenSSH
@@ -7,7 +9,11 @@ package app.skerry.shared.ssh
  *
  * [firstSeen] — отметка времени первого доверия ключу (ISO-8601, как её отдают инъектированные
  * часы [TofuHostKeyVerifier]); пусто для записей, импортированных из старого формата без даты.
+ *
+ * `@Serializable` — запись синкается в vault ([app.skerry.shared.ssh.VaultKnownHostsStore],
+ * Phase A): доверие к ключам хостов переезжает на другие устройства, как в Termius.
  */
+@Serializable
 data class KnownHost(
     val host: String,
     val port: Int,

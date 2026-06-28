@@ -42,6 +42,15 @@ class SnippetManager(
     var snippets: List<SnippetEntry> by mutableStateOf(store.all().map { SnippetEntry(it) })
         private set
 
+    /**
+     * Перечитать список из стора. Нужно после записей в обход менеджера — например, перенос сниппетов
+     * в vault при unlock ([app.skerry.shared.vault.WorkspaceMigration]): на старте vault залочен и
+     * [store] отдаёт пусто, после разблокировки сниппеты появляются.
+     */
+    fun reload() {
+        snippets = store.all().map { SnippetEntry(it) }
+    }
+
     fun find(id: String?): SnippetEntry? = id?.let { wanted -> snippets.firstOrNull { it.id == wanted } }
 
     /**

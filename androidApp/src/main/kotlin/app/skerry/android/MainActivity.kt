@@ -6,15 +6,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import app.skerry.shared.host.FileHostStore
+import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
-import app.skerry.shared.ssh.FileKnownHostsStore
+import app.skerry.shared.ssh.VaultKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
-import app.skerry.shared.snippet.FileSnippetStore
+import app.skerry.shared.snippet.VaultSnippetStore
 import app.skerry.shared.sync.KtorSyncClient
-import app.skerry.shared.tunnel.FileTunnelStore
+import app.skerry.shared.tunnel.VaultTunnelStore
 import app.skerry.shared.vault.AndroidBiometricKeyStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileBioArtifactStore
@@ -23,6 +23,8 @@ import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.shared.vault.VaultMigration
+import app.skerry.shared.vault.WorkspaceMigration
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.design.MobileDesignApp
@@ -47,6 +49,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.io.File
@@ -72,6 +75,10 @@ class MainActivity : FragmentActivity() {
     // контроллером и заблокирован, поэтому здесь чистим только данные ВНЕ vault (профили хостов,
     // known_hosts, туннели). Заполняется в [buildDependencies]; передаётся в [MobileDesignApp].
     private var onVaultReset: (ResetScope) -> Unit = {}
+
+    // Разовый перенос локального рабочего пространства в vault + миграция секретов при unlock. Поле,
+    // т.к. ссылается на граф зависимостей; заполняется в [buildDependencies], зовётся из [MobileDesignApp].
+    private var onVaultUnlocked: () -> Unit = {}
 
     override fun onDestroy() {
         tunnelScope?.cancel()
@@ -133,8 +140,8 @@ class MainActivity : FragmentActivity() {
                 deps,
                 state = designState,
                 onVaultReset = onVaultReset,
-                // keep-connected: vault открыт → бесшумно восстанавливаем sync-сессию из refresh-токена.
-                onVaultUnlocked = { deps.sync?.restoreSession() },
+                // Перенос workspace в vault + миграция секретов + reload + восстановление sync-сессии.
+                onVaultUnlocked = onVaultUnlocked,
             )
         }
     }
@@ -199,17 +206,19 @@ class MainActivity : FragmentActivity() {
             FileSystem.SYSTEM,
         ) { System.currentTimeMillis().toString() }
         val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
-        // SSH-транспорт (sshj, общий JVM source set). TOFU: первый ключ хоста запоминается в
-        // known_hosts (с отметкой времени), при смене ключа — отказ + запись события в
-        // known_hosts_mismatches, чтобы менеджер known-hosts мог показать предупреждение и дать
-        // принять/отклонить новый ключ. Менеджер хостов: профили в hosts.json рядом.
-        val knownHostsStore = FileKnownHostsStore(dir.resolve("known_hosts").toPath())
+        // SSH-транспорт (sshj, общий JVM source set). TOFU: первый ключ хоста запоминается в vault
+        // (RecordType.KNOWN_HOST — синкается между устройствами, как в Termius), при смене ключа —
+        // отказ + запись события в локальный (НЕ синкаемый) known_hosts_mismatches, чтобы менеджер
+        // known-hosts мог показать предупреждение и дать принять/отклонить новый ключ.
+        val knownHostsStore = VaultKnownHostsStore(vault)
         val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches").toPath())
         val transport = SshjTransport(
             TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
-        val hostStore = FileHostStore(dir.resolve("hosts.json").toPath())
+        // Профили — записи HOST в vault (Phase A), порядок дерева — в записи-макете. На старте vault
+        // залочен (список пуст), после unlock контроллер перечитывает через reload().
+        val hostStore = VaultHostStore(vault)
         val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
         // Биометрия: ключ в AndroidKeyStore, промпт хостит эта Activity. Слабая ссылка — стор не
         // удерживает Activity и при пересоздании отдаёт null, а не уничтоженную (промпт тогда NoActivity).
@@ -226,14 +235,14 @@ class MainActivity : FragmentActivity() {
         val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
         val tunnels = TunnelManager(
-            store = FileTunnelStore(dir.resolve("tunnels.json").toPath()),
+            store = VaultTunnelStore(vault),
             transport = tunnelTransport,
             resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
             scope = scope,
         ) { UUID.randomUUID().toString() }
-        // Сохранённые сниппеты (модель Termius): библиотека команд в snippets.json. Plain-конфиг —
-        // секретов не содержат, vault не требуют; запуск идёт в активный терминал из самого UI.
-        val snippets = SnippetManager(FileSnippetStore(dir.resolve("snippets.json").toPath())) { UUID.randomUUID().toString() }
+        // Сохранённые сниппеты (модель Termius): библиотека команд — записи SNIPPET в vault (команды
+        // могут содержать inline-креды, поэтому под общим шифрованием и E2E-синком). Запуск в терминал.
+        val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
         // Self-hosted sync (Phase 2): координатор связывает сетевой клиент (Ktor+SRP), крипту и vault.
         // Привязка к серверу персистится в sync.json (НЕсекретное: URL/accountId/deviceId); токены и
         // пароль не храним (переавторизация по мастер-паролю). deviceId — стабильный (как у записей
@@ -246,29 +255,43 @@ class MainActivity : FragmentActivity() {
             deviceIdProvider = { deviceId(dir) },
             deviceName = android.os.Build.MODEL?.takeIf { it.isNotBlank() } ?: "Skerry Android",
         )
+        // Перенос старого локального workspace (hosts/snippets/tunnels.json) в vault + миграция секретов
+        // при разблокировке; обе идемпотентны. После — reload менеджеров и восстановление sync-сессии.
+        onVaultUnlocked = {
+            // Миграция — файловый I/O + перешифровка записей: уводим с main-потока (StrictMode/джанк),
+            // reload Compose-state возвращаем на Main. restoreSession сам уходит в свой scope.
+            lifecycleScope.launch(Dispatchers.IO) {
+                runCatching { WorkspaceMigration(vault, dir.toPath()).migrate() }
+                runCatching { VaultMigration(vault, hostStore).migrate() }
+                withContext(Dispatchers.Main) {
+                    hosts.reload()
+                    snippets.reload()
+                    tunnels.reload()
+                    knownHosts.refresh()
+                }
+                sync.restoreSession()
+            }
+        }
         // Чистка данных вне vault при сбросе (паритет desktop `main.kt`). Файл vault уже стёрт и
         // заблокирован — секреты перечитаются при создании нового vault, поэтому credentials тут не трогаем.
-        onVaultReset = { scope ->
-            when (scope) {
-                // Только секреты: профили хостов остаются, но их ссылки на стёртые секреты висячие —
-                // зануляем credentialId/identityId, чтобы коннект снова спрашивал пароль (auth=Ask),
-                // а не падал на «секрет не найден». reorder сохраняет набор id (требование контракта).
-                ResetScope.SecretsOnly ->
-                    hostStore.reorder { list -> list.map { it.copy(credentialId = null, identityId = null) } }
-                // Заводской сброс: сносим профили хостов, доверенные ключи, туннели и свёрнутые папки.
-                ResetScope.Everything -> {
-                    tunnels.closeAll()
-                    tunnels.tunnels.toList().forEach { tunnels.delete(it.id) }
-                    snippets.snippets.toList().forEach { snippets.delete(it.id) }
-                    knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
-                    knownHosts.entries.toList().forEach { knownHosts.forget(it) }
-                    hostStore.all().forEach { hostStore.remove(it.id) }
-                    writeCollapsedGroups(dir, emptySet())
-                    writeTerminalFont(dir, TerminalFont.DEFAULT)
-                    writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
-                }
+        // Phase A: хосты/сниппеты/туннели — записи vault, поэтому Vault.reset() уже стёр их вместе с
+        // секретами (zero-knowledge: без мастер-пароля их не восстановить). Чистим лишь данные ВНЕ vault
+        // и отражаем опустевший vault в менеджерах. Vault на этот момент заблокирован.
+        onVaultReset = { resetScope ->
+            tunnels.closeAll()
+            // Хосты/группы стёрты вместе с vault при любом сбросе → чистим и их локальный UI-след
+            // (свёрнутость папок), иначе в открытом виде остались бы имена групп, которых уже нет (L1).
+            writeCollapsedGroups(dir, emptySet())
+            // Заводской сброс: дополнительно доверенные ключи (не-vault) и настройки терминала.
+            if (resetScope == ResetScope.Everything) {
+                knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
+                knownHosts.entries.toList().forEach { knownHosts.forget(it) }
+                writeTerminalFont(dir, TerminalFont.DEFAULT)
+                writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
             }
             hosts.reload()
+            snippets.reload()
+            tunnels.reload()
         }
         return AppDependencies(
             transport = transport,

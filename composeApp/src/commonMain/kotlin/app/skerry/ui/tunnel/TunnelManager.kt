@@ -144,6 +144,17 @@ class TunnelManager(
         }
     }
 
+    /**
+     * Перечитать список из стора. Нужно после записей в обход менеджера — например, перенос туннелей
+     * в vault при unlock ([app.skerry.shared.vault.WorkspaceMigration]): на старте vault залочен и
+     * [store] отдаёт пусто, после разблокировки данные появляются. Существующие строки сохраняем по id,
+     * чтобы не потерять рантайм-состояние активных пробросов; пропавшие отбрасываем, новые добавляем.
+     */
+    fun reload() {
+        val byId = tunnels.associateBy { it.id }
+        tunnels = store.all().map { tunnel -> byId[tunnel.id]?.also { it.tunnel = tunnel } ?: TunnelEntry(tunnel) }
+    }
+
     fun find(id: String): TunnelEntry? = tunnels.firstOrNull { it.id == id }
 
     /**
