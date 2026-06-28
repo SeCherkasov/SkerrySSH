@@ -42,6 +42,7 @@ import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.shortFingerprint
+import app.skerry.ui.vault.SecretCopyAuthorizer
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.vault.copyPasswordToClipboard
@@ -81,6 +82,10 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     val hosts = hostsController?.hosts ?: emptyList()
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
+    // Повторная аутентификация перед копированием пароля: биометрия, если включена, иначе мастер-пароль.
+    val vault = LocalVault.current
+    val biometrics = LocalVaultBiometrics.current
+    val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }
 
     var category by remember { mutableStateOf(VaultCategoryKind.SSH_KEYS) }
     var selectedId by remember { mutableStateOf<String?>(null) }
@@ -96,7 +101,8 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     // плавает поверх центрированного диалога и перекрывает нижние поля ввода над клавиатурой.
     // LaunchedEffect пишет флаг только при смене значения (не на каждой рекомпозиции списка);
     // DisposableEffect снимает его при уходе с таба, чтобы таб-бар не остался скрытым.
-    val modalOpen = showGenerate || showAddPassword || showImportCert || pendingDelete != null || selectedCred != null
+    val modalOpen = showGenerate || showAddPassword || showImportCert || pendingDelete != null ||
+        selectedCred != null || copyAuth.passwordPromptVisible
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
 
@@ -205,6 +211,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 hosts = VaultPresentation.hostsUsing(credential.id, hosts),
                 mono = mono,
                 onCopy = { copyTextToClipboard(it) },
+                onCopyPassword = { pwd -> copyAuth.authorize { copyPasswordToClipboard(pwd) } },
                 onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
                 // Закрываем лист деталей перед показом диалога подтверждения: иначе шторка (рисуется
                 // поверх) перекрыла бы центрированный DeleteSecretDialog, и виден был лишь его край.
@@ -213,6 +220,14 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                     pendingDelete = credential
                 },
                 onDismiss = { selectedId = null },
+            )
+        }
+        if (copyAuth.passwordPromptVisible) {
+            PasswordConfirmDialog(
+                error = copyAuth.passwordError,
+                busy = copyAuth.verifying,
+                onDismiss = { copyAuth.dismiss() },
+                onConfirm = { copyAuth.submitPassword(it) },
             )
         }
     }
@@ -369,6 +384,7 @@ private fun MobileSecretDetailSheet(
     hosts: List<Host>,
     mono: FontFamily,
     onCopy: (String) -> Unit,
+    onCopyPassword: (String) -> Unit,
     onExport: (name: String, content: String) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
@@ -432,9 +448,10 @@ private fun MobileSecretDetailSheet(
                             }
                         }
                         is CredentialSecret.Password -> {
-                            // Пароль — чувствительный: платформенный путь (Android: sensitive-клип +
-                            // автоочистка), а не обычный буфер, как для публичного ключа/сертификата.
-                            MobileSheetButton("Copy password", onClick = { copyPasswordToClipboard(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                            // Пароль — чувствительный: копирование требует повторной аутентификации
+                            // (биометрия/мастер-пароль, см. onCopyPassword) и идёт платформенным путём
+                            // (Android: sensitive-клип + автоочистка), а не обычным буфером, как cert/публичный ключ.
+                            MobileSheetButton("Copy password", onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                             MobileSheetButton("Delete", onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
                         }
                     }

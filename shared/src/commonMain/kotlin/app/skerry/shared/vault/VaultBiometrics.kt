@@ -46,6 +46,34 @@ sealed interface BiometricUnlockResult {
 }
 
 /**
+ * Исход биометрического подтверждения личности перед чувствительным действием в открытом vault
+ * (копирование пароля). В отличие от [BiometricUnlockResult] не открывает vault — лишь доказывает
+ * присутствие владельца через тот же `bioKey`.
+ */
+sealed interface BiometricConfirmResult {
+    /** Биометрия пройдена — действие можно выполнять. */
+    data object Confirmed : BiometricConfirmResult
+
+    /** Биометрия для этого vault не включена (`vault.bio` нет) — вызывающий просит мастер-пароль. */
+    data object NotEnabled : BiometricConfirmResult
+
+    /** Биометрия недоступна сейчас (нет железа/залочена) — откат на мастер-пароль. */
+    data object Unavailable : BiometricConfirmResult
+
+    /** Пользователь отменил промпт — действие не выполняем. */
+    data object Cancelled : BiometricConfirmResult
+
+    /** Сбой биометрии — действие не выполняем. */
+    data object Failed : BiometricConfirmResult
+
+    /**
+     * `bioKey` инвалидирован (новый отпечаток/лицо). Биометрия **выключена** (как в [unlock]) —
+     * вызывающий откатывается на мастер-пароль.
+     */
+    data object Invalidated : BiometricConfirmResult
+}
+
+/**
  * Оркестрация биометрической разблокировки поверх [Vault] + [BiometricKeyStore] + [BioArtifactStore].
  * Платформо-независима (контракт — `commonMain`), поэтому покрыта TDD на фейках без железа.
  *
@@ -139,6 +167,34 @@ class VaultBiometrics(
             BiometricResult.KeyInvalidated -> {
                 disable() // биометрия скомпрометирована сменой набора — снять и потребовать пароль
                 BiometricUnlockResult.Invalidated
+            }
+        }
+    }
+
+    /**
+     * Подтвердить личность владельца биометрией **без разблокировки** vault — для повторной
+     * аутентификации перед чувствительным действием в уже открытой сессии (копирование пароля).
+     * Тот же путь, что [unlock] (читает `vault.bio`, сверяет alias/deviceId, разворачивает через
+     * [BiometricKeyStore.unwrap] с системным промптом), но развёрнутый ключ не присваивается vault,
+     * а сразу затирается: нужен лишь факт успешной аутентификации. Инвалидация ключа выключает
+     * биометрию (как в [unlock]) — вызывающий откатится на мастер-пароль. Vault не трогается.
+     */
+    suspend fun confirm(prompt: BiometricPrompt): BiometricConfirmResult {
+        val artifact = artifacts.read() ?: return BiometricConfirmResult.NotEnabled
+        if (artifact.formatVersion != FORMAT_VERSION || artifact.alias != alias || artifact.deviceId != deviceId) {
+            return BiometricConfirmResult.NotEnabled
+        }
+        if (keyStore.availability() != BiometricAvailability.Available) return BiometricConfirmResult.Unavailable
+        return when (val unwrapped = keyStore.unwrap(alias, artifact.wrappedBio, prompt)) {
+            is BiometricResult.Success -> {
+                unwrapped.value.fill(0) // ключ не нужен — нужен лишь факт успешной аутентификации
+                BiometricConfirmResult.Confirmed
+            }
+            BiometricResult.Cancelled -> BiometricConfirmResult.Cancelled
+            BiometricResult.Failed -> BiometricConfirmResult.Failed
+            BiometricResult.KeyInvalidated -> {
+                disable() // ключ скомпрометирован сменой набора — снять и потребовать пароль
+                BiometricConfirmResult.Invalidated
             }
         }
     }

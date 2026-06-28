@@ -302,6 +302,41 @@ class FileVaultTest {
         assertFalse(v.changePassword("wrong".toCharArray(), "new-pass".toCharArray()))
     }
 
+    @Test
+    fun `verifyPassword accepts the correct master password`() = vaultTest {
+        val v = vault().apply { create("master".toCharArray()) }
+
+        assertTrue(v.verifyPassword("master".toCharArray()))
+    }
+
+    @Test
+    fun `verifyPassword rejects a wrong master password`() = vaultTest {
+        val v = vault().apply { create("master".toCharArray()) }
+
+        assertFalse(v.verifyPassword("nope".toCharArray()))
+    }
+
+    @Test
+    fun `verifyPassword does not disturb the open session`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("host-1", RecordType.HOST, "data".encodeToByteArray())
+        }
+
+        assertTrue(v.verifyPassword("master".toCharArray()))
+
+        // Проверка личности не перевыдаёт ключ и не перечитывает записи: vault остаётся открыт.
+        assertTrue(v.isUnlocked)
+        assertContentEquals("data".encodeToByteArray(), v.openPayload("host-1"))
+    }
+
+    @Test
+    fun `verifyPassword on a locked vault returns false`() = vaultTest {
+        val v = vault().apply { create("master".toCharArray()); lock() }
+
+        assertFalse(v.verifyPassword("master".toCharArray()))
+    }
+
     private companion object {
         const val TS = "2026-06-12T00:00:00Z"
     }

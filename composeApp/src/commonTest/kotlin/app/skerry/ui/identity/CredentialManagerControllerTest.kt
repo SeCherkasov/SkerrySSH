@@ -126,6 +126,7 @@ private class FakeCredVault : Vault {
     }
 
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = true
+    override fun verifyPassword(password: CharArray): Boolean = true
 
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
     override fun exportDataKey(): DataKey? = null

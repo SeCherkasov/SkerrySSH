@@ -68,6 +68,7 @@ import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.shortFingerprint
+import app.skerry.ui.vault.SecretCopyAuthorizer
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.vault.copyPasswordToClipboard
@@ -105,6 +106,10 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     val inspector = LocalSshCertificateInspector.current
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
+    // Повторная аутентификация перед копированием пароля (на desktop биометрии нет — мастер-пароль).
+    val vault = LocalVault.current
+    val biometrics = LocalVaultBiometrics.current
+    val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }
 
     var category by remember { mutableStateOf(VaultCategoryKind.SSH_KEYS) }
     var selectedId by remember { mutableStateOf<String?>(null) }
@@ -160,6 +165,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                             hosts = VaultPresentation.hostsUsing(credential.id, hosts),
                             mono = mono,
                             onCopy = { copyTextToClipboard(it) },
+                            onCopyPassword = { pwd -> copyAuth.authorize { copyPasswordToClipboard(pwd) } },
                             onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
                             onDelete = { pendingDeleteCred = credential },
                         )
@@ -235,6 +241,14 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     }
                     pendingDeleteCred = null
                 },
+            )
+        }
+        if (copyAuth.passwordPromptVisible) {
+            PasswordConfirmDialog(
+                error = copyAuth.passwordError,
+                busy = copyAuth.verifying,
+                onDismiss = { copyAuth.dismiss() },
+                onConfirm = { copyAuth.submitPassword(it) },
             )
         }
     }
@@ -442,6 +456,7 @@ private fun LiveSecretDetail(
     hosts: List<Host>,
     mono: FontFamily,
     onCopy: (String) -> Unit,
+    onCopyPassword: (String) -> Unit,
     onExport: (name: String, content: String) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -496,9 +511,10 @@ private fun LiveSecretDetail(
                     }
                 }
                 is CredentialSecret.Password -> {
-                    // Пароль — чувствительный: копируем платформенным путём (Android: sensitive-клип +
-                    // автоочистка), а не обычным буфером, как публичный ключ/сертификат.
-                    PrimaryButton("Copy password", onClick = { copyPasswordToClipboard(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                    // Пароль — чувствительный: копирование требует повторной аутентификации
+                    // (биометрия/мастер-пароль, см. onCopyPassword) и идёт платформенным путём
+                    // (Android: sensitive-клип + автоочистка), а не обычным буфером, как cert/публичный ключ.
+                    PrimaryButton("Copy password", onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                     GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
                 }
             }
@@ -618,6 +634,22 @@ internal fun ImportCertificateDialog(
             )
         }
         DialogButtons(confirmLabel = "Import", confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), pem.trim(), certificate.trim(), passphrase.ifBlank { null }) })
+    }
+}
+
+/**
+ * Повторная аутентификация мастер-паролем перед копированием пароля в буфер (общий для desktop и
+ * мобильного keychain — путь без биометрии). На неверный ввод [error] показывает ошибку, форма
+ * остаётся открытой для повторной попытки. Поле очищается вместе с пересозданием диалога.
+ */
+@Composable
+internal fun PasswordConfirmDialog(error: Boolean, busy: Boolean, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var password by remember { mutableStateOf("") }
+    VaultDialogScaffold("Confirm master password", "Enter your master password to copy this secret to the clipboard.", onDismiss) {
+        DialogField("MASTER PASSWORD", password, { password = it }, placeholder = "master password", password = true)
+        if (error) Txt("That password didn't match — try again.", color = D.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
+        // confirmEnabled гаснет на время сверки (Argon2id) — без этого двойной тап запустил бы её дважды.
+        DialogButtons(confirmLabel = "Copy", confirmEnabled = password.isNotEmpty() && !busy, onDismiss = onDismiss, onConfirm = { onConfirm(password) })
     }
 }
 

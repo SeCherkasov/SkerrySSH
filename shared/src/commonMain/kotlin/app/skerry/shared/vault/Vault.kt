@@ -92,4 +92,13 @@ interface Vault {
      * перешифровываются). `false`, если [oldPassword] неверен. Требует разблокированного vault.
      */
     fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean
+
+    /**
+     * Проверить мастер-пароль, **не меняя состояние**: вывести masterKey из текущего salt и
+     * развернуть `wrappedDataKey`. `true` — пароль верен. Сессию не трогает (`dataKey` не
+     * перевыдаётся, записи не перечитываются), на заблокированном vault — `false` (нет метаданных
+     * для сверки). Нужен для повторного подтверждения личности перед чувствительным действием —
+     * копированием пароля в буфер — без разблокировки заново. Пароль затирается.
+     */
+    fun verifyPassword(password: CharArray): Boolean
 }
