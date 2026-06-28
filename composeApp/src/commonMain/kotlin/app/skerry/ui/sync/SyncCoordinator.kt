@@ -92,6 +92,13 @@ class SyncCoordinator(
      * невозможен — он требует системного промпта отпечатка. На устройстве без биометрии — no-op.
      */
     private val onDataKeyAdopted: () -> Unit = {},
+    /**
+     * Вызывается после успешного синка, когда что-то подтянулось с сервера ([SyncOutcome.pulled] > 0).
+     * Менеджеры списков (хосты/сниппеты/туннели/known-hosts) держат записи в памяти и не видят то, что
+     * синк положил в vault напрямую — без этого колбэка синканутые данные не появляются на экране до
+     * перезахода. Платформа проводит сюда reload менеджеров (на главном потоке).
+     */
+    private val onSynced: () -> Unit = {},
 ) {
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Disabled)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
@@ -224,6 +231,8 @@ class SyncCoordinator(
         try {
             val outcome = SyncEngine(c, vault, syncState).sync(s)
             _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
+            // Подтянули записи с сервера → обновить менеджеры списков, иначе синканутое не видно до перезахода.
+            if (outcome.pulled > 0) runCatching { onSynced() }
         } catch (e: SyncException) {
             _status.value = SyncStatus.Failed(syncErrorMessage(e))
         }
