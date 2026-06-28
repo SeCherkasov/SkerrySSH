@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
+import app.skerry.ui.secure.SecureScreen
 
 
 /**
@@ -67,6 +68,9 @@ import app.skerry.ui.host.NewConnectionFormState
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MobileNewConnectionSheet(state: MobileDesignState) {
+    // Форма может содержать вводимые секреты (новый пароль/приватный ключ/passphrase) — защита окна
+    // от снимков экрана/превью в Recent Apps пока лист открыт (Android; desktop — no-op).
+    SecureScreen()
     val hosts = LocalHosts.current
     val credentials = LocalCredentials.current
     // Режим правки: лист предзаполняется из профиля и удерживает его id (паритет desktop NewConnectionModal).

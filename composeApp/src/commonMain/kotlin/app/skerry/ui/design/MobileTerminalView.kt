@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
 
@@ -374,6 +375,8 @@ private fun KeyCapIcon(icon: String, onClick: () -> Unit) {
 fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -> Unit) {
     var password by remember { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
+    // Защита ввода SSH-пароля при коннекте от снимков экрана/превью в Recent Apps (Android; desktop — no-op).
+    SecureScreen()
     MobileBottomSheet(
         onDismiss = onDismiss,
         panelModifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
