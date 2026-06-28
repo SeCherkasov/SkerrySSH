@@ -15,6 +15,7 @@ internal data class RegisterRequestWire(
     val wrappedDataKey: String,
     val deviceId: String,
     val deviceName: String,
+    val platform: String? = null,
 )
 
 @Serializable
@@ -30,6 +31,7 @@ internal data class VerifyRequestWire(
     val m1: String,
     val deviceId: String,
     val deviceName: String,
+    val platform: String? = null,
 )
 
 @Serializable

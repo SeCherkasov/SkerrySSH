@@ -31,14 +31,23 @@ fun Route.adminRoutes(services: Services) {
     get("/admin/stats") {
         if (!call.adminAuthorized(services.config.adminToken)) return@get
         val c = services.stats.counts()
-        call.respond(StatsResponse(c.accounts, c.devices, c.records, c.pairingSessions))
+        call.respond(StatsResponse(c.accounts, c.devices, c.records, c.pairingSessions, c.storageBytes))
     }
 
     get("/admin/devices") {
         if (!call.adminAuthorized(services.config.adminToken)) return@get
         val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 200
         val devices = services.devices.listAll(limit).map {
-            AdminDeviceDto(it.accountId, it.id, it.name, it.createdAt, it.lastSeenAt, it.revoked)
+            AdminDeviceDto(
+                accountId = it.accountId,
+                id = it.id,
+                name = it.name,
+                platform = it.platform,
+                createdAt = it.createdAt,
+                lastSeenAt = it.lastSeenAt,
+                syncVersion = it.lastSyncVersion,
+                revoked = it.revoked,
+            )
         }
         call.respond(AdminDevicesResponse(devices))
     }

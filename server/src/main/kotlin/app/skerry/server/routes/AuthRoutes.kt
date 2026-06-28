@@ -37,7 +37,7 @@ fun Route.authRoutes(services: Services) {
             call.respond(HttpStatusCode.Conflict, ErrorResponse("account already exists"))
             return@post
         }
-        services.devices.register(req.accountId, req.deviceId, req.deviceName)
+        services.devices.register(req.accountId, req.deviceId, req.deviceName, req.platform)
         services.activity.record(req.accountId, "auth.register", "new account + device", deviceId = req.deviceId)
         call.respond(
             TokenResponse(
@@ -65,7 +65,7 @@ fun Route.authRoutes(services: Services) {
             call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
             return@post
         }
-        services.devices.register(verified.accountId, req.deviceId, req.deviceName)
+        services.devices.register(verified.accountId, req.deviceId, req.deviceName, req.platform)
         services.activity.record(verified.accountId, "auth.login", "srp login", deviceId = req.deviceId)
         call.respond(
             VerifyResponse(

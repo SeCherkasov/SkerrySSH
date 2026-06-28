@@ -20,8 +20,12 @@ class DeviceRepository(private val db: Database) {
         accountId: String,
         deviceId: String,
         name: String,
+        platform: String? = null,
         now: Long = System.currentTimeMillis(),
     ): Unit = transaction(db) {
+        // Кап под varchar(64): клиентское поле, длинное значение иначе валит запись в 500
+        // (truncation в SQLite, исключение в PostgreSQL) вместо тихого усечения (kotlin-ревью L).
+        val plat = platform?.take(64)
         val existing = Devices.selectAll()
             .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }
             .singleOrNull()
@@ -30,6 +34,7 @@ class DeviceRepository(private val db: Database) {
                 it[id] = deviceId
                 it[Devices.accountId] = accountId
                 it[Devices.name] = name
+                it[Devices.platform] = plat
                 it[createdAt] = now
                 it[lastSeenAt] = now
                 it[revoked] = false
@@ -37,6 +42,8 @@ class DeviceRepository(private val db: Database) {
         } else {
             Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
                 it[Devices.name] = name
+                // platform пишем только когда клиент его прислал — иначе не затираем известное значение.
+                if (plat != null) it[Devices.platform] = plat
                 it[lastSeenAt] = now
             }
         }
@@ -71,9 +78,19 @@ class DeviceRepository(private val db: Database) {
         } > 0
     }
 
-    fun touch(accountId: String, deviceId: String, now: Long = System.currentTimeMillis()): Unit = transaction(db) {
+    /**
+     * Отмечает активность. Если передан [syncVersion] (курсор после pull/push), фиксирует, до
+     * какого состояния устройство дочиталось/дописалось — открытый счётчик для админ-консоли.
+     */
+    fun touch(
+        accountId: String,
+        deviceId: String,
+        now: Long = System.currentTimeMillis(),
+        syncVersion: Long? = null,
+    ): Unit = transaction(db) {
         Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
             it[lastSeenAt] = now
+            if (syncVersion != null) it[lastSyncVersion] = syncVersion
         }
     }
 
@@ -93,8 +110,10 @@ class DeviceRepository(private val db: Database) {
         id = this[Devices.id],
         accountId = this[Devices.accountId],
         name = this[Devices.name],
+        platform = this[Devices.platform],
         createdAt = this[Devices.createdAt],
         lastSeenAt = this[Devices.lastSeenAt],
+        lastSyncVersion = this[Devices.lastSyncVersion],
         revoked = this[Devices.revoked],
     )
 }

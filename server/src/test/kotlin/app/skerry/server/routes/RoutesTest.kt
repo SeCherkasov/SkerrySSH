@@ -16,6 +16,7 @@ import app.skerry.server.model.PushResponse
 import app.skerry.server.model.RecordDto
 import app.skerry.server.model.RecordsResponse
 import app.skerry.server.model.RegisterRequest
+import app.skerry.server.model.StatsResponse
 import app.skerry.server.model.TokenResponse
 import app.skerry.server.model.VerifyRequest
 import app.skerry.server.model.VerifyResponse
@@ -194,9 +195,15 @@ class RoutesTest {
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
         val reg = srpRegister(accountId, password)
-        client.post("/auth/register") {
+        val tokens: TokenResponse = client.post("/auth/register") {
             contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A", platform = "Linux"))
+        }.body()
+        // push фиксирует курсор устройства (syncVersion) — открытые метаданные для консоли
+        client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
         }
 
         // список закрыт admin-токеном
@@ -210,6 +217,8 @@ class RoutesTest {
         assertEquals("devA", d.id)
         assertEquals(accountId, d.accountId)
         assertEquals("Laptop A", d.name)
+        assertEquals("Linux", d.platform)
+        assertEquals(1L, d.syncVersion)
         assertEquals(false, d.revoked)
 
         // отзыв тоже под токеном
@@ -273,9 +282,20 @@ class RoutesTest {
 
         assertEquals(HttpStatusCode.OK, client.get("/admin/health").status)
         assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/stats").status)
-        assertEquals(
-            HttpStatusCode.OK,
-            client.get("/admin/stats") { header("X-Admin-Token", "s3cret") }.status,
-        )
+
+        // storageBytes = суммарный размер шифроблобов (LENGTH(blob)), считается на стороне БД
+        val reg = srpRegister(accountId, password)
+        val tokens: TokenResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
+        }.body()
+        client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1, 2, 3).b64()))))
+        }
+        val stats: StatsResponse = client.get("/admin/stats") { header("X-Admin-Token", "s3cret") }.body()
+        assertEquals(1, stats.records)
+        assertEquals(3L, stats.storageBytes)
     }
 }

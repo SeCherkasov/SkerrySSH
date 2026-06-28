@@ -2,8 +2,12 @@ package app.skerry.shared.sync
 
 import kotlinx.coroutines.flow.Flow
 
-/** Идентификация устройства в аккаунте (id — стабильный, генерируется при первом входе). */
-data class DeviceInfo(val id: String, val name: String)
+/**
+ * Идентификация устройства в аккаунте (id — стабильный, генерируется при первом входе).
+ * [platform] — открытая метка (напр. «Android 34», «Linux») для админ-консоли; `null` означает
+ * «не сообщать» (сервер не затирает уже известное значение).
+ */
+data class DeviceInfo(val id: String, val name: String, val platform: String? = null)
 
 /** Активная сессия с sync-сервером: accountId и пара токенов (см. §4 дизайна). */
 data class SyncSession(val accountId: String, val accessToken: String, val refreshToken: String)

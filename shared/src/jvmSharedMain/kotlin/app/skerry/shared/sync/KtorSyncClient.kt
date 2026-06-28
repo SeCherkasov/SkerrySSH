@@ -65,6 +65,7 @@ class KtorSyncClient(
                     wrappedDataKey = wrappedDataKey.b64(),
                     deviceId = device.id,
                     deviceName = device.name,
+                    platform = device.platform,
                 ),
             )
         }.bodyChecked()
@@ -90,6 +91,7 @@ class KtorSyncClient(
                     m1 = creds.M1.toString(16),
                     deviceId = device.id,
                     deviceName = device.name,
+                    platform = device.platform,
                 ),
             )
         }.bodyChecked()

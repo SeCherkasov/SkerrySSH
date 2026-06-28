@@ -13,8 +13,10 @@ data class DeviceRow(
     val id: String,
     val accountId: String,
     val name: String,
+    val platform: String?,
     val createdAt: Long,
     val lastSeenAt: Long,
+    val lastSyncVersion: Long?,
     val revoked: Boolean,
 )
 

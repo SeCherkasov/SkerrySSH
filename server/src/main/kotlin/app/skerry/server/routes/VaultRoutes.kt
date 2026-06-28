@@ -39,9 +39,10 @@ fun Route.vaultRoutes(services: Services) {
     get("/vault/records") {
         val principal = call.jwtPrincipal()
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
-        services.devices.touch(principal.accountId, principal.deviceId)
         val delta = services.records.delta(principal.accountId, since)
         val cursor = delta.lastOrNull()?.serverSeq ?: since
+        // Фиксируем активность и курсор, до которого устройство дочиталось (для админ-консоли).
+        services.devices.touch(principal.accountId, principal.deviceId, syncVersion = cursor)
         // Логируем только содержательные pull'ы — пустые поллинги не засоряют аудит-лог.
         if (delta.isNotEmpty()) {
             services.activity.record(
@@ -58,8 +59,8 @@ fun Route.vaultRoutes(services: Services) {
         val unknown = req.records.firstOrNull { it.type !in ALLOWED_TYPES }
         if (unknown != null) throw BadRequestException("unknown record type: ${unknown.type}")
 
-        services.devices.touch(principal.accountId, principal.deviceId)
         val result = services.records.upsert(principal.accountId, req.records.map { it.toIncoming() })
+        services.devices.touch(principal.accountId, principal.deviceId, syncVersion = result.cursor)
         services.activity.record(
             principal.accountId, "sync.push", "${req.records.size} records · cursor ${result.cursor}",
             deviceId = principal.deviceId,

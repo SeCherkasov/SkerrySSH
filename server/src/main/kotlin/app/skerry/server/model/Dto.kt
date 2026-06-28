@@ -19,6 +19,8 @@ data class RegisterRequest(
     val wrappedDataKey: String,
     val deviceId: String,
     val deviceName: String,
+    // Опционально (default null): старые клиенты без поля остаются совместимыми по wire.
+    val platform: String? = null,
 )
 
 @Serializable
@@ -34,6 +36,7 @@ data class VerifyRequest(
     val m1: String,
     val deviceId: String,
     val deviceName: String,
+    val platform: String? = null,
 )
 
 @Serializable
@@ -97,8 +100,10 @@ data class AdminDeviceDto(
     val accountId: String,
     val id: String,
     val name: String,
+    val platform: String?,
     val createdAt: Long,
     val lastSeenAt: Long,
+    val syncVersion: Long?,
     val revoked: Boolean,
 )
 
@@ -140,7 +145,13 @@ data class PairingClaimResponse(
 // --- admin / errors ---
 
 @Serializable
-data class StatsResponse(val accounts: Long, val devices: Long, val records: Long, val pairingSessions: Long)
+data class StatsResponse(
+    val accounts: Long,
+    val devices: Long,
+    val records: Long,
+    val pairingSessions: Long,
+    val storageBytes: Long,
+)
 
 @Serializable
 data class HealthResponse(val status: String, val version: String)

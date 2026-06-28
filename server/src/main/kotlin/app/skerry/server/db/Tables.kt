@@ -31,8 +31,12 @@ object Devices : Table("devices") {
     val id = varchar("id", 64)
     val accountId = varchar("account_id", 320).references(Accounts.id)
     val name = text("name")
+    /** Платформа устройства (напр. «Android 34», «Linux»). Открытая метка, как и name. */
+    val platform = varchar("platform", 64).nullable()
     val createdAt = long("created_at")
     val lastSeenAt = long("last_seen_at")
+    /** Курсор синхронизации, до которого устройство дочиталось/дописалось (открытый счётчик). */
+    val lastSyncVersion = long("last_sync_version").nullable()
     val revoked = bool("revoked").default(false)
 
     // PK по (accountId, id): deviceId уникален в рамках аккаунта, а не глобально — иначе

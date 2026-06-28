@@ -1,5 +1,6 @@
 package app.skerry.ui.sync
 
+import app.skerry.shared.platformName
 import app.skerry.shared.sync.DeviceInfo
 import app.skerry.shared.sync.RemoteDevice
 import app.skerry.shared.sync.SyncClient
@@ -135,7 +136,7 @@ class SyncCoordinator(
             val masterKey = crypto.deriveMasterKey(masterPassword, salt)
             val authKey = crypto.deriveAuthKey(masterKey)
             val deviceId = configStore.load()?.takeIf { it.accountId == accountId }?.deviceId ?: deviceIdProvider()
-            val device = DeviceInfo(deviceId, deviceName)
+            val device = DeviceInfo(deviceId, deviceName, platformName)
             val syncClient = clientFactory(serverUrl)
 
             val newSession = if (registering) {

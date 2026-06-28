@@ -25,7 +25,9 @@ object Db {
 
     fun createSchema(database: Database) {
         transaction(database) {
-            SchemaUtils.create(Accounts, Devices, Records, Pairing, ActivityLog)
+            // createMissingTablesAndColumns (не create): миграция добавляет новые nullable-колонки
+            // (Devices.platform, Devices.lastSyncVersion) в уже существующую БД, не теряя данные.
+            SchemaUtils.createMissingTablesAndColumns(Accounts, Devices, Records, Pairing, ActivityLog)
         }
     }
 }
