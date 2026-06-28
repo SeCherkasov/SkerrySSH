@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -90,7 +92,7 @@ fun DesktopUnlockScreen(
         subtitle = "Enter your master password to unlock the harbor",
         error = error,
     ) {
-        LockPasswordField(pwd, { pwd = it }, "Master password", ImeAction.Done, onSubmit = submit)
+        LockPasswordField(pwd, { pwd = it }, "Master password", ImeAction.Done, onSubmit = submit, autoFocus = true)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PrimaryButton("Unlock", onClick = submit, modifier = Modifier.weight(1f))
             if (canUseBiometric) BiometricButton(onClick = onBiometric)
@@ -223,7 +225,7 @@ fun DesktopCreateScreen(
         subtitle = "It encrypts this vault and never leaves the device — there is no recovery.",
         error = error,
     ) {
-        LockPasswordField(pwd, { pwd = it }, "Master password", ImeAction.Next)
+        LockPasswordField(pwd, { pwd = it }, "Master password", ImeAction.Next, autoFocus = true)
         passwordStrength(pwd)?.let { PasswordStrengthMeter(it) }
         LockPasswordField(confirm, { confirm = it }, "Repeat password", ImeAction.Done, onSubmit = submit)
         NoRecoveryAcknowledge(acknowledged) { acknowledged = !acknowledged }
@@ -344,7 +346,13 @@ private fun LockPasswordField(
     placeholder: String,
     imeAction: ImeAction,
     onSubmit: () -> Unit = {},
+    autoFocus: Boolean = false,
 ) {
+    // Автофокус на старте экрана (запрос пользователя): курсор сразу в поле пароля без клика.
+    val focusRequester = remember { FocusRequester() }
+    if (autoFocus) {
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    }
     // Рамка/паддинг/иконка живут в decorationBox самого поля, поэтому зона ввода покрывает
     // всю видимую рамку целиком — клик в любую её точку (паддинги, край, иконка) ставит каретку.
     BasicTextField(
@@ -356,7 +364,7 @@ private fun LockPasswordField(
         cursorBrush = SolidColor(D.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
         decorationBox = { innerTextField ->
             Row(
                 Modifier
