@@ -57,6 +57,8 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.terminal.LocalTerminalAppearance
+import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.vault.RESET_CONFIRM_WORD
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
@@ -107,8 +109,15 @@ fun MobileDesignApp(
     }
     val ownsSessions = sessions == null
     DisposableEffect(liveSessions) { onDispose { if (ownsSessions) liveSessions?.disconnectAll() } }
+    // Мемоизируем: LocalTerminalAppearance — staticCompositionLocalOf (сравнение по ссылке); без
+    // remember новый инстанс на каждой рекомпозиции форсил бы пересбор поддерева терминала.
+    val terminalAppearance = remember(state.terminalFont, state.terminalFontSize) {
+        TerminalAppearance(state.terminalFont, state.terminalFontSize)
+    }
     CompositionLocalProvider(
         LocalFonts provides fonts,
+        // Внешний вид терминала из настроек (More → Appearance): шрифт + кегль читает TerminalScreen.
+        LocalTerminalAppearance provides terminalAppearance,
         LocalHosts provides deps.hosts,
         LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,
@@ -300,6 +309,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Ports -> MobilePortsScreen(state)
         MobileRoute.Known -> MobileKnownScreen(state)
         MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")
+        MobileRoute.Appearance -> MobileAppearanceScreen(state)
     }
 }
 

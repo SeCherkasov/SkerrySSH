@@ -1,6 +1,7 @@
 package app.skerry.ui.design
 
 import app.skerry.shared.host.Host
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.TerminalFont
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -392,7 +393,7 @@ class DesktopDesignStateTest {
     fun terminal_font_defaults_to_hack_13px() {
         val s = DesktopDesignState()
         assertEquals(TerminalFont.Hack, s.terminalFont)
-        assertEquals(13, s.terminalFontSize)
+        assertEquals(DEFAULT_TERMINAL_FONT_SIZE, s.terminalFontSize)
     }
 
     @Test
