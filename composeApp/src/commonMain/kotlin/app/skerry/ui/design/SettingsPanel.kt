@@ -397,6 +397,9 @@ private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: Desk
             }
         }
         SyncStatus.Busy -> SyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.") {}
+        is SyncStatus.Configured -> SyncStatusCard("cloud_off", D.amber, "Linked · ${status.accountId}", "Reconnect with your master password to sync.") {
+            PrimaryButton("Reconnect", onClick = state::openSyncSetup, icon = "cloud_sync")
+        }
         is SyncStatus.Failed -> SyncStatusCard("cloud_off", D.sunset, "Sync error", status.message) {
             GhostButton("Set up sync", onClick = state::openSyncSetup)
         }

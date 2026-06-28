@@ -94,6 +94,7 @@ private fun syncSubtitle(): String {
     return when (sync.status.collectAsState().value) {
         is app.skerry.ui.sync.SyncStatus.Online -> "Synced"
         app.skerry.ui.sync.SyncStatus.Busy -> "Syncing…"
+        is app.skerry.ui.sync.SyncStatus.Configured -> "Linked · locked"
         is app.skerry.ui.sync.SyncStatus.Failed -> "Sync error"
         app.skerry.ui.sync.SyncStatus.Disabled -> "Local only"
     }

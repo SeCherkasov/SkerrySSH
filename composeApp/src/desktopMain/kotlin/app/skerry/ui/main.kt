@@ -236,12 +236,26 @@ fun main() {
         // Одноуровневая модель vault: keychain-секреты (записи CREDENTIAL). Хост ссылается на секрет
         // напрямую через credentialId.
         val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
+        // Self-hosted sync (Phase 2): координатор связывает сетевой клиент (Ktor+SRP), крипту и
+        // локальный vault. Привязка к серверу персистится в sync.json (0600) — несекретное
+        // (URL/accountId/deviceId) + опц. refresh-токен ЗАПЕЧАТАННЫЙ под dataKey (keep-connected).
+        // deviceId переиспользуем стабильный. Курсор синка пока в памяти (re-pull при старте, LWW идемпотентен).
+        val sync = SyncCoordinator(
+            clientFactory = { url -> KtorSyncClient(url) },
+            crypto = IonspinVaultCrypto(),
+            vault = vault,
+            configStore = FileSyncConfigStore(dir.resolve("sync.json")),
+            deviceIdProvider = { deviceId(dir) },
+            deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
+        )
         // Разовая миграция старых данных (секрет под IDENTITY → CREDENTIAL, хост → прямой credentialId,
         // снос учёток-обёрток) при разблокировке vault; идемпотентна. После неё обновляем кэш хостов.
         val onVaultUnlocked: () -> Unit = {
             // Сбой миграции не должен мешать показать уже доступные данные — гасим и перечитываем хосты.
             runCatching { VaultMigration(vault, hostStore).migrate() }
             hosts.reload()
+            // keep-connected: vault открыт → есть dataKey, можно бесшумно восстановить sync-сессию.
+            sync.restoreSession()
         }
         // Генерация SSH-ключей в разделе Vault: BouncyCastle поверх sshj-формата (тот же, что читает транспорт).
         val keyGenerator = BouncyCastleSshKeyGenerator()
@@ -289,19 +303,6 @@ fun main() {
             }
             hosts.reload()
         }
-        // Self-hosted sync (Phase 2): координатор связывает сетевой клиент (Ktor+SRP), крипту и
-        // локальный vault. Привязка к серверу персистится в sync.json (0600) — несекретное
-        // (URL/accountId/deviceId); токены и пароль не храним (переавторизация по мастер-паролю).
-        // deviceId переиспользуем стабильный (тот же, что у записей vault). Курсор синка пока
-        // в памяти — при перезапуске будет полный re-pull (LWW идемпотентен), персист курсора отложен.
-        val sync = SyncCoordinator(
-            clientFactory = { url -> KtorSyncClient(url) },
-            crypto = IonspinVaultCrypto(),
-            vault = vault,
-            configStore = FileSyncConfigStore(dir.resolve("sync.json")),
-            deviceIdProvider = { deviceId(dir) },
-            deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
-        )
         val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.

@@ -128,7 +128,15 @@ class MainActivity : FragmentActivity() {
             initialTerminalFontSize = readTerminalFontSize(dir),
             onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
         )
-        setContent { MobileDesignApp(deps, state = designState, onVaultReset = onVaultReset) }
+        setContent {
+            MobileDesignApp(
+                deps,
+                state = designState,
+                onVaultReset = onVaultReset,
+                // keep-connected: vault открыт → бесшумно восстанавливаем sync-сессию из refresh-токена.
+                onVaultUnlocked = { deps.sync?.restoreSession() },
+            )
+        }
     }
 
     /**

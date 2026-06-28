@@ -8,6 +8,7 @@ import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.InMemorySyncStateStore
+import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
 import kotlinx.coroutines.CoroutineScope
@@ -27,8 +28,19 @@ interface SyncConfigStore {
     fun clear()
 }
 
-/** Сохранённая привязка к серверу. Токены не храним в открытом виде — переавторизация по паролю. */
-data class SyncConfig(val serverUrl: String, val accountId: String, val deviceId: String)
+/**
+ * Сохранённая привязка к серверу. По умолчанию токены НЕ храним (переавторизация по паролю).
+ * Если пользователь включил «keep connected» ([keepConnected]), храним refresh-токен —
+ * но **запечатанным под dataKey vault** ([sealedRefreshToken], hex шифротекста): без разблокировки
+ * vault он бесполезен, так что кража файла конфигурации не даёт доступ к данным (zero-knowledge).
+ */
+data class SyncConfig(
+    val serverUrl: String,
+    val accountId: String,
+    val deviceId: String,
+    val keepConnected: Boolean = false,
+    val sealedRefreshToken: String? = null,
+)
 
 class InMemorySyncConfigStore : SyncConfigStore {
     private var config: SyncConfig? = null
@@ -39,8 +51,15 @@ class InMemorySyncConfigStore : SyncConfigStore {
 
 /** Видимое UI состояние подключения к sync. */
 sealed interface SyncStatus {
+    /** Sync не настроен на этом устройстве (нет сохранённой привязки). */
     data object Disabled : SyncStatus
     data object Busy : SyncStatus
+
+    /**
+     * Привязка к серверу есть (пережила перезапуск), но активной сессии нет — токены не персистятся
+     * (zero-knowledge, design §4). Нужен повторный ввод мастер-пароля; сервер/аккаунт уже известны.
+     */
+    data class Configured(val serverUrl: String, val accountId: String) : SyncStatus
     data class Online(val accountId: String, val lastPushed: Int, val lastPulled: Int) : SyncStatus
     data class Failed(val message: String) : SyncStatus
 }
@@ -77,19 +96,33 @@ class SyncCoordinator(
     // (тяжёлый) тоже уходит с main-потока на Dispatchers.Default.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    init {
+        // Восстанавливаем привязку после перезапуска: сессии/токенов в памяти нет, но сохранённый
+        // сервер/аккаунт показываем как Configured — UI предложит «переподключиться» одним паролем,
+        // без перенабора. Disconnect стирает конфиг → снова Disabled.
+        configStore.load()?.let { _status.value = SyncStatus.Configured(it.serverUrl, it.accountId) }
+    }
+
     val isConfigured: Boolean get() = configStore.load() != null
 
-    /** Регистрация нового аккаунта на сервере с текущим (разблокированным) vault. Запуск fire-and-forget — прогресс/итог через [status]. */
-    fun register(serverUrl: String, accountId: String, masterPassword: CharArray) {
-        scope.launch { connect(serverUrl, accountId, masterPassword, registering = true) }
+    /** Сохранённая привязка (для предзаполнения формы переподключения сервером/аккаунтом). */
+    val savedConfig: SyncConfig? get() = configStore.load()
+
+    /**
+     * Регистрация нового аккаунта на сервере с текущим (разблокированным) vault. Запуск
+     * fire-and-forget — прогресс/итог через [status]. [keepConnected] — хранить refresh-токен
+     * (запечатанным под dataKey) для бесшумного восстановления после перезапуска.
+     */
+    fun register(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean = false) {
+        scope.launch { connect(serverUrl, accountId, masterPassword, registering = true, keepConnected = keepConnected) }
     }
 
-    /** Вход в существующий аккаунт мастер-паролем. Запуск fire-and-forget — прогресс/итог через [status]. */
-    fun login(serverUrl: String, accountId: String, masterPassword: CharArray) {
-        scope.launch { connect(serverUrl, accountId, masterPassword, registering = false) }
+    /** Вход в существующий аккаунт мастер-паролем. [keepConnected] — см. [register]. */
+    fun login(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean = false) {
+        scope.launch { connect(serverUrl, accountId, masterPassword, registering = false, keepConnected = keepConnected) }
     }
 
-    private suspend fun connect(serverUrl: String, accountId: String, masterPassword: CharArray, registering: Boolean) {
+    private suspend fun connect(serverUrl: String, accountId: String, masterPassword: CharArray, registering: Boolean, keepConnected: Boolean) {
         _status.value = SyncStatus.Busy
         val dataKey = vault.exportDataKey()
         if (dataKey == null) {
@@ -114,7 +147,10 @@ class SyncCoordinator(
 
             client = syncClient
             session = newSession
-            configStore.save(SyncConfig(serverUrl, accountId, deviceId))
+            // keep-connected: запечатываем refresh-токен под dataKey, чтобы тихо восстановить сессию
+            // после перезапуска (см. [restoreSession]). Без флага — токен не храним вовсе.
+            val sealed = if (keepConnected) sealToken(dataKey, newSession.refreshToken) else null
+            configStore.save(SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed))
             runSync()
         } catch (e: SyncException) {
             _status.value = SyncStatus.Failed(syncErrorMessage(e))
@@ -167,6 +203,50 @@ class SyncCoordinator(
             configStore.clear()
             _status.value = SyncStatus.Disabled
         }
+    }
+
+    /**
+     * Бесшумно восстановить сессию после перезапуска, если включён «keep connected»: расшифровать
+     * сохранённый refresh-токен под dataKey и обновить сессию через сервер. Вызывать ПОСЛЕ
+     * разблокировки vault (нужен dataKey) — обычно из `onVaultUnlocked`. Vault заблокирован/нет
+     * токена → no-op (остаётся [SyncStatus.Configured]); токен протух/нет связи → откат в Configured
+     * (привязку НЕ стираем, пользователь переподключится паролем). Уже подключены → no-op.
+     */
+    fun restoreSession() {
+        val cfg = configStore.load() ?: return
+        if (!cfg.keepConnected || cfg.sealedRefreshToken == null || session != null) return
+        scope.launch {
+            val dataKey = vault.exportDataKey() ?: return@launch
+            _status.value = SyncStatus.Busy
+            try {
+                val refreshToken = openToken(dataKey, cfg.sealedRefreshToken)
+                if (refreshToken == null) {
+                    _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
+                    return@launch
+                }
+                val syncClient = clientFactory(cfg.serverUrl)
+                val newSession = syncClient.refresh(SyncSession(cfg.accountId, "", refreshToken))
+                client = syncClient
+                session = newSession
+                // refresh ротирует токен — пересохраняем запечатанным под dataKey.
+                configStore.save(cfg.copy(sealedRefreshToken = sealToken(dataKey, newSession.refreshToken)))
+                runSync()
+            } catch (e: SyncException) {
+                _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
+            }
+        }
+    }
+
+    private val tokenAad = "skerry-sync-refresh-token".encodeToByteArray()
+    private fun sealToken(dataKey: DataKey, token: String): String =
+        crypto.seal(dataKey, token.encodeToByteArray(), tokenAad).toHex()
+    private fun openToken(dataKey: DataKey, hex: String): String? =
+        hex.hexToBytesOrNull()?.let { crypto.open(dataKey, it, tokenAad) }?.decodeToString()
+
+    private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
+    private fun String.hexToBytesOrNull(): ByteArray? {
+        if (length % 2 != 0) return null
+        return runCatching { ByteArray(length / 2) { i -> substring(i * 2, i * 2 + 2).toInt(16).toByte() } }.getOrNull()
     }
 
     private fun syncErrorMessage(e: SyncException): String = when (e.kind) {

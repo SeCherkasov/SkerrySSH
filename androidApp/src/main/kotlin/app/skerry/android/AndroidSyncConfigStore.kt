@@ -27,7 +27,13 @@ class AndroidSyncConfigStore(private val file: File) : SyncConfigStore {
             val account = map["accountId"]
             val device = map["deviceId"]
             if (url.isNullOrEmpty() || account.isNullOrEmpty() || device.isNullOrEmpty()) null
-            else SyncConfig(url, account, device)
+            else SyncConfig(
+                serverUrl = url,
+                accountId = account,
+                deviceId = device,
+                keepConnected = map["keepConnected"] == "true",
+                sealedRefreshToken = map["sealedRefreshToken"]?.takeIf { it.isNotEmpty() },
+            )
         }.getOrNull()
     }
 
@@ -36,6 +42,8 @@ class AndroidSyncConfigStore(private val file: File) : SyncConfigStore {
             appendLine("serverUrl=${URLEncoder.encode(config.serverUrl, "UTF-8")}")
             appendLine("accountId=${URLEncoder.encode(config.accountId, "UTF-8")}")
             appendLine("deviceId=${URLEncoder.encode(config.deviceId, "UTF-8")}")
+            appendLine("keepConnected=${config.keepConnected}")
+            config.sealedRefreshToken?.let { appendLine("sealedRefreshToken=${URLEncoder.encode(it, "UTF-8")}") }
         }
         // Атомарно: пишем во временный файл и переименовываем — иначе обрыв процесса между truncate
         // и записью оставил бы пустой/усечённый sync.json (паритет с desktop PrivateConfig.atomicWrite).

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -85,6 +86,11 @@ private fun SyncBody(sync: SyncCoordinator) {
             }
         }
         SyncStatus.Busy -> MobileSyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.")
+        is SyncStatus.Configured -> {
+            MobileSyncStatusCard("cloud_off", D.amber, "Linked · ${status.accountId}", "Reconnect with your master password.")
+            Spacer(Modifier.height(16.dp))
+            SyncSetupBody(sync, errorMessage = null)
+        }
         is SyncStatus.Failed -> SyncSetupBody(sync, errorMessage = status.message)
         SyncStatus.Disabled -> SyncSetupBody(sync, errorMessage = null)
     }
@@ -95,10 +101,13 @@ private fun SyncSetupBody(
     sync: SyncCoordinator,
     errorMessage: String?,
 ) {
-    var mode by remember { mutableStateOf(SyncSetupMode.Register) }
-    var serverUrl by remember { mutableStateOf("") }
-    var account by remember { mutableStateOf("") }
+    // Предзаполнение из сохранённой привязки (Configured после перезапуска): нужен только пароль.
+    val saved = remember { sync.savedConfig }
+    var mode by remember { mutableStateOf(if (saved != null) SyncSetupMode.Login else SyncSetupMode.Register) }
+    var serverUrl by remember { mutableStateOf(saved?.serverUrl ?: "") }
+    var account by remember { mutableStateOf(saved?.accountId ?: "") }
     var password by remember { mutableStateOf("") }
+    var keepConnected by remember { mutableStateOf(saved?.keepConnected ?: true) }
 
     val form = SyncSetupForm(serverUrl, account)
     val canSubmit = form.canSubmit(password.length)
@@ -117,6 +126,25 @@ private fun SyncSetupBody(
     MobileSyncField(account, "you@example.com", KeyboardType.Text) { account = it }
     SyncFieldLabel("MASTER PASSWORD")
     MobileSyncField(password, "master password", KeyboardType.Password, masked = true) { password = it }
+
+    Row(
+        Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            Modifier.size(20.dp).clip(RoundedCornerShape(6.dp))
+                .background(if (keepConnected) D.cyan else Color.Transparent)
+                .border(1.dp, if (keepConnected) D.cyan else D.cyan14, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (keepConnected) Sym("check", size = 14.sp, color = Color(0xFF0A1A26))
+        }
+        Column(Modifier.weight(1f)) {
+            Txt("Keep me connected", color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt("Reconnect automatically after restart.", color = D.faint, size = 11.5.sp)
+        }
+    }
 
     if (errorMessage != null) {
         Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -137,8 +165,8 @@ private fun SyncSetupBody(
             // Запуск держит сам координатор (свой scope) — форма уйдёт из композиции на Busy,
             // привязывать к ней корутину нельзя (иначе отмена на полпути).
             when (mode) {
-                SyncSetupMode.Register -> sync.register(url, acc, pw)
-                SyncSetupMode.Login -> sync.login(url, acc, pw)
+                SyncSetupMode.Register -> sync.register(url, acc, pw, keepConnected)
+                SyncSetupMode.Login -> sync.login(url, acc, pw, keepConnected)
             }
         },
         modifier = Modifier.padding(top = 18.dp),

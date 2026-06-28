@@ -27,7 +27,13 @@ class FileSyncConfigStore(private val path: Path) : SyncConfigStore {
             val account = map["accountId"]
             val device = map["deviceId"]
             if (url.isNullOrEmpty() || account.isNullOrEmpty() || device.isNullOrEmpty()) null
-            else SyncConfig(url, account, device)
+            else SyncConfig(
+                serverUrl = url,
+                accountId = account,
+                deviceId = device,
+                keepConnected = map["keepConnected"] == "true",
+                sealedRefreshToken = map["sealedRefreshToken"]?.takeIf { it.isNotEmpty() },
+            )
         }.getOrNull()
     }
 
@@ -36,6 +42,8 @@ class FileSyncConfigStore(private val path: Path) : SyncConfigStore {
             appendLine("serverUrl=${encode(config.serverUrl)}")
             appendLine("accountId=${encode(config.accountId)}")
             appendLine("deviceId=${encode(config.deviceId)}")
+            appendLine("keepConnected=${config.keepConnected}")
+            config.sealedRefreshToken?.let { appendLine("sealedRefreshToken=${encode(it)}") }
         }
         PrivateConfig.atomicWrite(path, text.encodeToByteArray())
     }

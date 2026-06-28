@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -54,10 +55,14 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
     val status by sync.status.collectAsState()
 
-    var mode by remember { mutableStateOf(SyncSetupMode.Register) }
-    var serverUrl by remember { mutableStateOf("") }
-    var account by remember { mutableStateOf("") }
+    // Предзаполнение из сохранённой привязки (после перезапуска/Reconnect): сервер+аккаунт известны,
+    // нужен только пароль → режим Login по умолчанию.
+    val saved = remember { sync.savedConfig }
+    var mode by remember { mutableStateOf(if (saved != null) SyncSetupMode.Login else SyncSetupMode.Register) }
+    var serverUrl by remember { mutableStateOf(saved?.serverUrl ?: "") }
+    var account by remember { mutableStateOf(saved?.accountId ?: "") }
     var password by remember { mutableStateOf("") }
+    var keepConnected by remember { mutableStateOf(saved?.keepConnected ?: true) }
 
     val form = SyncSetupForm(serverUrl, account)
     val canSubmit = form.canSubmit(password.length) && status != SyncStatus.Busy
@@ -78,8 +83,8 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
         val acc = form.normalizedAccountId
         // Запуск держит сам координатор (свой scope) — не привязываем к жизни этого composable.
         when (mode) {
-            SyncSetupMode.Register -> sync.register(url, acc, pw)
-            SyncSetupMode.Login -> sync.login(url, acc, pw)
+            SyncSetupMode.Register -> sync.register(url, acc, pw, keepConnected)
+            SyncSetupMode.Login -> sync.login(url, acc, pw, keepConnected)
         }
     }
 
@@ -123,6 +128,8 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
             FieldLabel("MASTER PASSWORD")
             SyncField("master password", password, "key", KeyboardType.Password, ImeAction.Done, secret = true, onSubmit = { submit() }) { password = it }
 
+            KeepConnectedRow(keepConnected) { keepConnected = it }
+
             val failed = status as? SyncStatus.Failed
             if (failed != null) {
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -149,6 +156,29 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 val label = if (mode == SyncSetupMode.Register) "Create account" else "Log in"
                 PrimaryButton(label, onClick = { submit() }, enabled = canSubmit, bg = if (canSubmit) D.cyan else D.cyan.copy(alpha = 0.4f))
             }
+        }
+    }
+}
+
+/** Чекбокс «Keep me connected»: запоминать привязку и восстанавливать сессию без ввода пароля. */
+@Composable
+private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 14.dp).clickable { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            Modifier.size(18.dp).clip(RoundedCornerShape(5.dp))
+                .background(if (checked) D.cyan else Color.Transparent)
+                .border(1.dp, if (checked) D.cyan else D.cyan14, RoundedCornerShape(5.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (checked) Sym("check", size = 13.sp, color = Color(0xFF0A1A26))
+        }
+        Column(Modifier.weight(1f)) {
+            Txt("Keep me connected", color = D.text, size = 12.5.sp, weight = FontWeight.Medium)
+            Txt("Reconnect automatically after restart — no password needed.", color = D.faint, size = 11.sp)
         }
     }
 }
