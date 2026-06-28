@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
@@ -102,6 +103,10 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
         selectedCred != null || copyAuth.passwordPromptVisible
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
+
+    // Пока таб Vault в композиции (вкл. диалоги и лист деталей секрета внутри него) — защита окна
+    // от снимков экрана и превью в Recent Apps. Снимается автоматически при уходе с таба.
+    SecureScreen()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {

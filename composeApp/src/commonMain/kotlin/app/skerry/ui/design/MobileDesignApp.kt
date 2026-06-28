@@ -56,6 +56,7 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.identity.CredentialManagerController
+import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.TerminalAppearance
@@ -384,6 +385,8 @@ fun MobileUnlockScreen(
 ) {
     var pwd by remember { mutableStateOf("") }
     val submit = { if (pwd.isNotEmpty()) onUnlock(pwd.toCharArray()) }
+    // Защита ввода мастер-пароля от снимков экрана/превью в Recent Apps (Android; desktop — no-op).
+    SecureScreen()
     MobileLockScaffold(title = "Skerry is locked", subtitle = "Enter your master password", error = error) {
         MobileLockField(pwd, { pwd = it }, "Master password", ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
@@ -420,6 +423,8 @@ fun MobileCreateScreen(error: VaultGateError?, onCreate: (CharArray, CharArray) 
     var pwd by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     val submit = { if (pwd.isNotEmpty() && confirm.isNotEmpty()) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
+    // Защита ввода мастер-пароля от снимков экрана/превью в Recent Apps (Android; desktop — no-op).
+    SecureScreen()
     MobileLockScaffold(
         title = "Set a master password",
         subtitle = "It encrypts this vault and never leaves the device — there is no recovery.",
