@@ -579,4 +579,31 @@ class FilePaneControllerTest {
         c.rubberBandTo(c.entry("zeta"), ghost, select = true)
         assertEquals(setOf("$HOME/alpha"), c.selection)
     }
+
+    @Test
+    fun `entering an empty directory puts the cursor on the parent row`() = runTest {
+        val c = started() // alpha засеян как каталог без содержимого
+        c.open(c.entry("alpha"))
+        advanceUntilIdle()
+
+        assertEquals("$HOME/alpha", c.path)
+        assertTrue(c.loaded().entries.isEmpty())
+        assertTrue(c.cursorOnParent)
+        assertEquals(null, c.cursor)
+    }
+
+    @Test
+    fun `deleting the last entry moves the cursor to the parent row`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.open(c.entry("alpha")) // содержит единственный inside.txt
+        advanceUntilIdle()
+
+        c.selectOnly(c.entry("inside.txt"))
+        c.deleteSelected()
+        advanceUntilIdle()
+
+        assertTrue(c.loaded().entries.isEmpty())
+        assertTrue(c.cursorOnParent)
+        assertEquals(null, c.cursor)
+    }
 }

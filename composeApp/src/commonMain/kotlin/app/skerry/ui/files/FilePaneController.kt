@@ -293,7 +293,9 @@ class FilePaneController(
         resetSelection() // новый каталог — выделение пустое; pruneSelection не нужен (нечего чистить)
         // Курсор на первый реальный файл (не на «..»), как при открытии каталога в mc.
         cursor = (next as? FilePaneState.Loaded)?.entries?.firstOrNull()?.path
-        cursorOnParent = false
+        // Пустой каталог: файлов нет — ставим курсор на «..» (если есть куда подняться),
+        // чтобы выделение было видно сразу, а не на «ничём».
+        cursorOnParent = cursor == null && hasParent
     }
 
     /** Перечитать текущий [path] на месте (refresh/после mkdir/rename/delete — путь не меняется). */
@@ -348,7 +350,9 @@ class FilePaneController(
         }
         val entries = loadedEntries()
         if (entries.isEmpty()) {
+            // Каталог опустел (удалили последнее) — переводим курсор на «..», если есть родитель.
             cursor = null
+            cursorOnParent = hasParent
             return
         }
         if (cursor == null || entries.none { it.path == cursor }) cursor = entries.first().path
