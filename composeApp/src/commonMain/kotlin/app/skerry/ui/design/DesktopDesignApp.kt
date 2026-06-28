@@ -3,6 +3,8 @@ package app.skerry.ui.design
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +32,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEvent
@@ -573,10 +577,12 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
 }
 
 /**
- * Вкладка-сессия как сегментная пилюля (стиль референса в палитре night-sea): активная — залитый
- * cyan-фон с обводкой и ярким текстом, неактивная — приглушённая полупрозрачная пилюля с тусклым
- * текстом. Слева статус-точка соединения, справа крестик закрытия. Полностью скруглённая (в отличие
- * от прежней «вкладки-папки» со скруглением только сверху).
+ * Вкладка-сессия как сегментная пилюля (стиль референса в палитре night-sea) с выделением в духе
+ * редактора: активная — тонкая cyan-полоска по верхней кромке + cyan-подложка с ярким текстом;
+ * наведённая неактивная — чуть более светлый фон; покоящаяся — приглушённая полупрозрачная пилюля
+ * с тусклым текстом. Слева статус-точка соединения. Крестик закрытия показывается только на активной
+ * либо наведённой вкладке (модель VS Code); у прочих место зарезервировано пустым боксом, чтобы текст
+ * не прыгал при появлении крестика.
  */
 @Composable
 private fun SessionTabChip(
@@ -590,15 +596,34 @@ private fun SessionTabChip(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(8.dp)
+    // Общий interactionSource: clickable эмитит hover-события, которые читает collectIsHoveredAsState.
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val showClose = active || hovered
     Row(
         modifier
             // Перетаскиваемый чип приглушаем (alpha), чтобы было видно, что он «оторван» от ряда.
             .alpha(if (dragging) 0.5f else 1f)
             .height(28.dp)
             .clip(shape)
-            .background(if (active) D.cyan10 else Color(0x08FFFFFF))
+            .background(
+                when {
+                    active -> D.cyan10
+                    hovered -> Color(0x1FFFFFFF)
+                    else -> Color(0x08FFFFFF)
+                },
+            )
             .border(1.dp, if (active) D.cyan20 else D.line, shape)
-            .clickable(onClick = onClick)
+            // Акцентная полоска по верхней кромке активной вкладки (стиль вкладок редактора).
+            // drawBehind рисуем поверх фона/обводки, но под контентом; ширину чипа не раздувает.
+            .then(
+                if (active) {
+                    Modifier.drawBehind { drawRect(D.cyan, size = Size(size.width, 2.dp.toPx())) }
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(start = 11.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -615,7 +640,11 @@ private fun SessionTabChip(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(max = 150.dp),
         )
-        IconBtn("close", onClick = onClose, box = 16, icon = 14.sp, tint = if (active) D.dim else D.faint)
+        if (showClose) {
+            IconBtn("close", onClick = onClose, box = 16, icon = 14.sp, tint = if (active) D.dim else D.faint)
+        } else {
+            Box(Modifier.width(16.dp))
+        }
     }
 }
 

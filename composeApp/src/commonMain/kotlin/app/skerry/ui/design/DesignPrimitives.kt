@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -209,12 +210,18 @@ fun IconBtn(
     box: Int = 28,
     icon: TextUnit = 18.sp,
     tint: Color = D.dim,
+    hoverBg: Color = Color(0x1FFFFFFF),
 ) {
+    // Своя светлая hover-подложка (тёмная тема): дефолтная indication у clickable даёт тёмный
+    // ripple, который на тёмном фоне «затемняет» и почти не виден — вместо неё подсвечиваем светлым.
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
     Box(
         modifier
             .size(box.dp)
             .clip(RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick),
+            .background(if (hovered) hoverBg else Color.Transparent)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Sym(name, size = icon, color = tint)
