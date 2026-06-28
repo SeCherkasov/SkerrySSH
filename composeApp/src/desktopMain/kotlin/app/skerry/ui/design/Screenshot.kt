@@ -281,6 +281,7 @@ private class InMemoryVault : Vault {
         records[id]?.let { records[id] = it.copy(deleted = true) }
     }
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = true
+    override fun verifyPassword(password: CharArray): Boolean = true
 }
 
 /**

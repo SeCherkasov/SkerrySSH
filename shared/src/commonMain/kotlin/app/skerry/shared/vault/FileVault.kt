@@ -203,6 +203,25 @@ class FileVault(
         }
     }
 
+    override fun verifyPassword(password: CharArray): Boolean = synchronized(lock) {
+        try {
+            // Сверяем по метаданным открытой сессии (как changePassword сверяет старый пароль): vault
+            // должен быть разблокирован. dataKey/записи не трогаем — это только проверка личности.
+            // dataKey == null дублирует условие meta == null (lock() чистит оба), но делает инвариант
+            // «только на открытом vault» явным и устойчивым к будущему «meta-only»-чтению.
+            val currentMeta = meta ?: return@synchronized false
+            if (dataKey == null) return@synchronized false
+            val master = crypto.deriveMasterKey(password, currentMeta.salt)
+            val verified = crypto.unwrapDataKey(master, currentMeta.wrappedDataKey)
+            master.bytes.fill(0)
+            if (verified == null) return@synchronized false
+            verified.bytes.fill(0) // нужна была только проверка — развёрнутый ключ не оставляем в памяти
+            true
+        } finally {
+            password.fill(' ')
+        }
+    }
+
     private fun requireUnlocked(): DataKey =
         dataKey ?: throw IllegalStateException("vault is locked")
 

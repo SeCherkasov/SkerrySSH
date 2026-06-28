@@ -184,6 +184,54 @@ class VaultBiometricsTest {
     }
 
     @Test
+    fun `confirm succeeds with enrolled biometrics and does not unlock the vault`() = bioTest {
+        val keyStore = FakeBiometricKeyStore()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore).enable(prompt)
+        }
+
+        // Свежий (заблокированный) инстанс: confirm доказывает присутствие, но vault не открывает.
+        val fresh = vault()
+        assertEquals(BiometricConfirmResult.Confirmed, biometrics(fresh, keyStore).confirm(prompt))
+        assertFalse(fresh.isUnlocked, "confirm не должен разблокировать vault")
+    }
+
+    @Test
+    fun `confirm when biometrics not enabled reports NotEnabled`() = bioTest {
+        val keyStore = FakeBiometricKeyStore()
+        vault().create("master-pass".toCharArray())
+
+        assertEquals(BiometricConfirmResult.NotEnabled, biometrics(vault(), keyStore).confirm(prompt))
+    }
+
+    @Test
+    fun `cancelled confirm reports Cancelled`() = bioTest {
+        val keyStore = FakeBiometricKeyStore()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore).enable(prompt)
+        }
+        keyStore.nextUnwrap = BiometricOutcome.Cancelled
+
+        assertEquals(BiometricConfirmResult.Cancelled, biometrics(vault(), keyStore).confirm(prompt))
+    }
+
+    @Test
+    fun `invalidated key during confirm disables biometrics`() = bioTest {
+        val keyStore = FakeBiometricKeyStore()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore).enable(prompt)
+        }
+        assertTrue(artifacts().exists())
+        keyStore.nextUnwrap = BiometricOutcome.Invalidated
+
+        assertEquals(BiometricConfirmResult.Invalidated, biometrics(vault(), keyStore).confirm(prompt))
+        assertFalse(artifacts().exists(), "инвалидация должна снять биометрию")
+    }
+
+    @Test
     fun `disable removes artifact and key`() = bioTest {
         val keyStore = FakeBiometricKeyStore()
         val orchestrator = run {

@@ -376,6 +376,7 @@ private class FakeVault(
     override fun put(id: String, type: RecordType, payload: ByteArray) = Unit
     override fun remove(id: String) = Unit
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = false
+    override fun verifyPassword(password: CharArray): Boolean = false
 
     // Путь биометрии с живым dataKey покрыт в shared (DataKey-конструктор internal в :shared) — стабы.
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted

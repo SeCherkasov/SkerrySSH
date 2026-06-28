@@ -168,6 +168,10 @@ fun DesktopDesignApp(
         LocalSnippets provides snippets,
         LocalFeatures provides features,
         LocalSftpPrefs provides sftpPrefs,
+        // Открытый vault + биометрия за гейтом — нужны повторной аутентификации перед копированием
+        // пароля из keychain (на desktop биометрии нет, путь сводится к мастер-паролю).
+        LocalVault provides vault,
+        LocalVaultBiometrics provides biometrics,
     ) {
         if (vault != null) {
             VaultGate(
