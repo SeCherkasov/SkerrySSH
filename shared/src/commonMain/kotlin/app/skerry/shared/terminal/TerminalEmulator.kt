@@ -1305,10 +1305,16 @@ class TerminalEmulator(
         }
 
         // 4. Отбрасываем незначимый пустой хвост (неиспользованное место внизу экрана не должно уходить
-        //    в scrollback): держим строки до последней непустой и до строки курсора включительно.
+        //    в scrollback): держим строки до последней непустой и до строки курсора включительно. Но
+        //    пустое пространство ВИДИМОГО экрана под курсором — это содержимое (после `clear`/`Ctrl+L`
+        //    под prompt'ом лежит пустой экран, а история уже в scrollback): его сохраняем, иначе reflow
+        //    схлопнет хвост и втянет историю обратно на видимый экран. Кап nr-1 — курсор не уедет за низ.
         var significant = out.size
         while (significant > 0 && out[significant - 1].all { it == blank }) significant--
-        if (trackCursor) significant = maxOf(significant, cursorAbsNew + 1)
+        if (trackCursor) {
+            val belowCursorInScreen = (rows - 1 - cy).coerceIn(0, nr - 1)
+            significant = maxOf(significant, cursorAbsNew + 1 + belowCursorInScreen)
+        }
         significant = significant.coerceAtLeast(1).coerceAtMost(out.size)
         val kept = out.subList(0, significant)
 

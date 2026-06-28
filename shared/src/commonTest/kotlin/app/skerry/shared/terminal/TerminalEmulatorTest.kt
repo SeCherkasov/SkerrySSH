@@ -496,6 +496,46 @@ class TerminalEmulatorTest {
         assertEquals(afterFirst, emu.lines.size, "повторный clear не плодит пустые строки в истории")
     }
 
+    @Test
+    fun `resize after clear keeps the screen empty and history scrolled back`() {
+        // После `clear` прежний вывод лежит в scrollback, а видимый экран пуст (один свежий prompt
+        // вверху). Ресайз — например при открытии split, сужающего терминал — не должен втягивать
+        // историю обратно на видимый экран: пустое пространство под курсором это содержимое экрана,
+        // а не «незначимый хвост», и reflow обязан его сохранить.
+        val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2\r\nline3"))
+        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clear: история → scrollback, экран пуст
+        emu.feed("$ ".encodeToByteArray())                   // свежий prompt в верхней строке экрана
+        emu.resize(6, 4)                                     // сужаем терминал (как открытие split)
+
+        val visible = emu.lines.takeLast(4)
+        assertEquals("$", visible[0].joinToString("") { it.text }.trimEnd(), "prompt остаётся вверху экрана")
+        assertTrue(
+            visible.drop(1).all { row -> row.all { it.text == " " } },
+            "под prompt'ом экран пуст — история не всплыла обратно",
+        )
+        val visibleText = visible.joinToString("\n") { row -> row.joinToString("") { it.text } }
+        assertFalse("line1" in visibleText, "история не вернулась на видимый экран после ресайза")
+        // История по-прежнему доступна прокруткой.
+        val allText = emu.lines.joinToString("\n") { row -> row.joinToString("") { it.text } }
+        assertTrue("line1" in allText, "история сохранена в scrollback")
+    }
+
+    @Test
+    fun `resize after clear with height reduction pins the cursor on screen`() {
+        // Когда ресайз заодно уменьшает высоту, кап nr-1 на сохранённом пространстве под курсором
+        // обязан удержать курсор в пределах нового экрана (а не увести его за верхнюю границу).
+        val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2\r\nline3"))
+        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clear
+        emu.feed("$ ".encodeToByteArray())                   // prompt вверху экрана
+        emu.resize(6, 2)                                     // уже и НИЖЕ
+
+        assertTrue(emu.cursorRow < emu.lines.size, "курсор в пределах буфера")
+        val visible = emu.lines.takeLast(2)
+        assertEquals("$", visible[0].joinToString("") { it.text }.trimEnd(), "prompt остаётся на видимом экране")
+        val visibleText = visible.joinToString("\n") { row -> row.joinToString("") { it.text } }
+        assertFalse("line1" in visibleText, "история не всплыла на укоротившийся экран")
+    }
+
     // Вставка / удаление
 
     @Test
