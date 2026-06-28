@@ -269,6 +269,7 @@ private class InMemoryVault : Vault {
     override fun unlock(password: CharArray): UnlockResult = UnlockResult.Success
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Success
     override fun exportDataKey(): DataKey? = null
+    override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = false
     override fun lock() = Unit
     override fun reset() { records.clear(); payloads.clear() }
     override fun records(): List<VaultRecord> = records.values.filterNot { it.deleted }

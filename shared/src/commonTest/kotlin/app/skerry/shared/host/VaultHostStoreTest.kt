@@ -103,6 +103,7 @@ class VaultHostStoreTest {
         override fun unlock(password: CharArray) = UnlockResult.Success
         override fun unlockWithDataKey(dataKey: DataKey) = UnlockResult.Success
         override fun exportDataKey(): DataKey? = null
+        override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = false
         override fun lock() = Unit
         override fun reset() = Unit
         override fun records(): List<VaultRecord> = error("locked")

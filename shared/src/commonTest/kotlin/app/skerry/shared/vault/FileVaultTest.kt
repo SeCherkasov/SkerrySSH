@@ -337,6 +337,40 @@ class FileVaultTest {
         assertFalse(v.verifyPassword("master".toCharArray()))
     }
 
+    @Test
+    fun `adoptDataKey persists a different account key under the given password`() = vaultTest {
+        val v = vault()
+        v.create("local".toCharArray())
+
+        // Имитируем ключ аккаунта, пришедший с другого устройства (отличается от локального).
+        val accountKey = crypto.newDataKey()
+        assertTrue(v.adoptDataKey(accountKey, "account".toCharArray()))
+        // Запись, запечатанная уже под принятым ключом, должна читаться после перезапуска.
+        v.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+        v.lock()
+
+        // Старый локальный пароль больше не подходит — vault переобёрнут под паролем аккаунта.
+        assertEquals(UnlockResult.WrongPassword, vault().unlock("local".toCharArray()))
+        val reopened = vault()
+        assertEquals(UnlockResult.Success, reopened.unlock("account".toCharArray()))
+        assertContentEquals("secret".encodeToByteArray(), reopened.openPayload("r1"))
+    }
+
+    @Test
+    fun `adoptDataKey is a no-op when the key is unchanged and keeps the password`() = vaultTest {
+        val v = vault()
+        v.create("local".toCharArray())
+
+        // Тот же ключ (основное устройство переподключается своим же) → ничего не переписываем.
+        val sameKey = v.exportDataKey()!!
+        assertFalse(v.adoptDataKey(sameKey, "account".toCharArray()))
+        v.lock()
+
+        // Пароль vault не сменился: открывается исходным, а не переданным в adoptDataKey.
+        assertEquals(UnlockResult.Success, vault().unlock("local".toCharArray()))
+        assertEquals(UnlockResult.WrongPassword, vault().unlock("account".toCharArray()))
+    }
+
     private companion object {
         const val TS = "2026-06-12T00:00:00Z"
     }

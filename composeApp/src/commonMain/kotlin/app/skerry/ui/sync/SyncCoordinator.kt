@@ -153,7 +153,7 @@ class SyncCoordinator(
             } catch (e: SyncException) {
                 if (e.kind != SyncException.Kind.CONFLICT) throw e
                 val s = syncClient.login(accountId, authKey, device)
-                adoptAccountDataKey(syncClient, s, masterKey)
+                adoptAccountDataKey(syncClient, s, masterKey, masterPassword.copyOf())
                 s
             }
 
@@ -180,17 +180,20 @@ class SyncCoordinator(
     }
 
     /**
-     * Принять dataKey аккаунта на входящем устройстве: скачать обёртку, развернуть её мастер-ключом
-     * и разблокировать локальный vault этим ключом ([Vault.unlockWithDataKey]) — теперь записи,
-     * пришедшие с других устройств, расшифровываются. Если обёртка не разворачивается (другой пароль),
-     * оставляем локальный ключ как есть. Принятие действует в пределах сессии: при перезапуске
-     * устройство переподключается и принимает ключ снова (ограничение задокументировано — второе
-     * устройство после рестарта до реконнекта видит синканутые записи как нерасшифруемые).
+     * Принять dataKey аккаунта на входящем устройстве: скачать обёртку, развернуть её мастер-ключом и
+     * **персистентно** принять ключ в локальный vault ([Vault.adoptDataKey] — переобёртка под
+     * [password] + перезапись файла), чтобы записи с других устройств расшифровывались и после
+     * перезаписка, без повторного входа. Если обёртка не разворачивается (другой пароль) — оставляем
+     * локальный ключ как есть. adoptDataKey затирает [password] и забирает [accountDataKey].
      */
-    private suspend fun adoptAccountDataKey(syncClient: SyncClient, s: SyncSession, masterKey: MasterKey) {
+    private suspend fun adoptAccountDataKey(syncClient: SyncClient, s: SyncSession, masterKey: MasterKey, password: CharArray) {
         val wrapped = syncClient.fetchWrappedDataKey(s)
-        val accountDataKey = crypto.unwrapDataKey(masterKey, wrapped) ?: return
-        vault.unlockWithDataKey(accountDataKey)
+        val accountDataKey = crypto.unwrapDataKey(masterKey, wrapped)
+        if (accountDataKey == null) {
+            password.fill(' ')
+            return
+        }
+        vault.adoptDataKey(accountDataKey, password)
     }
 
     /** Прогнать один цикл синхронизации (pull/merge/push). No-op, если не подключены. */

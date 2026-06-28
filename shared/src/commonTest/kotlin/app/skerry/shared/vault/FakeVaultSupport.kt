@@ -47,6 +47,7 @@ internal class FakeVault : Vault {
     override fun verifyPassword(password: CharArray): Boolean = true
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
     override fun exportDataKey(): DataKey? = null
+    override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = false
 
     private companion object {
         val SEALED = "sealed".encodeToByteArray()

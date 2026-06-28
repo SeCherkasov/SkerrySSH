@@ -384,6 +384,7 @@ private class FakeVault(
     // Путь биометрии с живым dataKey покрыт в shared (DataKey-конструктор internal в :shared) — стабы.
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
     override fun exportDataKey(): DataKey? = null
+    override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = false
 }
 
 /** Фейк secure-enclave: [availability] управляет доступностью, wrap/unwrap — тождественны. */

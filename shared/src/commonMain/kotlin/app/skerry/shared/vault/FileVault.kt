@@ -118,6 +118,33 @@ class FileVault(
         dataKey?.let { DataKey(it.bytes.copyOf()) } // копия: вызывающий затрёт её, не тронув живой ключ
     }
 
+    override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = synchronized(lock) {
+        try {
+            val key = dataKey
+            check(key != null) { "vault is locked" }
+            // Тот же ключ (основное устройство переподключается своим же) → не переписываем meta, иначе
+            // молча сменили бы пароль vault на переданный. Лишнюю копию ключа не оставляем в памяти.
+            if (newDataKey.bytes.contentEquals(key.bytes)) {
+                newDataKey.bytes.fill(0)
+                return@synchronized false
+            }
+            val newSalt = crypto.newSalt()
+            val newMaster = crypto.deriveMasterKey(password, newSalt)
+            val newWrapped = crypto.wrapDataKey(newMaster, newDataKey)
+            newMaster.bytes.fill(0)
+            val newMeta = VaultMeta(FORMAT_VERSION, newSalt, newWrapped)
+            // Записи остаются как есть: синканутые придут под новым ключом, локальные (под старым)
+            // станут нечитаемы. Коммит после persist — упадёт запись, поля не тронуты.
+            writeFile(newMeta, records.toList())
+            key.bytes.fill(0) // старый ключ больше не нужен
+            dataKey = newDataKey
+            meta = newMeta
+            true
+        } finally {
+            password.fill(' ')
+        }
+    }
+
     override fun lock(): Unit = synchronized(lock) {
         dataKey?.bytes?.fill(0)
         dataKey = null
