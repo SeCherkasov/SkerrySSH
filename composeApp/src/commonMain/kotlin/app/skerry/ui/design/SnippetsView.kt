@@ -68,7 +68,7 @@ private val MOCK_SNIPPETS = listOf(
 )
 
 /**
- * Snippets — ГЛОБАЛЬНЫЙ раздел (модель Termius): библиотека сохранённых команд (sidebar) + редактор
+ * Snippets — ГЛОБАЛЬНЫЙ раздел: библиотека сохранённых команд (sidebar) + редактор
  * (main). Сниппет самостоятелен (plain-конфиг, секретов не содержит); редактор — чистая форма, а
  * запуск делается из палитры терминала, хоткеем или пунктом «Run snippet…» в контекстном меню хоста.
  * Когда менеджер подан ([LocalSnippets]) — живой список; без него (офскрин-рендер/превью) показывается
@@ -533,7 +533,7 @@ private fun SnipEditField(value: String, onValueChange: (String) -> Unit, placeh
     )
 }
 
-/** Многострочное поле команды (моноширинное, тёмный фон терминала как в макете). */
+/** Многострочное поле команды (моноширинное, тёмный фон терминала). */
 @Composable
 private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
     val textStyle = remember(mono) { TextStyle(color = D.textBright, fontSize = 13.sp, fontFamily = mono) }
@@ -552,7 +552,7 @@ private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, pla
     )
 }
 
-/** Поле поиска по библиотеке (стиль строки поиска макета + ввод). */
+/** Поле поиска по библиотеке. */
 @Composable
 private fun SnipSearchField(value: String, onValueChange: (String) -> Unit, mono: FontFamily) {
     val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }

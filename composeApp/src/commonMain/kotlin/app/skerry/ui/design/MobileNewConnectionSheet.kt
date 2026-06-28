@@ -54,15 +54,15 @@ import app.skerry.ui.host.NewConnectionFormState
 
 
 /**
- * Нижний лист «New connection» мобильного макета `Skerry Mobile.html`: затемнение + панель снизу с
- * формой профиля хоста. С живым [LocalHosts] (за гейтом vault) Save создаёт профиль через
+ * Нижний лист «New connection»: затемнение + панель снизу с формой профиля хоста. С живым
+ * [LocalHosts] (за гейтом vault) Save создаёт профиль через
  * [app.skerry.ui.host.HostManagerController] и закрывает лист; без него (превью) Save просто
- * закрывает. Переиспользует общий [NewConnectionFormState] (как desktop-модалка).
+ * закрывает. Переиспользует общий [NewConnectionFormState].
  *
- * Authentication — живой [MobileAuthPicker] (паритет desktop `AuthPicker`): Ask / новый пароль /
- * новый ключ / уже сохранённый keychain-секрет из [LocalCredentials]. Новый секрет запечатывается
- * в открытый vault и привязывается к хосту через [NewConnectionFormState.resolveCredentialId];
- * AI-политика спрятана за фича-флагом [FeatureFlags.ai] (Phase 2).
+ * Authentication — живой [MobileAuthPicker]: Ask / новый пароль / новый ключ / уже сохранённый
+ * keychain-секрет из [LocalCredentials]. Новый секрет запечатывается в открытый vault и
+ * привязывается к хосту через [NewConnectionFormState.resolveCredentialId]; AI-политика спрятана
+ * за фича-флагом [FeatureFlags.ai].
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -261,11 +261,11 @@ private fun SheetInput(
 }
 
 /**
- * Редактор тегов в стиле листа (паритет desktop-блока Tags): пилюли `#tag` с крестиком + инлайн-ввод
- * нового тега (Enter/запятая фиксирует пилюлю). [tags] — каноническая форма, на экране с префиксом `#`.
- * При фокусе поля под ним раскрывается type-ahead-список [tagSuggestions] (теги других [allHosts], ещё
- * не добавленные сюда, сужённые черновиком); тап по подсказке вызывает [onPick]. Меню через
- * [AnchoredDropdown] с `focusable = false`, чтобы не отнимать фокус и не прерывать набор.
+ * Редактор тегов: пилюли `#tag` с крестиком + инлайн-ввод нового тега (Enter/запятая фиксирует
+ * пилюлю). [tags] — каноническая форма, на экране с префиксом `#`. При фокусе поля под ним
+ * раскрывается type-ahead-список [tagSuggestions] (теги других [allHosts], ещё не добавленные сюда,
+ * сужённые черновиком); тап по подсказке вызывает [onPick]. Меню через [AnchoredDropdown] с
+ * `focusable = false`, чтобы не отнимать фокус и не прерывать набор.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -357,10 +357,10 @@ private fun SheetTags(
 }
 
 /**
- * Выбор аутентификации хоста в стиле мобильного листа (паритет desktop `AuthPicker`): селект-триггер
- * раскрывает варианты — Ask every time / новый пароль / новый ключ / уже сохранённые keychain-секреты
- * из живого [LocalCredentials] — плюс инлайн-поля под новый секрет. В мок-пути (без vault) остаются
- * только варианты без сохранения.
+ * Выбор аутентификации хоста в стиле мобильного листа: селект-триггер раскрывает варианты — Ask
+ * every time / новый пароль / новый ключ / уже сохранённые keychain-секреты из живого
+ * [LocalCredentials] — плюс инлайн-поля под новый секрет. В мок-пути (без vault) остаются только
+ * варианты без сохранения.
  */
 @Composable
 private fun MobileAuthPicker(form: NewConnectionFormState) {
@@ -446,10 +446,10 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
 }
 
 /**
- * Поле «Group» листа: выпадающий селект (паритет [MobileAuthPicker]) — пункт «No group», уже созданные
- * группы каталога ([groupSuggestions]) и «New group…», открывающий диалог создания. Выбранная группа
- * хранится в [NewConnectionFormState.group]; создание новой просто проставляет её имя (профиль заведёт
- * папку при сохранении). Свободного ввода в самом поле нет — только список + явное создание, чтобы не
+ * Поле «Group» листа: выпадающий селект — пункт «No group», уже созданные группы каталога
+ * ([groupSuggestions]) и «New group…», открывающий диалог создания. Выбранная группа хранится в
+ * [NewConnectionFormState.group]; создание новой просто проставляет её имя (профиль заведёт папку
+ * при сохранении). Свободного ввода в самом поле нет — только список + явное создание, чтобы не
  * плодить опечатки-дубли групп на телефоне.
  */
 @Composable
@@ -582,10 +582,10 @@ private fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) ->
 }
 
 /**
- * Диалог «Rename group» (карандаш у заголовка папки) — полноэкранный оверлей на корне над клавиатурой
- * ([imePadding]), паритет [MobileGroupCreateDialog]. Поле имени предзаполнено [initialName]; «Save»
- * переименовывает (хосты переезжают с группой), «Delete group» — разгруппировывает (профили целы).
- * Пустое/неизменное имя оставляет «Save» неактивной. Зеркалит desktop [GroupDialog] в режиме правки.
+ * Диалог «Rename group» (карандаш у заголовка папки) — полноэкранный оверлей на корне над
+ * клавиатурой ([imePadding]). Поле имени предзаполнено [initialName]; «Save» переименовывает
+ * (хосты переезжают с группой), «Delete group» — разгруппировывает (профили целы).
+ * Пустое/неизменное имя оставляет «Save» неактивной.
  */
 @Composable
 internal fun MobileGroupRenameDialog(
@@ -670,7 +670,7 @@ private fun MobileAuthOption(icon: String, title: String, subtitle: String, sele
     }
 }
 
-/** Пилюли AI-политики (Strict/Balanced/Off) — визуальный выбор за фича-флагом (Phase 2). */
+/** Пилюли AI-политики (Strict/Balanced/Off) — визуальный выбор за фича-флагом. */
 @Composable
 private fun AiPolicyPills() {
     var selected by remember { mutableStateOf("Strict") }

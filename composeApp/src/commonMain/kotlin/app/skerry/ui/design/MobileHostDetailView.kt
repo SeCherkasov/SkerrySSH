@@ -50,12 +50,11 @@ fun mobileHostDetailRows(host: Host): List<HostDetailRow> = listOf(
 )
 
 /**
- * Полноэкранная деталь хоста мобильного макета `Skerry Mobile.html` (push поверх Hosts). Профиль
- * берётся из живого [LocalHosts] по [MobileDesignState.selectedHostId] (или превью-каталог вне гейта).
- * Connect — seam в [MobileRoute.Terminal] (живой коннект подключается со слайсом терминала); Tunnels —
- * в [MobileRoute.Ports]; Delete удаляет профиль через [app.skerry.ui.host.HostManagerController] и
- * возвращает к списку. SFTP подключается к хосту (как Connect) и ведёт на таб Files;
- * Snippets/edit — экраны своих слайсов (пока без действия).
+ * Полноэкранная деталь хоста (push поверх Hosts). Профиль берётся из живого [LocalHosts] по
+ * [MobileDesignState.selectedHostId] (или превью-каталог вне гейта). Connect — переход на
+ * [MobileRoute.Terminal]; Tunnels — на [MobileRoute.Ports]; Delete удаляет профиль через
+ * [app.skerry.ui.host.HostManagerController] и возвращает к списку. SFTP подключается к хосту и
+ * ведёт на таб Files; Snippets/edit — заглушка (без действия).
  */
 @Composable
 fun MobileHostDetailScreen(state: MobileDesignState) {
@@ -138,8 +137,8 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
         }
 
         // Быстрые действия: SFTP подключается к хосту (как Connect, с резолвом секрета/паролем) и
-        // ведёт сразу на таб Files — Remote-браузер активной сессии, как SFTP-кнопка тулбара desktop.
-        // Tunnels — на Ports; Snippets — экран своего слайса (Phase 2).
+        // ведёт сразу на таб Files — Remote-браузер активной сессии.
+        // Tunnels — на Ports; Snippets — не реализован.
         val openSftp = LocalOpenSftp.current
         Row(
             Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),

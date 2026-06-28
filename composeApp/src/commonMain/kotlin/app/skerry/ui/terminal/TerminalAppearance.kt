@@ -35,8 +35,7 @@ enum class TerminalFont(val displayName: String, val id: String) {
 
 /**
  * Размер шрифта терминала по умолчанию. Применяется как `.sp` (см. [TerminalAppearance.fontSizeSp]);
- * в макете и в выпадающем списке подписан «px» — на масштабе шрифта 1.0 это одно и то же число.
- * Значение 13 совпадает с макетом `docs/new/Skerry.html`.
+ * в выпадающем списке подписан «px» — на масштабе шрифта 1.0 это одно и то же число.
  */
 const val DEFAULT_TERMINAL_FONT_SIZE = 13
 

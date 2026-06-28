@@ -5,7 +5,7 @@ import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 
 /**
- * Категории менеджера vault, 1:1 с макетом `docs/new/Skerry.html` ([title]/[icon] — текст и
+ * Категории менеджера vault ([title]/[icon] — текст и
  * Material-Symbols-иконка sidebar). Три keychain-категории ([SSH_KEYS]/[PASSWORDS]/[CERTIFICATES])
  * наполняются [Credential] по типу секрета. Все категории живые (бэкенд — открытый vault).
  */

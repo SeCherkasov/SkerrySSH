@@ -49,15 +49,15 @@ import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.TunnelStatus
 import app.skerry.ui.tunnel.buildTunnelDraft
 
-/** Фон карточки туннеля (белый 3%) макета PORTS. */
+/** Фон карточки туннеля (белый 3%). */
 private val TunnelCardBg = Color(0x08FFFFFF)
 
 /**
- * Push-экран Port forwarding мобильного макета `docs/new/Skerry Mobile.html`: шапка-назад + карточки
- * сохранённых туннелей + кнопка New tunnel. Туннели — ГЛОБАЛЬНЫЙ раздел (модель Termius): список и
- * включение/выключение идут через [TunnelManager] ([LocalTunnels]), без привязки к открытой сессии —
- * каждый туннель сам открывает соединение к своему хосту. Тумблер карточки = on/off, long-press →
- * Edit/Remove, New tunnel/Edit открывают лист-редактор. Без менеджера (превью/офскрин) — мок макета.
+ * Push-экран Port forwarding: шапка-назад + карточки сохранённых туннелей + кнопка New tunnel.
+ * Туннели — ГЛОБАЛЬНЫЙ раздел: список и включение/выключение идут через [TunnelManager]
+ * ([LocalTunnels]), без привязки к открытой сессии — каждый туннель сам открывает соединение к
+ * своему хосту. Тумблер карточки = on/off, long-press → Edit/Remove, New tunnel/Edit открывают
+ * лист-редактор. Без менеджера (превью/офскрин) — заглушка.
  */
 @Composable
 fun MobilePortsScreen(state: MobileDesignState) {
@@ -65,7 +65,7 @@ fun MobilePortsScreen(state: MobileDesignState) {
     val manager = LocalTunnels.current
     val hosts = LocalHosts.current
     // Открытый редактор: null — закрыт, иначе id правимого туннеля либо "" для нового. Держим на уровне
-    // экрана: лист — полноэкранный оверлей в корневом Box (как лист New connection в MobileChrome).
+    // экрана: лист — полноэкранный оверлей в корневом Box.
     // Без ключа: сброс — только явный onDismiss/onEdit, не смена идентичности менеджера.
     var editorFor by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize().background(D.bg)) {
@@ -169,8 +169,7 @@ private fun LiveMobilePortsBody(
 
 /**
  * Карточка сохранённого туннеля: бейдж типа + «via host» + тумблер on/off, строка source→dest.
- * Long-press → меню Edit/Remove (видимых якорей правки/удаления в макете нет — прячем в контекстное
- * меню, как на desktop/мобильном Files).
+ * Long-press → меню Edit/Remove (видимых якорей правки/удаления нет — прячем в контекстное меню).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -487,7 +486,7 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
 
 // New tunnel button.
 
-/** Дашед-кнопка «New tunnel» макета (cyan-рамка, иконка add). */
+/** Дашед-кнопка «New tunnel» (cyan-рамка, иконка add). */
 @Composable
 private fun MobileNewTunnelButton(onClick: () -> Unit) {
     Row(
@@ -505,7 +504,7 @@ private fun MobileNewTunnelButton(onClick: () -> Unit) {
     }
 }
 
-/** Строка скорости в листе-редакторе (стрелка + бар + текст) — мобильный аналог desktop-ThroughputRow. */
+/** Строка скорости в листе-редакторе: стрелка + бар + текст. */
 @Composable
 private fun MobileThroughputRow(icon: String, color: Color, fraction: Float, value: String, mono: FontFamily) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -527,7 +526,7 @@ private fun tunnelBadgeColors(direction: TunnelDirection): Pair<Color, Color> = 
 
 private data class MockTunnel(val type: String, val bg: Color, val fg: Color, val via: String, val source: String, val arrow: String, val dest: String, val destDim: Boolean, val on: Boolean)
 
-/** Статичные туннели ровно из макета PORTS — для офскрин-сверки 1:1. */
+/** Статичные туннели для превью/офскрин. */
 private val MOCK_TUNNELS = listOf(
     MockTunnel("LOCAL", D.cyan.copy(alpha = 0.12f), D.cyanBright, "via prod-web-01", "127.0.0.1:8080", "arrow_forward", "10.0.0.5:80", false, true),
     MockTunnel("REMOTE", D.amber.copy(alpha = 0.14f), D.amber, "via homelab-pi", "0.0.0.0:9000", "arrow_forward", "localhost:3000", false, true),

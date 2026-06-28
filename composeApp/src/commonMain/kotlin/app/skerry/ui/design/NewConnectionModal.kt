@@ -66,7 +66,7 @@ import app.skerry.ui.host.NewConnectionFormState
  * просто закрывает модалку. В режиме правки форма предзаполняется из [editHost]
  * ([NewConnectionFormState.fromHost]), а сохранение удерживает его [Host.id]. Теги редактируемы
  * (пилюли + инлайн-ввод, проводка к [NewConnectionFormState]); jump/keep-alive/AI-политика — пока
- * визуальные заглушки (отдельные слайсы).
+ * визуальные заглушки.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -187,7 +187,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         },
                     )
                 }
-                // Выбор AI-политики — фича MVP2 за фича-флагом; в MVP1 (дефолт) его в форме нет.
+                // Выбор AI-политики за фича-флагом; по умолчанию в форме отсутствует.
                 if (LocalFeatures.current.ai) {
                     Spacer14()
                     Field("AI policy for this connection") {

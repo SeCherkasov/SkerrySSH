@@ -56,7 +56,7 @@ private val TUNNELS = listOf(
 )
 
 /**
- * Port forwarding (Tunnels) — ГЛОБАЛЬНЫЙ раздел (модель Termius): список сохранённых туннелей с
+ * Port forwarding (Tunnels) — ГЛОБАЛЬНЫЙ раздел: список сохранённых туннелей с
  * тумблерами on/off + редактор справа. Туннель самостоятелен (ссылается на хост по id) и при включении
  * сам открывает SSH-соединение через [TunnelManager]. Когда менеджер подан ([LocalTunnels]) — живой
  * список; без него (офскрин-рендер/превью) показывается статичный мок ([TUNNELS]).
@@ -435,7 +435,7 @@ private fun directionDisplay(direction: TunnelDirection): String = when (directi
     TunnelDirection.Dynamic -> "Dynamic SOCKS (-D)"
 }
 
-// Мок-путь (офскрин-рендер/превью): статичная таблица + форма деталей из макета.
+// Мок-путь (офскрин-рендер/превью): статичная таблица + форма деталей.
 
 @Composable
 private fun MockTunnelsBody() {

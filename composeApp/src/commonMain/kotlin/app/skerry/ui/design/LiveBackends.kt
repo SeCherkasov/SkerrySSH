@@ -49,11 +49,8 @@ val LocalSftpPrefs: ProvidableCompositionLocal<SftpPrefs> = staticCompositionLoc
 
 /**
  * Живые бэкенды, подаваемые в дизайн-слой через CompositionLocal (тем же приёмом, что [LocalFonts]) —
- * чтобы не протаскивать контроллеры параметрами через каждый composable макета. `null` означает
+ * чтобы не протаскивать контроллеры параметрами через каждый composable. `null` означает
  * мок-путь (офскрин-рендер/превью): composable рисует статичные данные [DesktopMockData].
- *
- * [DesktopDesignApp] поставляет их за гейтом vault; по мере разводки бэкендов сюда добавятся
- * SFTP/форвардинг следующими слайсами.
  */
 val LocalHosts: ProvidableCompositionLocal<HostManagerController?> = staticCompositionLocalOf { null }
 
@@ -100,7 +97,7 @@ val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticComposi
 
 /**
  * Действие «открыть хост в split-панели активной вкладки»: тот же резолв секрета, что и
- * [LocalConnectHost], но открывает НОВУЮ независимую вторичную сессию рядом (модель Termius), а не
+ * [LocalConnectHost], но открывает НОВУЮ независимую вторичную сессию рядом, а не
  * новую вкладку. Поставляется [DesktopDesignApp]; дефолт — no-op (мок-путь/превью).
  */
 val LocalConnectSplit: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
@@ -124,7 +121,7 @@ val LocalTestTransport: ProvidableCompositionLocal<SshTransport?> = staticCompos
 val LocalOpenSftp: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
 /**
- * Менеджер глобальных сохранённых туннелей (модель Termius): список пробросов + включение/выключение,
+ * Менеджер глобальных сохранённых туннелей: список пробросов + включение/выключение,
  * каждый сам открывает соединение к хосту. `null` — мок-путь/превью без бэкенда:
  * [app.skerry.ui.design.TunnelsView] рисует статичный макет. Поставляется [DesktopDesignApp] за гейтом
  * vault (резолв секрета хоста требует открытого vault).
@@ -132,7 +129,7 @@ val LocalOpenSftp: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositio
 val LocalTunnels: ProvidableCompositionLocal<TunnelManager?> = staticCompositionLocalOf { null }
 
 /**
- * Менеджер сохранённых сниппетов (модель Termius): библиотека команд + запуск в активном терминале.
+ * Менеджер сохранённых сниппетов: библиотека команд + запуск в активном терминале.
  * `null` — мок-путь/превью без бэкенда: [app.skerry.ui.design.SnippetsView] рисует статичный макет.
  * Поставляется [DesktopDesignApp] (сниппеты — plain-конфиг, vault не требуют).
  */
@@ -140,7 +137,7 @@ val LocalSnippets: ProvidableCompositionLocal<SnippetManager?> = staticCompositi
 
 /**
  * Действие «Run on host» сниппета: открыть/использовать сессию к [Host] и выполнить переданную команду
- * сразу после подключения (модель Termius — запуск на выбранном хосте, а не только в активном
+ * сразу после подключения (запуск на выбранном хосте, а не только в активном
  * терминале). Резолвит секрет тем же путём, что [LocalConnectHost] (keychain или запрос пароля).
  * Поставляется [DesktopDesignApp]; дефолт — no-op (мок-путь/превью).
  */

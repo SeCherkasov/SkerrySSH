@@ -83,12 +83,12 @@ fun TerminalView(state: DesktopDesignState) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 // Живой режим: split привязан к активной вкладке (своя вторичная сессия). Мок/превью —
-                // глобальный флаг макета.
+                // глобальный флаг.
                 val sessions = LocalSessions.current
                 val activeId = sessions?.active?.id
                 val showSplit = if (sessions != null) sessions.active?.splitOpen == true else state.split
                 // В режиме split акцентная рамка (primary cyan) обводит сфокусированную панель — явно
-                // показывает, с какой панелью идёт работа (модель Termius). focusedSplit=false → основная.
+                // показывает, с какой панелью идёт работа. focusedSplit=false → основная.
                 val focusedSplit = sessions?.active?.focusedSplit == true
                 fun paneFocusBorder(focused: Boolean): Modifier =
                     if (showSplit && focused) Modifier.border(1.dp, D.cyan.copy(alpha = 0.35f)) else Modifier
@@ -97,7 +97,7 @@ fun TerminalView(state: DesktopDesignState) {
                     .then(if (sessions != null && activeId != null && showSplit) Modifier.focusPaneOnPress(sessions, activeId, split = false) else Modifier)
                     .then(paneFocusBorder(!focusedSplit))
                 // Основная панель = свой заголовок (тулбар) + терминал, симметрично split-панели: обе
-                // шапки на одном уровне (модель Termius), без «перекоса».
+                // шапки на одном уровне, без «перекоса».
                 Column(primaryMod) {
                     SessionToolbar(state)
                     TerminalPane(state, Modifier.weight(1f).fillMaxWidth())
@@ -123,7 +123,7 @@ private fun HostsSidebar(state: DesktopDesignState) {
     val liveHosts = LocalHosts.current
     // Состояние ручной сортировки (drag-and-drop) живого каталога; в мок-пути не используется.
     val dragState = remember { HostDragState() }
-    // Активный фильтр-чип (тег). Только для живого каталога; в мок-пути чипсы из макета статичны.
+    // Активный фильтр-чип (тег). Только для живого каталога; в мок-пути чипсы статичны.
     var activeChip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
     val chips = liveHosts?.let { remember(it.hosts) { hostTagChips(it.hosts) } } ?: emptyList()
     // Если активный тег исчез (хост отредактирован/удалён), фильтр откатывается к «All» — не зависает на пустом.
@@ -186,7 +186,7 @@ private fun HostsSidebar(state: DesktopDesignState) {
                 }
             }
             // Живой каталог из HostManagerController, если подан (за гейтом vault); иначе мок-данные
-            // макета (путь офскрин-рендера/превью). Папки — по группам, сузив активным тег-чипом.
+            // (путь офскрин-рендера/превью). Папки — по группам, сузив активным тег-чипом.
             if (liveHosts != null) {
                 val query = state.hostSearchQuery
                 val folders = remember(liveHosts.hosts, effectiveChip, query, state.customGroups) {
@@ -227,7 +227,7 @@ private fun HostsSidebar(state: DesktopDesignState) {
             }
             // Живой каталог: секция RECENT из реальной истории подключений ([DesktopDesignState.recentHostIds]),
             // резолвится в текущие профили — удалённые/неизвестные id просто скрыты. Пусто → секции нет.
-            // Мок/превью (нет живого каталога): статичная строка из макета.
+            // Мок/превью (нет живого каталога): статичная строка.
             if (liveHosts != null) {
                 // Мемоизируем по (порядок недавних, состав каталога) — как соседний `folders`: иначе
                 // резолв пересчитывался бы на каждой рекомпозиции сайдбара (drag/смена чипа/таба).
@@ -260,7 +260,7 @@ private fun HostsSidebar(state: DesktopDesignState) {
 /**
  * Поле поиска по сайдбару хостов (имя/адрес/пользователь/группа/теги). Рамка/иконка/плейсхолдер —
  * в decorationBox, чтобы клик по всей площади ставил каретку (см. правило для рукописных полей).
- * Пока пусто — справа бейдж `⌘K` (как в макете); при вводе он сменяется крестиком очистки.
+ * Пока пусто — справа бейдж `⌘K`; при вводе он сменяется крестиком очистки.
  */
 @Composable
 private fun HostSearchField(state: DesktopDesignState, mono: FontFamily) {
@@ -476,7 +476,7 @@ private fun LiveHostFolder(
                     ) {
                         HostEntryRow(
                             label = host.label,
-                            // Подсветку «хост активной вкладки» убрали (модель Termius): при split
+                            // Подсветку «хост активной вкладки» убрали: при split
                             // активных хостов два — подсветка одного вводила бы в заблуждение. Статус
                             // живого соединения по-прежнему показывает точка справа.
                             selected = false,
@@ -487,7 +487,7 @@ private fun LiveHostFolder(
                             // Объект хоста — для пункта «Run snippet…» (запуск сниппета на этом хосте).
                             host = host,
                             // Правка/удаление профиля — через контекстное меню (right-click/long-press),
-                            // как в шаблоне без отдельных кнопок/⋮.
+                            // без отдельных кнопок/⋮.
                             onEdit = onEdit,
                             onDelete = onDelete,
                         )
@@ -643,7 +643,7 @@ private fun SessionToolbar(state: DesktopDesignState) {
                     // Живой режим без активной сессии: честное пустое состояние, без фейкового хоста.
                     Txt("No active session", color = D.faint, size = 12.sp, font = mono)
                 } else {
-                    // Мок/превью (офскрин-рендер без LocalSessions): статичный заголовок макета.
+                    // Мок/превью (офскрин-рендер без LocalSessions): статичный заголовок.
                     Txt("root@prod-web-01", color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Txt("192.168.1.45:22", color = D.dim, size = 11.5.sp)
@@ -656,11 +656,11 @@ private fun SessionToolbar(state: DesktopDesignState) {
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 // Split: живой режим переключает split АКТИВНОЙ вкладки (своя вторичная сессия);
-                // мок/превью — глобальный флаг макета.
+                // мок/превью — глобальный флаг.
                 IconBtn("splitscreen_right", onClick = { if (sessions != null) sessions.toggleSplit() else state.toggleSplit() })
                 // Переключают подвью АКТИВНОЙ вкладки (живой режим, + сброс оверлея) / мок-фолбэк state.view.
                 IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
-                // Tunnels — глобальный раздел (модель Termius), всегда открывается оверлеем.
+                // Tunnels — глобальный раздел, всегда открывается оверлеем.
                 IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
                 // Быстрый запуск сниппета в активную сессию без ухода в раздел Snippets.
                 SnippetPaletteButton(active)
@@ -757,7 +757,7 @@ private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Uni
 // Терминальная панель.
 
 /**
- * Терминальная область: живая ([LocalSessions] подан, за гейтом vault) или мок-демо макета.
+ * Терминальная область: живая ([LocalSessions] подан, за гейтом vault) или мок-демо.
  * Живой путь рендерит реальную сетку активной сессии через готовый [TerminalScreen] (VT-эмулятор
  * + ввод в PTV) или экран-плейсхолдер для прочих состояний соединения.
  */
@@ -842,7 +842,7 @@ private fun TerminalNotice(icon: String, title: String, subtitle: String, color:
     }
 }
 
-/** Демо-терминал макета (мок-путь без живых сессий: офскрин-рендер/превью). */
+/** Демо-терминал (мок-путь без живых сессий: офскрин-рендер/превью). */
 @Composable
 private fun MockTerminalPane(state: DesktopDesignState, modifier: Modifier = Modifier) {
     val mono = LocalFonts.current.mono
@@ -997,7 +997,7 @@ private fun AiSuggestionCard() {
 // Split-панель.
 
 /**
- * Живая split-панель (модель Termius): вторая НЕЗАВИСИМАЯ сессия активной вкладки
+ * Живая split-панель: вторая НЕЗАВИСИМАЯ сессия активной вкладки
  * ([Session.splitSession], своё соединение/терминал/выделение). Шапка показывает её хост и крестик
  * закрытия ([SessionsController.closeSplit]); пока хост не выбран — пикер каталога ([SplitHostPicker]),
  * выбор подключает новую сессию через [LocalConnectSplit]. Клик по телу фокусирует split-панель
@@ -1194,7 +1194,7 @@ private fun InfoPanel() {
         HLine()
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             // Host/Address/User — из живого профиля активной сессии; cipher — из транспорта,
-            // uptime — из live-метрик (до первого опроса «…»); в мок-режиме всё из макета.
+            // uptime — из live-метрик (до первого опроса «…»); в мок-режиме — статичные значения.
             InfoRow("Host", if (live) (host?.label ?: active?.title ?: "—") else "prod-web-01", mono)
             InfoRow("Address", if (live) (host?.let { "${it.address}:${it.port}" } ?: "—") else "192.168.1.45:22", mono)
             InfoRow("User", if (live) (host?.username ?: "—") else "root", mono)
@@ -1205,7 +1205,7 @@ private fun InfoPanel() {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
             Txt("LIVE METRICS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
             if (!live) {
-                // Мок-путь (превью/офскрин): статичные значения макета.
+                // Мок-путь (превью/офскрин): статичные значения.
                 Meter("CPU", "34%", 0.34f, D.cyan, D.textBright, mono)
                 Meter("Memory", "2.1 / 4 GB", 0.52f, D.moss, D.textBright, mono)
                 Meter("Disk /", "87%", 0.87f, D.sunset, D.sunset, mono)
@@ -1223,7 +1223,7 @@ private fun InfoPanel() {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             Txt("SYSTEM", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
             // Живой блок собирается из фактов хоста (ОС / ядро / CPU+load); до первого опроса — «…».
-            // В мок-режиме (превью/офскрин) — статичный текст макета.
+            // В мок-режиме (превью/офскрин) — статичный текст.
             val systemText = if (live) liveSystemSummary(liveMetrics) else MOCK_SYSTEM
             Txt(systemText, color = D.dim, size = 10.5.sp, font = mono, lineHeight = 18.sp)
         }

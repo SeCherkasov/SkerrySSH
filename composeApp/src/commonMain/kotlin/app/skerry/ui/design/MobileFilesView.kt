@@ -63,7 +63,7 @@ private val TransferTrack = Color(0x12FFFFFF)
  * с подключённой активной сессией — живой листинг, иначе — уведомление «нет сессии». Видимые действия:
  * тап по папке — вход, тап по файлу (иконка `ios_share`) — скачать через системный «Save to…», FAB —
  * создать каталог / залить файл с устройства. Переименование/удаление и «Download to device» спрятаны
- * в контекстное меню (long-press), как и на desktop.
+ * в контекстное меню (long-press).
  */
 @Composable
 fun MobileFilesScreen() {
@@ -271,9 +271,9 @@ private fun MobileLivePane(
 }
 
 /**
- * Строка списка файлов мобильного макета: ведущая иконка ([mobileFileIcon]) + имя (mono) + мета +
+ * Строка списка файлов: ведущая иконка ([mobileFileIcon]) + имя (mono) + мета +
  * завершающая иконка ([mobileFileTrailingIcon]). Тап — [onClick] (войти/передать); long-press —
- * контекстное меню Rename/Delete (в макете их нет — прячем, как на desktop).
+ * контекстное меню Rename/Delete.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -497,7 +497,7 @@ private fun ConnectingMobileFilesView(subtitle: String) {
 
 private data class MockFileEntry(val icon: String, val iconColor: Color, val name: String, val meta: String, val trailing: String, val selected: Boolean = false)
 
-/** Статичные данные Remote-панели ровно из макета (FILES) — для офскрин-сверки 1:1. */
+/** Статичные данные Remote-панели (превью/офскрин). */
 private val MOCK_REMOTE_FILES = listOf(
     MockFileEntry("folder", D.cyanBright, "html", "drwxr-xr-x · 4 items", "chevron_right"),
     MockFileEntry("folder", D.cyanBright, "releases", "drwxr-xr-x · 12 items", "chevron_right"),
@@ -506,7 +506,7 @@ private val MOCK_REMOTE_FILES = listOf(
     MockFileEntry("description", D.dim, "robots.txt", "112 B · May 30", "ios_share"),
 )
 
-/** Статичный мок секции FILES макета (превью/офскрин без бэкенда) — 1:1 с `docs/new/Skerry Mobile.html`. */
+/** Статичный мок секции Files (превью/офскрин без бэкенда). */
 @Composable
 private fun MockMobileFilesView(mono: FontFamily) {
     Box(Modifier.fillMaxSize().background(D.bg)) {

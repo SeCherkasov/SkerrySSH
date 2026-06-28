@@ -8,8 +8,6 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Дизайн-токены Skerry — палитра «night sea».
- * Источник правды — `:root` HTML-прототипов в docs/; сюда переносится 1:1,
- * любые изменения палитры начинаются с прототипов и теста SkerryColorsTest.
  */
 object SkerryColors {
     // Поверхности

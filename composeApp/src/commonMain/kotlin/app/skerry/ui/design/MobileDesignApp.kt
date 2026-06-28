@@ -66,17 +66,13 @@ import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
 
 /**
- * Корень мобильного макета `docs/new/Skerry Mobile.html`, воспроизводимого 1:1 (телефонный
- * аналог [DesktopDesignApp]). Поставляет шрифты через [LocalFonts] и живые бэкенды через
+ * Корень мобильного макета. Поставляет шрифты через [LocalFonts] и живые бэкенды через
  * [LocalHosts]/[LocalKnownHosts]/[LocalFeatures], держит [MobileDesignState] и собирает каркас:
  * контент текущего таба (или push-экрана) + нижний таб-бар.
  *
  * Если в графе есть [AppDependencies.vault], весь контент закрыт гейтом мастер-пароля
  * ([VaultGate]) с мобильными формами ([MobileCreateScreen]/[MobileUnlockScreen]). Без vault
- * (путь превью) рисуется только chrome с мок-данными — как на desktop.
- *
- * Слайс 1: каркас навигации (5 табов) + lock-экран. Контент табов/push-экранов — плейсхолдеры,
- * наполняются следующими слайсами (Hosts → Terminal → Files → …).
+ * (путь превью) рисуется только chrome с мок-данными.
  */
 @Composable
 fun MobileDesignApp(
@@ -98,7 +94,7 @@ fun MobileDesignApp(
         symbols = rememberMaterialSymbols(),
     )
     // Менеджер сессий: либо подан снаружи (офскрин-рендер с фейковым транспортом), либо строится
-    // из живого транспорта — один shell на сессию, как в [DesktopDesignApp]/legacy-`MobileApp`.
+    // из живого транспорта — один shell на сессию.
     // Свой граф закрываем при dispose; внешний — собственность вызывающего, не трогаем.
     val scope = rememberCoroutineScope()
     val liveSessions = sessions ?: remember(deps.transport, scope) {
@@ -157,7 +153,7 @@ fun MobileDesignApp(
 /**
  * Каркас мобильного макета: контент (push-экран либо корневой таб) + нижний таб-бар, видимый
  * только на корневых экранах ([MobileDesignState.showTabs]). [onLock] != null — живой путь за
- * гейтом (пункт «Lock Skerry» в More реально запирает vault); пока используется в следующих слайсах.
+ * гейтом (пункт «Lock Skerry» в More реально запирает vault).
  */
 @Composable
 private fun MobileChrome(
@@ -168,7 +164,7 @@ private fun MobileChrome(
     onVaultUnlocked: () -> Unit,
 ) {
     // Keychain-секреты живут в открытом vault — за гейтом мастер-пароля сперва прогоняем миграцию
-    // данных ([onVaultUnlocked]), затем перечитываем (как DesktopChrome).
+    // данных ([onVaultUnlocked]), затем перечитываем.
     LaunchedEffect(credentials) {
         onVaultUnlocked()
         credentials?.reload()
@@ -283,8 +279,7 @@ private fun openMobileSession(
 // Контент: корневые табы и push-экраны.
 
 /**
- * Корневой экран текущего таба. Все табы реализованы 1:1 с макетом. [onLock] прокидывается в хаб
- * More («Lock Skerry»).
+ * Корневой экран текущего таба. [onLock] прокидывается в хаб More («Lock Skerry»).
  */
 @Composable
 private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
@@ -298,8 +293,8 @@ private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
 }
 
 /**
- * Полноэкранный push-экран. HostDetail реализован 1:1 ([MobileHostDetailScreen], слайс 2B);
- * остальные — back-стрелка + заголовок ([MobileRoutePlaceholder]), тело придёт со слайсом раздела.
+ * Полноэкранный push-экран. [MobileRoute.HostDetail] открывает [MobileHostDetailScreen];
+ * остальные — back-стрелка + заголовок ([MobileRoutePlaceholder]), тело не реализовано.
  */
 @Composable
 private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
@@ -313,7 +308,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
     }
 }
 
-/** Заглушка push-экрана раздела: back-стрелка + заголовок; тело придёт со слайсом раздела. */
+/** Заглушка push-экрана: back-стрелка + заголовок. */
 @Composable
 private fun MobileRoutePlaceholder(state: MobileDesignState, title: String) {
     Column(Modifier.fillMaxSize()) {
@@ -331,9 +326,9 @@ private fun MobileRoutePlaceholder(state: MobileDesignState, title: String) {
 // Нижний таб-бар.
 
 /**
- * Нижний таб-бар `Skerry Mobile.html` (5 табов): полупрозрачный тёмный фон + верхняя cyan-линия,
+ * Нижний таб-бар (5 табов): полупрозрачный тёмный фон + верхняя cyan-линия,
  * активный таб — cyanBright, остальные — faint. Высота контента ~64dp, ниже — отступ под системную
- * навигацию (home-indicator макета).
+ * навигацию (home-indicator).
  */
 @Composable
 private fun MobileTabBar(state: MobileDesignState, modifier: Modifier = Modifier) {
@@ -374,7 +369,7 @@ private fun MobileTabItem(tab: MobileTab, active: Boolean, onClick: () -> Unit) 
 // Lock-экраны (мобильный визуал).
 
 /**
- * Живая форма разблокировки `Skerry Mobile.html` (режим master-password): логотип, заголовок,
+ * Живая форма разблокировки (режим master-password): логотип, заголовок,
  * поле пароля, кнопка Unlock на всю ширину, строка биометрии и футер. PIN-режим макета отложен
  * (нет бэкенда passcode) — см. бэклог нового дизайна. Пароль уходит в [onUnlock] как [CharArray]
  * и затирается контроллером; кнопка/строка биометрии видна только при [canUseBiometric].
@@ -559,7 +554,7 @@ private fun MobileResetScopeRow(selected: Boolean, title: String, subtitle: Stri
     }
 }
 
-/** Каркас lock-экрана `Skerry Mobile.html`: радиальный фон, логотип 64dp, заголовок, [fields], футер. */
+/** Каркас lock-экрана: радиальный фон, логотип 64dp, заголовок, [fields], футер. */
 @Composable
 private fun MobileLockScaffold(
     title: String,

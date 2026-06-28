@@ -42,8 +42,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 
 /**
- * Базовый текст макета на UI-шрифте (Space Grotesk по умолчанию). Тонкая обёртка над
- * [BasicText], чтобы по всему воспроизведённому UI не дублировать [TextStyle]; для моноширинных
+ * Базовый текст на UI-шрифте (Space Grotesk по умолчанию). Тонкая обёртка над
+ * [BasicText], чтобы по всему UI не дублировать [TextStyle]; для моноширинных
  * мест передаётся `font = LocalFonts.current.mono`.
  */
 @Composable

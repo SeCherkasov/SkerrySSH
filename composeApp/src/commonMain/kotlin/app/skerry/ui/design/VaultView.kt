@@ -85,7 +85,7 @@ import kotlinx.coroutines.withContext
  * (публичный ключ, отпечаток, какие хосты используют секрет напрямую через [Host.credentialId]),
  * генерацией пары ([LocalSshKeyGenerator]), добавлением пароля, импортом сертификата
  * ([LocalSshCertificateInspector]), копированием/экспортом/удалением.
- * Без keychain-контроллера (офскрин-рендер/превью) рисуется статичный макет [MockVaultView].
+ * Без keychain-контроллера (офскрин-рендер/превью) рисуется статичный мок [MockVaultView].
  */
 @Composable
 fun VaultView() {
@@ -784,7 +784,7 @@ private fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDismi
     }
 }
 
-// Мок-путь (офскрин-рендер/превью): статичные категории/ключи/детали из макета.
+// Мок-путь (офскрин-рендер/превью): статичные категории/ключи/детали.
 
 /** Vault view (мок): категории секретов (sidebar) + список SSH-ключей + панель деталей ключа. */
 @Composable

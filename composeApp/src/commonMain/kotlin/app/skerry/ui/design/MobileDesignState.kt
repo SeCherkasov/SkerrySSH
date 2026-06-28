@@ -10,9 +10,8 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
 
 /**
- * Нижняя навигация мобильного макета `docs/new/Skerry Mobile.html` — ровно 5 корневых табов
- * ([showTabs]=true). [icon] — лигатура Material Symbols (см. [Sym]), согласована с desktop-rail
- * ([RAIL]) там, где раздел совпадает (Files/Snippets/Vault). Порядок и состав — 1:1 с макетом.
+ * Нижняя навигация — ровно 5 корневых табов ([showTabs]=true). [icon] — лигатура Material Symbols
+ * (см. [Sym]), согласована с desktop-rail ([RAIL]) там, где раздел совпадает (Files/Snippets/Vault).
  */
 enum class MobileTab(val icon: String, val label: String) {
     Hosts("dns", "Hosts"),
@@ -23,28 +22,26 @@ enum class MobileTab(val icon: String, val label: String) {
 }
 
 /**
- * Полноэкранные push-экраны поверх таб-навигации (таб-бар скрыт). В макете это `isTerminal`,
- * `isHostDetail`, `isPorts`, `isKnown`, `isTeam`: терминал и деталь хоста открываются из Hosts,
- * а Ports/Known/Team — из таба More. Контент экранов наполняется в следующих слайсах.
+ * Полноэкранные push-экраны поверх таб-навигации (таб-бар скрыт): терминал и деталь хоста
+ * открываются из Hosts, а Ports/Known/Team — из таба More.
  */
 enum class MobileRoute { Terminal, HostDetail, Ports, Known, Team, Appearance }
 
 /**
- * Состояние мобильного макета `docs/new/Skerry Mobile.html` — навигация (текущий таб + открытый
- * push-экран) и оверлей листа New connection. Аналог [DesktopDesignState] для телефона: чисто
- * UI-состояние, мутаторы инкапсулированы (`private set`), как в
+ * Состояние мобильного макета — навигация (текущий таб + открытый push-экран) и оверлей листа
+ * New connection. Чисто UI-состояние, мутаторы инкапсулированы (`private set`), как в
  * [app.skerry.ui.session.SessionsController]. Блокировка vault живёт в `VaultGate`, а не здесь.
  */
 @Stable
 class MobileDesignState(
     // Свёрнутые папки хостов в списке (имена групп). Стартовое значение читается из персиста при
     // запуске, колбэк пишет его обратно — состояние папок переживает перезапуск. Дефолты (всё
-    // развёрнуто, no-op) сохраняют прежнее поведение для превью/тестов. Зеркалит [DesktopDesignState].
+    // развёрнуто, no-op) сохраняют прежнее поведение для превью/тестов.
     initialCollapsedGroups: Set<String> = emptySet(),
     private val onCollapsedGroupsChange: (Set<String>) -> Unit = {},
     // Шрифт терминала (More → Appearance → Font) и его кегль. Стартовые значения читаются из персиста
     // при запуске, колбэки пишут обратно — выбор переживает перезапуск. Дефолты (Hack 13px, no-op) —
-    // для превью/тестов. Зеркалит [DesktopDesignState].
+    // для превью/тестов.
     initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
@@ -126,8 +123,8 @@ class MobileDesignState(
 
     /**
      * Синхронизировать свёрнутость при переименовании группы [old]→[new] (профили правит контроллер):
-     * свёрнутая папка остаётся свёрнутой под новым именем. Имя триммится; пустое/неизменное — no-op,
-     * как [DesktopDesignState.renameGroupName]. Колбэк персиста вызывается только при реальной правке.
+     * свёрнутая папка остаётся свёрнутой под новым именем. Имя триммится; пустое/неизменное — no-op.
+     * Колбэк персиста вызывается только при реальной правке.
      */
     fun onGroupRenamed(old: String, new: String) {
         val n = new.trim().filterNot { it == '\n' || it == '\r' }

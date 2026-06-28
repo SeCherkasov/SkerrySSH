@@ -53,15 +53,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Корневой таб Vault мобильного макета. Шаблон `docs/new/Skerry Mobile.html` показывал лишь read-only
- * список SSH-ключей — по запросу доведён до функционального паритета с desktop ([VaultView]): три
- * keychain-категории (SSH keys/Passwords/Certificates) переключаются пилюлями (на телефоне вместо
- * sidebar), генерация ключа/добавление пароля/импорт сертификата — теми же диалогами, что и desktop;
- * тап по секрету открывает лист деталей (публичный ключ/отпечаток/principals, used-by-хосты) с
- * Copy/Export/Delete.
+ * Корневой таб Vault: три keychain-категории (SSH keys/Passwords/Certificates) переключаются
+ * пилюлями, генерация ключа/добавление пароля/импорт сертификата, тап по секрету открывает лист
+ * деталей (публичный ключ/отпечаток/principals, used-by-хосты) с Copy/Export/Delete.
  *
  * Живой путь ([LocalCredentials] != null) рисует реальный открытый keychain; превью/офскрин без
- * keychain ([LocalCredentials] == null) — статичные карточки из макета для сверки.
+ * keychain ([LocalCredentials] == null) — статичная заглушка.
  */
 @Composable
 fun MobileVaultScreen(state: MobileDesignState) {
@@ -250,7 +247,7 @@ private fun MobileVaultBanner() {
     }
 }
 
-/** Пилюли-переключатели keychain-категорий (на телефоне замена desktop-sidebar) с живыми счётчиками. */
+/** Пилюли-переключатели keychain-категорий с живыми счётчиками. */
 @Composable
 private fun MobileCategoryPills(active: VaultCategoryKind, credentials: List<Credential>, onSelect: (VaultCategoryKind) -> Unit) {
     Row(
@@ -373,10 +370,10 @@ private fun MobileVaultEmpty(category: VaultCategoryKind) {
 // Лист деталей секрета.
 
 /**
- * Нижний лист деталей выбранного секрета — мобильный аналог desktop-панели [VaultView] LiveSecretDetail:
- * шапка (иконка/имя/подтип), публичный ключ + отпечаток (ключ) либо тело сертификата, used-by-хосты,
- * кнопки Copy/Export/Delete. Наружу отдаём только публичный материал (открытый ключ/cert), приватный
- * ключ/пароль — лишь в Copy/Export по явному действию пользователя.
+ * Нижний лист деталей выбранного секрета: шапка (иконка/имя/подтип), публичный ключ + отпечаток
+ * (ключ) либо тело сертификата, used-by-хосты, кнопки Copy/Export/Delete. Наружу отдаём только
+ * публичный материал (открытый ключ/cert), приватный ключ/пароль — лишь в Copy/Export по явному
+ * действию пользователя.
  */
 @Composable
 private fun MobileSecretDetailSheet(
@@ -463,7 +460,7 @@ private fun MobileSecretDetailSheet(
 
 // Превью (макет).
 
-/** Статичный макет таба Vault (офскрин/превью без открытого keychain) — карточки 1:1 с `Skerry Mobile.html`. */
+/** Статичная заглушка таба Vault (офскрин/превью без открытого keychain). */
 @Composable
 private fun MobileVaultMock() {
     val mono = LocalFonts.current.mono

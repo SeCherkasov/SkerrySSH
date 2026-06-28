@@ -37,16 +37,15 @@ import app.skerry.ui.known.KnownHostEntry
 import app.skerry.ui.known.KnownHostStatus
 import app.skerry.ui.known.KnownHostsController
 
-/** Фон строки доверенного ключа (белый 3%) макета KNOWN HOSTS. */
+/** Фон строки доверенного ключа (белый 3%). */
 private val KnownRowBg = Color(0x08FFFFFF)
 
 /**
- * Push-экран Known hosts мобильного макета `docs/new/Skerry Mobile.html` (слайс 6): шапка-назад +
- * баннеры смены ключа (Accept/Reject прямо в баннере — на телефоне нет боковой панели сравнения
- * отпечатков desktop-`KnownHostsView`) + список доверенных ключей. Поверх живого
- * [KnownHostsController] ([LocalKnownHosts]): баннеры из `mismatches`, строки из `entries`, статус
- * Verified/Changed. Забыть ключ — long-press → Forget (в макете якоря нет, прячем в контекстное меню,
- * как desktop/мобильные Files/Ports). Без контроллера (превью/офскрин) — статичный макет 1:1.
+ * Push-экран Known hosts: шапка-назад + баннеры смены ключа (Accept/Reject прямо в баннере — на
+ * телефоне нет боковой панели сравнения отпечатков desktop-`KnownHostsView`) + список доверенных
+ * ключей. Поверх живого [KnownHostsController] ([LocalKnownHosts]): баннеры из `mismatches`, строки
+ * из `entries`, статус Verified/Changed. Забыть ключ — long-press → Forget (прячем в контекстное
+ * меню). Без контроллера (превью/офскрин) — статичная заглушка.
  */
 @Composable
 fun MobileKnownScreen(state: MobileDesignState) {
@@ -172,7 +171,7 @@ private fun MobileEmptyKnown() {
 // Общие куски разметки.
 
 /**
- * Баннер смены ключа макета: коралловая карточка, заголовок с иконкой gpp_maybe, тело и две кнопки
+ * Баннер смены ключа: коралловая карточка, заголовок с иконкой gpp_maybe, тело и две кнопки
  * Accept/Reject во всю ширину. [onAccept]/[onReject] == no-op в мок-пути (превью/офскрин).
  */
 @Composable
@@ -271,14 +270,14 @@ private fun KnownRowContent(
 
 private data class MockKnownHost(val name: String, val subtitle: String, val status: KnownHostStatus)
 
-/** Статичные строки ровно из макета KNOWN HOSTS — для офскрин-сверки 1:1. */
+/** Статичные строки для превью/офскрин. */
 private val MOCK_KNOWN = listOf(
     MockKnownHost("prod-web-01", "ed25519 · 8c3F1a…pK9R", KnownHostStatus.Verified),
     MockKnownHost("db-master", "ed25519 · 2dE7b…wQ1z", KnownHostStatus.Verified),
     MockKnownHost("nas-truenas", "ed25519 · changed", KnownHostStatus.Changed),
 )
 
-/** Мок-тело (превью/офскрин): баннер смены ключа + три строки ровно из макета (текст 1:1, не честные данные). */
+/** Мок-тело (превью/офскрин): баннер смены ключа + статичные строки. */
 @Composable
 private fun MockMobileKnownBody(mono: FontFamily) {
     Column(

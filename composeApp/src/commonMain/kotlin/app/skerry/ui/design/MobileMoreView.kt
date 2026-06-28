@@ -40,15 +40,14 @@ import app.skerry.ui.vault.VaultGateController
 import kotlinx.coroutines.launch
 
 /**
- * Корневой таб More мобильного макета `docs/new/Skerry Mobile.html` (слайс 5): заголовок + карточка
- * профиля + список разделов-ссылок. Хаб навигации к push-экранам Port forwarding / Known hosts / Team
- * и к действию «Lock Skerry».
+ * Корневой таб More: заголовок + карточка профиля + список разделов-ссылок. Хаб навигации к
+ * push-экранам Port forwarding / Known hosts / Team и к действию «Lock Skerry».
  *
- * Живой путь ([onLock] != null, за гейтом vault): карточка профиля — локальный vault (аккаунт/sync —
- * Phase 2, не выдумываем имя/PRO), подзаголовки Port forwarding/Known hosts — живые счётчики
+ * Живой путь ([onLock] != null, за гейтом vault): карточка профиля — локальный vault,
+ * подзаголовки Port forwarding/Known hosts — живые счётчики
  * ([mobileMorePortsSubtitle]/[mobileMoreKnownSubtitle]) из [LocalSessions]/[LocalKnownHosts], строки
- * AI/Appearance/Security инертны (разделы вне MVP), «Lock Skerry» реально запирает vault. Превью/
- * офскрин ([onLock] == null) — статичная карточка и подписи ровно из макета для сверки 1:1.
+ * AI/Appearance/Security инертны (заглушки), «Lock Skerry» реально запирает vault. Превью/
+ * офскрин ([onLock] == null) — статичная карточка мок-профиля.
  */
 @Composable
 fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
@@ -81,8 +80,8 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
 
 @Composable
 private fun portsSubtitle(): String {
-    // Туннели — глобальный раздел (модель Termius): счёт активных берём из менеджера, без привязки
-    // к открытой сессии. null (нет менеджера: превью/офскрин) → пустой подзаголовок.
+    // Туннели — глобальный раздел: счёт активных берём из менеджера, без привязки к открытой
+    // сессии. null (нет менеджера: превью/офскрин) → пустой подзаголовок.
     val manager = LocalTunnels.current ?: return mobileMorePortsSubtitle(null)
     return mobileMorePortsSubtitle(mobileActiveTunnelCount(manager.tunnels))
 }
@@ -95,7 +94,7 @@ private fun knownSubtitle(): String = mobileMoreKnownSubtitle(knownChanged())
 
 /**
  * Строка раздела хаба: ведущая иконка + название + подпись справа + chevron. [onClick] == null —
- * инертная строка (раздел вне текущего слайса/MVP, как в макете без onclick). [divider] — нижняя
+ * инертная строка (раздел вне MVP, без действия). [divider] — нижняя
  * линия (нет у последней строки).
  */
 @Composable
@@ -183,10 +182,8 @@ private fun BiometricUnlockRow() {
 // Appearance (push-экран More → Appearance).
 
 /**
- * Push-экран More → Appearance: выбор шрифта терминала и кегля (паритет desktop Settings → Appearance).
- * Отступление от мобильного мока (там строка Appearance вела только к теме) — добавлено по явному
- * запросу пользователя. Тема пока не редактируется (вне текущего объёма). Оба шрифта рендерятся без
- * лигатур (см. [app.skerry.ui.terminal.TerminalAppearance]).
+ * Push-экран More → Appearance: выбор шрифта терминала и кегля. Тема пока не редактируется
+ * (заглушка). Оба шрифта рендерятся без лигатур (см. [app.skerry.ui.terminal.TerminalAppearance]).
  */
 @Composable
 fun MobileAppearanceScreen(state: MobileDesignState) {
@@ -296,15 +293,15 @@ private fun MobileDropdownOption(label: String, selected: Boolean, onClick: () -
 // Профиль.
 
 /**
- * Живая карточка профиля: аккаунт/sync — Phase 2, поэтому показываем честную локальную сущность
- * (зашифрованный мастер-паролем vault на этом устройстве), без выдуманных имени/почты/PRO макета.
+ * Живая карточка профиля: показывает локальный vault (зашифрованный мастер-паролем на этом
+ * устройстве). Синхронизация аккаунта не реализована.
  */
 @Composable
 private fun LocalVaultCard() {
     ProfileCard(initials = "S", avatarBg = D.cyan, title = "Local vault", subtitle = "Encrypted on this device", badge = null)
 }
 
-/** Статичная карточка профиля ровно из макета (превью/офскрин) — для сверки 1:1. */
+/** Статичная карточка профиля (превью/офскрин). */
 @Composable
 private fun MockProfileCard() {
     ProfileCard(initials = "MK", avatarBg = D.cyan, title = "Maya Kovac", subtitle = "maya@skerry.dev", badge = "PRO")

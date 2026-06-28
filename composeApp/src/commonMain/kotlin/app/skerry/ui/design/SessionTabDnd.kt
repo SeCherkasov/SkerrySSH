@@ -20,7 +20,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 fun tabInsertIndex(otherCentersX: List<Float>, pointerX: Float): Int = otherCentersX.count { it < pointerX }
 
 /**
- * Состояние drag-reorder вкладок titlebar (горизонтальный аналог [HostDragState]). Геометрию чипов в
+ * Состояние drag-reorder вкладок titlebar. Геометрию чипов в
  * координатах окна собирает [tabBoundsAnchor]; жест [draggableTab] ведёт указатель и на отпускании
  * считает целевой индекс чистой [tabInsertIndex]. Что переставить — решает вызывающий через onDrop
  * (обычно [app.skerry.ui.session.SessionsController.moveTab]).

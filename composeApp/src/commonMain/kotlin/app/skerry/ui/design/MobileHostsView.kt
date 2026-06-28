@@ -44,7 +44,7 @@ import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.UNGROUPED_LABEL
 
-/** Превью-каталог для пути без живого [LocalHosts] (офскрин/превью) — состав и группы из макета. */
+/** Превью-каталог для пути без живого [LocalHosts] (офскрин/превью). */
 internal val MOBILE_PREVIEW_HOSTS = listOf(
     Host("p1", "prod-web-01", "192.168.1.45", 22, "root", "Production"),
     Host("p2", "db-master", "192.168.1.50", 22, "root", "Production"),
@@ -53,11 +53,10 @@ internal val MOBILE_PREVIEW_HOSTS = listOf(
 )
 
 /**
- * Корневой экран таба Hosts мобильного макета `Skerry Mobile.html`, 1:1 с шаблоном: шапка с
- * заголовком и аватаром (→ More), строка поиска, лента фильтр-чипсов по тегам, секции хостов и FAB
- * «новое подключение». Каталог — живой [LocalHosts] (за гейтом vault), либо [MOBILE_PREVIEW_HOSTS]
- * на пути превью. Тап по хосту открывает [MobileRoute.HostDetail] (наполняется слайсом 2B); статус
- * соединения (живая точка) подключается со слайсом терминала.
+ * Корневой экран таба Hosts: шапка с заголовком и аватаром (→ More), строка поиска, лента
+ * фильтр-чипсов по тегам, секции хостов и FAB «новое подключение». Каталог — живой [LocalHosts]
+ * (за гейтом vault), либо [MOBILE_PREVIEW_HOSTS] на пути превью. Тап по хосту открывает
+ * [MobileRoute.HostDetail].
  */
 @Composable
 fun MobileHostsScreen(state: MobileDesignState) {
@@ -100,9 +99,9 @@ fun MobileHostsScreen(state: MobileDesignState) {
 
 /**
  * Папка хостов: заголовок со схлопыванием (шеврон) + список строк, оба с drag-перетаскиванием для
- * ручной сортировки. Зеркалит desktop-`LiveHostFolder`, но в мобильной вёрстке. Drag и линии-вставки
- * активны только в живом каталоге ([controller] != null) — в превью (мок-хосты) сортировать нечего и
- * нечем (стор отсутствует). Свёрнутая папка скрывает список хостов (и их drag-цели).
+ * ручной сортировки. Drag и линии-вставки активны только в живом каталоге ([controller] != null) —
+ * в превью (мок-хосты) сортировать нечего и нечем (стор отсутствует). Свёрнутая папка скрывает
+ * список хостов (и их drag-цели).
  */
 @Composable
 private fun MobileHostFolder(

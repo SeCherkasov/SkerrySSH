@@ -74,7 +74,7 @@ private fun deviceId(dir: Path): String {
 /**
  * Видимость info-панели терминала, переживающая перезапуск: хранится как один символ в файле
  * `info_panel` (`0`/`1`) рядом с прочей конфигурацией. Отсутствует/нечитаем → дефолт `true`
- * (панель показана, как в макете). Запись best-effort: сбой персиста не должен ронять UI.
+ * (панель показана по умолчанию). Запись best-effort: сбой персиста не должен ронять UI.
  */
 private fun readInfoPanel(dir: Path): Boolean {
     val file = dir.resolve("info_panel")
@@ -91,7 +91,7 @@ private fun writeInfoPanel(dir: Path, visible: Boolean) {
 /**
  * Свёрнутые папки хостов сайдбара, переживающие перезапуск: имена групп хранятся в файле
  * `collapsed_groups` по одному на строку рядом с прочей конфигурацией. Отсутствует/нечитаем →
- * пусто (все папки развёрнуты, как в макете). Запись best-effort: сбой персиста не роняет UI.
+ * пусто (все папки развёрнуты по умолчанию). Запись best-effort: сбой персиста не роняет UI.
  */
 private fun readCollapsedGroups(dir: Path): Set<String> {
     val file = dir.resolve("collapsed_groups")
@@ -244,7 +244,7 @@ fun main() {
         val keyGenerator = BouncyCastleSshKeyGenerator()
         // Разбор импортированных SSH-сертификатов (раздел Vault → Certificates) — sshj поверх ssh-wire.
         val certificateInspector = SshjCertificateInspector()
-        // Глобальные туннели (модель Termius): сохранённые пробросы в tunnels.json. Активация ходит
+        // Глобальные туннели: сохранённые пробросы в tunnels.json. Активация ходит
         // через ОТДЕЛЬНЫЙ probe-транспорт (read-only verifier): включить можно только уже доверенный
         // хост — туннель открывается без терминала, поэтому тихого TOFU тут быть не должно. Резолв
         // хоста/секрета — через граф (hosts + credentials в открытом vault). Scope живёт всё приложение.
@@ -256,7 +256,7 @@ fun main() {
             resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
             scope = tunnelScope,
         ) { UUID.randomUUID().toString() }
-        // Сохранённые сниппеты (модель Termius): библиотека команд в snippets.json. Plain-конфиг —
+        // Сохранённые сниппеты: библиотека команд в snippets.json. Plain-конфиг —
         // секретов не содержат, vault не требуют; запуск идёт в активный терминал из самого UI.
         val snippets = SnippetManager(FileSnippetStore(dir.resolve("snippets.json"))) { UUID.randomUUID().toString() }
         // Внешняя чистка при безвозвратном сбросе vault (забытый пароль / битый файл). Файл vault уже
@@ -299,7 +299,6 @@ fun main() {
             state = windowState,
             title = "Skerry",
         ) {
-            // Десктопный UI — точная реализация макета docs/new/Skerry.html (визуальный слой).
             // Живой vault + хосты + сессии + known-hosts подключены: chrome закрыт гейтом мастер-пароля,
             // клик по хосту открывает живой SSH-терминал во вкладке (transport+identities из `deps`),
             // менеджер known-hosts работает поверх своих сторов (knownHosts из `deps`).

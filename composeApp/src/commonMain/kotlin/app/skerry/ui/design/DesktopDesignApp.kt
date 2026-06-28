@@ -79,7 +79,7 @@ import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 
 /**
- * Корень десктопного макета `docs/new/Skerry.html`, воспроизведённого 1:1. Поставляет шрифты
+ * Корень десктопного приложения. Поставляет шрифты
  * через [LocalFonts], держит [DesktopDesignState] и собирает структуру: titlebar (44dp) →
  * rail (62dp) + viewport → statusbar (26dp). Поверх — оверлеи lock / new-connection / settings.
  *
@@ -215,7 +215,7 @@ fun DesktopDesignApp(
 }
 
 /**
- * Основной chrome макета (titlebar → rail+viewport → statusbar) и оверлеи. [onLock] != null —
+ * Основной chrome (titlebar → rail+viewport → statusbar) и оверлеи. [onLock] != null —
  * живой путь за гейтом: чип «Unlocked» запирает vault. null — мок-путь: блокировку рисует
  * заглушечный [LockScreen] по [DesktopDesignState.locked].
  */
@@ -228,7 +228,7 @@ private fun DesktopChrome(
     onVaultUnlocked: () -> Unit,
 ) {
     // Keychain-секреты живут в открытом vault — за гейтом мастер-пароля сперва прогоняем
-    // миграцию данных ([onVaultUnlocked]), затем перечитываем (как MobileRoot).
+    // миграцию данных ([onVaultUnlocked]), затем перечитываем.
     LaunchedEffect(credentials) {
         onVaultUnlocked()
         credentials?.reload()
@@ -486,8 +486,8 @@ private fun openHostSession(
 }
 
 /**
- * Подключить [host] с [auth] в split-панель активной вкладки (новая независимая вторичная сессия,
- * модель Termius). Без активной вкладки — no-op. См. [SessionsController.connectSplit].
+ * Подключить [host] с [auth] в split-панель активной вкладки (новая независимая вторичная сессия).
+ * Без активной вкладки — no-op. См. [SessionsController.connectSplit].
  */
 private fun openSplitSession(sessions: SessionsController?, state: DesktopDesignState, parentId: String?, host: Host, auth: SshAuth) {
     if (sessions == null || parentId == null) return
@@ -523,10 +523,10 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            // Живые вкладки из менеджера сессий (за гейтом vault); иначе — мок-вкладки макета.
+            // Живые вкладки из менеджера сессий (за гейтом vault); иначе — мок-вкладки.
             val sessions = LocalSessions.current
             if (sessions != null) {
-                // Состояние drag-reorder вкладок (модель Termius): перетаскивание чипов местами.
+                // Состояние drag-reorder вкладок: перетаскивание чипов местами.
                 val tabDrag = remember { TabDragState() }
                 // rememberUpdatedState: pointerInput пересоздаётся лишь по ключу tabId, поэтому лямбда
                 // ids() должна читать свежий список через .value, иначе onDragEnd взял бы устаревший
@@ -535,7 +535,7 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
                 sessions.sessions.forEachIndexed { index, s ->
                     // Линия вставки перед чипом, над которым сейчас зависла перетаскиваемая вкладка.
                     if (tabDrag.insertLineIndex == index) TabInsertLine()
-                    // При сплите чип показывает сфокусированную панель (модель Termius): имя меняется
+                    // При сплите чип показывает сфокусированную панель: имя меняется
                     // при переключении фокуса между основной и split-панелью.
                     val focused = if (s.splitOpen && s.focusedSplit) s.splitSession ?: s else s
                     SessionTabChip(
@@ -600,7 +600,7 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
  * редактора: активная — тонкая cyan-полоска по верхней кромке + cyan-подложка с ярким текстом;
  * наведённая неактивная — чуть более светлый фон; покоящаяся — приглушённая полупрозрачная пилюля
  * с тусклым текстом. Слева статус-точка соединения. Крестик закрытия показывается только на активной
- * либо наведённой вкладке (модель VS Code); у прочих место зарезервировано пустым боксом, чтобы текст
+ * либо наведённой вкладке; у прочих место зарезервировано пустым боксом, чтобы текст
  * не прыгал при появлении крестика.
  */
 @Composable
@@ -648,7 +648,7 @@ private fun SessionTabChip(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Dot(dot)
-        // Значок split: вкладка держит две панели (модель Termius).
+        // Значок split: вкладка держит две панели.
         if (split) Sym("splitscreen_right", size = 13.sp, color = if (active) D.cyan else D.faint)
         Txt(
             name,
@@ -667,7 +667,7 @@ private fun SessionTabChip(
     }
 }
 
-/** Вертикальная линия-индикатор позиции вставки при drag-reorder вкладок (cyan-акцент макета). */
+/** Вертикальная линия-индикатор позиции вставки при drag-reorder вкладок (cyan-акцент). */
 @Composable
 private fun TabInsertLine() {
     Box(Modifier.width(2.dp).height(22.dp).clip(RoundedCornerShape(1.dp)).background(D.cyan))
@@ -745,8 +745,7 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
 @Composable
 private fun StatusBar() {
     val mono = LocalFonts.current.mono
-    // В живом режиме статус слева и throughput отражают активную сессию; RTT-пинг пока плейсхолдер
-    // макета (отдельный слайс), но не противоречит состоянию связи.
+    // В живом режиме статус слева и throughput отражают активную сессию.
     val sessions = LocalSessions.current
     val active = sessions?.active
     val connected = active?.controller?.uiState is ConnectionUiState.Connected

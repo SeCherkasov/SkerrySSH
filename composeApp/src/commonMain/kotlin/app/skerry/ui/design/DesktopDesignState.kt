@@ -19,7 +19,7 @@ enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
  * Known/Teams. Они открываются «поверх» вкладок ([DesktopDesignState.appOverlay]) и общие на весь
  * app, тогда как Terminal/SFTP — подвью активной вкладки ([app.skerry.ui.session.Session.view]).
  *
- * Tunnels — глобальный список сохранённых пробросов (модель Termius): туннель самостоятелен и сам
+ * Tunnels — глобальный список сохранённых пробросов: туннель самостоятелен и сам
  * открывает соединение к хосту, поэтому раздел общий, а не часть открытой сессии.
  */
 val DesktopView.isAppLevel: Boolean
@@ -77,11 +77,9 @@ data class SessionTab(val name: String, val dot: Color)
 data class TermLine(val text: String, val isCmd: Boolean, val color: Color = D.textMid)
 
 /**
- * Состояние десктопного макета `docs/new/Skerry.html` — порт `class Component` из прототипа
- * (state + методы `setView`/`closeTab`/`toggle`/`runCmd`/…). Чисто UI-состояние без бэкенда:
- * демо-терминал (`exec`) и переключатели — заглушки, как в макете; живая функциональность
- * подключается отдельно. Compose-state через [mutableStateOf], мутаторы инкапсулированы
- * (`private set`) — тем же приёмом, что [app.skerry.ui.session.SessionsController].
+ * UI-состояние десктопного приложения без бэкенда: демо-терминал (`exec`) и переключатели —
+ * заглушки; живая функциональность подключается отдельно. Compose-state через [mutableStateOf],
+ * мутаторы инкапсулированы (`private set`) — тем же приёмом, что [app.skerry.ui.session.SessionsController].
  */
 @Stable
 class DesktopDesignState(

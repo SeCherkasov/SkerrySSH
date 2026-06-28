@@ -15,10 +15,9 @@ import app.skerry.ui.generated.resources.spacegrotesk_regular
 import app.skerry.ui.generated.resources.spacegrotesk_semibold
 
 /**
- * Дизайн-токены десктопного макета `docs/new/Skerry.html` — палитра «night sea» + бирюзовый
- * сигнал логотипа. Значения перенесены 1:1 из инлайн-стилей и `renderVals()` прототипа.
- * Намеренно отдельный объект от [app.skerry.ui.theme.SkerryColors], чтобы точная палитра макета
- * (включая alpha-оттенки cyan для линий/фонов) жила рядом с воспроизведённым UI.
+ * Дизайн-токены палитры «night sea» + бирюзовый сигнал логотипа. Намеренно отдельный объект
+ * от [app.skerry.ui.theme.SkerryColors], чтобы точная палитра (включая alpha-оттенки cyan для
+ * линий/фонов) жила рядом с UI.
  */
 object D {
     // Базовый фон и поверхности

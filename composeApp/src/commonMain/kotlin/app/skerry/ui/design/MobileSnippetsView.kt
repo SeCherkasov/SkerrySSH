@@ -64,13 +64,12 @@ private val MOCK_MOBILE_SNIPPETS = listOf(
 )
 
 /**
- * Корневой таб Snippets мобильного макета `docs/new/Skerry Mobile.html`: библиотека сохранённых команд
- * (карточки 1:1 с моком) + FAB добавления. Тап по карточке открывает лист-редактор (Name/Command/Tags
- * с type-ahead, Run/Save/Delete) — паритет desktop-раздела Snippets. Сниппет самостоятелен
+ * Корневой таб Snippets: библиотека сохранённых команд + FAB добавления. Тап по карточке открывает
+ * лист-редактор (Name/Command/Tags с type-ahead, Run/Save/Delete). Сниппет самостоятелен
  * (plain-конфиг, секретов не содержит).
  *
  * Живой путь ([LocalSnippets] != null, за гейтом vault) — реальная библиотека из [SnippetManager];
- * превью/офскрин без менеджера — статичные карточки макета для сверки 1:1.
+ * превью/офскрин без менеджера — статичные карточки-заглушки.
  */
 @Composable
 fun MobileSnippetsScreen(state: MobileDesignState) {
@@ -84,8 +83,7 @@ fun MobileSnippetsScreen(state: MobileDesignState) {
 private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager) {
     val mono = LocalFonts.current.mono
     val sessions = LocalSessions.current
-    // Запуск сниппета бьёт в активную подключённую сессию (паритет desktop-палитры терминала); нет
-    // живого терминала — кнопки Run в редакторе нет.
+    // Запуск сниппета бьёт в активную подключённую сессию; нет живого терминала — кнопки Run в редакторе нет.
     val activeTerminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
 
     var editing by remember { mutableStateOf<SnippetEntry?>(null) }
@@ -123,7 +121,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
             Spacer(Modifier.height(96.dp))
         }
 
-        // FAB добавления (макет: правый-нижний, над таб-баром). Скрыт, пока открыт лист-редактор.
+        // FAB добавления (правый-нижний, над таб-баром). Скрыт, пока открыт лист-редактор.
         if (!sheetOpen) {
             Box(
                 Modifier
@@ -204,7 +202,7 @@ private fun SnippetTagChip(tag: String) {
 
 /**
  * Палитра запуска сниппета из шапки терминала (иконка `bolt`): список сохранённых команд, тап
- * запускает выбранный сниппет в активной сессии через [onRun]. Паритет desktop-палитры терминала.
+ * запускает выбранный сниппет в активной сессии через [onRun].
  */
 @Composable
 internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry) -> Unit, onDismiss: () -> Unit) {
@@ -236,7 +234,7 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
 // --- Лист-редактор ---
 
 /**
- * Лист создания/правки сниппета (паритет desktop [SnippetEditor]). [entry] == null — создание.
+ * Лист создания/правки сниппета. [entry] == null — создание.
  * [canRun]/[onRun] есть только когда правится существующий сниппет и есть живой терминал.
  */
 @Composable

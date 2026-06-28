@@ -77,7 +77,7 @@ fun main() {
     val overlay = System.getProperty("skerry.screenshot.overlay", "")
     val live = System.getProperty("skerry.screenshot.live", "false").toBoolean()
 
-    // Телефонный макет: рендерим MobileDesignApp в узкой сцене. view=MobileTab (по умолчанию Hosts).
+    // Мобильный вариант: рендерим MobileDesignApp в узкой сцене. view=MobileTab (по умолчанию Hosts).
     if (System.getProperty("skerry.screenshot.device", "desktop") == "mobile") {
         renderMobile(out, viewName, overlay, live); return
     }
@@ -126,9 +126,9 @@ fun main() {
 }
 
 /**
- * Офскрин-рендер телефонного макета ([MobileDesignApp]) в узкой сцене 390×844 (density 2). `view` —
+ * Офскрин-рендер мобильного варианта ([MobileDesignApp]) в узкой сцене 390×844 (density 2). `view` —
  * имя [MobileTab] (по умолчанию Hosts); `live=true` подаёт засеянный каталог [seededHosts], иначе
- * экран берёт встроенные превью-данные. Аналог desktop-ветки [main]; запускается той же задачей
+ * экран берёт встроенные превью-данные. Запускается той же задачей
  * `screenshotDesign` со свойством `skerry.screenshot.device=mobile`.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -146,7 +146,7 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     } else {
         AppDependencies()
     }
-    // Засеянные сессии (фейковый транспорт) для живого терминала — как в desktop-ветке; подаём в
+    // Засеянные сессии (фейковый транспорт) для живого терминала; подаём в
     // MobileDesignApp внешним менеджером, чтобы офскрин показал реальный TerminalScreen без сети.
     val sessions = if (live && hosts != null) seededSessions(hosts) else null
     // view — имя MobileTab (корневой) либо MobileRoute (push-экран). HostDetail открывается на первом

@@ -95,7 +95,7 @@ private val REMOTE_FILES = listOf(
  * SFTP view (двухпанельный, Total-Commander): заголовок + Local-панель (локальная ФС) + Remote-панель
  * (хост) + панель действий передачи + полоса прогресса. При живой сессии ([LocalSessions]) обе панели
  * рендерятся поверх [TransferCoordinator] активной сессии — листинг/навигация/CRUD/передача реальны.
- * Без сессии (офскрин-рендер дизайна без бэкенда) показывается статичный мок макета.
+ * Без сессии (офскрин-рендер дизайна без бэкенда) показывается статичный мок.
  */
 @Composable
 fun SftpView() {
@@ -190,7 +190,7 @@ private fun LiveSftpView(
 
     // Единая точка для F-клавиш: и нажатие клавиши, и клик по строке нижней панели идут сюда. Операции
     // работают над АКТИВНОЙ панелью, цель — её operands() (выделение либо строка под курсором, mc-стиль).
-    // F3 View / F4 Edit пока заглушки (нужно чтение файла в контракте FileBrowser — следующий слайс).
+    // F3 View / F4 Edit — заглушки (нужно чтение файла в контракте FileBrowser).
     val fKey: (Int) -> Unit = remember(c) { fKey@{ n ->
         val coord = c ?: return@fKey
         val pane = if (active == ActivePane.Local) coord.local else coord.remote
@@ -211,7 +211,7 @@ private fun LiveSftpView(
             }
             9 -> { coord.local.refresh(); coord.remote.refresh() } // Refresh обеих панелей
             10 -> onQuit() // Quit: назад в терминал этой вкладки
-            else -> {} // F3 View / F4 Edit — следующий слайс
+            else -> {} // F3 View / F4 Edit — заглушка
         }
     } }
 
@@ -260,7 +260,7 @@ private fun LiveSftpView(
             }
             .focusable(),
     ) {
-        // Шапка ровно по шаблону: слева «File transfer» + подзаголовок, справа Upload + New folder.
+        // Шапка: слева «File transfer» + подзаголовок, справа Upload + New folder.
         Row(
             Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -420,7 +420,7 @@ private fun ensureOperandSelection(pane: FilePaneController) {
 
 /**
  * Раскладка нижней панели F-клавиш в стиле mc (классика, адаптированная под Skerry).
- * [done] = клавиша реально что-то делает; false — заглушка (слайс 3). Нерабочие помечены «*»
+ * [done] = клавиша реально что-то делает; false — заглушка. Нерабочие помечены «*»
  * в панели, чтобы было видно, что подключено, а что ещё нет.
  */
 private data class FKeyDef(val n: Int, val label: String, val done: Boolean)
@@ -479,13 +479,13 @@ private fun FKeyCell(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        // «*» — пометка нерабочей заглушки (F3 View / F4 Edit — следующий слайс).
+        // «*» — пометка нерабочей заглушки (F3 View / F4 Edit).
         if (!def.done) Txt("*", color = D.sunset, size = 11.sp, weight = FontWeight.SemiBold)
     }
 }
 
 /**
- * Одна живая панель поверх [FilePaneController]: шапка [label] + путь (ровно как в шаблоне, без
+ * Одна живая панель поверх [FilePaneController]: шапка [label] + путь (без
  * тулбара — навигация вверх строкой «..») и листинг. Файловые операции — через нижнюю панель F-клавиш,
  * выделение — ЛКМ (toggle) и rubber-band зажатой ПКМ.
  */
@@ -647,7 +647,7 @@ private class RowRubberBand(
 }
 
 /**
- * Строка живого листинга — визуально идентична шаблону (иконка + имя + размер, без ⋮). ЛКМ просто
+ * Строка живого листинга (иконка + имя + размер, без ⋮). ЛКМ просто
  * ставит курсор (НЕ помечает и НЕ входит в каталог) — реагирует мгновенно по нажатию ([onPress]),
  * чтобы не было задержки распознавания двойного клика. Двойной клик — вход в каталог ([onDoubleClick]).
  * Выделение — ПКМ-нажатие/протяжка (rubber-band, [RowRubberBand]) либо Space/Insert. Контекстного
@@ -1105,7 +1105,7 @@ private fun NoSessionSftpView(mono: FontFamily) {
     }
 }
 
-/** Статичный мок макета (офскрин-рендер/превью без бэкенда сессий). */
+/** Статичный мок (офскрин-рендер/превью без бэкенда сессий). */
 @Composable
 private fun MockSftpView(mono: FontFamily) {
     Column(Modifier.fillMaxSize().background(D.bg)) {

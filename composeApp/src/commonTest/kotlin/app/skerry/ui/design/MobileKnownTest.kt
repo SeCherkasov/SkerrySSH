@@ -7,7 +7,7 @@ import app.skerry.ui.known.KnownHostStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Чистая логика мобильного экрана Known hosts (слайс 6): проекция строки, иконка статуса, баннер смены ключа. */
+/** Чистая логика мобильного экрана Known hosts: проекция строки, иконка статуса, баннер смены ключа. */
 class MobileKnownTest {
 
     private fun entry(
@@ -33,7 +33,7 @@ class MobileKnownTest {
 
     @Test
     fun subtitle_says_changed_when_status_changed() {
-        // У сменившегося ключа точного отпечатка не показываем — он под вопросом, как в макете.
+        // У сменившегося ключа точного отпечатка не показываем — он под вопросом.
         assertEquals("ed25519 · changed", mobileKnownSubtitle(entry(status = KnownHostStatus.Changed)))
     }
 

@@ -47,7 +47,7 @@ import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
 
 /**
- * Оверлей блокировки `docs/new/Skerry.html` (мок-путь скриншота): радиальный фон, крупный логотип,
+ * Оверлей блокировки (мок-путь): радиальный фон, крупный логотип,
  * поле мастер-пароля и кнопки. Разблокировка здесь — заглушка ([DesktopDesignState.unlock]);
  * живой гейт поверх `VaultGateController` рендерит [DesktopUnlockScreen]/[DesktopCreateScreen].
  */

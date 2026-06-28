@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Чистая логика мобильного терминал-экрана (слайс 3): статус-строка, решение Connect, sticky-ctrl. */
+/** Чистая логика мобильного терминал-экрана: статус-строка, решение Connect, sticky-ctrl. */
 class MobileTerminalTest {
 
     private fun connected(): ConnectionUiState.Connected {
@@ -39,7 +39,7 @@ class MobileTerminalTest {
         assertEquals("no session", mobileTerminalStatusText(null))
     }
 
-    // Метрики статус-бара шапки (RTT/throughput) — паритет с desktop-статусбаром.
+    // Метрики статус-бара шапки (RTT/throughput).
 
     @Test
     fun rtt_label_formats_ms_or_dash_before_first_ping() {
@@ -50,7 +50,7 @@ class MobileTerminalTest {
 
     @Test
     fun rate_label_humanizes_or_dash_before_first_sample() {
-        // Та же гуманизация, что в desktop-статусбаре (humanRate), «—» пока нет замера.
+        // Гуманизация B/s, «—» пока нет замера.
         assertEquals("0 B/s", mobileRateLabel(0))
         assertEquals("1 KB/s", mobileRateLabel(1024))
         assertEquals("—", mobileRateLabel(null))

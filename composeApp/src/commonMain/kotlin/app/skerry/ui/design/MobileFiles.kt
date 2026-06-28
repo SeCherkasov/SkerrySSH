@@ -5,9 +5,8 @@ import app.skerry.shared.files.FileItemType
 import app.skerry.ui.sftp.humanSize
 
 /**
- * Режим мобильного экрана Files (`docs/new/Skerry Mobile.html`, секция FILES). Зеркалит ветвление
- * desktop-`SftpView`, но для одной панели за раз (телефонный single-pane с переключателем Remote/Local):
- * - [Preview] — нет менеджера сессий (офскрин-рендер/превью без бэкенда) → статичный мок макета;
+ * Режим мобильного экрана Files (single-pane):
+ * - [Preview] — нет менеджера сессий (офскрин-рендер/превью без бэкенда) → статичный мок;
  * - [Live] — есть активная подключённая сессия → живой листинг поверх [app.skerry.ui.files.TransferCoordinator];
  * - [Connecting] — активная сессия ещё подключается (после тапа SFTP/Connect) → «Connecting…»,
  *   чтобы не мигать «No active session» на время сетевого хендшейка/аутентификации;

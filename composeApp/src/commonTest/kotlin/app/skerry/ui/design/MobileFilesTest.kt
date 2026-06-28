@@ -5,7 +5,7 @@ import app.skerry.shared.files.FileItemType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Чистая логика мобильного экрана Files (слайс 4): режим экрана, мета/иконки строк, путь-крошка. */
+/** Чистая логика мобильного экрана Files: режим экрана, мета/иконки строк, путь-крошка. */
 class MobileFilesTest {
 
     private fun item(name: String, type: FileItemType, size: Long = 0): FileItem =
@@ -15,7 +15,7 @@ class MobileFilesTest {
 
     @Test
     fun files_mode_picks_preview_when_no_session_manager() {
-        // Путь превью/офскрин без бэкенда — статичный мок макета.
+        // Путь превью/офскрин без бэкенда.
         assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = false, connecting = false))
         assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = true, connecting = false))
     }
@@ -57,7 +57,7 @@ class MobileFilesTest {
         assertEquals("folder", mobileFileIcon(item("html", FileItemType.Directory)))
         assertEquals("link", mobileFileIcon(item("current", FileItemType.Symlink)))
         assertEquals("description", mobileFileIcon(item("nginx.conf", FileItemType.File)))
-        // Шелл-скрипт — иконка terminal, как в макете для deploy.sh.
+        // Шелл-скрипт — иконка terminal.
         assertEquals("terminal", mobileFileIcon(item("deploy.sh", FileItemType.File)))
     }
 
