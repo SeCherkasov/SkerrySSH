@@ -249,6 +249,9 @@ fun main() {
         // локальный vault. Привязка к серверу персистится в sync.json (0600) — несекретное
         // (URL/accountId/deviceId) + опц. refresh-токен ЗАПЕЧАТАННЫЙ под dataKey (keep-connected).
         // deviceId переиспользуем стабильный. Курсор синка пока в памяти (re-pull при старте, LWW идемпотентен).
+        // Перечитать менеджеры списков после синка/unlock. Отложенный var: tunnels/snippets создаются
+        // ниже, а sync ссылается на reload через этот var (вызывается уже после полной инициализации).
+        var reloadManagers: () -> Unit = {}
         val sync = SyncCoordinator(
             clientFactory = { url -> KtorSyncClient(url) },
             crypto = IonspinVaultCrypto(),
@@ -256,6 +259,8 @@ fun main() {
             configStore = FileSyncConfigStore(dir.resolve("sync.json")),
             deviceIdProvider = { deviceId(dir) },
             deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
+            // Синк подтянул записи прямо в vault → обновить менеджеры, иначе данные не видны до перезахода.
+            onSynced = { reloadManagers() },
         )
         // Генерация SSH-ключей в разделе Vault: BouncyCastle поверх sshj-формата (тот же, что читает транспорт).
         val keyGenerator = BouncyCastleSshKeyGenerator()
@@ -280,12 +285,16 @@ fun main() {
         // разблокировке — идемпотентна. После — перечитываем менеджеры и бесшумно восстанавливаем
         // sync-сессию. Переноса старого локального workspace (hosts/snippets/tunnels.json) больше нет:
         // рабочее пространство живёт записями vault, до первого прод-релиза миграции не делаем.
-        val onVaultUnlocked: () -> Unit = {
-            runCatching { VaultMigration(vault, hostStore).migrate() }
+        // Теперь все менеджеры существуют — подключаем reload (используется и из onSynced, и при unlock).
+        reloadManagers = {
             hosts.reload()
             snippets.reload()
             tunnels.reload()
             knownHosts.refresh()
+        }
+        val onVaultUnlocked: () -> Unit = {
+            runCatching { VaultMigration(vault, hostStore).migrate() }
+            reloadManagers()
             // keep-connected: vault открыт → есть dataKey, можно бесшумно восстановить sync-сессию.
             sync.restoreSession()
         }
@@ -298,6 +307,10 @@ fun main() {
         // данные ВНЕ vault и отражаем опустевший vault в менеджерах. Vault на этот момент заблокирован.
         val onVaultReset: (ResetScope) -> Unit = { resetScope ->
             tunnels.closeAll()
+            // Сброс стёр dataKey → sealed refresh-токен sync обёрнут под мёртвым ключом. Рвём привязку
+            // к серверу, иначе настройки висели бы «Linked» без возможности войти. (Биометрии на desktop
+            // нет — deps.biometrics=null.) Чистый старт: заново создать vault и подключить sync.
+            sync.disconnect()
             // Хосты/группы стёрты вместе с vault при ЛЮБОМ сбросе → чистим и их локальные UI-следы
             // (недавние, свёрнутость, пустые папки): иначе в открытом виде остались бы имена групп и
             // UUID хостов, которых уже нет (security L1/I1).
