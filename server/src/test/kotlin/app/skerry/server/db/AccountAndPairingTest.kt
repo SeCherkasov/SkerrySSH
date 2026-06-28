@@ -44,6 +44,21 @@ class AccountAndPairingTest {
     }
 
     @Test
+    fun `re-register after revoke re-enrolls the device`() = withTestDb { db ->
+        seedAccount(db)
+        val repo = DeviceRepository(db)
+        repo.register("alice@example.com", "dev1", "Laptop", now = 100)
+        assertTrue(repo.revoke("alice@example.com", "dev1"))
+        assertTrue(repo.isRevoked("alice@example.com", "dev1"))
+
+        // Повторная аутентификация тем же устройством (register на входе/логине) снимает отзыв:
+        // знание мастер-пароля = владение аккаунтом, revoke лишь гасит текущие токены, а не блокирует
+        // навсегда. Иначе устройство с верным паролем оставалось бы запертым (register=409, sync=401).
+        repo.register("alice@example.com", "dev1", "Laptop", now = 300)
+        assertFalse(repo.isRevoked("alice@example.com", "dev1"))
+    }
+
+    @Test
     fun `same deviceId under two accounts stays isolated`() = withTestDb { db ->
         AccountRepository(db).create("a@x", "0", "a", byteArrayOf(0))
         AccountRepository(db).create("b@x", "0", "a", byteArrayOf(0))

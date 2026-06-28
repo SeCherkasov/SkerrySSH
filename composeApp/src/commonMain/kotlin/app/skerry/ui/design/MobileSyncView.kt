@@ -38,14 +38,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupForm
-import app.skerry.ui.sync.SyncSetupMode
 import app.skerry.ui.sync.SyncStatus
 
 /**
  * Push-экран More → «Security & sync»: self-hosted синхронизация (Phase 2). В мобильном идиоме
  * (отступление от макета, как Appearance) форма настройки — inline на самом экране, а не модалка.
  * Подключён — статус + «Sync now»/«Disconnect»; не подключён/ошибка — форма (сервер + accountId +
- * мастер-пароль, режим New account/Existing). Zero-knowledge: пароль уходит в [SyncCoordinator]
+ * мастер-пароль, одно действие «Connect»). Zero-knowledge: пароль уходит в [SyncCoordinator]
  * CharArray-ом и затирается там; здесь держим строкой до отправки и обнуляем сразу после.
  */
 @Composable
@@ -103,7 +102,6 @@ private fun SyncSetupBody(
 ) {
     // Предзаполнение из сохранённой привязки (Configured после перезапуска): нужен только пароль.
     val saved = remember { sync.savedConfig }
-    var mode by remember { mutableStateOf(if (saved != null) SyncSetupMode.Login else SyncSetupMode.Register) }
     var serverUrl by remember { mutableStateOf(saved?.serverUrl ?: "") }
     var account by remember { mutableStateOf(saved?.accountId ?: "") }
     var password by remember { mutableStateOf("") }
@@ -111,14 +109,6 @@ private fun SyncSetupBody(
 
     val form = SyncSetupForm(serverUrl, account)
     val canSubmit = form.canSubmit(password.length)
-
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).background(D.bg).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        SyncModeTab("New account", mode == SyncSetupMode.Register, Modifier.weight(1f)) { mode = SyncSetupMode.Register }
-        SyncModeTab("Existing", mode == SyncSetupMode.Login, Modifier.weight(1f)) { mode = SyncSetupMode.Login }
-    }
 
     SyncFieldLabel("SERVER URL")
     MobileSyncField(serverUrl, "https://sync.example.com", KeyboardType.Uri) { serverUrl = it }
@@ -153,9 +143,8 @@ private fun SyncSetupBody(
         }
     }
 
-    val label = if (mode == SyncSetupMode.Register) "Create account" else "Log in"
     PrimaryButton(
-        label,
+        "Connect",
         onClick = {
             if (!canSubmit) return@PrimaryButton
             val pw = password.toCharArray() // координатор затрёт массив
@@ -163,11 +152,9 @@ private fun SyncSetupBody(
             val url = form.normalizedServerUrl
             val acc = form.normalizedAccountId
             // Запуск держит сам координатор (свой scope) — форма уйдёт из композиции на Busy,
-            // привязывать к ней корутину нельзя (иначе отмена на полпути).
-            when (mode) {
-                SyncSetupMode.Register -> sync.register(url, acc, pw, keepConnected)
-                SyncSetupMode.Login -> sync.login(url, acc, pw, keepConnected)
-            }
+            // привязывать к ней корутину нельзя (иначе отмена на полпути). Один вызов: координатор
+            // сам решит регистрировать новый аккаунт или входить в существующий.
+            sync.connect(url, acc, pw, keepConnected)
         },
         modifier = Modifier.padding(top = 18.dp),
         enabled = canSubmit,
@@ -192,16 +179,6 @@ private fun MobileSyncStatusCard(icon: String, iconColor: Color, title: String, 
             Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium)
             Txt(subtitle, color = D.faint, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
         }
-    }
-}
-
-@Composable
-private fun SyncModeTab(label: String, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier.clip(RoundedCornerShape(7.dp)).background(if (active) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(vertical = 9.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Txt(label, color = if (active) D.cyanBright else D.dim, size = 13.sp, weight = if (active) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 

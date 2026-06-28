@@ -15,14 +15,21 @@ import org.jetbrains.exposed.sql.update
  */
 class DeviceRepository(private val db: Database) {
 
-    /** Идемпотентно в пределах аккаунта: повторный вход того же устройства обновляет имя/активность. */
+    /**
+     * Идемпотентно в пределах аккаунта: повторный вход того же устройства обновляет имя/активность
+     * и **снимает отзыв** (`revoked=false`). Повторная аутентификация (этот метод зовётся из
+     * register и srp/verify) доказывает знание мастер-пароля = владение аккаунтом, поэтому
+     * переотзывать устройство нельзя — иначе отозванное устройство с верным паролем оставалось бы
+     * запертым навсегда (register→409, а каждый sync-запрос→401 по [isRevoked]). Revoke в этой модели
+     * гасит текущие токены до следующего входа, а не банит устройство; постоянный бан = ротация пароля.
+     */
     fun register(
         accountId: String,
         deviceId: String,
         name: String,
         platform: String? = null,
         now: Long = System.currentTimeMillis(),
-    ): Unit = transaction(db) {
+    ): Boolean = transaction(db) {
         // Кап под varchar(64): клиентское поле, длинное значение иначе валит запись в 500
         // (truncation в SQLite, исключение в PostgreSQL) вместо тихого усечения (kotlin-ревью L).
         val plat = platform?.take(64)
@@ -39,13 +46,19 @@ class DeviceRepository(private val db: Database) {
                 it[lastSeenAt] = now
                 it[revoked] = false
             }
+            false
         } else {
+            val wasRevoked = existing[Devices.revoked]
             Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
                 it[Devices.name] = name
                 // platform пишем только когда клиент его прислал — иначе не затираем известное значение.
                 if (plat != null) it[Devices.platform] = plat
                 it[lastSeenAt] = now
+                it[revoked] = false // повторная аутентификация переактивирует устройство (см. KDoc)
             }
+            // true ⇒ устройство было отозвано и сейчас переактивировано — сигнал для аудита (consoleadmin
+            // видит «revoked» красным, но без этого события не узнал бы о возврате с верным паролем).
+            wasRevoked
         }
     }
 

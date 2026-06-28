@@ -43,9 +43,8 @@ class SnippetManager(
         private set
 
     /**
-     * Перечитать список из стора. Нужно после записей в обход менеджера — например, перенос сниппетов
-     * в vault при unlock ([app.skerry.shared.vault.WorkspaceMigration]): на старте vault залочен и
-     * [store] отдаёт пусто, после разблокировки сниппеты появляются.
+     * Перечитать список из стора. Нужно после записей в обход менеджера и при разблокировке vault:
+     * на старте vault залочен и [store] (поверх vault) отдаёт пусто, после unlock сниппеты появляются.
      */
     fun reload() {
         snippets = store.all().map { SnippetEntry(it) }

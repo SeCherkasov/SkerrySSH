@@ -181,6 +181,49 @@ class RoutesTest {
     }
 
     @Test
+    fun `revoked device re-logs in with master password and regains access`() = testApplication {
+        // Точный сценарий пользователя: отозвал устройство → register=409, sync=401. С верным
+        // мастер-паролем повторный вход (SRP) должен ПЕРЕАКТИВИРОВАТЬ устройство и вернуть доступ —
+        // иначе аккаунт заперт навсегда. Revoke гасит текущие токены, но не банит устройство.
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val reg = srpRegister(accountId, password)
+        val tokens: TokenResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
+        }.body()
+
+        // отзыв → старый токен мёртв
+        client.delete("/devices/devA") { bearerAuth(tokens.accessToken) }
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/vault/keys") { bearerAuth(tokens.accessToken) }.status)
+        // повторная регистрация невозможна (аккаунт уже есть) — клиент обязан войти
+        val reReg = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
+        }
+        assertEquals(HttpStatusCode.Conflict, reReg.status)
+
+        // повторный вход тем же устройством верным паролем → register снимает отзыв, выдаёт новые токены
+        val sc = srpClient(accountId, password)
+        val challenge: ChallengeResponse = client.post("/auth/srp/challenge") {
+            contentType(ContentType.Application.Json)
+            setBody(ChallengeRequest(accountId))
+        }.body()
+        val creds = sc.step2(SRP_PARAMS, BigInteger(challenge.salt, 16), BigInteger(challenge.b, 16))
+        val fresh: VerifyResponse = client.post("/auth/srp/verify") {
+            contentType(ContentType.Application.Json)
+            setBody(VerifyRequest(challenge.challengeId, creds.A.toString(16), creds.M1.toString(16), "devA", "Laptop A"))
+        }.body()
+
+        // доступ восстановлен: новый токен снова работает, устройство больше не отозвано
+        assertEquals(HttpStatusCode.OK, client.get("/vault/keys") { bearerAuth(fresh.accessToken) }.status)
+        val after: DevicesResponse = client.get("/devices") { bearerAuth(fresh.accessToken) }.body()
+        assertEquals(false, after.devices.single { it.id == "devA" }.revoked)
+    }
+
+    @Test
     fun `pairing transfers encrypted data key to a new device`() = testApplication {
         val services = testServices()
         application { configureServer(services) }

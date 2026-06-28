@@ -21,7 +21,6 @@ import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.VaultMigration
 import app.skerry.shared.vault.WorkspaceLayoutStore
-import app.skerry.shared.vault.WorkspaceMigration
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.initializeVaultCrypto
@@ -277,11 +276,11 @@ fun main() {
         // Сохранённые сниппеты: библиотека команд — записи SNIPPET в vault (команды могут содержать
         // inline-креды, поэтому под общим шифрованием и E2E-синком). Запуск идёт в активный терминал.
         val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
-        // Разовый перенос старого локального рабочего пространства (hosts/snippets/tunnels.json) в vault
-        // + миграция секретов (IDENTITY → CREDENTIAL, хост → прямой credentialId) при разблокировке;
-        // обе идемпотентны. После — перечитываем менеджеры и бесшумно восстанавливаем sync-сессию.
+        // Миграция секретов в vault (IDENTITY → CREDENTIAL, хост → прямой credentialId) при
+        // разблокировке — идемпотентна. После — перечитываем менеджеры и бесшумно восстанавливаем
+        // sync-сессию. Переноса старого локального workspace (hosts/snippets/tunnels.json) больше нет:
+        // рабочее пространство живёт записями vault, до первого прод-релиза миграции не делаем.
         val onVaultUnlocked: () -> Unit = {
-            runCatching { WorkspaceMigration(vault, dir).migrate() }
             runCatching { VaultMigration(vault, hostStore).migrate() }
             hosts.reload()
             snippets.reload()

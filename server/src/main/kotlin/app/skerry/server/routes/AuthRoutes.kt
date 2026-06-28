@@ -65,8 +65,13 @@ fun Route.authRoutes(services: Services) {
             call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
             return@post
         }
-        services.devices.register(verified.accountId, req.deviceId, req.deviceName, req.platform)
+        val reactivated = services.devices.register(verified.accountId, req.deviceId, req.deviceName, req.platform)
         services.activity.record(verified.accountId, "auth.login", "srp login", deviceId = req.deviceId)
+        // Возврат отозванного устройства с верным паролем — отдельное событие для админ-консоли:
+        // revoke лишь гасит токены, и без этого сигнала админ не узнал бы, что устройство снова активно.
+        if (reactivated) {
+            services.activity.record(verified.accountId, "device.reenrolled", "revoked device re-enrolled", deviceId = req.deviceId)
+        }
         call.respond(
             VerifyResponse(
                 m2 = verified.m2,

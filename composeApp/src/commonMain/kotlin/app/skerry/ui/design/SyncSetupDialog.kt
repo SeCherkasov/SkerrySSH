@@ -39,12 +39,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupForm
-import app.skerry.ui.sync.SyncSetupMode
 import app.skerry.ui.sync.SyncStatus
 
 /**
  * Модалка-онбординг self-hosted sync (в макете её нет — макет показывает только подключённое
- * состояние): адрес сервера + accountId + мастер-пароль, режим Register/Login. Zero-knowledge —
+ * состояние): адрес сервера + accountId + мастер-пароль, одно действие «Connect» (координатор сам
+ * регистрирует новый аккаунт либо входит в существующий — без выбора режима). Zero-knowledge —
  * пароль уходит в [SyncCoordinator] как CharArray и там затирается; здесь держим его строкой ровно
  * до отправки и обнуляем сразу после. Стиль — скрим + карточка, как [DesktopPasswordDialog].
  *
@@ -56,9 +56,8 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val status by sync.status.collectAsState()
 
     // Предзаполнение из сохранённой привязки (после перезапуска/Reconnect): сервер+аккаунт известны,
-    // нужен только пароль → режим Login по умолчанию.
+    // нужен только пароль.
     val saved = remember { sync.savedConfig }
-    var mode by remember { mutableStateOf(if (saved != null) SyncSetupMode.Login else SyncSetupMode.Register) }
     var serverUrl by remember { mutableStateOf(saved?.serverUrl ?: "") }
     var account by remember { mutableStateOf(saved?.accountId ?: "") }
     var password by remember { mutableStateOf("") }
@@ -82,10 +81,8 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
         val url = form.normalizedServerUrl
         val acc = form.normalizedAccountId
         // Запуск держит сам координатор (свой scope) — не привязываем к жизни этого composable.
-        when (mode) {
-            SyncSetupMode.Register -> sync.register(url, acc, pw, keepConnected)
-            SyncSetupMode.Login -> sync.login(url, acc, pw, keepConnected)
-        }
+        // Один вызов: координатор сам решит регистрировать или входить.
+        sync.connect(url, acc, pw, keepConnected)
     }
 
     Box(
@@ -109,15 +106,6 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 "End-to-end encrypted. Skerry never sees your data in plaintext — only your device holds the master password.",
                 color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
-
-            // Сегментный переключатель Register / Login.
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(D.bg).border(1.dp, D.cyan08, RoundedCornerShape(8.dp)).padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                ModeTab("New account", mode == SyncSetupMode.Register, Modifier.weight(1f)) { mode = SyncSetupMode.Register }
-                ModeTab("Existing", mode == SyncSetupMode.Login, Modifier.weight(1f)) { mode = SyncSetupMode.Login }
-            }
 
             FieldLabel("SERVER URL", top = 16.dp)
             SyncField("https://sync.example.com", serverUrl, "dns", KeyboardType.Uri, ImeAction.Next) { serverUrl = it }
@@ -153,8 +141,7 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
                     Txt("Cancel", color = D.dim, size = 12.5.sp)
                 }
-                val label = if (mode == SyncSetupMode.Register) "Create account" else "Log in"
-                PrimaryButton(label, onClick = { submit() }, enabled = canSubmit, bg = if (canSubmit) D.cyan else D.cyan.copy(alpha = 0.4f))
+                PrimaryButton("Connect", onClick = { submit() }, enabled = canSubmit, bg = if (canSubmit) D.cyan else D.cyan.copy(alpha = 0.4f))
             }
         }
     }
@@ -180,20 +167,6 @@ private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
             Txt("Keep me connected", color = D.text, size = 12.5.sp, weight = FontWeight.Medium)
             Txt("Reconnect automatically after restart — no password needed.", color = D.faint, size = 11.sp)
         }
-    }
-}
-
-@Composable
-private fun ModeTab(label: String, active: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (active) D.cyan10 else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(vertical = 7.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Txt(label, color = if (active) D.cyanBright else D.dim, size = 12.sp, weight = if (active) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 

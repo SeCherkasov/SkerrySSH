@@ -24,7 +24,6 @@ import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.VaultMigration
-import app.skerry.shared.vault.WorkspaceMigration
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.design.MobileDesignApp
@@ -255,13 +254,13 @@ class MainActivity : FragmentActivity() {
             deviceIdProvider = { deviceId(dir) },
             deviceName = android.os.Build.MODEL?.takeIf { it.isNotBlank() } ?: "Skerry Android",
         )
-        // Перенос старого локального workspace (hosts/snippets/tunnels.json) в vault + миграция секретов
-        // при разблокировке; обе идемпотентны. После — reload менеджеров и восстановление sync-сессии.
+        // Миграция секретов в vault (IDENTITY → CREDENTIAL) при разблокировке — идемпотентна.
+        // После — reload менеджеров и восстановление sync-сессии. Переноса старого локального
+        // workspace больше нет: рабочее пространство живёт записями vault, до прод-релиза миграций нет.
         onVaultUnlocked = {
-            // Миграция — файловый I/O + перешифровка записей: уводим с main-потока (StrictMode/джанк),
+            // Миграция — перешифровка записей: уводим с main-потока (StrictMode/джанк),
             // reload Compose-state возвращаем на Main. restoreSession сам уходит в свой scope.
             lifecycleScope.launch(Dispatchers.IO) {
-                runCatching { WorkspaceMigration(vault, dir.toPath()).migrate() }
                 runCatching { VaultMigration(vault, hostStore).migrate() }
                 withContext(Dispatchers.Main) {
                     hosts.reload()
