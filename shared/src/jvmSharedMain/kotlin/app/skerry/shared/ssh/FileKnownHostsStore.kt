@@ -1,8 +1,8 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.io.PrivateConfig
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
 
 /**
  * Файловое [KnownHostsStore]: по строке на запись, поля разделены пробелом —
@@ -28,13 +28,9 @@ class FileKnownHostsStore(private val path: Path) : KnownHostsStore {
     @Synchronized
     override fun add(host: KnownHost) {
         entries += host
-        path.parent?.let { Files.createDirectories(it) }
-        Files.write(
-            path,
-            listOf(encode(host)),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.APPEND,
-        )
+        // Раньше тут был append, но он создавал файл под umask до harden (TOCTOU-окно) и не был
+        // атомарен. Перезапись из кеша даёт тот же файл атомарно и приватно — список known-hosts мал.
+        rewrite()
     }
 
     @Synchronized
@@ -50,16 +46,14 @@ class FileKnownHostsStore(private val path: Path) : KnownHostsStore {
         if (removed) rewrite()
     }
 
-    /** Перезаписать файл целиком из кеша (для replace/remove). */
+    /** Перезаписать файл целиком из кеша — атомарно и приватно (для add/replace/remove). */
     private fun rewrite() {
-        path.parent?.let { Files.createDirectories(it) }
-        Files.write(
-            path,
-            entries.map(::encode),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.TRUNCATE_EXISTING,
-        )
+        PrivateConfig.atomicWrite(path, encodeAll())
     }
+
+    private fun encodeAll(): ByteArray =
+        entries.joinToString(separator = "\n", postfix = if (entries.isEmpty()) "" else "\n", transform = ::encode)
+            .toByteArray()
 
     private fun encode(host: KnownHost): String = buildString {
         append(host.host).append(' ').append(host.port).append(' ')
@@ -69,7 +63,10 @@ class FileKnownHostsStore(private val path: Path) : KnownHostsStore {
 
     private fun load() {
         if (!Files.exists(path)) return
-        Files.readAllLines(path).forEach { line ->
+        PrivateConfig.harden(path) // апгрейд старого мир-читаемого файла при первом чтении
+        // Ошибка чтения (нет прав/IO) не должна валить конструктор стора — трактуем как пустой.
+        val lines = runCatching { Files.readAllLines(path) }.getOrElse { return }
+        lines.forEach { line ->
             val parts = line.trim().split(" ")
             if (parts.size != 4 && parts.size != 5) return@forEach
             val port = parts[1].toIntOrNull() ?: return@forEach

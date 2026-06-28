@@ -1,15 +1,16 @@
 package app.skerry.shared.snippet
 
+import app.skerry.shared.io.PrivateConfig
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 
 /**
  * Файловое [SnippetStore]: сниппеты хранятся одним JSON-массивом [Snippet]. Зеркало
  * [app.skerry.shared.tunnel.FileTunnelStore] — upsert/remove с полной перезаписью файла из in-memory
- * кеша, атомарная запись (временный файл рядом + ATOMIC_MOVE), битый/нечитаемый файл при загрузке
- * трактуется как пустой стор. Методы синхронизированы.
+ * кеша, приватная атомарная запись ([PrivateConfig.atomicWrite], 0600), битый/нечитаемый файл при
+ * загрузке трактуется как пустой стор. Файл может содержать инлайн-креды команд — права важны.
+ * Методы синхронизированы.
  */
 class FileSnippetStore(private val path: Path) : SnippetStore {
 
@@ -36,16 +37,13 @@ class FileSnippetStore(private val path: Path) : SnippetStore {
     }
 
     private fun persist() {
-        path.parent?.let { Files.createDirectories(it) }
-        val tmp = path.resolveSibling("${path.fileName}.tmp")
         // Files.writeString/readString требуют Android API 33+; пишем байтами (UTF-8) ради minSdk 26.
-        Files.write(tmp, json.encodeToString(entries.toList()).toByteArray())
-        runCatching { Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE) }
-            .onFailure { Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING) }
+        PrivateConfig.atomicWrite(path, json.encodeToString(entries.toList()).toByteArray())
     }
 
     private fun load() {
         if (!Files.exists(path)) return
+        PrivateConfig.harden(path) // апгрейд старого мир-читаемого файла при первом чтении
         runCatching { json.decodeFromString<List<Snippet>>(Files.readAllBytes(path).decodeToString()) }
             .onSuccess { entries += it }
     }

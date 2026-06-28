@@ -2,6 +2,7 @@ package app.skerry.shared.snippet
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermission
 import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -119,6 +120,16 @@ class FileSnippetStoreTest {
         file.writeText("{ not json at all ][")
 
         assertEquals(emptyList(), FileSnippetStore(file).all())
+    }
+
+    @Test
+    fun `writes the file owner-only - it may carry inline credentials`() {
+        FileSnippetStore(file).put(snip("1", "a"))
+
+        assertEquals(
+            setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE),
+            Files.getPosixFilePermissions(file),
+        )
     }
 
     @Test

@@ -1,8 +1,8 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.io.PrivateConfig
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
 
 /**
  * Файловое [HostKeyMismatchStore]: по строке на событие, поля разделены пробелом —
@@ -39,13 +39,8 @@ class FileHostKeyMismatchStore(private val path: Path) : HostKeyMismatchStore {
     }
 
     private fun persist() {
-        path.parent?.let { Files.createDirectories(it) }
-        Files.write(
-            path,
-            entries.map(::encode),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.TRUNCATE_EXISTING,
-        )
+        val body = entries.joinToString(separator = "\n", postfix = if (entries.isEmpty()) "" else "\n", transform = ::encode)
+        PrivateConfig.atomicWrite(path, body.toByteArray())
     }
 
     private fun encode(m: HostKeyMismatch): String = buildString {
@@ -58,7 +53,10 @@ class FileHostKeyMismatchStore(private val path: Path) : HostKeyMismatchStore {
 
     private fun load() {
         if (!Files.exists(path)) return
-        Files.readAllLines(path).forEach { line ->
+        PrivateConfig.harden(path) // апгрейд старого мир-читаемого файла при первом чтении
+        // Ошибка чтения не должна валить конструктор стора — трактуем как пустой.
+        val lines = runCatching { Files.readAllLines(path) }.getOrElse { return }
+        lines.forEach { line ->
             val parts = line.trim().split(" ")
             if (parts.size != 5 && parts.size != 6) return@forEach
             val port = parts[1].toIntOrNull() ?: return@forEach

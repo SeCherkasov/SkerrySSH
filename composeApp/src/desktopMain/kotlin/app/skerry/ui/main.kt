@@ -10,6 +10,7 @@ import androidx.compose.ui.window.rememberWindowState
 import app.skerry.ui.design.optimalWindowSize
 import java.awt.GraphicsEnvironment
 import app.skerry.shared.host.FileHostStore
+import app.skerry.shared.io.PrivateConfig
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.FileKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
@@ -45,11 +46,13 @@ import java.util.UUID
 
 /**
  * Каталог конфигурации Skerry. По умолчанию `~/.config/skerry`; уважает XDG_CONFIG_HOME.
+ * Создаётся с правами 0700 (и апгрейдится, если со старой установки остался 0755), чтобы UI-префы
+ * и конфиг-файлы внутри не были доступны другим локальным пользователям независимо от их прав.
  */
 private fun configDir(): Path {
     val xdg = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }
     val base = xdg?.let { Path.of(it) } ?: Path.of(System.getProperty("user.home"), ".config")
-    return base.resolve("skerry")
+    return base.resolve("skerry").also { PrivateConfig.ensureDir(it) }
 }
 
 /**

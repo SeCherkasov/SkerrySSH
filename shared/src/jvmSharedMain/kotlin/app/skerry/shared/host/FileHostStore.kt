@@ -1,16 +1,16 @@
 package app.skerry.shared.host
 
+import app.skerry.shared.io.PrivateConfig
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 
 /**
  * Файловое [HostStore]: профили хранятся одним JSON-массивом [Host]. В отличие от
  * append-only [app.skerry.shared.ssh.FileKnownHostsStore] здесь нужен upsert/remove,
  * поэтому при каждой мутации файл переписывается целиком из in-memory кеша. Запись
- * атомарна (во временный файл рядом + ATOMIC_MOVE), чтобы сбой посреди записи не оставил
- * усечённый JSON. Битый или нечитаемый файл при загрузке трактуется как пустой стор.
+ * приватна и атомарна ([PrivateConfig.atomicWrite], 0600), чтобы профили не были мир-читаемыми,
+ * а сбой посреди записи не оставил усечённый JSON. Битый/нечитаемый файл при загрузке — пустой стор.
  *
  * Методы синхронизированы: вызовы идут из UI-корутины, но контракт прост и держит
  * инвариант кеша согласованным с файлом.
@@ -52,16 +52,13 @@ class FileHostStore(private val path: Path) : HostStore {
     }
 
     private fun persist() {
-        path.parent?.let { Files.createDirectories(it) }
-        val tmp = path.resolveSibling("${path.fileName}.tmp")
         // Files.writeString/readString требуют Android API 33+; пишем байтами (UTF-8) ради minSdk 26.
-        Files.write(tmp, json.encodeToString(entries.toList()).toByteArray())
-        runCatching { Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE) }
-            .onFailure { Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING) }
+        PrivateConfig.atomicWrite(path, json.encodeToString(entries.toList()).toByteArray())
     }
 
     private fun load() {
         if (!Files.exists(path)) return
+        PrivateConfig.harden(path) // апгрейд старого мир-читаемого файла при первом чтении
         runCatching { json.decodeFromString<List<Host>>(Files.readAllBytes(path).decodeToString()) }
             .onSuccess { entries += it }
     }
