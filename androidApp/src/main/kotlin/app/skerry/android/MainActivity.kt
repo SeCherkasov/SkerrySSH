@@ -26,6 +26,7 @@ import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.design.MobileDesignApp
 import app.skerry.ui.design.MobileDesignState
+import app.skerry.ui.secure.WindowBridge
 import app.skerry.ui.sftp.SafBridge
 import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
@@ -79,6 +80,10 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Окно отдаётся в WindowBridge, чтобы общий UI мог включать FLAG_SECURE точечно на экранах
+        // с секретами (vault, ввод мастер-пароля) — см. SecureScreen. Слабая ссылка, без утечки Activity.
+        WindowBridge.install(window)
 
         // Контекст для проверки keyguard: авто-лок при уходе в фон должен срабатывать только при
         // реально заблокированном устройстве, а не при открытии системного пикера (см. deviceMandatesAutoLock).
