@@ -2,6 +2,9 @@ package app.skerry.shared.vault
 
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okio.FileSystem
@@ -51,6 +54,13 @@ class FileVault(
     private var dataKey: DataKey? = null
     private var meta: VaultMeta? = null
     private val records = mutableListOf<VaultRecord>()
+
+    // Сигнал «локальная мутация» для live-sync (см. [Vault.localChanges]). replay=0 + DROP_OLDEST:
+    // сигнал идемпотентен (важен факт изменения, не их число), а tryEmit без подписчика не должен ни
+    // блокировать мутатор, ни падать. Эмитим ПОСЛЕ успешного commit (после writeFile), вне зависимости
+    // от того, подписан ли координатор.
+    private val _localChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    override val localChanges: Flow<Unit> = _localChanges
 
     override fun exists(): Boolean = fileSystem.exists(path)
 
@@ -218,6 +228,7 @@ class FileVault(
         }
         writeFile(currentMeta, updated) // упадёт — кеш не тронут
         records.clear(); records.addAll(updated)
+        _localChanges.tryEmit(Unit) // commit удался → разбудить live-sync push
     }
 
     override fun remove(id: String): Unit = synchronized(lock) {
@@ -233,6 +244,7 @@ class FileVault(
         val updated = records.toMutableList().also { it[index] = tombstone }
         writeFile(currentMeta, updated)
         records.clear(); records.addAll(updated)
+        _localChanges.tryEmit(Unit) // локальное удаление → разбудить live-sync push
     }
 
     override fun compact(ids: List<String>): Unit = synchronized(lock) {

@@ -1,5 +1,8 @@
 package app.skerry.shared.vault
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+
 /** Результат разблокировки [Vault]: успех, неверный пароль или нечитаемый файл. */
 sealed interface UnlockResult {
     data object Success : UnlockResult
@@ -92,6 +95,16 @@ interface Vault {
      * про неё не знает. Идемпотентно: повторный вызов / отсутствие файла — no-op.
      */
     fun reset()
+
+    /**
+     * Поток уведомлений о ЛОКАЛЬНЫХ мутациях vault ([put]/[remove]) — без содержимого, лишь сигнал
+     * «пользователь что-то изменил». Координатор синка подписывается, дебаунсит и пушит изменение на
+     * сервер (live-sync «как у популярных SSH-клиентов»: правка на одном устройстве сама долетает до других). НЕ
+     * эмитится при [mergeRemote]/[compact]: это входящие/служебные операции, и их повторный push был
+     * бы лишним (LWW его всё равно отверг бы) — а так цепочка pull→merge не зацикливала бы push.
+     * По умолчанию пустой поток (фейки/реализации без sync); файловый vault переопределяет.
+     */
+    val localChanges: Flow<Unit> get() = emptyFlow()
 
     /** Метаданные всех записей, включая tombstone (`deleted=true`); вызывающий фильтрует сам. */
     fun records(): List<VaultRecord>
