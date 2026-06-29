@@ -1,6 +1,7 @@
 package app.skerry.ui.sync
 
 import app.skerry.shared.sync.DeviceInfo
+import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.sync.PairingResult
 import app.skerry.shared.sync.PairingTicket
 import app.skerry.shared.sync.RecordPage
@@ -8,6 +9,7 @@ import app.skerry.shared.sync.RemoteDevice
 import app.skerry.shared.sync.RemoteRecord
 import app.skerry.shared.sync.SyncClient
 import app.skerry.shared.sync.SyncSession
+import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.MasterKey
 import app.skerry.shared.vault.RecordType
@@ -68,6 +70,75 @@ class SyncCoordinatorHealthTest {
     }
 
     private fun configuredStore() = InMemorySyncConfigStore().apply {
+        save(SyncConfig(serverUrl = "https://sync.test", accountId = "maya", deviceId = "dev-1"))
+    }
+}
+
+/**
+ * Сброс курсора синка координатором. [SyncCoordinator.disconnect] обнуляет курсор (следующее
+ * подключение делает полный re-pull, а не продолжает с tip прошлой сессии), а повторное включение
+ * ранее выключенного типа в [SyncCoordinator.setSyncSettings] — обнуляет курсор для backfill
+ * (привычная модель SSH-клиентов: пока тип был OFF, курсор проскочил чужие записи этого типа).
+ */
+class SyncCoordinatorCursorTest {
+
+    @Test
+    fun disconnect_resets_sync_cursor_for_bound_account() = runBlocking {
+        val state = InMemorySyncStateStore().apply { setCursor("maya", 42) }
+        val sut = SyncCoordinator(
+            { FakePingClient(reachable = true) }, StubCrypto(), StubVault(),
+            configStore = boundStore(), syncState = state,
+        )
+        sut.disconnect()
+        withTimeout(3_000) { while (state.cursor("maya") != 0L) delay(10) }
+        assertEquals(0L, state.cursor("maya"))
+    }
+
+    @Test
+    fun reenabling_a_type_resets_cursor_for_backfill() = runBlocking {
+        val state = InMemorySyncStateStore().apply { setCursor("maya", 7) }
+        val sut = SyncCoordinator(
+            { FakePingClient(reachable = true) }, StubCrypto(), StubVault(),
+            configStore = boundStore(), syncState = state,
+        )
+        // Выключение типа НЕ трогает курсор — просто перестаём слать/принимать этот тип.
+        sut.setSyncSettings(SyncSettings(syncHosts = false))
+        delay(150)
+        assertEquals(7L, state.cursor("maya"))
+        // Повторное включение → полный re-pull: курсор обнуляется, чтобы подтянуть пропущенные записи.
+        sut.setSyncSettings(SyncSettings(syncHosts = true))
+        withTimeout(3_000) { while (state.cursor("maya") != 0L) delay(10) }
+        assertEquals(0L, state.cursor("maya"))
+    }
+
+    private fun boundStore() = InMemorySyncConfigStore().apply {
+        save(SyncConfig(serverUrl = "https://sync.test", accountId = "maya", deviceId = "dev-1"))
+    }
+}
+
+/**
+ * Cursor-guard live-pull: второй разрыватель петли push→WS→push. WS-сигнал несёт курсор аккаунта;
+ * наш собственный push возвращается тем же сигналом с курсором, который мы уже знаем — без guard'а это
+ * запускало бы лишний синк (а в паре с безусловным серверным publish — петлю). Тянем дельту ТОЛЬКО когда
+ * присланный курсор обгоняет локальный (= реально появились чужие изменения).
+ */
+class SyncCoordinatorWatchGuardTest {
+
+    @Test
+    fun ws_signal_triggers_pull_only_when_cursor_advances() = runBlocking {
+        val state = InMemorySyncStateStore().apply { setCursor("maya", 10) }
+        val sut = SyncCoordinator(
+            { FakePingClient(reachable = true) }, StubCrypto(), StubVault(),
+            configStore = boundStore(), syncState = state,
+        )
+        // Равный курсор = эхо нашего же push'а: не тянем (иначе петля). Отставший — тем более.
+        assertEquals(false, sut.signalAdvancesCursor("maya", 10))
+        assertEquals(false, sut.signalAdvancesCursor("maya", 3))
+        // Курсор обогнал локальный = появились чужие изменения: тянем дельту.
+        assertEquals(true, sut.signalAdvancesCursor("maya", 11))
+    }
+
+    private fun boundStore() = InMemorySyncConfigStore().apply {
         save(SyncConfig(serverUrl = "https://sync.test", accountId = "maya", deviceId = "dev-1"))
     }
 }

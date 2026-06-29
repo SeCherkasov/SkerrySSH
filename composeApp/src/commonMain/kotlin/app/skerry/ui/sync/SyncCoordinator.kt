@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Где приложение хранит настройку sync (URL сервера, accountId, deviceId) между запусками. */
@@ -151,7 +152,13 @@ class SyncCoordinator(
     private val _syncSettings = MutableStateFlow(SyncSettings())
     val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
 
+    // @Volatile: пишутся/читаются из независимых корутин на [scope] (Dispatchers.Default — пул потоков):
+    // doConnect/restoreSession ставят, disconnect зануляет, startWatch/startLocalPush/runSync читают. Без
+    // volatile запись на одном потоке не обязана быть видна чтению на другом (JMM) — например disconnect
+    // ставит client=null, а startWatch видит устаревший ненулевой и стартует watch с мёртвым клиентом.
+    @Volatile
     private var client: SyncClient? = null
+    @Volatile
     private var session: SyncSession? = null
 
     // URL текущей привязки для health-пинга (из конфигурации, живёт независимо от сессии). Смена цели
@@ -165,12 +172,14 @@ class SyncCoordinator(
     // Подписка на серверные уведомления об изменениях (WS `/sync`): пока живёт — каждое чужое
     // изменение прилетает push-сигналом и тянет дельту, без ручного «Sync». Один на сессию; новое
     // подключение и disconnect его отменяют. null = live-pull не активен (синк только вручную).
+    @Volatile
     private var watchJob: kotlinx.coroutines.Job? = null
 
     // Подписка на ЛОКАЛЬНЫЕ изменения vault ([Vault.localChanges]): правка/добавление/удаление записи
     // на этом устройстве с дебаунсом запускает синк (push), чтобы изменение само улетело на сервер,
     // а оттуда WS-сигналом — на другие устройства (live-sync «как у популярных SSH-клиентов»). Один на сессию; отменяется
     // в disconnect и заменяется при реконнекте.
+    @Volatile
     private var pushJob: kotlinx.coroutines.Job? = null
 
     // Сериализует ВСЕ циклы синка: их запускают doConnect/restoreSession, ручной syncNow, WS-live-pull
@@ -356,12 +365,22 @@ class SyncCoordinator(
         val previous = _syncSettings.value
         _syncSettings.value = settings
         scope.launch {
-            val reEnabled = (settings.syncHosts && !previous.syncHosts) ||
-                (settings.syncSnippets && !previous.syncSnippets)
-            if (reEnabled) configStore.load()?.let { syncState.setCursor(it.accountId, 0) }
-            // save ПОСЛЕ сброса курсора: его localChanges разбудит pushJob→runSync, который должен
-            // увидеть уже сброшенный курсор и сделать полный re-pull (debounce даёт достаточный зазор).
-            settingsStore.save(settings)
+            try {
+                val reEnabled = (settings.syncHosts && !previous.syncHosts) ||
+                    (settings.syncSnippets && !previous.syncSnippets)
+                if (reEnabled) configStore.load()?.let { syncState.setCursor(it.accountId, 0) }
+                // save ПОСЛЕ сброса курсора: его localChanges разбудит pushJob→runSync, который должен
+                // увидеть уже сброшенный курсор и сделать полный re-pull (debounce даёт достаточный зазор).
+                settingsStore.save(settings)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // save в vault упал (vault залочен, диск переполнен) — иначе ошибка ушла бы в SupervisorJob
+                // тихо, а оптимистично переключённый тумблер «отскочил» бы в прежнее значение при следующем
+                // refreshSyncSettings без объяснения (silent-ревью). Откатываем UI к previous и сигналим.
+                _syncSettings.value = previous
+                _status.value = SyncStatus.Failed("Не удалось сохранить настройки синхронизации: ${e.message}")
+            }
         }
     }
 
@@ -402,10 +421,22 @@ class SyncCoordinator(
     /**
      * Подписаться на серверные уведомления об изменениях (WS `/sync`) и тянуть дельту на каждый сигнал —
      * realtime live-pull вместо ручного «Sync». Отменяет прошлую подписку (реконнект). Best-effort:
-     * обрыв/ошибка WS просто завершает подписку (ручной [syncNow] и переподключение остаются рабочими) —
-     * статус НЕ роняем в Failed, иначе временная просадка связи гасила бы рабочий Online. [runSync] на
+     * обрыв/ошибка WS не убивает live-pull навсегда — переподключаемся с экспоненциальным backoff
+     * ([WATCH_RETRY_MIN_MS]…[WATCH_RETRY_MAX_MS]), пока корутину не отменят (disconnect/реконнект). Без
+     * этого временная просадка сети молча гасила бы live-pull, а статус оставался бы Online (пассивное
+     * устройство переставало бы получать чужие изменения без единого сигнала). Статус в Failed НЕ роняем —
+     * иначе моргание связи гасило бы рабочий Online; ручной [syncNow] всё время доступен. [runSync] на
      * каждый сигнал выполняется последовательно (collect не параллелит) и сам не мигает Busy.
      */
+    /**
+     * Должен ли WS-сигнал с курсором [remoteCursor] запустить дельта-pull. `true` только когда сервер
+     * ушёл ВПЕРЁД нашего сохранённого курсора (= появились чужие изменения). Равный/отставший курсор —
+     * это эхо нашего собственного push'а, тянуть нечего: гасим, чтобы не крутить петлю push→WS→push.
+     * `internal` (а не private) — точка для модульного теста [SyncCoordinatorWatchGuardTest].
+     */
+    internal fun signalAdvancesCursor(accountId: String, remoteCursor: Long): Boolean =
+        remoteCursor > syncState.cursor(accountId)
+
     private suspend fun startWatch() {
         val c = client ?: return
         val s = session ?: return
@@ -414,13 +445,24 @@ class SyncCoordinator(
         watchJob?.cancel()
         watchJob?.join()
         watchJob = scope.launch {
-            try {
-                c.changes(s).collect { runSync() }
-            } catch (e: CancellationException) {
-                throw e // отмену (disconnect/реконнект) не глушим
-            } catch (e: Exception) {
-                // WS оборвался (сеть/сервер/протух токен) — live-pull прекращаем тихо. Видимый статус
-                // остаётся прежним (Online после последнего успешного синка); ручной Sync доступен.
+            var backoff = WATCH_RETRY_MIN_MS
+            while (true) {
+                try {
+                    c.changes(s).collect { remoteCursor ->
+                        backoff = WATCH_RETRY_MIN_MS // живой сигнал — сбрасываем задержку до минимума
+                        // Тянем дельту ТОЛЬКО если сервер ушёл вперёд нашего курсора. Иначе наш же push,
+                        // вернувшийся WS-сигналом с уже известным курсором, запускал бы лишний синк —
+                        // второй разрыватель петли push→WS→push (defense-in-depth к серверному guard'у).
+                        if (signalAdvancesCursor(s.accountId, remoteCursor)) runSync()
+                    }
+                    // collect завершился без исключения = сервер штатно закрыл поток; переподключимся ниже.
+                } catch (e: CancellationException) {
+                    throw e // отмену (disconnect/реконнект) не глушим
+                } catch (e: Exception) {
+                    // WS оборвался (сеть/сервер/протух токен) — не сдаёмся, ждём backoff и переподключаемся.
+                }
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(WATCH_RETRY_MAX_MS)
             }
         }
     }
@@ -470,6 +512,10 @@ class SyncCoordinator(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Отзыв — security-action (реакция на потерянное устройство): тихий false неотличим в UI от
+            // «устройства нет», пользователь не знает, отозвалось ли (silent-ревью). Сигналим ошибку через
+            // статус, чтобы секция Sync показала сбой, и возвращаем false (список не перечитывается).
+            _status.value = SyncStatus.Failed("Не удалось отозвать устройство: ${e.message}")
             false
         }
     }
@@ -486,14 +532,22 @@ class SyncCoordinator(
             pushJob?.join()
             watchJob = null
             pushJob = null
-            // runCatching: сбой close() (I/O при teardown) не должен оставить привязку/курсор на месте —
-            // иначе disconnect молча провалился бы, а статус застрял.
-            runCatching { client?.close() }
-            client = null
-            session = null
+            // close() и зануление client/session — под syncMutex: ручной syncNow() запускает runSync() и
+            // нигде не трекается/не отменяется, поэтому без замка disconnect мог бы закрыть Ktor-клиент
+            // во время его же in-flight запроса (kotlin-ревью HIGH). withLock дождётся завершения текущего
+            // runSync; следующий после зануления увидит client==null и сделает ранний возврат.
+            syncMutex.withLock {
+                // runCatching: сбой close() (I/O при teardown) не должен оставить привязку/курсор на месте —
+                // иначе disconnect молча провалился бы, а статус застрял.
+                runCatching { client?.close() }
+                client = null
+                session = null
+            }
             // Курсор синка тоже забываем: следующее подключение (к этому или другому аккаунту в том же
-            // процессе) обязано сделать полный re-pull, а не продолжить с tip прошлой сессии.
-            configStore.load()?.let { syncState.setCursor(it.accountId, 0) }
+            // процессе) обязано сделать полный re-pull, а не продолжить с tip прошлой сессии. runCatching:
+            // сбой записи курсора (диск переполнен) не должен оставить configStore/healthTarget/статус в
+            // полу-отвязанном состоянии (silent-ревью: «Disconnect отработал, но устройство снова привязано»).
+            runCatching { configStore.load()?.let { syncState.setCursor(it.accountId, 0) } }
             configStore.clear()
             healthTarget.value = null // отвязались — гасим health-пинг (поллер закроет клиент, статус → UNKNOWN)
             _status.value = SyncStatus.Disabled
@@ -613,6 +667,15 @@ private const val PUSH_DEBOUNCE_MS = 1500L
  * (падение/возврат сервера видно в пределах ~15 с), и достаточно редко, чтобы не нагружать сервер.
  */
 private const val HEALTH_POLL_MS = 15_000L
+
+/**
+ * Backoff переподключения WS-подписки live-pull ([SyncCoordinator.startWatch]): после обрыва ждём
+ * [WATCH_RETRY_MIN_MS] и удваиваем до потолка [WATCH_RETRY_MAX_MS]. Минимум мал, чтобы короткая просадка
+ * сети восстанавливалась быстро; потолок ограничивает частоту попыток при долгой недоступности сервера
+ * (или мёртвом токене) — ~раз в минуту, без разряда батареи. Живой сигнал сбрасывает задержку к минимуму.
+ */
+private const val WATCH_RETRY_MIN_MS = 1_000L
+private const val WATCH_RETRY_MAX_MS = 60_000L
 
 /**
  * Криптослучайный 128-битный deviceId как hex. Берём 16 байт из CSPRNG libsodium через

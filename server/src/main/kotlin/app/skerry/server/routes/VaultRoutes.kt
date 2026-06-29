@@ -21,7 +21,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 
 /** Допустимые значения открытого поля `type` (зеркалит `RecordType` ядра). */
-private val ALLOWED_TYPES = setOf("HOST", "GROUP", "IDENTITY", "CREDENTIAL", "KNOWN_HOST", "SNIPPET", "TUNNEL")
+private val ALLOWED_TYPES = setOf("HOST", "GROUP", "IDENTITY", "CREDENTIAL", "KNOWN_HOST", "SNIPPET", "TUNNEL", "SETTINGS")
 
 /** Хранилище шифроблобов: обёртка dataKey, дельта-чтение и batch-push с LWW. */
 fun Route.vaultRoutes(services: Services) {
@@ -68,8 +68,11 @@ fun Route.vaultRoutes(services: Services) {
             principal.accountId, "sync.push", "${req.records.size} records · cursor ${result.cursor}",
             deviceId = principal.deviceId,
         )
-        // Уведомляем другие устройства аккаунта: «есть изменения до cursor» (без содержимого).
-        services.notifier.publish(principal.accountId, result.cursor)
+        // Уведомляем другие устройства аккаунта: «есть изменения до cursor» (без содержимого). ТОЛЬКО
+        // когда курсор реально продвинулся — no-op push (та же version+deviceId, wins=false) сигнал не
+        // публикует, иначе live-sync уходит в петлю push→WS→push (другое/то же устройство тянет дельту,
+        // пушит всё обратно no-op'ом, что снова разбудило бы WS).
+        if (result.changed) services.notifier.publish(principal.accountId, result.cursor)
         call.respond(PushResponse(result.records.map { it.toDto() }, result.cursor))
     }
 }

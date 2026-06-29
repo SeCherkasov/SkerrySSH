@@ -46,8 +46,12 @@ class IncomingRecord(
     }
 }
 
-/** Результат batch-upsert: победившие записи (в порядке входа) + новый курсор аккаунта. */
-data class UpsertResult(val records: List<StoredRecord>, val cursor: Long)
+/**
+ * Результат batch-upsert: победившие записи (в порядке входа) + новый курсор аккаунта. [changed] —
+ * хоть одна запись выиграла LWW и курсор продвинулся; по нему PUT решает, слать ли WS-сигнал
+ * (no-op push сигнал НЕ публикует, иначе live-sync уходит в петлю push→WS→push).
+ */
+data class UpsertResult(val records: List<StoredRecord>, val cursor: Long, val changed: Boolean)
 
 /**
  * Зашифрованные записи vault. Содержит ядро разрешения конфликтов LWW
@@ -113,10 +117,11 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
             }
         }
 
-        if (seq != seqBefore) {
+        val changed = seq != seqBefore
+        if (changed) {
             Accounts.update({ Accounts.id eq accountId }) { it[syncSeq] = seq }
         }
-        UpsertResult(result, seq)
+        UpsertResult(result, seq, changed)
     }
 
     /**

@@ -38,6 +38,9 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.math.BigInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -82,7 +85,49 @@ class RoutesTest {
     }
 
     @Test
-    fun `push accepts TUNNEL record type and rejects an unknown type`() = testApplication {
+    fun `no-op push does not publish a change notification`() = testApplication {
+        // Корень live-sync петли: PUT публиковал WS-сигнал БЕЗУСЛОВНО, даже когда upsert ничего не
+        // изменил (та же version+deviceId ⇒ wins=false, курсор не двигается). Сигнал будил подписчиков
+        // → дельта-pull → push-all → снова PUT → бесконечный цикл ~30мс. Публиковать только при реальном
+        // продвижении курсора.
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val reg = srpRegister(accountId, password)
+        val tokens: TokenResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
+        }.body()
+
+        val record = RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64())
+        kotlinx.coroutines.coroutineScope {
+            // UNDISPATCHED: collect регистрируется синхронно ДО первого push (replay=0, иначе гонка подписки).
+            val published = kotlinx.coroutines.channels.Channel<Long>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+            val watch = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                services.notifier.forAccount(accountId).collect { published.send(it) }
+            }
+
+            // Первый push — реальное изменение: курсор 0→1, сигнал ДОЛЖЕН прийти.
+            client.put("/vault/records") {
+                bearerAuth(tokens.accessToken); contentType(ContentType.Application.Json)
+                setBody(PushRequest(listOf(record)))
+            }
+            assertEquals(1L, withTimeout(2_000) { published.receive() })
+
+            // Повторный push той же записи — no-op (wins=false, курсор остаётся 1): сигнала быть НЕ должно.
+            client.put("/vault/records") {
+                bearerAuth(tokens.accessToken); contentType(ContentType.Application.Json)
+                setBody(PushRequest(listOf(record)))
+            }
+            delay(300)
+            assertEquals(null, published.tryReceive().getOrNull())
+            watch.cancel()
+        }
+    }
+
+    @Test
+    fun `push accepts TUNNEL and SETTINGS record types and rejects an unknown type`() = testApplication {
         val services = testServices()
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
@@ -101,6 +146,15 @@ class RoutesTest {
             setBody(PushRequest(listOf(RecordDto("t1", "TUNNEL", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
         }
         assertEquals(HttpStatusCode.OK, ok.status)
+
+        // SETTINGS — запись «что синхронизировать» (account-level), клиент пушит её ВСЕГДА. Без неё в
+        // белом списке любой push с настройками отклоняется 400 и весь синк встаёт (selective-sync баг).
+        val settings = client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("sync.settings", "SETTINGS", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
+        }
+        assertEquals(HttpStatusCode.OK, settings.status)
 
         // Произвольный тип по-прежнему отвергается (защита от мусора/несовместимых клиентов).
         val bad = client.put("/vault/records") {

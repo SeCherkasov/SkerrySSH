@@ -59,7 +59,14 @@ fun accountInitials(accountId: String): String {
 /** Хост из URL сервера для подзаголовка (без схемы/порта/пути). null, если разобрать не вышло. */
 fun serverHost(url: String?): String? {
     if (url.isNullOrBlank()) return null
-    val afterScheme = url.trim().substringAfter("://", url.trim())
-    val host = afterScheme.substringBefore('/').substringBefore(':').trim()
+    val trimmed = url.trim()
+    val authority = trimmed.substringAfter("://", trimmed).substringBefore('/').substringBefore('?').trim()
+    // IPv6-литерал записывается в скобках (http://[::1]:8080) — наивный substringBefore(':') оставил бы
+    // от него одну «[». Берём содержимое скобок как хост, порт после «]» игнорируем.
+    if (authority.startsWith("[")) {
+        val close = authority.indexOf(']')
+        return if (close > 1) authority.substring(1, close) else null
+    }
+    val host = authority.substringBefore(':').trim()
     return host.ifEmpty { null }
 }
