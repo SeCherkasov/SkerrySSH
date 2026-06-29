@@ -82,6 +82,11 @@ class DeviceRepository(private val db: Database) {
             .map { it.toDeviceRow() }
     }
 
+    /** Всего устройств на инстансе — для честного «N из M» в консоли. */
+    suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
+        Devices.selectAll().count()
+    }
+
     suspend fun find(accountId: String, deviceId: String): DeviceRow? = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.selectAll()
             .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }

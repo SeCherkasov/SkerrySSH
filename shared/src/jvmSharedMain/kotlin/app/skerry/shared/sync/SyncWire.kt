@@ -58,7 +58,11 @@ internal data class RecordDtoWire(
 )
 
 @Serializable
-internal data class RecordsResponseWire(val records: List<RecordDtoWire>, val cursor: Long)
+internal data class RecordsResponseWire(
+    val records: List<RecordDtoWire>,
+    val cursor: Long,
+    val compactedIds: List<String> = emptyList(),
+)
 
 @Serializable
 internal data class PushRequestWire(val records: List<RecordDtoWire>)

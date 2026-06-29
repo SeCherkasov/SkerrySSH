@@ -27,8 +27,13 @@ data class RemoteRecord(
     val blob: ByteArray,
 )
 
-/** Страница дельты: записи + новый курсор синхронизации (`lastSyncVersion`). */
-data class RecordPage(val records: List<RemoteRecord>, val cursor: Long)
+/**
+ * Страница дельты: записи + новый курсор синхронизации (`lastSyncVersion`). [compactedIds] — id
+ * надгробий, которые сервер считает полностью распространёнными (все устройства их дочитали):
+ * клиент физически забывает их ([Vault.compact]) и перестаёт пушить, иначе re-push воскрешал бы их
+ * после серверного purge. Пусто для старого сервера (поле опционально на проводе).
+ */
+data class RecordPage(val records: List<RemoteRecord>, val cursor: Long, val compactedIds: List<String> = emptyList())
 
 data class RemoteDevice(
     val id: String,

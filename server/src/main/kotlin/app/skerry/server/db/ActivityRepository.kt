@@ -41,6 +41,11 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
             .map { it.toRow() }
     }
 
+    /** Всего удержанных событий (≤ maxRows) — для честного «N из M» в консоли. */
+    suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
+        ActivityLog.selectAll().count()
+    }
+
     /** Удаляет всё старше последних [maxRows] событий (gap-устойчиво: по реальному seq границы). */
     private fun prune() {
         // Дешёвый счётчик-гейт: дорогой OFFSET-скан только когда реально переросли кап, а не на

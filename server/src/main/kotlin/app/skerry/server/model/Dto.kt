@@ -64,9 +64,18 @@ data class RecordDto(
     val blob: String,
 )
 
-/** Дельта: записи + новый курсор синхронизации, который клиент сохраняет как `lastSyncVersion`. */
+/**
+ * Дельта: записи + новый курсор синхронизации, который клиент сохраняет как `lastSyncVersion`.
+ * [compactedIds] — id надгробий, полностью распространённых на все устройства (serverSeq ≤ watermark):
+ * клиент по ним физически забывает тромбстоуны и перестаёт их пушить (иначе re-push воскрешал бы их
+ * после purge). Поле с дефолтом — старый клиент его игнорирует.
+ */
 @Serializable
-data class RecordsResponse(val records: List<RecordDto>, val cursor: Long)
+data class RecordsResponse(
+    val records: List<RecordDto>,
+    val cursor: Long,
+    val compactedIds: List<String> = emptyList(),
+)
 
 @Serializable
 data class PushRequest(val records: List<RecordDto>)
@@ -108,7 +117,7 @@ data class AdminDeviceDto(
 )
 
 @Serializable
-data class AdminDevicesResponse(val devices: List<AdminDeviceDto>)
+data class AdminDevicesResponse(val devices: List<AdminDeviceDto>, val total: Long)
 
 /** Событие аудит-лога для консоли: только метаданные синхронизации, `createdAt` — epoch millis. */
 @Serializable
@@ -121,7 +130,7 @@ data class AdminActivityDto(
 )
 
 @Serializable
-data class AdminActivityResponse(val events: List<AdminActivityDto>)
+data class AdminActivityResponse(val events: List<AdminActivityDto>, val total: Long)
 
 /**
  * Аккаунт инстанса для консоли: открытые метаданные ([id] — он же email/identity) и агрегаты,
@@ -142,7 +151,7 @@ data class AdminAccountDto(
 )
 
 @Serializable
-data class AdminAccountsResponse(val accounts: List<AdminAccountDto>)
+data class AdminAccountsResponse(val accounts: List<AdminAccountDto>, val total: Long)
 
 /**
  * Envelope записи vault, как её РЕАЛЬНО видит сервер: открытые метаданные синхронизации плюс размер

@@ -114,7 +114,7 @@ class KtorSyncClient(
         val resp: RecordsResponseWire = get("/vault/records?since=$since") {
             bearerAuth(session.accessToken)
         }.bodyChecked()
-        return RecordPage(resp.records.map { it.toRemote() }, resp.cursor)
+        return RecordPage(resp.records.map { it.toRemote() }, resp.cursor, resp.compactedIds)
     }
 
     override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage {

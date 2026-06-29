@@ -185,23 +185,29 @@ class SyncCoordinator(
 
             // Register-or-login: новый аккаунт публикует наш dataKey; существующий — входим и
             // принимаем его dataKey, иначе чужие записи не расшифруются. CONFLICT = аккаунт уже есть.
+            var adoptedKey = false
             val newSession = try {
                 syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device)
             } catch (e: SyncException) {
                 if (e.kind != SyncException.Kind.CONFLICT) throw e
                 val s = syncClient.login(accountId, ak, device)
-                adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())
+                adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())
                 s
             }
 
             client = syncClient
             session = newSession
-            // Явное подключение ВСЕГДА делает полный re-pull: сбрасываем курсор перед синком. Курсор
-            // живёт в памяти процесса ([SyncStateStore]) и не привязан к идентичности vault — после
-            // reset/recreate vault (новый пустой vault, возможно новый dataKey) в ТОМ ЖЕ процессе он
-            // остался бы от прошлой сессии, и `pull since tip` проскочил бы все серверные записи: vault
-            // остался бы пустым, а pulled==0 не дёрнул бы onSynced (баг «после Connected хосты пусты»).
-            syncState.setCursor(accountId, 0)
+            // Полный re-pull (сброс курсора в 0) делаем ТОЛЬКО когда сменился dataKey, т.е. вход
+            // принял ОТЛИЧНЫЙ ключ аккаунта (adoptedKey). Это ровно случай, ради которого фикс жил:
+            // после reset/recreate vault в ТОМ ЖЕ процессе локальный vault пуст и/или под новым ключом,
+            // а in-memory курсор ([SyncStateStore]) остался от прошлой сессии — без сброса `pull since
+            // tip` проскочил бы серверные записи (баг «после Connected хосты пусты», pulled==0 ⇒ нет
+            // onSynced). Recreate всегда даёт новый случайный dataKey, поэтому adoptedKey его ловит.
+            // Обычный реконнект своим же ключом (adoptedKey=false) идёт инкрементально: иначе КАЖДЫЙ
+            // connect форсил бы полный re-pull всей истории — лишняя нагрузка и усилитель ретрансляции
+            // старых тромбстоунов на все устройства. Свежий процесс и так стартует с курсора 0 (full
+            // pull), а цикл disconnect→reconnect покрыт сбросом в [disconnect].
+            if (adoptedKey) syncState.setCursor(accountId, 0)
             // keep-connected: запечатываем refresh-токен под АКТУАЛЬНЫМ dataKey vault (после возможного
             // принятия ключа аккаунта он мог смениться) — иначе restoreSession не сможет его открыть.
             val sealed = if (keepConnected) {
@@ -233,21 +239,24 @@ class SyncCoordinator(
      * [password] + перезапись файла), чтобы записи с других устройств расшифровывались и после
      * перезаписка, без повторного входа. Если обёртка не разворачивается (другой пароль) — оставляем
      * локальный ключ как есть. adoptDataKey затирает [password] и забирает [accountDataKey].
+     * Возвращает `true`, если ключ был принят (сменился) — вызывающий по этому форсит полный re-pull.
      */
-    private suspend fun adoptAccountDataKey(syncClient: SyncClient, s: SyncSession, masterKey: MasterKey, password: CharArray) {
+    private suspend fun adoptAccountDataKey(syncClient: SyncClient, s: SyncSession, masterKey: MasterKey, password: CharArray): Boolean {
         val wrapped = syncClient.fetchWrappedDataKey(s)
         val accountDataKey = crypto.unwrapDataKey(masterKey, wrapped)
         if (accountDataKey == null) {
             password.fill(' ')
-            return
+            return false
         }
         // Ключ сменился → биометрия обёрнута под старым ключом и стала бы давать неверный dataKey
         // при разблокировке отпечатком: просим платформу сбросить её (runCatching — сбой биометрии
         // не должен валить подключение). Если биометрия БЫЛА включена — поднимаем флаг, чтобы UI
         // предложил перерегистрировать отпечаток уже под новым ключом.
-        if (vault.adoptDataKey(accountDataKey, password)) {
+        val adopted = vault.adoptDataKey(accountDataKey, password)
+        if (adopted) {
             if (runCatching { onDataKeyAdopted() }.getOrDefault(false)) _biometricResetNeeded.value = true
         }
+        return adopted
     }
 
     /** Сбросить приглашение перерегистрировать отпечаток (пользователь перерегистрировал или отклонил). */

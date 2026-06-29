@@ -6,6 +6,7 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
@@ -116,6 +117,24 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
             Accounts.update({ Accounts.id eq accountId }) { it[syncSeq] = seq }
         }
         UpsertResult(result, seq)
+    }
+
+    /**
+     * id надгробий аккаунта, уже распространённых на ВСЕ устройства — `serverSeq ≤ watermark`, где
+     * watermark = минимум курсоров устройств (как в [AdminRepository.purgeTombstones]). Клиент по
+     * этому списку физически забывает тромбстоуны ([app.skerry.shared.vault.Vault.compact]) и
+     * перестаёт их пушить — иначе re-push воскрешал бы их на сервере после purge ("крот").
+     * Устройство без курсора (null/никогда не синкалось) тянет watermark к 0 → ничего не компактим;
+     * аккаунт без устройств → watermark = MAX → компактим все надгробия (воскрешать некому).
+     */
+    suspend fun compactedTombstoneIds(accountId: String): List<String> = newSuspendedTransaction(Dispatchers.IO, db) {
+        val cursors = Devices.selectAll()
+            .where { Devices.accountId eq accountId }
+            .map { it[Devices.lastSyncVersion] ?: 0L }
+        val watermark = if (cursors.isEmpty()) Long.MAX_VALUE else cursors.min()
+        Records.selectAll()
+            .where { (Records.accountId eq accountId) and (Records.deleted eq true) and (Records.serverSeq lessEq watermark) }
+            .map { it[Records.recordId] }
     }
 
     /** Дельта: записи с `serverSeq > since`, по возрастанию курсора. */

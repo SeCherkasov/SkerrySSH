@@ -155,6 +155,39 @@ class FileVaultTest {
     }
 
     @Test
+    fun `compact physically forgets tombstones but keeps live records`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("dead", RecordType.HOST, "x".encodeToByteArray())
+            put("alive", RecordType.HOST, "y".encodeToByteArray())
+        }
+        v.remove("dead") // надгробие
+
+        // Компактим оба id: тромбстоун исчезает НАСОВСЕМ (не остаётся в records — больше не пушится),
+        // живая запись с тем же запросом не трогается (защита от потери непротолкнутой версии).
+        v.compact(listOf("dead", "alive"))
+
+        assertNull(v.records().firstOrNull { it.id == "dead" })
+        assertTrue(v.records().any { it.id == "alive" })
+        assertContentEquals("y".encodeToByteArray(), v.openPayload("alive"))
+    }
+
+    @Test
+    fun `compact survives a reload and is idempotent on unknown ids`() = vaultTest {
+        val file2 = "/vault2.json".toPath()
+        FileVault(file2, crypto, deviceId = "device-1", fileSystem = fs, now = { TS }).apply {
+            create("master".toCharArray())
+            put("dead", RecordType.HOST, "x".encodeToByteArray())
+            remove("dead")
+            compact(listOf("dead", "never-existed")) // неизвестный id — no-op, не падаем
+        }
+        // Перечитываем файл новым стором: компакция дошла до диска, а не только в кеш.
+        val reloaded = FileVault(file2, crypto, deviceId = "device-1", fileSystem = fs, now = { TS })
+        assertEquals(UnlockResult.Success, reloaded.unlock("master".toCharArray()))
+        assertTrue(reloaded.records().none { it.id == "dead" })
+    }
+
+    @Test
     fun `put after remove resurrects the record`() = vaultTest {
         val v = vault().apply {
             create("master".toCharArray())

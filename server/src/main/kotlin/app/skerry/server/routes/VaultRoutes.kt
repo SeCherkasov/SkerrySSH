@@ -50,7 +50,10 @@ fun Route.vaultRoutes(services: Services) {
                 deviceId = principal.deviceId,
             )
         }
-        call.respond(RecordsResponse(delta.map { it.toDto() }, cursor))
+        // ПОСЛЕ touch: курсор этого устройства уже учтён в watermark. Список надгробий, которые все
+        // устройства дочитали — клиент по нему компактит локально и перестаёт их пере-пушить.
+        val compactedIds = services.records.compactedTombstoneIds(principal.accountId)
+        call.respond(RecordsResponse(delta.map { it.toDto() }, cursor, compactedIds))
     }
 
     put("/vault/records") {
