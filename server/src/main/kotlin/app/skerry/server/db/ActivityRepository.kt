@@ -1,12 +1,13 @@
 package app.skerry.server.db
 
+import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
 /**
  * Аудит-лог метаданных для админ-консоли. Append-only с удержанием последних [maxRows] событий,
@@ -15,13 +16,13 @@ import org.jetbrains.exposed.sql.transactions.transaction
  */
 class ActivityRepository(private val db: Database, private val maxRows: Int = 2_000) {
 
-    fun record(
+    suspend fun record(
         accountId: String,
         event: String,
         detail: String,
         deviceId: String? = null,
         now: Long = System.currentTimeMillis(),
-    ): Unit = transaction(db) {
+    ): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
         ActivityLog.insert {
             it[ActivityLog.accountId] = accountId
             it[ActivityLog.deviceId] = deviceId
@@ -33,7 +34,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
     }
 
     /** Свежие события первыми (по убыванию монотонного `seq`). */
-    fun recent(limit: Int = 50): List<ActivityRow> = transaction(db) {
+    suspend fun recent(limit: Int = 50): List<ActivityRow> = newSuspendedTransaction(Dispatchers.IO, db) {
         ActivityLog.selectAll()
             .orderBy(ActivityLog.seq to SortOrder.DESC)
             .limit(limit)

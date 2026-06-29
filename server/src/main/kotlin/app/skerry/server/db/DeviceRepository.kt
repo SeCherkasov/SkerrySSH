@@ -1,11 +1,12 @@
 package app.skerry.server.db
 
+import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 
 /**
@@ -23,16 +24,19 @@ class DeviceRepository(private val db: Database) {
      * запертым навсегда (register→409, а каждый sync-запрос→401 по [isRevoked]). Revoke в этой модели
      * гасит текущие токены до следующего входа, а не банит устройство; постоянный бан = ротация пароля.
      */
-    fun register(
+    suspend fun register(
         accountId: String,
         deviceId: String,
         name: String,
         platform: String? = null,
         now: Long = System.currentTimeMillis(),
-    ): Boolean = transaction(db) {
+    ): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         // Кап под varchar(64): клиентское поле, длинное значение иначе валит запись в 500
         // (truncation в SQLite, исключение в PostgreSQL) вместо тихого усечения (kotlin-ревью L).
         val plat = platform?.take(64)
+        // name — text-колонка, но всё равно клиентский ввод: режем до разумного предела, чтобы
+        // нельзя было раздуть строку и админ-консоль произвольно длинным именем (kotlin-ревью L).
+        val safeName = name.take(128)
         val existing = Devices.selectAll()
             .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }
             .singleOrNull()
@@ -40,7 +44,7 @@ class DeviceRepository(private val db: Database) {
             Devices.insert {
                 it[id] = deviceId
                 it[Devices.accountId] = accountId
-                it[Devices.name] = name
+                it[Devices.name] = safeName
                 it[Devices.platform] = plat
                 it[createdAt] = now
                 it[lastSeenAt] = now
@@ -50,7 +54,7 @@ class DeviceRepository(private val db: Database) {
         } else {
             val wasRevoked = existing[Devices.revoked]
             Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
-                it[Devices.name] = name
+                it[Devices.name] = safeName
                 // platform пишем только когда клиент его прислал — иначе не затираем известное значение.
                 if (plat != null) it[Devices.platform] = plat
                 it[lastSeenAt] = now
@@ -62,7 +66,7 @@ class DeviceRepository(private val db: Database) {
         }
     }
 
-    fun list(accountId: String): List<DeviceRow> = transaction(db) {
+    suspend fun list(accountId: String): List<DeviceRow> = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.selectAll().where { Devices.accountId eq accountId }.map { it.toDeviceRow() }
     }
 
@@ -71,21 +75,21 @@ class DeviceRepository(private val db: Database) {
      * первыми и с верхней границей [limit] — устройства не удаляются (только отзываются), поэтому
      * без лимита список и JSON-ответ росли бы безгранично (kotlin-ревью L).
      */
-    fun listAll(limit: Int = 200): List<DeviceRow> = transaction(db) {
+    suspend fun listAll(limit: Int = 200): List<DeviceRow> = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.selectAll()
             .orderBy(Devices.lastSeenAt to SortOrder.DESC)
             .limit(limit)
             .map { it.toDeviceRow() }
     }
 
-    fun find(accountId: String, deviceId: String): DeviceRow? = transaction(db) {
+    suspend fun find(accountId: String, deviceId: String): DeviceRow? = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.selectAll()
             .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }
             .singleOrNull()
             ?.toDeviceRow()
     }
 
-    fun revoke(accountId: String, deviceId: String): Boolean = transaction(db) {
+    suspend fun revoke(accountId: String, deviceId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
             it[revoked] = true
         } > 0
@@ -95,12 +99,12 @@ class DeviceRepository(private val db: Database) {
      * Отмечает активность. Если передан [syncVersion] (курсор после pull/push), фиксирует, до
      * какого состояния устройство дочиталось/дописалось — открытый счётчик для админ-консоли.
      */
-    fun touch(
+    suspend fun touch(
         accountId: String,
         deviceId: String,
         now: Long = System.currentTimeMillis(),
         syncVersion: Long? = null,
-    ): Unit = transaction(db) {
+    ): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
             it[lastSeenAt] = now
             if (syncVersion != null) it[lastSyncVersion] = syncVersion
@@ -112,7 +116,7 @@ class DeviceRepository(private val db: Database) {
      * JWT от устройства, которого нет в таблице (напр. после ручной чистки), отклоняется
      * (kotlin-ревью L2).
      */
-    fun isRevoked(accountId: String, deviceId: String): Boolean = transaction(db) {
+    suspend fun isRevoked(accountId: String, deviceId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.selectAll()
             .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }
             .singleOrNull()

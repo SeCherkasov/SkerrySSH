@@ -20,6 +20,8 @@ class SrpService(
     private val challengeTtlMillis: Long = 120_000,
     /** Жёсткий предел незавершённых challenge — страховка от OOM при флуде /auth/srp/challenge. */
     private val maxPending: Int = 10_000,
+    /** Сколько одновременных незавершённых challenge допускается на один accountId. */
+    private val maxPerAccount: Int = 3,
     private val randomId: () -> String = { java.util.UUID.randomUUID().toString() },
 ) {
     /** Стандартные параметры: 2048-битная группа RFC 5054, хеш SHA-256. */
@@ -29,21 +31,35 @@ class SrpService(
 
     private val pending = ConcurrentHashMap<String, Pending>()
 
+    /** Монитор для compound-операций над [pending] (эвикция + кап считаются и применяются одним проходом). */
+    private val lock = Any()
+
     data class Challenge(val challengeId: String, val salt: String, val b: String)
 
     /** Шаг 1: по соли/верификатору аккаунта порождает эфемерный `B` и регистрирует challenge. */
     fun startChallenge(accountId: String, salt: String, verifier: String): Challenge {
-        evictExpired()
-        // Под предел: если флуд не даёт TTL-эвикции справиться, сбрасываем самые старые challenge.
-        if (pending.size >= maxPending) {
-            pending.entries.sortedBy { it.value.createdAt }
-                .take(pending.size - maxPending + 1)
-                .forEach { pending.remove(it.key) }
-        }
+        // Дорогой modexp считаем вне монитора — под локом только учёт записей.
         val session = SRP6ServerSession(params)
         val b = session.step1(accountId, BigInteger(salt, 16), BigInteger(verifier, 16))
         val challengeId = randomId()
-        pending[challengeId] = Pending(session, accountId, clock())
+        synchronized(lock) {
+            val now = clock()
+            // 1) TTL-эвикция и глобальный кап — одним проходом, атомарно относительно других стартов.
+            pending.entries.removeIf { now - it.value.createdAt > challengeTtlMillis }
+            if (pending.size >= maxPending) {
+                pending.entries.sortedBy { it.value.createdAt }
+                    .take(pending.size - maxPending + 1)
+                    .forEach { pending.remove(it.key) }
+            }
+            // 2) Per-account кап: оставляем максимум (maxPerAccount-1) старых challenge этого аккаунта,
+            //    самые старые сбрасываем, чтобы освободить слот под новый (флуд одного аккаунта не
+            //    вытесняет challenge остальных и не растёт без предела).
+            val mine = pending.entries.filter { it.value.accountId == accountId }
+                .sortedBy { it.value.createdAt }
+            val overflow = mine.size - (maxPerAccount - 1)
+            if (overflow > 0) mine.take(overflow).forEach { pending.remove(it.key) }
+            pending[challengeId] = Pending(session, accountId, now)
+        }
         return Challenge(challengeId, salt, b.toString(16))
     }
 

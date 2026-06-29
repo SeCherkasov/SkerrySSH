@@ -1,16 +1,22 @@
 package app.skerry.server.db
 
+import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 
-/** Запись, пришедшая от клиента (ещё без серверного курсора). */
-data class IncomingRecord(
+/**
+ * Запись, пришедшая от клиента (ещё без серверного курсора).
+ *
+ * equals/hashCode переопределены вручную: автогенерация data-класса сравнивала бы [blob] по
+ * ссылке, из-за чего две структурно одинаковые записи считались бы разными (security/kotlin-ревью).
+ */
+class IncomingRecord(
     val id: String,
     val type: String,
     val version: Long,
@@ -18,7 +24,26 @@ data class IncomingRecord(
     val deviceId: String,
     val deleted: Boolean,
     val blob: ByteArray,
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is IncomingRecord) return false
+        return id == other.id && type == other.type && version == other.version &&
+            updatedAt == other.updatedAt && deviceId == other.deviceId &&
+            deleted == other.deleted && blob.contentEquals(other.blob)
+    }
+
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + type.hashCode()
+        result = 31 * result + version.hashCode()
+        result = 31 * result + updatedAt.hashCode()
+        result = 31 * result + deviceId.hashCode()
+        result = 31 * result + deleted.hashCode()
+        result = 31 * result + blob.contentHashCode()
+        return result
+    }
+}
 
 /** Результат batch-upsert: победившие записи (в порядке входа) + новый курсор аккаунта. */
 data class UpsertResult(val records: List<StoredRecord>, val cursor: Long)
@@ -39,7 +64,7 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
      * Возвращает победившее состояние каждой записи (с присвоенным `serverSeq`) и финальный
      * курсор — клиент по записям узнаёт, какие его изменения отвергнуты, по курсору двигает `since`.
      */
-    fun upsert(accountId: String, incoming: List<IncomingRecord>): UpsertResult = transaction(db) {
+    suspend fun upsert(accountId: String, incoming: List<IncomingRecord>): UpsertResult = newSuspendedTransaction(Dispatchers.IO, db) {
         val accountQuery = Accounts.selectAll().where { Accounts.id eq accountId }
         // Курсор сравниваем с локально снятым seqBefore, НЕ с повторным чтением из БД: при
         // READ COMMITTED повторный SELECT увидел бы коммит конкурента и регрессировал курсор.
@@ -94,7 +119,7 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
     }
 
     /** Дельта: записи с `serverSeq > since`, по возрастанию курсора. */
-    fun delta(accountId: String, since: Long): List<StoredRecord> = transaction(db) {
+    suspend fun delta(accountId: String, since: Long): List<StoredRecord> = newSuspendedTransaction(Dispatchers.IO, db) {
         Records.selectAll()
             .where { (Records.accountId eq accountId) and (Records.serverSeq greater since) }
             .orderBy(Records.serverSeq to SortOrder.ASC)

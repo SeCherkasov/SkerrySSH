@@ -9,10 +9,13 @@ import app.skerry.server.routes.pairingClaimRoute
 import app.skerry.server.routes.pairingStartRoute
 import app.skerry.server.routes.syncWebSocket
 import app.skerry.server.routes.vaultRoutes
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.Application
+import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.authenticate
@@ -23,16 +26,30 @@ import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
+import io.ktor.server.plugins.defaultheaders.DefaultHeaders
+import io.ktor.server.plugins.origin
+import io.ktor.server.plugins.ratelimit.RateLimit
+import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.http.content.staticResources
+import io.ktor.server.request.contentLength
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
+
+/** Имена rate-limit бакетов (по удалённому IP). Объявлены здесь, используются в маршрутах. */
+object RateLimits {
+    val REGISTER = RateLimitName("auth-register")
+    val SRP_CHALLENGE = RateLimitName("srp-challenge")
+    val SRP_VERIFY = RateLimitName("srp-verify")
+    val PAIRING_CLAIM = RateLimitName("pairing-claim")
+}
 
 /** Версия сервера для /healthz и админ-консоли. */
 const val SERVER_VERSION = "0.1.0"
@@ -58,6 +75,47 @@ fun Application.configureServer(services: Services) {
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
     install(WebSockets) { pingPeriodMillis = 30_000 }
     install(CallLogging) { level = Level.INFO }
+    // Security-заголовки на каждый ответ. CSP заперт на 'self' (API отдаёт JSON, админ-консоль —
+    // same-origin без внешних ресурсов после удаления Google Fonts CDN); inline стиль/скрипт
+    // допущены, т.к. консоль их использует и встроена в ту же страницу.
+    install(DefaultHeaders) {
+        header("X-Content-Type-Options", "nosniff")
+        header("X-Frame-Options", "DENY")
+        header("Referrer-Policy", "no-referrer")
+        header(
+            "Content-Security-Policy",
+            "default-src 'self'; font-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+        )
+    }
+    // Rate-limit по удалённому IP: гасит брутфорс/флуд на регистрацию, SRP и claim паринга.
+    install(RateLimit) {
+        register(RateLimits.REGISTER) {
+            rateLimiter(limit = 5, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+        register(RateLimits.SRP_CHALLENGE) {
+            rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+        register(RateLimits.SRP_VERIFY) {
+            rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+        register(RateLimits.PAIRING_CLAIM) {
+            rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+    }
+    // Жёсткая верхняя граница тела запроса: по Content-Length отвергаем раздутые тела 413-м ещё до
+    // чтения, чтобы клиент не мог исчерпать память сервера одним запросом.
+    val maxBody = services.config.maxRequestBodyBytes
+    intercept(ApplicationCallPipeline.Plugins) {
+        val len = call.request.contentLength()
+        if (len != null && len > maxBody) {
+            call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("request body too large"))
+            return@intercept finish()
+        }
+    }
     // CORS нужен только браузерным клиентам; нативные приложения ему не подвержены, а админ-консоль
     // — same-origin. Поэтому по умолчанию (пустой список) CORS не ставим; включается явным списком
     // хостов через SKERRY_CORS_HOSTS (security-ревью M3: не оставлять anyHost).

@@ -1,5 +1,6 @@
 package app.skerry.server.db
 
+import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
@@ -7,7 +8,7 @@ import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
 /**
  * Read- и destructive-операции, нужные только админ-консоли (`docs/skerry-sync-design.md` §3):
@@ -49,7 +50,7 @@ class AdminRepository(private val db: Database) {
      * не N+1): устройства (всего/активных/последняя активность) и записи (всего/tombstone'ов/байт).
      * `NOT revoked` / `CASE WHEN deleted` переносимы между SQLite (0/1) и PostgreSQL (boolean).
      */
-    fun accountSummaries(): List<AccountSummary> = transaction(db) {
+    suspend fun accountSummaries(): List<AccountSummary> = newSuspendedTransaction(Dispatchers.IO, db) {
         val devAgg = HashMap<String, DevAgg>()
         exec(
             """SELECT account_id,
@@ -104,7 +105,7 @@ class AdminRepository(private val db: Database) {
      * границей [limit]). [RecordEnvelope.previewHex] — первые 16 байт настоящего шифротекста: это
      * непрозрачный шум, который наглядно доказывает, что без dataKey содержимое нечитаемо.
      */
-    fun recordEnvelopes(accountId: String, limit: Int = 100): List<RecordEnvelope> = transaction(db) {
+    suspend fun recordEnvelopes(accountId: String, limit: Int = 100): List<RecordEnvelope> = newSuspendedTransaction(Dispatchers.IO, db) {
         Records.selectAll()
             .where { Records.accountId eq accountId }
             .orderBy(Records.serverSeq to SortOrder.DESC)
@@ -132,7 +133,7 @@ class AdminRepository(private val db: Database) {
      * синхронизировалось) тянет watermark к 0 → ничего не чистим. Аккаунт без устройств — чистим всё
      * (воскрешать некому). Возвращает число удалённых надгробий.
      */
-    fun purgeTombstones(accountId: String): Int = transaction(db) {
+    suspend fun purgeTombstones(accountId: String): Int = newSuspendedTransaction(Dispatchers.IO, db) {
         val cursors = Devices.selectAll()
             .where { Devices.accountId eq accountId }
             .map { it[Devices.lastSyncVersion] ?: 0L }
@@ -147,9 +148,9 @@ class AdminRepository(private val db: Database) {
      * транзакции. Аудит-лог НЕ трогаем — он живёт без FK на [Accounts] и должен пережить удаление
      * (см. [ActivityLog]). Возвращает false, если аккаунта нет.
      */
-    fun deleteAccount(accountId: String): Boolean = transaction(db) {
+    suspend fun deleteAccount(accountId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         val exists = Accounts.selectAll().where { Accounts.id eq accountId }.any()
-        if (!exists) return@transaction false
+        if (!exists) return@newSuspendedTransaction false
         Records.deleteWhere { Records.accountId eq accountId }
         Pairing.deleteWhere { Pairing.accountId eq accountId }
         Devices.deleteWhere { Devices.accountId eq accountId }

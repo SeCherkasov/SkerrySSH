@@ -1,5 +1,6 @@
 package app.skerry.server.routes
 
+import app.skerry.server.RateLimits
 import app.skerry.server.Services
 import app.skerry.server.accountId
 import app.skerry.server.jwtPrincipal
@@ -11,6 +12,7 @@ import app.skerry.server.model.PairingStartResponse
 import app.skerry.server.model.b64
 import app.skerry.server.model.unb64
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -48,21 +50,23 @@ fun Route.pairingStartRoute(services: Services) {
  * Код одноразовый и с TTL; сервер видит только шифротекст dataKey.
  */
 fun Route.pairingClaimRoute(services: Services) {
-    post("/pairing/claim") {
-        val req = call.receive<PairingClaimRequest>()
-        val session = services.pairing.consume(req.code)
-        if (session == null) {
-            call.respond(HttpStatusCode.Gone, ErrorResponse("pairing code invalid or expired"))
-            return@post
+    rateLimit(RateLimits.PAIRING_CLAIM) {
+        post("/pairing/claim") {
+            val req = call.receive<PairingClaimRequest>()
+            val session = services.pairing.consume(req.code)
+            if (session == null) {
+                call.respond(HttpStatusCode.Gone, ErrorResponse("pairing code invalid or expired"))
+                return@post
+            }
+            services.devices.register(session.accountId, req.deviceId, req.deviceName)
+            call.respond(
+                PairingClaimResponse(
+                    accountId = session.accountId,
+                    encryptedDataKey = session.encryptedDataKey.b64(),
+                    accessToken = services.tokens.issueAccess(session.accountId, req.deviceId),
+                    refreshToken = services.tokens.issueRefresh(session.accountId, req.deviceId),
+                ),
+            )
         }
-        services.devices.register(session.accountId, req.deviceId, req.deviceName)
-        call.respond(
-            PairingClaimResponse(
-                accountId = session.accountId,
-                encryptedDataKey = session.encryptedDataKey.b64(),
-                accessToken = services.tokens.issueAccess(session.accountId, req.deviceId),
-                refreshToken = services.tokens.issueRefresh(session.accountId, req.deviceId),
-            ),
-        )
     }
 }

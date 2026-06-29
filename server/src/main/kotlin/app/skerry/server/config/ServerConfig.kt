@@ -27,6 +27,8 @@ data class ServerConfig(
     val tombstoneRetentionDays: Long,
     /** Разрешённые CORS-источники. Пусто ⇒ CORS не включается (нативные клиенты ему не подвержены). */
     val corsHosts: List<String>,
+    /** Верхняя граница тела запроса в байтах (защита от OOM/abuse). По Content-Length → 413. */
+    val maxRequestBodyBytes: Long,
 ) {
     val isPostgres: Boolean get() = databaseUrl.startsWith("jdbc:postgresql")
 
@@ -57,6 +59,7 @@ data class ServerConfig(
                 tombstoneRetentionDays = long("SKERRY_TOMBSTONE_DAYS", 90),     // design §2
                 corsHosts = str("SKERRY_CORS_HOSTS", "")
                     .split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                maxRequestBodyBytes = long("SKERRY_MAX_BODY_BYTES", 4L * 1024 * 1024), // 4 MiB
             )
         }
     }

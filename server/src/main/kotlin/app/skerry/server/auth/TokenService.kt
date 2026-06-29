@@ -10,6 +10,22 @@ import java.util.Date
 /**
  * Выпуск и проверка JWT (`docs/skerry-sync-design.md` §4: короткий TTL + refresh). Токен
  * привязан к accountId и deviceId; даёт доступ только к шифроблобам, не к содержимому.
+ *
+ * ## Отзыв refresh-токенов: осознанный stateless trade-off
+ *
+ * Refresh-токены здесь — самодостаточные (stateless) JWT: сервер не хранит их в БД и не ведёт
+ * per-token список выданных. Это упрощает self-hosted инстанс (нет таблицы токенов, нет уборки),
+ * но означает, что отдельный refresh-токен нельзя «погасить» индивидуально — подписанный JWT
+ * действителен до своего `exp`.
+ *
+ * Канал отзыва при компрометации — **revoke устройства**: и `/auth/refresh`, и access-валидатор
+ * (`auth-jwt`) на каждый запрос сверяются с [app.skerry.server.db.DeviceRepository.isRevoked]
+ * (accountId+deviceId). Отзыв устройства мгновенно перекрывает и его access-, и его refresh-поток,
+ * не трогая остальные устройства. Глобальный отзыв всех токенов аккаунта = ротация
+ * `SKERRY_JWT_SECRET` (инвалидирует все подписи) или смена мастер-пароля (ротация SRP-верификатора).
+ *
+ * Поэтому generation-counter / БД-список refresh-токенов НЕ реализуется намеренно: device-revoke
+ * уже даёт нужную гранулярность отзыва при принятой модели одиночного инстанса.
  */
 class TokenService(private val config: ServerConfig, private val clock: () -> Long = System::currentTimeMillis) {
 
