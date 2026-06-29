@@ -206,7 +206,7 @@ private fun MobileChrome(
             }
         }
     }
-    // Производные стабильные лямбды для двух точек входа: Connect (→ терминал) и SFTP (→ таб Files).
+    // Производные стабильные лямбды для двух точек входа: Connect (→ терминал) и SFTP (→ push-экран Files).
     val connectHost = remember(connect) { { host: Host -> connect(host, MobileConnectDest.Terminal) } }
     val openSftp = remember(connect) { { host: Host -> connect(host, MobileConnectDest.Files) } }
 
@@ -264,7 +264,7 @@ private fun MobileChrome(
 /** Хост, ждущий ввода пароля, вместе с пунктом назначения после подключения (терминал/файлы). */
 private data class PendingConnect(val host: Host, val dest: MobileConnectDest)
 
-/** Открыть сессию к [host] с [auth] и перейти к месту назначения ([dest]): терминал или таб Files. */
+/** Открыть сессию к [host] с [auth] и перейти к месту назначения ([dest]): терминал или push-экран Files. */
 private fun openMobileSession(
     sessions: SessionsController?,
     state: MobileDesignState,
@@ -291,7 +291,6 @@ private fun openMobileSession(
 private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
     when (state.tab) {
         MobileTab.Hosts -> MobileHostsScreen(state)
-        MobileTab.Files -> MobileFilesScreen()
         MobileTab.Snippets -> MobileSnippetsScreen(state)
         MobileTab.Vault -> MobileVaultScreen(state)
         MobileTab.More -> MobileMoreScreen(state, onLock)
@@ -307,6 +306,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
     when (route) {
         MobileRoute.HostDetail -> MobileHostDetailScreen(state)
         MobileRoute.Terminal -> MobileTerminalScreen(state)
+        MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
         MobileRoute.Ports -> MobilePortsScreen(state)
         MobileRoute.Known -> MobileKnownScreen(state)
         MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")

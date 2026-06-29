@@ -60,12 +60,12 @@ class MobileDesignStateTest {
     }
 
     @Test
-    fun five_tabs_in_template_order() {
-        // Нижняя навигация макета `Skerry Mobile.html`: ровно 5 табов в этом порядке.
+    fun four_tabs_in_template_order() {
+        // Нижняя навигация: 4 корневых таба в этом порядке. Files в баре нет — SFTP открывается
+        // push-экраном ([MobileRoute.Files]) с карточки хоста, как терминал.
         assertEquals(
             listOf(
                 MobileTab.Hosts,
-                MobileTab.Files,
                 MobileTab.Snippets,
                 MobileTab.Vault,
                 MobileTab.More,
@@ -107,8 +107,8 @@ class MobileDesignStateTest {
     fun select_tab_clears_any_open_route() {
         val s = MobileDesignState()
         s.push(MobileRoute.HostDetail)
-        s.select(MobileTab.Files)
-        assertEquals(MobileTab.Files, s.tab)
+        s.select(MobileTab.Vault)
+        assertEquals(MobileTab.Vault, s.tab)
         assertNull(s.route)
     }
 
@@ -129,7 +129,7 @@ class MobileDesignStateTest {
         assertNull(s.selectedHostId) // иначе 2B прочёл бы устаревший id
 
         s.openHost("host-7")
-        s.select(MobileTab.Files)
+        s.select(MobileTab.Snippets)
         assertNull(s.selectedHostId)
     }
 
@@ -142,14 +142,14 @@ class MobileDesignStateTest {
     }
 
     @Test
-    fun navigate_after_connect_files_opens_files_tab() {
-        // SFTP с экрана хоста ведёт на корневой таб Files (Remote-браузер активной сессии),
-        // закрывая push-экран детали хоста.
+    fun navigate_after_connect_files_pushes_files_route() {
+        // SFTP с экрана хоста ведёт на push-экран Files (Remote-браузер активной сессии) с back-стрелкой,
+        // как терминал; push поверх детали хоста заменяет её маршрут.
         val s = MobileDesignState()
         s.push(MobileRoute.HostDetail)
         navigateAfterConnect(s, MobileConnectDest.Files)
-        assertEquals(MobileTab.Files, s.tab)
-        assertNull(s.route)
+        assertEquals(MobileRoute.Files, s.route)
+        assertFalse(s.showTabs) // push-экран полноэкранный, без таб-бара
     }
 
     @Test

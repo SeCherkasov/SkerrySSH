@@ -66,7 +66,7 @@ private val TransferTrack = Color(0x12FFFFFF)
  * в контекстное меню (long-press).
  */
 @Composable
-fun MobileFilesScreen() {
+fun MobileFilesScreen(onBack: (() -> Unit)? = null) {
     val mono = LocalFonts.current.mono
     val sessions = LocalSessions.current
     val active = sessions?.active
@@ -77,11 +77,11 @@ fun MobileFilesScreen() {
         MobileFilesMode.Preview -> MockMobileFilesView(mono)
         // active?.let вместо !! : sessions.active — производный геттер над двумя snapshot-полями,
         // и при гонке закрытия сессии мог бы оказаться null даже при connected — раннее «ничего».
-        MobileFilesMode.Live -> active?.let { LiveMobileFilesView(it.controller, it.subtitle, mono) }
+        MobileFilesMode.Live -> active?.let { LiveMobileFilesView(it.controller, it.subtitle, mono, onBack) }
         // «Connecting…» с подписью хоста: после тапа SFTP/Connect сессия ещё в хендшейке — не мигаем
         // «No active session». active?.let на случай гонки закрытия (как в Live).
-        MobileFilesMode.Connecting -> active?.let { ConnectingMobileFilesView(it.subtitle) }
-        MobileFilesMode.NoSession -> NoSessionMobileFilesView(mono)
+        MobileFilesMode.Connecting -> active?.let { ConnectingMobileFilesView(it.subtitle, onBack) }
+        MobileFilesMode.NoSession -> NoSessionMobileFilesView(mono, onBack)
     }
 }
 
@@ -93,7 +93,7 @@ fun MobileFilesScreen() {
  * (каталог хоста); Local-панель координатора используется лишь как приёмник «Download to device».
  */
 @Composable
-private fun LiveMobileFilesView(controller: ConnectionController, subtitle: String, mono: FontFamily) {
+private fun LiveMobileFilesView(controller: ConnectionController, subtitle: String, mono: FontFamily, onBack: (() -> Unit)? = null) {
     var coord by remember(controller) { mutableStateOf<TransferCoordinator?>(null) }
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
@@ -115,12 +115,15 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     val c = coord
     Box(Modifier.fillMaxSize().background(D.bg)) {
         Column(Modifier.fillMaxSize()) {
-            MobileFilesTitle()
+            MobileFilesTitle(onBack)
             when {
-                // Переходные плашки центрируем (как Connecting/Loading), чтобы экран не «прыгал»
-                // вертикально между состояниями подключение → открытие SFTP → загрузка → список.
+                // Один нейтральный центрированный статус на всю фазу ожидания: хендшейк сессии →
+                // открытие SFTP-канала → первый листинг каталога. Текст и позиция не меняются (как у
+                // терминала — «какая разница terminal это или sftp»), поэтому экран не мигает и не
+                // «прыгает» вертикально. Хлебную крошку + список показываем только когда листинг готов.
                 openError != null -> MobileFilesNoticeBox("error", "SFTP unavailable", openError, D.sunset)
-                c == null -> MobileFilesNoticeBox("sync", "Opening SFTP…", subtitle, D.cyanBright)
+                c == null || c.remote.state is FilePaneState.Loading ->
+                    MobileFilesNoticeBox("sync", "Connecting…", subtitle, D.cyanBright)
                 else -> {
                     val pane = c.remote
                     // Видимое действие строки-файла (ios_share): скачать НАРУЖУ из песочницы через
@@ -148,7 +151,7 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                         modifier = Modifier.weight(1f),
                     )
                     MobileTransferCard(c.transfer, mono, onDismiss = c::clearTransfer)
-                    Spacer(Modifier.height(96.dp)) // место под таб-бар (FAB поверх него)
+                    Spacer(Modifier.height(88.dp)) // место под плавающую FAB (push-экран без таб-бара)
                 }
             }
         }
@@ -164,9 +167,9 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
         }
         // Единый «+»-FAB: раскрывает действия над Remote-панелью — «Создать директорию» и «Загрузить
         // файл» (uploadSource целит в remote.path). Действия всплывают НАД кнопкой стопкой с подписями.
-        if (c != null && openError == null) {
+        if (c != null && openError == null && c.remote.state !is FilePaneState.Loading) {
             Column(
-                Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
+                Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 24.dp),
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -397,10 +400,26 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
 
 // Общий chrome.
 
-/** Заголовок «Files» (28sp, как в макете). Действия (создать каталог/загрузить) — в общем «+»-FAB. */
+/**
+ * Заголовок «Files» (28sp, как в макете). Действия (создать каталог/загрузить) — в общем «+»-FAB.
+ * [onBack] (push-режим SFTP с карточки хоста) добавляет слева back-стрелку, как у терминала; в превью
+ * (`null`) её нет.
+ */
 @Composable
-private fun MobileFilesTitle() {
-    Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
+private fun MobileFilesTitle(onBack: (() -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = if (onBack != null) 14.dp else 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (onBack != null) {
+            Sym(
+                "chevron_left",
+                size = 27.sp,
+                color = D.cyanBright,
+                modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onBack),
+            )
+        }
         Txt("Files", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
     }
 }
@@ -477,18 +496,18 @@ private fun MobileFilesNoticeContent(icon: String, title: String, subtitle: Stri
 
 /** Менеджер сессий есть, но активная не подключена: заголовок + уведомление. */
 @Composable
-private fun NoSessionMobileFilesView(mono: FontFamily) {
+private fun NoSessionMobileFilesView(mono: FontFamily, onBack: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        MobileFilesTitle()
+        MobileFilesTitle(onBack)
         MobileFilesNoticeBox("cloud_off", "No active session", "Connect a host to browse files", D.faint)
     }
 }
 
 /** Активная сессия ещё подключается (тап SFTP/Connect): заголовок + «Connecting…» с подписью хоста. */
 @Composable
-private fun ConnectingMobileFilesView(subtitle: String) {
+private fun ConnectingMobileFilesView(subtitle: String, onBack: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        MobileFilesTitle()
+        MobileFilesTitle(onBack)
         MobileFilesNoticeBox("sync", "Connecting…", subtitle, D.cyanBright)
     }
 }

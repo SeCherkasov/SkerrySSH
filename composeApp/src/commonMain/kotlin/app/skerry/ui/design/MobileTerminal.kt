@@ -61,12 +61,12 @@ enum class MobileConnectDest { Terminal, Files }
 
 /**
  * Навигация после того, как сессия хоста открыта или возобновлена. Connect ведёт на push-экран
- * терминала, SFTP — на корневой таб Files (Remote-браузер активной сессии, закрывая деталь хоста).
+ * терминала, SFTP — на push-экран Files (Remote-браузер активной сессии) с back-стрелкой, как терминал.
  * Вынесено из вью, чтобы единый путь подключения (включая лист запроса пароля) знал пункт назначения.
  */
 fun navigateAfterConnect(state: MobileDesignState, dest: MobileConnectDest): Unit = when (dest) {
     MobileConnectDest.Terminal -> state.push(MobileRoute.Terminal)
-    MobileConnectDest.Files -> state.select(MobileTab.Files)
+    MobileConnectDest.Files -> state.push(MobileRoute.Files)
 }
 
 /**

@@ -10,12 +10,13 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
 
 /**
- * Нижняя навигация — ровно 5 корневых табов ([showTabs]=true). [icon] — лигатура Material Symbols
- * (см. [Sym]), согласована с desktop-rail ([RAIL]) там, где раздел совпадает (Files/Snippets/Vault).
+ * Нижняя навигация — ровно 4 корневых таба ([showTabs]=true). [icon] — лигатура Material Symbols
+ * (см. [Sym]), согласована с desktop-rail ([RAIL]) там, где раздел совпадает (Snippets/Vault). Files
+ * в баре нет: SFTP открывается push-экраном ([MobileRoute.Files]) с карточки хоста (кнопка SFTP), как
+ * терминал — отдельный корневой таб дублировал бы его.
  */
 enum class MobileTab(val icon: String, val label: String) {
     Hosts("dns", "Hosts"),
-    Files("folder_open", "Files"),
     Snippets("code_blocks", "Snippets"),
     Vault("vpn_key", "Vault"),
     More("more_horiz", "More"),
@@ -23,9 +24,9 @@ enum class MobileTab(val icon: String, val label: String) {
 
 /**
  * Полноэкранные push-экраны поверх таб-навигации (таб-бар скрыт): терминал и деталь хоста
- * открываются из Hosts, а Ports/Known/Team — из таба More.
+ * открываются из Hosts, SFTP (Files) — кнопкой SFTP на карточке хоста, а Ports/Known/Team — из таба More.
  */
-enum class MobileRoute { Terminal, HostDetail, Ports, Known, Team, Appearance, Sync }
+enum class MobileRoute { Terminal, Files, HostDetail, Ports, Known, Team, Appearance, Sync }
 
 /**
  * Состояние мобильного макета — навигация (текущий таб + открытый push-экран) и оверлей листа
