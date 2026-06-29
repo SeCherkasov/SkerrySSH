@@ -25,6 +25,7 @@ import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.shared.snippet.VaultSnippetStore
+import app.skerry.shared.sync.FileSyncStateStore
 import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.tunnel.VaultTunnelStore
 import app.skerry.ui.sync.FileSyncConfigStore
@@ -257,6 +258,8 @@ fun main() {
             crypto = IonspinVaultCrypto(),
             vault = vault,
             configStore = FileSyncConfigStore(dir.resolve("sync.json")),
+            // Персистентный курсор дельта-синка: переживает перезапуск, иначе каждый старт — full re-pull since 0.
+            syncState = FileSyncStateStore(dir.resolve("sync-cursor.json")),
             deviceIdProvider = { deviceId(dir) },
             deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
             // Синк подтянул записи прямо в vault → обновить менеджеры, иначе данные не видны до перезахода.

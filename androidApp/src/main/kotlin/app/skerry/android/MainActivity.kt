@@ -13,6 +13,7 @@ import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.snippet.VaultSnippetStore
+import app.skerry.shared.sync.FileSyncStateStore
 import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.tunnel.VaultTunnelStore
 import app.skerry.shared.vault.AndroidBiometricKeyStore
@@ -245,12 +246,14 @@ class MainActivity : FragmentActivity() {
         // Self-hosted sync (Phase 2): координатор связывает сетевой клиент (Ktor+SRP), крипту и vault.
         // Привязка к серверу персистится в sync.json (НЕсекретное: URL/accountId/deviceId); токены и
         // пароль не храним (переавторизация по мастер-паролю). deviceId — стабильный (как у записей
-        // vault). Курсор синка пока в памяти (полный re-pull при перезапуске, LWW идемпотентен).
+        // vault). Курсор синка персистится в sync-cursor.json (инкрементальный pull после перезапуска).
         val sync = SyncCoordinator(
             clientFactory = { url -> KtorSyncClient(url) },
             crypto = crypto,
             vault = vault,
             configStore = AndroidSyncConfigStore(File(dir, "sync.json")),
+            // Персистентный курсор дельта-синка: переживает перезапуск, иначе каждый старт — full re-pull since 0.
+            syncState = FileSyncStateStore(File(dir, "sync-cursor.json").toPath()),
             deviceIdProvider = { deviceId(dir) },
             deviceName = android.os.Build.MODEL?.takeIf { it.isNotBlank() } ?: "Skerry Android",
             // При входе принят ключ аккаунта (dataKey vault сменился) → биометрия обёрнута под старым

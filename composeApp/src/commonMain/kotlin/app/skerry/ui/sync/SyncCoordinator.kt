@@ -119,6 +119,11 @@ class SyncCoordinator(
     private var client: SyncClient? = null
     private var session: SyncSession? = null
 
+    // Подписка на серверные уведомления об изменениях (WS `/sync`): пока живёт — каждое чужое
+    // изменение прилетает push-сигналом и тянет дельту, без ручного «Sync». Один на сессию; новое
+    // подключение и disconnect его отменяют. null = live-pull не активен (синк только вручную).
+    private var watchJob: kotlinx.coroutines.Job? = null
+
     // Собственный scope: сетевые операции НЕ должны зависеть от жизненного цикла composable.
     // На мобильном форма перерисовывается по [status]: как только connect() ставит Busy, форма
     // покидает композицию — и если бы запуск шёл от её rememberCoroutineScope, операция отменилась бы
@@ -199,14 +204,15 @@ class SyncCoordinator(
             session = newSession
             // Полный re-pull (сброс курсора в 0) делаем ТОЛЬКО когда сменился dataKey, т.е. вход
             // принял ОТЛИЧНЫЙ ключ аккаунта (adoptedKey). Это ровно случай, ради которого фикс жил:
-            // после reset/recreate vault в ТОМ ЖЕ процессе локальный vault пуст и/или под новым ключом,
-            // а in-memory курсор ([SyncStateStore]) остался от прошлой сессии — без сброса `pull since
-            // tip` проскочил бы серверные записи (баг «после Connected хосты пусты», pulled==0 ⇒ нет
+            // после reset/recreate vault локальный vault пуст и/или под новым ключом, а сохранённый
+            // курсор ([SyncStateStore]) остался от прошлой сессии — без сброса `pull since tip`
+            // проскочил бы серверные записи (баг «после Connected хосты пусты», pulled==0 ⇒ нет
             // onSynced). Recreate всегда даёт новый случайный dataKey, поэтому adoptedKey его ловит.
             // Обычный реконнект своим же ключом (adoptedKey=false) идёт инкрементально: иначе КАЖДЫЙ
             // connect форсил бы полный re-pull всей истории — лишняя нагрузка и усилитель ретрансляции
-            // старых тромбстоунов на все устройства. Свежий процесс и так стартует с курсора 0 (full
-            // pull), а цикл disconnect→reconnect покрыт сбросом в [disconnect].
+            // старых тромбстоунов на все устройства. Курсор теперь персистентный
+            // ([FileSyncStateStore]), так что и перезапуск процесса продолжает инкрементально; путь
+            // reset покрыт двойной защитой — сбросом курсора в [disconnect] (onVaultReset) и adoptedKey.
             if (adoptedKey) syncState.setCursor(accountId, 0)
             // keep-connected: запечатываем refresh-токен под АКТУАЛЬНЫМ dataKey vault (после возможного
             // принятия ключа аккаунта он мог смениться) — иначе restoreSession не сможет его открыть.
@@ -215,6 +221,7 @@ class SyncCoordinator(
             } else null
             configStore.save(SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed))
             runSync()
+            startWatch()
         } catch (e: CancellationException) {
             throw e // не глушим отмену — иначе порвём structured concurrency
         } catch (e: SyncException) {
@@ -292,6 +299,29 @@ class SyncCoordinator(
         }
     }
 
+    /**
+     * Подписаться на серверные уведомления об изменениях (WS `/sync`) и тянуть дельту на каждый сигнал —
+     * realtime live-pull вместо ручного «Sync». Отменяет прошлую подписку (реконнект). Best-effort:
+     * обрыв/ошибка WS просто завершает подписку (ручной [syncNow] и переподключение остаются рабочими) —
+     * статус НЕ роняем в Failed, иначе временная просадка связи гасила бы рабочий Online. [runSync] на
+     * каждый сигнал выполняется последовательно (collect не параллелит) и сам не мигает Busy.
+     */
+    private fun startWatch() {
+        val c = client ?: return
+        val s = session ?: return
+        watchJob?.cancel()
+        watchJob = scope.launch {
+            try {
+                c.changes(s).collect { runSync() }
+            } catch (e: CancellationException) {
+                throw e // отмену (disconnect/реконнект) не глушим
+            } catch (e: Exception) {
+                // WS оборвался (сеть/сервер/протух токен) — live-pull прекращаем тихо. Видимый статус
+                // остаётся прежним (Online после последнего успешного синка); ручной Sync доступен.
+            }
+        }
+    }
+
     suspend fun listDevices(): List<RemoteDevice> {
         val c = client ?: return emptyList()
         val s = session ?: return emptyList()
@@ -308,6 +338,12 @@ class SyncCoordinator(
     /** Отключить sync на этом устройстве: забыть сессию и сохранённую привязку. */
     fun disconnect() {
         scope.launch {
+            // Сначала гасим WS-подписку и ДОЖИДАЕМСЯ её остановки: cancel() лишь шлёт сигнал, а её
+            // collect мог быть в середине runSync() — без join его уже-отработавший runSync записал бы
+            // Online ПОСЛЕ выставленного ниже Disabled (статус залип бы на Online при client==null).
+            watchJob?.cancel()
+            watchJob?.join()
+            watchJob = null
             // runCatching: сбой close() (I/O при teardown) не должен оставить привязку/курсор на месте —
             // иначе disconnect молча провалился бы, а статус застрял.
             runCatching { client?.close() }
@@ -347,6 +383,7 @@ class SyncCoordinator(
                 // refresh ротирует токен — пересохраняем запечатанным под dataKey.
                 configStore.save(cfg.copy(sealedRefreshToken = sealToken(dataKey, newSession.refreshToken)))
                 runSync()
+                startWatch()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
