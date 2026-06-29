@@ -64,9 +64,8 @@ SKERRY_JWT_SECRET=dev-secret SKERRY_ADMIN_TOKEN=admin ./gradlew :server:run
 событий). Zero-knowledge сохраняется: консоль видит только метаданные — событие, устройство, метку
 платформы, курсоры и размер-агрегат, но не содержимое записей, мастер-пароль или `dataKey`.
 
-> Шрифты и иконки (Space Grotesk, JetBrains Mono, Material Symbols) грузятся с Google Fonts CDN.
-> Без интернета консоль работает, но иконки выродятся в текст. Для полностью офлайн-инсталляции
-> шрифты можно зашить локально (техдолг).
+> Шрифты (Space Grotesk, JetBrains Mono) зашиты в сервер (`resources/admin/fonts/*.woff2`), иконки —
+> инлайн-SVG. Консоль полностью работает офлайн, без обращений к внешним CDN.
 
 > ⚠️ Метаданные содержат `accountId` (это e-mail) и удерживаются в аудит-логе (последние 2000
 > событий). Для single-user self-host оператор и есть субъект данных — приемлемо. Admin-токен
@@ -75,9 +74,51 @@ SKERRY_JWT_SECRET=dev-secret SKERRY_ADMIN_TOKEN=admin ./gradlew :server:run
 
 ## Безопасность в проде
 
-- Поставьте перед сервером TLS-терминатор (reverse proxy) — протокол подразумевает HTTPS.
-- Задайте устойчивый `SKERRY_JWT_SECRET` (иначе токены инвалидируются при рестарте).
+- Задайте устойчивый `SKERRY_JWT_SECRET` (иначе токены инвалидируются при рестарте) и непустой `SKERRY_ADMIN_TOKEN`.
 - Бэкап = файл SQLite (`/data`) или дамп PostgreSQL; данные зашифрованы, но это ваша точка восстановления.
+- Сам сервер слушает cleartext HTTP — TLS терминируется обратным прокси (ниже). Полезная нагрузка
+  и так E2E-зашифрована (zero-knowledge), SRP безопасен поверх cleartext, но **админ-токен и метаданные
+  (включая `accountId` = e-mail) идут открыто** — без TLS они видны в сети. Для публичного хоста TLS обязателен.
+
+### TLS-терминатор
+
+Клиент указывает `https://…` — WebSocket `/sync` автоматически переключается на `wss://` (тот же хост).
+
+**Caddy** (автоматический Let's Encrypt, проще всего):
+
+```caddy
+sync.example.com {
+    reverse_proxy localhost:8080
+}
+```
+
+**nginx** (сертификат свой/Certbot; важно пробросить апгрейд WebSocket для `/sync`):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name sync.example.com;
+    ssl_certificate     /etc/letsencrypt/live/sync.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sync.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # WebSocket /sync (live-pull): без этих двух заголовков realtime-уведомления не работают.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 1h; # /sync — долгоживущее соединение, не рвать по таймауту
+    }
+}
+```
+
+Привяжите сервер к loopback (`SKERRY_HOST=127.0.0.1`), чтобы 8080 не торчал в сеть в обход прокси.
+
+> **Self-host в локальной сети без TLS** допустим осознанно: трафик E2E-зашифрован, метаданные
+> остаются в доверенной LAN. Android-клиент разрешает cleartext (`network_security_config.xml`).
+> Как только хост доступен извне — ставьте TLS.
 
 ## Тесты
 
