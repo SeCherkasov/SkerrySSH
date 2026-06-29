@@ -299,6 +299,66 @@ class VaultGateControllerTest {
         assertEquals(VaultGateState.Unlocked, controller.state)
     }
 
+    // --- Sync-онбординг: предлагается ДО биометрии, чтобы биометрия обернула финальный dataKey ---
+
+    @Test
+    fun `create offers sync onboarding first when the platform provides a sync form`() {
+        // Биометрия доступна, но шаг sync идёт раньше: иначе принятие ключа аккаунта обнулило бы
+        // только что включённую биометрию.
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.Available),
+            minPasswordLength = 8,
+            offersSyncOnboarding = true,
+        )
+
+        controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
+
+        assertEquals(VaultGateState.OfferSync, controller.state)
+    }
+
+    @Test
+    fun `completeSyncOnboarding advances to the biometric offer when the device can enable it`() {
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.Available),
+            minPasswordLength = 8,
+            offersSyncOnboarding = true,
+        )
+        controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
+
+        controller.completeSyncOnboarding()
+
+        assertEquals(VaultGateState.OfferBiometric, controller.state)
+    }
+
+    @Test
+    fun `completeSyncOnboarding unlocks directly when biometrics are unavailable`() {
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.NotEnrolled),
+            minPasswordLength = 8,
+            offersSyncOnboarding = true,
+        )
+        controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
+        assertEquals(VaultGateState.OfferSync, controller.state)
+
+        controller.completeSyncOnboarding()
+
+        assertEquals(VaultGateState.Unlocked, controller.state)
+    }
+
+    @Test
+    fun `completeSyncOnboarding is a no-op outside the OfferSync step`() {
+        val controller = VaultGateController(FakeVault(exists = true, unlockResult = UnlockResult.Success))
+        controller.unlock("correct horse".toCharArray())
+        assertEquals(VaultGateState.Unlocked, controller.state)
+
+        controller.completeSyncOnboarding()
+
+        assertEquals(VaultGateState.Unlocked, controller.state)
+    }
+
     @Test
     fun `dismissBiometricOffer moves from the offer to Unlocked`() {
         val controller = VaultGateController(

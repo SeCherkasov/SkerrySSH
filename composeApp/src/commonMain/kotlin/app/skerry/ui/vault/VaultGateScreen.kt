@@ -109,6 +109,11 @@ fun VaultGate(
                 UnlockVaultForm(error, canUseBiometric, onUnlock, onBiometric, onForgotPassword)
             }
         },
+    // Шаг подключения sync в онбординге ([VaultGateState.OfferSync]) — показывается сразу после
+    // создания vault, ДО предложения биометрии. Форма сама дёргает SyncCoordinator (подключить/
+    // пропустить) и вызывает onDone, когда шаг завершён. null (по умолчанию) — шаг не показывается
+    // (на устройстве/в превью без sync); тогда после создания сразу биометрия/приложение.
+    offerSyncForm: (@Composable (onDone: () -> Unit) -> Unit)? = null,
     // Экран повреждённого файла: единственное действие — уйти на подтверждение сброса ([onReset]).
     corruptedForm: @Composable (onReset: () -> Unit) -> Unit =
         { onResetClick ->
@@ -138,8 +143,11 @@ fun VaultGate(
     // потерялись бы состояние/ввод). rememberUpdatedState даёт контроллеру всегда свежий колбэк, не
     // делая его ключом: иначе inline-лямбда вызывающего «застыла» бы на первой композиции.
     val currentOnReset by rememberUpdatedState(onReset)
+    // Наличие формы sync не меняется в течение жизни экрана — безопасно зафиксировать на старте
+    // контроллера (он решает, показывать ли шаг OfferSync).
+    val offersSync = offerSyncForm != null
     val controller = remember(vault, biometrics) {
-        VaultGateController(vault, biometrics, onReset = { currentOnReset(it) })
+        VaultGateController(vault, biometrics, onReset = { currentOnReset(it) }, offersSyncOnboarding = offersSync)
     }
     val scope = rememberCoroutineScope()
 
@@ -185,6 +193,12 @@ fun VaultGate(
                     { scope.launch { controller.unlockWithBiometric(UNLOCK_PROMPT) } },
                     { controller.beginReset() },
                 )
+
+            // Шаг sync в онбординге: форма сама подключает/пропускает sync и вызывает onDone, после
+            // чего dataKey финальный и можно безопасно предлагать биометрию. offerSyncForm здесь
+            // гарантированно не null — иначе контроллер не пришёл бы в OfferSync (offersSyncOnboarding).
+            VaultGateState.OfferSync ->
+                offerSyncForm?.invoke { controller.completeSyncOnboarding() }
 
             VaultGateState.Corrupted -> corruptedForm { controller.beginReset() }
 
