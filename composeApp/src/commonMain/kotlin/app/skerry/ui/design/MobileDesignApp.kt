@@ -144,6 +144,9 @@ fun MobileDesignApp(
                     },
                     corruptedForm = { onReset -> MobileCorruptedScreen(onReset) },
                     resetForm = { onConfirm, onCancel -> MobileResetScreen(onConfirm, onCancel) },
+                    // Шаг sync в онбординге (ДО биометрии) — только если sync проведён в граф. Подключение
+                    // тут принимает dataKey аккаунта, так что биометрия обернёт уже финальный ключ.
+                    offerSyncForm = deps.sync?.let { s -> { onDone -> SyncOnboardingScreen(s, onDone) } },
                     offerBiometricForm = { inFlight, onEnable, onSkip -> MobileBiometricOfferScreen(inFlight, onEnable, onSkip) },
                 ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked) }
             } else {

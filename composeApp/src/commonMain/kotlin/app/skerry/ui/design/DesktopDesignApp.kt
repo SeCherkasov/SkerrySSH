@@ -215,6 +215,9 @@ fun DesktopDesignApp(
                 },
                 corruptedForm = { onReset -> DesktopCorruptedScreen(onReset) },
                 resetForm = { onConfirm, onCancel -> DesktopResetScreen(onConfirm, onCancel) },
+                // Шаг sync в онбординге (паритет с mobile): подключить sync и подтянуть данные сразу
+                // после создания vault. Только если sync проведён в граф.
+                offerSyncForm = sync?.let { s -> { onDone -> SyncOnboardingScreen(s, onDone) } },
             ) { onLock -> DesktopChrome(state, onLock, liveSessions, credentials, onVaultUnlocked, customGroupsProvider) }
         } else {
             DesktopChrome(state, onLock = null, sessions = liveSessions, credentials = credentials, onVaultUnlocked = onVaultUnlocked, customGroupsProvider = customGroupsProvider)

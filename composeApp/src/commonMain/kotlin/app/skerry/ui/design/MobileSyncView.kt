@@ -13,17 +13,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
+import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.ui.vault.VaultGateController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,8 +81,218 @@ fun MobileSyncScreen(state: MobileDesignState) {
     }
 }
 
+/**
+ * Шаг онбординга сразу после создания vault, ДО enroll биометрии
+ * (см. [app.skerry.ui.vault.VaultGateState.OfferSync]). Сначала спрашиваем, КАК хранить данные:
+ * локально (только это устройство) или через self-hosted sync — и лишь во втором случае показываем
+ * форму параметров сервера. Выбор «локально» сразу завершает шаг ([onDone]); подключение sync может
+ * принять dataKey аккаунта, поэтому оборачивать биометрию надо уже под финальным ключом — успех
+ * ([SyncStatus.Online]) тоже ведёт в [onDone], данные с сервера подтягиваются тут же. Общий экран для
+ * обеих платформ (template-fidelity для sync отменён — держим только цветовую схему).
+ */
+@Composable
+fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
+    // collectAsState (не ...WithLifecycle): этот экран — commonMain (desktop тоже), а lifecycle-aware
+    // сбор есть только на Android. Сбор в STOPPED тут безвреден: auto-lock на ON_STOP запирает vault →
+    // controller.state уходит в NeedsUnlock → key(state) рушит этот subtree и отменяет сбор.
+    val status by sync.status.collectAsState()
+
+    // Успешное подключение завершает онбординг-шаг. Один выстрел через Flow.first (а НЕ
+    // LaunchedEffect(status)): Online — data class с меняющимися lastPushed/lastPulled, и повторный
+    // runSync мог бы дёрнуть onDone дважды. Менеджеры списков уже перечитаны координатором (onSynced),
+    // так что в приложение пользователь попадёт с подтянутыми данными.
+    LaunchedEffect(Unit) {
+        sync.status.first { it is SyncStatus.Online }
+        onDone()
+    }
+
+    // Если у привязки уже есть сохранённый сервер (Configured / после рестарта — нужен лишь пароль),
+    // выбор «локально/sync» уже не имеет смысла: пропускаем развилку и сразу открываем форму.
+    var showSyncForm by remember { mutableStateOf(sync.savedConfig != null) }
+
+    // fillMaxSize-скролл-контейнер по фону; контент центрируем по вертикали и ограничиваем по ширине.
+    // Center (а не TopCenter): когда форма короче экрана — она по центру (desktop с большим окном и
+    // телефон), длиннее (клавиатура) — скроллится. verticalScroll меряет колонку по её высоте.
+    Box(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
+        Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().padding(horizontal = 22.dp, vertical = 32.dp)) {
+            if (!showSyncForm) {
+                SyncStorageChoice(
+                    onLocal = onDone,
+                    onSync = { showSyncForm = true },
+                )
+            } else {
+                // Back ведёт обратно к развилке — это и есть путь «передумал»: на развилке выбор
+                // «Local encrypted storage» завершает онбординг, поэтому отдельная кнопка Skip не нужна.
+                Row(
+                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { showSyncForm = false }
+                        .padding(vertical = 4.dp, horizontal = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Sym("chevron_left", size = 20.sp, color = D.dim)
+                    Txt("Back", color = D.dim, size = 13.sp)
+                }
+                Spacer(Modifier.height(10.dp))
+
+                Txt("Set up sync", color = D.text, size = 22.sp, weight = FontWeight.Bold)
+                Txt(
+                    "Connect this device to your sync server. End-to-end encrypted — Skerry never sees your " +
+                        "data in plaintext.",
+                    color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                )
+
+                when (val s = status) {
+                    SyncStatus.Busy -> {
+                        Spacer(Modifier.height(8.dp))
+                        MobileSyncStatusCard("sync", D.cyanBright, "Connecting…", "Talking to your sync server.")
+                    }
+                    is SyncStatus.Failed -> SyncSetupBody(sync, errorMessage = s.message)
+                    else -> SyncSetupBody(sync, errorMessage = null)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Развилка хранения в онбординге: две карточки-кнопки. «Local encrypted storage» завершает шаг
+ * ([onLocal]); «Self-hosted sync server» раскрывает форму параметров ([onSync]). Способ можно сменить
+ * позже в настройках — оба варианта обратимы, поэтому выбор здесь ни к чему не обязывает.
+ */
+@Composable
+private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit) {
+    Txt(
+        "Where should Skerry keep your vault?",
+        color = D.text, size = 22.sp, weight = FontWeight.Bold, lineHeight = 28.sp,
+    )
+    Txt(
+        "Your hosts and keys are always encrypted. Choose whether they stay only on this device or " +
+            "sync across your devices through a server you run.",
+        color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 22.dp),
+    )
+
+    SyncChoiceCard(
+        icon = "lock",
+        iconColor = D.moss,
+        title = "Local encrypted storage",
+        subtitle = "Everything stays on this device. No account, no server — the simplest setup.",
+        onClick = onLocal,
+    )
+    Spacer(Modifier.height(12.dp))
+    SyncChoiceCard(
+        icon = "cloud_sync",
+        iconColor = D.cyanBright,
+        title = "Self-hosted sync server",
+        subtitle = "End-to-end encrypted sync across your devices through a server you run.",
+        onClick = onSync,
+    )
+
+    Row(
+        Modifier.padding(top = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Sym("shield_lock", size = 14.sp, color = D.moss)
+        Txt("You can switch later in Settings.", color = D.faint, size = 11.5.sp)
+    }
+}
+
+/** Карточка выбора в развилке хранения: иконка в плашке, заголовок/подзаголовок, шеврон-аффорданс. */
+@Composable
+private fun SyncChoiceCard(
+    icon: String,
+    iconColor: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(D.surfaceDeep)
+            .border(1.dp, D.cyan14, RoundedCornerShape(13.dp)).clickable(onClick = onClick).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(42.dp).clip(RoundedCornerShape(11.dp)).background(iconColor.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Sym(icon, size = 22.sp, color = iconColor)
+        }
+        Column(Modifier.weight(1f)) {
+            Txt(title, color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+            Txt(subtitle, color = D.faint, size = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        Sym("chevron_right", size = 22.sp, color = D.dim)
+    }
+}
+
+/** Промпт включения биометрии при перерегистрации после смены ключа sync (англоязычный, под mobile). */
+private val REENROLL_BIOMETRIC_PROMPT = BiometricPrompt(
+    title = "Re-enable biometric unlock",
+    cancelLabel = "Cancel",
+    subtitle = "Confirm your biometrics to bind quick unlock to the new account key.",
+)
+
+/**
+ * Приглашение перерегистрировать отпечаток после того, как подключение к аккаунту приняло его ключ
+ * и сбросило включённую биометрию (см. [SyncCoordinator.biometricResetNeeded]). Видно только когда
+ * флаг поднят И на устройстве есть биометрия; «Re-enable» запускает системный промпт и оборачивает
+ * dataKey уже под НОВЫМ ключом, «Not now» просто гасит приглашение. Если биометрии на устройстве нет
+ * — перерегистрировать нечего, флаг гасим тихо.
+ */
+@Composable
+private fun BiometricReenrollCard(sync: SyncCoordinator) {
+    val needed by sync.biometricResetNeeded.collectAsState()
+    if (!needed) return
+    val vault = LocalVault.current
+    val biometrics = LocalVaultBiometrics.current
+    if (vault == null || biometrics == null) return
+    val controller = remember(vault, biometrics) { VaultGateController(vault, biometrics) }
+    if (!controller.canEnableBiometric()) {
+        LaunchedEffect(Unit) { sync.acknowledgeBiometricReset() }
+        return
+    }
+    val scope = rememberCoroutineScope()
+
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.surfaceDeep)
+            .border(1.dp, D.cyan.copy(alpha = 0.45f), RoundedCornerShape(11.dp)).padding(15.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Sym("fingerprint", size = 22.sp, color = D.cyanBright)
+            Column(Modifier.weight(1f)) {
+                Txt("Re-enable fingerprint", color = D.text, size = 14.sp, weight = FontWeight.Medium)
+                Txt(
+                    "Connecting to your account changed the vault key, so biometric unlock was turned off. " +
+                        "Set it up again to keep opening Skerry with your fingerprint.",
+                    color = D.faint, size = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PrimaryButton(
+                "Re-enable",
+                icon = "fingerprint",
+                enabled = !controller.biometricInFlight,
+                onClick = {
+                    if (controller.biometricInFlight) return@PrimaryButton
+                    // enable оборачивает dataKey под новым ключом; флаг гасим в любом исходе (включил
+                    // или отменил промпт) — повторно покажем лишь после следующего принятия ключа.
+                    scope.launch {
+                        controller.enableBiometric(REENROLL_BIOMETRIC_PROMPT)
+                        sync.acknowledgeBiometricReset()
+                    }
+                },
+            )
+            GhostButton("Not now", onClick = { sync.acknowledgeBiometricReset() }, fg = D.dim)
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+}
+
 @Composable
 private fun SyncBody(sync: SyncCoordinator) {
+    BiometricReenrollCard(sync)
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> {
             MobileSyncStatusCard("cloud_done", D.moss, "Connected · ${status.accountId}", "Pushed ${status.lastPushed} · pulled ${status.lastPulled} this session")
@@ -111,11 +328,11 @@ private fun SyncSetupBody(
     val canSubmit = form.canSubmit(password.length)
 
     SyncFieldLabel("SERVER URL")
-    MobileSyncField(serverUrl, "https://sync.example.com", KeyboardType.Uri) { serverUrl = it }
+    MobileSyncField(serverUrl, "https://sync.example.com", KeyboardType.Uri, icon = "dns") { serverUrl = it }
     SyncFieldLabel("ACCOUNT")
-    MobileSyncField(account, "you@example.com", KeyboardType.Text) { account = it }
+    MobileSyncField(account, "you@example.com", KeyboardType.Text, icon = "person") { account = it }
     SyncFieldLabel("MASTER PASSWORD")
-    MobileSyncField(password, "master password", KeyboardType.Password, masked = true) { password = it }
+    MobileSyncField(password, "master password", KeyboardType.Password, masked = true, icon = "key") { password = it }
 
     Row(
         Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
@@ -193,6 +410,7 @@ private fun MobileSyncField(
     placeholder: String,
     keyboardType: KeyboardType,
     masked: Boolean = false,
+    icon: String? = null,
     onChange: (String) -> Unit,
 ) {
     val ui = LocalFonts.current.ui
@@ -207,11 +425,16 @@ private fun MobileSyncField(
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
-            Box(
+            Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
-                inner()
+                if (icon != null) Sym(icon, size = 18.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
+                    inner()
+                }
             }
         },
     )

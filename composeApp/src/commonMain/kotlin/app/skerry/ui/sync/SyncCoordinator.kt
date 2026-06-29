@@ -90,8 +90,13 @@ class SyncCoordinator(
      * под старым ключом и теперь даёт неверный ключ при разблокировке отпечатком, поэтому платформа
      * сбрасывает биометрию (пользователь включит её заново уже с новым ключом). Тихий re-wrap
      * невозможен — он требует системного промпта отпечатка. На устройстве без биометрии — no-op.
+     *
+     * Возвращает `true`, если биометрия БЫЛА включена и её пришлось сбросить — тогда координатор
+     * поднимает [biometricResetNeeded], и UI просит перерегистрировать отпечаток (вне онбординга
+     * биометрия включается раньше подключения, и сброс иначе прошёл бы молча). В онбординге биометрии
+     * ещё нет — колбэк вернёт `false`, флаг не встанет.
      */
-    private val onDataKeyAdopted: () -> Unit = {},
+    private val onDataKeyAdopted: () -> Boolean = { false },
     /**
      * Вызывается после успешного синка, когда что-то подтянулось с сервера ([SyncOutcome.pulled] > 0).
      * Менеджеры списков (хосты/сниппеты/туннели/known-hosts) держат записи в памяти и не видят то, что
@@ -102,6 +107,15 @@ class SyncCoordinator(
 ) {
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Disabled)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
+
+    /**
+     * Поднят, когда подключение приняло ключ аккаунта и из-за этого сбросило ВКЛЮЧЁННУЮ биометрию
+     * ([onDataKeyAdopted] вернул true). UI показывает приглашение перерегистрировать отпечаток и
+     * гасит флаг через [acknowledgeBiometricReset]. Вне онбординга это единственный сигнал — иначе
+     * пользователь молча остался бы без быстрой разблокировки.
+     */
+    private val _biometricResetNeeded = MutableStateFlow(false)
+    val biometricResetNeeded: StateFlow<Boolean> = _biometricResetNeeded.asStateFlow()
 
     private var client: SyncClient? = null
     private var session: SyncSession? = null
@@ -136,6 +150,11 @@ class SyncCoordinator(
      * **принимает** ключ аккаунта (см. [doConnect]).
      */
     fun connect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean = false) {
+        // Busy ставим СИНХРОННО, ещё до launch: онбординг-форма гасит «Skip» по статусу Busy. Поставь
+        // мы Busy лишь первой строкой doConnect — остался бы dispatch-цикл, где статус ещё Disabled и
+        // Skip активен: проскочив на enroll биометрии, пользователь обернул бы её под ключом, который
+        // коннект затем заменит (гонка принятия ключа аккаунта; security-ревью, MEDIUM).
+        _status.value = SyncStatus.Busy
         // Копируем синхронно и затираем оригинал ДО launch: корутина стартует на Dispatchers.Default
         // не сразу, а вызывающий может затереть массив раньше — иначе deriveMasterKey получил бы
         // пустой пароль (TOCTOU). Копией владеет [doConnect] и затирает её в finally.
@@ -174,6 +193,12 @@ class SyncCoordinator(
 
             client = syncClient
             session = newSession
+            // Явное подключение ВСЕГДА делает полный re-pull: сбрасываем курсор перед синком. Курсор
+            // живёт в памяти процесса ([SyncStateStore]) и не привязан к идентичности vault — после
+            // reset/recreate vault (новый пустой vault, возможно новый dataKey) в ТОМ ЖЕ процессе он
+            // остался бы от прошлой сессии, и `pull since tip` проскочил бы все серверные записи: vault
+            // остался бы пустым, а pulled==0 не дёрнул бы onSynced (баг «после Connected хосты пусты»).
+            syncState.setCursor(accountId, 0)
             // keep-connected: запечатываем refresh-токен под АКТУАЛЬНЫМ dataKey vault (после возможного
             // принятия ключа аккаунта он мог смениться) — иначе restoreSession не сможет его открыть.
             val sealed = if (keepConnected) vault.exportDataKey()?.let { sealToken(it, newSession.refreshToken) } else null
@@ -210,10 +235,16 @@ class SyncCoordinator(
         }
         // Ключ сменился → биометрия обёрнута под старым ключом и стала бы давать неверный dataKey
         // при разблокировке отпечатком: просим платформу сбросить её (runCatching — сбой биометрии
-        // не должен валить подключение).
+        // не должен валить подключение). Если биометрия БЫЛА включена — поднимаем флаг, чтобы UI
+        // предложил перерегистрировать отпечаток уже под новым ключом.
         if (vault.adoptDataKey(accountDataKey, password)) {
-            runCatching { onDataKeyAdopted() }
+            if (runCatching { onDataKeyAdopted() }.getOrDefault(false)) _biometricResetNeeded.value = true
         }
+    }
+
+    /** Сбросить приглашение перерегистрировать отпечаток (пользователь перерегистрировал или отклонил). */
+    fun acknowledgeBiometricReset() {
+        _biometricResetNeeded.value = false
     }
 
     /** Прогнать один цикл синхронизации (pull/merge/push). No-op, если не подключены. */
@@ -257,6 +288,9 @@ class SyncCoordinator(
             client?.close()
             client = null
             session = null
+            // Курсор синка тоже забываем: следующее подключение (к этому или другому аккаунту в том же
+            // процессе) обязано сделать полный re-pull, а не продолжить с tip прошлой сессии.
+            configStore.load()?.let { syncState.setCursor(it.accountId, 0) }
             configStore.clear()
             _status.value = SyncStatus.Disabled
         }
