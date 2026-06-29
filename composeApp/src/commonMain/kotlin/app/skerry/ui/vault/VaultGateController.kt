@@ -41,6 +41,16 @@ enum class VaultGateState {
     Resetting,
 
     /**
+     * Vault только что создан и уже открыт — разовое предложение подключить self-hosted sync прямо
+     * в онбординге. Делается ДО [OfferBiometric] намеренно: вход в существующий аккаунт принимает
+     * его dataKey ([Vault.adoptDataKey]), и если бы биометрия уже была обёрнута под локальным ключом,
+     * принятие ключа аккаунта её обнулило бы. Подключив (или пропустив) sync здесь, к моменту enroll
+     * биометрии dataKey уже финальный. Показывается лишь когда платформа дала форму sync
+     * ([offersSyncOnboarding]); любой исход (подключил/пропустил) ведёт в [OfferBiometric]/[Unlocked].
+     */
+    OfferSync,
+
+    /**
      * Vault только что создан и уже открыт, но прежде чем пустить в приложение — разовое предложение
      * включить разблокировку биометрией. Показывается лишь когда биометрия доступна на устройстве;
      * любой исход (включил/отказался) ведёт в [Unlocked].
@@ -106,6 +116,12 @@ class VaultGateController(
      * платформенная проводка (desktop `main`). По умолчанию no-op (мок/превью).
      */
     private val onReset: (ResetScope) -> Unit = {},
+    /**
+     * Предлагать ли подключение sync шагом онбординга ([VaultGateState.OfferSync]) сразу после
+     * создания vault. Платформа выставляет `true`, когда у неё есть готовая форма sync (есть
+     * `SyncCoordinator`). Контроллер про sync ничего не знает — лишь решает, показать ли шаг.
+     */
+    private val offersSyncOnboarding: Boolean = false,
 ) {
     var state: VaultGateState by mutableStateOf(
         if (vault.exists()) VaultGateState.NeedsUnlock else VaultGateState.NeedsCreate,
@@ -147,9 +163,14 @@ class VaultGateController(
                 !password.contentEquals(confirm) -> error = VaultGateError.PasswordMismatch
                 else -> {
                     vault.create(password)
-                    // Новый vault открыт. Если устройство умеет биометрию — разовое предложение её
-                    // включить (экран [VaultGateState.OfferBiometric]); иначе сразу в приложение.
-                    state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
+                    // Новый vault открыт. Сначала (если платформа дала форму) предлагаем подключить
+                    // sync — он может принять dataKey аккаунта, и биометрию надо оборачивать уже под
+                    // финальным ключом. Иначе сразу к биометрии / в приложение.
+                    state = when {
+                        offersSyncOnboarding -> VaultGateState.OfferSync
+                        canEnableBiometric() -> VaultGateState.OfferBiometric
+                        else -> VaultGateState.Unlocked
+                    }
                 }
             }
         } finally {
@@ -280,6 +301,16 @@ class VaultGateController(
         val bio = biometrics ?: return
         bio.disable()
         biometricEnabled = bio.isEnabled()
+    }
+
+    /**
+     * Завершить шаг подключения sync ([VaultGateState.OfferSync]) — вызывается формой sync и когда
+     * пользователь подключился, и когда пропустил. dataKey теперь финальный, поэтому переходим к
+     * предложению биометрии (если устройство умеет) либо сразу пускаем в приложение.
+     */
+    fun completeSyncOnboarding() {
+        if (state != VaultGateState.OfferSync) return
+        state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
     }
 
     /**
