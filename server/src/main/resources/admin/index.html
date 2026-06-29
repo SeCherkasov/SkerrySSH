@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <!--
   Skerry Sync — админ-консоль (self-hosted). Статическая страница, отдаётся самим Ktor.
-  Структура 1:1 с docs/skerry-sync-prototype.html (дашборд: overview · devices ·
-  privacy boundary · recent activity), но на актуальной теме «night sea» (Space Grotesk,
-  не Inter из старого шаблона) и с новым логотипом «сигнальная S» (docs/new/Skerry Logo).
-  Zero-knowledge: показывает только метаданные — счётчики, устройства, аудит событий.
-  К содержимому записей, мастер-паролю и dataKey доступа нет по определению.
+  Всё на странице приходит из живых /admin-эндпоинтов; нарисованных данных нет. Zero-knowledge:
+  консоль работает только с метаданными синхронизации и размерами шифроблобов — к содержимому
+  записей, мастер-паролю и dataKey доступа нет по определению.
+
+  Функции: обзор инстанса · аккаунты (инспект записей / purge tombstone'ов / удаление) ·
+  устройства (отзыв) · реальные envelope'ы записей (включая hex-превью настоящего шифротекста,
+  что наглядно доказывает zero-knowledge) · аудит-лог метаданных.
 -->
 <html lang="en">
 <head>
@@ -21,10 +23,8 @@
       --night-sea: #07141E;
       --night-sea-soft: #0B1A26;
       --deep: #0E2230;
-      --deep-2: #0A1A26;
       --cyan: #2BBDEE;
       --cyan-soft: rgba(43,189,238,0.10);
-      --cyan-bright: #5FD1F4;
       --amber: #F2A65A;
       --moss: #5DCE9E;
       --storm: #E94B4B;
@@ -47,7 +47,7 @@
     }
     .mono { font-family: "JetBrains Mono", monospace; }
 
-    .admin { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    .admin { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
 
     /* ===== header ===== */
     .admin-header {
@@ -81,16 +81,21 @@
       font-family: "JetBrains Mono", monospace;
     }
     .auth input:focus { outline: none; border-color: var(--cyan); }
-    .auth button {
-      background: var(--cyan); color: #04222E; border: none; padding: 9px 18px;
-      border-radius: 9px; font-weight: 600; cursor: pointer; font-size: 13px; font-family: inherit;
+    .btn {
+      border: none; padding: 9px 18px; border-radius: 9px; font-weight: 600; cursor: pointer;
+      font-size: 13px; font-family: inherit;
     }
-    .auth button:hover { filter: brightness(1.08); }
-    .auth .msg { font-size: 12.5px; color: var(--storm); min-width: 0; }
+    .btn-primary { background: var(--cyan); color: #04222E; }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-ghost { background: transparent; border: 1px solid var(--line-strong); color: var(--text-dim); }
+    .btn-ghost:hover { border-color: var(--cyan); color: var(--text); }
+    .auth .msg { font-size: 12.5px; min-width: 0; }
+    .msg.err { color: var(--storm); }
+    .msg.ok { color: var(--moss); }
 
     /* ===== zk banner ===== */
     .zk-banner {
-      margin-top: 14px; display: flex; align-items: center; gap: 12px;
+      margin-top: 14px; display: flex; align-items: flex-start; gap: 12px;
       background: var(--cyan-soft); border: 1px solid var(--line-strong); border-radius: 12px;
       padding: 13px 16px; font-size: 13px; color: var(--text-dim); line-height: 1.5;
     }
@@ -104,6 +109,8 @@
       letter-spacing: 0.8px; color: var(--text-faint);
     }
     .section-title .material-symbols-outlined { font-size: 15px; }
+    .section-title .spacer { margin-left: auto; }
+    .section-title .count { color: var(--text-dim); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 11.5px; }
 
     /* ===== stat cards ===== */
     .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -117,48 +124,56 @@
     /* ===== tables ===== */
     .card { background: var(--night-sea-soft); border: 1px solid var(--line); border-radius: 13px; overflow: hidden; }
     table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-    th { text-align: left; padding: 11px 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-faint); border-bottom: 1px solid var(--line); }
+    th { text-align: left; padding: 11px 16px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-faint); border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
     td { padding: 11px 16px; border-bottom: 1px solid var(--line); color: var(--text-dim); vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
     tbody tr:hover td { background: rgba(255,255,255,0.015); }
+    tr.selected td { background: var(--cyan-soft) !important; }
     td .dev { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 500; }
     td .dev .material-symbols-outlined { font-size: 18px; color: var(--cyan); }
-    td .dev .did { color: var(--text-faint); font-weight: 400; }
+    td .did { color: var(--text-faint); font-weight: 400; }
+    .acct-id { color: var(--text); font-weight: 500; font-family: "JetBrains Mono", monospace; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .empty { padding: 26px 16px; text-align: center; color: var(--text-faint); font-size: 13px; }
 
     .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 3px 8px; border-radius: 5px; }
     .badge.ok { background: rgba(93,206,158,0.12); color: var(--moss); }
     .badge.stale { background: rgba(242,166,90,0.12); color: var(--amber); }
     .badge.revoked { background: rgba(233,75,75,0.12); color: var(--storm); }
-    .revoke { background: transparent; border: 1px solid rgba(233,75,75,0.3); color: var(--storm); border-radius: 7px; padding: 5px 11px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; }
-    .revoke:hover { background: rgba(233,75,75,0.1); }
-    .revoke:disabled { opacity: 0.35; cursor: default; }
+    .badge.tomb { background: rgba(242,166,90,0.12); color: var(--amber); }
+    .badge.muted { background: rgba(143,163,176,0.10); color: var(--text-faint); }
 
-    /* ===== privacy boundary ===== */
-    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
-    .sees { padding: 16px; }
-    .sees .row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 12.5px; border-bottom: 1px solid var(--line); }
-    .sees .row:last-child { border-bottom: none; }
-    .sees .row .material-symbols-outlined { font-size: 17px; flex-shrink: 0; }
-    .sees .row.yes .material-symbols-outlined { color: var(--moss); }
-    .sees .row.no .material-symbols-outlined { color: var(--storm); }
-    .sees .row .what { color: var(--text); min-width: 165px; font-weight: 500; }
-    .sees .row .how { color: var(--text-faint); font-size: 11.5px; font-family: "JetBrains Mono", monospace; }
-    .blob-box { padding: 16px; }
-    .blob-box .lbl { font-size: 11px; color: var(--text-faint); font-weight: 600; margin-bottom: 8px; }
-    .blob-hex { background: rgba(0,0,0,0.35); border: 1px solid var(--line-strong); border-radius: 9px; padding: 12px 14px; font-family: "JetBrains Mono", monospace; font-size: 11px; line-height: 1.7; color: var(--text-faint); word-break: break-all; white-space: pre-wrap; }
-    .blob-hex .meta { color: var(--cyan); }
-    .blob-note { margin-top: 10px; display: flex; gap: 7px; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
-    .blob-note .material-symbols-outlined { font-size: 15px; color: var(--moss); flex-shrink: 0; margin-top: 1px; }
+    .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    .act { background: transparent; border: 1px solid var(--line-strong); color: var(--text-dim); border-radius: 7px; padding: 5px 10px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 4px; }
+    .act .material-symbols-outlined { font-size: 14px; }
+    .act:hover { border-color: var(--cyan); color: var(--text); }
+    .act.danger { border-color: rgba(233,75,75,0.3); color: var(--storm); }
+    .act.danger:hover { background: rgba(233,75,75,0.1); }
+    .act:disabled { opacity: 0.35; cursor: default; }
+    .act.on { border-color: var(--cyan); color: var(--cyan); }
+
+    /* ===== records inspector ===== */
+    #inspector { margin-top: 12px; display: none; }
+    #inspector.shown { display: block; }
+    .insp-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+    .insp-head .acct { font-family: "JetBrains Mono", monospace; color: var(--text); font-weight: 600; font-size: 13px; }
+    .insp-head .material-symbols-outlined { font-size: 18px; color: var(--cyan); }
+    .insp-head .close { margin-left: auto; }
+    .hex { font-family: "JetBrains Mono", monospace; color: var(--text-faint); font-size: 11px; letter-spacing: 0.3px; }
+    .insp-note { display: flex; gap: 8px; padding: 12px 16px; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; border-top: 1px solid var(--line); background: rgba(0,0,0,0.18); }
+    .insp-note .material-symbols-outlined { font-size: 15px; color: var(--moss); flex-shrink: 0; margin-top: 1px; }
+    .rtype { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 2px 7px; border-radius: 5px; background: rgba(43,189,238,0.10); color: var(--cyan); }
 
     /* ===== activity ===== */
     .log-line td { font-family: "JetBrains Mono", monospace; font-size: 11.5px; }
     .ev-ok { color: var(--moss); }
     .ev-warn { color: var(--amber); }
+    .ev-danger { color: var(--storm); }
     .ev-info { color: var(--cyan); }
     .ev-dim { color: var(--text-dim); }
 
     .foot { margin-top: 30px; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
+    .locked { opacity: 0.4; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -186,111 +201,138 @@
   <div class="auth">
     <span class="material-symbols-outlined">key</span>
     <input id="token" type="password" placeholder="Admin token (SKERRY_ADMIN_TOKEN)" autocomplete="off"/>
-    <button id="load">Connect</button>
-    <span class="msg" id="msg"></span>
+    <button id="load" class="btn btn-primary">Connect</button>
+    <button id="refresh" class="btn btn-ghost" style="display:none;">Refresh</button>
+    <span class="msg err" id="msg"></span>
   </div>
 
   <div class="zk-banner">
     <span class="material-symbols-outlined">visibility_off</span>
-    <div><strong>Zero-knowledge:</strong> this server stores only ciphertext. Master passwords, data keys,
-      host names and credentials are never visible to the server — even to you, its administrator.</div>
+    <div><strong>Zero-knowledge.</strong> Everything below comes from live server metadata. The server stores
+      only ciphertext and sync bookkeeping — master passwords, data keys, host names and credentials are
+      never visible to it, nor to this console. Inspect any account to see exactly what a record looks like
+      to the server.</div>
   </div>
 
-  <!-- ===== OVERVIEW ===== -->
-  <div class="section-title"><span class="material-symbols-outlined">monitoring</span>Overview</div>
-  <div class="stats">
-    <div class="stat">
-      <div class="k"><span class="material-symbols-outlined">person</span>Accounts</div>
-      <div class="v" id="s-accounts">—</div>
-      <div class="sub" id="s-accounts-sub">&nbsp;</div>
-    </div>
-    <div class="stat">
-      <div class="k"><span class="material-symbols-outlined">devices</span>Paired devices</div>
-      <div class="v" id="s-devices">—</div>
-      <div class="sub" id="s-devices-sub">&nbsp;</div>
-    </div>
-    <div class="stat">
-      <div class="k"><span class="material-symbols-outlined">database</span>Vault records</div>
-      <div class="v" id="s-records">—</div>
-      <div class="sub">ciphertext blobs + tombstones</div>
-    </div>
-    <div class="stat">
-      <div class="k"><span class="material-symbols-outlined">hard_drive</span>Encrypted storage</div>
-      <div class="v" id="s-storage">—</div>
-      <div class="sub" id="s-storage-sub">opaque XChaCha20-Poly1305 blobs</div>
-    </div>
-  </div>
+  <div id="board" class="locked">
 
-  <!-- ===== DEVICES ===== -->
-  <div class="section-title"><span class="material-symbols-outlined">devices</span>Devices</div>
-  <div class="card">
-    <table>
-      <thead><tr><th>Device</th><th>Platform</th><th>Last sync</th><th>Sync version</th><th>Status</th><th></th></tr></thead>
-      <tbody id="devices-rows">
-        <tr><td colspan="6" class="empty">Enter the admin token and press Connect.</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- ===== PRIVACY BOUNDARY ===== -->
-  <div class="section-title"><span class="material-symbols-outlined">policy</span>Privacy boundary</div>
-  <div class="cols">
-    <div class="card sees">
-      <div class="row yes"><span class="material-symbols-outlined">check_circle</span><span class="what">Record IDs &amp; types</span><span class="how">host / identity / group…</span></div>
-      <div class="row yes"><span class="material-symbols-outlined">check_circle</span><span class="what">Sync versions &amp; timestamps</span><span class="how">Lamport counter, ISO-8601</span></div>
-      <div class="row yes"><span class="material-symbols-outlined">check_circle</span><span class="what">Device names &amp; platforms</span><span class="how">user-editable labels</span></div>
-      <div class="row no"><span class="material-symbols-outlined">cancel</span><span class="what">Master password</span><span class="how">never transmitted (SRP)</span></div>
-      <div class="row no"><span class="material-symbols-outlined">cancel</span><span class="what">dataKey</span><span class="how">stored wrapped, opaque</span></div>
-      <div class="row no"><span class="material-symbols-outlined">cancel</span><span class="what">Host names, IPs, credentials</span><span class="how">inside encrypted blobs</span></div>
-      <div class="row no"><span class="material-symbols-outlined">cancel</span><span class="what">Private keys</span><span class="how">wrapped; hardware keys never sync</span></div>
-    </div>
-    <div class="card blob-box">
-      <div class="lbl">WHAT A VAULT RECORD LOOKS LIKE TO THIS SERVER</div>
-      <div class="blob-hex"><span class="meta">id:</span> 8f3a2c1e-77b4-4f0e-9a12-d65f08c4e991
-<span class="meta">type:</span> host · <span class="meta">version:</span> 1284 · <span class="meta">deleted:</span> false
-<span class="meta">blob (XChaCha20-Poly1305):</span>
-9c4e 1f8a 02bd 77e3 5a90 cc41 e8d2 0b6f
-33a7 91fe 4c05 b8d6 1e92 a4f0 7d38 c5e1
-06bb f249 8e17 d3a0 52c8 …  (208 bytes)</div>
-      <div class="blob-note">
-        <span class="material-symbols-outlined">shield</span>
-        <span>Without dataKey this is irreversible noise. Even a full database dump reveals only structure, never content.</span>
+    <!-- ===== OVERVIEW ===== -->
+    <div class="section-title"><span class="material-symbols-outlined">monitoring</span>Overview</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="k"><span class="material-symbols-outlined">person</span>Accounts</div>
+        <div class="v" id="s-accounts">—</div>
+        <div class="sub" id="s-accounts-sub">&nbsp;</div>
+      </div>
+      <div class="stat">
+        <div class="k"><span class="material-symbols-outlined">devices</span>Devices</div>
+        <div class="v" id="s-devices">—</div>
+        <div class="sub" id="s-devices-sub">&nbsp;</div>
+      </div>
+      <div class="stat">
+        <div class="k"><span class="material-symbols-outlined">database</span>Vault records</div>
+        <div class="v" id="s-records">—</div>
+        <div class="sub" id="s-records-sub">ciphertext blobs + tombstones</div>
+      </div>
+      <div class="stat">
+        <div class="k"><span class="material-symbols-outlined">hard_drive</span>Encrypted storage</div>
+        <div class="v" id="s-storage">—</div>
+        <div class="sub">opaque XChaCha20-Poly1305 blobs</div>
       </div>
     </div>
-  </div>
 
-  <!-- ===== RECENT ACTIVITY ===== -->
-  <div class="section-title"><span class="material-symbols-outlined">receipt_long</span>Recent activity (metadata only)</div>
-  <div class="card">
-    <table>
-      <thead><tr><th>Time</th><th>Event</th><th>Device</th><th>Detail</th></tr></thead>
-      <tbody id="activity-rows">
-        <tr><td colspan="4" class="empty">Enter the admin token and press Connect.</td></tr>
-      </tbody>
-    </table>
-  </div>
+    <!-- ===== ACCOUNTS ===== -->
+    <div class="section-title">
+      <span class="material-symbols-outlined">group</span>Accounts
+      <span class="spacer"></span>
+      <span class="count" id="accounts-count"></span>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Account</th><th>Created</th><th class="num">Devices</th><th class="num">Records</th>
+          <th class="num">Tombstones</th><th class="num">Storage</th><th>Last activity</th><th></th>
+        </tr></thead>
+        <tbody id="accounts-rows">
+          <tr><td colspan="8" class="empty">Enter the admin token and press Connect.</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-  <div class="foot">
-    Zero-knowledge: the server stores only ciphertext and sync metadata. Record content, host names,
-    the master password and the dataKey are not available to the server or to this console. The audit
-    log records only the event, device and a summary (counters / cursors) — never content.
-  </div>
+    <!-- ===== RECORDS INSPECTOR (real envelopes) ===== -->
+    <div class="card" id="inspector">
+      <div class="insp-head">
+        <span class="material-symbols-outlined">frame_inspect</span>
+        <span>What the server actually stores for</span>
+        <span class="acct" id="insp-acct"></span>
+        <button class="act close" id="insp-close"><span class="material-symbols-outlined">close</span>Close</button>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Type</th><th>Record ID</th><th class="num">Version</th><th>State</th>
+          <th class="num">Bytes</th><th class="num">Seq</th><th>Ciphertext preview</th>
+        </tr></thead>
+        <tbody id="insp-rows"></tbody>
+      </table>
+      <div class="insp-note">
+        <span class="material-symbols-outlined">shield</span>
+        <span>The preview is the real first 16 bytes of each blob. Without the dataKey it is irreversible
+          noise — a full database dump reveals only this structure, never content.</span>
+      </div>
+    </div>
 
+    <!-- ===== DEVICES ===== -->
+    <div class="section-title"><span class="material-symbols-outlined">devices</span>Devices</div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Device</th><th>Account</th><th>Platform</th><th>Last sync</th><th class="num">Sync version</th><th>Status</th><th></th></tr></thead>
+        <tbody id="devices-rows">
+          <tr><td colspan="7" class="empty">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ===== RECENT ACTIVITY ===== -->
+    <div class="section-title"><span class="material-symbols-outlined">receipt_long</span>Recent activity <span class="count" style="margin-left:6px;">(metadata only)</span></div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Time</th><th>Event</th><th>Account</th><th>Device</th><th>Detail</th></tr></thead>
+        <tbody id="activity-rows">
+          <tr><td colspan="5" class="empty">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="foot">
+      The audit log records only the event, account, device and a human-readable summary (counters /
+      cursors) — never content. <strong style="color:var(--text-dim);">Purge tombstones</strong> only
+      removes deletion markers every device has already synced past, so it can never resurrect a record.
+      <strong style="color:var(--text-dim);">Delete account</strong> cascades its records, devices and
+      pairing sessions — irreversibly.
+    </div>
+
+  </div>
 </div>
 
 <script>
   "use strict";
   const STALE_MS = 7 * 24 * 60 * 60 * 1000;
   let token = "";
+  let selected = null; // account id currently open in the inspector
 
   const $ = id => document.getElementById(id);
   function tokenValue() { return $("token").value.trim(); }
-  function setMsg(text) { $("msg").textContent = text || ""; }
+  function setMsg(text, ok) {
+    const el = $("msg");
+    el.textContent = text || "";
+    el.className = "msg " + (ok ? "ok" : "err");
+  }
 
   function esc(s) {
     return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
   function relTime(ms) {
+    if (!ms) return "—";
     const diff = Date.now() - ms;
     if (diff < 60000) return "just now";
     const min = Math.floor(diff / 60000);
@@ -299,6 +341,10 @@
     if (h < 24) return h + " h ago";
     const d = Math.floor(h / 24);
     return d + (d === 1 ? " day ago" : " days ago");
+  }
+  function dateShort(ms) {
+    const d = new Date(ms);
+    return d.toLocaleDateString("en", { year: "2-digit", month: "short", day: "2-digit" });
   }
   function clockTime(ms) {
     const d = new Date(ms);
@@ -312,6 +358,11 @@
     if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' <span class="unit">KB</span>';
     return (n / (1024 * 1024)).toFixed(1) + ' <span class="unit">MB</span>';
   }
+  function fmtBytesPlain(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
+    return (n / (1024 * 1024)).toFixed(1) + " MB";
+  }
   function platformIcon(p) {
     const s = (p || "").toLowerCase();
     if (s.includes("android") || s.includes("ios") || s.includes("phone")) return "smartphone";
@@ -324,8 +375,9 @@
     return { cls: "ok", icon: "check_circle", text: "UP TO DATE" };
   }
   function eventClass(ev) {
+    if (ev === "account.deleted" || ev === "device.revoked") return "ev-danger";
+    if (ev === "tombstones.purged") return "ev-warn";
     if (ev.startsWith("sync.push") || ev.startsWith("auth.register")) return "ev-ok";
-    if (ev.startsWith("device.revoked") || ev.endsWith(".stale")) return "ev-warn";
     if (ev.startsWith("sync.pull") || ev.startsWith("auth.login")) return "ev-info";
     return "ev-dim";
   }
@@ -335,6 +387,9 @@
     if (r.status === 401) { setMsg("Invalid admin token."); return null; }
     if (!r.ok) { setMsg("Error " + r.status); return null; }
     return r.json();
+  }
+  async function adminDelete(path) {
+    return fetch(path, { method: "DELETE", headers: { "X-Admin-Token": token } });
   }
 
   async function health() {
@@ -356,6 +411,119 @@
     $("s-devices").textContent = j.devices;
     $("s-records").textContent = j.records;
     $("s-storage").innerHTML = fmtBytes(j.storageBytes || 0);
+    if (j.pairingSessions) $("s-devices-sub").textContent = j.pairingSessions + " pairing session(s) open";
+    else $("s-devices-sub").innerHTML = "&nbsp;";
+  }
+
+  async function loadAccounts() {
+    const j = await adminGet("/admin/accounts");
+    const tbody = $("accounts-rows");
+    if (!j) return;
+    $("accounts-count").textContent = j.accounts.length + (j.accounts.length === 1 ? " account" : " accounts");
+    if (!j.accounts.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">No accounts on this instance yet.</td></tr>';
+      hideInspector();
+      return;
+    }
+    tbody.innerHTML = j.accounts.map(a => {
+      const aid = esc(a.id);
+      const enc = encodeURIComponent(a.id);
+      const devs = a.devices === 0 ? '<span class="badge muted">none</span>'
+        : a.activeDevices + ' / ' + a.devices;
+      const tomb = a.tombstones > 0 ? '<span class="badge tomb">' + a.tombstones + '</span>' : '0';
+      const inspectOn = selected === a.id ? " on" : "";
+      const purgeBtn = a.tombstones > 0
+        ? '<button class="act" data-purge="' + enc + '" title="Remove deletion markers every device has synced past"><span class="material-symbols-outlined">mop</span>Purge</button>'
+        : '';
+      return '<tr' + (selected === a.id ? ' class="selected"' : '') + '>'
+        + '<td><span class="acct-id" title="' + aid + '">' + aid + '</span></td>'
+        + '<td class="mono">' + dateShort(a.createdAt) + '</td>'
+        + '<td class="num">' + devs + '</td>'
+        + '<td class="num">' + a.records + '</td>'
+        + '<td class="num">' + tomb + '</td>'
+        + '<td class="num mono">' + fmtBytesPlain(a.storageBytes) + '</td>'
+        + '<td class="mono">' + relTime(a.lastSeenAt) + '</td>'
+        + '<td><div class="row-actions">'
+          + '<button class="act' + inspectOn + '" data-inspect="' + enc + '"><span class="material-symbols-outlined">frame_inspect</span>Inspect</button>'
+          + purgeBtn
+          + '<button class="act danger" data-delete="' + enc + '" data-label="' + aid + '"><span class="material-symbols-outlined">delete</span>Delete</button>'
+        + '</div></td>'
+        + '</tr>';
+    }).join("");
+    tbody.querySelectorAll("[data-inspect]").forEach(b =>
+      b.addEventListener("click", () => toggleInspect(decodeURIComponent(b.dataset.inspect))));
+    tbody.querySelectorAll("[data-purge]").forEach(b =>
+      b.addEventListener("click", () => purgeTombstones(decodeURIComponent(b.dataset.purge))));
+    tbody.querySelectorAll("[data-delete]").forEach(b =>
+      b.addEventListener("click", () => deleteAccount(decodeURIComponent(b.dataset.delete), b.dataset.label)));
+  }
+
+  function hideInspector() {
+    selected = null;
+    $("inspector").classList.remove("shown");
+  }
+
+  function renderInspector(accountId, records) {
+    $("insp-acct").textContent = accountId;
+    const tbody = $("insp-rows");
+    if (!records.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No records stored for this account.</td></tr>';
+    } else {
+      tbody.innerHTML = records.map(r => {
+        const state = r.deleted
+          ? '<span class="badge tomb">tombstone</span>'
+          : '<span class="badge ok">live</span>';
+        return '<tr>'
+          + '<td><span class="rtype">' + esc(r.type) + '</span></td>'
+          + '<td class="mono">' + esc(r.id) + '</td>'
+          + '<td class="num mono">' + r.version + '</td>'
+          + '<td>' + state + '</td>'
+          + '<td class="num mono">' + r.blobBytes + '</td>'
+          + '<td class="num mono">' + r.serverSeq + '</td>'
+          + '<td class="hex">' + esc(r.previewHex) + ' …</td>'
+          + '</tr>';
+      }).join("");
+    }
+    $("inspector").classList.add("shown");
+  }
+
+  async function toggleInspect(accountId) {
+    if (selected === accountId) { hideInspector(); loadAccounts(); return; }
+    const j = await adminGet("/admin/accounts/" + encodeURIComponent(accountId) + "/records");
+    if (!j) return;
+    selected = accountId;
+    renderInspector(accountId, j.records);
+    loadAccounts();
+    $("inspector").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // Re-pull the open inspector after a mutation, without scrolling or toggling it shut.
+  async function reloadInspector() {
+    if (!selected) return;
+    const j = await adminGet("/admin/accounts/" + encodeURIComponent(selected) + "/records");
+    if (!j) { hideInspector(); return; }
+    renderInspector(selected, j.records);
+  }
+
+  async function purgeTombstones(accountId) {
+    if (!confirm("Purge synced tombstones for " + accountId + "?\n\nOnly deletion markers every device has already pulled past are removed — this cannot resurrect a record.")) return;
+    const r = await adminDelete("/admin/accounts/" + encodeURIComponent(accountId) + "/tombstones");
+    if (r.status === 401) { setMsg("Invalid admin token."); return; }
+    if (!r.ok) { setMsg("Error " + r.status); return; }
+    const j = await r.json();
+    setMsg(j.purged > 0 ? ("Purged " + j.purged + " tombstone(s).") : "Nothing to purge — no tombstone is past every device cursor yet.", true);
+    refreshData();
+  }
+
+  async function deleteAccount(accountId, label) {
+    if (!confirm("Delete account " + label + "?\n\nThis irreversibly removes its records, devices and pairing sessions. Any client still signed in will lose sync access.")) return;
+    const r = await adminDelete("/admin/accounts/" + encodeURIComponent(accountId));
+    if (r.status === 401) { setMsg("Invalid admin token."); return; }
+    if (r.status === 404) { setMsg("Account not found."); return; }
+    if (r.status !== 204) { setMsg("Error " + r.status); return; }
+    if (selected === accountId) hideInspector();
+    setMsg("Deleted account " + label + ".", true);
+    refreshData();
   }
 
   async function loadDevices() {
@@ -363,7 +531,7 @@
     const tbody = $("devices-rows");
     if (!j) return;
     if (!j.devices.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty">No devices yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No devices yet.</td></tr>';
       return;
     }
     tbody.innerHTML = j.devices.map(d => {
@@ -371,29 +539,30 @@
       const ver = d.syncVersion != null ? "v" + d.syncVersion : "—";
       const plat = d.platform ? esc(d.platform) : "—";
       const revokeBtn = d.revoked
-        ? '<button class="revoke" disabled>—</button>'
-        : '<button class="revoke" data-account="' + esc(d.accountId) + '" data-id="' + esc(d.id) + '">Revoke</button>';
+        ? '<button class="act" disabled>—</button>'
+        : '<button class="act danger" data-account="' + esc(d.accountId) + '" data-id="' + esc(d.id) + '"><span class="material-symbols-outlined">block</span>Revoke</button>';
       return '<tr>'
         + '<td><span class="dev"><span class="material-symbols-outlined">' + platformIcon(d.platform) + '</span>'
         + esc(d.name) + ' <span class="did mono">' + esc(d.id) + '</span></span></td>'
+        + '<td><span class="acct-id" title="' + esc(d.accountId) + '">' + esc(d.accountId) + '</span></td>'
         + '<td>' + plat + '</td>'
         + '<td class="mono">' + relTime(d.lastSeenAt) + '</td>'
-        + '<td class="mono">' + ver + '</td>'
+        + '<td class="num mono">' + ver + '</td>'
         + '<td><span class="badge ' + st.cls + '"><span class="material-symbols-outlined" style="font-size:13px;">' + st.icon + '</span>' + st.text + '</span></td>'
-        + '<td>' + revokeBtn + '</td>'
+        + '<td><div class="row-actions">' + revokeBtn + '</div></td>'
         + '</tr>';
     }).join("");
-    tbody.querySelectorAll(".revoke[data-id]").forEach(btn => {
+    tbody.querySelectorAll(".act[data-id]").forEach(btn => {
       btn.addEventListener("click", () => revokeDevice(btn.dataset.account, btn.dataset.id));
     });
   }
 
   async function revokeDevice(accountId, id) {
-    if (!confirm("Revoke device " + id + "? It will stop syncing.")) return;
+    if (!confirm("Revoke device " + id + "?\n\nIt stops syncing until it signs in again with the master password.")) return;
     const url = "/admin/devices/" + encodeURIComponent(id) + "?accountId=" + encodeURIComponent(accountId);
-    const r = await fetch(url, { method: "DELETE", headers: { "X-Admin-Token": token } });
+    const r = await adminDelete(url);
     if (r.status === 401) { setMsg("Invalid admin token."); return; }
-    if (r.status === 204) { setMsg(""); loadDevices(); loadStats(); loadActivity(); return; }
+    if (r.status === 204) { setMsg("Device revoked.", true); refreshData(); return; }
     if (r.status === 404) { setMsg("Device not found."); return; }
     setMsg("Error " + r.status);
   }
@@ -403,30 +572,41 @@
     const tbody = $("activity-rows");
     if (!j) return;
     if (!j.events.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty">No activity yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No activity yet.</td></tr>';
       return;
     }
     tbody.innerHTML = j.events.map(e =>
       '<tr class="log-line">'
       + '<td>' + clockTime(e.createdAt) + '</td>'
       + '<td><span class="' + eventClass(e.event) + '">' + esc(e.event) + '</span></td>'
+      + '<td>' + esc(e.accountId) + '</td>'
       + '<td>' + (e.deviceId ? esc(e.deviceId) : "—") + '</td>'
       + '<td>' + esc(e.detail) + '</td>'
       + '</tr>'
     ).join("");
   }
 
-  function refresh() {
+  function refreshData() {
+    loadStats();
+    loadAccounts();
+    loadDevices();
+    loadActivity();
+    reloadInspector();
+  }
+
+  function connect() {
     token = tokenValue();
     if (!token) { setMsg("Enter the admin token."); return; }
     setMsg("");
-    loadStats();
-    loadDevices();
-    loadActivity();
+    $("board").classList.remove("locked");
+    $("refresh").style.display = "";
+    refreshData();
   }
 
-  $("load").addEventListener("click", refresh);
-  $("token").addEventListener("keydown", e => { if (e.key === "Enter") refresh(); });
+  $("load").addEventListener("click", connect);
+  $("refresh").addEventListener("click", refreshData);
+  $("insp-close").addEventListener("click", () => { hideInspector(); loadAccounts(); });
+  $("token").addEventListener("keydown", e => { if (e.key === "Enter") connect(); });
   health();
 </script>
 </body>

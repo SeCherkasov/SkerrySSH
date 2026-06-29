@@ -123,6 +123,52 @@ data class AdminActivityDto(
 @Serializable
 data class AdminActivityResponse(val events: List<AdminActivityDto>)
 
+/**
+ * Аккаунт инстанса для консоли: открытые метаданные ([id] — он же email/identity) и агрегаты,
+ * посчитанные на стороне БД. Содержимого записей здесь нет — только их число, число tombstone'ов
+ * и суммарный размер шифроблобов. [lastSeenAt] — самая свежая активность любого устройства аккаунта.
+ */
+@Serializable
+data class AdminAccountDto(
+    val id: String,
+    val createdAt: Long,
+    val syncSeq: Long,
+    val devices: Int,
+    val activeDevices: Int,
+    val records: Int,
+    val tombstones: Int,
+    val storageBytes: Long,
+    val lastSeenAt: Long?,
+)
+
+@Serializable
+data class AdminAccountsResponse(val accounts: List<AdminAccountDto>)
+
+/**
+ * Envelope записи vault, как её РЕАЛЬНО видит сервер: открытые метаданные синхронизации плюс размер
+ * шифроблоба и [previewHex] — первые байты настоящего шифротекста (непрозрачный шум). Содержимого
+ * нет по определению: без dataKey блоб нечитаем. Это честная замена прежней нарисованной карточки.
+ */
+@Serializable
+data class AdminRecordDto(
+    val id: String,
+    val type: String,
+    val version: Long,
+    val updatedAt: String,
+    val deviceId: String,
+    val deleted: Boolean,
+    val blobBytes: Int,
+    val serverSeq: Long,
+    val previewHex: String,
+)
+
+@Serializable
+data class AdminRecordsResponse(val accountId: String, val records: List<AdminRecordDto>)
+
+/** Результат purge tombstone'ов: сколько надгробий физически удалено (освобождено места). */
+@Serializable
+data class AdminPurgeResponse(val purged: Int)
+
 // --- pairing (вариант B) ---
 
 @Serializable

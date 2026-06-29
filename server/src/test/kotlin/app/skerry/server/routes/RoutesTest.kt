@@ -1,8 +1,11 @@
 package app.skerry.server.routes
 
 import app.skerry.server.configureServer
+import app.skerry.server.model.AdminAccountsResponse
 import app.skerry.server.model.AdminActivityResponse
 import app.skerry.server.model.AdminDevicesResponse
+import app.skerry.server.model.AdminPurgeResponse
+import app.skerry.server.model.AdminRecordsResponse
 import app.skerry.server.model.ChallengeRequest
 import app.skerry.server.model.ChallengeResponse
 import app.skerry.server.model.DevicesResponse
@@ -345,6 +348,88 @@ class RoutesTest {
         assertEquals("devA", push.deviceId)
         assertTrue(push.detail.contains("1 records"))
         assertTrue(push.detail.contains("cursor 1"))
+    }
+
+    @Test
+    fun `admin accounts and record envelopes are real and token-gated`() = testApplication {
+        val services = testServices(adminToken = "s3cret")
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val reg = srpRegister(accountId, password)
+        val tokens: TokenResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A", platform = "Linux"))
+        }.body()
+        client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(0xDE.toByte(), 0xAD.toByte()).b64()))))
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/accounts").status)
+
+        val accounts: AdminAccountsResponse = client.get("/admin/accounts") { header("X-Admin-Token", "s3cret") }.body()
+        val a = accounts.accounts.single()
+        assertEquals(accountId, a.id)
+        assertEquals(1, a.devices)
+        assertEquals(1, a.activeDevices)
+        assertEquals(1, a.records)
+        assertEquals(0, a.tombstones)
+        assertEquals(2L, a.storageBytes)
+
+        // реальный envelope: настоящие байты шифротекста в hex-превью, без содержимого
+        val records: AdminRecordsResponse = client.get("/admin/accounts/$accountId/records") {
+            header("X-Admin-Token", "s3cret")
+        }.body()
+        val r = records.records.single()
+        assertEquals("r1", r.id)
+        assertEquals(2, r.blobBytes)
+        assertEquals("de ad", r.previewHex)
+    }
+
+    @Test
+    fun `admin purges tombstones and deletes account`() = testApplication {
+        val services = testServices(adminToken = "s3cret")
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val reg = srpRegister(accountId, password)
+        val tokens: TokenResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
+        }.body()
+        // создать запись и удалить её (tombstone); курсор устройства догоняет удаление
+        client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
+        }
+        client.put("/vault/records") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 2, "2026-06-29T00:00:01Z", "devA", true, byteArrayOf(1).b64()))))
+        }
+        // pull двигает курсор устройства до tip (serverSeq 2) — теперь purge безопасен
+        client.get("/vault/records?since=0") { bearerAuth(tokens.accessToken) }
+
+        assertEquals(HttpStatusCode.Unauthorized, client.delete("/admin/accounts/$accountId/tombstones").status)
+        val purge: AdminPurgeResponse = client.delete("/admin/accounts/$accountId/tombstones") {
+            header("X-Admin-Token", "s3cret")
+        }.body()
+        assertEquals(1, purge.purged)
+
+        // удаление аккаунта — под токеном, каскадом
+        assertEquals(HttpStatusCode.Unauthorized, client.delete("/admin/accounts/$accountId").status)
+        assertEquals(
+            HttpStatusCode.NoContent,
+            client.delete("/admin/accounts/$accountId") { header("X-Admin-Token", "s3cret") }.status,
+        )
+        val after: AdminAccountsResponse = client.get("/admin/accounts") { header("X-Admin-Token", "s3cret") }.body()
+        assertTrue(after.accounts.isEmpty())
+        // повторное удаление → 404
+        assertEquals(
+            HttpStatusCode.NotFound,
+            client.delete("/admin/accounts/$accountId") { header("X-Admin-Token", "s3cret") }.status,
+        )
     }
 
     @Test

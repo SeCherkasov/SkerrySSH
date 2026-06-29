@@ -2,10 +2,15 @@ package app.skerry.server.routes
 
 import app.skerry.server.SERVER_VERSION
 import app.skerry.server.Services
+import app.skerry.server.model.AdminAccountDto
+import app.skerry.server.model.AdminAccountsResponse
 import app.skerry.server.model.AdminActivityDto
 import app.skerry.server.model.AdminActivityResponse
 import app.skerry.server.model.AdminDeviceDto
 import app.skerry.server.model.AdminDevicesResponse
+import app.skerry.server.model.AdminPurgeResponse
+import app.skerry.server.model.AdminRecordDto
+import app.skerry.server.model.AdminRecordsResponse
 import app.skerry.server.model.ErrorResponse
 import app.skerry.server.model.HealthResponse
 import app.skerry.server.model.StatsResponse
@@ -74,6 +79,76 @@ fun Route.adminRoutes(services: Services) {
             services.activity.record(accountId, "device.revoked", "admin-revoked $deviceId")
         }
         call.respond(if (revoked) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
+    }
+
+    get("/admin/accounts") {
+        if (!call.adminAuthorized(services.config.adminToken)) return@get
+        val accounts = services.admin.accountSummaries().map {
+            AdminAccountDto(
+                id = it.id,
+                createdAt = it.createdAt,
+                syncSeq = it.syncSeq,
+                devices = it.devices,
+                activeDevices = it.activeDevices,
+                records = it.records,
+                tombstones = it.tombstones,
+                storageBytes = it.storageBytes,
+                lastSeenAt = it.lastSeenAt,
+            )
+        }
+        call.respond(AdminAccountsResponse(accounts))
+    }
+
+    get("/admin/accounts/{id}/records") {
+        if (!call.adminAuthorized(services.config.adminToken)) return@get
+        val accountId = call.parameters["id"]
+        if (accountId.isNullOrBlank()) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("account id is required"))
+            return@get
+        }
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 100
+        val records = services.admin.recordEnvelopes(accountId, limit).map {
+            AdminRecordDto(
+                id = it.id,
+                type = it.type,
+                version = it.version,
+                updatedAt = it.updatedAt,
+                deviceId = it.deviceId,
+                deleted = it.deleted,
+                blobBytes = it.blobBytes,
+                serverSeq = it.serverSeq,
+                previewHex = it.previewHex,
+            )
+        }
+        call.respond(AdminRecordsResponse(accountId, records))
+    }
+
+    delete("/admin/accounts/{id}/tombstones") {
+        if (!call.adminAuthorized(services.config.adminToken)) return@delete
+        val accountId = call.parameters["id"]
+        if (accountId.isNullOrBlank()) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("account id is required"))
+            return@delete
+        }
+        val purged = services.admin.purgeTombstones(accountId)
+        if (purged > 0) {
+            services.activity.record(accountId, "tombstones.purged", "purged $purged tombstones")
+        }
+        call.respond(AdminPurgeResponse(purged))
+    }
+
+    delete("/admin/accounts/{id}") {
+        if (!call.adminAuthorized(services.config.adminToken)) return@delete
+        val accountId = call.parameters["id"]
+        if (accountId.isNullOrBlank()) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("account id is required"))
+            return@delete
+        }
+        val deleted = services.admin.deleteAccount(accountId)
+        if (deleted) {
+            services.activity.record(accountId, "account.deleted", "admin-deleted account")
+        }
+        call.respond(if (deleted) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
     }
 }
 
