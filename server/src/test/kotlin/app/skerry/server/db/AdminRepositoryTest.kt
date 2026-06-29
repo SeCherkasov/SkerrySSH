@@ -50,6 +50,16 @@ class AdminRepositoryTest {
     }
 
     @Test
+    fun `account summaries honour the limit while count reports the true total`() = withTestDb { db ->
+        repeat(5) { seedAccount(db, "user$it@example.com") }
+        val admin = AdminRepository(db)
+
+        assertEquals(5L, admin.accountCount())
+        assertEquals(2, admin.accountSummaries(limit = 2).size)
+        assertEquals(5, admin.accountSummaries(limit = 100).size)
+    }
+
+    @Test
     fun `record envelopes expose metadata and a ciphertext preview, never content`() = withTestDb { db ->
         seedAccount(db)
         val records = RecordRepository(db)
@@ -107,6 +117,27 @@ class AdminRepositoryTest {
         records.upsert("ghost@example.com", listOf(rec("g1", 1)))
         records.upsert("ghost@example.com", listOf(rec("g1", 2, deleted = true)))
         assertEquals(1, admin.purgeTombstones("ghost@example.com"))
+    }
+
+    @Test
+    fun `compacted tombstone ids are those at or below the slowest device cursor`() = withTestDb { db ->
+        seedAccount(db)
+        val devices = DeviceRepository(db)
+        val records = RecordRepository(db)
+        devices.register("alice@example.com", "devA", "Laptop")
+        devices.register("alice@example.com", "devB", "Phone")
+
+        records.upsert("alice@example.com", listOf(rec("r1", 1), rec("r2", 1)))
+        records.upsert("alice@example.com", listOf(rec("r1", 2, deleted = true))) // tombstone at serverSeq 3
+
+        // devB отстаёт (курсор 2 < seq 3 надгробия) → надгробие ещё не у всех → не компактим.
+        devices.touch("alice@example.com", "devA", syncVersion = 3)
+        devices.touch("alice@example.com", "devB", syncVersion = 2)
+        assertTrue(records.compactedTombstoneIds("alice@example.com").isEmpty())
+
+        // Оба устройства дочитали надгробие → отдаём его id на компакцию.
+        devices.touch("alice@example.com", "devB", syncVersion = 3)
+        assertContentEquals(listOf("r1"), records.compactedTombstoneIds("alice@example.com"))
     }
 
     @Test

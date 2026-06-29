@@ -50,7 +50,7 @@ class AdminRepository(private val db: Database) {
      * не N+1): устройства (всего/активных/последняя активность) и записи (всего/tombstone'ов/байт).
      * `NOT revoked` / `CASE WHEN deleted` переносимы между SQLite (0/1) и PostgreSQL (boolean).
      */
-    suspend fun accountSummaries(): List<AccountSummary> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun accountSummaries(limit: Int = 100): List<AccountSummary> = newSuspendedTransaction(Dispatchers.IO, db) {
         val devAgg = HashMap<String, DevAgg>()
         exec(
             """SELECT account_id,
@@ -82,6 +82,7 @@ class AdminRepository(private val db: Database) {
 
         Accounts.selectAll()
             .orderBy(Accounts.createdAt to SortOrder.ASC)
+            .limit(limit)
             .map { row ->
                 val id = row[Accounts.id]
                 val d = devAgg[id] ?: DevAgg()
@@ -98,6 +99,11 @@ class AdminRepository(private val db: Database) {
                     lastSeenAt = d.lastSeen,
                 )
             }
+    }
+
+    /** Всего аккаунтов на инстансе — чтобы консоль честно показывала «N из M» при подгрузке. */
+    suspend fun accountCount(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
+        Accounts.selectAll().count()
     }
 
     /**

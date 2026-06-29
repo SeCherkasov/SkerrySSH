@@ -62,9 +62,14 @@ class SyncEngine(
         var cursor = from
         while (true) {
             val page = client.pull(session, cursor)
+            if (page.records.isNotEmpty()) {
+                val merged = vault.mergeRemote(page.records.mapNotNull { it.toVaultRecord() })
+                onMerged(merged.size)
+            }
+            // Компактим ПОСЛЕ merge: иначе только что слитый тромбстоун из этой же страницы тут же
+            // вернулся бы в vault. Идемпотентно — список приходит на каждый pull, пока надгробие живо.
+            if (page.compactedIds.isNotEmpty()) vault.compact(page.compactedIds)
             if (page.records.isEmpty()) return cursor
-            val merged = vault.mergeRemote(page.records.mapNotNull { it.toVaultRecord() })
-            onMerged(merged.size)
             if (page.cursor <= cursor) return page.cursor // защита от зацикливания, если курсор не растёт
             cursor = page.cursor
         }

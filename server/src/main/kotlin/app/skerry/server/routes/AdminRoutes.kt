@@ -42,6 +42,7 @@ fun Route.adminRoutes(services: Services) {
     get("/admin/devices") {
         if (!call.adminAuthorized(services.config.adminToken)) return@get
         val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 200
+        val total = services.devices.count()
         val devices = services.devices.listAll(limit).map {
             AdminDeviceDto(
                 accountId = it.accountId,
@@ -54,16 +55,17 @@ fun Route.adminRoutes(services: Services) {
                 revoked = it.revoked,
             )
         }
-        call.respond(AdminDevicesResponse(devices))
+        call.respond(AdminDevicesResponse(devices, total))
     }
 
     get("/admin/activity") {
         if (!call.adminAuthorized(services.config.adminToken)) return@get
-        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 50
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 2000) ?: 50
+        val total = services.activity.count()
         val events = services.activity.recent(limit).map {
             AdminActivityDto(it.accountId, it.deviceId, it.event, it.detail, it.createdAt)
         }
-        call.respond(AdminActivityResponse(events))
+        call.respond(AdminActivityResponse(events, total))
     }
 
     delete("/admin/devices/{id}") {
@@ -83,7 +85,9 @@ fun Route.adminRoutes(services: Services) {
 
     get("/admin/accounts") {
         if (!call.adminAuthorized(services.config.adminToken)) return@get
-        val accounts = services.admin.accountSummaries().map {
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
+        val total = services.admin.accountCount()
+        val accounts = services.admin.accountSummaries(limit).map {
             AdminAccountDto(
                 id = it.id,
                 createdAt = it.createdAt,
@@ -96,7 +100,7 @@ fun Route.adminRoutes(services: Services) {
                 lastSeenAt = it.lastSeenAt,
             )
         }
-        call.respond(AdminAccountsResponse(accounts))
+        call.respond(AdminAccountsResponse(accounts, total))
     }
 
     get("/admin/accounts/{id}/records") {

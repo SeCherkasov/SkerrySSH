@@ -235,6 +235,19 @@ class FileVault(
         records.clear(); records.addAll(updated)
     }
 
+    override fun compact(ids: List<String>): Unit = synchronized(lock) {
+        requireUnlocked()
+        if (ids.isEmpty()) return@synchronized
+        val currentMeta = meta ?: error("unlocked vault has no metadata")
+        val drop = ids.toHashSet()
+        // Удаляем только НАДГРОБИЯ из списка: живую (более новую, ещё не запушенную) запись с тем же
+        // id сохраняем — её увезёт следующий push, иначе потеряли бы непротолкнутые данные.
+        val updated = records.filterNot { it.id in drop && it.deleted }
+        if (updated.size == records.size) return@synchronized // нечего компактить — файл не трогаем
+        writeFile(currentMeta, updated) // упадёт — кеш не тронут (коммит после persist)
+        records.clear(); records.addAll(updated)
+    }
+
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = synchronized(lock) {
         try {
             val currentMeta = meta
