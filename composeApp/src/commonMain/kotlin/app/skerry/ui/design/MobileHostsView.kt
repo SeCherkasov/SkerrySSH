@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.collectAsState
+import app.skerry.ui.sync.ServerReachable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -205,11 +207,19 @@ private fun HostsHeader(onAvatar: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Txt("Hosts", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
-        Box(
-            Modifier.size(34.dp).clip(CircleShape).background(D.cyan).clickable(onClick = onAvatar),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym("person", size = 19.sp, color = Color(0xFF0A1A26))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Доступность sync-сервера по health-пингу; прячем, когда sync не настроен (UNKNOWN).
+            val reach = LocalSync.current?.serverReachable?.collectAsState()?.value
+            if (reach != null && reach != ServerReachable.UNKNOWN) {
+                val up = reach == ServerReachable.REACHABLE
+                Sym(if (up) "cloud_done" else "cloud_off", size = 19.sp, color = if (up) D.moss else D.sunset)
+            }
+            Box(
+                Modifier.size(34.dp).clip(CircleShape).background(D.cyan).clickable(onClick = onAvatar),
+                contentAlignment = Alignment.Center,
+            ) {
+                Sym("person", size = 19.sp, color = Color(0xFF0A1A26))
+            }
         }
     }
 }

@@ -70,6 +70,8 @@ import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
+import androidx.compose.runtime.collectAsState
+import app.skerry.ui.sync.ServerReachable
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.LocalTerminalAppearance
@@ -802,6 +804,18 @@ private fun StatusBar() {
             StatusItem("arrow_downward", if (live) (downRate?.let { humanRate(it) } ?: "—") else "8.4 KB/s", mono = mono)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            // Доступность sync-сервера по health-пингу (см. SyncCoordinator.serverReachable). Прячем,
+            // когда sync не настроен (UNKNOWN) — индикатор только для тех, кто им пользуется.
+            val reach = LocalSync.current?.serverReachable?.collectAsState()?.value
+            if (reach != null && reach != ServerReachable.UNKNOWN) {
+                val up = reach == ServerReachable.REACHABLE
+                StatusItem(
+                    if (up) "cloud_done" else "cloud_off",
+                    if (up) "Sync online" else "Sync offline",
+                    color = if (up) D.moss else D.sunset,
+                    mono = mono,
+                )
+            }
             // Версия сервера — live ident активной сессии (до коннекта/если транспорт молчит — «—»).
             StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
             Txt("UTF-8 · LF", color = D.faint, size = 10.5.sp, font = mono)

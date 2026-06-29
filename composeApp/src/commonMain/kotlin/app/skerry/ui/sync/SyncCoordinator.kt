@@ -16,7 +16,9 @@ import app.skerry.shared.vault.VaultCrypto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -69,6 +71,14 @@ sealed interface SyncStatus {
 }
 
 /**
+ * Доступность sync-сервера по периодическому health-пробнику ([SyncClient.ping] → `GET /healthz`),
+ * НЕЗАВИСИМО от состояния vault и наличия сессии. Питает индикатор «сервер работает и доступен» на
+ * главных экранах desktop/mobile. [UNKNOWN] — sync не настроен (пинговать нечего) либо первой проверки
+ * ещё не было; индикатор в этом состоянии прячется, чтобы не маячить у тех, кто sync не использует.
+ */
+enum class ServerReachable { UNKNOWN, REACHABLE, UNREACHABLE }
+
+/**
  * App-level склейка self-hosted sync (`docs/skerry-sync-design.md`): связывает [SyncClient],
  * [VaultCrypto] и локальный [Vault] в операции register/login/sync для UI. Zero-knowledge —
  * мастер-пароль и dataKey не покидают устройство; на сервер уходят SRP-верификатор и шифроблобы.
@@ -119,8 +129,23 @@ class SyncCoordinator(
     private val _biometricResetNeeded = MutableStateFlow(false)
     val biometricResetNeeded: StateFlow<Boolean> = _biometricResetNeeded.asStateFlow()
 
+    /**
+     * Доступность сервера по health-пингу (см. [ServerReachable]). Обновляется поллером ([healthLoop])
+     * независимо от сессии — индикатор честен и при заблокированном vault.
+     */
+    private val _serverReachable = MutableStateFlow(ServerReachable.UNKNOWN)
+    val serverReachable: StateFlow<ServerReachable> = _serverReachable.asStateFlow()
+
     private var client: SyncClient? = null
     private var session: SyncSession? = null
+
+    // URL текущей привязки для health-пинга (из конфигурации, живёт независимо от сессии). Смена цели
+    // (connect/disconnect) перезапускает цикл пинга через collectLatest. null = sync не настроен.
+    private val healthTarget = MutableStateFlow(configStore.load()?.serverUrl)
+    // Выделенный клиент только для health-пинга, переиспользуется между тиками: пересоздаётся при смене
+    // URL, закрывается при отвязке. Отдельный от рабочего [client] — пинг должен идти и без сессии.
+    private var healthClient: SyncClient? = null
+    private var healthClientUrl: String? = null
 
     // Подписка на серверные уведомления об изменениях (WS `/sync`): пока живёт — каждое чужое
     // изменение прилетает push-сигналом и тянет дельту, без ручного «Sync». Один на сессию; новое
@@ -152,6 +177,8 @@ class SyncCoordinator(
         // сервер/аккаунт показываем как Configured — UI предложит «переподключиться» одним паролем,
         // без перенабора. Disconnect стирает конфиг → снова Disabled.
         configStore.load()?.let { _status.value = SyncStatus.Configured(it.serverUrl, it.accountId) }
+        // Health-поллер живёт всё время жизни координатора; пока [healthTarget] == null он держит UNKNOWN.
+        scope.launch { healthLoop() }
     }
 
     val isConfigured: Boolean get() = configStore.load() != null
@@ -236,6 +263,7 @@ class SyncCoordinator(
                 vault.exportDataKey()?.let { dk -> try { sealToken(dk, newSession.refreshToken) } finally { dk.zeroize() } }
             } else null
             configStore.save(SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed))
+            healthTarget.value = serverUrl // включаем health-пинг этого сервера (если ещё не шёл)
             runSync()
             startWatch()
             startLocalPush()
@@ -398,8 +426,47 @@ class SyncCoordinator(
             // процессе) обязано сделать полный re-pull, а не продолжить с tip прошлой сессии.
             configStore.load()?.let { syncState.setCursor(it.accountId, 0) }
             configStore.clear()
+            healthTarget.value = null // отвязались — гасим health-пинг (поллер закроет клиент, статус → UNKNOWN)
             _status.value = SyncStatus.Disabled
         }
+    }
+
+    /**
+     * Периодически пингует сервер ([SyncClient.ping] → `/healthz`) и публикует [serverReachable]. Цель —
+     * текущий [healthTarget]; смена цели (connect/disconnect) перезапускает цикл через [collectLatest]
+     * (старый пинг-луп отменяется на точке [delay]). Пинг идёт независимо от vault/сессии, поэтому
+     * индикатор честен и при заблокированном хранилище. Любой сбой пинга = [ServerReachable.UNREACHABLE].
+     */
+    private suspend fun healthLoop() {
+        healthTarget.collectLatest { url ->
+            if (url == null) {
+                closeHealthClient()
+                _serverReachable.value = ServerReachable.UNKNOWN
+                return@collectLatest
+            }
+            while (true) {
+                val reachable = runCatching { healthClientFor(url).ping() }.getOrDefault(false)
+                _serverReachable.value =
+                    if (reachable) ServerReachable.REACHABLE else ServerReachable.UNREACHABLE
+                delay(HEALTH_POLL_MS)
+            }
+        }
+    }
+
+    private suspend fun healthClientFor(url: String): SyncClient {
+        if (healthClientUrl != url) {
+            closeHealthClient()
+            healthClient = clientFactory(url)
+            healthClientUrl = url
+        }
+        return healthClient!!
+    }
+
+    private suspend fun closeHealthClient() {
+        val c = healthClient
+        healthClient = null
+        healthClientUrl = null
+        if (c != null) runCatching { c.close() }
     }
 
     /**
@@ -471,6 +538,12 @@ class SyncCoordinator(
  * других устройств за ~секунду, и достаточно велик, чтобы не пушить на каждое нажатие.
  */
 private const val PUSH_DEBOUNCE_MS = 1500L
+
+/**
+ * Период health-пинга сервера для индикатора доступности: достаточно часто, чтобы статус был «живым»
+ * (падение/возврат сервера видно в пределах ~15 с), и достаточно редко, чтобы не нагружать сервер.
+ */
+private const val HEALTH_POLL_MS = 15_000L
 
 /**
  * Криптослучайный 128-битный deviceId как hex. Берём 16 байт из CSPRNG libsodium через

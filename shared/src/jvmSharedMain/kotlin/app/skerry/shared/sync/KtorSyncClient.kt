@@ -178,6 +178,14 @@ class KtorSyncClient(
         }
     }
 
+    override suspend fun ping(): Boolean = try {
+        // Открытый liveness-эндпоинт (см. server Plugins.kt `/healthz`). Без bearer-токена — пинг
+        // должен проходить и без сессии (vault залочен). Любой сбой = недоступен (не бросаем).
+        http.get("$serverUrl/healthz").status.isSuccess()
+    } catch (e: Exception) {
+        false
+    }
+
     override suspend fun close() = http.close()
 
     // --- helpers ---
