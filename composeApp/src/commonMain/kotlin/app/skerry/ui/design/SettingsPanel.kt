@@ -372,7 +372,8 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator) {
     LaunchedEffect(sync, reload) {
         loading = true
         // Отозванные устройства больше не привязаны — не показываем (сервер хранит строку с revoked=true).
-        devices = sync.listDevices().filter { !it.revoked }
+        // Текущее устройство всегда первым (sortedByDescending стабилен — порядок прочих сохраняется).
+        devices = sync.listDevices().filter { !it.revoked }.sortedByDescending { it.current }
         loading = false
     }
 
