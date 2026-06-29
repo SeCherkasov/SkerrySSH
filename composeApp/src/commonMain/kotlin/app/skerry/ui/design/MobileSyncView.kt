@@ -43,6 +43,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.sync.RemoteDevice
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupForm
 import app.skerry.ui.sync.SyncStatus
@@ -296,10 +297,15 @@ private fun SyncBody(sync: SyncCoordinator) {
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> {
             MobileSyncStatusCard("cloud_done", D.moss, "Connected · ${status.accountId}", "Pushed ${status.lastPushed} · pulled ${status.lastPulled} this session")
+            // Кнопки в том же стиле, что на desktop (ghost, не залитый primary) — паритет платформ.
+            // Mobile объединяет вкладки Account+Sync desktop в один экран, поэтому Sync now и
+            // Disconnect живут рядом (на desktop они разнесены по вкладкам).
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PrimaryButton("Sync now", onClick = { sync.syncNow() }, icon = "sync")
+                GhostButton("Sync now", onClick = { sync.syncNow() })
                 GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
             }
+            MobileWhatSyncs()
+            MobileLinkedDevices(sync)
         }
         SyncStatus.Busy -> MobileSyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.")
         is SyncStatus.Configured -> {
@@ -389,6 +395,107 @@ private fun SyncSetupBody(
     Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Sym("shield_lock", size = 14.sp, color = D.moss)
         Txt("Zero-knowledge · password never leaves this device", color = D.faint, size = 11.sp)
+    }
+}
+
+/**
+ * Что синхронизируется — паритет с desktop (Settings → Sync, секция WHAT SYNCS). Тумблеры пока
+ * декоративные стабы (как на desktop: `onToggle = {}`); реальная фильтрация по типам записей — позже.
+ */
+@Composable
+private fun MobileWhatSyncs() {
+    Txt("WHAT SYNCS", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 4.dp))
+    MobileSyncToggleRow("Hosts & groups", null, on = true)
+    MobileSyncToggleRow("Snippets", null, on = true)
+    MobileSyncToggleRow("SSH keys · re-encrypted on device", null, on = true)
+    MobileSyncToggleRow("Terminal history", "Off by default for privacy.", on = false)
+}
+
+@Composable
+private fun MobileSyncToggleRow(label: String, sub: String?, on: Boolean) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Txt(label, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
+            if (sub != null) Txt(sub, color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        Toggle(on = on, onToggle = {})
+    }
+}
+
+/**
+ * Реальные устройства аккаунта — паритет с desktop (Settings → Account, LINKED DEVICES). На активной
+ * сессии сервер всегда возвращает хотя бы текущее устройство, поэтому пустой список = listDevices
+ * проглотил ошибку: честно говорим, а не «только вы». Revoke отзывает чужое (с подтверждением вторым
+ * кликом) и перечитывает список.
+ */
+@Composable
+private fun MobileLinkedDevices(sync: SyncCoordinator) {
+    val scope = rememberCoroutineScope()
+    var devices by remember { mutableStateOf<List<RemoteDevice>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(sync, reload) {
+        loading = true
+        devices = sync.listDevices()
+        loading = false
+    }
+
+    Txt("LINKED DEVICES", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 6.dp))
+    when {
+        loading -> Txt("Loading devices…", color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.isEmpty() -> Txt("Couldn't load devices. Try Sync now.", color = D.amber, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.size == 1 && devices.first().current -> Txt("Only this device so far.", color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        else -> devices.forEach { d ->
+            MobileDeviceRow(
+                device = d,
+                onRevoke = if (d.current || d.revoked) null else {
+                    { scope.launch { if (sync.revokeDevice(d.id)) reload++ } }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MobileDeviceRow(device: RemoteDevice, onRevoke: (() -> Unit)?) {
+    // Отзыв необратим из UI (устройство переподключается мастер-паролем) — подтверждаем вторым кликом.
+    var confirming by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Sym("devices", size = 20.sp, color = D.dim)
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Txt(device.name, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
+                if (device.current) Txt("● this device", color = D.moss, size = 10.sp)
+            }
+            Txt(if (device.current) "linked · this device" else "linked device", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        if (onRevoke != null) {
+            if (confirming) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MobileRevokeChip("Confirm", D.sunset) { confirming = false; onRevoke() }
+                    MobileRevokeChip("Cancel", D.dim) { confirming = false }
+                }
+            } else {
+                MobileRevokeChip("Revoke", D.dim) { confirming = true }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MobileRevokeChip(label: String, fg: Color, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(7.dp)).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Txt(label, color = fg, size = 12.sp)
     }
 }
 

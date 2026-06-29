@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.ui.sync.accountCardModel
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.vault.VaultGateController
@@ -307,12 +308,30 @@ private fun MobileDropdownOption(label: String, selected: Boolean, onClick: () -
 // Профиль.
 
 /**
- * Живая карточка профиля: показывает локальный vault (зашифрованный мастер-паролем на этом
- * устройстве). Синхронизация аккаунта не реализована.
+ * Живая карточка профиля: отражает реальное состояние sync — не настроен → локальный vault
+ * («Encrypted on this device»), подключён → accountId + хост сервера. Управление синхронизацией
+ * (set up / reconnect / disconnect / устройства) живёт на экране «Security & sync».
+ *
+ * Ветвление на отдельный [LiveLocalVaultCard] (а не условный `collectAsState` в одном теле) держит
+ * composable-вызовы безусловными — правило слотовой таблицы Compose, как и на desktop ([LocalSync]
+ * стабилен, но строгий паттерн надёжнее при будущих рефакторингах).
  */
 @Composable
 private fun LocalVaultCard() {
-    ProfileCard(initials = "S", avatarBg = D.cyan, title = "Local vault", subtitle = "Encrypted on this device", badge = null)
+    when (val sync = LocalSync.current) {
+        null -> AccountProfileCard(accountCardModel(null))
+        else -> LiveLocalVaultCard(sync)
+    }
+}
+
+@Composable
+private fun LiveLocalVaultCard(sync: app.skerry.ui.sync.SyncCoordinator) {
+    AccountProfileCard(accountCardModel(sync.status.collectAsState().value, sync.savedConfig?.serverUrl))
+}
+
+@Composable
+private fun AccountProfileCard(model: app.skerry.ui.sync.AccountCardModel) {
+    ProfileCard(initials = model.initials, avatarBg = D.cyan, title = model.title, subtitle = model.subtitle, badge = null)
 }
 
 /** Статичная карточка профиля (превью/офскрин). */

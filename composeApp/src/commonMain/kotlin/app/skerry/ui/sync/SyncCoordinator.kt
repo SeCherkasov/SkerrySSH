@@ -405,6 +405,23 @@ class SyncCoordinator(
         }
     }
 
+    /**
+     * Отозвать чужое устройство по [deviceId] (Settings → Account). No-op без активной сессии.
+     * Возвращает `true`, если сервер подтвердил отзыв — UI по этому перечитывает список устройств.
+     * Отзыв ТЕКУЩЕГО устройства UI не предлагает (для этого есть [disconnect]).
+     */
+    suspend fun revokeDevice(deviceId: String): Boolean {
+        val c = client ?: return false
+        val s = session ?: return false
+        return try {
+            c.revokeDevice(s, deviceId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     /** Отключить sync на этом устройстве: забыть сессию и сохранённую привязку. */
     fun disconnect() {
         scope.launch {

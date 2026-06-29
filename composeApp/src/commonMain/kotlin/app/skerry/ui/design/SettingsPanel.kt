@@ -20,10 +20,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,9 +36,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.sync.AccountCardModel
 import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.sync.accountCardModel
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
+import kotlinx.coroutines.launch
 
 /** Панель настроек (модалка 760×560): nav 200dp + контент с 8 секциями (AI/Appearance/…/About). */
 @Composable
@@ -71,7 +76,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                     SettingsTab.AI -> AiSection(state)
                     SettingsTab.Appearance -> AppearanceSection(state)
                     SettingsTab.Terminal -> TerminalSection()
-                    SettingsTab.Account -> AccountSection()
+                    SettingsTab.Account -> AccountSection(state)
                     SettingsTab.Sync -> SyncSection(state)
                     SettingsTab.Security -> SecuritySection()
                     SettingsTab.Keyboard -> KeyboardSection()
@@ -309,34 +314,93 @@ private fun TerminalSection() {
 // Account.
 
 @Composable
-private fun AccountSection() {
-    SectionTitle("Account", "Your Skerry profile and the devices signed in to it.")
+private fun AccountSection(state: DesktopDesignState) {
+    SectionTitle("Account", "Your Skerry account and the devices linked to it.")
+    // Реальная модель — self-hosted zero-knowledge sync (без биллинга/PRO): карточка отражает живое
+    // состояние из координатора. Превью/офскрин (нет бэкенда) — локальный vault с «Set up sync».
+    val sync = LocalSync.current
+    if (sync == null) {
+        AccountCard(accountCardModel(null), sync = null, state = state)
+    } else {
+        LiveAccountSection(sync, state)
+    }
+}
+
+/** Живая карточка аккаунта: безусловный collectAsState внутри своего composable. */
+@Composable
+private fun LiveAccountSection(sync: app.skerry.ui.sync.SyncCoordinator, state: DesktopDesignState) {
+    val status = sync.status.collectAsState().value
+    val model = accountCardModel(status, sync.savedConfig?.serverUrl)
+    AccountCard(model, sync, state)
+    // Список устройств серверу известен только при активной сессии (Online) — иначе нечем спрашивать.
+    if (model.connected) LinkedDevices(sync)
+}
+
+/** Карточка профиля: аватар + заголовок/подпись + действия по состоянию (set up / reconnect / sync·disconnect). */
+@Composable
+private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCoordinator?, state: DesktopDesignState) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(D.cyan), contentAlignment = Alignment.Center) {
-            Txt("MK", color = Color(0xFF0A1A26), size = 14.sp, weight = FontWeight.SemiBold)
+            Txt(model.initials, color = Color(0xFF0A1A26), size = 14.sp, weight = FontWeight.SemiBold)
         }
         Column(Modifier.weight(1f)) {
-            Txt("Maya Kovac", color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
-            Txt("maya@skerry.dev", color = D.faint, size = 11.5.sp)
+            Txt(model.title, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
+            Txt(model.subtitle, color = D.faint, size = 11.5.sp)
         }
-        Badge("PRO · LIFETIME", bg = D.amber.copy(alpha = 0.14f), fg = D.amber, radius = 4, size = 10.sp)
+        // Account владеет жизненным циклом ПОДКЛЮЧЕНИЯ (set up / reconnect / disconnect). Действие
+        // «Sync now» здесь НЕ дублируем — оно про движок синка и живёт во вкладке Sync.
+        when {
+            model.connected && sync != null -> GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
+            model.linked -> PrimaryButton("Reconnect", onClick = state::openSyncSetup, icon = "cloud_sync")
+            else -> PrimaryButton("Set up sync", onClick = state::openSyncSetup, icon = "cloud_sync")
+        }
     }
-    Txt("SIGNED-IN DEVICES", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
-    DeviceRow("laptop_mac", "MacBook Pro 16″", "Sausalito · last active now", trailing = "macOS 15.4", thisDevice = true)
-    DeviceRow("smartphone", "iPhone 16 Pro", "last active 2 h ago", revoke = true)
-    DeviceRow("tablet_mac", "iPad Air", "last active Jun 14", revoke = true)
-    Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        GhostButton("Manage billing", onClick = {})
-        GhostButton("Sign out", onClick = {}, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f))
+}
+
+/** Реальные устройства аккаунта ([SyncCoordinator.listDevices]); Revoke отзывает чужое и перечитывает список. */
+@Composable
+private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator) {
+    val scope = rememberCoroutineScope()
+    var devices by remember { mutableStateOf<List<app.skerry.shared.sync.RemoteDevice>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    // reload++ заставляет LaunchedEffect перечитать список после отзыва устройства.
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(sync, reload) {
+        loading = true
+        devices = sync.listDevices()
+        loading = false
+    }
+
+    Txt("LINKED DEVICES", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
+    when {
+        loading -> Txt("Loading devices…", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        // На активной сессии сервер всегда возвращает хотя бы текущее устройство; пустой список =
+        // listDevices проглотил ошибку (нет связи/протух токен) — честно говорим, а не «только вы».
+        devices.isEmpty() -> Txt("Couldn't load devices. Try Sync now.", color = D.amber, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.size == 1 && devices.first().current -> Txt("Only this device so far.", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        else -> devices.forEach { d ->
+            DeviceRow(
+                icon = "devices",
+                name = d.name,
+                sub = if (d.current) "linked · this device" else "linked device",
+                thisDevice = d.current,
+                onRevoke = if (d.current || d.revoked) null else {
+                    { scope.launch { if (sync.revokeDevice(d.id)) reload++ } }
+                },
+            )
+        }
     }
 }
 
 @Composable
-private fun DeviceRow(icon: String, name: String, sub: String, trailing: String? = null, revoke: Boolean = false, thisDevice: Boolean = false) {
+private fun DeviceRow(icon: String, name: String, sub: String, trailing: String? = null, onRevoke: (() -> Unit)? = null, thisDevice: Boolean = false) {
+    // Отзыв необратим из UI (устройство переподключается мастер-паролем) — требуем подтверждение
+    // вторым кликом, чтобы случайный промах по списку не разлогинил рабочее устройство.
+    var confirming by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -351,9 +415,26 @@ private fun DeviceRow(icon: String, name: String, sub: String, trailing: String?
             Txt(sub, color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
         }
         if (trailing != null) Txt(trailing, color = D.faint, size = 11.sp)
-        if (revoke) Box(Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Txt("Revoke", color = D.dim, size = 11.5.sp)
+        if (onRevoke != null) {
+            if (confirming) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    RevokeChip("Confirm", D.sunset) { confirming = false; onRevoke() }
+                    RevokeChip("Cancel", D.dim) { confirming = false }
+                }
+            } else {
+                RevokeChip("Revoke", D.dim) { confirming = true }
+            }
         }
+    }
+}
+
+/** Маленькая обведённая кнопка-чип в строке устройства (Revoke/Confirm/Cancel). */
+@Composable
+private fun RevokeChip(label: String, fg: Color, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, D.cyan14, RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Txt(label, color = fg, size = 11.5.sp)
     }
 }
 
@@ -385,26 +466,26 @@ private fun SyncSection(state: DesktopDesignState) {
 /** Живой статус sync: безусловный collectAsState внутри своего composable (операции — на scope координатора). */
 @Composable
 private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: DesktopDesignState) {
+    // Sync владеет ДВИЖКОМ синхронизации: статус + «Sync now». Подключение/отвязка/устройства живут
+    // во вкладке Account — здесь их НЕ дублируем; в несоединённых состояниях ведём в Account.
+    val toAccount = { state.showSettingsTab(SettingsTab.Account) }
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> SyncStatusCard(
             "cloud_done", D.moss,
             "Connected · ${status.accountId}",
             "Pushed ${status.lastPushed} · pulled ${status.lastPulled} this session",
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                GhostButton("Sync now", onClick = { sync.syncNow() })
-                GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
-            }
+            GhostButton("Sync now", onClick = { sync.syncNow() })
         }
         SyncStatus.Busy -> SyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.") {}
-        is SyncStatus.Configured -> SyncStatusCard("cloud_off", D.amber, "Linked · ${status.accountId}", "Reconnect with your master password to sync.") {
-            PrimaryButton("Reconnect", onClick = state::openSyncSetup, icon = "cloud_sync")
+        is SyncStatus.Configured -> SyncStatusCard("cloud_off", D.amber, "Linked · ${status.accountId}", "Reconnect from Account to resume syncing.") {
+            GhostButton("Open Account", onClick = toAccount)
         }
         is SyncStatus.Failed -> SyncStatusCard("cloud_off", D.sunset, "Sync error", status.message) {
-            GhostButton("Set up sync", onClick = state::openSyncSetup)
+            GhostButton("Open Account", onClick = toAccount)
         }
-        SyncStatus.Disabled -> SyncStatusCard("cloud_off", D.faint, "Not connected", "Set up a self-hosted server to sync across devices.") {
-            PrimaryButton("Set up sync", onClick = state::openSyncSetup, icon = "cloud_sync")
+        SyncStatus.Disabled -> SyncStatusCard("cloud_off", D.faint, "Not connected", "Connect your account to sync across devices.") {
+            GhostButton("Open Account", onClick = toAccount)
         }
     }
 }
