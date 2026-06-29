@@ -17,6 +17,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -124,6 +127,19 @@ class SyncCoordinator(
     // подключение и disconnect его отменяют. null = live-pull не активен (синк только вручную).
     private var watchJob: kotlinx.coroutines.Job? = null
 
+    // Подписка на ЛОКАЛЬНЫЕ изменения vault ([Vault.localChanges]): правка/добавление/удаление записи
+    // на этом устройстве с дебаунсом запускает синк (push), чтобы изменение само улетело на сервер,
+    // а оттуда WS-сигналом — на другие устройства (live-sync «как Termius»). Один на сессию; отменяется
+    // в disconnect и заменяется при реконнекте.
+    private var pushJob: kotlinx.coroutines.Job? = null
+
+    // Сериализует ВСЕ циклы синка: их запускают doConnect/restoreSession, ручной syncNow, WS-live-pull
+    // (watchJob) и авто-push локальных правок (pushJob) — на Dispatchers.Default они иначе шли бы
+    // параллельно и наперегонки писали бы курсор ([syncState]) и [_status] (kotlin-ревью MEDIUM-2:
+    // два движка читают cursor=N, оба пишут cursor=M, статус отражает «последний добежавший»). LWW и
+    // замок vault уберегли бы данные, но курсор/статус рассогласовались бы. Один синк за раз.
+    private val syncMutex = Mutex()
+
     // Собственный scope: сетевые операции НЕ должны зависеть от жизненного цикла composable.
     // На мобильном форма перерисовывается по [status]: как только connect() ставит Busy, форма
     // покидает композицию — и если бы запуск шёл от её rememberCoroutineScope, операция отменилась бы
@@ -222,6 +238,7 @@ class SyncCoordinator(
             configStore.save(SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed))
             runSync()
             startWatch()
+            startLocalPush()
         } catch (e: CancellationException) {
             throw e // не глушим отмену — иначе порвём structured concurrency
         } catch (e: SyncException) {
@@ -280,9 +297,12 @@ class SyncCoordinator(
         }
     }
 
-    private suspend fun runSync() {
-        val c = client ?: return
-        val s = session ?: return
+    // Под [syncMutex]: параллельные вызовы (watchJob/pushJob/syncNow/connect) сериализуются, чтобы не
+    // гонять курсор и статус наперегонки. withLock — точка отмены, так что cancel из disconnect/реконнекта
+    // освобождает замок штатно (CancellationException пробрасывается).
+    private suspend fun runSync() = syncMutex.withLock {
+        val c = client ?: return@withLock
+        val s = session ?: return@withLock
         try {
             val outcome = SyncEngine(c, vault, syncState).sync(s)
             _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
@@ -306,10 +326,13 @@ class SyncCoordinator(
      * статус НЕ роняем в Failed, иначе временная просадка связи гасила бы рабочий Online. [runSync] на
      * каждый сигнал выполняется последовательно (collect не параллелит) и сам не мигает Busy.
      */
-    private fun startWatch() {
+    private suspend fun startWatch() {
         val c = client ?: return
         val s = session ?: return
+        // cancel + join старой подписки ДО запуска новой (реконнект без disconnect): иначе прошлый
+        // collect мог бы крутить runSync уже с новой сессией под старым курсором (kotlin-ревью MEDIUM-1).
         watchJob?.cancel()
+        watchJob?.join()
         watchJob = scope.launch {
             try {
                 c.changes(s).collect { runSync() }
@@ -319,6 +342,25 @@ class SyncCoordinator(
                 // WS оборвался (сеть/сервер/протух токен) — live-pull прекращаем тихо. Видимый статус
                 // остаётся прежним (Online после последнего успешного синка); ручной Sync доступен.
             }
+        }
+    }
+
+    /**
+     * Подписаться на локальные изменения vault и автоматически пушить их (live-sync «как Termius»):
+     * правка/добавление/удаление записи запускает синк, без ручного «Sync». Дебаунс [PUSH_DEBOUNCE_MS]
+     * коалесцирует пачку быстрых правок (массовый импорт, переименование с автосохранением) в один синк.
+     * Отменяет прошлую подписку (реконнект). [runSync] делает pull+push: pull→merge НЕ эмитит
+     * localChanges, поэтому входящие записи не порождают новый push — цикла нет.
+     */
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    private suspend fun startLocalPush() {
+        if (client == null || session == null) return
+        pushJob?.cancel()
+        pushJob?.join() // как в startWatch: дождаться остановки старой подписки до запуска новой
+        pushJob = scope.launch {
+            vault.localChanges
+                .debounce(PUSH_DEBOUNCE_MS)
+                .collect { if (client != null && session != null) runSync() }
         }
     }
 
@@ -338,12 +380,15 @@ class SyncCoordinator(
     /** Отключить sync на этом устройстве: забыть сессию и сохранённую привязку. */
     fun disconnect() {
         scope.launch {
-            // Сначала гасим WS-подписку и ДОЖИДАЕМСЯ её остановки: cancel() лишь шлёт сигнал, а её
-            // collect мог быть в середине runSync() — без join его уже-отработавший runSync записал бы
+            // Сначала гасим обе live-подписки и ДОЖИДАЕМСЯ их остановки: cancel() лишь шлёт сигнал, а
+            // их collect мог быть в середине runSync() — без join его уже-отработавший runSync записал бы
             // Online ПОСЛЕ выставленного ниже Disabled (статус залип бы на Online при client==null).
             watchJob?.cancel()
+            pushJob?.cancel()
             watchJob?.join()
+            pushJob?.join()
             watchJob = null
+            pushJob = null
             // runCatching: сбой close() (I/O при teardown) не должен оставить привязку/курсор на месте —
             // иначе disconnect молча провалился бы, а статус застрял.
             runCatching { client?.close() }
@@ -384,6 +429,7 @@ class SyncCoordinator(
                 configStore.save(cfg.copy(sealedRefreshToken = sealToken(dataKey, newSession.refreshToken)))
                 runSync()
                 startWatch()
+                startLocalPush()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -418,6 +464,13 @@ class SyncCoordinator(
         SyncException.Kind.PROTOCOL -> "Ошибка протокола синхронизации: ${e.message}"
     }
 }
+
+/**
+ * Дебаунс авто-пуша локальных правок: пачка быстрых изменений (массовый импорт, переименование с
+ * автосохранением каждой буквы) коалесцируется в один синк. Достаточно мал, чтобы правка долетала до
+ * других устройств за ~секунду, и достаточно велик, чтобы не пушить на каждое нажатие.
+ */
+private const val PUSH_DEBOUNCE_MS = 1500L
 
 /**
  * Криптослучайный 128-битный deviceId как hex. Берём 16 байт из CSPRNG libsodium через

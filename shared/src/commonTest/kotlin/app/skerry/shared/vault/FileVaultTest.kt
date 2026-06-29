@@ -1,6 +1,8 @@
 package app.skerry.shared.vault
 
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestResult
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import okio.Path
@@ -21,6 +23,7 @@ import kotlin.test.assertTrue
  * поэтому пароли короткие, а число unlock/create в каждом тесте минимально. libsodium требует
  * асинхронной инициализации до первого вызова — каждый тест обёрнут в [vaultTest].
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class) // runCurrent() в тестах localChanges
 class FileVaultTest {
 
     private val crypto: VaultCrypto = IonspinVaultCrypto()
@@ -402,6 +405,110 @@ class FileVaultTest {
         // Пароль vault не сменился: открывается исходным, а не переданным в adoptDataKey.
         assertEquals(UnlockResult.Success, vault().unlock("local".toCharArray()))
         assertEquals(UnlockResult.WrongPassword, vault().unlock("account".toCharArray()))
+    }
+
+    @Test
+    fun `put emits a local change for live-sync`() = runTest {
+        initializeVaultCrypto()
+        val v = vault()
+        v.create("m".toCharArray())
+        val seen = mutableListOf<Unit>()
+        val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
+        runCurrent() // дать подписчику зарегистрироваться до мутации (SharedFlow replay=0)
+
+        v.put("h", RecordType.HOST, "x".encodeToByteArray())
+        runCurrent()
+
+        assertEquals(1, seen.size)
+        job.cancel()
+    }
+
+    @Test
+    fun `remove emits a local change for live-sync`() = runTest {
+        initializeVaultCrypto()
+        val v = vault()
+        v.create("m".toCharArray())
+        v.put("h", RecordType.HOST, "x".encodeToByteArray())
+        val seen = mutableListOf<Unit>()
+        val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
+        runCurrent()
+
+        v.remove("h")
+        runCurrent()
+
+        assertEquals(1, seen.size)
+        job.cancel()
+    }
+
+    @Test
+    fun `removing an unknown id emits nothing`() = runTest {
+        initializeVaultCrypto()
+        val v = vault()
+        v.create("m".toCharArray())
+        val seen = mutableListOf<Unit>()
+        val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
+        runCurrent()
+
+        v.remove("nope")
+        runCurrent()
+
+        assertTrue(seen.isEmpty())
+        job.cancel()
+    }
+
+    @Test
+    fun `removing an already-tombstoned id emits nothing`() = runTest {
+        initializeVaultCrypto()
+        val v = vault()
+        v.create("m".toCharArray())
+        v.put("h", RecordType.HOST, "x".encodeToByteArray())
+        v.remove("h") // первое удаление → надгробие (эмит уже был, до подписки)
+        val seen = mutableListOf<Unit>()
+        val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
+        runCurrent()
+
+        v.remove("h") // повторное удаление надгробия — no-op, не должно будить push
+        runCurrent()
+
+        assertTrue(seen.isEmpty())
+        job.cancel()
+    }
+
+    @Test
+    fun `mergeRemote does not emit a local change`() = runTest {
+        initializeVaultCrypto()
+        val v = vault()
+        v.create("m".toCharArray())
+        val seen = mutableListOf<Unit>()
+        val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
+        runCurrent()
+
+        // Входящая запись с sync: merge кладёт её verbatim, но push обратно не нужен (LWW отверг бы),
+        // поэтому localChanges не эмитится — иначе pull→merge зациклил бы push.
+        val incoming = VaultRecord("r", RecordType.HOST, version = 5, updatedAt = TS, deviceId = "other", deleted = false, blob = ByteArray(8))
+        v.mergeRemote(listOf(incoming))
+        runCurrent()
+
+        assertTrue(seen.isEmpty())
+        job.cancel()
+    }
+
+    @Test
+    fun `compact does not emit a local change`() = runTest {
+        initializeVaultCrypto()
+        val v = vault()
+        v.create("m".toCharArray())
+        v.put("h", RecordType.HOST, "x".encodeToByteArray())
+        v.remove("h") // надгробие, которое компакция физически удалит
+        val seen = mutableListOf<Unit>()
+        val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
+        runCurrent()
+
+        v.compact(listOf("h"))
+        runCurrent()
+
+        assertTrue(seen.isEmpty())
+        job.cancel()
     }
 
     private companion object {
