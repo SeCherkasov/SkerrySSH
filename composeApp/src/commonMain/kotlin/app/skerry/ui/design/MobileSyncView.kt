@@ -304,7 +304,7 @@ private fun SyncBody(sync: SyncCoordinator) {
                 GhostButton("Sync now", onClick = { sync.syncNow() })
                 GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
             }
-            MobileWhatSyncs()
+            MobileWhatSyncs(sync)
             MobileLinkedDevices(sync)
         }
         SyncStatus.Busy -> MobileSyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.")
@@ -399,20 +399,29 @@ private fun SyncSetupBody(
 }
 
 /**
- * Что синхронизируется — паритет с desktop (Settings → Sync, секция WHAT SYNCS). Тумблеры пока
- * декоративные стабы (как на desktop: `onToggle = {}`); реальная фильтрация по типам записей — позже.
+ * Что синхронизируется — паритет с desktop (Settings → Sync, секция WHAT SYNCS). Живые тумблеры
+ * уровня аккаунта: пишут [SyncSettings] в vault через координатор, изменение уезжает тем же live-push.
+ * «SSH keys» и «Terminal history» из макета убраны сознательно (как на desktop): ключи синкаются
+ * всегда вместе с «Hosts & groups», а истории терминала как фичи ещё нет.
  */
 @Composable
-private fun MobileWhatSyncs() {
+private fun MobileWhatSyncs(sync: SyncCoordinator) {
+    val settings = sync.syncSettings.collectAsState().value
+    LaunchedEffect(Unit) { sync.refreshSyncSettings() }
     Txt("WHAT SYNCS", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 4.dp))
-    MobileSyncToggleRow("Hosts & groups", null, on = true)
-    MobileSyncToggleRow("Snippets", null, on = true)
-    MobileSyncToggleRow("SSH keys · re-encrypted on device", null, on = true)
-    MobileSyncToggleRow("Terminal history", "Off by default for privacy.", on = false)
+    // onToggle читает актуальное значение из flow, не снимок композиции (stale-closure write-write).
+    MobileSyncToggleRow("Hosts & groups", null, on = settings.syncHosts) {
+        val current = sync.syncSettings.value
+        sync.setSyncSettings(current.copy(syncHosts = !current.syncHosts))
+    }
+    MobileSyncToggleRow("Snippets", null, on = settings.syncSnippets) {
+        val current = sync.syncSettings.value
+        sync.setSyncSettings(current.copy(syncSnippets = !current.syncSnippets))
+    }
 }
 
 @Composable
-private fun MobileSyncToggleRow(label: String, sub: String?, on: Boolean) {
+private fun MobileSyncToggleRow(label: String, sub: String?, on: Boolean, onToggle: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -422,7 +431,7 @@ private fun MobileSyncToggleRow(label: String, sub: String?, on: Boolean) {
             Txt(label, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
             if (sub != null) Txt(sub, color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
         }
-        Toggle(on = on, onToggle = {})
+        Toggle(on = on, onToggle = onToggle)
     }
 }
 

@@ -9,6 +9,8 @@ import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.InMemorySyncStateStore
+import app.skerry.shared.sync.SyncSettings
+import app.skerry.shared.sync.SyncSettingsStore
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.MasterKey
 import app.skerry.shared.vault.Vault
@@ -135,6 +137,19 @@ class SyncCoordinator(
      */
     private val _serverReachable = MutableStateFlow(ServerReachable.UNKNOWN)
     val serverReachable: StateFlow<ServerReachable> = _serverReachable.asStateFlow()
+
+    // «Что синхронизировать» (уровень аккаунта) — хранится записью SETTINGS в самом vault, едет тем же
+    // синком (см. [SyncSettings]). Читаем лениво из vault: на залоченном vault стор отдаёт дефолт.
+    private val settingsStore = SyncSettingsStore(vault)
+
+    /**
+     * Текущее «что синхронизировать» для UI (секция WHAT SYNCS). Обновляется из vault через
+     * [refreshSyncSettings] (вызывать после unlock и при показе экрана) и автоматически после каждого
+     * успешного синка, подтянувшего записи (другое устройство могло поменять настройку). [setSyncSettings]
+     * пишет её в vault — изменение уезжает на сервер тем же live-push, что и прочие правки.
+     */
+    private val _syncSettings = MutableStateFlow(SyncSettings())
+    val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
 
     private var client: SyncClient? = null
     private var session: SyncSession? = null
@@ -316,6 +331,40 @@ class SyncCoordinator(
         _biometricResetNeeded.value = false
     }
 
+    /**
+     * Перечитать «что синхронизировать» из vault в [syncSettings]. На залоченном vault стор отдаёт
+     * дефолт. Зовётся автоматически после синка с pull'ом и вручную при показе экрана настроек (после
+     * unlock значение в vault уже доступно, а flow мог стартовать с дефолта на залоченном старте).
+     * Чтение vault (диск + AEAD) уводим с UI-потока на [scope] (Dispatchers.Default) — ANR-риск.
+     */
+    fun refreshSyncSettings() {
+        scope.launch { _syncSettings.value = settingsStore.load() }
+    }
+
+    /**
+     * Сохранить «что синхронизировать» (уровень аккаунта). [syncSettings] обновляем сразу (оптимистично,
+     * для отзывчивости тумблера), а запись в vault — на [scope] (диск/atomicWrite не на UI-потоке).
+     * Запись настроек — обычная запись vault, поэтому [Vault.put] эмитит localChanges, и live-push сам
+     * отправит её на сервер (а оттуда на другие устройства).
+     *
+     * Re-enable backfill (логика Termius): при ВКЛЮЧЕНИИ ранее выключенного типа сбрасываем курсор в 0
+     * ДО сохранения — пока тип был OFF, курсор проскочил serverSeq чужих записей этого типа, и без
+     * сброса повторное включение их бы не подтянуло (security-ревью MEDIUM: «re-enable не делает
+     * backfill»). Полный re-pull идемпотентен ([Vault.mergeRemote] по LWW), лишние дубли не страшны.
+     */
+    fun setSyncSettings(settings: SyncSettings) {
+        val previous = _syncSettings.value
+        _syncSettings.value = settings
+        scope.launch {
+            val reEnabled = (settings.syncHosts && !previous.syncHosts) ||
+                (settings.syncSnippets && !previous.syncSnippets)
+            if (reEnabled) configStore.load()?.let { syncState.setCursor(it.accountId, 0) }
+            // save ПОСЛЕ сброса курсора: его localChanges разбудит pushJob→runSync, который должен
+            // увидеть уже сброшенный курсор и сделать полный re-pull (debounce даёт достаточный зазор).
+            settingsStore.save(settings)
+        }
+    }
+
     /** Прогнать один цикл синхронизации (pull/merge/push). No-op, если не подключены. */
     fun syncNow() {
         if (client == null || session == null) return
@@ -332,10 +381,13 @@ class SyncCoordinator(
         val c = client ?: return@withLock
         val s = session ?: return@withLock
         try {
-            val outcome = SyncEngine(c, vault, syncState).sync(s)
+            val outcome = SyncEngine(c, vault, syncState, settings = { settingsStore.load() }).sync(s)
             _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
             // Подтянули записи с сервера → обновить менеджеры списков, иначе синканутое не видно до перезахода.
-            if (outcome.pulled > 0) runCatching { onSynced() }
+            if (outcome.pulled > 0) {
+                refreshSyncSettings() // другое устройство могло сменить «что синхронизировать»
+                runCatching { onSynced() }
+            }
         } catch (e: CancellationException) {
             throw e // отмену не глушим — иначе порвём structured concurrency
         } catch (e: SyncException) {

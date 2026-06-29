@@ -458,10 +458,35 @@ private fun SyncSection(state: DesktopDesignState) {
         LiveSyncStatus(sync, state)
     }
     Txt("WHAT SYNCS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
-    SettingToggleRow("Hosts & groups", "", on = true, onToggle = {})
-    SettingToggleRow("Snippets", "", on = true, onToggle = {})
-    SettingToggleRow("SSH keys · re-encrypted on device", "", on = true, onToggle = {})
-    SettingToggleRow("Terminal history", "Off by default for privacy.", on = false, onToggle = {})
+    if (sync == null) {
+        // Превью без бэкенда: статичные тумблеры (как в макете).
+        SettingToggleRow("Hosts & groups", "", on = true, onToggle = {})
+        SettingToggleRow("Snippets", "", on = true, onToggle = {})
+    } else {
+        WhatSyncsToggles(sync)
+    }
+}
+
+/**
+ * Живые тумблеры «что синхронизировать» (уровень аккаунта): пишут [SyncSettings] в vault через
+ * координатор, изменение уезжает тем же live-push. «SSH keys» и «Terminal history» из макета убраны
+ * сознательно: ключи нужны для аутентификации хостов и синкаются всегда вместе с «Hosts & groups»
+ * (отдельный выключатель сломал бы связки host→credential), а истории терминала как фичи ещё нет.
+ */
+@Composable
+private fun WhatSyncsToggles(sync: app.skerry.ui.sync.SyncCoordinator) {
+    val settings = sync.syncSettings.collectAsState().value
+    LaunchedEffect(Unit) { sync.refreshSyncSettings() } // vault уже открыт на экране настроек
+    // В onToggle читаем АКТУАЛЬНОЕ значение из flow, не снимок композиции: иначе быстрый второй тап
+    // (по другому тумблеру) до перерисовки откатил бы первый (stale-closure write-write).
+    SettingToggleRow("Hosts & groups", "", on = settings.syncHosts, onToggle = {
+        val current = sync.syncSettings.value
+        sync.setSyncSettings(current.copy(syncHosts = !current.syncHosts))
+    })
+    SettingToggleRow("Snippets", "", on = settings.syncSnippets, onToggle = {
+        val current = sync.syncSettings.value
+        sync.setSyncSettings(current.copy(syncSnippets = !current.syncSnippets))
+    })
 }
 
 /** Живой статус sync: безусловный collectAsState внутри своего composable (операции — на scope координатора). */
