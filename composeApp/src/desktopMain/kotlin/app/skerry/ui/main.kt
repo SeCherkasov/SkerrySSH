@@ -308,12 +308,15 @@ fun main() {
             snippets.reload()
             tunnels.reload()
             knownHosts.refresh()
+            // BYOK-настройки AI (ключ/модель) — тоже запись SETTINGS в vault: перечитываем и здесь,
+            // чтобы правка, прилетевшая живым синком с другого устройства (onSynced зовёт reloadManagers),
+            // сразу отражалась в UI, а не только после перезахода.
+            ai.refresh()
         }
         val onVaultUnlocked: () -> Unit = {
             runCatching { VaultMigration(vault, hostStore).migrate() }
+            // Vault открыт → перечитать менеджеры (включая BYOK-настройки AI) из расшифрованных записей.
             reloadManagers()
-            // Vault открыт → перечитать BYOK-настройки AI (ключ/модель) из зашифрованной записи.
-            ai.refresh()
             // keep-connected: vault открыт → есть dataKey, можно бесшумно восстановить sync-сессию.
             sync.restoreSession()
         }

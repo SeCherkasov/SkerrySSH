@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +64,7 @@ import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.sync.SyncCoordinator
+import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.vault.RESET_CONFIRM_WORD
@@ -131,8 +133,16 @@ fun MobileDesignApp(
             )
         }
     }
-    // credentials появляется (null→controller) при разблокировке vault — перечитываем и AI-настройки.
-    LaunchedEffect(deps.credentials) { ai?.refresh() }
+    // AI-настройки живут записью SETTINGS в (синхронизируемом) vault. Контроллер надо перечитывать,
+    // когда синк подтянул записи с сервера — иначе BYOK-ключ, настроенный на другом устройстве, в
+    // мобильном UI не появится без перезахода. Разблокировку vault обрабатываем ОТДЕЛЬНО, в
+    // [MobileChrome] (он композится только за гейтом и заходит в композицию на каждый unlock): вешать
+    // refresh на [deps.credentials] нельзя — на Android этот контроллер создаётся сразу и не меняется,
+    // так что эффект сработал бы ровно один раз на залоченном старте и вернул бы дефолт («AI сбрасывается»).
+    val syncStatus = deps.sync?.status?.collectAsState()?.value
+    LaunchedEffect(syncStatus) {
+        if (syncStatus is SyncStatus.Online && syncStatus.lastPulled > 0) ai?.refresh()
+    }
     CompositionLocalProvider(
         LocalFonts provides fonts,
         // Внешний вид терминала из настроек (More → Appearance): шрифт + кегль читает TerminalScreen.
@@ -176,9 +186,9 @@ fun MobileDesignApp(
                     // тут принимает dataKey аккаунта, так что биометрия обернёт уже финальный ключ.
                     offerSyncForm = deps.sync?.let { s -> { onDone -> SyncOnboardingScreen(s, onDone) } },
                     offerBiometricForm = { inFlight, onEnable, onSkip -> MobileBiometricOfferScreen(inFlight, onEnable, onSkip) },
-                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked) }
+                ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked, ai) }
             } else {
-                MobileChrome(state, onLock = null, sessions = liveSessions, credentials = deps.credentials, onVaultUnlocked = onVaultUnlocked)
+                MobileChrome(state, onLock = null, sessions = liveSessions, credentials = deps.credentials, onVaultUnlocked = onVaultUnlocked, ai = ai)
             }
         }
     }
@@ -196,12 +206,17 @@ private fun MobileChrome(
     sessions: SessionsController?,
     credentials: CredentialManagerController?,
     onVaultUnlocked: () -> Unit,
+    ai: AiAssistantController?,
 ) {
     // Keychain-секреты живут в открытом vault — за гейтом мастер-пароля сперва прогоняем миграцию
-    // данных ([onVaultUnlocked]), затем перечитываем.
+    // данных ([onVaultUnlocked]), затем перечитываем. [MobileChrome] композится только за гейтом и
+    // заходит в композицию на каждую разблокировку, поэтому здесь же перечитываем AI-настройки из
+    // теперь-открытого vault (BYOK-ключ хранится записью SETTINGS; на залоченном старте контроллер
+    // видел только дефолт). Синканные с другого устройства правки ловит отдельный эффект в MobileDesignApp.
     LaunchedEffect(credentials) {
         onVaultUnlocked()
         credentials?.reload()
+        ai?.refresh()
     }
 
     // Хост без привязанного секрета → спрашиваем пароль листом перед подключением. Вместе с хостом
