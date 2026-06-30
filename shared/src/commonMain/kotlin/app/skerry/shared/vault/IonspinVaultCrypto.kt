@@ -92,6 +92,17 @@ class IonspinVaultCrypto : VaultCrypto {
             .toByteArray()
     }
 
+    override fun newTransferKey(): ByteArray {
+        requireInitialized()
+        return AuthenticatedEncryptionWithAssociatedData.xChaCha20Poly1305IetfKeygen().toByteArray()
+    }
+
+    override fun sealDataKeyForTransfer(dataKey: DataKey, transferKey: ByteArray): ByteArray =
+        aeadSeal(transferKey, dataKey.bytes, TRANSFER_AAD)
+
+    override fun openTransferredDataKey(transferKey: ByteArray, envelope: ByteArray): DataKey? =
+        aeadOpen(transferKey, envelope, TRANSFER_AAD)?.let { DataKey(it) }
+
     override fun wrapDataKey(masterKey: MasterKey, dataKey: DataKey): ByteArray =
         aeadSeal(masterKey.bytes, dataKey.bytes, WRAP_AAD)
 
@@ -159,6 +170,10 @@ class IonspinVaultCrypto : VaultCrypto {
         // Доменный AAD обёртки dataKey: отделяет её от записей (seal с AAD слота), чтобы
         // обёртку нельзя было подставить как запись и наоборот даже при совпадении ключей.
         val WRAP_AAD = "skerry.vault.wrapped-data-key.v1".encodeToByteArray()
+
+        // Доменный AAD конверта быстрого паринга (вариант B): отделяет перенос dataKey под
+        // transferKey от обёртки masterKey'ем и от записей — конверт нельзя подставить как иной блоб.
+        val TRANSFER_AAD = "skerry.pairing.transfer-key.v1".encodeToByteArray()
 
         // Деривация authKey: контекст ровно 8 байт (crypto_kdf_CONTEXTBYTES), субключ №1.
         const val AUTH_CONTEXT = "skerryau" // 8 ASCII-символов

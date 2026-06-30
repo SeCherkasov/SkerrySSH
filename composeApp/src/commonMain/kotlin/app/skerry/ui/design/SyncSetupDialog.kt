@@ -182,12 +182,12 @@ private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun FieldLabel(text: String, top: androidx.compose.ui.unit.Dp = 12.dp) {
+internal fun FieldLabel(text: String, top: androidx.compose.ui.unit.Dp = 12.dp) {
     Txt(text, color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = top, bottom = 5.dp))
 }
 
 @Composable
-private fun SyncField(
+internal fun SyncField(
     placeholder: String,
     value: String,
     icon: String,

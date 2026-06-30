@@ -333,7 +333,7 @@ private fun LiveAccountSection(sync: app.skerry.ui.sync.SyncCoordinator, state: 
     val model = accountCardModel(status, sync.savedConfig?.serverUrl)
     AccountCard(model, sync, state)
     // Список устройств серверу известен только при активной сессии (Online) — иначе нечем спрашивать.
-    if (model.connected) LinkedDevices(sync)
+    if (model.connected) LinkedDevices(sync, onLink = state::openPairing)
 }
 
 /** Карточка профиля: аватар + заголовок/подпись + действия по состоянию (set up / reconnect / sync·disconnect). */
@@ -363,7 +363,7 @@ private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCo
 
 /** Реальные устройства аккаунта ([SyncCoordinator.listDevices]); Revoke отзывает чужое и перечитывает список. */
 @Composable
-private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator) {
+private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -> Unit) {
     val scope = rememberCoroutineScope()
     var devices by remember { mutableStateOf<List<app.skerry.shared.sync.RemoteDevice>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -396,6 +396,8 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator) {
             )
         }
     }
+    // Быстрый паринг: показать новому устройству QR/код, чтобы привязать его без мастер-пароля аккаунта.
+    GhostButton("Link a device", onClick = onLink, icon = "qr_code", modifier = Modifier.padding(top = 12.dp))
 }
 
 @Composable

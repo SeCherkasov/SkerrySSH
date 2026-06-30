@@ -13,6 +13,7 @@ import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSettingsStore
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.MasterKey
+import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
 import kotlinx.coroutines.CoroutineScope
@@ -57,6 +58,12 @@ class InMemorySyncConfigStore : SyncConfigStore {
     override fun save(config: SyncConfig) { this.config = config }
     override fun clear() { config = null }
 }
+
+/**
+ * То, что вошедшее устройство показывает для быстрого паринга: [payload] — строка [PairingPayload]
+ * под QR/код, [expiresAt] — момент протухания pairing-сессии (epoch ms) для обратного отсчёта в UI.
+ */
+class PairingOffer(val payload: String, val expiresAt: Long)
 
 /** Видимое UI состояние подключения к sync. */
 sealed interface SyncStatus {
@@ -188,6 +195,11 @@ class SyncCoordinator(
     // два движка читают cursor=N, оба пишут cursor=M, статус отражает «последний добежавший»). LWW и
     // замок vault уберегли бы данные, но курсор/статус рассогласовались бы. Один синк за раз.
     private val syncMutex = Mutex()
+
+    // Сериализует startPairing: двойной тап «Link a device» не должен плодить несколько живых pairing-
+    // сессий на сервере — каждая независимо валидна до TTL и расширяет окно атаки. tryLock: второй
+    // параллельный вызов сразу возвращает null (UI просто не покажет второй код).
+    private val pairMutex = Mutex()
 
     // Собственный scope: сетевые операции НЕ должны зависеть от жизненного цикла composable.
     // На мобильном форма перерисовывается по [status]: как только connect() ставит Busy, форма
@@ -338,6 +350,148 @@ class SyncCoordinator(
     /** Сбросить приглашение перерегистрировать отпечаток (пользователь перерегистрировал или отклонил). */
     fun acknowledgeBiometricReset() {
         _biometricResetNeeded.value = false
+    }
+
+    /**
+     * Начать быстрый паринг на ВОШЕДШЕМ устройстве (вариант B): сгенерировать одноразовый transferKey,
+     * запечатать им живой dataKey и отдать конверт серверу ([SyncClient.startPairing]); вернуть
+     * [PairingOffer] — строку для QR/кода ([PairingPayload]) и срок жизни. transferKey уезжает только в
+     * QR, на сервер идёт лишь конверт, поэтому серверный шифротекст без QR бесполезен. Требует активной
+     * сессии и разблокированного vault; `null` при сбое (статус → [SyncStatus.Failed]). suspend —
+     * вызывается из корутины UI (короткий POST); transferKey/копию dataKey затираем в finally.
+     */
+    suspend fun startPairing(): PairingOffer? {
+        val c = client ?: return null
+        val s = session ?: return null
+        val cfg = configStore.load() ?: return null
+        // tryLock сериализует паринг: повторный вызов, пока предыдущий не завершился, сразу даёт null.
+        if (!pairMutex.tryLock()) return null
+        // НЕ трогаем глобальный _status: паринг запускается, когда устройство уже Online, и разовый сбой
+        // POST'а не должен ронять статус в Failed (это схлопнуло бы всю Online-секцию вместе с самой
+        // карточкой паринга). Об ошибке сигналим только возвратом null — UI покажет её локально.
+        val dataKey = vault.exportDataKey()
+        if (dataKey == null) {
+            pairMutex.unlock()
+            return null
+        }
+        val transferKey = crypto.newTransferKey()
+        return try {
+            val envelope = crypto.sealDataKeyForTransfer(dataKey, transferKey)
+            val ticket = c.startPairing(s, envelope)
+            // encode() копирует transferKey в base64-строку до finally, где сырой массив затирается.
+            PairingOffer(PairingPayload(cfg.serverUrl, ticket.code, transferKey).encode(), ticket.expiresAt)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        } finally {
+            dataKey.zeroize()
+            transferKey.fill(0)
+            pairMutex.unlock()
+        }
+    }
+
+    /**
+     * Завершить быстрый паринг на НОВОМ устройстве (вариант B): принять строку из QR/ручного ввода,
+     * claim'нуть сессию по коду ([SyncClient.claimPairing]), развернуть dataKey аккаунта transferKey'ем
+     * (в обход сервера) и записать локальный vault под [localPassword] — этим паролем устройство будет
+     * разблокироваться дальше, мастер-пароль аккаунта вводить не нужно. Если vault ещё не создан
+     * (онбординг-join) — создаём его этим паролем; если создан, но заблокирован — разблокируем им.
+     * Запуск fire-and-forget, прогресс/итог — через [status]; хвост (client/session/курсор/конфиг/
+     * health/runSync/startWatch/startLocalPush) повторяет [doConnect].
+     */
+    fun claimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean = false) {
+        // Busy синхронно (как connect): онбординг-форма гасит «Skip»/двойной сабмит по статусу Busy.
+        _status.value = SyncStatus.Busy
+        // Копируем и затираем оригинал ДО launch (TOCTOU): корутина стартует не сразу, вызывающий мог бы
+        // затереть массив раньше, чем vault.create/unlock его прочтёт. Копией владеет doClaimPairing.
+        val owned = localPassword.copyOf()
+        localPassword.fill(' ')
+        scope.launch { doClaimPairing(payload, owned, keepConnected) }
+    }
+
+    private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean) {
+        _status.value = SyncStatus.Busy
+        val parsed = PairingPayload.decode(payload)
+        if (parsed == null) {
+            _status.value = SyncStatus.Failed("Не похоже на код связывания")
+            localPassword.fill(' ')
+            return
+        }
+        // Развёрнутый ключ аккаунта держим во внешней переменной, чтобы затереть в finally, ПОКА им не
+        // завладел adoptDataKey (после успешного adopt обнуляем ссылку — иначе затёрли бы живой ключ).
+        var accountDataKey: DataKey? = null
+        // Клиент, который мы открыли, но ещё не сделали активным [client]: при ошибке до присвоения его
+        // нужно закрыть (Ktor-пул/сокеты/диспетчер), иначе утечёт на весь процесс (kotlin-ревью).
+        var openedClient: SyncClient? = null
+        try {
+            val syncClient = clientFactory(parsed.serverUrl).also { openedClient = it }
+            val deviceId = deviceIdProvider() // новое устройство для аккаунта — всегда свежий id
+            val device = DeviceInfo(deviceId, deviceName, platformName)
+            val result = syncClient.claimPairing(parsed.code, device)
+
+            val decoded = crypto.openTransferredDataKey(parsed.transferKey, result.encryptedDataKey)
+            if (decoded == null) {
+                // transferKey не подошёл к конверту — битый/подменённый код. claimPairing уже сжёг
+                // одноразовый код на сервере, повтор не поможет: пусть пользователь начнёт паринг заново.
+                _status.value = SyncStatus.Failed("Код связывания недействителен")
+                return
+            }
+            accountDataKey = decoded
+
+            // Привести локальный vault к разблокированному состоянию под [localPassword], затем принять
+            // ключ аккаунта (переобёртка под этот пароль + перезапись файла). Существующие локальные
+            // записи под старым ключом станут нечитаемы — синканутые придут заново полным re-pull ниже.
+            if (!vault.exists()) {
+                vault.create(localPassword.copyOf())
+            } else if (!vault.isUnlocked) {
+                when (vault.unlock(localPassword.copyOf())) {
+                    UnlockResult.Success -> {}
+                    UnlockResult.WrongPassword -> {
+                        _status.value = SyncStatus.Failed("Неверный пароль этого устройства")
+                        return
+                    }
+                    UnlockResult.Corrupted -> {
+                        _status.value = SyncStatus.Failed("Локальное хранилище повреждено")
+                        return
+                    }
+                }
+            }
+            val adopted = vault.adoptDataKey(decoded, localPassword.copyOf())
+            // adoptDataKey забирает владение ключом ТОЛЬКО при принятии (true). Если он отверг ключ
+            // (false — совпал с текущим; для нового устройства практически невозможно) — владение
+            // осталось у нас, держим ссылку, чтобы finally затёр (security-ревью). Иначе обнуляем.
+            if (adopted) accountDataKey = null
+            if (adopted && runCatching { onDataKeyAdopted() }.getOrDefault(false)) {
+                _biometricResetNeeded.value = true
+            }
+
+            client = syncClient
+            openedClient = null // владение передано полю client (его закроет disconnect)
+            session = result.session
+            // Новое устройство: локально записей нет — полный re-pull всей истории аккаунта (как adoptedKey в doConnect).
+            syncState.setCursor(result.accountId, 0)
+            val sealed = if (keepConnected) {
+                vault.exportDataKey()?.let { dk -> try { sealToken(dk, result.session.refreshToken) } finally { dk.zeroize() } }
+            } else null
+            configStore.save(SyncConfig(parsed.serverUrl, result.accountId, deviceId, keepConnected, sealed))
+            healthTarget.value = parsed.serverUrl
+            runSync()
+            startWatch()
+            startLocalPush()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SyncException) {
+            _status.value = SyncStatus.Failed(syncErrorMessage(e))
+        } catch (e: Exception) {
+            // Без e.message: оно может нести внутренние детали крипто/Ktor наружу в UI (security-ревью).
+            _status.value = SyncStatus.Failed("Не удалось связать устройство. Проверьте код и попробуйте снова.")
+        } finally {
+            localPassword.fill(' ')
+            accountDataKey?.zeroize() // если до adopt не дошли (или ключ отвергнут) — затираем развёрнутый ключ
+            parsed.transferKey.fill(0)
+            runCatching { openedClient?.close() } // открыли, но не сделали активным — закрываем
+        }
     }
 
     /**

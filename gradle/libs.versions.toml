@@ -41,6 +41,13 @@ postgresql = "42.7.5"
 hikari = "6.3.0"
 # Nimbus SRP6a — аудированная реализация SRP-6a, используется сервером и JVM-клиентом sync
 nimbus-srp = "2.1.0"
+# --- Быстрый паринг устройств (вариант B): QR-генерация + камера-сканер ---
+# ZXing core — чистая Java (работает и на desktop JVM, и на Android), генерация QR-матрицы паринга
+zxing = "3.5.3"
+# CameraX — превью камеры для сканера QR на Android (только androidMain)
+camerax = "1.4.1"
+# ML Kit barcode-scanning — распознавание QR в кадре камеры (Android, on-device, без сети)
+mlkit-barcode = "17.3.0"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
@@ -90,6 +97,12 @@ ionspin-libsodium = { module = "com.ionspin.kotlin:multiplatform-crypto-libsodiu
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okio" }
 kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkit-barcode" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

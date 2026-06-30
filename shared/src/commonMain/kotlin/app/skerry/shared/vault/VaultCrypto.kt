@@ -82,6 +82,30 @@ interface VaultCrypto {
      */
     fun deriveAuthKey(masterKey: MasterKey): ByteArray
 
+    /**
+     * Новый одноразовый transfer-ключ для быстрого паринга устройств (вариант B,
+     * `docs/skerry-sync-design.md` §3): 32 случайных байта (длина AEAD-ключа). Уходит **только** в
+     * QR/код, который пользователь переносит на новое устройство глазами/камерой — на сервер не
+     * попадает, поэтому серверный шифротекст dataKey без него бесполезен. Возвращается как сырые
+     * байты (а не [DataKey]), потому что должен сериализоваться в полезную нагрузку паринга.
+     */
+    fun newTransferKey(): ByteArray
+
+    /**
+     * Запечатать живой [dataKey] под одноразовым [transferKey] для переноса на новое устройство
+     * (вариант B). Результат (nonce-prefix XChaCha20-Poly1305) кладётся на сервер в pairing-сессию;
+     * развернуть его можно только тем же [transferKey], которого у сервера нет. Доменный AAD
+     * отделяет конверт паринга от обёртки dataKey и записей. [transferKey] должен быть длиной
+     * AEAD-ключа (см. [newTransferKey]).
+     */
+    fun sealDataKeyForTransfer(dataKey: DataKey, transferKey: ByteArray): ByteArray
+
+    /**
+     * Развернуть перенесённый dataKey на новом устройстве тем [transferKey], что пришёл из QR/кода.
+     * `null` ⇒ неверный [transferKey] или подменённый конверт (AEAD-провал) — как [unwrapDataKey].
+     */
+    fun openTransferredDataKey(transferKey: ByteArray, envelope: ByteArray): DataKey?
+
     /** Обернуть [dataKey] мастер-ключом для хранения на диске/сервере (видит только шифротекст). */
     fun wrapDataKey(masterKey: MasterKey, dataKey: DataKey): ByteArray
 
