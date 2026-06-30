@@ -41,8 +41,11 @@ object CommandRiskClassifier {
 
         // ---------- DANGER ----------
 
-        // Fork-бомба :(){ :|:& };:
-        if (compact.contains(":(){:|:&};:") || rx(""":\s*\(\s*\)\s*\{[^}]*\|[^}]*&""").containsMatchIn(cmd)) {
+        // Fork-бомба :(){ :|:& };: — а также переименованная (обратная ссылка на то же имя функции).
+        if (compact.contains(":(){:|:&};:") ||
+            rx(""":\s*\(\s*\)\s*\{[^}]*\|[^}]*&""").containsMatchIn(cmd) ||
+            rx("""\b(\w+)\s*\(\s*\)\s*\{[^}]*\|[^}]*&[^}]*}\s*;\s*\1\b""").containsMatchIn(cmd)
+        ) {
             return danger("Fork bomb — will exhaust system resources.")
         }
 
@@ -68,9 +71,10 @@ object CommandRiskClassifier {
             return danger("Pipes a downloaded script straight into a shell — runs unverified remote code.")
         }
 
-        // Любой пайп в интерпретатор шелла (в т.ч. base64 -d | sh) — исполнение сконструированного кода
-        if (rx("""\|\s*(sudo\s+)?(sh|bash|zsh|ksh|dash)\b""").containsMatchIn(lower)) {
-            return danger("Pipes output into a shell — runs constructed or remote code.")
+        // Любой пайп в интерпретатор (шелл ИЛИ python/perl/ruby/node, в т.ч. base64 -d | python3) —
+        // исполнение сконструированного/декодированного кода. Список интерпретаторов совпадает с curl|… выше.
+        if (rx("""\|\s*(sudo\s+)?(sh|bash|zsh|ksh|dash|python\d?|perl|ruby|node)\b""").containsMatchIn(lower)) {
+            return danger("Pipes output into an interpreter — runs constructed or remote code.")
         }
 
         // rsync --delete — зеркальное удаление, стирает всё в приёмнике, чего нет в источнике

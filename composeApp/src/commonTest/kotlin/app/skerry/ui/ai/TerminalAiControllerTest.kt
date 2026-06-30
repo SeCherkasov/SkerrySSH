@@ -9,6 +9,7 @@ import app.skerry.shared.ai.AiSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -230,6 +231,42 @@ class TerminalAiControllerTest {
         assertEquals("uptime", c.confirm())
         assertNull(c.pending)
         assertNull(c.confirm())
+    }
+
+    @Test
+    fun `a cancelled request does not clobber the state of the next one`() = runTest {
+        // Регрессия (job-reassignment): cancel() сбрасывает busy синхронно, позволяя сразу ask()
+        // новый запрос; finally отменённой корутины не должен обнулять состояние уже активной новой.
+        val gateFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val gateSecond = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var call = 0
+        val provider = object : AiProvider {
+            override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
+                if (call++ == 0) { emit(AiDelta("first")); gateFirst.await() } else { emit(AiDelta("uptime")); gateSecond.await() }
+            }
+            override suspend fun close() {}
+        }
+        val c = TerminalAiController(
+            AiPolicy.Balanced, settings = { AiSettings(apiKey = "sk-x") },
+            providerFactory = { provider }, scope = this,
+        )
+
+        c.ask("first request")
+        runCurrent()
+        assertTrue(c.busy)
+
+        c.cancel()
+        c.ask("second request")
+        runCurrent()
+        // Вторая генерация активна; поздний finally первой (отменённой) не должен её погасить.
+        assertTrue(c.busy, "the second request is still running")
+        assertEquals("uptime", c.streaming)
+
+        gateSecond.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("uptime", c.pending)
+        assertFalse(c.busy)
+        assertNull(c.streaming)
     }
 
     @Test

@@ -50,6 +50,24 @@ class SecretRedactorTest {
     }
 
     @Test
+    fun `masks a multi-word unquoted secret value to the end of the line`() {
+        // Регрессия: незакавыченное значение бралось как один токен (\S+) — «my» маскировалось,
+        // а «long passphrase» утекало. Значение должно скрываться до конца строки.
+        val out = SecretRedactor.redact("secret = my long passphrase")
+        assertFalse(out.contains("passphrase"), "trailing words of the secret must be masked")
+        assertTrue(out.contains("secret"))
+        assertTrue(out.contains(SecretRedactor.MASK))
+    }
+
+    @Test
+    fun `masks a two-word Authorization Basic credential whole`() {
+        // Регрессия: `Authorization: Basic <base64>` маскировал только слово-схему «Basic»,
+        // оставляя сам base64-секрет открытым.
+        val out = SecretRedactor.redact("curl -H \"Authorization: Basic dXNlcjpwYXNzd29yZA==\" https://api.example.com")
+        assertFalse(out.contains("dXNlcjpwYXNzd29yZA=="), "the base64 credential must not leak")
+    }
+
+    @Test
     fun `does not mask a plain word followed by another word`() {
         // Разделитель строго :/= — «password for prod» не должно маскировать «for».
         val out = SecretRedactor.redact("the password for prod is set")

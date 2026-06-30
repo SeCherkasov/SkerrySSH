@@ -47,6 +47,8 @@ class AiAssistantController(
     var busy by mutableStateOf(false); private set
 
     private var job: Job? = null
+    // См. TerminalAiController: поколение защищает состояние нового запроса от finally отменённого старого.
+    private var generation = 0
 
     val isConfigured: Boolean get() = settings.isConfigured
 
@@ -79,6 +81,7 @@ class AiAssistantController(
         busy = true
         error = null
         streaming = ""
+        val gen = ++generation
         val history = turns.map { AiMessage(it.role, it.text) }
         val messages = listOf(AiMessage(AiRole.SYSTEM, SYSTEM_PROMPT)) + history
         val config = settings.toOpenAiConfig()
@@ -100,14 +103,17 @@ class AiAssistantController(
                 error = "AI request failed: ${e.message}"
             } finally {
                 provider?.let { runCatching { it.close() } }
-                streaming = null
-                busy = false
+                if (gen == generation) {
+                    streaming = null
+                    busy = false
+                }
             }
         }
     }
 
     /** Отменить текущий запрос (если идёт) и очистить ленту. */
     fun clearConversation() {
+        generation++
         job?.cancel()
         turns.clear()
         error = null

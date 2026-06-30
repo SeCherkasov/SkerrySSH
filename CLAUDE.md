@@ -49,19 +49,20 @@ AI under policy (вывод сервера = недоверенный источ
 
 ## Следующий шаг (с него начинать новую сессию)
 
-Сделано и запушено: интерактивный терминал (PTY-канал + `TerminalSession` + UI, проводка к
-живому SSH через экран подключения), персистентный TOFU known-hosts, менеджер хостов
-(`Host`/`HostStore` + `FileHostStore` + desktop UI), а также **криптоядро vault** —
-контракт `VaultCrypto` (`commonMain`) + libsodium-реализация `LibsodiumVaultCrypto`
-(`desktopMain`, lazysodium-java): Argon2id(m=64MiB, t=3) → `MasterKey`, обёртка `DataKey`,
-XChaCha20-Poly1305 nonce-prefix; покрыто TDD (`desktopTest`).
+**Детальная актуальная память — в `memory/MEMORY.md` (индекс) и файлах рядом; там источник
+правды по «что сделано / что дальше», этот раздел — только крупные вехи.**
 
-Высокоуровневый `Vault`-стор тоже готов: контракт `Vault` + `UnlockResult` + модель
-`VaultRecord`/`RecordType` (`commonMain`), файловый `FileVault` (`desktopMain`) — жизненный
-цикл create/unlock/lock, CRUD на открытом payload (seal/open с AAD=`id‖type` внутри, `dataKey`
-наружу не отдаётся), tombstone-удаление и `changePassword`; атомарность через commit-after-persist;
-покрыто TDD (16 тестов) + два ревью (`ecc:kotlin-reviewer`, `ecc:security-reviewer`).
+**Phase 1 (MVP) — ЗАКРЫТ.** SSH/SFTP/порт-форвардинг, менеджер хостов/ключей/групп,
+терминал (grid-переписка, конформность VT, мышь), vault (крипто Argon2id→XChaCha20 +
+высокоуровневый `Vault`/`VaultRecord` + UI мастер-пароля + биометрия + reset/recovery),
+двухпанельный SFTP. Паритет desktop⇆Android закрыт (роадмап A–E), проверено на S24.
 
-Дальше: UI мастер-пароля (экран создать/разблокировать vault), затем хранение паролей/ключей
-хостов в vault вместо ввода при коннекте (увязать `Host`/менеджер хостов с `Vault`/`VaultRecord`).
-Биометрия и паритет мобильных таргетов (`VaultCrypto`/`Vault` под Android) — следом.
+**Phase 2 — почти закрыт.** Self-hosted sync (Ktor+SRP-сервер, zero-knowledge E2E,
+live-sync push-on-change, tombstone-propagation, персист курсора, селективный синк по типам,
+admin-консоль); паринг устройств (QR, вариант B); сниппеты; **AI-ассистент (BYOK OpenAI +
+per-host политики Strict/Balanced/Permissive/Off)** — код в `shared/ai/` и `ui/ai/`,
+последняя ветка. Teams/шеринг сознательно ОТЛОЖЕН (zero-knowledge крипто-шеринг слишком
+сложен) — не предлагать следующим шагом.
+
+Дальше: закрыть хвост AI-ассистента (ревью слайса per-host политик), затем **Phase 3** —
+Mosh, Telnet, serial, autocomplete, локальная AI-модель на desktop.

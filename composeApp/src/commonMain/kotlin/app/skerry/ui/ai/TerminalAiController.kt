@@ -66,6 +66,10 @@ class TerminalAiController(
     var blocked by mutableStateOf<String?>(null); private set
 
     private var job: Job? = null
+    // Поколение активного запроса. cancel()/новый ask() увеличивают его; finally сбрасывает busy/streaming
+    // только если его поколение всё ещё текущее — иначе поздно завершившийся отменённый запрос затирал бы
+    // состояние уже запущенного следующего (job-reassignment race).
+    private var generation = 0
 
     /** Запросить команду. No-op, если занят/пусто/AI выключен. Секрет облака не уходит при Strict/не настроено. */
     fun ask(prompt: String) {
@@ -88,6 +92,7 @@ class TerminalAiController(
         val outbound = if (decision.sanitizeSecrets) SecretRedactor.redact(text) else text
         busy = true
         streaming = ""
+        val gen = ++generation
         val config = current.toOpenAiConfig()
         val messages = listOf(AiMessage(AiRole.SYSTEM, COMMAND_PROMPT), AiMessage(AiRole.USER, outbound))
         job = scope.launch {
@@ -108,8 +113,10 @@ class TerminalAiController(
                 error = "AI request failed: ${e.message}"
             } finally {
                 provider?.let { runCatching { it.close() } }
-                streaming = null
-                busy = false
+                if (gen == generation) {
+                    streaming = null
+                    busy = false
+                }
             }
         }
     }
@@ -240,6 +247,7 @@ class TerminalAiController(
 
     /** Отменить активный запрос (если идёт). */
     fun cancel() {
+        generation++
         job?.cancel()
         busy = false
         streaming = null

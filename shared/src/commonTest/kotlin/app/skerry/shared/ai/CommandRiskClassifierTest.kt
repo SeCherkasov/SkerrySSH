@@ -54,6 +54,21 @@ class CommandRiskClassifierTest {
     }
 
     @Test
+    fun `a renamed fork bomb is still danger`() {
+        // Регрессия: паттерн якорился на имя функции `:` — переименование обходило Danger.
+        assertEquals(CommandRisk.Danger, risk("f(){ f|f& };f"))
+        assertEquals(CommandRisk.Danger, risk("bomb(){ bomb|bomb& };bomb"))
+    }
+
+    @Test
+    fun `decoded payload piped into any interpreter is danger`() {
+        // Регрессия: общее правило «пайп в шелл» знало только sh/bash/zsh — python/perl/ruby/node
+        // мимо curl проваливались как безопасные, хотя это то же исполнение сконструированного кода.
+        assertEquals(CommandRisk.Danger, risk("echo cHJpbnQoMSk= | base64 -d | python3"))
+        assertEquals(CommandRisk.Danger, risk("cat payload | perl"))
+    }
+
+    @Test
     fun `power state changes are danger`() {
         listOf("shutdown -h now", "reboot", "poweroff", "systemctl reboot", "init 0")
             .forEach { assertEquals(CommandRisk.Danger, risk(it), "should be danger: $it") }
