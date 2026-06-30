@@ -60,4 +60,7 @@ class CommandHistory(private val capacity: Int = 500) {
         if (query.isBlank()) return emptyList()
         return entries.filter { it.contains(query) }
     }
+
+    /** Забыть [command] (например, опечатку, упавшую с «command not found»). `true`, если была в истории. */
+    fun forget(command: String): Boolean = entries.remove(command.trim())
 }

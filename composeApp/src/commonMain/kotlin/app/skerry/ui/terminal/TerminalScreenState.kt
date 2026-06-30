@@ -457,6 +457,24 @@ class TerminalScreenState(
     }
 
     /**
+     * Удалить [command] из истории автодополнения (ручная чистка опечаток/ненужных команд) и обновить
+     * персист. Как в bash/zsh, история пишет всё подряд — это способ убрать конкретную запись из
+     * подсказок. Индекс reverse-search подравнивается, чтобы выбор остался в границах.
+     */
+    fun forgetHistoryCommand(command: String) {
+        if (!autocomplete.forget(command)) return
+        val n = reverseSearchResults.size
+        if (n == 0) reverseSearchIndex = 0 else if (reverseSearchIndex >= n) reverseSearchIndex = n - 1
+        onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
+        refreshSuggestion()
+    }
+
+    /** Удалить выбранное в reverse-search совпадение из истории; оверлей остаётся открыт. */
+    fun reverseSearchDeleteSelected() {
+        reverseSearchSelection?.let { forgetHistoryCommand(it) }
+    }
+
+    /**
      * Вставить выбранную из истории команду: очистить текущую строку shell (Ctrl-U) и «набрать» её,
      * чтобы пользователь мог отредактировать/запустить. Идёт через [typeInput] — движок снова видит
      * строку, а гейт echoSuppressed сохраняется (в редком режиме без эха просто уйдёт как ввод).

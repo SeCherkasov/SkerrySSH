@@ -433,6 +433,7 @@ private fun MobileKeybar(
             KeyCap("esc") { terminal.closeReverseSearch(); onCtrlArmedChange(false) }
             KeyCapIcon("expand_more") { terminal.reverseSearchNext() } // следующее (старее)
             KeyCapIcon("expand_less") { terminal.reverseSearchPrev() } // предыдущее (новее)
+            KeyCapIcon("delete") { terminal.reverseSearchDeleteSelected() } // убрать из истории
             KeyCap("insert", accent = true) { terminal.reverseSearchAccept(); onCtrlArmedChange(false) }
             return@Row
         }

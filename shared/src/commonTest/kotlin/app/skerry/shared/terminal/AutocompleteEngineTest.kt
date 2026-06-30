@@ -2,6 +2,7 @@ package app.skerry.shared.terminal
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -49,6 +50,16 @@ class CommandHistoryTest {
         h.record("git stash")
         assertEquals(listOf("git stash", "git status"), h.matches("git s"))
         assertTrue(h.matches("").isEmpty())
+    }
+
+    @Test
+    fun `forget removes a command from history`() {
+        val h = CommandHistory()
+        h.record("gti status")
+        h.record("git status")
+        assertTrue(h.forget("gti status"))
+        assertEquals(listOf("git status"), h.commands)
+        assertFalse(h.forget("nope")) // отсутствующая — false
     }
 
     @Test

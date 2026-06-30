@@ -30,6 +30,9 @@ class AutocompleteEngine(
     /** История команд (для reverse-search из UI). */
     val commandHistory: CommandHistory get() = history
 
+    /** Забыть команду из истории (напр. опечатку с «command not found»). `true`, если была. */
+    fun forget(command: String): Boolean = history.forget(command)
+
     /** Сбросить текущую отслеживаемую строку БЕЗ записи в историю (напр. на входе в режим без эха). */
     fun reset() {
         line.clear()

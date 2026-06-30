@@ -569,6 +569,8 @@ fun TerminalScreen(
                         (event.isCtrlPressed && event.key == Key.R) || event.key == Key.DirectionUp ->
                             state.reverseSearchNext()
                         event.key == Key.DirectionDown -> state.reverseSearchPrev()
+                        // Delete — убрать выбранную команду из истории (ручная чистка), оверлей открыт.
+                        event.key == Key.Delete -> state.reverseSearchDeleteSelected()
                         event.key == Key.Backspace -> state.reverseSearchBackspace()
                         else -> {
                             val cp = event.utf16CodePoint
@@ -919,7 +921,7 @@ fun TerminalScreen(
                   .padding(horizontal = 10.dp, vertical = 6.dp),
           ) {
               Text(
-                  text = "(reverse-i-search)`$rsQuery`:",
+                  text = "(reverse-i-search)`$rsQuery`:  ↑↓ выбрать · Enter вставить · Del убрать · Esc",
                   style = textStyle.copy(color = Color(0xFF8AA0AE)),
               )
               if (shown.isEmpty()) {

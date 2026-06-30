@@ -123,6 +123,24 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `delete removes selected command from history and persists`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val snapshots = mutableListOf<List<String>>()
+        val state = TerminalScreenState(
+            FakeTerminalSession(), scope,
+            initialHistory = listOf("gti status", "git status"),
+            onHistoryChanged = { snapshots += it },
+        )
+        state.openReverseSearch()
+        state.reverseSearchAppend("gti") // выбираем опечатку
+        assertEquals("gti status", state.reverseSearchSelection)
+        state.reverseSearchDeleteSelected()
+        assertEquals(emptyList(), state.reverseSearchResults) // "gti" больше не находится
+        assertEquals(listOf("git status"), snapshots.last()) // персист без опечатки
+        scope.cancel()
+    }
+
+    @Test
     fun `resize forwards to session`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
