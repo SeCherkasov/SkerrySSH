@@ -1307,8 +1307,9 @@ private fun TerminalAiBarSlot() {
 
 /**
  * Интерактивный AI-бар: запрос на естественном языке → одна shell-команда под [policy]. Команда
- * НИКОГДА не исполняется автоматически — она показывается карточкой, и только «Run» вставляет её в
- * ввод терминала (через [TerminalScreenState.send], БЕЗ перевода строки — Enter жмёт пользователь).
+ * НИКОГДА не исполняется автоматически — она показывается карточкой; «Run» и есть подтверждение
+ * (принцип «AI under policy»): он отправляет команду + CR (Enter) в терминал. Команда предварительно
+ * сведена к одной строке без управляющих байтов, поэтому CR исполняет ровно её (не цепочку).
  */
 @Composable
 private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: TerminalScreenState?) {
@@ -1331,7 +1332,8 @@ private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: Termina
                 Sym("terminal", size = 15.sp, color = D.moss)
                 Txt(cmd, color = D.text, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
                 AiActionChip("Run", D.moss, enabled = terminal != null) {
-                    controller.confirm()?.let { terminal?.send(it) }
+                    // Run = подтверждение: команда + CR (Enter) → исполняется в шелле.
+                    controller.confirm()?.let { terminal?.send(it + "\r") }
                 }
                 AiActionChip("Dismiss", D.faint) { controller.dismiss() }
             }
