@@ -42,9 +42,13 @@ class OpenAiProviderTest {
             )
         })
 
-    private fun okBody(content: String): String {
-        val quoted = Json.encodeToString(String.serializer(), content)
-        return """{"choices":[{"index":0,"message":{"role":"assistant","content":$quoted}}]}"""
+    /** Строит SSE-поток chat-completions: один `data:`-кадр на дельту, завершается `[DONE]`. */
+    private fun sse(vararg deltas: String): String {
+        val frames = deltas.joinToString("") { chunk ->
+            val quoted = Json.encodeToString(String.serializer(), chunk)
+            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":$quoted}}]}\n\n"
+        }
+        return frames + "data: [DONE]\n\n"
     }
 
     private suspend fun requestBody(): String {
@@ -53,8 +57,8 @@ class OpenAiProviderTest {
     }
 
     @Test
-    fun `sends model messages and bearer key to the chat completions endpoint`() = runTest {
-        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-secret", model = "gpt-4o-mini"), client(HttpStatusCode.OK, okBody("ls -la")))
+    fun `sends model messages bearer key and requests streaming`() = runTest {
+        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-secret", model = "gpt-4o-mini"), client(HttpStatusCode.OK, sse("ls -la")))
 
         provider.chat(request).toList()
 
@@ -62,6 +66,7 @@ class OpenAiProviderTest {
         assertEquals("Bearer sk-secret", lastRequest.headers[HttpHeaders.Authorization])
         val json = Json.parseToJsonElement(requestBody()).jsonObject
         assertEquals("gpt-4o-mini", json["model"]!!.jsonPrimitive.content)
+        assertTrue(json["stream"]!!.jsonPrimitive.content.toBoolean(), "expected stream=true in request body")
         val messages = json["messages"]!!.jsonArray
         assertEquals(2, messages.size)
         assertEquals("system", messages[0].jsonObject["role"]!!.jsonPrimitive.content)
@@ -70,12 +75,24 @@ class OpenAiProviderTest {
     }
 
     @Test
-    fun `parses assistant text from a completion response`() = runTest {
-        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-secret"), client(HttpStatusCode.OK, okBody("Use ls -la")))
+    fun `streams assistant deltas token by token in order`() = runTest {
+        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-secret"), client(HttpStatusCode.OK, sse("Use ", "ls ", "-la")))
+
+        val deltas = provider.chat(request).toList()
+
+        assertEquals(listOf("Use ", "ls ", "-la"), deltas.map { it.text })
+        assertEquals("Use ls -la", deltas.joinToString("") { it.text })
+    }
+
+    @Test
+    fun `ignores keepalive comments blank lines and the done sentinel`() = runTest {
+        val body = ": keep-alive\n\n" + "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n" +
+            "data: {\"choices\":[{\"delta\":{}}]}\n\n" + "data: [DONE]\n\n"
+        val provider = OpenAiProvider(OpenAiConfig(apiKey = "sk-x"), client(HttpStatusCode.OK, body))
 
         val text = provider.chat(request).toList().joinToString("") { it.text }
 
-        assertEquals("Use ls -la", text)
+        assertEquals("hi", text)
     }
 
     @Test
