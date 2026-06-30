@@ -9,6 +9,7 @@ import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
@@ -162,3 +163,12 @@ val LocalVaultBiometrics: ProvidableCompositionLocal<VaultBiometrics?> = staticC
  * Поставляется [DesktopDesignApp]/[MobileDesignApp] за гейтом vault (для серверной обёртки нужен dataKey).
  */
 val LocalSync: ProvidableCompositionLocal<SyncCoordinator?> = staticCompositionLocalOf { null }
+
+/**
+ * Контроллер AI-ассистента (внешний OpenAI-совместимый провайдер, BYOK). `null` — мок-путь/превью
+ * или платформа без AI: таб «AI» в настройках рисует статичный макет. Когда контроллер задан, таб
+ * становится живым (ввод ключа/модели, быстрый чат), независимо от [FeatureFlags.ai], который
+ * по-прежнему гейтит незавершённые AI-поверхности терминала. Поставляется за гейтом vault
+ * (ключ хранится зашифрованным в vault).
+ */
+val LocalAi: ProvidableCompositionLocal<AiAssistantController?> = staticCompositionLocalOf { null }

@@ -29,6 +29,9 @@ import app.skerry.shared.sync.FileSyncStateStore
 import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.tunnel.VaultTunnelStore
 import app.skerry.ui.sync.FileSyncConfigStore
+import app.skerry.shared.ai.AiSettingsStore
+import app.skerry.shared.ai.OpenAiProvider
+import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
@@ -284,6 +287,17 @@ fun main() {
         // Сохранённые сниппеты: библиотека команд — записи SNIPPET в vault (команды могут содержать
         // inline-креды, поэтому под общим шифрованием и E2E-синком). Запуск идёт в активный терминал.
         val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
+        // AI-ассистент (Phase 2, BYOK): ключ хранится зашифрованной записью SETTINGS в vault, вызовы
+        // идут во внешний OpenAI-совместимый провайдер. На старте vault залочен (settings = дефолт),
+        // после unlock контроллер перечитывает настройки в onVaultUnlocked.
+        val aiSettingsStore = AiSettingsStore(vault)
+        val ai = AiAssistantController(
+            initialSettings = aiSettingsStore.load(),
+            persist = aiSettingsStore::save,
+            providerFactory = { cfg -> OpenAiProvider.pooled(cfg) },
+            scope = tunnelScope,
+            reload = aiSettingsStore::load,
+        )
         // Миграция секретов в vault (IDENTITY → CREDENTIAL, хост → прямой credentialId) при
         // разблокировке — идемпотентна. После — перечитываем менеджеры и бесшумно восстанавливаем
         // sync-сессию. Переноса старого локального workspace (hosts/snippets/tunnels.json) больше нет:
@@ -298,6 +312,8 @@ fun main() {
         val onVaultUnlocked: () -> Unit = {
             runCatching { VaultMigration(vault, hostStore).migrate() }
             reloadManagers()
+            // Vault открыт → перечитать BYOK-настройки AI (ключ/модель) из зашифрованной записи.
+            ai.refresh()
             // keep-connected: vault открыт → есть dataKey, можно бесшумно восстановить sync-сессию.
             sync.restoreSession()
         }
@@ -378,6 +394,7 @@ fun main() {
                     tunnels = deps.tunnels,
                     snippets = deps.snippets,
                     sync = deps.sync,
+                    ai = ai,
                     onVaultUnlocked = onVaultUnlocked,
                     onVaultReset = onVaultReset,
                 )

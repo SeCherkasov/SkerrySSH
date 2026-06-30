@@ -90,6 +90,9 @@ kotlin {
                 // это implementation-зависимости и в тест транзитивно не приходят).
                 implementation(libs.ktor.server.core)
                 implementation(libs.ktor.server.netty)
+                // MockEngine: TDD HTTP-клиентов (OpenAiProvider) без реальной сети — проверяем
+                // запрос (url/заголовки/тело) и скармливаем каноничные ответы.
+                implementation(libs.ktor.client.mock)
             }
         }
     }

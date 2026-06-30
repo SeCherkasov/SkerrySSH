@@ -33,9 +33,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ai.AiRole
 import app.skerry.ui.sync.AccountCardModel
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.accountCardModel
@@ -60,13 +63,15 @@ fun SettingsPanel(state: DesktopDesignState) {
                 .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
                 .clickable(interactionSource = noop, indication = null, onClick = {}),
         ) {
-            // AI — фича MVP2 за фича-флагом: при выключенном флаге таб «AI» скрыт из nav, а выбор
-            // (дефолт state.settingsTab = AI, как в прототипе) безопасно проецируется на Account.
+            // AI-таб виден, когда либо включён флаг незавершённых AI-поверхностей, либо подключён
+            // живой контроллер ассистента (реальный BYOK-провайдер за гейтом vault). Иначе таб скрыт,
+            // а дефолтный выбор (state.settingsTab = AI, как в прототипе) проецируется на Account.
             val features = LocalFeatures.current
-            val effectiveTab = if (state.settingsTab == SettingsTab.AI && !features.ai) SettingsTab.Account else state.settingsTab
+            val aiVisible = features.ai || LocalAi.current != null
+            val effectiveTab = if (state.settingsTab == SettingsTab.AI && !aiVisible) SettingsTab.Account else state.settingsTab
             Column(Modifier.width(200.dp).fillMaxHeight().background(Color(0x33000000)).padding(horizontal = 8.dp, vertical = 16.dp)) {
                 Txt("SETTINGS", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
-                SETTINGS_NAV.filter { features.ai || it.tab != SettingsTab.AI }.forEach { item ->
+                SETTINGS_NAV.filter { aiVisible || it.tab != SettingsTab.AI }.forEach { item ->
                     NavRow(item, active = effectiveTab == item.tab, onClick = { state.showSettingsTab(item.tab) })
                 }
             }
@@ -123,6 +128,80 @@ private fun SettingToggleRow(title: String, desc: String, on: Boolean, onToggle:
 
 @Composable
 private fun AiSection(state: DesktopDesignState) {
+    val ai = LocalAi.current
+    if (ai != null) LiveAiSection(ai) else AiSectionMock(state)
+}
+
+/**
+ * Живой AI-таб: BYOK-настройки внешнего OpenAI-совместимого провайдера (ключ шифруется в vault) и
+ * быстрый чат для проверки соединения. Полноценный ассистент в терминале (per-host политики,
+ * подтверждение команд) — отдельный слайс; здесь вывод модели только показывается, не исполняется.
+ */
+@Composable
+private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
+    SectionTitle("AI", "Connect your own OpenAI-compatible provider (BYOK). Your key is stored encrypted in the vault and only ever sent to the provider you configure.")
+
+    var key by remember(ai.settings) { mutableStateOf(ai.settings.apiKey) }
+    var model by remember(ai.settings) { mutableStateOf(ai.settings.model) }
+    var baseUrl by remember(ai.settings) { mutableStateOf(ai.settings.baseUrl) }
+
+    FieldLabel("OPENAI API KEY", top = 4.dp)
+    SyncField(placeholder = "sk-…", value = key, icon = "key", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { key = it }
+    FieldLabel("MODEL")
+    SyncField(placeholder = "gpt-4o-mini", value = model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Next) { model = it }
+    FieldLabel("ENDPOINT")
+    SyncField(placeholder = "https://api.openai.com/v1", value = baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done) { baseUrl = it }
+
+    Box(Modifier.height(12.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        RevokeChip("Save", fg = D.cyan) { ai.save(key, model, baseUrl) }
+        if (ai.isConfigured) Txt("Key saved", color = D.moss, size = 11.5.sp)
+        else Txt("Not configured yet", color = D.faint, size = 11.5.sp)
+    }
+
+    Box(Modifier.padding(top = 18.dp)); HLine(); Box(Modifier.height(12.dp))
+    Txt("Quick chat", color = D.text, size = 13.sp, weight = FontWeight.Medium)
+    Txt("Ask the assistant a question to verify the connection.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
+
+    ai.turns.forEach { turn -> ChatBubble(turn.role, turn.text) }
+    ai.streaming?.let { ChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
+    ai.error?.let { Txt(it, color = D.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
+
+    Box(Modifier.height(8.dp))
+    var prompt by remember { mutableStateOf("") }
+    val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
+    SyncField(
+        placeholder = if (ai.isConfigured) "Ask about ssh, scp, tunnels…" else "Save an API key first",
+        value = prompt,
+        icon = "chat",
+        keyboardType = KeyboardType.Text,
+        imeAction = ImeAction.Send,
+        onSubmit = send,
+    ) { prompt = it }
+    Box(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        RevokeChip(if (ai.busy) "Sending…" else "Ask", fg = if (ai.isConfigured && !ai.busy) D.cyan else D.faint) { send() }
+        if (ai.turns.isNotEmpty()) RevokeChip("Clear", fg = D.dim) { ai.clearConversation() }
+    }
+}
+
+@Composable
+private fun ChatBubble(role: AiRole, text: String) {
+    val mine = role == AiRole.USER
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+        Box(
+            Modifier.clip(RoundedCornerShape(8.dp))
+                .background(if (mine) D.cyan10 else Color(0x0DFFFFFF))
+                .border(1.dp, if (mine) D.cyan14 else D.line, RoundedCornerShape(8.dp))
+                .padding(horizontal = 11.dp, vertical = 8.dp),
+        ) {
+            Txt(text, color = if (mine) D.text else D.dim, size = 12.5.sp, lineHeight = 18.sp)
+        }
+    }
+}
+
+@Composable
+private fun AiSectionMock(state: DesktopDesignState) {
     SectionTitle("AI", "Configure where AI runs. The default is on this device — your commands never leave Skerry. Each connection can override these settings.")
     Txt("Default AI provider", color = D.text, size = 13.sp, weight = FontWeight.Medium)
     Txt("Used for connections without a specific override.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))

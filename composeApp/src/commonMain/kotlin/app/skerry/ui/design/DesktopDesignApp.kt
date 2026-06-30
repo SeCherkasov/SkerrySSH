@@ -140,6 +140,9 @@ fun DesktopDesignApp(
     // Координатор self-hosted sync (Phase 2). `null` — sync не подключён на платформе/мок-путь:
     // секция Sync в настройках рисует статичный макет, модалка-онбординг не показывается.
     sync: SyncCoordinator? = null,
+    // Контроллер AI-ассистента (BYOK, внешний OpenAI-совместимый провайдер). `null` — AI не подключён:
+    // таб «AI» в настройках рисует статичный макет. Поставляется за гейтом vault (ключ хранится в vault).
+    ai: app.skerry.ui.ai.AiAssistantController? = null,
     features: FeatureFlags = FeatureFlags(),
     // Вызывается один раз после разблокировки vault, до перечитывания списков — точка для миграции
     // данных (схлопывание двухуровневой модели → хост ссылается на keychain-секрет). No-op в мок/превью.
@@ -206,6 +209,7 @@ fun DesktopDesignApp(
         LocalVault provides vault,
         LocalVaultBiometrics provides biometrics,
         LocalSync provides sync,
+        LocalAi provides ai,
     ) {
         if (vault != null) {
             VaultGate(
