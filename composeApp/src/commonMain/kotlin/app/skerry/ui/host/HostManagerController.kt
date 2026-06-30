@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
+import app.skerry.shared.ssh.ConnectionType
 
 /**
  * Редактируемые поля профиля без [Host.id]: форма создания/правки оперирует черновиком,
@@ -23,6 +24,7 @@ data class HostDraft(
     val credentialId: String? = null,
     val tags: List<String> = emptyList(),
     val aiPolicy: AiPolicy = AiPolicy.Strict,
+    val connectionType: ConnectionType = ConnectionType.SSH,
 )
 
 /**
@@ -70,6 +72,7 @@ class HostManagerController(
                 credentialId = draft.credentialId,
                 tags = draft.tags,
                 aiPolicy = draft.aiPolicy,
+                connectionType = draft.connectionType,
             ),
         )
         hosts = store.all()

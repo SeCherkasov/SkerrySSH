@@ -1,6 +1,7 @@
 package app.skerry.shared.host
 
 import app.skerry.shared.ai.AiPolicy
+import app.skerry.shared.ssh.ConnectionType
 import kotlinx.serialization.Serializable
 
 /**
@@ -26,6 +27,12 @@ import kotlinx.serialization.Serializable
  * [aiPolicy] — per-host политика AI (принцип «AI under policy»). Дефолт [AiPolicy.Strict] безопасен:
  * для уже сохранённых хостов (поле отсутствует) и новых по умолчанию облако запрещено, пока
  * пользователь осознанно не ослабит политику. Сериализуется по имени (обратно совместимо).
+ *
+ * [connectionType] — транспорт профиля (см. [ConnectionType]). Дефолт [ConnectionType.SSH] сохраняет
+ * обратную совместимость: у старых файлов поле отсутствует и читается как SSH. Для [ConnectionType.TELNET]
+ * значимы только [address]/[port] (аутентификации/секрета нет). Для [ConnectionType.SERIAL] [address]
+ * несёт имя устройства (напр. `/dev/ttyUSB0`, `COM3`), а [port] — скорость (baud); [username]/[credentialId]
+ * не используются.
  */
 @Serializable
 data class Host(
@@ -39,4 +46,5 @@ data class Host(
     val identityId: String? = null,
     val tags: List<String> = emptyList(),
     val aiPolicy: AiPolicy = AiPolicy.Strict,
+    val connectionType: ConnectionType = ConnectionType.SSH,
 )

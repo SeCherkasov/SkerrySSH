@@ -580,7 +580,13 @@ fun TerminalScreen(
                 if (bytes != null) {
                     state.clearSelection()
                     textToolbar.hide()
-                    state.send(bytes)
+                    // Tab при наличии подсказки автодополнения — принять её (fish-style), не слать в shell.
+                    // Без подсказки Tab уходит в PTY как обычно (серверное completion не ломается).
+                    if (bytes == "\t" && state.suggestionTail != null) {
+                        state.acceptSuggestion()
+                    } else {
+                        state.typeInput(bytes)
+                    }
                     true
                 } else {
                     false
@@ -854,6 +860,18 @@ fun TerminalScreen(
           }
       }
 
+      // «Призрак» автодополнения (Phase 3): серым дорисовываем хвост подсказки от позиции курсора
+      // (fish/zsh-стиль). Та же моноширинная геометрия, что у курсора; Tab (desktop) / чип (mobile)
+      // принимают его. В alt-screen (vim/htop) подсказки нет — [suggestionTail] там уже сброшен.
+      val ghost = state.suggestionTail
+      if (ghost != null && !closed && screen.isNotEmpty()) {
+          Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp).clipToBounds()) {
+              val x = cursorCol * metrics.cellWidth
+              val y = cursorRow * metrics.cellHeight - scroll.value.toFloat()
+              drawText(measurer, ghost, topLeft = Offset(x, y), style = textStyle.copy(color = Color(0x66E6F2FA)))
+          }
+      }
+
       // Тач-маркеры выделения («капли» по краям). Рисуем только на мобильном пути ([imeInput]):
       // оверлей внутри того же padding, что и текст, со сдвигом по вертикали на текущую прокрутку,
       // чтобы маркеры держались на границах выделения при скролле. На мыши (desktop) их нет.
@@ -882,7 +900,7 @@ fun TerminalScreen(
                   if (out.isNotEmpty()) {
                       state.clearSelection()
                       textToolbar.hide()
-                      state.send(out)
+                      state.typeInput(out) // питает автодополнение (софт-клавиатура), затем в PTY
                   }
                   imeValue = imeBaseline
               },

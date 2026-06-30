@@ -8,6 +8,7 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.MAX_TAGS_PER_HOST
 import app.skerry.shared.host.normalizeTag
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 
@@ -43,6 +44,26 @@ class NewConnectionFormState {
     var username: String by mutableStateOf("")
     var group: String by mutableStateOf("")
 
+    /**
+     * Транспорт профиля. Смена типа через [chooseConnectionType] подставляет дефолтный порт/скорость,
+     * если пользователь оставил прежний дефолт. Для [ConnectionType.TELNET]/[ConnectionType.SERIAL]
+     * аутентификация не нужна (валидация её не требует).
+     */
+    var connectionType: ConnectionType by mutableStateOf(ConnectionType.SSH)
+        private set
+
+    /**
+     * Сменить транспорт. Если [port] всё ещё равен дефолту прежнего типа (пользователь его не трогал),
+     * подставляем дефолт нового: SSH→22, Telnet→23, Serial→9600 (baud). Иначе значение сохраняем.
+     */
+    fun chooseConnectionType(type: ConnectionType) {
+        if (type == connectionType) return
+        if (port.trim() == defaultPortFor(connectionType).toString()) {
+            port = defaultPortFor(type).toString()
+        }
+        connectionType = type
+    }
+
     // Аутентификация: режим + поля под каждый вид (держатся рядом, чтобы переключение не теряло ввод).
     var authMode: AuthMode by mutableStateOf(AuthMode.ASK)
     var existingCredentialId: String? by mutableStateOf(null)
@@ -73,8 +94,14 @@ class NewConnectionFormState {
         tags = tags - tag
     }
 
-    /** Порт как валидное число в диапазоне TCP-портов, иначе `null`. */
-    val portOrNull: Int? get() = port.trim().toIntOrNull()?.takeIf { it in 1..65535 }
+    /**
+     * Порт/скорость как валидное число, иначе `null`. Для SSH/Telnet — TCP-порт (1..65535); для
+     * Serial [port] несёт скорость (baud), где верхнего предела 65535 нет — валидно любое > 0.
+     */
+    val portOrNull: Int?
+        get() = port.trim().toIntOrNull()?.takeIf {
+            if (connectionType == ConnectionType.SERIAL) it > 0 else it in 1..65535
+        }
 
     /** Заполнен ли выбранный способ аутентификации (для [canSave]). */
     private val authValid: Boolean
@@ -85,9 +112,19 @@ class NewConnectionFormState {
             AuthMode.NEW_KEY -> privateKeyPem.isNotBlank()
         }
 
-    /** Можно ли сохранять: имя/адрес/пользователь не пусты, порт валиден и аутентификация заполнена. */
+    /**
+     * Можно ли сохранять. Общее: имя/адрес не пусты, порт/скорость валидны. Для [ConnectionType.SSH]
+     * дополнительно нужен пользователь и заполненная аутентификация; у Telnet/Serial их нет (у Serial
+     * [address] — имя устройства, [username]/auth не используются).
+     */
     val canSave: Boolean
-        get() = name.isNotBlank() && address.isNotBlank() && username.isNotBlank() && portOrNull != null && authValid
+        get() {
+            val base = name.isNotBlank() && address.isNotBlank() && portOrNull != null
+            return when (connectionType) {
+                ConnectionType.SSH -> base && username.isNotBlank() && authValid
+                ConnectionType.TELNET, ConnectionType.SERIAL -> base
+            }
+        }
 
     /** Метка автосоздаваемого секрета — `user@address`, чтобы его было видно во вкладке Vault. */
     private fun identityLabel(): String = "${username.trim()}@${address.trim()}"
@@ -98,20 +135,24 @@ class NewConnectionFormState {
      * [AuthMode.ASK] — `null` (секрет не хранится). [saveCredential] вызывается ровно для новых
      * секретов (пишет в vault); если он вернул `null`, привязки нет.
      */
-    fun resolveCredentialId(saveCredential: (CredentialDraft) -> String?): String? = when (authMode) {
-        AuthMode.ASK -> null
-        AuthMode.EXISTING -> existingCredentialId
-        AuthMode.NEW_PASSWORD -> saveCredential(
-            CredentialDraft(label = identityLabel(), kind = CredentialKind.PASSWORD, password = password),
-        )
-        AuthMode.NEW_KEY -> saveCredential(
-            CredentialDraft(
-                label = identityLabel(),
-                kind = CredentialKind.PRIVATE_KEY,
-                privateKeyPem = privateKeyPem,
-                passphrase = passphrase,
-            ),
-        )
+    fun resolveCredentialId(saveCredential: (CredentialDraft) -> String?): String? = when {
+        // У Telnet/Serial аутентификации нет — секрет не привязываем.
+        connectionType != ConnectionType.SSH -> null
+        else -> when (authMode) {
+            AuthMode.ASK -> null
+            AuthMode.EXISTING -> existingCredentialId
+            AuthMode.NEW_PASSWORD -> saveCredential(
+                CredentialDraft(label = identityLabel(), kind = CredentialKind.PASSWORD, password = password),
+            )
+            AuthMode.NEW_KEY -> saveCredential(
+                CredentialDraft(
+                    label = identityLabel(),
+                    kind = CredentialKind.PRIVATE_KEY,
+                    privateKeyPem = privateKeyPem,
+                    passphrase = passphrase,
+                ),
+            )
+        }
     }
 
     /** Собрать черновик для [HostManagerController.save]; [id] != null — правка существующего. */
@@ -119,15 +160,23 @@ class NewConnectionFormState {
         id = id,
         label = name.trim(),
         address = address.trim(),
-        port = portOrNull ?: 22,
+        port = portOrNull ?: defaultPortFor(connectionType),
         username = username.trim(),
         group = group.trim().ifBlank { null },
         credentialId = credentialId,
         tags = tags,
         aiPolicy = aiPolicy,
+        connectionType = connectionType,
     )
 
     companion object {
+        /** Дефолтный порт/скорость по типу: SSH→22, Telnet→23, Serial→9600 (baud). */
+        fun defaultPortFor(type: ConnectionType): Int = when (type) {
+            ConnectionType.SSH -> 22
+            ConnectionType.TELNET -> 23
+            ConnectionType.SERIAL -> 9600
+        }
+
         /**
          * Предзаполнить форму полями существующего [host] для режима правки. Привязанный секрет
          * ([Host.credentialId]) разворачивается в [AuthMode.EXISTING] на тот же id — так
@@ -136,6 +185,7 @@ class NewConnectionFormState {
          * хоста. [Host.id] форма не держит: его передают в [toDraft] на сохранении.
          */
         fun fromHost(host: Host): NewConnectionFormState = NewConnectionFormState().apply {
+            connectionType = host.connectionType
             name = host.label
             address = host.address
             port = host.port.toString()

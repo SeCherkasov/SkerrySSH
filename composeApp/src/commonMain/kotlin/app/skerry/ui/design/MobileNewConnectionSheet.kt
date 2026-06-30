@@ -49,6 +49,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.nav.PlatformBackHandler
@@ -143,19 +144,32 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
 
             SheetField("Name") { SheetInput(form.name, { form.name = it }, "prod-web-01") }
             Spacer(Modifier.height(14.dp))
-            SheetField("Host address") { SheetInput(form.address, { form.address = it }, "192.168.1.45") }
+            SheetField("Protocol") { MobileProtocolPicker(form) }
             Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SheetField("Username", Modifier.weight(1f)) {
-                    SheetInput(form.username, { form.username = it }, "root")
-                }
-                SheetField("Port", Modifier.width(84.dp)) {
-                    SheetInput(form.port, { form.port = it }, "22", keyboardType = KeyboardType.Number)
-                }
+            val serial = form.connectionType == ConnectionType.SERIAL
+            SheetField(if (serial) "Device" else "Host address") {
+                SheetInput(form.address, { form.address = it }, if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45")
             }
             Spacer(Modifier.height(14.dp))
-            SheetField("Authentication") { MobileAuthPicker(form) }
-            Spacer(Modifier.height(14.dp))
+            if (form.connectionType == ConnectionType.SSH) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SheetField("Username", Modifier.weight(1f)) {
+                        SheetInput(form.username, { form.username = it }, "root")
+                    }
+                    SheetField("Port", Modifier.width(84.dp)) {
+                        SheetInput(form.port, { form.port = it }, "22", keyboardType = KeyboardType.Number)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                SheetField("Authentication") { MobileAuthPicker(form) }
+                Spacer(Modifier.height(14.dp))
+            } else {
+                // Telnet/Serial: аутентификации нет; показываем только порт/скорость.
+                SheetField(if (serial) "Baud" else "Port", Modifier.width(120.dp)) {
+                    SheetInput(form.port, { form.port = it }, if (serial) "9600" else "23", keyboardType = KeyboardType.Number)
+                }
+                Spacer(Modifier.height(14.dp))
+            }
             // Подсказки группы — из уже созданных хостов (паритет desktop GroupPicker); в превью список пуст.
             SheetField("Group") { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
             Spacer(Modifier.height(14.dp))
@@ -359,6 +373,37 @@ private fun SheetTags(
             }
         },
     )
+}
+
+/**
+ * Сегментированный выбор транспорта (SSH / Telnet / Serial) на телефоне — паритет desktop
+ * ProtocolPicker. Пишет тип через [NewConnectionFormState.chooseConnectionType] (подставляет
+ * дефолтный порт/скорость) и перестраивает форму.
+ */
+@Composable
+private fun MobileProtocolPicker(form: NewConnectionFormState) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        MobileProtocolSegment("SSH", form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
+        MobileProtocolSegment("Telnet", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
+        MobileProtocolSegment("Serial", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
+    }
+}
+
+@Composable
+private fun MobileProtocolSegment(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) D.cyan10 else Color.Transparent)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(vertical = 11.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Txt(label, color = if (selected) D.cyanBright else D.dim, size = 14.sp, weight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    }
 }
 
 /**

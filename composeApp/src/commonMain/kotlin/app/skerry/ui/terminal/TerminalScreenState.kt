@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.PtySize
+import app.skerry.shared.terminal.AutocompleteEngine
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
@@ -248,6 +249,8 @@ class TerminalScreenState(
         bracketedPaste = emulator.bracketedPaste
         focusReporting = emulator.focusReporting
         altScreen = emulator.altScreen
+        // Вход в полноэкранный TUI (vim/htop) гасит подсказку автодополнения — «строки» там нет.
+        if (altScreen && suggestionTail != null) suggestionTail = null
         title = emulator.title
         palette = emulator.paletteSnapshot()
         snapshotVersion++
@@ -319,6 +322,52 @@ class TerminalScreenState(
         val text = selectedText() ?: return null
         primarySelection = text
         return text
+    }
+
+    // --- Автодополнение (Phase 3) ---
+    // Движок отслеживает набираемую пользователем строку и предлагает продолжение из истории команд
+    // этой сессии + типовых команд. Живёт на сессию (учится на её же командах). Подсказки работают
+    // только в обычном (не alt-screen) режиме: в полноэкранных TUI (vim/htop) «строки» нет.
+    private val autocomplete = AutocompleteEngine()
+
+    /** «Хвост» текущей подсказки автодополнения (серым после набранного) или `null`. Читает UI. */
+    var suggestionTail: String? by mutableStateOf(null)
+        private set
+
+    /**
+     * Ввод пользователя с клавиатуры/IME: скармливает движку автодополнения (для отслеживания строки
+     * и истории) и отправляет в PTY. Отдельно от [send]/[sendBytes], которыми идут отчёты мыши/фокуса,
+     * paste и вывод сниппетов — их движок видеть не должен, иначе строка исказится.
+     */
+    fun typeInput(text: String) {
+        // Сервер не эхоит ввод (ввод пароля / line-mode, сигнал от транспорта) — НЕ отслеживаем строку
+        // и НЕ пишем её в историю: секрет не должен оседать в памяти и всплывать подсказкой. Для SSH
+        // эхо-статус недоступен (всегда false) — остаточный риск in-session паролей осознан.
+        if (session.echoSuppressed) {
+            autocomplete.reset()
+            if (suggestionTail != null) suggestionTail = null
+            send(text)
+            return
+        }
+        autocomplete.onUserInput(text.encodeToByteArray())
+        refreshSuggestion()
+        send(text)
+    }
+
+    /**
+     * Принять текущую подсказку автодополнения: дослать её «хвост» в PTY (shell сам его отобразит эхом).
+     * Возвращает `true`, если было что принять (UI тогда гасит своё событие, напр. Tab), иначе `false`.
+     */
+    fun acceptSuggestion(): Boolean {
+        if (altScreen) return false
+        val tail = autocomplete.acceptSuggestion() ?: return false
+        refreshSuggestion()
+        sendBytes(tail)
+        return true
+    }
+
+    private fun refreshSuggestion() {
+        suggestionTail = if (altScreen) null else autocomplete.suggestionTail()
     }
 
     /** Отправить введённый текст в PTY (fire-and-forget через очередь [outbound], FIFO-порядок). */

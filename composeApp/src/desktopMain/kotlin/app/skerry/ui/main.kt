@@ -14,6 +14,7 @@ import app.skerry.shared.io.PrivateConfig
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.VaultKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
+import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
@@ -230,8 +231,12 @@ fun main() {
         // принять/отклонить. Часы штампуют firstSeen/observedAt.
         val knownHostsStore = VaultKnownHostsStore(vault)
         val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches"))
-        val transport = SshjTransport(
-            TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+        // Живой транспорт сессий: маршрутизатор по типу подключения (SSH/Telnet/Serial). SSH несёт
+        // TOFU-verifier/known-hosts; Telnet/Serial без состояния (создаются внутри по умолчанию).
+        val transport = RoutingTransport(
+            ssh = SshjTransport(
+                TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+            ),
         )
         // «Test connection» из формы — отдельный транспорт с read-only verifier: проба пускает
         // совпавший доверенный ключ, отвергает смену ключа у известного хоста, а новый хост принимает

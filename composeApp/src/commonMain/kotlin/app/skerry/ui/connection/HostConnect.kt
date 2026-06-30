@@ -12,8 +12,9 @@ import app.skerry.shared.vault.CredentialSecret
  * (DRY) и это покрывалось общими тестами без Compose.
  */
 
-/** Профиль хоста → адрес для подключения ([SshTarget]). */
-fun Host.toTarget(): SshTarget = SshTarget(host = address, port = port, username = username)
+/** Профиль хоста → адрес для подключения ([SshTarget]); [Host.connectionType] выбирает транспорт. */
+fun Host.toTarget(): SshTarget =
+    SshTarget(host = address, port = port, username = username, connectionType = connectionType)
 
 /** Строка `user@addr:port` — подпись вкладки/заголовка сессии. */
 fun Host.connectionSubtitle(): String = "$username@$address:$port"

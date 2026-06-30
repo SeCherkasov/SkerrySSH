@@ -10,6 +10,7 @@ import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.VaultKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
+import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.snippet.VaultSnippetStore
@@ -212,8 +213,12 @@ class MainActivity : FragmentActivity() {
         // known-hosts мог показать предупреждение и дать принять/отклонить новый ключ.
         val knownHostsStore = VaultKnownHostsStore(vault)
         val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches").toPath())
-        val transport = SshjTransport(
-            TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+        // Живой транспорт сессий: маршрутизатор по типу подключения (SSH/Telnet/Serial). SSH несёт
+        // TOFU-verifier/known-hosts; Telnet/Serial без состояния (serial на Android пока unsupported).
+        val transport = RoutingTransport(
+            ssh = SshjTransport(
+                TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+            ),
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
         // Профили — записи HOST в vault (Phase A), порядок дерева — в записи-макете. На старте vault

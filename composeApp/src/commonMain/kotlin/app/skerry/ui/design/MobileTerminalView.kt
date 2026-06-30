@@ -428,7 +428,10 @@ private fun MobileKeybar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         KeyCap("esc") { plain(ESC) }
-        KeyCap("tab") { plain("\t") }
+        // Tab при наличии подсказки автодополнения — принять её; иначе обычный таб в PTY.
+        KeyCap("tab") {
+            if (terminal.suggestionTail != null) { terminal.acceptSuggestion(); onCtrlArmedChange(false) } else plain("\t")
+        }
         // ctrl — спец-клавиша макета (всегда cyan); армирование заливает её сплошным cyan.
         KeyCap("ctrl", accent = true, active = ctrlArmed) { onCtrlArmedChange(!ctrlArmed) }
         KeyCap("/") { char("/") }

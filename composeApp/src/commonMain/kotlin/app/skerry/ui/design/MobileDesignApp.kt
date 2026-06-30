@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ai.AiSettingsStore
 import app.skerry.shared.ai.OpenAiProvider
@@ -240,10 +241,13 @@ private fun MobileChrome(
                     existing?.let { sessions.close(it.id) }
                     // Одноуровневый резолв: хост → keychain-секрет по credentialId → SshAuth; нет привязки → пароль.
                     val credential = credentials?.find(host.credentialId)
-                    if (credential != null) {
-                        openMobileSession(sessions, state, host, credential.toSshAuth(), dest)
-                    } else {
-                        pending = PendingConnect(host, dest)
+                    when {
+                        // Telnet/Serial без аутентификации — коннектим сразу, без запроса пароля.
+                        host.connectionType != ConnectionType.SSH ->
+                            openMobileSession(sessions, state, host, SshAuth.Password(""), dest)
+                        credential != null ->
+                            openMobileSession(sessions, state, host, credential.toSshAuth(), dest)
+                        else -> pending = PendingConnect(host, dest)
                     }
                 }
             }

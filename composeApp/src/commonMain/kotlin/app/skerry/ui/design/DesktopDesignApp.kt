@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.SshCertificateInspector
@@ -277,10 +278,11 @@ private fun DesktopChrome(
     val connectHost = remember(sessions, credentials, state) {
         { host: Host ->
             val credential = credentials?.find(host.credentialId)
-            if (credential != null) {
-                openHostSession(sessions, state, host, credential.toSshAuth())
-            } else {
-                pendingHost = host
+            when {
+                // Telnet/Serial без аутентификации — коннектим сразу, без запроса пароля (auth игнорируется).
+                host.connectionType != ConnectionType.SSH -> openHostSession(sessions, state, host, SshAuth.Password(""))
+                credential != null -> openHostSession(sessions, state, host, credential.toSshAuth())
+                else -> pendingHost = host
             }
         }
     }
@@ -290,11 +292,15 @@ private fun DesktopChrome(
     val runSnippetOnHost = remember(sessions, credentials, state) {
         { host: Host, command: String ->
             val credential = credentials?.find(host.credentialId)
-            if (credential != null) {
-                openHostSession(sessions, state, host, credential.toSshAuth()) { it.send(command + "\n") }
-            } else {
-                pendingSnippetHost = host
-                pendingSnippetCommand = command
+            when {
+                host.connectionType != ConnectionType.SSH ->
+                    openHostSession(sessions, state, host, SshAuth.Password("")) { it.send(command + "\n") }
+                credential != null ->
+                    openHostSession(sessions, state, host, credential.toSshAuth()) { it.send(command + "\n") }
+                else -> {
+                    pendingSnippetHost = host
+                    pendingSnippetCommand = command
+                }
             }
         }
     }
@@ -304,11 +310,15 @@ private fun DesktopChrome(
         { host: Host ->
             val parentId = sessions?.activeId
             val credential = credentials?.find(host.credentialId)
-            if (credential != null) {
-                openSplitSession(sessions, state, parentId, host, credential.toSshAuth())
-            } else {
-                pendingSplitHost = host
-                pendingSplitParent = parentId
+            when {
+                host.connectionType != ConnectionType.SSH ->
+                    openSplitSession(sessions, state, parentId, host, SshAuth.Password(""))
+                credential != null ->
+                    openSplitSession(sessions, state, parentId, host, credential.toSshAuth())
+                else -> {
+                    pendingSplitHost = host
+                    pendingSplitParent = parentId
+                }
             }
         }
     }

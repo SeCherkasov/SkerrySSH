@@ -9,6 +9,11 @@ plugins {
 kotlin {
     jvmToolchain(21)
 
+    // expect/actual для классов/объектов (SerialSystem) пока в Beta — флаг убирает шумный warning.
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     jvm("desktop") {
         // kotlin("test") выбирает бэкенд по конфигурации Test-задачи: это включает JUnit 5
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
@@ -72,6 +77,13 @@ kotlin {
                 implementation(libs.ktor.serialization.kotlinx.json)
                 // SRP-6a клиентская сторона (verifier-генератор + клиентский обмен).
                 implementation(libs.nimbus.srp)
+            }
+        }
+        val desktopMain by getting {
+            dependencies {
+                // Нативный доступ к последовательным портам (SerialSystem actual). Только desktop —
+                // на Android serial пойдёт через USB-OTG отдельной реализацией.
+                implementation(libs.jserialcomm)
             }
         }
         androidMain.dependencies {

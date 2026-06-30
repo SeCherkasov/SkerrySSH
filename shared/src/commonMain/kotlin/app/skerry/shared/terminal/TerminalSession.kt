@@ -45,6 +45,12 @@ interface TerminalSession {
      */
     val output: Flow<ByteArray>
 
+    /**
+     * Подавлен ли сейчас эхо-ответ сервера (ввод пароля / line-mode) — см. [ShellChannel.echoSuppressed].
+     * По нему UI не пишет набранное в историю автодополнения. По умолчанию `false` (фейки/тесты).
+     */
+    val echoSuppressed: Boolean get() = false
+
     /** @throws app.skerry.shared.ssh.SshConnectionException канал закрыт или обрыв транспорта */
     suspend fun send(data: ByteArray)
 
@@ -69,6 +75,9 @@ class ShellTerminalSession(
 
     private val _output = MutableSharedFlow<ByteArray>(extraBufferCapacity = 256)
     override val output: Flow<ByteArray> = _output.asSharedFlow()
+
+    // Прокидываем эхо-статус канала (Telnet сообщает ввод пароля / line-mode; SSH всегда false).
+    override val echoSuppressed: Boolean get() = channel.echoSuppressed
 
     init {
         scope.launch {

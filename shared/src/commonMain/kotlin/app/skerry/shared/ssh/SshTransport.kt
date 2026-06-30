@@ -15,10 +15,18 @@ interface SshTransport {
     suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection
 }
 
+/**
+ * Цель подключения. [connectionType] выбирает транспорт ([RoutingTransport] диспетчеризует по нему):
+ * для [ConnectionType.SSH] значимы все поля; для [ConnectionType.TELNET] — только [host]/[port]
+ * ([username]/auth не используются); для [ConnectionType.SERIAL] [host] несёт имя устройства
+ * (`/dev/ttyUSB0`, `COM3`), а [port] — скорость (baud). Дефолт [ConnectionType.SSH] сохраняет
+ * поведение всех прежних вызовов, строящих таргет без указания типа.
+ */
 data class SshTarget(
     val host: String,
     val port: Int = 22,
     val username: String,
+    val connectionType: ConnectionType = ConnectionType.SSH,
 )
 
 sealed interface SshAuth {
@@ -162,6 +170,15 @@ interface ShellChannel {
      * сессию) от обрыва (→ авто-реконнект); см. [app.skerry.shared.terminal.TerminalState.Closed].
      */
     val endedWithEof: Boolean get() = false
+
+    /**
+     * Подавлен ли эхо-ответ сервера прямо сейчас (ввод пароля / line-mode): по нему верхний слой
+     * НЕ отслеживает набранную строку и не пишет её в историю автодополнения, чтобы секреты не
+     * оседали в памяти/подсказках. По умолчанию `false` (эхо есть): SSH-транспорт не сообщает
+     * termios-состояние, поэтому у него всегда `false` (остаточный риск для in-session паролей задокументирован),
+     * а Telnet перекрывает по согласованной опции ECHO.
+     */
+    val echoSuppressed: Boolean get() = false
 
     /** @throws SshConnectionException канал закрыт или обрыв транспорта */
     suspend fun write(data: ByteArray)

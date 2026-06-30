@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.ui.connection.ConnectionTestController
@@ -99,7 +100,8 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
         AuthMode.EXISTING -> credentials?.credentials?.any { it.id == form.existingCredentialId } == true
         AuthMode.ASK -> false
     }
-    val canTest = tester != null && hasTestSecret &&
+    // «Test connection» — только для SSH (у Telnet/Serial аутентификации/пробы шифра нет).
+    val canTest = tester != null && form.connectionType == ConnectionType.SSH && hasTestSecret &&
         form.address.isNotBlank() && form.username.isNotBlank() && form.portOrNull != null
     // Правка полей коннекта/аутентификации обнуляет прежний результат теста — он больше не релевантен.
     LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase) {
@@ -134,24 +136,37 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(start = 26.dp, end = 26.dp, top = 6.dp, bottom = 22.dp)) {
                 Field("Name") { ModalTextField(form.name, { form.name = it }, "e.g. prod-web-01") }
                 Spacer14()
+                Field("Protocol") { ProtocolPicker(form) }
+                Spacer14()
+                val serial = form.connectionType == ConnectionType.SERIAL
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field("Host address", Modifier.weight(1f)) {
-                        ModalTextField(form.address, { form.address = it }, "192.168.1.45 or example.com", icon = "dns")
+                    Field(if (serial) "Device" else "Host address", Modifier.weight(1f)) {
+                        ModalTextField(
+                            form.address, { form.address = it },
+                            if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45 or example.com",
+                            icon = if (serial) "usb" else "dns",
+                        )
                     }
-                    Field("Port", Modifier.width(110.dp)) {
-                        ModalTextField(form.port, { form.port = it }, "22", keyboardType = KeyboardType.Number)
+                    Field(if (serial) "Baud" else "Port", Modifier.width(110.dp)) {
+                        ModalTextField(form.port, { form.port = it }, if (serial) "9600" else "22", keyboardType = KeyboardType.Number)
                     }
                 }
-                Spacer14()
-                Field("Username") { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
-                Spacer14()
-                Field("Authentication") { AuthPicker(form) }
+                // Аутентификация — только SSH: у Telnet логин/пароль вводятся в самом терминале,
+                // у Serial аутентификации нет вовсе.
+                if (form.connectionType == ConnectionType.SSH) {
+                    Spacer14()
+                    Field("Username") { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
+                    Spacer14()
+                    Field("Authentication") { AuthPicker(form) }
+                }
                 Spacer14()
                 Field("Group") { GroupPicker(form, allHosts) }
-                Spacer14()
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field("Jump host (optional)", Modifier.weight(1f)) { ModalSelect("None — direct") }
-                    Field("Keep-alive", Modifier.weight(1f)) { ModalSelect("Every 30s") }
+                if (form.connectionType == ConnectionType.SSH) {
+                    Spacer14()
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Field("Jump host (optional)", Modifier.weight(1f)) { ModalSelect("None — direct") }
+                        Field("Keep-alive", Modifier.weight(1f)) { ModalSelect("Every 30s") }
+                    }
                 }
                 Spacer14()
                 Field("Tags") {
@@ -334,6 +349,36 @@ private fun ModalTextField(
             }
         },
     )
+}
+
+/**
+ * Сегментированный выбор транспорта (SSH / Telnet / Serial): пишет [NewConnectionFormState.connectionType]
+ * через [NewConnectionFormState.chooseConnectionType] (тот подставляет дефолтный порт/скорость). Смена
+ * типа перестраивает форму (скрывает аутентификацию, меняет подписи адрес/порт).
+ */
+@Composable
+private fun ProtocolPicker(form: NewConnectionFormState) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        ProtocolSegment("SSH", "lan", form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
+        ProtocolSegment("Telnet", "terminal", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
+        ProtocolSegment("Serial", "cable", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
+    }
+}
+
+/** Одна пилюля сегментированного выбора протокола: активная — на cyan-подложке. */
+@Composable
+private fun ProtocolSegment(label: String, icon: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier.clip(RoundedCornerShape(5.dp)).background(if (selected) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+    ) {
+        Sym(icon, size = 15.sp, color = if (selected) D.cyanBright else D.faint)
+        Txt(label, color = if (selected) D.cyanBright else D.dim, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
+    }
 }
 
 /**
