@@ -3,14 +3,15 @@ package app.skerry.shared.ai
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.header
-import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.readLine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.SerialName
@@ -22,9 +23,13 @@ import java.io.IOException
  * JVM-реализация [AiProvider] для OpenAI-совместимого chat-completions API (desktop + Android),
  * на Ktor. BYOK: ключ уходит только в заголовок `Authorization` этого запроса и нигде не логируется.
  *
- * Слайс 1 — без стриминга: запрос идёт с `stream=false`, весь ответ приходит разом и эмитится
- * одним [AiDelta]. Контракт стриминговый ([Flow]), поэтому переход на настоящий SSE (слайс 1b)
- * не затронет вызывающие стороны.
+ * Слайс 1b — настоящий SSE: запрос идёт с `stream=true`, ответ читается построчно из канала и
+ * каждая дельта модели эмитится отдельным [AiDelta] по мере генерации. Ошибочный HTTP-статус
+ * проверяется до чтения тела; служебные строки SSE (`:`-комментарии, пустые, `[DONE]`) пропускаются.
+ *
+ * Допущение парсинга: каждый `data:`-кадр — самостоятельный компактный JSON (как шлёт OpenAI).
+ * Многострочные `data:`-поля SSE-спеки (склейка через `\n` до пустой строки) НЕ поддерживаются —
+ * OpenAI-совместимый endpoint, дробящий один chunk на несколько `data:`-строк, даст PROTOCOL.
  */
 class OpenAiProvider private constructor(
     private val config: OpenAiConfig,
@@ -44,24 +49,48 @@ class OpenAiProvider private constructor(
             messages = request.messages.map { MsgWire(it.role.wire(), it.content) },
             temperature = request.temperature,
             maxTokens = request.maxOutputTokens,
+            stream = true,
         )
-        val response = try {
-            http.post("${config.baseUrl}/chat/completions") {
-                header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
-                contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(ChatReqWire.serializer(), wire))
+        val statement = http.preparePost("${config.baseUrl}/chat/completions") {
+            header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(ChatReqWire.serializer(), wire))
+        }
+        try {
+            // emit() внутри execute-блока безопасен, пока блок выполняется на вызывающей корутине.
+            // На JVM это дефолт Ktor <4.0 (без io.ktor.client.statement.useEngineDispatcher). В Ktor 4.0
+            // переключение диспетчера станет дефолтным — тогда стриминг тут надо унести в channelFlow.
+            statement.execute { response ->
+                if (!response.status.isSuccess()) throw errorFor(response.status)
+                val channel = response.bodyAsChannel()
+                while (true) {
+                    val line = channel.readLine() ?: break
+                    val delta = contentDelta(line) ?: continue
+                    if (delta.isNotEmpty()) emit(AiDelta(delta))
+                }
             }
+        } catch (e: AiException) {
+            throw e
         } catch (e: IOException) {
             throw AiException(AiException.Kind.NETWORK, "AI request failed: ${e.message}", e)
         }
-        if (!response.status.isSuccess()) throw errorFor(response.status)
-        val parsed = try {
-            json.decodeFromString(ChatRespWire.serializer(), response.bodyAsText())
+    }
+
+    /**
+     * Извлекает текстовую дельту из одной строки SSE. Возвращает `null` для служебных строк
+     * (`:`-комментарии/keep-alive, пустые, не-`data:`, `[DONE]`). Кидает [AiException.Kind.PROTOCOL]
+     * на невалидный JSON-кадр.
+     */
+    private fun contentDelta(line: String): String? {
+        if (!line.startsWith("data:")) return null
+        val payload = line.substring("data:".length).trim()
+        if (payload.isEmpty() || payload == "[DONE]") return null
+        val chunk = try {
+            json.decodeFromString(ChatChunkWire.serializer(), payload)
         } catch (e: Exception) {
-            throw AiException(AiException.Kind.PROTOCOL, "Malformed AI response", e)
+            throw AiException(AiException.Kind.PROTOCOL, "Malformed AI stream chunk", e)
         }
-        val text = parsed.choices.firstOrNull()?.message?.content.orEmpty()
-        if (text.isNotEmpty()) emit(AiDelta(text))
+        return chunk.choices.firstOrNull()?.delta?.content
     }
 
     override suspend fun close() {
@@ -103,8 +132,12 @@ private data class ChatReqWire(
 @Serializable
 private data class MsgWire(val role: String, val content: String)
 
+/** Один SSE-кадр стриминга: `choices[].delta.content` несёт очередной кусок текста. */
 @Serializable
-private data class ChatRespWire(val choices: List<ChoiceWire> = emptyList())
+private data class ChatChunkWire(val choices: List<ChunkChoiceWire> = emptyList())
 
 @Serializable
-private data class ChoiceWire(val message: MsgWire? = null)
+private data class ChunkChoiceWire(val delta: DeltaWire? = null)
+
+@Serializable
+private data class DeltaWire(val content: String? = null)
