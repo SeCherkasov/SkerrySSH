@@ -43,6 +43,14 @@ kotlin {
         androidMain.dependencies {
             // androidx.activity.compose.BackHandler — перехват системного «назад» (PlatformBackHandler).
             implementation(libs.androidx.activity.compose)
+            // Быстрый паринг (вариант B): ZXing генерит QR-матрицу, CameraX даёт превью камеры,
+            // ML Kit barcode-scanning распознаёт QR в кадре on-device (без сети) — QrScannerScreen.
+            implementation(libs.zxing.core)
+            implementation(libs.androidx.camera.core)
+            implementation(libs.androidx.camera.camera2)
+            implementation(libs.androidx.camera.lifecycle)
+            implementation(libs.androidx.camera.view)
+            implementation(libs.mlkit.barcode.scanning)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
@@ -52,6 +60,8 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.kotlinx.coroutines.swing)
+                // ZXing генерит QR-матрицу кода связывания (desktop показывает QR для скана телефоном).
+                implementation(libs.zxing.core)
             }
         }
     }

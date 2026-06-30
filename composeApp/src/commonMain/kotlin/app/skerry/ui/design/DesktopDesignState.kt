@@ -128,6 +128,9 @@ class DesktopDesignState(
 
     /** Открыта ли модалка-онбординг настройки sync (Settings → Sync → «Set up sync»). */
     var syncSetupOpen: Boolean by mutableStateOf(false); private set
+
+    /** Открыт ли диалог «Link a device» (показ кода/QR быстрого паринга — Settings → Account). */
+    var pairingOpen: Boolean by mutableStateOf(false); private set
     var settingsTab: SettingsTab by mutableStateOf(SettingsTab.AI); private set
     var split: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
@@ -245,6 +248,8 @@ class DesktopDesignState(
     fun closeSettings() { settingsOpen = false }
     fun openSyncSetup() { syncSetupOpen = true }
     fun closeSyncSetup() { syncSetupOpen = false }
+    fun openPairing() { pairingOpen = true }
+    fun closePairing() { pairingOpen = false }
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }

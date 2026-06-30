@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Скан QR-кода связывания устройств (быстрый паринг). Камера не обязательна: код можно ввести
+         текстом, поэтому required=false — не отсекаем устройства без камеры. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:allowBackup="false"

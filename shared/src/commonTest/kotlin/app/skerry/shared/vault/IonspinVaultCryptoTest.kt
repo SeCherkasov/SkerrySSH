@@ -203,4 +203,34 @@ class IonspinVaultCryptoTest {
         assertEquals(16, a.size)
         assertFalse(a.contentEquals(b))
     }
+
+    @Test
+    fun `transfer key round-trips the data key to a new device`() = cryptoTest {
+        val dataKey = crypto.newDataKey()
+        // запись, запечатанная исходным dataKey на устройстве A
+        val record = crypto.seal(dataKey, "10.0.0.1 admin".encodeToByteArray())
+
+        val transferKey = crypto.newTransferKey()
+        assertEquals(32, transferKey.size) // длина ключа XChaCha20 — годен как AEAD-ключ
+        val envelope = crypto.sealDataKeyForTransfer(dataKey, transferKey)
+
+        // устройство B разворачивает dataKey transferKey'ем и читает ту же запись
+        val adopted = crypto.openTransferredDataKey(transferKey, envelope)
+        assertNotNull(adopted)
+        assertContentEquals("10.0.0.1 admin".encodeToByteArray(), crypto.open(adopted, record))
+    }
+
+    @Test
+    fun `transfer envelope is useless without the right transfer key`() = cryptoTest {
+        val dataKey = crypto.newDataKey()
+        val envelope = crypto.sealDataKeyForTransfer(dataKey, crypto.newTransferKey())
+
+        // чужой transferKey (перехват шифротекста без QR) — AEAD-провал, null
+        assertNull(crypto.openTransferredDataKey(crypto.newTransferKey(), envelope))
+    }
+
+    @Test
+    fun `newTransferKey is random`() = cryptoTest {
+        assertFalse(crypto.newTransferKey().contentEquals(crypto.newTransferKey()))
+    }
 }

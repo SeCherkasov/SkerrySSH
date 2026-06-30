@@ -47,6 +47,8 @@ import app.skerry.shared.sync.RemoteDevice
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupForm
 import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.sync.qr.QrScannerScreen
+import app.skerry.ui.sync.qr.qrScannerAvailable
 
 /**
  * Push-экран More → «Security & sync»: self-hosted синхронизация (Phase 2). В мобильном идиоме
@@ -110,17 +112,38 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
     // Если у привязки уже есть сохранённый сервер (Configured / после рестарта — нужен лишь пароль),
     // выбор «локально/sync» уже не имеет смысла: пропускаем развилку и сразу открываем форму.
     var showSyncForm by remember { mutableStateOf(sync.savedConfig != null) }
+    // Ветка «у меня есть код связывания» (быстрый паринг, вариант B) — отдельно от sync-формы.
+    var showPairForm by remember { mutableStateOf(false) }
 
     // fillMaxSize-скролл-контейнер по фону; контент центрируем по вертикали и ограничиваем по ширине.
     // Center (а не TopCenter): когда форма короче экрана — она по центру (desktop с большим окном и
     // телефон), длиннее (клавиатура) — скроллится. verticalScroll меряет колонку по её высоте.
     Box(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().padding(horizontal = 22.dp, vertical = 32.dp)) {
-            if (!showSyncForm) {
+            if (!showSyncForm && !showPairForm) {
                 SyncStorageChoice(
                     onLocal = onDone,
                     onSync = { showSyncForm = true },
+                    onPair = { showPairForm = true },
                 )
+            } else if (showPairForm) {
+                Row(
+                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { showPairForm = false }
+                        .padding(vertical = 4.dp, horizontal = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Sym("chevron_left", size = 20.sp, color = D.dim)
+                    Txt("Back", color = D.dim, size = 13.sp)
+                }
+                Spacer(Modifier.height(10.dp))
+                Txt("Link with a code", color = D.text, size = 22.sp, weight = FontWeight.Bold)
+                Txt(
+                    "On a device that's already signed in, open Settings → Account → Link a device, then " +
+                        "scan its QR or paste the code here.",
+                    color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                )
+                SyncJoinBody(sync, errorMessage = (status as? SyncStatus.Failed)?.message)
             } else {
                 // Back ведёт обратно к развилке — это и есть путь «передумал»: на развилке выбор
                 // «Local encrypted storage» завершает онбординг, поэтому отдельная кнопка Skip не нужна.
@@ -161,7 +184,7 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
  * позже в настройках — оба варианта обратимы, поэтому выбор здесь ни к чему не обязывает.
  */
 @Composable
-private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit) {
+private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit, onPair: () -> Unit) {
     Txt(
         "Where should Skerry keep your vault?",
         color = D.text, size = 22.sp, weight = FontWeight.Bold, lineHeight = 28.sp,
@@ -186,6 +209,14 @@ private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit) {
         title = "Self-hosted sync server",
         subtitle = "End-to-end encrypted sync across your devices through a server you run.",
         onClick = onSync,
+    )
+    Spacer(Modifier.height(12.dp))
+    SyncChoiceCard(
+        icon = "qr_code_scanner",
+        iconColor = D.cyanBright,
+        title = "I have a pairing code",
+        subtitle = "Link this device from one that's already signed in — scan its QR or paste the code.",
+        onClick = onPair,
     )
 
     Row(
@@ -304,6 +335,7 @@ private fun SyncBody(sync: SyncCoordinator) {
                 GhostButton("Sync now", onClick = { sync.syncNow() })
                 GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
             }
+            MobileLinkDeviceSection(sync)
             MobileWhatSyncs(sync)
             MobileLinkedDevices(sync)
         }
@@ -399,6 +431,82 @@ private fun SyncSetupBody(
 }
 
 /**
+ * Форма присоединения нового устройства по коду связывания (быстрый паринг, вариант B). Поле кода
+ * (вставка вручную) + опциональный скан QR камерой (только где [qrScannerAvailable]) + локальный
+ * пароль этого устройства, которым vault уже создан в онбординге (claimPairing переобернёт под него
+ * ключ аккаунта). Завершение — общий `status.first { Online }` в [SyncOnboardingScreen] → onDone.
+ */
+@Composable
+private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
+    var code by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var keepConnected by remember { mutableStateOf(true) }
+    var showScanner by remember { mutableStateOf(false) }
+
+    if (showScanner) {
+        QrScannerScreen(
+            onResult = { code = it; showScanner = false },
+            onCancel = { showScanner = false },
+        )
+        return
+    }
+
+    val canSubmit = code.isNotBlank() && password.isNotEmpty()
+
+    SyncFieldLabel("PAIRING CODE")
+    MobileSyncField(code, "Paste code (sk1.…)", KeyboardType.Text, icon = "qr_code") { code = it }
+    if (qrScannerAvailable) {
+        GhostButton("Scan QR code", onClick = { showScanner = true }, icon = "photo_camera", modifier = Modifier.padding(top = 10.dp))
+    }
+    SyncFieldLabel("DEVICE PASSWORD")
+    MobileSyncField(password, "the password you just set", KeyboardType.Password, masked = true, icon = "key") { password = it }
+
+    Row(
+        Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            Modifier.size(20.dp).clip(RoundedCornerShape(6.dp))
+                .background(if (keepConnected) D.cyan else Color.Transparent)
+                .border(1.dp, if (keepConnected) D.cyan else D.cyan14, RoundedCornerShape(6.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (keepConnected) Sym("check", size = 14.sp, color = Color(0xFF0A1A26))
+        }
+        Column(Modifier.weight(1f)) {
+            Txt("Keep me connected", color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt("Reconnect automatically after restart.", color = D.faint, size = 11.5.sp)
+        }
+    }
+
+    if (errorMessage != null) {
+        Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Sym("error", size = 14.sp, color = D.sunset)
+            Txt(errorMessage, color = D.sunset, size = 12.sp)
+        }
+    }
+
+    PrimaryButton(
+        "Link this device",
+        onClick = {
+            if (!canSubmit) return@PrimaryButton
+            val pw = password.toCharArray() // координатор затрёт массив
+            password = ""
+            sync.claimPairing(code.trim(), pw, keepConnected)
+        },
+        modifier = Modifier.padding(top = 18.dp),
+        enabled = canSubmit,
+        bg = if (canSubmit) D.cyan else D.cyan.copy(alpha = 0.4f),
+        icon = "cloud_sync",
+    )
+    Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Sym("shield_lock", size = 14.sp, color = D.moss)
+        Txt("Zero-knowledge · the account password never travels", color = D.faint, size = 11.sp)
+    }
+}
+
+/**
  * Что синхронизируется — паритет с desktop (Settings → Sync, секция WHAT SYNCS). Живые тумблеры
  * уровня аккаунта: пишут [SyncSettings] в vault через координатор, изменение уезжает тем же live-push.
  * «SSH keys» и «Terminal history» из макета убраны сознательно (как на desktop): ключи синкаются
@@ -417,6 +525,33 @@ private fun MobileWhatSyncs(sync: SyncCoordinator) {
     MobileSyncToggleRow("Snippets", null, on = settings.syncSnippets) {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncSnippets = !current.syncSnippets))
+    }
+}
+
+/**
+ * Mobile-секция «Link a device» (вошедшее устройство): кнопка раскрывает inline-карточку с QR/кодом
+ * быстрого паринга (общий [PairingOfferContent]). Inline, а не диалог — мобильный идиом экрана Sync.
+ */
+@Composable
+private fun MobileLinkDeviceSection(sync: SyncCoordinator) {
+    var show by remember { mutableStateOf(false) }
+    if (!show) {
+        GhostButton("Link a device", onClick = { show = true }, icon = "qr_code", modifier = Modifier.padding(top = 12.dp))
+        return
+    }
+    Spacer(Modifier.height(16.dp))
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(D.surfaceDeep)
+            .border(1.dp, D.cyan14, RoundedCornerShape(13.dp)).padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Txt("Link a device", color = D.text, size = 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable { show = false }.padding(horizontal = 10.dp, vertical = 5.dp)) {
+                Txt("Hide", color = D.dim, size = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        PairingOfferContent(sync)
     }
 }
 

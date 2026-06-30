@@ -369,6 +369,8 @@ private fun DesktopChrome(
             // Модалка-онбординг sync поверх настроек: появляется по «Set up sync», закрывается сама
             // при успешном подключении. Только когда координатор подан (мок-путь без бэкенда — нет).
             LocalSync.current?.let { if (state.syncSetupOpen) SyncSetupDialog(it, onDismiss = state::closeSyncSetup) }
+            // Диалог «Link a device»: показывает QR/код быстрого паринга для нового устройства.
+            LocalSync.current?.let { if (state.pairingOpen) PairingShowDialog(it, onDismiss = state::closePairing) }
             if (onLock == null && state.locked) LockScreen(state)
             pendingHost?.let { host ->
                 DesktopPasswordDialog(
