@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
@@ -351,8 +352,9 @@ class ConnectionController(
      * Закрытие сессии не по нашей инициативе: освобождаем ресурсы (оставляя [frozen] экран для показа).
      * При штатном выходе shell ([cleanExit] — команда `exit`/EOF) реконнекта НЕТ: сбрасываем
      * сохранённую учётку и показываем нейтральный «Session closed». Иначе (обрыв транспорта) запускаем
-     * авто-реконнект к последним [lastTarget]/[lastAuth]; без сохранённых цели/учётки остаёмся в
-     * [ConnectionUiState.Disconnected] без попыток. Гард на Connected защищает от повторного входа.
+     * авто-реконнект к последним [lastTarget]/[lastAuth] — но ТОЛЬКО для SSH; у Telnet/Serial реконнекта
+     * нет (см. ниже). Без сохранённых цели/учётки остаёмся в [ConnectionUiState.Disconnected] без
+     * попыток. Гард на Connected защищает от повторного входа.
      */
     private fun onSessionLost(frozen: TerminalScreenState, cleanExit: Boolean) {
         if (uiState !is ConnectionUiState.Connected) return
@@ -368,6 +370,15 @@ class ConnectionController(
         val target = lastTarget
         val auth = lastAuth
         if (target == null || auth == null) {
+            uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
+            return
+        }
+        // Авто-реконнект только для SSH. У Telnet/Serial он неуместен: аутентификации нет, а «обрыв» —
+        // это обычно закрытие сессии сервером или исчезновение устройства (отключили кабель/остановили
+        // стенд), куда молча переподключаться бессмысленно — пользователь коннектится заново вручную.
+        if (target.connectionType != ConnectionType.SSH) {
+            lastAuth = null
+            lastTarget = null
             uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
             return
         }
