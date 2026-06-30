@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -129,18 +130,27 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 ConnectionUiState.Connecting ->
                     MobileTerminalNotice("sync", "Connecting…", active.subtitle)
                 is ConnectionUiState.Connected -> {
-                    TerminalScreen(
-                        st.terminal,
-                        Modifier.weight(1f).fillMaxWidth(),
-                        imeInput = true,
-                        imeTransform = imeTransform,
-                    )
-                    // AI-бар (паритет desktop): при живом контроллере и разрешающей политике хоста.
-                    // Предложенная команда исполняется только по явному Run (Run = подтверждение).
-                    LocalAi.current?.let { ai ->
-                        val policy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
-                        if (AiPolicyDecision.of(policy).aiEnabled) MobileAiBar(ai, policy, st.terminal)
+                    // AI-контроллер (или null): общий на транзиент-оверлей и строку ввода; key() пересоздаёт
+                    // при смене хоста/политики. Транзиент рисуется поверх низа терминала, чтобы его появление
+                    // НЕ ресайзило терминал (иначе reflow-«дёрг» при вставке/выполнении).
+                    val liveAi = LocalAi.current
+                    val aiPolicy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
+                    val aiController = key(liveAi, aiPolicy) {
+                        remember {
+                            if (liveAi != null && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
+                        }
                     }
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        TerminalScreen(
+                            st.terminal,
+                            Modifier.fillMaxSize(),
+                            imeInput = true,
+                            imeTransform = imeTransform,
+                        )
+                        aiController?.let { MobileAiBarTransient(it, st.terminal, Modifier.align(Alignment.BottomStart)) }
+                    }
+                    // Строка ввода AI — в потоке (стабильная высота). Автозапуска нет: Run = подтверждение.
+                    if (aiController != null) MobileAiBarInput(aiController)
                     MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
                 }
                 is ConnectionUiState.Error ->
@@ -162,21 +172,19 @@ fun MobileTerminalScreen(state: MobileDesignState) {
 }
 
 /**
- * Мобильный терминальный AI-бар (паритет desktop): запрос на естественном языке → одна shell-команда
- * под per-host [policy]. Автозапуска нет — предложение показывается карточкой, и лишь Run вставляет
- * команду в терминал + CR (Enter) — Run и есть подтверждение. Команда сведена к одной строке без
- * управляющих байтов, поэтому CR исполняет ровно её.
+ * Мобильный AI-бар (паритет desktop) разделён на два слоя, чтобы его появление не ресайзило терминал
+ * (иначе reflow-«дёрг» при вставке/выполнении): [MobileAiBarTransient] — предупреждение/предложение/
+ * статус ОВЕРЛЕЕМ поверх низа терминала, [MobileAiBarInput] — строка ввода в потоке (стабильная высота).
+ * Автозапуска нет (вывод модели недоверенный): Run = подтверждение (команда + CR → в шелл); для
+ * [CommandRisk.Danger] нужен второй тап («Run anyway» → «Confirm»).
  */
 @Composable
-private fun MobileAiBar(ai: AiAssistantController, policy: AiPolicy, terminal: TerminalScreenState) {
+private fun MobileAiBarTransient(controller: TerminalAiController, terminal: TerminalScreenState, modifier: Modifier) {
     val mono = LocalFonts.current.mono
-    val controller = remember(ai, policy) { ai.terminalController(policy) }
-    var prompt by remember { mutableStateOf("") }
-    val submit = {
-        val text = prompt.trim()
-        if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
-    }
-    Column(Modifier.fillMaxWidth().background(D.surface2)) {
+    val hasContent = controller.pending != null || controller.blocked != null ||
+        controller.error != null || controller.busy
+    if (!hasContent) return
+    Column(modifier.fillMaxWidth().background(D.surface2)) {
         controller.pending?.let { cmd ->
             val danger = controller.pendingRisk?.risk == CommandRisk.Danger
             val accent = if (danger) D.sunset else D.moss
@@ -205,6 +213,18 @@ private fun MobileAiBar(ai: AiAssistantController, policy: AiPolicy, terminal: T
         controller.blocked?.let { MobileAiStatus("shield_lock", it, D.amber, mono) }
         controller.error?.let { MobileAiStatus("error", it, D.sunset, mono) }
         if (controller.busy) MobileAiStatus("hourglass_top", controller.streaming?.takeIf { it.isNotEmpty() } ?: "Thinking…", D.dim, mono)
+    }
+}
+
+@Composable
+private fun MobileAiBarInput(controller: TerminalAiController) {
+    val mono = LocalFonts.current.mono
+    var prompt by remember { mutableStateOf("") }
+    val submit = {
+        val text = prompt.trim()
+        if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
+    }
+    Column(Modifier.fillMaxWidth().background(D.surface2)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -224,7 +244,7 @@ private fun MobileAiBar(ai: AiAssistantController, policy: AiPolicy, terminal: T
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Txt(policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)
+            Txt(controller.policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)
             Box(
                 Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(D.cyan)
                     .clickable(enabled = !controller.busy) { submit() },

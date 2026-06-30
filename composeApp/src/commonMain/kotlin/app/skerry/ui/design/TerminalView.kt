@@ -86,7 +86,19 @@ fun TerminalView(state: DesktopDesignState) {
     Row(Modifier.fillMaxSize()) {
         HostsSidebar(state)
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            Row(Modifier.weight(1f).fillMaxWidth()) {
+            // Общий AI-контроллер живого бара (или null): один экземпляр на оверлей-слой и строку ввода;
+            // key() пересоздаёт при смене активного хоста/политики. Off/мок → null (показ ниже прежним слотом).
+            val liveAi = LocalAi.current
+            val aiSession = LocalSessions.current?.active
+            val aiPolicy = aiSession?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
+            val aiTerminal = (aiSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+            val aiController = key(liveAi, aiPolicy) {
+                remember {
+                    if (liveAi != null && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
+                }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Row(Modifier.fillMaxSize()) {
                 // Живой режим: split привязан к активной вкладке (своя вторичная сессия). Мок/превью —
                 // глобальный флаг.
                 val sessions = LocalSessions.current
@@ -114,9 +126,12 @@ fun TerminalView(state: DesktopDesignState) {
                 }
                 if (state.infoPanel) InfoPanel()
             }
-            // AI-бар терминала: при живом AI-контроллере виден под per-host политикой (Off — скрыт);
-            // в чистом дизайн-превью (только фича-флаг, без контроллера) — прежний декоративный мок.
-            TerminalAiBarSlot()
+                // Транзиентный AI-слой (предупреждение/предложение/статус) поверх низа терминала:
+                // появляется/исчезает БЕЗ изменения высоты терминала → нет reflow-«дёрга».
+                aiController?.let { AiBarTransient(it, aiTerminal, Modifier.align(Alignment.BottomStart)) }
+            }
+            // Строка ввода AI — в потоке (стабильная высота). Off/мок без контроллера → прежний слот.
+            if (aiController != null) AiBarInput(aiController) else TerminalAiBarSlot()
         }
     }
 }
@@ -1293,44 +1308,33 @@ private fun liveSystemSummary(m: HostMetrics?): String {
  */
 @Composable
 private fun TerminalAiBarSlot() {
-    val ai = LocalAi.current
-    if (ai != null) {
-        val active = LocalSessions.current?.active
-        val policy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
-        if (AiPolicyDecision.of(policy).aiEnabled) {
-            val terminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-            AiBar(ai, policy, terminal)
-        }
-    } else if (LocalFeatures.current.ai) {
-        AiBarMock()
-    }
+    // Достигается только вне живого пути (нет контроллера): декоративный AI-бар для дизайн-превью.
+    if (LocalAi.current == null && LocalFeatures.current.ai) AiBarMock()
 }
 
 /**
- * Интерактивный AI-бар: запрос на естественном языке → одна shell-команда под [policy]. Команда
- * НИКОГДА не исполняется автоматически — она показывается карточкой; «Run» и есть подтверждение
- * (принцип «AI under policy»): он отправляет команду + CR (Enter) в терминал. Команда предварительно
- * сведена к одной строке без управляющих байтов, поэтому CR исполняет ровно её (не цепочку).
+ * Транзиентный слой AI-бара: предупреждение о риске, карточка предложенной команды и статусы
+ * (blocked/error/thinking). Рисуется ОВЕРЛЕЕМ поверх низа терминала (см. [TerminalView]) — его
+ * появление/исчезновение НЕ меняет высоту терминала, поэтому нет reflow-«дёрга» при вставке/выполнении.
+ * Пусто → нулевая высота (ничего не перекрывает).
+ *
+ * Команда НИКОГДА не исполняется автоматически (принцип «AI under policy», вывод модели недоверенный):
+ * «Run» и есть подтверждение (команда + CR → в шелл); для [CommandRisk.Danger] нужен второй тап
+ * («Run anyway» → «Confirm run»).
  */
 @Composable
-private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: TerminalScreenState?) {
+private fun AiBarTransient(controller: TerminalAiController, terminal: TerminalScreenState?, modifier: Modifier) {
     val mono = LocalFonts.current.mono
-    val controller = remember(ai, policy) { ai.terminalController(policy) }
-    var prompt by remember { mutableStateOf("") }
-    val submit = {
-        val text = prompt.trim()
-        if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
-    }
-    Column {
+    val hasContent = controller.pending != null || controller.blocked != null ||
+        controller.error != null || controller.busy
+    if (!hasContent) return
+    Column(modifier.fillMaxWidth().background(D.surface2)) {
         HLine()
-        // Предложенная команда — над строкой ввода, с явным подтверждением (Run) или отклонением.
         controller.pending?.let { cmd ->
             val risk = controller.pendingRisk?.risk ?: CommandRisk.None
             val danger = risk == CommandRisk.Danger
             val accent = if (danger) D.sunset else D.moss
-            // Danger требует арм-подтверждения: первый тап «Run anyway» лишь взводит, второй исполняет.
             var armed by remember(cmd) { mutableStateOf(false) }
-            // Предупреждение о риске над командой (принцип «AI under policy»: вывод модели недоверенный).
             controller.pendingRisk?.takeIf { it.risk != CommandRisk.None }?.let { a ->
                 AiStatusRow("warning", a.reason ?: "Potentially destructive command — review before running.",
                     if (a.risk == CommandRisk.Danger) D.sunset else D.amber, mono)
@@ -1347,7 +1351,6 @@ private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: Termina
                     color = accent,
                     enabled = terminal != null,
                 ) {
-                    // Run = подтверждение: команда + CR (Enter) → исполняется в шелле. Для Danger нужен второй тап.
                     if (danger && !armed) armed = true
                     else controller.confirm()?.let { terminal?.send(it + "\r") }
                 }
@@ -1357,6 +1360,20 @@ private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: Termina
         controller.blocked?.let { AiStatusRow("shield_lock", it, D.amber, mono) }
         controller.error?.let { AiStatusRow("error", it, D.sunset, mono) }
         if (controller.busy) AiStatusRow("hourglass_top", controller.streaming?.takeIf { it.isNotEmpty() } ?: "Thinking…", D.dim, mono)
+    }
+}
+
+/** Строка ввода AI-бара — всегда в потоке (постоянная высота), поэтому терминал над ней не ресайзится. */
+@Composable
+private fun AiBarInput(controller: TerminalAiController) {
+    val mono = LocalFonts.current.mono
+    var prompt by remember { mutableStateOf("") }
+    val submit = {
+        val text = prompt.trim()
+        if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
+    }
+    Column {
+        HLine()
         Row(
             Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1378,7 +1395,7 @@ private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: Termina
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            AiBarTag("verified_user", policy.name.uppercase(), mono)
+            AiBarTag("verified_user", controller.policy.name.uppercase(), mono)
             Box(
                 Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.cyan)
                     .clickable(enabled = !controller.busy) { submit() },
