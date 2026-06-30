@@ -147,8 +147,6 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             imeInput = true,
                             imeTransform = imeTransform,
                         )
-                        // Только тонкая строка риска (для Warn/Danger) оверлеем; команда — в строке ниже.
-                        aiController?.let { MobileAiInfoOverlay(it, Modifier.align(Alignment.BottomStart)) }
                     }
                     // Всегда-присутствующая строка бара — команда/статус внутри неё (нет «дёрга»).
                     if (aiController != null) MobileAiBarInput(aiController, st.terminal)
@@ -173,28 +171,10 @@ fun MobileTerminalScreen(state: MobileDesignState) {
 }
 
 /**
- * Тонкая строка над баром: пояснение к команде (None → что делает) или предупреждение о риске
- * (Warn — янтарь, Danger — красный/«block»). ОВЕРЛЕЕМ поверх низа терминала (нет «дёрга»), ≤1 строка.
- */
-@Composable
-private fun MobileAiInfoOverlay(controller: TerminalAiController, modifier: Modifier) {
-    if (controller.pending == null) return
-    val risk = controller.pendingRisk?.risk ?: CommandRisk.None
-    val (icon, color, text) = when (risk) {
-        CommandRisk.Danger -> Triple("block", D.sunset, controller.pendingRisk?.reason ?: "Destructive command — review carefully.")
-        CommandRisk.Warn -> Triple("warning", D.amber, controller.pendingRisk?.reason ?: "Use with care.")
-        CommandRisk.None -> Triple("lightbulb", D.cyan, controller.pendingInfo ?: return)
-    }
-    Column(modifier.fillMaxWidth().background(D.surface2)) {
-        MobileAiStatus(icon, text, color, LocalFonts.current.mono)
-    }
-}
-
-/**
- * Всегда-присутствующая строка мобильного AI-бара (паритет desktop) — постоянная высота, терминал над
- * ней не ресайзится. Внутри одной строки: ввод, «Thinking…», blocked/error и предложенная команда с
- * кнопками. Автозапуска нет (вывод недоверенный): Run = подтверждение (команда + CR → в шелл); для
- * [CommandRisk.Danger] нужен второй тап («Run anyway» → «Confirm»). Причина риска — оверлеем сверху.
+ * Единственная форма мобильного AI-бара (паритет desktop) — постоянная высота, терминал не ресайзится,
+ * ничего не перекрывается. В одной строке: ввод, «Thinking…», blocked/error, а для предложения — команда
+ * + инлайн-пояснение (None: что делает; Warn/Danger: причина риска цветом) + кнопки. Деструктивная —
+ * красная со знаком «block». Автозапуска нет: Run = подтверждение; для [CommandRisk.Danger] второй тап.
  */
 @Composable
 private fun MobileAiBarInput(controller: TerminalAiController, terminal: TerminalScreenState) {
@@ -220,7 +200,19 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
             )
             Box(Modifier.weight(1f)) {
                 when {
-                    pending != null -> Txt(pending, color = if (danger) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    pending != null -> {
+                        val risk = controller.pendingRisk?.risk ?: CommandRisk.None
+                        val infoColor = when (risk) { CommandRisk.Danger -> D.sunset; CommandRisk.Warn -> D.amber; else -> D.dim }
+                        val info = when (risk) {
+                            CommandRisk.Danger -> controller.pendingRisk?.reason ?: "Destructive — review carefully."
+                            CommandRisk.Warn -> controller.pendingRisk?.reason
+                            else -> controller.pendingInfo
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Txt(pending, color = if (danger) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        }
+                    }
                     controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)
                     controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -261,18 +253,6 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun MobileAiStatus(icon: String, text: String, color: Color, mono: FontFamily) {
-    Row(
-        Modifier.fillMaxWidth().background(color.copy(alpha = 0.08f)).padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Sym(icon, size = 13.sp, color = color)
-        Txt(text, color = color, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

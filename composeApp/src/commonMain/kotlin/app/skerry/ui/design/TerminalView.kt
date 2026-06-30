@@ -126,12 +126,9 @@ fun TerminalView(state: DesktopDesignState) {
                 }
                 if (state.infoPanel) InfoPanel()
             }
-                // Строка риска (Warn/Danger) поверх низа терминала — только для рискованной команды
-                // (≤1 строка). Безопасные (None) не перекрывают ничего. Сама команда — в строке ниже.
-                aiController?.let { AiInfoOverlay(it, Modifier.align(Alignment.BottomStart)) }
             }
-            // Всегда-присутствующая строка бара: команда/Thinking/blocked/error показываются ВНУТРИ неё
-            // (нулевое изменение высоты → нет дёрга). Off/мок без контроллера → прежний слот.
+            // Всё в одной строке бара: команда + инлайн-пояснение/причина риска + кнопки; Thinking/blocked/
+            // error там же. Ничего не перекрывает терминал и не меняет его высоту (нет «дёрга»). Off/мок → слот.
             if (aiController != null) AiBarInput(aiController, aiTerminal) else TerminalAiBarSlot()
         }
     }
@@ -1314,31 +1311,11 @@ private fun TerminalAiBarSlot() {
 }
 
 /**
- * Тонкая строка над баром: краткое пояснение к команде (None → что она делает, [TerminalAiController.pendingInfo])
- * или предупреждение о риске ([CommandRisk.Warn] — янтарь/«warning», [Danger] — красный/«block» — запрещающий
- * знак). Рисуется ОВЕРЛЕЕМ поверх низа терминала (см. [TerminalView]) — не ресайзит терминал (нет «дёрга»),
- * перекрывает ≤1 строку. Для None без пояснения — не показывается (ничего не перекрывает).
- */
-@Composable
-private fun AiInfoOverlay(controller: TerminalAiController, modifier: Modifier) {
-    if (controller.pending == null) return
-    val risk = controller.pendingRisk?.risk ?: CommandRisk.None
-    val (icon, color, text) = when (risk) {
-        CommandRisk.Danger -> Triple("block", D.sunset, controller.pendingRisk?.reason ?: "Destructive command — review carefully.")
-        CommandRisk.Warn -> Triple("warning", D.amber, controller.pendingRisk?.reason ?: "Use with care.")
-        CommandRisk.None -> Triple("lightbulb", D.cyan, controller.pendingInfo ?: return)
-    }
-    Column(modifier.fillMaxWidth().background(D.surface2)) {
-        AiStatusRow(icon, text, color, LocalFonts.current.mono)
-    }
-}
-
-/**
- * Всегда-присутствующая строка AI-бара — постоянная высота, поэтому терминал над ней не ресайзится
- * (никакого «дёрга»). Внутри одной строки показываются ВСЕ состояния: ввод, «Thinking…», blocked/error
- * и предложенная команда с кнопками. Команда НИКОГДА не исполняется автоматически (вывод модели
- * недоверенный): «Run» = подтверждение (команда + CR → в шелл); для [CommandRisk.Danger] нужен второй
- * тап («Run anyway» → «Confirm run»). Причина риска — тонким оверлеем [AiRiskOverlay] над строкой.
+ * Единственная форма AI-бара — постоянная высота, терминал над ней не ресайзится (нет «дёрга») и ничего
+ * не перекрывается. В одной строке ВСЁ: ввод, «Thinking…», blocked/error, а для предложения — команда
+ * + инлайн-пояснение (None: что делает; Warn/Danger: причина риска цветом) + кнопки. Деструктивная
+ * команда красная с запрещающим знаком «block». Автозапуска нет (вывод недоверенный): «Run» =
+ * подтверждение (команда + CR → в шелл); для [CommandRisk.Danger] нужен второй тап («Run anyway» → «Confirm run»).
  */
 @Composable
 private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScreenState?) {
@@ -1369,8 +1346,21 @@ private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScree
             }
             Box(Modifier.weight(1f)) {
                 when {
-                    // Деструктивную команду подсвечиваем красным.
-                    pending != null -> Txt(pending, color = if (danger) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    pending != null -> {
+                        // Одна строка: команда + инлайн-пояснение/причина риска (без отдельной плашки).
+                        val risk = controller.pendingRisk?.risk ?: CommandRisk.None
+                        val infoColor = when (risk) { CommandRisk.Danger -> D.sunset; CommandRisk.Warn -> D.amber; else -> D.dim }
+                        val info = when (risk) {
+                            CommandRisk.Danger -> controller.pendingRisk?.reason ?: "Destructive — review carefully."
+                            CommandRisk.Warn -> controller.pendingRisk?.reason
+                            else -> controller.pendingInfo
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Деструктивную команду подсвечиваем красным.
+                            Txt(pending, color = if (danger) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            if (info != null) Txt(info, color = infoColor, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        }
+                    }
                     controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)
                     controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1415,19 +1405,6 @@ private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScree
                 }
             }
         }
-    }
-}
-
-/** Строка статуса AI-бара (blocked/error/thinking). */
-@Composable
-private fun AiStatusRow(icon: String, text: String, color: Color, mono: FontFamily) {
-    Row(
-        Modifier.fillMaxWidth().background(color.copy(alpha = 0.08f)).padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Sym(icon, size = 14.sp, color = color)
-        Txt(text, color = color, size = 12.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
