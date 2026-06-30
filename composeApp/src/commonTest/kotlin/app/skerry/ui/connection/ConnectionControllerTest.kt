@@ -5,6 +5,7 @@ import app.skerry.shared.files.FileItem
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpProgress
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.LocalForwardSpec
@@ -257,6 +258,30 @@ class ConnectionControllerTest {
         assertFalse(st.reconnecting) // попытки исчерпаны
         assertSame(connected.terminal, st.terminal) // экран остался застывшим
         assertEquals(3, transport.connectCalls) // 1 первичный + 2 неуспешные попытки
+        scope.cancel()
+    }
+
+    @Test
+    fun `non-SSH drop does not auto-reconnect`() = runTest {
+        val ch1 = FakeShellChannel()
+        val transport = ScriptedTransport(
+            // Вторая попытка НЕ должна состояться — реконнекта для Telnet/Serial нет.
+            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(FakeShellChannel()))),
+        )
+        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
+        val telnetTarget = SshTarget(host = "h", port = 23, username = "", connectionType = ConnectionType.TELNET)
+        controller.connect(telnetTarget, SshAuth.Password(""))
+        val connected = controller.uiState
+        assertIs<ConnectionUiState.Connected>(connected)
+
+        ch1.close() // обрыв со стороны сервера
+        advanceUntilIdle()
+
+        val st = controller.uiState
+        assertIs<ConnectionUiState.Disconnected>(st)
+        assertFalse(st.reconnecting) // для Telnet/Serial авто-реконнекта нет
+        assertSame(connected.terminal, st.terminal) // экран остался застывшим
+        assertEquals(1, transport.connectCalls) // только первичный, попыток реконнекта не было
         scope.cancel()
     }
 
