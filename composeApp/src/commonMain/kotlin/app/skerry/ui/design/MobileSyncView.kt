@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import app.skerry.shared.vault.BiometricPrompt
+import androidx.compose.runtime.rememberUpdatedState
+import app.skerry.ui.nav.PlatformBackHandler
+import app.skerry.ui.secure.SecureScreen
+import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
 import app.skerry.ui.vault.VaultGateController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,51 +104,31 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
     // сбор есть только на Android. Сбор в STOPPED тут безвреден: auto-lock на ON_STOP запирает vault →
     // controller.state уходит в NeedsUnlock → key(state) рушит этот subtree и отменяет сбор.
     val status by sync.status.collectAsState()
+    val currentOnDone by rememberUpdatedState(onDone)
 
-    // Успешное подключение завершает онбординг-шаг. Один выстрел через Flow.first (а НЕ
-    // LaunchedEffect(status)): Online — data class с меняющимися lastPushed/lastPulled, и повторный
-    // runSync мог бы дёрнуть onDone дважды. Менеджеры списков уже перечитаны координатором (onSynced),
-    // так что в приложение пользователь попадёт с подтянутыми данными.
+    // Успешное подключение завершает онбординг-шаг. dropWhile + first: ждём ПЕРЕХОД в Online, а не
+    // устаревшее значение (после reset координатор гасит сессию асинхронно — на входе ещё мог стоять
+    // Online). Один выстрел: Online — data class с меняющимися lastPushed/lastPulled, повторный runSync
+    // не должен дёрнуть onDone дважды. Менеджеры списков уже перечитаны координатором (onSynced).
     LaunchedEffect(Unit) {
-        sync.status.first { it is SyncStatus.Online }
-        onDone()
+        sync.status.dropWhile { it is SyncStatus.Online }.first { it is SyncStatus.Online }
+        currentOnDone()
     }
 
     // Если у привязки уже есть сохранённый сервер (Configured / после рестарта — нужен лишь пароль),
     // выбор «локально/sync» уже не имеет смысла: пропускаем развилку и сразу открываем форму.
     var showSyncForm by remember { mutableStateOf(sync.savedConfig != null) }
-    // Ветка «у меня есть код связывания» (быстрый паринг, вариант B) — отдельно от sync-формы.
-    var showPairForm by remember { mutableStateOf(false) }
 
     // fillMaxSize-скролл-контейнер по фону; контент центрируем по вертикали и ограничиваем по ширине.
     // Center (а не TopCenter): когда форма короче экрана — она по центру (desktop с большим окном и
     // телефон), длиннее (клавиатура) — скроллится. verticalScroll меряет колонку по её высоте.
     Box(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().padding(horizontal = 22.dp, vertical = 32.dp)) {
-            if (!showSyncForm && !showPairForm) {
+            if (!showSyncForm) {
                 SyncStorageChoice(
                     onLocal = onDone,
                     onSync = { showSyncForm = true },
-                    onPair = { showPairForm = true },
                 )
-            } else if (showPairForm) {
-                Row(
-                    Modifier.clip(RoundedCornerShape(8.dp)).clickable { showPairForm = false }
-                        .padding(vertical = 4.dp, horizontal = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Sym("chevron_left", size = 20.sp, color = D.dim)
-                    Txt("Back", color = D.dim, size = 13.sp)
-                }
-                Spacer(Modifier.height(10.dp))
-                Txt("Link with a code", color = D.text, size = 22.sp, weight = FontWeight.Bold)
-                Txt(
-                    "On a device that's already signed in, open Settings → Account → Link a device, then " +
-                        "scan its QR or paste the code here.",
-                    color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
-                )
-                SyncJoinBody(sync, errorMessage = (status as? SyncStatus.Failed)?.message)
             } else {
                 // Back ведёт обратно к развилке — это и есть путь «передумал»: на развилке выбор
                 // «Local encrypted storage» завершает онбординг, поэтому отдельная кнопка Skip не нужна.
@@ -184,7 +169,7 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
  * позже в настройках — оба варианта обратимы, поэтому выбор здесь ни к чему не обязывает.
  */
 @Composable
-private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit, onPair: () -> Unit) {
+private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit) {
     Txt(
         "Where should Skerry keep your vault?",
         color = D.text, size = 22.sp, weight = FontWeight.Bold, lineHeight = 28.sp,
@@ -209,14 +194,6 @@ private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit, onPair: (
         title = "Self-hosted sync server",
         subtitle = "End-to-end encrypted sync across your devices through a server you run.",
         onClick = onSync,
-    )
-    Spacer(Modifier.height(12.dp))
-    SyncChoiceCard(
-        icon = "qr_code_scanner",
-        iconColor = D.cyanBright,
-        title = "I have a pairing code",
-        subtitle = "Link this device from one that's already signed in — scan its QR or paste the code.",
-        onClick = onPair,
     )
 
     Row(
@@ -431,15 +408,72 @@ private fun SyncSetupBody(
 }
 
 /**
- * Форма присоединения нового устройства по коду связывания (быстрый паринг, вариант B). Поле кода
- * (вставка вручную) + опциональный скан QR камерой (только где [qrScannerAvailable]) + локальный
- * пароль этого устройства, которым vault уже создан в онбординге (claimPairing переобернёт под него
- * ключ аккаунта). Завершение — общий `status.first { Online }` в [SyncOnboardingScreen] → onDone.
+ * Экран связывания этого устройства по коду (быстрый паринг, вариант B) — показывается с экрана
+ * СОЗДАНИЯ vault ([app.skerry.ui.vault.VaultGateState.NeedsCreate]), а не после него. Пароль здесь
+ * вводится ОДИН раз: [SyncCoordinator.claimPairing] сам создаёт локальный vault под ним и принимает
+ * ключ аккаунта, поэтому повторного ввода и рассинхрона паролей нет. Общий экран для desktop+mobile
+ * (template-fidelity для sync отменён — держим лишь цветовую схему). [onBack] возвращает к форме
+ * создания, успех ([SyncStatus.Online]) ведёт в [onDone] (гейт уходит к предложению биометрии).
+ */
+@Composable
+fun PairingJoinScreen(sync: SyncCoordinator, onBack: () -> Unit, onDone: () -> Unit) {
+    val status by sync.status.collectAsState()
+    // onDone создаётся инлайн в гейте (новый инстанс на рекомпозицию) — держим свежую ссылку, чтобы
+    // долгоживущий LaunchedEffect(Unit) не звал устаревшую лямбду.
+    val currentOnDone by rememberUpdatedState(onDone)
+
+    // Здесь вводится мастер-пароль — защищаем экран от снимков Recent Apps сами, не полагаясь на
+    // вызывающего (на desktop SecureScreen — no-op).
+    SecureScreen()
+    // Системный «назад» = визуальная стрелка Back: вернуться к форме создания, а не закрыть приложение.
+    PlatformBackHandler(onBack = onBack)
+
+    // Завершаем шаг лишь при ПЕРЕХОДЕ в Online, а не на устаревшем значении. status — StateFlow, и после
+    // сброса vault координатор гасит сессию асинхронно (disconnect в scope.launch): войдя сюда сразу
+    // после reset, мы могли бы увидеть ещё не погашенный Online и дёрнуть onDone до того, как claimPairing
+    // вообще пересоздаст vault. dropWhile отбрасывает ведущие Online; ждём Online уже ПОСЛЕ нашего claim
+    // (он синхронно ставит Busy). Один выстрел: Online — data class со счётчиками, повтор не нужен.
+    LaunchedEffect(Unit) {
+        sync.status.dropWhile { it is SyncStatus.Online }.first { it is SyncStatus.Online }
+        currentOnDone()
+    }
+
+    Box(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
+        Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().padding(horizontal = 22.dp, vertical = 32.dp)) {
+            Row(
+                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack)
+                    .padding(vertical = 4.dp, horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Sym("chevron_left", size = 20.sp, color = D.dim)
+                Txt("Back", color = D.dim, size = 13.sp)
+            }
+            Spacer(Modifier.height(10.dp))
+            Txt("Link with a code", color = D.text, size = 22.sp, weight = FontWeight.Bold)
+            Txt(
+                "On a device that's already signed in, open Settings → Account → Link a device, then " +
+                    "scan its QR or paste the code here. The password you choose below encrypts this " +
+                    "device's vault and can't be recovered — if you lose it, you'll re-link from scratch.",
+                color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+            )
+            SyncJoinBody(sync, errorMessage = (status as? SyncStatus.Failed)?.message)
+        }
+    }
+}
+
+/**
+ * Поля связывания устройства по коду: код (вставка вручную) + опциональный скан QR камерой (только
+ * где [qrScannerAvailable]) + пароль, которым [SyncCoordinator.claimPairing] создаст локальный vault
+ * и обернёт под него принятый ключ аккаунта. Пароль выбирается здесь впервые (vault ещё нет), поэтому
+ * к нему тот же минимум длины, что и при обычном создании. Завершение — общий `status.first { Online }`
+ * в [PairingJoinScreen] → onDone.
  */
 @Composable
 private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     var code by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
     var keepConnected by remember { mutableStateOf(true) }
     var showScanner by remember { mutableStateOf(false) }
 
@@ -451,15 +485,26 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
         return
     }
 
-    val canSubmit = code.isNotBlank() && password.isNotEmpty()
+    // Пароль создаёт НОВЫЙ vault и невосстановим — требуем подтверждения (как обычная форма создания),
+    // иначе опечатка заперла бы устройство, а одноразовый код уже сгорел.
+    val passwordsMatch = password == confirm
+    val canSubmit = code.isNotBlank() && password.length >= MIN_MASTER_PASSWORD_LENGTH && passwordsMatch
 
     SyncFieldLabel("PAIRING CODE")
     MobileSyncField(code, "Paste code (sk1.…)", KeyboardType.Text, icon = "qr_code") { code = it }
     if (qrScannerAvailable) {
         GhostButton("Scan QR code", onClick = { showScanner = true }, icon = "photo_camera", modifier = Modifier.padding(top = 10.dp))
     }
-    SyncFieldLabel("DEVICE PASSWORD")
-    MobileSyncField(password, "the password you just set", KeyboardType.Password, masked = true, icon = "key") { password = it }
+    SyncFieldLabel("CHOOSE A PASSWORD FOR THIS DEVICE")
+    MobileSyncField(password, "at least $MIN_MASTER_PASSWORD_LENGTH characters", KeyboardType.Password, masked = true, icon = "key") { password = it }
+    SyncFieldLabel("REPEAT PASSWORD")
+    MobileSyncField(confirm, "repeat to confirm", KeyboardType.Password, masked = true, icon = "key") { confirm = it }
+    if (confirm.isNotEmpty() && !passwordsMatch) {
+        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Sym("error", size = 14.sp, color = D.sunset)
+            Txt("Passwords don't match.", color = D.sunset, size = 11.5.sp)
+        }
+    }
 
     Row(
         Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
@@ -493,6 +538,7 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
             if (!canSubmit) return@PrimaryButton
             val pw = password.toCharArray() // координатор затрёт массив
             password = ""
+            confirm = ""
             sync.claimPairing(code.trim(), pw, keepConnected)
         },
         modifier = Modifier.padding(top = 18.dp),

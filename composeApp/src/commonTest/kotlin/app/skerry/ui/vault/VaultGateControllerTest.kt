@@ -360,6 +360,45 @@ class VaultGateControllerTest {
     }
 
     @Test
+    fun `completePairing advances to the biometric offer when the device can enable it`() {
+        // Vault уже создан и разблокирован координатором паринга на экране создания (NeedsCreate),
+        // ключ аккаунта принят — биометрию можно оборачивать сразу.
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.Available),
+        )
+        assertEquals(VaultGateState.NeedsCreate, controller.state)
+
+        controller.completePairing()
+
+        assertEquals(VaultGateState.OfferBiometric, controller.state)
+    }
+
+    @Test
+    fun `completePairing unlocks directly when biometrics are unavailable`() {
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.NotEnrolled),
+        )
+        assertEquals(VaultGateState.NeedsCreate, controller.state)
+
+        controller.completePairing()
+
+        assertEquals(VaultGateState.Unlocked, controller.state)
+    }
+
+    @Test
+    fun `completePairing is a no-op once past the create step`() {
+        val controller = VaultGateController(FakeVault(exists = true, unlockResult = UnlockResult.Success))
+        controller.unlock("correct horse".toCharArray())
+        assertEquals(VaultGateState.Unlocked, controller.state)
+
+        controller.completePairing()
+
+        assertEquals(VaultGateState.Unlocked, controller.state)
+    }
+
+    @Test
     fun `dismissBiometricOffer moves from the offer to Unlocked`() {
         val controller = VaultGateController(
             FakeVault(exists = false),

@@ -212,7 +212,11 @@ fun DesktopDesignApp(
                 vault = vault,
                 biometrics = biometrics,
                 onReset = onVaultReset,
-                createForm = { error, onCreate -> DesktopCreateScreen(error, onCreate) },
+                // onPairingComplete != null (есть sync) — экран создания предлагает «у меня есть код»:
+                // координатор сам создаст vault под выбранным паролем и примет ключ аккаунта.
+                createForm = { error, onCreate, onPairingComplete ->
+                    DesktopCreateScreen(error, onCreate, sync, onPairingComplete)
+                },
                 unlockForm = { error, canBio, onUnlock, onBio, onForgot ->
                     DesktopUnlockScreen(error, canBio, onUnlock, onBio, onForgot)
                 },

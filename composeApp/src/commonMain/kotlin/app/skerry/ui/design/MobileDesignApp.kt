@@ -59,6 +59,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.vault.RESET_CONFIRM_WORD
@@ -139,7 +140,11 @@ fun MobileDesignApp(
                     vault = vault,
                     biometrics = deps.biometrics,
                     onReset = onVaultReset,
-                    createForm = { error, onCreate -> MobileCreateScreen(error, onCreate) },
+                    // onPairingComplete != null (есть sync) — экран создания предлагает «у меня есть код»:
+                    // координатор сам создаст vault под выбранным паролем и примет ключ аккаунта.
+                    createForm = { error, onCreate, onPairingComplete ->
+                        MobileCreateScreen(error, onCreate, deps.sync, onPairingComplete)
+                    },
                     unlockForm = { error, canBio, onUnlock, onBio, onForgot ->
                         MobileUnlockScreen(error, canBio, onUnlock, onBio, onForgot)
                     },
@@ -439,14 +444,31 @@ fun MobileUnlockScreen(
  * Живая форма создания мастер-пароля при первом запуске (мобильный визуал): два поля + кнопка
  * на всю ширину. Валидация (длина/совпадение) — в `VaultGateController`; оба буфера уходят как
  * [CharArray] и затираются там же.
+ *
+ * Если платформа провела sync ([sync] != null и [onPairingComplete] != null), под формой появляется
+ * аффорданс «у меня есть код связывания» (быстрый паринг, вариант B): он открывает [PairingJoinScreen],
+ * где пароль вводится ОДИН раз — координатор сам создаёт vault под ним и принимает ключ аккаунта, после
+ * чего [onPairingComplete] уводит гейт к предложению биометрии (повторного ввода пароля нет).
  */
 @Composable
-fun MobileCreateScreen(error: VaultGateError?, onCreate: (CharArray, CharArray) -> Unit) {
+fun MobileCreateScreen(
+    error: VaultGateError?,
+    onCreate: (CharArray, CharArray) -> Unit,
+    sync: SyncCoordinator? = null,
+    onPairingComplete: (() -> Unit)? = null,
+) {
     var pwd by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
+    var joining by remember { mutableStateOf(false) }
     val submit = { if (pwd.isNotEmpty() && confirm.isNotEmpty()) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
     // Защита ввода мастер-пароля от снимков экрана/превью в Recent Apps (Android; desktop — no-op).
     SecureScreen()
+
+    if (joining && sync != null && onPairingComplete != null) {
+        PairingJoinScreen(sync, onBack = { joining = false }, onDone = onPairingComplete)
+        return
+    }
+
     MobileLockScaffold(
         title = "Set a master password",
         subtitle = "It encrypts this vault and never leaves the device — there is no recovery.",
@@ -457,6 +479,14 @@ fun MobileCreateScreen(error: VaultGateError?, onCreate: (CharArray, CharArray) 
         MobileLockField(confirm, { confirm = it }, "Repeat password", ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
         MobileWideButton("Create vault", onClick = submit)
+        if (sync != null && onPairingComplete != null) {
+            Spacer(Modifier.height(18.dp))
+            Txt(
+                "Linking from another device? Use a pairing code",
+                color = D.cyanBright, size = 13.sp,
+                modifier = Modifier.clickable { joining = true },
+            )
+        }
     }
 }
 
