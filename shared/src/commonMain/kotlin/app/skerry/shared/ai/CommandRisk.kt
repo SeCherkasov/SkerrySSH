@@ -3,8 +3,12 @@ package app.skerry.shared.ai
 /** Уровень риска предложенной AI shell-команды. */
 enum class CommandRisk { None, Warn, Danger }
 
-/** Оценка команды: уровень + человекочитаемая причина ([reason] `null` только для [CommandRisk.None]). */
-data class CommandAssessment(val risk: CommandRisk, val reason: String?) {
+/**
+ * Оценка команды: уровень + человекочитаемая причина ([reason] `null` только для [CommandRisk.None]).
+ * [destructive] — команда теряет/затирает данные (удаление, перезапись, форматирование): UI красит её
+ * красным даже на уровне [CommandRisk.Warn] (не деструктивные Warn вроде sudo/kill — янтарные).
+ */
+data class CommandAssessment(val risk: CommandRisk, val reason: String?, val destructive: Boolean = false) {
     companion object {
         val SAFE = CommandAssessment(CommandRisk.None, null)
     }
@@ -104,7 +108,7 @@ object CommandRiskClassifier {
         // ---------- WARN ----------
 
         if (rx("""\brm\b\s+.*-\w*[rf]|\brm\b\s+[^-]""").containsMatchIn(lower)) {
-            return warn("Deletes files.")
+            return warn("Deletes files.", destructive = true)
         }
         if (rx("""\b(kill|killall|pkill)\b""").containsMatchIn(lower)) {
             return warn("Terminates running processes.")
@@ -115,7 +119,7 @@ object CommandRiskClassifier {
             return warn("Uninstalls packages.")
         }
         if (rx("""\bgit\b.*\b(reset\s+--hard|clean\s+-\w*f|push\s+.*(--force|-f)\b)""").containsMatchIn(lower)) {
-            return warn("Discards local changes or rewrites history.")
+            return warn("Discards local changes or rewrites history.", destructive = true)
         }
         if (rx("""\bchmod\s+(-\w+\s+)?[0-7]*777\b""").containsMatchIn(lower)) {
             return warn("Grants world-writable permissions.")
@@ -124,10 +128,10 @@ object CommandRiskClassifier {
             return warn("Stops or disables a service.")
         }
         if (rx("""\bfind\b.*-delete|\bfind\b.*-exec\s+rm""").containsMatchIn(lower)) {
-            return warn("Bulk-deletes matched files.")
+            return warn("Bulk-deletes matched files.", destructive = true)
         }
         if (rx("""\btruncate\b|\bmv\b.*\s/dev/null\b|:\s*>\s*\S""").containsMatchIn(lower)) {
-            return warn("Discards file contents.")
+            return warn("Discards file contents.", destructive = true)
         }
         if (rx("""\bsudo\b|\bsu\s""").containsMatchIn(lower)) {
             return warn("Runs with elevated privileges.")
@@ -154,6 +158,6 @@ object CommandRiskClassifier {
         return s.replace(Regex("""\s+"""), " ").trim()
     }
 
-    private fun danger(reason: String) = CommandAssessment(CommandRisk.Danger, reason)
-    private fun warn(reason: String) = CommandAssessment(CommandRisk.Warn, reason)
+    private fun danger(reason: String) = CommandAssessment(CommandRisk.Danger, reason, destructive = true)
+    private fun warn(reason: String, destructive: Boolean = false) = CommandAssessment(CommandRisk.Warn, reason, destructive)
 }

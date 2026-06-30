@@ -132,6 +132,43 @@ class TerminalAiControllerTest {
     }
 
     @Test
+    fun `parses the CMD and INFO reply format`() = runTest {
+        val p = CapturingProvider(deltas = listOf("CMD: ls -la\n", "INFO: lists files in long format"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("list files")
+        advanceUntilIdle()
+
+        assertEquals("ls -la", c.pending)
+        assertEquals("lists files in long format", c.pendingInfo)
+    }
+
+    @Test
+    fun `an ASK clarification is shown as a message not a runnable command`() = runTest {
+        val p = CapturingProvider(deltas = listOf("ASK: Which directory should I search?"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("find the thing")
+        advanceUntilIdle()
+
+        assertNull(c.pending)
+        assertEquals("Which directory should I search?", c.error)
+    }
+
+    @Test
+    fun `a prose reply without a marker is not offered as a command`() = runTest {
+        // Регрессия: «уточните запрос…» без ASK-маркера не должно попадать в слот с кнопкой Run.
+        val p = CapturingProvider(deltas = listOf("Уточните запрос, пожалуйста."))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("сделай хорошо")
+        advanceUntilIdle()
+
+        assertNull(c.pending)
+        assertNotNull(c.error)
+    }
+
+    @Test
     fun `strips wrapping backticks the model sometimes adds`() = runTest {
         // Регрессия: `free -h` в бэктиках bash понимает как подстановку → выполняет и падает.
         val p = CapturingProvider(deltas = listOf("`free -h`"))

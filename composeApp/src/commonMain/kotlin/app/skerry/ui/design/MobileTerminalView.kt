@@ -185,8 +185,11 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
         if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
     }
     val pending = controller.pending
-    val danger = controller.pendingRisk?.risk == CommandRisk.Danger
-    val accent = if (danger) D.sunset else D.moss
+    val risk = controller.pendingRisk?.risk ?: CommandRisk.None
+    val danger = risk == CommandRisk.Danger
+    // Красным — любую деструктивную команду (удаление/перезапись), даже Warn.
+    val severe = danger || controller.pendingRisk?.destructive == true
+    val accent = if (severe) D.sunset else D.moss
     var armed by remember(pending) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(if (pending != null) accent.copy(alpha = 0.08f) else D.surface2)) {
         Row(
@@ -195,22 +198,20 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Sym(
-                if (pending != null) (if (danger) "block" else "terminal") else "auto_awesome",
+                if (pending != null) (if (severe) "block" else "terminal") else "auto_awesome",
                 size = 16.sp, color = if (pending != null) accent else D.amber,
             )
             Box(Modifier.weight(1f)) {
                 when {
                     pending != null -> {
-                        val risk = controller.pendingRisk?.risk ?: CommandRisk.None
-                        val infoColor = when (risk) { CommandRisk.Danger -> D.sunset; CommandRisk.Warn -> D.amber; else -> D.dim }
+                        val infoColor = if (severe) D.sunset else if (risk == CommandRisk.Warn) D.amber else D.dim
                         val info = when (risk) {
-                            CommandRisk.Danger -> controller.pendingRisk?.reason ?: "Destructive — review carefully."
-                            CommandRisk.Warn -> controller.pendingRisk?.reason
-                            else -> controller.pendingInfo
+                            CommandRisk.None -> controller.pendingInfo
+                            else -> controller.pendingRisk?.reason
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Txt(pending, color = if (danger) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                            if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Txt(pending, color = if (severe) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
+                            if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }
                     controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)

@@ -1326,8 +1326,11 @@ private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScree
         if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
     }
     val pending = controller.pending
-    val danger = controller.pendingRisk?.risk == CommandRisk.Danger
-    val accent = if (danger) D.sunset else D.moss
+    val risk = controller.pendingRisk?.risk ?: CommandRisk.None
+    val danger = risk == CommandRisk.Danger
+    // Красным красим ЛЮБУЮ деструктивную команду (удаление/перезапись), даже на уровне Warn.
+    val severe = danger || controller.pendingRisk?.destructive == true
+    val accent = if (severe) D.sunset else D.moss
     var armed by remember(pending) { mutableStateOf(false) }
     Column {
         HLine()
@@ -1340,7 +1343,7 @@ private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScree
         ) {
             val leadColor = if (pending != null) accent else D.amber
             // Для деструктивной команды — запрещающий знак «block» вместо иконки терминала.
-            val leadIcon = if (pending != null) (if (danger) "block" else "terminal") else "auto_awesome"
+            val leadIcon = if (pending != null) (if (severe) "block" else "terminal") else "auto_awesome"
             Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(leadColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                 Sym(leadIcon, size = 16.sp, color = leadColor)
             }
@@ -1348,17 +1351,16 @@ private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScree
                 when {
                     pending != null -> {
                         // Одна строка: команда + инлайн-пояснение/причина риска (без отдельной плашки).
-                        val risk = controller.pendingRisk?.risk ?: CommandRisk.None
-                        val infoColor = when (risk) { CommandRisk.Danger -> D.sunset; CommandRisk.Warn -> D.amber; else -> D.dim }
+                        val infoColor = if (severe) D.sunset else if (risk == CommandRisk.Warn) D.amber else D.dim
                         val info = when (risk) {
-                            CommandRisk.Danger -> controller.pendingRisk?.reason ?: "Destructive — review carefully."
-                            CommandRisk.Warn -> controller.pendingRisk?.reason
-                            else -> controller.pendingInfo
+                            CommandRisk.None -> controller.pendingInfo
+                            else -> controller.pendingRisk?.reason
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Команда и пояснение — по общей базовой линии (разный кегль не «плавает»).
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             // Деструктивную команду подсвечиваем красным.
-                            Txt(pending, color = if (danger) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                            if (info != null) Txt(info, color = infoColor, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Txt(pending, color = if (severe) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
+                            if (info != null) Txt(info, color = infoColor, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }
                     controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)

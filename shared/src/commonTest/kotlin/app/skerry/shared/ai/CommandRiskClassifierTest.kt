@@ -2,8 +2,10 @@ package app.skerry.shared.ai
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class CommandRiskClassifierTest {
 
@@ -117,6 +119,17 @@ class CommandRiskClassifierTest {
         val a = CommandRiskClassifier.assess("sudo rm -rf /")
         assertEquals(CommandRisk.Danger, a.risk)
         assertNotNull(a.reason)
+    }
+
+    @Test
+    fun `destructive flag is set for deletions and overwrites but not for plain elevation`() {
+        assertTrue(CommandRiskClassifier.assess("rm file.txt").destructive)
+        assertTrue(CommandRiskClassifier.assess("rm -rf /").destructive)
+        assertTrue(CommandRiskClassifier.assess("git reset --hard HEAD~1").destructive)
+        assertTrue(CommandRiskClassifier.assess("truncate -s 0 app.log").destructive)
+        assertFalse(CommandRiskClassifier.assess("sudo apt update").destructive)
+        assertFalse(CommandRiskClassifier.assess("systemctl stop nginx").destructive)
+        assertFalse(CommandRiskClassifier.assess("free -h").destructive)
     }
 
     @Test

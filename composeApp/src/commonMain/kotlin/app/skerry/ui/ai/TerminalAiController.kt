@@ -99,19 +99,7 @@ class TerminalAiController(
                     sb.append(delta.text)
                     streaming = sb.toString()
                 }
-                val command = sanitizeCommand(sb.toString())
-                when {
-                    command == null -> error = "The assistant returned no command."
-                    // По контракту COMMAND_PROMPT непечатаемый/невозможный запрос модель возвращает
-                    // строкой на «#» — это объяснение, а не команда: показываем как ошибку, не исполняем.
-                    command.startsWith("#") ->
-                        error = command.trimStart('#').trim().ifEmpty { "The assistant declined this request." }
-                    else -> {
-                        pending = command
-                        pendingRisk = CommandRiskClassifier.assess(command)
-                        pendingInfo = extractDescription(sb.toString())
-                    }
-                }
+                applyReply(sb.toString())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AiException) {
@@ -179,6 +167,68 @@ class TerminalAiController(
         return cleaned.ifEmpty { null }?.take(120)
     }
 
+    /**
+     * Разобрать ответ модели ([COMMAND_PROMPT]): либо `CMD:`+`INFO:` (команда), либо `ASK:` (уточнение/
+     * отказ — НЕ команда, показываем сообщением, не даём Run). Если маркеров нет — толерантный фолбэк:
+     * первая строка как команда, но если она похожа на прозу (кириллица/вопрос/фраза-уточнение) — это
+     * тоже сообщение, а не команда (иначе «уточните запрос…» попадало в слот с кнопкой Run).
+     */
+    private fun applyReply(raw: String) {
+        val cmdLine = lineAfter(raw, "CMD:")
+        val askLine = lineAfter(raw, "ASK:")
+        val command = cmdLine?.let { sanitizeCommand(it) }
+        when {
+            command != null && !command.startsWith("#") && !looksLikeProse(command) -> {
+                setPending(command, lineAfter(raw, "INFO:")?.let { cleanLine(it) })
+            }
+            askLine != null -> error = cleanLine(askLine) ?: NEEDS_CLARIFICATION
+            else -> {
+                val first = sanitizeCommand(raw)
+                when {
+                    first == null -> error = "The assistant returned no command."
+                    first.startsWith("#") -> error = first.trimStart('#').trim().ifEmpty { NEEDS_CLARIFICATION }
+                    looksLikeProse(first) -> error = first
+                    else -> setPending(first, extractDescription(raw))
+                }
+            }
+        }
+    }
+
+    private fun setPending(command: String, info: String?) {
+        pending = command
+        pendingRisk = CommandRiskClassifier.assess(command)
+        pendingInfo = info
+    }
+
+    /** Первая строка, начинающаяся на [prefix] (регистронезависимо); возвращает остаток; `null` — нет. */
+    private fun lineAfter(raw: String, prefix: String): String? {
+        raw.lineSequence().forEach { line ->
+            val t = line.trim()
+            if (t.startsWith(prefix, ignoreCase = true)) {
+                return t.substring(prefix.length).trim().ifEmpty { null }
+            }
+        }
+        return null
+    }
+
+    /** Вычистить служебную строку (INFO/ASK): бэктики, маркеры списков, control-байты; до 160 символов. */
+    private fun cleanLine(s: String): String? {
+        val c = s.trim().trim('`').trimStart('#', '-', '*', '•', '>').trim()
+            .filter { it == '\t' || it.code >= 0x20 }.trim()
+        return c.ifEmpty { null }?.take(160)
+    }
+
+    /**
+     * Похоже ли на естественный язык (уточнение/отказ), а не на shell-команду. Эвристика-предохранитель
+     * на случай, когда модель не проставила `ASK:`: кириллица, финальный «?» или типичные фразы-уточнения.
+     */
+    private fun looksLikeProse(s: String): Boolean {
+        if (s.endsWith("?")) return true
+        if (s.any { it in 'Ѐ'..'ӿ' }) return true
+        val lower = s.lowercase()
+        return PROSE_STARTERS.any { lower.startsWith(it) }
+    }
+
     /** Отклонить предложение/сбросить сообщения. */
     fun dismiss() {
         pending = null
@@ -206,12 +256,19 @@ class TerminalAiController(
     companion object {
         const val NOT_CONFIGURED = "Add an API key in AI settings first."
         const val STRICT_BLOCKED = "Strict policy: cloud AI is off for this host."
+        const val NEEDS_CLARIFICATION = "Please clarify your request."
+
+        private val PROSE_STARTERS = listOf(
+            "please", "sorry", "could you", "can you", "which ", "what ", "i cannot", "i can't",
+            "i'm ", "i am ", "unable", "clarify", "specify", "you need", "the request", "to run this",
+        )
 
         const val COMMAND_PROMPT =
-            "You translate the user's request into a SINGLE shell command for a POSIX/Linux SSH session. " +
-                "Output the command on the FIRST line — only the command, no markdown, no backticks. " +
-                "On the SECOND line, add a very short (max 8 words) plain-English description of what it does. " +
-                "If the request is unsafe or impossible, output a single line starting with '#' explaining why. " +
+            "You turn the user's request into a shell command for a POSIX/Linux SSH session. " +
+                "Reply in ONE of two forms, nothing else:\n" +
+                "1) If you can produce a command — first line `CMD: <command>` (only the command, no markdown, " +
+                "no backticks); second line `INFO: <max 8-word description of what it does>`.\n" +
+                "2) If the request is unclear, unsafe, or impossible — a single line `ASK: <short clarification or reason>`.\n" +
                 "Never invent credentials or hostnames."
     }
 }
