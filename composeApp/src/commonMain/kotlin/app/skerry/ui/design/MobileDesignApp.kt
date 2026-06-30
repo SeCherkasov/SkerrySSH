@@ -56,6 +56,7 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.identity.CredentialManagerController
+import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.terminal.LocalTerminalAppearance
@@ -216,6 +217,21 @@ private fun MobileChrome(
         // Keychain открытого vault — нужен листу «New connection» для выбора/создания секрета (паритет desktop).
         LocalCredentials provides credentials,
     ) {
+        // Системный «назад»/жест ведём по стеку приложения, а не закрываем Activity: закрыть push-экран
+        // (→ подлежащий таб), затем уйти с не-Hosts таба на Hosts. На корневом Hosts без оверлеев back не
+        // перехватываем — система штатно закрывает приложение. Открытые листы/диалоги гасят свой back
+        // СВОИМИ BackHandler (они композятся глубже/позже → перехватывают первыми по LIFO диспетчера),
+        // поэтому при открытом оверлее навигационный перехват держим выключенным, чтобы он не сработал
+        // следом. Регистрируем до контента — он становится самым низкоприоритетным в стеке back.
+        val overlayOpen = pending != null || state.sheetNewConn || state.renamingGroup != null || state.modalOpen
+        val backAction = if (overlayOpen) null else mobileBackAction(state.route, state.tab)
+        PlatformBackHandler(enabled = backAction != null) {
+            when (backAction) {
+                MobileBackAction.PopRoute -> state.pop()
+                MobileBackAction.GoHome -> state.select(MobileTab.Hosts)
+                null -> {}
+            }
+        }
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             val route = state.route
             Box(Modifier.fillMaxSize()) {

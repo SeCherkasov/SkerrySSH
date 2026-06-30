@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.nav.PlatformBackHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -202,8 +203,12 @@ fun VaultGate(
 
             VaultGateState.Corrupted -> corruptedForm { controller.beginReset() }
 
-            VaultGateState.Resetting ->
+            VaultGateState.Resetting -> {
+                // Системный «назад» на экране подтверждения сброса = «Отмена»: возврат на разблокировку,
+                // а не закрытие приложения (иначе единственный выход с danger-экрана — кнопка Cancel).
+                PlatformBackHandler { controller.cancelReset() }
                 resetForm({ scope -> controller.confirmReset(scope) }, { controller.cancelReset() })
+            }
 
             // Включение/отказ оба ведут в приложение: при отказе или сбое промпта vault уже открыт,
             // биометрию можно настроить позже в разделе More. dismissBiometricOffer вызываем в любом исходе.

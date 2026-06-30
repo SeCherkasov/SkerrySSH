@@ -68,6 +68,7 @@ import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.shortFingerprint
+import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.vault.SecretCopyAuthorizer
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
@@ -673,6 +674,9 @@ internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: (
 
 @Composable
 private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    // Системный «назад»/жест закрывает диалог (как тап по затемнению). На Android перехватывает back до
+    // навигации каркаса (LIFO диспетчера); на desktop BackHandler без диспетчера — no-op.
+    PlatformBackHandler(onBack = onDismiss)
     Box(
         // imePadding: на мобильном поднимает центрированный диалог над экранной клавиатурой (поля
         // NAME/PASSWORD/PEM), чтобы кнопки не уезжали под неё; на desktop WindowInsets.ime пуст — no-op.

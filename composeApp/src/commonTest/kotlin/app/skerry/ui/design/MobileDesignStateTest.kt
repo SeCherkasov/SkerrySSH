@@ -300,6 +300,36 @@ class MobileDesignStateTest {
         assertTrue(seen.isEmpty())
     }
 
+    // Системный «назад»: куда ведёт по состоянию навигации (mobileBackAction)
+
+    @Test
+    fun back_on_hosts_root_yields_null_so_system_exits() {
+        // Корневой таб Hosts без открытого push-экрана: перехватывать нечего — событие уходит системе
+        // (штатное закрытие приложения), это единственная точка выхода.
+        assertNull(mobileBackAction(route = null, tab = MobileTab.Hosts))
+    }
+
+    @Test
+    fun back_with_open_route_pops_it() {
+        // Любой полноэкранный push-экран (терминал/детали/файлы/…) закрывается «назад», возвращая на таб.
+        assertEquals(MobileBackAction.PopRoute, mobileBackAction(MobileRoute.Terminal, MobileTab.Hosts))
+        assertEquals(MobileBackAction.PopRoute, mobileBackAction(MobileRoute.Files, MobileTab.More))
+    }
+
+    @Test
+    fun back_on_non_hosts_tab_goes_home() {
+        // С не-корневого таба (Snippets/Vault/More) «назад» возвращает на Hosts, а не закрывает приложение.
+        assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Snippets))
+        assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Vault))
+        assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.More))
+    }
+
+    @Test
+    fun back_prefers_popping_route_over_tab() {
+        // Открытый push-экран важнее таба: даже на не-Hosts «назад» сперва закрывает экран, не прыгая на Hosts.
+        assertEquals(MobileBackAction.PopRoute, mobileBackAction(MobileRoute.Ports, MobileTab.More))
+    }
+
     private fun sampleHost(): Host =
         Host(id = "host-42", label = "prod-web-01", address = "192.168.1.45", username = "root")
 }

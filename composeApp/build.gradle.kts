@@ -40,6 +40,10 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
         }
+        androidMain.dependencies {
+            // androidx.activity.compose.BackHandler — перехват системного «назад» (PlatformBackHandler).
+            implementation(libs.androidx.activity.compose)
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)

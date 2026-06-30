@@ -28,6 +28,27 @@ enum class MobileTab(val icon: String, val label: String) {
  */
 enum class MobileRoute { Terminal, Files, HostDetail, Ports, Known, Team, Appearance, Sync }
 
+/** Что должен сделать системный «назад» на мобильном каркасе. */
+enum class MobileBackAction {
+    /** Закрыть открытый полноэкранный push-экран (вернуться на подлежащий таб). */
+    PopRoute,
+
+    /** Уйти с не-корневого таба на корневой Hosts. */
+    GoHome,
+}
+
+/**
+ * Решает, что делает системный «назад» по состоянию навигации каркаса. `null` — перехватывать нечего
+ * (корневой таб Hosts без открытого push-экрана): событие отдаётся системе, которая закрывает Activity
+ * (штатный выход из приложения). Открытые листы/диалоги здесь НЕ учитываются — они перехватывают свой
+ * back сами (собственными `BackHandler` поверх этого), поэтому до навигации событие при них не доходит.
+ */
+fun mobileBackAction(route: MobileRoute?, tab: MobileTab): MobileBackAction? = when {
+    route != null -> MobileBackAction.PopRoute
+    tab != MobileTab.Hosts -> MobileBackAction.GoHome
+    else -> null
+}
+
 /**
  * Состояние мобильного макета — навигация (текущий таб + открытый push-экран) и оверлей листа
  * New connection. Чисто UI-состояние, мутаторы инкапсулированы (`private set`), как в

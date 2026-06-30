@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
+import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.secure.SecureScreen
 
 
@@ -603,6 +604,8 @@ internal fun MobileGroupRenameDialog(
     // Триммим здесь, чтобы и контроллер (Host.group), и синхронизация collapsedGroups получили
     // одинаковый канонический ключ — иначе свёрнутость папки разъедется на хвостовом пробеле.
     val submit = { if (canSave) onSave(name.trim()) }
+    // Системный «назад»/жест закрывает диалог (как тап по затемнению), перехватывая back до навигации каркаса.
+    PlatformBackHandler(onBack = onDismiss)
     Box(
         Modifier
             .fillMaxSize()
