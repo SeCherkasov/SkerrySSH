@@ -134,7 +134,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                         imeTransform = imeTransform,
                     )
                     // AI-бар (паритет desktop): при живом контроллере и разрешающей политике хоста.
-                    // Предложенная команда исполняется только по явному Run (вставка в ввод без Enter).
+                    // Предложенная команда исполняется только по явному Run (Run = подтверждение).
                     LocalAi.current?.let { ai ->
                         val policy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
                         if (AiPolicyDecision.of(policy).aiEnabled) MobileAiBar(ai, policy, st.terminal)
@@ -162,7 +162,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
 /**
  * Мобильный терминальный AI-бар (паритет desktop): запрос на естественном языке → одна shell-команда
  * под per-host [policy]. Автозапуска нет — предложение показывается карточкой, и лишь Run вставляет
- * команду в ввод терминала ([TerminalScreenState.send], без перевода строки; Enter жмёт пользователь).
+ * команду в терминал + CR (Enter) — Run и есть подтверждение. Команда сведена к одной строке без
+ * управляющих байтов, поэтому CR исполняет ровно её.
  */
 @Composable
 private fun MobileAiBar(ai: AiAssistantController, policy: AiPolicy, terminal: TerminalScreenState) {
@@ -182,7 +183,7 @@ private fun MobileAiBar(ai: AiAssistantController, policy: AiPolicy, terminal: T
             ) {
                 Sym("terminal", size = 14.sp, color = D.moss)
                 Txt(cmd, color = D.text, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
-                MobileAiChip("Run", D.moss) { controller.confirm()?.let { terminal.send(it) } }
+                MobileAiChip("Run", D.moss) { controller.confirm()?.let { terminal.send(it + "\r") } }
                 MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
             }
         }
