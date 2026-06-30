@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
 import app.skerry.ui.vault.RESET_CONFIRM_WORD
 import app.skerry.ui.vault.ResetScope
@@ -206,20 +207,34 @@ private fun ResetScopeRow(selected: Boolean, title: String, subtitle: String, on
  * Живая форма создания мастер-пароля при первом запуске (слот `createForm`): два поля + кнопка,
  * валидация (длина/совпадение) — в [VaultGateController]; сюда оба буфера уходят как [CharArray]
  * и затираются там же. Тот же «night sea»-визуал, что у [DesktopUnlockScreen].
+ *
+ * Если платформа провела sync ([sync] != null и [onPairingComplete] != null), под формой появляется
+ * аффорданс «у меня есть код связывания» (быстрый паринг, вариант B): он открывает [PairingJoinScreen],
+ * где пароль вводится ОДИН раз — координатор сам создаёт vault под ним и принимает ключ аккаунта, после
+ * чего [onPairingComplete] уводит гейт к предложению биометрии/в приложение (повторного ввода нет).
  */
 @Composable
 fun DesktopCreateScreen(
     error: VaultGateError?,
     onCreate: (CharArray, CharArray) -> Unit,
+    sync: SyncCoordinator? = null,
+    onPairingComplete: (() -> Unit)? = null,
 ) {
     var pwd by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     // Утрата мастер-пароля = безвозвратная утрата vault (zero-knowledge): требуем явного признания
     // этого до создания, чтобы «нет восстановления» не осталось незамеченным мелким текстом.
     var acknowledged by remember { mutableStateOf(false) }
+    var joining by remember { mutableStateOf(false) }
     // Минимум длины — тот же, что форсирует VaultGateController, чтобы кнопка не была активна до отказа.
     val canCreate = pwd.length >= MIN_MASTER_PASSWORD_LENGTH && confirm.isNotEmpty() && acknowledged
     val submit = { if (canCreate) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
+
+    if (joining && sync != null && onPairingComplete != null) {
+        PairingJoinScreen(sync, onBack = { joining = false }, onDone = onPairingComplete)
+        return
+    }
+
     LockScaffold(
         title = "Set a master password",
         subtitle = "It encrypts this vault and never leaves the device — there is no recovery.",
@@ -237,6 +252,13 @@ fun DesktopCreateScreen(
             fg = if (canCreate) Color(0xFF0A1A26) else D.faint,
             enabled = canCreate,
         )
+        if (sync != null && onPairingComplete != null) {
+            Txt(
+                "Linking from another device? Use a pairing code",
+                color = D.cyanBright, size = 12.5.sp,
+                modifier = Modifier.fillMaxWidth().clickable { joining = true },
+            )
+        }
     }
 }
 

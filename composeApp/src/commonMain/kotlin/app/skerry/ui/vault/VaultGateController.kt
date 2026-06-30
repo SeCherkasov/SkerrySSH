@@ -314,6 +314,20 @@ class VaultGateController(
     }
 
     /**
+     * Завершить связывание устройства по коду, начатое прямо на экране создания vault
+     * ([VaultGateState.NeedsCreate]). К этому моменту координатор паринга
+     * ([app.skerry.ui.sync.SyncCoordinator.claimPairing]) уже создал и разблокировал локальный vault
+     * под выбранным паролем и принял ключ аккаунта, поэтому dataKey финальный — биометрию можно
+     * оборачивать сразу. Ведём через предложение биометрии (если устройство умеет) либо сразу в
+     * приложение. Сознательно НЕ напрямую в [VaultGateState.Unlocked] — иначе потерялось бы разовое
+     * предложение биометрии под финальным ключом. No-op вне [VaultGateState.NeedsCreate].
+     */
+    fun completePairing() {
+        if (state != VaultGateState.NeedsCreate) return
+        state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
+    }
+
+    /**
      * Закрыть разовое предложение биометрии после создания vault ([VaultGateState.OfferBiometric]) —
      * пустить в приложение независимо от того, включил пользователь биометрию или отказался.
      */

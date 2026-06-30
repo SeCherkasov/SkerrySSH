@@ -102,7 +102,7 @@ fun main() {
     val knownHosts = if (live) seededKnownHosts() else null
 
     val content: @Composable () -> Unit = when (overlay) {
-        "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null) { _, _ -> } } } }
+        "create" -> { { GateScreenPreview { DesktopCreateScreen(error = null, onCreate = { _, _ -> }) } } }
         "unlock" -> { { GateScreenPreview { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}, onForgotPassword = {}) } } }
         "corrupted" -> { { GateScreenPreview { DesktopCorruptedScreen(onReset = {}) } } }
         "reset" -> { { GateScreenPreview { DesktopResetScreen(onConfirm = {}, onCancel = {}) } } }

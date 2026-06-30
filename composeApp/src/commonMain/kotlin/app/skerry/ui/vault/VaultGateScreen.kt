@@ -94,8 +94,17 @@ fun VaultGate(
     // Внешняя чистка при сбросе (хосты/known_hosts/настройки по выбранному [ResetScope]). Вызывается
     // после стирания vault; платформенная проводка (desktop `main`) подставляет реальную реализацию.
     onReset: (ResetScope) -> Unit = {},
-    createForm: @Composable (error: VaultGateError?, onCreate: (CharArray, CharArray) -> Unit) -> Unit =
-        { error, onCreate ->
+    // [onPairingComplete] != null — платформа умеет связать это устройство по коду прямо на экране
+    // создания (быстрый паринг, вариант B): форма может показать аффорданс «у меня есть код», где
+    // координатор сам создаст vault под выбранным паролем и примет ключ аккаунта; по завершении форма
+    // зовёт [onPairingComplete], уводя гейт к предложению биометрии/в приложение. null — паринг с
+    // экрана создания недоступен (нет sync / превью), показывается только обычное создание.
+    createForm: @Composable (
+        error: VaultGateError?,
+        onCreate: (CharArray, CharArray) -> Unit,
+        onPairingComplete: (() -> Unit)?,
+    ) -> Unit =
+        { error, onCreate, _ ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CreateVaultForm(error, onCreate) }
         },
     unlockForm: @Composable (
@@ -150,6 +159,11 @@ fun VaultGate(
     val controller = remember(vault, biometrics) {
         VaultGateController(vault, biometrics, onReset = { currentOnReset(it) }, offersSyncOnboarding = offersSync)
     }
+    // Стабильная ссылка (не новый инстанс на каждую рекомпозицию VaultGate) — иначе createForm и его
+    // поддерево (аффорданс паринга) перерисовывались бы лишний раз. null, когда паринг с экрана
+    // создания недоступен (нет sync).
+    val onPairingComplete: (() -> Unit)? =
+        if (offersSync) remember(controller) { { controller.completePairing() } } else null
     val scope = rememberCoroutineScope()
 
     // Авто-лок при уходе приложения в фон: чужие руки на разблокированном устройстве не должны
@@ -184,7 +198,13 @@ fun VaultGate(
     key(controller.state) {
         when (controller.state) {
             VaultGateState.NeedsCreate ->
-                createForm(controller.error) { password, confirm -> controller.create(password, confirm) }
+                createForm(
+                    controller.error,
+                    { password, confirm -> controller.create(password, confirm) },
+                    // null, когда платформа не провела sync (та же готовность, что и для OfferSync):
+                    // иначе claimPairing некому исполнить. Стабильная ссылка — см. onPairingComplete выше.
+                    onPairingComplete,
+                )
 
             VaultGateState.NeedsUnlock ->
                 unlockForm(
