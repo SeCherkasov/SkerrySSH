@@ -126,12 +126,13 @@ fun TerminalView(state: DesktopDesignState) {
                 }
                 if (state.infoPanel) InfoPanel()
             }
-                // Транзиентный AI-слой (предупреждение/предложение/статус) поверх низа терминала:
-                // появляется/исчезает БЕЗ изменения высоты терминала → нет reflow-«дёрга».
-                aiController?.let { AiBarTransient(it, aiTerminal, Modifier.align(Alignment.BottomStart)) }
+                // Строка риска (Warn/Danger) поверх низа терминала — только для рискованной команды
+                // (≤1 строка). Безопасные (None) не перекрывают ничего. Сама команда — в строке ниже.
+                aiController?.let { AiRiskOverlay(it, Modifier.align(Alignment.BottomStart)) }
             }
-            // Строка ввода AI — в потоке (стабильная высота). Off/мок без контроллера → прежний слот.
-            if (aiController != null) AiBarInput(aiController) else TerminalAiBarSlot()
+            // Всегда-присутствующая строка бара: команда/Thinking/blocked/error показываются ВНУТРИ неё
+            // (нулевое изменение высоты → нет дёрга). Off/мок без контроллера → прежний слот.
+            if (aiController != null) AiBarInput(aiController, aiTerminal) else TerminalAiBarSlot()
         }
     }
 }
@@ -1313,95 +1314,99 @@ private fun TerminalAiBarSlot() {
 }
 
 /**
- * Транзиентный слой AI-бара: предупреждение о риске, карточка предложенной команды и статусы
- * (blocked/error/thinking). Рисуется ОВЕРЛЕЕМ поверх низа терминала (см. [TerminalView]) — его
- * появление/исчезновение НЕ меняет высоту терминала, поэтому нет reflow-«дёрга» при вставке/выполнении.
- * Пусто → нулевая высота (ничего не перекрывает).
- *
- * Команда НИКОГДА не исполняется автоматически (принцип «AI under policy», вывод модели недоверенный):
- * «Run» и есть подтверждение (команда + CR → в шелл); для [CommandRisk.Danger] нужен второй тап
- * («Run anyway» → «Confirm run»).
+ * Тонкая строка-предупреждение о риске команды ([CommandRisk.Warn]/[Danger]) — рисуется ОВЕРЛЕЕМ поверх
+ * низа терминала (см. [TerminalView]), поэтому не ресайзит терминал (нет reflow-«дёрга»). Перекрывает
+ * ≤1 строку и ТОЛЬКО для рискованной команды; безопасные (None) ничего не перекрывают. Сама команда
+ * показывается в строке бара ([AiBarInput]), не здесь.
  */
 @Composable
-private fun AiBarTransient(controller: TerminalAiController, terminal: TerminalScreenState?, modifier: Modifier) {
-    val mono = LocalFonts.current.mono
-    val hasContent = controller.pending != null || controller.blocked != null ||
-        controller.error != null || controller.busy
-    if (!hasContent) return
+private fun AiRiskOverlay(controller: TerminalAiController, modifier: Modifier) {
+    val assessment = controller.pendingRisk ?: return
+    if (controller.pending == null || assessment.risk == CommandRisk.None) return
+    val color = if (assessment.risk == CommandRisk.Danger) D.sunset else D.amber
     Column(modifier.fillMaxWidth().background(D.surface2)) {
-        HLine()
-        controller.pending?.let { cmd ->
-            val risk = controller.pendingRisk?.risk ?: CommandRisk.None
-            val danger = risk == CommandRisk.Danger
-            val accent = if (danger) D.sunset else D.moss
-            var armed by remember(cmd) { mutableStateOf(false) }
-            controller.pendingRisk?.takeIf { it.risk != CommandRisk.None }?.let { a ->
-                AiStatusRow("warning", a.reason ?: "Potentially destructive command — review before running.",
-                    if (a.risk == CommandRisk.Danger) D.sunset else D.amber, mono)
-            }
-            Row(
-                Modifier.fillMaxWidth().background(accent.copy(alpha = 0.08f)).padding(horizontal = 16.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Sym("terminal", size = 15.sp, color = accent)
-                Txt(cmd, color = D.text, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                AiActionChip(
-                    label = when { !danger -> "Run"; !armed -> "Run anyway"; else -> "Confirm run" },
-                    color = accent,
-                    enabled = terminal != null,
-                ) {
-                    if (danger && !armed) armed = true
-                    else controller.confirm()?.let { terminal?.send(it + "\r") }
-                }
-                AiActionChip("Dismiss", D.faint) { controller.dismiss() }
-            }
-        }
-        controller.blocked?.let { AiStatusRow("shield_lock", it, D.amber, mono) }
-        controller.error?.let { AiStatusRow("error", it, D.sunset, mono) }
-        if (controller.busy) AiStatusRow("hourglass_top", controller.streaming?.takeIf { it.isNotEmpty() } ?: "Thinking…", D.dim, mono)
+        AiStatusRow("warning", assessment.reason ?: "Potentially destructive command — review before running.",
+            color, LocalFonts.current.mono)
     }
 }
 
-/** Строка ввода AI-бара — всегда в потоке (постоянная высота), поэтому терминал над ней не ресайзится. */
+/**
+ * Всегда-присутствующая строка AI-бара — постоянная высота, поэтому терминал над ней не ресайзится
+ * (никакого «дёрга»). Внутри одной строки показываются ВСЕ состояния: ввод, «Thinking…», blocked/error
+ * и предложенная команда с кнопками. Команда НИКОГДА не исполняется автоматически (вывод модели
+ * недоверенный): «Run» = подтверждение (команда + CR → в шелл); для [CommandRisk.Danger] нужен второй
+ * тап («Run anyway» → «Confirm run»). Причина риска — тонким оверлеем [AiRiskOverlay] над строкой.
+ */
 @Composable
-private fun AiBarInput(controller: TerminalAiController) {
+private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScreenState?) {
     val mono = LocalFonts.current.mono
     var prompt by remember { mutableStateOf("") }
     val submit = {
         val text = prompt.trim()
         if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
     }
+    val pending = controller.pending
+    val danger = controller.pendingRisk?.risk == CommandRisk.Danger
+    val accent = if (danger) D.sunset else D.moss
+    var armed by remember(pending) { mutableStateOf(false) }
     Column {
         HLine()
         Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth()
+                .background(if (pending != null) accent.copy(alpha = 0.08f) else D.surface2)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.amber.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Sym("auto_awesome", size = 16.sp, color = D.amber)
+            val leadColor = if (pending != null) accent else D.amber
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(leadColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                Sym(if (pending != null) "terminal" else "auto_awesome", size = 16.sp, color = leadColor)
             }
             Box(Modifier.weight(1f)) {
-                if (prompt.isEmpty()) Txt("Ask Skerry: 'find files larger than 100MB'", color = D.dim, size = 13.sp)
-                BasicTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
-                    singleLine = true,
-                    textStyle = TextStyle(color = D.text, fontSize = 13.sp),
-                    cursorBrush = SolidColor(D.cyan),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { submit() }),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                when {
+                    pending != null -> Txt(pending, color = D.text, size = 13.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)
+                    controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    else -> {
+                        if (prompt.isEmpty()) Txt("Ask Skerry: 'find files larger than 100MB'", color = D.dim, size = 13.sp)
+                        BasicTextField(
+                            value = prompt,
+                            onValueChange = { prompt = it },
+                            singleLine = true,
+                            textStyle = TextStyle(color = D.text, fontSize = 13.sp),
+                            cursorBrush = SolidColor(D.cyan),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { submit() }),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
-            AiBarTag("verified_user", controller.policy.name.uppercase(), mono)
-            Box(
-                Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.cyan)
-                    .clickable(enabled = !controller.busy) { submit() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Sym("arrow_upward", size = 16.sp, color = Color(0xFF0A1A26))
+            when {
+                pending != null -> {
+                    AiActionChip(
+                        label = when { !danger -> "Run"; !armed -> "Run anyway"; else -> "Confirm run" },
+                        color = accent,
+                        enabled = terminal != null,
+                    ) {
+                        if (danger && !armed) armed = true
+                        else controller.confirm()?.let { terminal?.send(it + "\r") }
+                    }
+                    AiActionChip("Dismiss", D.faint) { controller.dismiss() }
+                }
+                controller.blocked != null || controller.error != null ->
+                    AiActionChip("Dismiss", D.faint) { controller.dismiss() }
+                else -> {
+                    AiBarTag("verified_user", controller.policy.name.uppercase(), mono)
+                    Box(
+                        Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.cyan)
+                            .clickable(enabled = !controller.busy) { submit() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Sym("arrow_upward", size = 16.sp, color = Color(0xFF0A1A26))
+                    }
+                }
             }
         }
     }

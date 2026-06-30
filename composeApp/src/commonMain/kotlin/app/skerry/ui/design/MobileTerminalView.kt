@@ -147,10 +147,11 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             imeInput = true,
                             imeTransform = imeTransform,
                         )
-                        aiController?.let { MobileAiBarTransient(it, st.terminal, Modifier.align(Alignment.BottomStart)) }
+                        // Только тонкая строка риска (для Warn/Danger) оверлеем; команда — в строке ниже.
+                        aiController?.let { MobileAiRiskOverlay(it, Modifier.align(Alignment.BottomStart)) }
                     }
-                    // Строка ввода AI — в потоке (стабильная высота). Автозапуска нет: Run = подтверждение.
-                    if (aiController != null) MobileAiBarInput(aiController)
+                    // Всегда-присутствующая строка бара — команда/статус внутри неё (нет «дёрга»).
+                    if (aiController != null) MobileAiBarInput(aiController, st.terminal)
                     MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
                 }
                 is ConnectionUiState.Error ->
@@ -172,85 +173,85 @@ fun MobileTerminalScreen(state: MobileDesignState) {
 }
 
 /**
- * Мобильный AI-бар (паритет desktop) разделён на два слоя, чтобы его появление не ресайзило терминал
- * (иначе reflow-«дёрг» при вставке/выполнении): [MobileAiBarTransient] — предупреждение/предложение/
- * статус ОВЕРЛЕЕМ поверх низа терминала, [MobileAiBarInput] — строка ввода в потоке (стабильная высота).
- * Автозапуска нет (вывод модели недоверенный): Run = подтверждение (команда + CR → в шелл); для
- * [CommandRisk.Danger] нужен второй тап («Run anyway» → «Confirm»).
+ * Тонкая строка-предупреждение о риске ([CommandRisk.Warn]/[Danger]) — ОВЕРЛЕЕМ поверх низа терминала,
+ * не ресайзит терминал (нет «дёрга»); перекрывает ≤1 строку и только для рискованной команды.
  */
 @Composable
-private fun MobileAiBarTransient(controller: TerminalAiController, terminal: TerminalScreenState, modifier: Modifier) {
-    val mono = LocalFonts.current.mono
-    val hasContent = controller.pending != null || controller.blocked != null ||
-        controller.error != null || controller.busy
-    if (!hasContent) return
+private fun MobileAiRiskOverlay(controller: TerminalAiController, modifier: Modifier) {
+    val assessment = controller.pendingRisk ?: return
+    if (controller.pending == null || assessment.risk == CommandRisk.None) return
+    val color = if (assessment.risk == CommandRisk.Danger) D.sunset else D.amber
     Column(modifier.fillMaxWidth().background(D.surface2)) {
-        controller.pending?.let { cmd ->
-            val danger = controller.pendingRisk?.risk == CommandRisk.Danger
-            val accent = if (danger) D.sunset else D.moss
-            var armed by remember(cmd) { mutableStateOf(false) }
-            controller.pendingRisk?.takeIf { it.risk != CommandRisk.None }?.let { a ->
-                MobileAiStatus("warning", a.reason ?: "Potentially destructive command.",
-                    if (a.risk == CommandRisk.Danger) D.sunset else D.amber, mono)
-            }
-            Row(
-                Modifier.fillMaxWidth().background(accent.copy(alpha = 0.08f)).padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("terminal", size = 14.sp, color = accent)
-                Txt(cmd, color = D.text, size = 12.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                MobileAiChip(
-                    when { !danger -> "Run"; !armed -> "Run anyway"; else -> "Confirm" },
-                    accent,
-                ) {
-                    if (danger && !armed) armed = true
-                    else controller.confirm()?.let { terminal.send(it + "\r") }
-                }
-                MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
-            }
-        }
-        controller.blocked?.let { MobileAiStatus("shield_lock", it, D.amber, mono) }
-        controller.error?.let { MobileAiStatus("error", it, D.sunset, mono) }
-        if (controller.busy) MobileAiStatus("hourglass_top", controller.streaming?.takeIf { it.isNotEmpty() } ?: "Thinking…", D.dim, mono)
+        MobileAiStatus("warning", assessment.reason ?: "Potentially destructive command.", color, LocalFonts.current.mono)
     }
 }
 
+/**
+ * Всегда-присутствующая строка мобильного AI-бара (паритет desktop) — постоянная высота, терминал над
+ * ней не ресайзится. Внутри одной строки: ввод, «Thinking…», blocked/error и предложенная команда с
+ * кнопками. Автозапуска нет (вывод недоверенный): Run = подтверждение (команда + CR → в шелл); для
+ * [CommandRisk.Danger] нужен второй тап («Run anyway» → «Confirm»). Причина риска — оверлеем сверху.
+ */
 @Composable
-private fun MobileAiBarInput(controller: TerminalAiController) {
+private fun MobileAiBarInput(controller: TerminalAiController, terminal: TerminalScreenState) {
     val mono = LocalFonts.current.mono
     var prompt by remember { mutableStateOf("") }
     val submit = {
         val text = prompt.trim()
         if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
     }
-    Column(Modifier.fillMaxWidth().background(D.surface2)) {
+    val pending = controller.pending
+    val danger = controller.pendingRisk?.risk == CommandRisk.Danger
+    val accent = if (danger) D.sunset else D.moss
+    var armed by remember(pending) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().background(if (pending != null) accent.copy(alpha = 0.08f) else D.surface2)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Sym("auto_awesome", size = 16.sp, color = D.amber)
+            Sym(if (pending != null) "terminal" else "auto_awesome", size = 16.sp, color = if (pending != null) accent else D.amber)
             Box(Modifier.weight(1f)) {
-                if (prompt.isEmpty()) Txt("Ask Skerry…", color = D.dim, size = 13.sp)
-                BasicTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
-                    singleLine = true,
-                    textStyle = TextStyle(color = D.text, fontSize = 13.sp),
-                    cursorBrush = SolidColor(D.cyan),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { submit() }),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                when {
+                    pending != null -> Txt(pending, color = D.text, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)
+                    controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    else -> {
+                        if (prompt.isEmpty()) Txt("Ask Skerry…", color = D.dim, size = 13.sp)
+                        BasicTextField(
+                            value = prompt,
+                            onValueChange = { prompt = it },
+                            singleLine = true,
+                            textStyle = TextStyle(color = D.text, fontSize = 13.sp),
+                            cursorBrush = SolidColor(D.cyan),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = { submit() }),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             }
-            Txt(controller.policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)
-            Box(
-                Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(D.cyan)
-                    .clickable(enabled = !controller.busy) { submit() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Sym("arrow_upward", size = 16.sp, color = Color(0xFF0A1A26))
+            when {
+                pending != null -> {
+                    MobileAiChip(when { !danger -> "Run"; !armed -> "Run anyway"; else -> "Confirm" }, accent) {
+                        if (danger && !armed) armed = true
+                        else controller.confirm()?.let { terminal.send(it + "\r") }
+                    }
+                    MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
+                }
+                controller.blocked != null || controller.error != null ->
+                    MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
+                else -> {
+                    Txt(controller.policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)
+                    Box(
+                        Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(D.cyan)
+                            .clickable(enabled = !controller.busy) { submit() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Sym("arrow_upward", size = 16.sp, color = Color(0xFF0A1A26))
+                    }
+                }
             }
         }
     }
