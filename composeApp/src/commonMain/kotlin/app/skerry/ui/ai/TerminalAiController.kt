@@ -263,12 +263,20 @@ class TerminalAiController(
             "i'm ", "i am ", "unable", "clarify", "specify", "you need", "the request", "to run this",
         )
 
+        /**
+         * Язык человекочитаемого текста (INFO/ASK) — язык UI приложения. Сейчас интерфейс англоязычный
+         * (строки захардкожены), поэтому English. Когда появится локализация — прокинуть сюда текущую
+         * локаль (риск-причины [CommandRiskClassifier] тоже английские, консистентно).
+         */
+        private const val UI_LANGUAGE = "English"
+
         const val COMMAND_PROMPT =
             "You turn the user's request into a shell command for a POSIX/Linux SSH session. " +
                 "Reply in ONE of two forms, nothing else:\n" +
                 "1) If you can produce a command — first line `CMD: <command>` (only the command, no markdown, " +
                 "no backticks); second line `INFO: <max 8-word description of what it does>`.\n" +
                 "2) If the request is unclear, unsafe, or impossible — a single line `ASK: <short clarification or reason>`.\n" +
+                "Always write the INFO and ASK text in " + UI_LANGUAGE + ", regardless of the language the user asked in. " +
                 "Never invent credentials or hostnames."
     }
 }
