@@ -168,6 +168,21 @@ class TerminalAiControllerTest {
     }
 
     @Test
+    fun `assesses the risk of the pending command and clears it on confirm`() = runTest {
+        val p = CapturingProvider(deltas = listOf("rm -rf /"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("wipe everything")
+        advanceUntilIdle()
+
+        assertEquals("rm -rf /", c.pending)
+        assertEquals(app.skerry.shared.ai.CommandRisk.Danger, c.pendingRisk?.risk)
+
+        c.confirm()
+        assertNull(c.pendingRisk)
+    }
+
+    @Test
     fun `confirm returns the pending command and clears it`() = runTest {
         val p = CapturingProvider(deltas = listOf("uptime"))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)

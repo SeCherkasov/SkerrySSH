@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.ai.AiPolicyDecision
+import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.host.Host
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.ai.TerminalAiController
@@ -1324,16 +1325,31 @@ private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: Termina
         HLine()
         // Предложенная команда — над строкой ввода, с явным подтверждением (Run) или отклонением.
         controller.pending?.let { cmd ->
+            val risk = controller.pendingRisk?.risk ?: CommandRisk.None
+            val danger = risk == CommandRisk.Danger
+            val accent = if (danger) D.sunset else D.moss
+            // Danger требует арм-подтверждения: первый тап «Run anyway» лишь взводит, второй исполняет.
+            var armed by remember(cmd) { mutableStateOf(false) }
+            // Предупреждение о риске над командой (принцип «AI under policy»: вывод модели недоверенный).
+            controller.pendingRisk?.takeIf { it.risk != CommandRisk.None }?.let { a ->
+                AiStatusRow("warning", a.reason ?: "Potentially destructive command — review before running.",
+                    if (a.risk == CommandRisk.Danger) D.sunset else D.amber, mono)
+            }
             Row(
-                Modifier.fillMaxWidth().background(D.moss.copy(alpha = 0.08f)).padding(horizontal = 16.dp, vertical = 9.dp),
+                Modifier.fillMaxWidth().background(accent.copy(alpha = 0.08f)).padding(horizontal = 16.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Sym("terminal", size = 15.sp, color = D.moss)
+                Sym("terminal", size = 15.sp, color = accent)
                 Txt(cmd, color = D.text, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                AiActionChip("Run", D.moss, enabled = terminal != null) {
-                    // Run = подтверждение: команда + CR (Enter) → исполняется в шелле.
-                    controller.confirm()?.let { terminal?.send(it + "\r") }
+                AiActionChip(
+                    label = when { !danger -> "Run"; !armed -> "Run anyway"; else -> "Confirm run" },
+                    color = accent,
+                    enabled = terminal != null,
+                ) {
+                    // Run = подтверждение: команда + CR (Enter) → исполняется в шелле. Для Danger нужен второй тап.
+                    if (danger && !armed) armed = true
+                    else controller.confirm()?.let { terminal?.send(it + "\r") }
                 }
                 AiActionChip("Dismiss", D.faint) { controller.dismiss() }
             }

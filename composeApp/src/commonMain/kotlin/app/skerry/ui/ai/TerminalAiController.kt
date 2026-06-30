@@ -11,6 +11,8 @@ import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.shared.ai.AiProvider
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.AiSettings
+import app.skerry.shared.ai.CommandAssessment
+import app.skerry.shared.ai.CommandRiskClassifier
 import app.skerry.shared.ai.OpenAiConfig
 import app.skerry.shared.ai.SecretRedactor
 import kotlinx.coroutines.CancellationException
@@ -46,6 +48,12 @@ class TerminalAiController(
     /** Предложенная команда, ждущая подтверждения пользователя; `null` — предложения нет. */
     var pending by mutableStateOf<String?>(null); private set
 
+    /**
+     * Оценка риска [pending] ([CommandRiskClassifier]); `null` — нет предложения. UI показывает
+     * предупреждение и для [app.skerry.shared.ai.CommandRisk.Danger] требует доп. подтверждения.
+     */
+    var pendingRisk by mutableStateOf<CommandAssessment?>(null); private set
+
     /** Частичный ответ во время генерации; `null` — генерации нет. */
     var streaming by mutableStateOf<String?>(null); private set
     var busy by mutableStateOf(false); private set
@@ -63,6 +71,7 @@ class TerminalAiController(
         error = null
         blocked = null
         pending = null
+        pendingRisk = null
         val current = settings()
         if (!current.isConfigured) {
             blocked = NOT_CONFIGURED
@@ -93,7 +102,10 @@ class TerminalAiController(
                     // строкой на «#» — это объяснение, а не команда: показываем как ошибку, не исполняем.
                     command.startsWith("#") ->
                         error = command.trimStart('#').trim().ifEmpty { "The assistant declined this request." }
-                    else -> pending = command
+                    else -> {
+                        pending = command
+                        pendingRisk = CommandRiskClassifier.assess(command)
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -117,6 +129,7 @@ class TerminalAiController(
     fun confirm(): String? {
         val command = pending
         pending = null
+        pendingRisk = null
         return command
     }
 
@@ -151,6 +164,7 @@ class TerminalAiController(
     /** Отклонить предложение/сбросить сообщения. */
     fun dismiss() {
         pending = null
+        pendingRisk = null
         error = null
         blocked = null
     }

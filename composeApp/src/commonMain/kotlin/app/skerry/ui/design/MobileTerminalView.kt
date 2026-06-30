@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiPolicyDecision
+import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.host.Host
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.ai.TerminalAiController
@@ -177,14 +178,27 @@ private fun MobileAiBar(ai: AiAssistantController, policy: AiPolicy, terminal: T
     }
     Column(Modifier.fillMaxWidth().background(D.surface2)) {
         controller.pending?.let { cmd ->
+            val danger = controller.pendingRisk?.risk == CommandRisk.Danger
+            val accent = if (danger) D.sunset else D.moss
+            var armed by remember(cmd) { mutableStateOf(false) }
+            controller.pendingRisk?.takeIf { it.risk != CommandRisk.None }?.let { a ->
+                MobileAiStatus("warning", a.reason ?: "Potentially destructive command.",
+                    if (a.risk == CommandRisk.Danger) D.sunset else D.amber, mono)
+            }
             Row(
-                Modifier.fillMaxWidth().background(D.moss.copy(alpha = 0.08f)).padding(horizontal = 14.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().background(accent.copy(alpha = 0.08f)).padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Sym("terminal", size = 14.sp, color = D.moss)
+                Sym("terminal", size = 14.sp, color = accent)
                 Txt(cmd, color = D.text, size = 12.sp, font = mono, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                MobileAiChip("Run", D.moss) { controller.confirm()?.let { terminal.send(it + "\r") } }
+                MobileAiChip(
+                    when { !danger -> "Run"; !armed -> "Run anyway"; else -> "Confirm" },
+                    accent,
+                ) {
+                    if (danger && !armed) armed = true
+                    else controller.confirm()?.let { terminal.send(it + "\r") }
+                }
                 MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
             }
         }
