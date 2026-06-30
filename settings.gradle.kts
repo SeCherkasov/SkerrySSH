@@ -25,6 +25,11 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
+        // JitPack: только для usb-serial-for-android (USB-OTG serial на Android). Ограничено группой,
+        // чтобы прочие зависимости резолвились из mavenCentral/google.
+        maven("https://jitpack.io") {
+            mavenContent { includeGroup("com.github.mik3y") }
+        }
     }
 }
 

@@ -89,6 +89,8 @@ kotlin {
         androidMain.dependencies {
             // BiometricPrompt + CryptoObject для AndroidBiometricKeyStore (Keystore-огороженный ключ)
             implementation(libs.androidx.biometric)
+            // USB-OTG serial: драйверы CDC-ACM/FTDI/CP210x/CH34x поверх USB Host API (SerialSystem actual).
+            implementation(libs.usbserial)
         }
         val desktopTest by getting {
             dependencies {

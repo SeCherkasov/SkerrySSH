@@ -41,6 +41,26 @@ class CommandHistoryTest {
         assertNull(h.suggestion("git status")) // равно префиксу — не подсказываем
         assertNull(h.suggestion("")) // пустой префикс
     }
+
+    @Test
+    fun `matches returns all prefix matches newest first`() {
+        val h = CommandHistory()
+        h.record("git status")
+        h.record("git stash")
+        assertEquals(listOf("git stash", "git status"), h.matches("git s"))
+        assertTrue(h.matches("").isEmpty())
+    }
+
+    @Test
+    fun `search finds substring matches newest first`() {
+        val h = CommandHistory()
+        h.record("git status")
+        h.record("docker ps")
+        h.record("git push")
+        assertEquals(listOf("git push", "git status"), h.search("git"))
+        assertEquals(listOf("docker ps"), h.search("ps")) // substring, не префикс
+        assertTrue(h.search("").isEmpty())
+    }
 }
 
 class AutocompleteEngineTest {
@@ -125,5 +145,45 @@ class AutocompleteEngineTest {
         val e = engine("git status")
         e.onUserInput("git ".encodeToByteArray())
         assertNull(e.suggestionTail())
+    }
+
+    @Test
+    fun `cycle advances through candidates and wraps`() {
+        val e = engine("backupdb", "backupfiles")
+        e.onUserInput("back".encodeToByteArray())
+        assertEquals("backupdb", e.suggestion())
+        e.cycleSuggestion()
+        assertEquals("backupfiles", e.suggestion())
+        e.cycleSuggestion() // wrap
+        assertEquals("backupdb", e.suggestion())
+    }
+
+    @Test
+    fun `cycle position resets when the line changes`() {
+        val e = engine("backupdb", "backupfiles")
+        e.onUserInput("back".encodeToByteArray())
+        e.cycleSuggestion()
+        assertEquals("backupfiles", e.suggestion())
+        e.onUserInput("u".encodeToByteArray()) // "backu" — строка изменилась
+        assertEquals("backupdb", e.suggestion()) // курсор цикла сброшен на первый кандидат
+    }
+
+    @Test
+    fun `completes known subcommand when history is empty`() {
+        val e = AutocompleteEngine()
+        e.onUserInput("git pus".encodeToByteArray())
+        assertEquals("git push", e.suggestion())
+        e.onUserInput(byteArrayOf(127, 127, 127, 127, 127, 127, 127)) // стереть
+        e.onUserInput("docker ru".encodeToByteArray())
+        assertEquals("docker run", e.suggestion())
+    }
+
+    @Test
+    fun `completes a path token seen earlier in the session`() {
+        val e = AutocompleteEngine()
+        e.onUserInput("cat /etc/nginx/nginx.conf\r".encodeToByteArray())
+        e.onUserInput("vim /etc/ng".encodeToByteArray())
+        assertEquals("vim /etc/nginx/nginx.conf", e.suggestion())
+        assertEquals("inx/nginx.conf", e.suggestionTail())
     }
 }

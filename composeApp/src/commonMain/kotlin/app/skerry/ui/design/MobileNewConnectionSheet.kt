@@ -150,6 +150,8 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             SheetField(if (serial) "Device" else "Host address") {
                 SheetInput(form.address, { form.address = it }, if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45")
             }
+            // Пикер обнаруженных портов (Android — USB-OTG): тап заполняет Device. Пусто — только ручной ввод.
+            if (serial) MobileSerialPortPicker(form)
             Spacer(Modifier.height(14.dp))
             if (form.connectionType == ConnectionType.SSH) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -380,6 +382,36 @@ private fun SheetTags(
  * ProtocolPicker. Пишет тип через [NewConnectionFormState.chooseConnectionType] (подставляет
  * дефолтный порт/скорость) и перестраивает форму.
  */
+@Composable
+private fun MobileSerialPortPicker(form: NewConnectionFormState) {
+    val ports = remember { listSerialPorts() }
+    if (ports.isEmpty()) return
+    FlowRow(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        ports.forEach { port ->
+            key(port.systemName) {
+                val selected = form.address == port.systemName
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(if (selected) D.cyan14 else D.bg)
+                        .border(1.dp, if (selected) D.cyan else D.cyan14, RoundedCornerShape(7.dp))
+                        .clickable { form.address = port.systemName }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Sym("usb", size = 14.sp, color = if (selected) D.cyanBright else D.faint)
+                    Txt(port.description, color = if (selected) D.text else D.dim, size = 12.sp)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun MobileProtocolPicker(form: NewConnectionFormState) {
     Row(

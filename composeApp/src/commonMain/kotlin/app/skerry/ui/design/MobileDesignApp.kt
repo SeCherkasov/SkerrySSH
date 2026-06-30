@@ -56,6 +56,7 @@ import app.skerry.shared.ai.AiSettingsStore
 import app.skerry.shared.ai.OpenAiProvider
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.ai.AiAssistantController
+import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toSshAuth
@@ -106,10 +107,15 @@ fun MobileDesignApp(
     // из живого транспорта — один shell на сессию.
     // Свой граф закрываем при dispose; внешний — собственность вызывающего, не трогаем.
     val scope = rememberCoroutineScope()
-    val liveSessions = sessions ?: remember(deps.transport, scope) {
+    val liveSessions = sessions ?: remember(deps.transport, scope, deps.vault) {
         deps.transport?.let { t ->
+            // Персист истории команд терминала per-host (для автодополнения) поверх зашифрованного vault.
+            val termHistory = deps.vault?.let { VaultTerminalHistoryStore(it) }
             var counter = 0
-            SessionsController(newId = { "sess-${counter++}" }, controllerFactory = { ConnectionController(t, scope) })
+            SessionsController(
+                newId = { "sess-${counter++}" },
+                controllerFactory = { ConnectionController(t, scope, history = termHistory) },
+            )
         }
     }
     val ownsSessions = sessions == null

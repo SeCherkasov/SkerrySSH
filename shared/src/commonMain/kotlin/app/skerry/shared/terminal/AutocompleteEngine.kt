@@ -20,12 +20,20 @@ class AutocompleteEngine(
 ) {
     private val line = StringBuilder()
 
+    // Курсор циклирования альтернатив (Shift+Tab): индекс в списке [candidates]. Сбрасывается на 0
+    // при любом изменении строки, чтобы после нового символа снова показывалась лучшая подсказка.
+    private var cycleIndex = 0
+
     /** Текущая набранная строка (для тестов/диагностики). */
     val currentLine: String get() = line.toString()
+
+    /** История команд (для reverse-search из UI). */
+    val commandHistory: CommandHistory get() = history
 
     /** Сбросить текущую отслеживаемую строку БЕЗ записи в историю (напр. на входе в режим без эха). */
     fun reset() {
         line.clear()
+        cycleIndex = 0
     }
 
     /**
@@ -34,6 +42,7 @@ class AutocompleteEngine(
      * обрабатываются по очереди — возвращается ПОСЛЕДНЯЯ закоммиченная.
      */
     fun onUserInput(data: ByteArray): String? {
+        cycleIndex = 0 // строка меняется — циклирование начинается заново с лучшего кандидата
         var committed: String? = null
         var i = 0
         while (i < data.size) {
@@ -65,12 +74,30 @@ class AutocompleteEngine(
         return committed
     }
 
-    /** Полное предложение для текущей строки (из истории приоритетно, затем типовые), либо `null`. */
-    fun suggestion(): String? {
+    /**
+     * Упорядоченный список полных предложений для текущей строки (для циклирования). Приоритет:
+     * история → типовые команды → (при уже начатом аргументе) известные подкоманды и пути/токены,
+     * встреченные в истории этой сессии. Дубликаты схлопнуты, сохранён порядок первого появления.
+     * Пустой список, если подсказывать нечего (пустая строка / завершается пробелом).
+     */
+    fun candidates(): List<String> {
         val prefix = line.toString()
-        if (prefix.isBlank() || prefix.endsWith(' ')) return null
-        history.suggestion(prefix)?.let { return it }
-        return builtins.firstOrNull { it.length > prefix.length && it.startsWith(prefix) }
+        if (prefix.isBlank() || prefix.endsWith(' ')) return emptyList()
+        val out = LinkedHashSet<String>()
+        history.matches(prefix).forEach { out.add(it) }
+        builtins.forEach { if (it.length > prefix.length && it.startsWith(prefix)) out.add(it) }
+        if (prefix.contains(' ')) {
+            subcommandCandidates(prefix).forEach { out.add(it) }
+            tokenCandidates(prefix).forEach { out.add(it) }
+        }
+        return out.filter { it.length > prefix.length && it.startsWith(prefix) }.toList()
+    }
+
+    /** Полное предложение для текущей строки — кандидат под курсором циклирования, либо `null`. */
+    fun suggestion(): String? {
+        val c = candidates()
+        if (c.isEmpty()) return null
+        return c[cycleIndex.mod(c.size)]
     }
 
     /** «Хвост» подсказки — то, что дорисовать серым после уже набранного, либо `null`. */
@@ -80,13 +107,62 @@ class AutocompleteEngine(
     }
 
     /**
+     * Переключить подсказку на следующую альтернативу (Shift+Tab). Циклирует по [candidates] с
+     * заворотом; при одном/нуле кандидатов — no-op. Строку не меняет — только выбираемый «призрак».
+     */
+    fun cycleSuggestion() {
+        val size = candidates().size
+        if (size > 1) cycleIndex = (cycleIndex + 1).mod(size)
+    }
+
+    /**
      * Принять подсказку: вернуть байты, которые надо отправить в сессию, чтобы дописать команду
      * (сам «хвост»), и обновить внутреннюю строку. `null`, если принимать нечего.
      */
     fun acceptSuggestion(): ByteArray? {
         val tail = suggestionTail() ?: return null
         line.append(tail)
+        cycleIndex = 0
         return tail.encodeToByteArray()
+    }
+
+    /**
+     * Подсказки известных подкоманд: для строки `cmd partial` (ровно два слова, где `cmd` — команда
+     * из [SUBCOMMANDS]) вернуть `cmd sub` для каждой подкоманды, начинающейся с `partial`.
+     */
+    private fun subcommandCandidates(prefix: String): List<String> {
+        val words = prefix.split(' ')
+        if (words.size != 2) return emptyList()
+        val (cmd, partial) = words
+        val subs = SUBCOMMANDS[cmd] ?: return emptyList()
+        return subs.filter { it != partial && it.startsWith(partial) }.map { "$cmd $it" }
+    }
+
+    /**
+     * Дополнение последнего слова путём/токеном, встреченным как аргумент в истории этой сессии
+     * (пути, имена файлов/юнитов и пр.). Токены собираются из истории на лету, от новых к старым.
+     */
+    private fun tokenCandidates(prefix: String): List<String> {
+        val lastSpace = prefix.lastIndexOf(' ')
+        val head = prefix.substring(0, lastSpace + 1)
+        val partial = prefix.substring(lastSpace + 1)
+        if (partial.isEmpty()) return emptyList()
+        return sessionTokens()
+            .filter { it.length > partial.length && it.startsWith(partial) }
+            .map { head + it }
+    }
+
+    /** Различимые аргументы (не первое слово) из истории команд, от новых к старым, без дублей. */
+    private fun sessionTokens(): List<String> {
+        val seen = LinkedHashSet<String>()
+        for (cmd in history.commands) {
+            val parts = cmd.split(' ')
+            for (i in 1 until parts.size) {
+                val t = parts[i]
+                if (t.length >= 2) seen.add(t)
+            }
+        }
+        return seen.toList()
     }
 
     /** Пропустить ESC-последовательность (CSI/`ESC [ … final` или простой `ESC x`); вернуть индекс её конца. */
@@ -142,4 +218,31 @@ val COMMON_COMMANDS: List<String> = listOf(
     "git status", "git pull", "git log --oneline",
     "df -h", "du -sh ", "free -h", "top", "htop", "ps aux | grep ",
     "sudo ", "exit", "clear",
+)
+
+/**
+ * Известные подкоманды частых CLI для дополнения второго слова (`git pus` → `git push`). Намеренно
+ * компактно и без деструктивных подсказок первыми. Работает и с пустой историей.
+ */
+val SUBCOMMANDS: Map<String, List<String>> = mapOf(
+    "git" to listOf(
+        "status", "add", "commit", "push", "pull", "fetch", "checkout", "switch", "branch",
+        "log", "diff", "stash", "merge", "rebase", "clone", "remote", "reset", "tag", "restore",
+    ),
+    "docker" to listOf(
+        "ps", "images", "logs", "exec", "run", "build", "pull", "push", "stop", "start",
+        "restart", "rm", "rmi", "compose", "inspect", "stats", "network", "volume", "system",
+    ),
+    "systemctl" to listOf(
+        "status", "start", "stop", "restart", "reload", "enable", "disable", "list-units",
+        "daemon-reload", "is-active", "is-enabled",
+    ),
+    "kubectl" to listOf(
+        "get", "describe", "logs", "apply", "delete", "exec", "rollout", "scale",
+        "port-forward", "config", "cluster-info",
+    ),
+    "apt" to listOf("update", "upgrade", "install", "remove", "search", "show", "list", "autoremove"),
+    "brew" to listOf("install", "update", "upgrade", "list", "search", "info", "uninstall", "services"),
+    "npm" to listOf("install", "run", "start", "test", "build", "update", "list", "ci"),
+    "cargo" to listOf("build", "run", "test", "check", "add", "update", "clippy", "fmt"),
 )

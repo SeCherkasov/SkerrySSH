@@ -41,8 +41,23 @@ class CommandHistory(private val capacity: Int = 500) {
      * Самая свежая команда, начинающаяся с [prefix] и строго длиннее его, либо `null`. Пустой/пробельный
      * [prefix] подсказок не даёт (не мешаем в начале строки).
      */
-    fun suggestion(prefix: String): String? {
-        if (prefix.isBlank()) return null
-        return entries.firstOrNull { it.length > prefix.length && it.startsWith(prefix) }
+    fun suggestion(prefix: String): String? = matches(prefix).firstOrNull()
+
+    /**
+     * Все команды, начинающиеся с [prefix] и строго длиннее его, от новой к старой (для циклирования
+     * альтернатив). Пустой/пробельный [prefix] — пустой список.
+     */
+    fun matches(prefix: String): List<String> {
+        if (prefix.isBlank()) return emptyList()
+        return entries.filter { it.length > prefix.length && it.startsWith(prefix) }
+    }
+
+    /**
+     * Поиск по подстроке (reverse-search, как Ctrl-R в bash/zsh): команды, СОДЕРЖАЩИЕ [query],
+     * от новой к старой. Пустой/пробельный [query] — пустой список.
+     */
+    fun search(query: String): List<String> {
+        if (query.isBlank()) return emptyList()
+        return entries.filter { it.contains(query) }
     }
 }

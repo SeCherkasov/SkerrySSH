@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.AutocompleteEngine
+import app.skerry.shared.terminal.CommandHistory
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
@@ -44,6 +45,11 @@ import kotlinx.coroutines.launch
 class TerminalScreenState(
     private val session: TerminalSession,
     private val scope: CoroutineScope,
+    // История команд для автодополнения, предзагруженная для этого хоста (от новой к старой), и колбэк
+    // персиста при каждой закоммиченной команде. По умолчанию пусто/без персиста — сессия учится
+    // только на себе (поведение до Phase 3.1). Персист идёт только с эхом (пароли отсекаются выше).
+    initialHistory: List<String> = emptyList(),
+    private val onHistoryChanged: ((List<String>) -> Unit)? = null,
 ) {
     // Запросы OSC 52 на запись в системный буфер. extraBufferCapacity — чтобы tryEmit с
     // корутины-владельца не терялся без подписчика в момент эмита; DROP_OLDEST при всплеске
@@ -328,7 +334,9 @@ class TerminalScreenState(
     // Движок отслеживает набираемую пользователем строку и предлагает продолжение из истории команд
     // этой сессии + типовых команд. Живёт на сессию (учится на её же командах). Подсказки работают
     // только в обычном (не alt-screen) режиме: в полноэкранных TUI (vim/htop) «строки» нет.
-    private val autocomplete = AutocompleteEngine()
+    private val autocomplete = AutocompleteEngine(
+        CommandHistory().apply { if (initialHistory.isNotEmpty()) preload(initialHistory) },
+    )
 
     /** «Хвост» текущей подсказки автодополнения (серым после набранного) или `null`. Читает UI. */
     var suggestionTail: String? by mutableStateOf(null)
@@ -349,9 +357,11 @@ class TerminalScreenState(
             send(text)
             return
         }
-        autocomplete.onUserInput(text.encodeToByteArray())
+        val committed = autocomplete.onUserInput(text.encodeToByteArray())
         refreshSuggestion()
         send(text)
+        // Команда подтверждена Enter (и была с эхом) — персистим снимок истории для этого хоста.
+        if (committed != null) onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
     }
 
     /**
@@ -364,6 +374,97 @@ class TerminalScreenState(
         refreshSuggestion()
         sendBytes(tail)
         return true
+    }
+
+    /**
+     * Переключить «призрак» подсказки на следующую альтернативу (Shift+Tab). В alt-screen подсказок
+     * нет — no-op. Строку в PTY не трогает: меняется лишь предлагаемый хвост до его принятия.
+     */
+    fun cycleSuggestion() {
+        if (altScreen) return
+        autocomplete.cycleSuggestion()
+        suggestionTail = autocomplete.suggestionTail()
+    }
+
+    /** Совпадения истории команд для reverse-search (Ctrl-R), от новой к старой; пустой query — пусто. */
+    fun historyMatches(query: String): List<String> = autocomplete.commandHistory.search(query)
+
+    // --- Reverse-search истории (Ctrl-R): состояние оверлея живёт здесь, чтобы им одинаково управляли
+    // и desktop-клавиши, и мобильная панель/IME, а рендер-оверлей читал единый источник. ---
+
+    /** Текущий запрос reverse-search или `null`, если оверлей закрыт. Читает UI. */
+    var reverseSearchQuery: String? by mutableStateOf(null)
+        private set
+
+    /** Индекс выбранного совпадения в [reverseSearchResults]. */
+    var reverseSearchIndex: Int by mutableStateOf(0)
+        private set
+
+    /** Совпадения текущего запроса (от новой к старой) или пусто, если оверлей закрыт. */
+    val reverseSearchResults: List<String>
+        get() = reverseSearchQuery?.let { autocomplete.commandHistory.search(it) } ?: emptyList()
+
+    /** Выбранное совпадение (под [reverseSearchIndex]) или `null`. */
+    val reverseSearchSelection: String?
+        get() {
+            val r = reverseSearchResults
+            return if (r.isEmpty()) null else r[reverseSearchIndex.mod(r.size)]
+        }
+
+    /** Открыть reverse-search (пустой запрос). В alt-screen — no-op (истории строк там нет). */
+    fun openReverseSearch() {
+        if (altScreen) return
+        reverseSearchQuery = ""
+        reverseSearchIndex = 0
+    }
+
+    /** Закрыть оверлей reverse-search без вставки. */
+    fun closeReverseSearch() {
+        reverseSearchQuery = null
+        reverseSearchIndex = 0
+    }
+
+    /** Дописать [text] к запросу reverse-search (сброс выбора на первое совпадение). */
+    fun reverseSearchAppend(text: String) {
+        val q = reverseSearchQuery ?: return
+        reverseSearchQuery = q + text
+        reverseSearchIndex = 0
+    }
+
+    /** Удалить последний символ запроса reverse-search. */
+    fun reverseSearchBackspace() {
+        val q = reverseSearchQuery ?: return
+        reverseSearchQuery = q.dropLast(1)
+        reverseSearchIndex = 0
+    }
+
+    /** К следующему (более старому) совпадению. */
+    fun reverseSearchNext() {
+        val n = reverseSearchResults.size
+        if (n > 0) reverseSearchIndex = (reverseSearchIndex + 1) % n
+    }
+
+    /** К предыдущему (более новому) совпадению. */
+    fun reverseSearchPrev() {
+        val n = reverseSearchResults.size
+        if (n > 0) reverseSearchIndex = (reverseSearchIndex - 1 + n) % n
+    }
+
+    /** Принять выбранное совпадение (вставить в строку через [applyHistoryCommand]) и закрыть оверлей. */
+    fun reverseSearchAccept() {
+        reverseSearchSelection?.let { applyHistoryCommand(it) }
+        closeReverseSearch()
+    }
+
+    /**
+     * Вставить выбранную из истории команду: очистить текущую строку shell (Ctrl-U) и «набрать» её,
+     * чтобы пользователь мог отредактировать/запустить. Идёт через [typeInput] — движок снова видит
+     * строку, а гейт echoSuppressed сохраняется (в редком режиме без эха просто уйдёт как ввод).
+     */
+    fun applyHistoryCommand(command: String) {
+        sendBytes(byteArrayOf(0x15)) // Ctrl-U — стереть текущую строку ввода (readline kill-line)
+        autocomplete.reset()
+        typeInput(command)
     }
 
     private fun refreshSuggestion() {

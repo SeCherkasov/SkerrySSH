@@ -427,11 +427,26 @@ private fun MobileKeybar(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Пока открыт reverse-search (Ctrl-R) — панель показывает его управление; ввод запроса идёт
+        // с софт-клавиатуры (маршрутизируется в TerminalScreen). Иначе — обычный макет.
+        if (terminal.reverseSearchQuery != null) {
+            KeyCap("esc") { terminal.closeReverseSearch(); onCtrlArmedChange(false) }
+            KeyCapIcon("expand_more") { terminal.reverseSearchNext() } // следующее (старее)
+            KeyCapIcon("expand_less") { terminal.reverseSearchPrev() } // предыдущее (новее)
+            KeyCap("insert", accent = true) { terminal.reverseSearchAccept(); onCtrlArmedChange(false) }
+            return@Row
+        }
         KeyCap("esc") { plain(ESC) }
         // Tab при наличии подсказки автодополнения — принять её; иначе обычный таб в PTY.
         KeyCap("tab") {
             if (terminal.suggestionTail != null) { terminal.acceptSuggestion(); onCtrlArmedChange(false) } else plain("\t")
         }
+        // При показанной подсказке — цикл по альтернативам (аналог Shift+Tab на desktop).
+        if (terminal.suggestionTail != null) {
+            KeyCapIcon("autorenew") { terminal.cycleSuggestion() }
+        }
+        // Reverse-search истории (Ctrl-R): открыть оверлей поиска (ввод — с софт-клавиатуры).
+        KeyCapIcon("search") { terminal.openReverseSearch() }
         // ctrl — спец-клавиша макета (всегда cyan); армирование заливает её сплошным cyan.
         KeyCap("ctrl", accent = true, active = ctrlArmed) { onCtrlArmedChange(!ctrlArmed) }
         KeyCap("/") { char("/") }

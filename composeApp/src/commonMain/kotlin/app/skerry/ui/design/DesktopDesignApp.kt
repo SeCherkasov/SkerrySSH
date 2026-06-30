@@ -59,6 +59,7 @@ import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.forward.humanRate
@@ -171,10 +172,15 @@ fun DesktopDesignApp(
     // из живого транспорта — один shell на вкладку, как в [app.skerry.ui.mobile.MobileApp]. Свой
     // граф закрываем при dispose; внешний — собственность вызывающего, не трогаем.
     val scope = rememberCoroutineScope()
-    val liveSessions = sessions ?: remember(transport, scope) {
+    val liveSessions = sessions ?: remember(transport, scope, vault) {
         transport?.let { t ->
+            // Персист истории команд терминала per-host (для автодополнения) поверх зашифрованного vault.
+            val termHistory = vault?.let { VaultTerminalHistoryStore(it) }
             var counter = 0
-            SessionsController(newId = { "sess-${counter++}" }, controllerFactory = { ConnectionController(t, scope) })
+            SessionsController(
+                newId = { "sess-${counter++}" },
+                controllerFactory = { ConnectionController(t, scope, history = termHistory) },
+            )
         }
     }
     // Владение фиксируем снимком на момент композиции: внешний менеджер сессий — собственность

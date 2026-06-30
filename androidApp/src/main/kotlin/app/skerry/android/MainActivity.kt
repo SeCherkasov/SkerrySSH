@@ -99,6 +99,9 @@ class MainActivity : FragmentActivity() {
         // реально заблокированном устройстве, а не при открытии системного пикера (см. deviceMandatesAutoLock).
         AndroidLockContext.appContext = applicationContext
 
+        // Контекст для USB-OTG serial: статичный SerialSystem берёт его отсюда (enumerate + permission).
+        app.skerry.shared.serial.SerialUsbBridge.install(applicationContext)
+
         // SAF-пикеры SFTP: launcher'ы регистрируем в onCreate (требование ActivityResult API — до
         // STARTED) и отдаём в SafBridge как лямбды запуска, чтобы общий UI-код не зависел от Activity.
         // octet-stream — нейтральный MIME для произвольного бинарного скачивания; text/plain — для

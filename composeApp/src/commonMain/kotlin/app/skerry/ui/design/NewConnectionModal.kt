@@ -151,6 +151,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         ModalTextField(form.port, { form.port = it }, if (serial) "9600" else "22", keyboardType = KeyboardType.Number)
                     }
                 }
+                // Пикер обнаруженных портов (desktop — jSerialComm, Android — USB-OTG): тап заполняет
+                // поле Device. Пусто (нет адаптера / нет USB Host) — чипсов нет, остаётся ручной ввод.
+                if (serial) SerialPortPicker(form)
                 // Аутентификация — только SSH: у Telnet логин/пароль вводятся в самом терминале,
                 // у Serial аутентификации нет вовсе.
                 if (form.connectionType == ConnectionType.SSH) {
@@ -356,6 +359,37 @@ private fun ModalTextField(
  * через [NewConnectionFormState.chooseConnectionType] (тот подставляет дефолтный порт/скорость). Смена
  * типа перестраивает форму (скрывает аутентификацию, меняет подписи адрес/порт).
  */
+@Composable
+private fun SerialPortPicker(form: NewConnectionFormState) {
+    // Перечисляем один раз при открытии формы (enumerate дёшев и без разрешения). Пусто — ничего не рисуем.
+    val ports = remember { listSerialPorts() }
+    if (ports.isEmpty()) return
+    FlowRow(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        ports.forEach { port ->
+            key(port.systemName) {
+                val selected = form.address == port.systemName
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(if (selected) D.cyan14 else D.bg)
+                        .border(1.dp, if (selected) D.cyan else D.cyan14, RoundedCornerShape(7.dp))
+                        .clickable { form.address = port.systemName }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Sym("usb", size = 14.sp, color = if (selected) D.cyanBright else D.faint)
+                    Txt(port.description, color = if (selected) D.text else D.dim, size = 12.sp)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ProtocolPicker(form: NewConnectionFormState) {
     Row(

@@ -6,6 +6,9 @@
          текстом, поэтому required=false — не отсекаем устройства без камеры. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- USB-OTG serial (переходники CDC/FTDI/CP210x/CH34x). Не обязателен: не отсекаем устройства
+         без USB Host — serial просто не покажет портов. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <application
         android:allowBackup="false"

@@ -8,9 +8,12 @@ import kotlin.test.assertTrue
 class SyncSettingsTest {
 
     @Test
-    fun `default syncs everything`() {
+    fun `default syncs everything except local terminal history`() {
         val s = SyncSettings()
-        RecordType.entries.forEach { assertTrue(s.shouldSync(it), "default must sync $it") }
+        // TERMINAL_HISTORY — сознательно локальная (per-host, объёмная, чувствительная), не синкается.
+        RecordType.entries.filter { it != RecordType.TERMINAL_HISTORY }
+            .forEach { assertTrue(s.shouldSync(it), "default must sync $it") }
+        assertFalse(s.shouldSync(RecordType.TERMINAL_HISTORY), "terminal history never syncs")
     }
 
     @Test

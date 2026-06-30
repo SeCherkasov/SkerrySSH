@@ -25,6 +25,9 @@ sshj = "0.40.0"
 # jSerialComm: нативный доступ к последовательным портам на desktop (Linux/Windows/macOS).
 # Только в desktopMain — на Android serial идёт через USB-OTG отдельной реализацией (позже).
 jserialcomm = "2.11.0"
+# usb-serial-for-android: доступ к USB-serial переходникам (CDC/FTDI/CP210x/CH34x) через USB Host API.
+# Только в androidMain — desktop использует jSerialComm.
+usbSerial = "3.9.0"
 # полный BouncyCastle: транзитив sshj (как implementation, на compile classpath не виден),
 # подключаем явно — на Android системный «BC» урезан и его подменяет SshjTransport.ensureCryptoProvider
 bouncycastle = "1.80.2"
@@ -95,6 +98,7 @@ nimbus-srp = { module = "com.nimbusds:srp6a", version.ref = "nimbus-srp" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
 jserialcomm = { module = "com.fazecast:jSerialComm", version.ref = "jserialcomm" }
+usbserial = { module = "com.github.mik3y:usb-serial-for-android", version.ref = "usbSerial" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }
 sshd-sftp = { module = "org.apache.sshd:sshd-sftp", version.ref = "sshd" }

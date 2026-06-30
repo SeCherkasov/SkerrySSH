@@ -35,6 +35,9 @@ data class SyncSettings(
         RecordType.CREDENTIAL,
         RecordType.KNOWN_HOST,
         RecordType.TUNNEL -> syncHosts
+        // История команд терминала — локальная (per-host, зашифрована в vault), но НЕ синкается:
+        // объёмна, чувствительна и завязана на устройство. Сознательно исключена из WHAT SYNCS.
+        RecordType.TERMINAL_HISTORY -> false
     }
 }
 

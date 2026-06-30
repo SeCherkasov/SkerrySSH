@@ -14,7 +14,9 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
+import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.shared.terminal.terminalHistoryKey
 import app.skerry.ui.terminal.ThroughputController
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
@@ -98,6 +100,10 @@ class ConnectionController(
     private val reconnectDelayMillis: (attempt: Int) -> Long = { attempt ->
         minOf(30_000L, 1_000L shl (attempt - 1).coerceIn(0, 16))
     },
+    // Персист истории команд терминала per-host (для автодополнения). null → без персиста (сессия
+    // учится только на себе). Ключ выводится из цели ([terminalHistoryKey]); сохранение уходит на IO,
+    // чтобы file-IO vault не блокировал UI-поток на каждой команде.
+    private val history: TerminalHistoryStore? = null,
 ) {
     var uiState: ConnectionUiState by mutableStateOf(ConnectionUiState.Form)
         private set
@@ -188,7 +194,21 @@ class ConnectionController(
             cipher = conn.cipher
             serverVersion = conn.serverVersion
             sessionScope = sScope
-            val terminal = TerminalScreenState(ShellTerminalSession(channel, sScope), sScope)
+            // История команд для автодополнения: грузим для этого хоста и вешаем персист снимка на
+            // каждую закоммиченную команду (уходит на IO-scope контроллера, не на UI-поток).
+            val historyKey = terminalHistoryKey(
+                target.connectionType.name, target.username, target.host, target.port,
+            )
+            val loadedHistory = history?.load(historyKey).orEmpty()
+            val terminal = TerminalScreenState(
+                ShellTerminalSession(channel, sScope),
+                sScope,
+                initialHistory = loadedHistory,
+                onHistoryChanged = history?.let { store ->
+                    // Уводим запись с UI-потока на scope контроллера (Default): команды редки, запись мелкая.
+                    { snapshot -> scope.launch { store.save(historyKey, snapshot) } }
+                },
+            )
             uiState = ConnectionUiState.Connected(terminal)
             // Одноразовое действие первого подключения (Run on host): берём и обнуляем ДО возможного
             // обрыва, чтобы реконнект через этот же establishSession его не повторил.

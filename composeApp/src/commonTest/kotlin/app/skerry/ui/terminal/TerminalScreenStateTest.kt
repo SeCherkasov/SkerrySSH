@@ -69,6 +69,60 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `preloaded history feeds autosuggestion`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val state = TerminalScreenState(
+            FakeTerminalSession(), scope,
+            initialHistory = listOf("git push origin main"),
+        )
+        state.typeInput("git pu")
+        assertEquals("sh origin main", state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `committed command triggers history persist callback`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val snapshots = mutableListOf<List<String>>()
+        val state = TerminalScreenState(
+            FakeTerminalSession(), scope,
+            onHistoryChanged = { snapshots += it },
+        )
+        state.typeInput("uptime\n")
+        assertEquals(listOf("uptime"), snapshots.last())
+        scope.cancel()
+    }
+
+    @Test
+    fun `cycle suggestion advances the ghost tail`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val state = TerminalScreenState(
+            FakeTerminalSession(), scope,
+            initialHistory = listOf("backupdb", "backupfiles"),
+        )
+        state.typeInput("back")
+        assertEquals("updb", state.suggestionTail)
+        state.cycleSuggestion()
+        assertEquals("upfiles", state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `reverse search selects a matching command and closes on accept`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val state = TerminalScreenState(
+            FakeTerminalSession(), scope,
+            initialHistory = listOf("docker ps", "git status"),
+        )
+        state.openReverseSearch()
+        state.reverseSearchAppend("git")
+        assertEquals("git status", state.reverseSearchSelection)
+        state.reverseSearchAccept()
+        assertEquals(null, state.reverseSearchQuery) // оверлей закрыт после вставки
+        scope.cancel()
+    }
+
+    @Test
     fun `resize forwards to session`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

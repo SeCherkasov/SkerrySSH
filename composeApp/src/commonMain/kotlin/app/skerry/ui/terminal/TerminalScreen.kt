@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -50,6 +51,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
@@ -116,6 +118,8 @@ private const val DOUBLE_CLICK_MS = 350
 private const val CURSOR_BLINK_MS = 530L
 
 private const val PADDING_DP = 14
+// Сколько совпадений истории показывать в оверлее reverse-search (Ctrl-R) за раз.
+private const val REVERSE_SEARCH_ROWS = 6
 
 /** Радиус «капли» тач-маркера выделения и радиус зоны попадания пальца по нему. */
 private const val HANDLE_RADIUS_DP = 7
@@ -556,6 +560,35 @@ fun TerminalScreen(
             .onFocusChanged { state.notifyFocus(it.isFocused) }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown || closed) return@onPreviewKeyEvent false
+                // --- Reverse-search истории (Ctrl-R): пока оверлей открыт, клавиши правят его, не PTY ---
+                if (state.reverseSearchQuery != null) {
+                    when {
+                        event.key == Key.Escape -> state.closeReverseSearch()
+                        event.key == Key.Enter -> state.reverseSearchAccept()
+                        // Ещё один Ctrl-R (или ↑) — к следующему (более старому) совпадению; ↓ — к новее.
+                        (event.isCtrlPressed && event.key == Key.R) || event.key == Key.DirectionUp ->
+                            state.reverseSearchNext()
+                        event.key == Key.DirectionDown -> state.reverseSearchPrev()
+                        event.key == Key.Backspace -> state.reverseSearchBackspace()
+                        else -> {
+                            val cp = event.utf16CodePoint
+                            if (cp in 0x20..0xFFFF && !event.isCtrlPressed && !event.isAltPressed) {
+                                state.reverseSearchAppend(cp.toChar().toString())
+                            }
+                        }
+                    }
+                    return@onPreviewKeyEvent true
+                }
+                // Ctrl-R — открыть reverse-search истории (перехват у shell, показываем свой оверлей).
+                if (event.isCtrlPressed && event.key == Key.R) {
+                    state.openReverseSearch()
+                    return@onPreviewKeyEvent true
+                }
+                // Shift+Tab — циклировать альтернативы подсказки автодополнения (только если она есть).
+                if (event.isShiftPressed && event.key == Key.Tab && state.suggestionTail != null) {
+                    state.cycleSuggestion()
+                    return@onPreviewKeyEvent true
+                }
                 // Ctrl+Shift+C — копирование выделения (Ctrl+C остаётся SIGINT для shell).
                 if (event.isCtrlPressed && event.isShiftPressed && event.key == Key.C) {
                     copySelection()
@@ -872,6 +905,41 @@ fun TerminalScreen(
           }
       }
 
+      // Оверлей reverse-search истории (Ctrl-R): панель снизу с текущим запросом и совпадениями
+      // (выбранное — cyan). Enter вставляет, Esc закрывает, повторный Ctrl-R/стрелки листают.
+      val rsQuery = state.reverseSearchQuery
+      if (rsQuery != null && !closed) {
+          val matches = state.reverseSearchResults
+          val shown = matches.take(REVERSE_SEARCH_ROWS)
+          Column(
+              Modifier
+                  .align(Alignment.BottomStart)
+                  .fillMaxWidth()
+                  .background(Color(0xF00A1620))
+                  .padding(horizontal = 10.dp, vertical = 6.dp),
+          ) {
+              Text(
+                  text = "(reverse-i-search)`$rsQuery`:",
+                  style = textStyle.copy(color = Color(0xFF8AA0AE)),
+              )
+              if (shown.isEmpty()) {
+                  Text("— нет совпадений —", style = textStyle.copy(color = Color(0xFF5B6B77)))
+              } else {
+                  shown.forEachIndexed { i, cmd ->
+                      val selected = i == state.reverseSearchIndex.mod(matches.size.coerceAtLeast(1))
+                      Text(
+                          text = cmd,
+                          maxLines = 1,
+                          style = textStyle.copy(
+                              color = if (selected) SkerryColors.cyan else Color(0xFFB8C6D0),
+                              fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                          ),
+                      )
+                  }
+              }
+          }
+      }
+
       // Тач-маркеры выделения («капли» по краям). Рисуем только на мобильном пути ([imeInput]):
       // оверлей внутри того же padding, что и текст, со сдвигом по вертикали на текущую прокрутку,
       // чтобы маркеры держались на границах выделения при скролле. На мыши (desktop) их нет.
@@ -900,7 +968,17 @@ fun TerminalScreen(
                   if (out.isNotEmpty()) {
                       state.clearSelection()
                       textToolbar.hide()
-                      state.typeInput(out) // питает автодополнение (софт-клавиатура), затем в PTY
+                      // Пока открыт reverse-search — софт-клавиатура правит запрос, а не PTY:
+                      // DEL → backspace, Enter(CR) → принять, печатные символы → в запрос.
+                      if (state.reverseSearchQuery != null) {
+                          for (ch in out) when (ch.code) {
+                              127, 8 -> state.reverseSearchBackspace() // DEL / BS
+                              13, 10 -> state.reverseSearchAccept() // CR / LF — принять
+                              else -> if (ch.code >= 0x20) state.reverseSearchAppend(ch.toString())
+                          }
+                      } else {
+                          state.typeInput(out) // питает автодополнение (софт-клавиатура), затем в PTY
+                      }
                   }
                   imeValue = imeBaseline
               },
