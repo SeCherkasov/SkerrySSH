@@ -50,7 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ai.AiSettingsStore
+import app.skerry.shared.ai.OpenAiProvider
 import app.skerry.ui.AppDependencies
+import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toSshAuth
@@ -113,6 +116,23 @@ fun MobileDesignApp(
     val terminalAppearance = remember(state.terminalFont, state.terminalFontSize) {
         TerminalAppearance(state.terminalFont, state.terminalFontSize)
     }
+    // AI-ассистент (Phase 2, BYOK) — паритет с desktop `main`: ключ хранится записью SETTINGS в vault,
+    // вызовы идут во внешний OpenAI-совместимый провайдер. Строится при наличии vault (в превью — null →
+    // AI-поверхности показывают мок). На старте vault залочен (settings=дефолт); refresh при разблокировке.
+    val ai = remember(deps.vault, scope) {
+        deps.vault?.let { v ->
+            val store = AiSettingsStore(v)
+            AiAssistantController(
+                initialSettings = store.load(),
+                persist = store::save,
+                providerFactory = { cfg -> OpenAiProvider.pooled(cfg) },
+                scope = scope,
+                reload = store::load,
+            )
+        }
+    }
+    // credentials появляется (null→controller) при разблокировке vault — перечитываем и AI-настройки.
+    LaunchedEffect(deps.credentials) { ai?.refresh() }
     CompositionLocalProvider(
         LocalFonts provides fonts,
         // Внешний вид терминала из настроек (More → Appearance): шрифт + кегль читает TerminalScreen.
@@ -121,6 +141,8 @@ fun MobileDesignApp(
         LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,
         LocalFeatures provides features,
+        // AI-ассистент (BYOK): таб настроек More→AI, per-host политики, терминальный AI-бар.
+        LocalAi provides ai,
         // Инспектор/генератор SSH-ключей + инспектор сертификатов — таб Vault: отпечатки, генерация, разбор cert.
         LocalSshKeyGenerator provides deps.keyGenerator,
         LocalSshCertificateInspector provides deps.certificateInspector,
@@ -333,6 +355,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")
         MobileRoute.Appearance -> MobileAppearanceScreen(state)
         MobileRoute.Sync -> MobileSyncScreen(state)
+        MobileRoute.Ai -> MobileAiScreen(state)
     }
 }
 

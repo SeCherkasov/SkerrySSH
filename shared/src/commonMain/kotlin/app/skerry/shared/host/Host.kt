@@ -1,5 +1,6 @@
 package app.skerry.shared.host
 
+import app.skerry.shared.ai.AiPolicy
 import kotlinx.serialization.Serializable
 
 /**
@@ -21,6 +22,10 @@ import kotlinx.serialization.Serializable
  * его НИКОГДА не пишет: он существует только чтобы [app.skerry.shared.vault.VaultMigration] могла
  * прочитать старые сохранённые файлы хостов (ключ `identityId`) и схлопнуть их в [credentialId],
  * после чего поле зануляется. TODO: удалить через релиз, когда не останется старых файлов.
+ *
+ * [aiPolicy] — per-host политика AI (принцип «AI under policy»). Дефолт [AiPolicy.Strict] безопасен:
+ * для уже сохранённых хостов (поле отсутствует) и новых по умолчанию облако запрещено, пока
+ * пользователь осознанно не ослабит политику. Сериализуется по имени (обратно совместимо).
  */
 @Serializable
 data class Host(
@@ -33,4 +38,5 @@ data class Host(
     val credentialId: String? = null,
     val identityId: String? = null,
     val tags: List<String> = emptyList(),
+    val aiPolicy: AiPolicy = AiPolicy.Strict,
 )

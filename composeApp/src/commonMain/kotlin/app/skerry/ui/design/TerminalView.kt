@@ -55,9 +55,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.shared.host.Host
+import app.skerry.ui.ai.AiAssistantController
+import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.shortCipher
+import app.skerry.ui.terminal.TerminalScreenState
 import kotlin.math.roundToInt
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostManagerController
@@ -109,8 +113,9 @@ fun TerminalView(state: DesktopDesignState) {
                 }
                 if (state.infoPanel) InfoPanel()
             }
-            // AI-бар — фича MVP2 за фича-флагом; в MVP1 (дефолт) терминал без него.
-            if (LocalFeatures.current.ai) AiBar()
+            // AI-бар терминала: при живом AI-контроллере виден под per-host политикой (Off — скрыт);
+            // в чистом дизайн-превью (только фича-флаг, без контроллера) — прежний декоративный мок.
+            TerminalAiBarSlot()
         }
     }
 }
@@ -1280,8 +1285,125 @@ private fun liveSystemSummary(m: HostMetrics?): String {
 
 // AI-бар.
 
+/**
+ * Решает, показывать ли терминальный AI-бар и в каком режиме. Живой контроллер ([LocalAi]) → бар
+ * работает под per-host политикой ([Host.aiPolicy]): [app.skerry.shared.ai.AiPolicy.Off] прячет бар
+ * целиком. Без контроллера, но с фича-флагом → прежний декоративный мок (для дизайн-превью).
+ */
 @Composable
-private fun AiBar() {
+private fun TerminalAiBarSlot() {
+    val ai = LocalAi.current
+    if (ai != null) {
+        val active = LocalSessions.current?.active
+        val policy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
+        if (AiPolicyDecision.of(policy).aiEnabled) {
+            val terminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+            AiBar(ai, policy, terminal)
+        }
+    } else if (LocalFeatures.current.ai) {
+        AiBarMock()
+    }
+}
+
+/**
+ * Интерактивный AI-бар: запрос на естественном языке → одна shell-команда под [policy]. Команда
+ * НИКОГДА не исполняется автоматически — она показывается карточкой, и только «Run» вставляет её в
+ * ввод терминала (через [TerminalScreenState.send], БЕЗ перевода строки — Enter жмёт пользователь).
+ */
+@Composable
+private fun AiBar(ai: AiAssistantController, policy: AiPolicy, terminal: TerminalScreenState?) {
+    val mono = LocalFonts.current.mono
+    val controller = remember(ai, policy) { ai.terminalController(policy) }
+    var prompt by remember { mutableStateOf("") }
+    val submit = {
+        val text = prompt.trim()
+        if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
+    }
+    Column {
+        HLine()
+        // Предложенная команда — над строкой ввода, с явным подтверждением (Run) или отклонением.
+        controller.pending?.let { cmd ->
+            Row(
+                Modifier.fillMaxWidth().background(D.moss.copy(alpha = 0.08f)).padding(horizontal = 16.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Sym("terminal", size = 15.sp, color = D.moss)
+                Txt(cmd, color = D.text, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+                AiActionChip("Run", D.moss, enabled = terminal != null) {
+                    controller.confirm()?.let { terminal?.send(it) }
+                }
+                AiActionChip("Dismiss", D.faint) { controller.dismiss() }
+            }
+        }
+        controller.blocked?.let { AiStatusRow("shield_lock", it, D.amber, mono) }
+        controller.error?.let { AiStatusRow("error", it, D.sunset, mono) }
+        if (controller.busy) AiStatusRow("hourglass_top", controller.streaming?.takeIf { it.isNotEmpty() } ?: "Thinking…", D.dim, mono)
+        Row(
+            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.amber.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                Sym("auto_awesome", size = 16.sp, color = D.amber)
+            }
+            Box(Modifier.weight(1f)) {
+                if (prompt.isEmpty()) Txt("Ask Skerry: 'find files larger than 100MB'", color = D.dim, size = 13.sp)
+                BasicTextField(
+                    value = prompt,
+                    onValueChange = { prompt = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = D.text, fontSize = 13.sp),
+                    cursorBrush = SolidColor(D.cyan),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { submit() }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            AiBarTag("verified_user", policy.name.uppercase(), mono)
+            Box(
+                Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.cyan)
+                    .clickable(enabled = !controller.busy) { submit() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Sym("arrow_upward", size = 16.sp, color = Color(0xFF0A1A26))
+            }
+        }
+    }
+}
+
+/** Строка статуса AI-бара (blocked/error/thinking). */
+@Composable
+private fun AiStatusRow(icon: String, text: String, color: Color, mono: FontFamily) {
+    Row(
+        Modifier.fillMaxWidth().background(color.copy(alpha = 0.08f)).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Sym(icon, size = 14.sp, color = color)
+        Txt(text, color = color, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+    }
+}
+
+/** Компактная кнопка-чип в карточке предложения (Run/Dismiss). */
+@Composable
+private fun AiActionChip(label: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (enabled) color.copy(alpha = 0.16f) else Color(0x0AFFFFFF))
+            .border(1.dp, if (enabled) color.copy(alpha = 0.5f) else D.line, RoundedCornerShape(6.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Txt(label, color = if (enabled) color else D.faint, size = 12.sp, weight = FontWeight.Medium)
+    }
+}
+
+/** Прежний декоративный AI-бар для чистого дизайн-превью (без живого контроллера). */
+@Composable
+private fun AiBarMock() {
     val mono = LocalFonts.current.mono
     Column {
         HLine()

@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.ai.AiChatRequest
 import app.skerry.shared.ai.AiException
 import app.skerry.shared.ai.AiMessage
+import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.ai.AiProvider
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.AiSettings
@@ -51,6 +52,13 @@ class AiAssistantController(
 
     /** Перечитать настройки из хранилища (после разблокировки vault). */
     fun refresh() { settings = reload() }
+
+    /**
+     * Построить контроллер терминального AI-бара под per-host [policy], разделяя провайдер/scope/настройки
+     * с этим ассистентом (BYOK-ключ один на приложение). Настройки читаются лениво — свежие после [refresh].
+     */
+    fun terminalController(policy: AiPolicy): TerminalAiController =
+        TerminalAiController(policy, settings = { settings }, providerFactory = providerFactory, scope = scope)
 
     /** Сохранить BYOK-настройки (ключ шифруется в vault на стороне [persist]). */
     fun save(apiKey: String, model: String, baseUrl: String) {

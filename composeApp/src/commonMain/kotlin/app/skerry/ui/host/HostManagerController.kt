@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
 
@@ -21,6 +22,7 @@ data class HostDraft(
     val group: String? = null,
     val credentialId: String? = null,
     val tags: List<String> = emptyList(),
+    val aiPolicy: AiPolicy = AiPolicy.Strict,
 )
 
 /**
@@ -67,6 +69,7 @@ class HostManagerController(
                 group = draft.group,
                 credentialId = draft.credentialId,
                 tags = draft.tags,
+                aiPolicy = draft.aiPolicy,
             ),
         )
         hosts = store.all()

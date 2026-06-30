@@ -26,7 +26,7 @@ enum class MobileTab(val icon: String, val label: String) {
  * Полноэкранные push-экраны поверх таб-навигации (таб-бар скрыт): терминал и деталь хоста
  * открываются из Hosts, SFTP (Files) — кнопкой SFTP на карточке хоста, а Ports/Known/Team — из таба More.
  */
-enum class MobileRoute { Terminal, Files, HostDetail, Ports, Known, Team, Appearance, Sync }
+enum class MobileRoute { Terminal, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai }
 
 /** Что должен сделать системный «назад» на мобильном каркасе. */
 enum class MobileBackAction {

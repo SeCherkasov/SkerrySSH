@@ -173,9 +173,9 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 )
             }
 
-            if (LocalFeatures.current.ai) {
+            if (LocalFeatures.current.ai || LocalAi.current != null) {
                 Spacer(Modifier.height(14.dp))
-                SheetField("AI policy") { AiPolicyPills() }
+                SheetField("AI policy") { AiPolicyPills(form) }
             }
 
             Spacer(Modifier.height(22.dp))
@@ -677,14 +677,13 @@ private fun MobileAuthOption(icon: String, title: String, subtitle: String, sele
     }
 }
 
-/** Пилюли AI-политики (Strict/Balanced/Off) — визуальный выбор за фича-флагом. */
+/** Пилюли AI-политики (все 4 значения [AiPolicy]) — выбор пишется в форму (Host.aiPolicy). */
 @Composable
-private fun AiPolicyPills() {
-    var selected by remember { mutableStateOf("Strict") }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("Strict", "Balanced", "Off").forEach { name ->
-            val on = name == selected
-            val onPick = remember(name) { { selected = name } }
+private fun AiPolicyPills(form: NewConnectionFormState) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        AiPolicy.entries.forEach { policy ->
+            val on = form.aiPolicy == policy
+            val onPick = remember(policy) { { form.aiPolicy = policy } }
             Box(
                 Modifier
                     .weight(1f)
@@ -692,17 +691,17 @@ private fun AiPolicyPills() {
                     .background(if (on) D.cyan.copy(alpha = 0.1f) else Color.Transparent)
                     .border(1.dp, if (on) D.cyan else D.cyan.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
                     .clickable(
-                        interactionSource = remember(name) { MutableInteractionSource() },
+                        interactionSource = remember(policy) { MutableInteractionSource() },
                         indication = null,
                         onClick = onPick,
                     )
-                    .padding(vertical = 9.dp),
+                    .padding(vertical = 9.dp, horizontal = 2.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Txt(
-                    name,
+                    policy.name,
                     color = if (on) D.cyanBright else D.dim,
-                    size = 12.5.sp,
+                    size = 11.sp,
                     weight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }

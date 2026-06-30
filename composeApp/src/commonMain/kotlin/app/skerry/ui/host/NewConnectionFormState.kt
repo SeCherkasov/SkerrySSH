@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.MAX_TAGS_PER_HOST
 import app.skerry.shared.host.normalizeTag
@@ -31,7 +32,8 @@ enum class AuthMode { ASK, EXISTING, NEW_PASSWORD, NEW_KEY }
  * [resolveCredentialId]: для новых секретов форма не пишет в vault сама, а вызывает переданный
  * `saveCredential` (обычно [app.skerry.ui.identity.CredentialManagerController.save]) — побочный
  * эффект остаётся снаружи, логика выбора тестируема. Теги — каноническая форма ([normalizeTag]),
- * правятся [addTag]/[removeTag] и идут в черновик; AI-политика в черновик пока не входит.
+ * правятся [addTag]/[removeTag] и идут в черновик. [aiPolicy] — per-host политика AI (см.
+ * [app.skerry.shared.ai.AiPolicy]), тоже уходит в черновик.
  */
 @Stable
 class NewConnectionFormState {
@@ -51,6 +53,9 @@ class NewConnectionFormState {
     /** Метки хоста в канонической форме (см. [normalizeTag]); правится только через [addTag]/[removeTag]. */
     var tags: List<String> by mutableStateOf(emptyList())
         private set
+
+    /** Per-host политика AI (принцип «AI under policy»). Дефолт — [AiPolicy.Strict] (облако запрещено). */
+    var aiPolicy: AiPolicy by mutableStateOf(AiPolicy.Strict)
 
     /**
      * Добавить тег(и) из ввода: строка делится по запятым, каждая часть нормализуется ([normalizeTag]),
@@ -119,6 +124,7 @@ class NewConnectionFormState {
         group = group.trim().ifBlank { null },
         credentialId = credentialId,
         tags = tags,
+        aiPolicy = aiPolicy,
     )
 
     companion object {
@@ -136,6 +142,7 @@ class NewConnectionFormState {
             username = host.username
             group = host.group ?: ""
             tags = host.tags
+            aiPolicy = host.aiPolicy
             if (host.credentialId != null) {
                 authMode = AuthMode.EXISTING
                 existingCredentialId = host.credentialId

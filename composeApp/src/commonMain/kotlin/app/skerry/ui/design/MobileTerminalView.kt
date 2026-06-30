@@ -39,7 +39,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.shared.host.Host
+import app.skerry.ui.ai.AiAssistantController
+import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.secure.SecureScreen
@@ -130,6 +133,12 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                         imeInput = true,
                         imeTransform = imeTransform,
                     )
+                    // AI-бар (паритет desktop): при живом контроллере и разрешающей политике хоста.
+                    // Предложенная команда исполняется только по явному Run (вставка в ввод без Enter).
+                    LocalAi.current?.let { ai ->
+                        val policy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
+                        if (AiPolicyDecision.of(policy).aiEnabled) MobileAiBar(ai, policy, st.terminal)
+                    }
                     MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
                 }
                 is ConnectionUiState.Error ->
@@ -147,6 +156,90 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 onDismiss = { paletteOpen = false },
             )
         }
+    }
+}
+
+/**
+ * Мобильный терминальный AI-бар (паритет desktop): запрос на естественном языке → одна shell-команда
+ * под per-host [policy]. Автозапуска нет — предложение показывается карточкой, и лишь Run вставляет
+ * команду в ввод терминала ([TerminalScreenState.send], без перевода строки; Enter жмёт пользователь).
+ */
+@Composable
+private fun MobileAiBar(ai: AiAssistantController, policy: AiPolicy, terminal: TerminalScreenState) {
+    val mono = LocalFonts.current.mono
+    val controller = remember(ai, policy) { ai.terminalController(policy) }
+    var prompt by remember { mutableStateOf("") }
+    val submit = {
+        val text = prompt.trim()
+        if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
+    }
+    Column(Modifier.fillMaxWidth().background(D.surface2)) {
+        controller.pending?.let { cmd ->
+            Row(
+                Modifier.fillMaxWidth().background(D.moss.copy(alpha = 0.08f)).padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Sym("terminal", size = 14.sp, color = D.moss)
+                Txt(cmd, color = D.text, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+                MobileAiChip("Run", D.moss) { controller.confirm()?.let { terminal.send(it) } }
+                MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
+            }
+        }
+        controller.blocked?.let { MobileAiStatus("shield_lock", it, D.amber, mono) }
+        controller.error?.let { MobileAiStatus("error", it, D.sunset, mono) }
+        if (controller.busy) MobileAiStatus("hourglass_top", controller.streaming?.takeIf { it.isNotEmpty() } ?: "Thinking…", D.dim, mono)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Sym("auto_awesome", size = 16.sp, color = D.amber)
+            Box(Modifier.weight(1f)) {
+                if (prompt.isEmpty()) Txt("Ask Skerry…", color = D.dim, size = 13.sp)
+                BasicTextField(
+                    value = prompt,
+                    onValueChange = { prompt = it },
+                    singleLine = true,
+                    textStyle = TextStyle(color = D.text, fontSize = 13.sp),
+                    cursorBrush = SolidColor(D.cyan),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { submit() }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Txt(policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)
+            Box(
+                Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(D.cyan)
+                    .clickable(enabled = !controller.busy) { submit() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Sym("arrow_upward", size = 16.sp, color = Color(0xFF0A1A26))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MobileAiStatus(icon: String, text: String, color: Color, mono: FontFamily) {
+    Row(
+        Modifier.fillMaxWidth().background(color.copy(alpha = 0.08f)).padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Sym(icon, size = 13.sp, color = color)
+        Txt(text, color = color, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun MobileAiChip(label: String, color: Color, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(6.dp)).background(color.copy(alpha = 0.16f))
+            .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(6.dp)).clickable(onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 5.dp),
+    ) {
+        Txt(label, color = color, size = 11.5.sp, weight = FontWeight.Medium)
     }
 }
 

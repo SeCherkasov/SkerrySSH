@@ -41,8 +41,11 @@ fun SessionView.asDesktopView(): DesktopView = when (this) {
 /** Вкладки панели настроек. */
 enum class SettingsTab { Account, AI, Sync, Security, Appearance, Terminal, Keyboard, About }
 
-/** AI-политика подключения (модалка New connection). */
-enum class AiPolicy { Strict, Balanced, Permissive, Off }
+/**
+ * AI-политика подключения. Единый тип с [app.skerry.shared.host.Host.aiPolicy] — дизайн-слой
+ * использует shared-enum через alias, чтобы выбор в модалке писался прямо в профиль хоста.
+ */
+typealias AiPolicy = app.skerry.shared.ai.AiPolicy
 
 /**
  * Запрошенное деструктивное действие над сессией, ждущее подтверждения ([ConfirmActionDialog]).

@@ -187,13 +187,14 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         },
                     )
                 }
-                // Выбор AI-политики за фича-флагом; по умолчанию в форме отсутствует.
-                if (LocalFeatures.current.ai) {
+                // Выбор AI-политики виден, когда AI реально доступен (живой контроллер или фича-флаг).
+                // Пишется прямо в форму → профиль хоста (Host.aiPolicy).
+                if (LocalFeatures.current.ai || LocalAi.current != null) {
                     Spacer14()
                     Field("AI policy for this connection") {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             POLICY_OPTIONS.forEach { opt ->
-                                PolicyRow(opt, selected = state.modalPolicy == opt.policy, onClick = { state.choosePolicy(opt.policy) })
+                                PolicyRow(opt, selected = form.aiPolicy == opt.policy, onClick = { form.aiPolicy = opt.policy })
                             }
                         }
                     }

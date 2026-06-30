@@ -68,7 +68,9 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             MoreRow("lan", D.cyanBright, "Port forwarding", ports, D.moss, onClick = { state.push(MobileRoute.Ports) })
             MoreRow("fingerprint", D.cyanBright, "Known hosts", known, if (knownWarn) D.sunset else D.moss, onClick = { state.push(MobileRoute.Known) })
             MoreRow("groups", D.cyanBright, "Team", if (preview) "Platform crew" else null, D.dim, onClick = { state.push(MobileRoute.Team) })
-            MoreRow("auto_awesome", D.amber, "AI & privacy", "Local", D.dim, onClick = null)
+            // AI: живой путь (есть контроллер) → push экрана настроек AI; иначе инертная заглушка (превью).
+            val aiLive = LocalAi.current != null
+            MoreRow("auto_awesome", D.amber, "AI & privacy", if (aiLive) "OpenAI · BYOK" else "Local", D.dim, onClick = if (aiLive) { -> state.push(MobileRoute.Ai) } else null)
             MoreRow("palette", D.cyanBright, "Appearance", "Night Sea", D.dim, onClick = { state.push(MobileRoute.Appearance) })
             MoreRow("shield_lock", D.cyanBright, "Security & sync", if (preview) "Synced" else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
             // Тумблер биометрии — живой путь за гейтом (vault открыт). Прячется, если биометрия
