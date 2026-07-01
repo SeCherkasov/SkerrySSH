@@ -78,8 +78,11 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncIndicatorLevel
 import app.skerry.ui.sync.syncIndicatorLocalized
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.TerminalAppearance
+import app.skerry.ui.terminal.TerminalCursorStyle
+import app.skerry.ui.terminal.TerminalSessionPrefs
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
@@ -137,12 +140,23 @@ fun DesktopDesignApp(
     // Язык интерфейса (Appearance → Language) — персистится снаружи (desktop main): стартовое значение + колбэк записи.
     initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
     onUiLanguageChange: (UiLanguage) -> Unit = {},
+    // Настройки терминала (Settings → Терминал): scrollback, стиль курсора, показ OSC-заголовка на вкладках —
+    // персистятся снаружи (desktop main): стартовые значения + колбэки записи.
+    initialTerminalScrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
+    onTerminalScrollbackChange: (Int) -> Unit = {},
+    initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
+    onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
+    initialShowTerminalTitleOnTabs: Boolean = false,
+    onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
     state: DesktopDesignState = remember {
         DesktopDesignState(
             initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
             initialRecentHostIds, onRecentHostIdsChange, initialCustomGroups, onCustomGroupsChange,
             initialTerminalFont, onTerminalFontChange, initialTerminalFontSize, onTerminalFontSizeChange,
             initialUiLanguage, onUiLanguageChange,
+            initialTerminalScrollback, onTerminalScrollbackChange,
+            initialTerminalCursorStyle, onTerminalCursorStyleChange,
+            initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
         )
     },
     vault: Vault? = null,
@@ -200,7 +214,14 @@ fun DesktopDesignApp(
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
-                controllerFactory = { ConnectionController(t, scope, history = termHistory) },
+                controllerFactory = {
+                    ConnectionController(
+                        t, scope, history = termHistory,
+                        // Читаем настройки терминала в момент connect — новые сессии подхватывают текущий
+                        // выбор scrollback/курсора, открытые сохраняют свой эмулятор.
+                        terminalPrefs = { TerminalSessionPrefs(state.terminalScrollback, state.terminalCursorStyle) },
+                    )
+                },
             )
         }
     }
@@ -209,6 +230,17 @@ fun DesktopDesignApp(
     val ownsSessions = sessions == null
     DisposableEffect(liveSessions) {
         onDispose { if (ownsSessions) liveSessions?.disconnectAll() }
+    }
+    // Смена стиля курсора в настройках применяется к УЖЕ открытым сессиям на лету (новые берут его при
+    // connect через terminalPrefs). Проталкиваем в терминалы каждой вкладки и её split-панели; команда
+    // идёт через очередь эмулятора, поэтому без гонки. Отсоединённые/пустые вкладки просто пропускаем.
+    val cursorStyle = state.terminalCursorStyle
+    LaunchedEffect(cursorStyle, liveSessions) {
+        val manager = liveSessions ?: return@LaunchedEffect
+        manager.sessions.forEach { s ->
+            s.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
+            s.splitSession?.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
+        }
     }
     // Мемоизируем: LocalTerminalAppearance — staticCompositionLocalOf (сравнение по ссылке), а
     // DesktopDesignApp рекомпозируется на смене вкладок/сессий/событий vault. Без remember новый
@@ -689,7 +721,7 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
                     // при переключении фокуса между основной и split-панелью.
                     val focused = if (s.splitOpen && s.focusedSplit) s.splitSession ?: s else s
                     SessionTabChip(
-                        name = focused.displayTitle,
+                        name = focused.tabTitle(state.showTerminalTitleOnTabs),
                         dot = sessionDotColor(focused.controller.uiState),
                         split = s.splitOpen,
                         active = s.id == sessions.activeId,

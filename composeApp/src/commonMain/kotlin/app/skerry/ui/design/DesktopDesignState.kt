@@ -9,7 +9,10 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
+import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -121,6 +124,16 @@ class DesktopDesignState(
     // прежнее поведение (автоопределение по локали ОС) для мок/превью/тестов.
     initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
     private val onUiLanguageChange: (UiLanguage) -> Unit = {},
+    // Настройки терминала (Settings → Терминал): глубина scrollback, стиль курсора и показ живого
+    // OSC-заголовка на вкладках. Стартовые значения читаются из персиста при запуске, колбэки пишут
+    // обратно — выбор переживает перезапуск. Дефолты (10 000 строк, мигающий блок, показ выкл, no-op) —
+    // для мок/превью/тестов. Первые две применяются к НОВЫМ сессиям (см. [app.skerry.ui.terminal.TerminalSessionPrefs]).
+    initialTerminalScrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
+    private val onTerminalScrollbackChange: (Int) -> Unit = {},
+    initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
+    private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
+    initialShowTerminalTitleOnTabs: Boolean = false,
+    private val onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -173,6 +186,15 @@ class DesktopDesignState(
 
     /** Язык интерфейса (Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
+
+    /** Глубина scrollback новой сессии, строк (Terminal → Буфер прокрутки). Применяется к новым сессиям. */
+    var terminalScrollback: Int by mutableStateOf(initialTerminalScrollback); private set
+
+    /** Стиль курсора по умолчанию (Terminal → Стиль курсора). Применяется к новым сессиям. */
+    var terminalCursorStyle: TerminalCursorStyle by mutableStateOf(initialTerminalCursorStyle); private set
+
+    /** Показывать ли живой OSC-заголовок терминала на вкладках (Terminal → Показывать заголовок…). */
+    var showTerminalTitleOnTabs: Boolean by mutableStateOf(initialShowTerminalTitleOnTabs); private set
 
     /** Открытый диалог управления группой (создание/правка) или `null`. */
     var groupDialog: GroupDialog? by mutableStateOf(null); private set
@@ -369,6 +391,29 @@ class DesktopDesignState(
         if (px == terminalFontSize || px !in TERMINAL_FONT_SIZES) return
         terminalFontSize = px
         onTerminalFontSizeChange(px)
+    }
+
+    /**
+     * Задать глубину scrollback и сообщить наружу (для персиста). Значение вне [TERMINAL_SCROLLBACK_OPTIONS]
+     * и повтор текущего — no-op (ни записи, ни колбэка). Применяется к последующим сессиям.
+     */
+    fun chooseTerminalScrollback(lines: Int) {
+        if (lines == terminalScrollback || lines !in TERMINAL_SCROLLBACK_OPTIONS) return
+        terminalScrollback = lines
+        onTerminalScrollbackChange(lines)
+    }
+
+    /** Выбрать стиль курсора и сообщить наружу (для персиста). Повтор того же — no-op. */
+    fun chooseTerminalCursorStyle(style: TerminalCursorStyle) {
+        if (style == terminalCursorStyle) return
+        terminalCursorStyle = style
+        onTerminalCursorStyleChange(style)
+    }
+
+    /** Переключить показ живого OSC-заголовка терминала на вкладках и сообщить наружу (для персиста). */
+    fun toggleShowTerminalTitleOnTabs() {
+        showTerminalTitleOnTabs = !showTerminalTitleOnTabs
+        onShowTerminalTitleOnTabsChange(showTerminalTitleOnTabs)
     }
 
     fun toggleSanitize() { sanitize = !sanitize }

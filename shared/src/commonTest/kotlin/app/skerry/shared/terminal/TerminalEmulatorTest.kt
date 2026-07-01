@@ -874,6 +874,38 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `cursor shape and blink seed from constructor defaults`() {
+        val emu = TerminalEmulator(initialCursorShape = CursorShape.Bar, initialCursorBlink = false)
+        assertEquals(CursorShape.Bar, emu.cursorShape)
+        assertFalse(emu.cursorBlink)
+    }
+
+    @Test
+    fun `RIS restores configured cursor default not hardcoded block`() {
+        // Настройка = стабильная черта; приложение переключает на мигающий блок, затем RIS (ESC c).
+        val emu = TerminalEmulator(initialCursorShape = CursorShape.Bar, initialCursorBlink = false)
+        emu.feed("$esc[1 q".encodeToByteArray()) // мигающий блок из приложения
+        assertEquals(CursorShape.Block, emu.cursorShape)
+        emu.feed("${esc}c".encodeToByteArray())  // RIS
+        assertEquals(CursorShape.Bar, emu.cursorShape)
+        assertFalse(emu.cursorBlink)
+    }
+
+    @Test
+    fun `applyCursorDefault changes cursor live and survives RIS`() {
+        val emu = TerminalEmulator() // старт: мигающий блок
+        emu.applyCursorDefault(CursorShape.Bar, blink = false)
+        assertEquals(CursorShape.Bar, emu.cursorShape)
+        assertFalse(emu.cursorBlink)
+        // Приложение перебивает своим DECSCUSR, затем RIS возвращает к НОВОМУ дефолту, не к блоку.
+        emu.feed("$esc[1 q".encodeToByteArray())
+        assertEquals(CursorShape.Block, emu.cursorShape)
+        emu.feed("${esc}c".encodeToByteArray())
+        assertEquals(CursorShape.Bar, emu.cursorShape)
+        assertFalse(emu.cursorBlink)
+    }
+
+    @Test
     fun `decscusr selects steady block`() {
         // CSI 2 SP q — пробел перед 'q' это intermediate-байт DECSCUSR.
         val emu = emulate(chunks = arrayOf("$esc[2 q"))

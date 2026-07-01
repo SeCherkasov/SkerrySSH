@@ -52,9 +52,13 @@
     <string name="settings_terminal_scrollback_desc">Сколько строк хранить на сессию.</string>
     <string name="settings_terminal_cursor_style">Стиль курсора</string>
     <string name="settings_terminal_cursor_block_blink">Блок (мигающий)</string>
-    <string name="settings_terminal_copy_on_select">Копировать при выделении</string>
+    <string name="settings_terminal_cursor_block_steady">Блок</string>
+    <string name="settings_terminal_cursor_underline_blink">Подчёркивание (мигающее)</string>
+    <string name="settings_terminal_cursor_underline_steady">Подчёркивание</string>
+    <string name="settings_terminal_cursor_bar_blink">Черта (мигающая)</string>
+    <string name="settings_terminal_cursor_bar_steady">Черта</string>
     <string name="settings_terminal_show_title">Показывать заголовок терминала на вкладках</string>
-    <string name="settings_terminal_show_title_desc">Разрешить подключённому шеллу переименовывать вкладку (например, по запущенной программе). Выкл — вкладки всегда показывают сохранённое имя хоста. Пока не реализовано.</string>
+    <string name="settings_terminal_show_title_desc">Разрешить подключённому шеллу переименовывать вкладку (например, по запущенной программе). Выкл — вкладки всегда показывают сохранённое имя хоста.</string>
 
     <!-- Раздел Account -->
     <string name="settings_account_title">Аккаунт</string>

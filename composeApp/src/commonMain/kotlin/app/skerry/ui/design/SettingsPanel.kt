@@ -114,7 +114,6 @@ import app.skerry.ui.generated.resources.settings_linked_devices
 import app.skerry.ui.generated.resources.settings_loading_devices
 import app.skerry.ui.generated.resources.settings_manage
 import app.skerry.ui.generated.resources.settings_nav_header
-import app.skerry.ui.generated.resources.settings_on
 import app.skerry.ui.generated.resources.settings_only_this_device
 import app.skerry.ui.generated.resources.settings_open_account
 import app.skerry.ui.generated.resources.settings_reconnect
@@ -151,8 +150,12 @@ import app.skerry.ui.generated.resources.settings_sync_synced_ago
 import app.skerry.ui.generated.resources.settings_sync_syncing
 import app.skerry.ui.generated.resources.settings_sync_syncing_desc
 import app.skerry.ui.generated.resources.settings_sync_title
-import app.skerry.ui.generated.resources.settings_terminal_copy_on_select
+import app.skerry.ui.generated.resources.settings_terminal_cursor_bar_blink
+import app.skerry.ui.generated.resources.settings_terminal_cursor_bar_steady
 import app.skerry.ui.generated.resources.settings_terminal_cursor_block_blink
+import app.skerry.ui.generated.resources.settings_terminal_cursor_block_steady
+import app.skerry.ui.generated.resources.settings_terminal_cursor_underline_blink
+import app.skerry.ui.generated.resources.settings_terminal_cursor_underline_steady
 import app.skerry.ui.generated.resources.settings_terminal_cursor_style
 import app.skerry.ui.generated.resources.settings_terminal_scrollback
 import app.skerry.ui.generated.resources.settings_terminal_scrollback_desc
@@ -176,6 +179,8 @@ import app.skerry.ui.sync.AccountCardModel
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.accountCardModelLocalized
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
+import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -214,7 +219,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                 when (effectiveTab) {
                     SettingsTab.AI -> AiSection(state)
                     SettingsTab.Appearance -> AppearanceSection(state)
-                    SettingsTab.Terminal -> TerminalSection()
+                    SettingsTab.Terminal -> TerminalSection(state)
                     SettingsTab.Account -> AccountSection(state)
                     SettingsTab.Sync -> SyncSection(state)
                     SettingsTab.Security -> SecuritySection()
@@ -538,28 +543,84 @@ private fun ThemeCard(name: String, active: Boolean, mono: FontFamily, modifier:
 // Terminal.
 
 @Composable
-private fun TerminalSection() {
+private fun TerminalSection(state: DesktopDesignState) {
     SectionTitle(stringResource(Res.string.settings_terminal_title), stringResource(Res.string.settings_terminal_subtitle))
-    SettingValueRow(stringResource(Res.string.settings_terminal_scrollback), stringResource(Res.string.settings_terminal_scrollback_desc), "10 000")
-    HLine()
+    // Буфер прокрутки: глубина scrollback новой сессии (селект пресетов справа от подписи).
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_cursor_style), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
-        Box(Modifier.width(160.dp)) { SettingsSelect(stringResource(Res.string.settings_terminal_cursor_block_blink)) }
+        Column(Modifier.weight(1f)) {
+            Txt(stringResource(Res.string.settings_terminal_scrollback), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.settings_terminal_scrollback_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        Box(Modifier.width(160.dp)) { ScrollbackPicker(state.terminalScrollback, onPick = state::chooseTerminalScrollback) }
     }
     HLine()
-    SettingValueRow(stringResource(Res.string.settings_terminal_copy_on_select), "", stringResource(Res.string.settings_on))
+    // Стиль курсора: форма × мигание по умолчанию для новой сессии.
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_cursor_style), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
+        Box(Modifier.width(200.dp)) { CursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle) }
+    }
     HLine()
-    // ЗАГЛУШКА (техдолг, см. память tab-title-host-label): сейчас вкладка всегда показывает лейбл
-    // хоста, а живой OSC 0/2-заголовок терминала (vim, htop, root@host…) игнорируется. Когда дойдут
-    // руки — этот тоггл должен включать ветку effectiveTabTitle в Session.displayTitle. Пока он
-    // визуально present, но выключен и без обработчика (как и прочие мок-настройки этой секции).
+    // Живой OSC-заголовок терминала на вкладках: включает ветку effectiveTabTitle в Session.tabTitle.
     SettingToggleRow(
         stringResource(Res.string.settings_terminal_show_title),
         stringResource(Res.string.settings_terminal_show_title_desc),
-        on = false,
-        onToggle = {},
+        on = state.showTerminalTitleOnTabs,
+        onToggle = state::toggleShowTerminalTitleOnTabs,
     )
 }
+
+/** Локализованная подпись стиля курсора (форма + мигание) для дропдауна и триггера. */
+@Composable
+private fun TerminalCursorStyle.label(): String = stringResource(
+    when (this) {
+        TerminalCursorStyle.BlockBlink -> Res.string.settings_terminal_cursor_block_blink
+        TerminalCursorStyle.BlockSteady -> Res.string.settings_terminal_cursor_block_steady
+        TerminalCursorStyle.UnderlineBlink -> Res.string.settings_terminal_cursor_underline_blink
+        TerminalCursorStyle.UnderlineSteady -> Res.string.settings_terminal_cursor_underline_steady
+        TerminalCursorStyle.BarBlink -> Res.string.settings_terminal_cursor_bar_blink
+        TerminalCursorStyle.BarSteady -> Res.string.settings_terminal_cursor_bar_steady
+    },
+)
+
+/** Выпадающий список глубины scrollback ([TERMINAL_SCROLLBACK_OPTIONS], строк; формат «10 000»). */
+@Composable
+private fun ScrollbackPicker(current: Int, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { SelectTrigger(formatScrollback(current), onClick = { open = !open }) },
+        menu = { width ->
+            DropdownMenuColumn(width) {
+                TERMINAL_SCROLLBACK_OPTIONS.forEach { lines ->
+                    DropdownOption(formatScrollback(lines), selected = lines == current) { onPick(lines); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Выпадающий список стиля курсора ([TerminalCursorStyle.entries]). */
+@Composable
+private fun CursorStylePicker(current: TerminalCursorStyle, onPick: (TerminalCursorStyle) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { SelectTrigger(current.label(), onClick = { open = !open }) },
+        menu = { width ->
+            DropdownMenuColumn(width) {
+                TerminalCursorStyle.entries.forEach { style ->
+                    DropdownOption(style.label(), selected = style == current) { onPick(style); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** «10000» → «10 000» (неразрывный пробел между тысячами) для читаемости счётчика строк. */
+private fun formatScrollback(lines: Int): String =
+    lines.toString().reversed().chunked(3).joinToString(" ").reversed()
 
 // Account.
 
@@ -920,17 +981,6 @@ private fun AboutSection() {
 }
 
 // Хелперы.
-
-@Composable
-private fun SettingValueRow(title: String, desc: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            if (desc.isNotEmpty()) Txt(desc, color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
-        }
-        Txt(value, color = D.textBright, size = 12.5.sp)
-    }
-}
 
 @Composable
 private fun SettingsSelect(value: String) {

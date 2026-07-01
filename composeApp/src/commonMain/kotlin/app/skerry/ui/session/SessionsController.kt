@@ -98,12 +98,41 @@ class Session(
      * готов под это. До этого вкладка всегда = лейбл хоста.
      */
     val displayTitle: String get() = title
+
+    /**
+     * Живой заголовок окна из OSC 0/1/2 подключённого терминала этой вкладки (`vim ~/app`,
+     * `root@host`…) или `null`, если сессия не открыта либо приложение заголовок не задавало.
+     * Читается из snapshot-стейта терминала, поэтому геттер реактивен в Compose.
+     */
+    val liveTitle: String?
+        get() = when (val s = controller.uiState) {
+            is ConnectionUiState.Connected -> s.terminal.title.takeIf { it.isNotBlank() }
+            is ConnectionUiState.Disconnected -> s.terminal.title.takeIf { it.isNotBlank() }
+            else -> null
+        }
+
+    /** Живой терминал этой вкладки (Connected/Disconnected) или `null`, пока сессия не открыта. */
+    val liveTerminal: TerminalScreenState?
+        get() = when (val s = controller.uiState) {
+            is ConnectionUiState.Connected -> s.terminal
+            is ConnectionUiState.Disconnected -> s.terminal
+            else -> null
+        }
+
+    /**
+     * Заголовок для вкладки с учётом настройки «показывать заголовок терминала на вкладках»
+     * (Settings → Терминал). Выключено — всегда лейбл хоста ([displayTitle]); включено — живой
+     * OSC-заголовок ([liveTitle]) перекрывает лейбл, а на его отсутствие откатываемся к лейблу
+     * (см. [effectiveTabTitle]).
+     */
+    fun tabTitle(showLiveTitle: Boolean): String =
+        if (showLiveTitle) effectiveTabTitle(liveTitle, displayTitle) else displayTitle
 }
 
 /**
- * Эффективный заголовок вкладки: непустой живой [liveTitle] перекрывает [fallback]. Пока не
- * вызывается из UI (см. [Session.displayTitle]) — заготовка под будущую настройку «показывать
- * OSC-заголовок терминала на вкладке».
+ * Эффективный заголовок вкладки: непустой живой [liveTitle] перекрывает [fallback]. Используется
+ * [Session.tabTitle], когда включена настройка «показывать заголовок терминала на вкладках»
+ * (Settings → Терминал); выключено — вкладка всегда = лейбл хоста ([Session.displayTitle]).
  */
 fun effectiveTabTitle(liveTitle: String?, fallback: String): String =
     liveTitle?.takeIf { it.isNotBlank() } ?: fallback

@@ -8,6 +8,7 @@ import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.AutocompleteEngine
 import app.skerry.shared.terminal.CommandHistory
 import app.skerry.shared.terminal.CursorShape
+import app.skerry.shared.terminal.DEFAULT_MAX_SCROLLBACK
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
@@ -50,6 +51,11 @@ class TerminalScreenState(
     // только на себе (поведение до Phase 3.1). Персист идёт только с эхом (пароли отсекаются выше).
     initialHistory: List<String> = emptyList(),
     private val onHistoryChanged: ((List<String>) -> Unit)? = null,
+    // Настройки терминала (Settings → Терминал), применяемые к НОВОЙ сессии: глубина scrollback и
+    // форма/мигание курсора по умолчанию. Дефолты сохраняют прежнее поведение (5000 строк, блок+мигание).
+    scrollback: Int = DEFAULT_MAX_SCROLLBACK,
+    cursorShape: CursorShape = CursorShape.Block,
+    cursorBlink: Boolean = true,
 ) {
     // Запросы OSC 52 на запись в системный буфер. extraBufferCapacity — чтобы tryEmit с
     // корутины-владельца не терялся без подписчика в момент эмита; DROP_OLDEST при всплеске
@@ -63,6 +69,9 @@ class TerminalScreenState(
     val clipboardCopies: SharedFlow<String> = _clipboardCopies
 
     private val emulator = TerminalEmulator(
+        maxScrollback = scrollback,
+        initialCursorShape = cursorShape,
+        initialCursorBlink = cursorBlink,
         // respond: ответы терминала (DSR/DA) уходят обратно в PTY, иначе приложения, опрашивающие
         // курсор/атрибуты, подвисают. Колбэк зовётся синхронно из feed() (корутина-владелец), поэтому
         // обязан лишь писать в PTY (send → session.send) и НЕ заводить новый feed/resize — иначе
@@ -102,12 +111,12 @@ class TerminalScreenState(
     var cursorVisible: Boolean by mutableStateOf(true)
         private set
 
-    /** Форма курсора (DECSCUSR): блок/подчёркивание/черта. Рендер выбирает геометрию по ней. */
-    var cursorShape: CursorShape by mutableStateOf(CursorShape.Block)
+    /** Форма курсора (DECSCUSR): блок/подчёркивание/черта. Рендер выбирает геометрию по ней. Стартует с настройки. */
+    var cursorShape: CursorShape by mutableStateOf(cursorShape)
         private set
 
-    /** Должен ли курсор мигать (DECSCUSR steady/blink). Рендер гоняет таймер мигания по флагу. */
-    var cursorBlink: Boolean by mutableStateOf(true)
+    /** Должен ли курсор мигать (DECSCUSR steady/blink). Рендер гоняет таймер мигания по флагу. Стартует с настройки. */
+    var cursorBlink: Boolean by mutableStateOf(cursorBlink)
         private set
 
     /** Текущее выделение мышью (или `null`, если ничего не выделено). Рендер подсвечивает его. */
@@ -211,6 +220,7 @@ class TerminalScreenState(
             for (cmd in commands) {
                 when (cmd) {
                     is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
+                    is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
                     is TerminalCommand.Resize -> {
                         // PTY ресайзим ПЕРВЫМ, эмулятор — только при успехе: иначе сетка станет шире,
                         // чем знает приложение, и хвост строк зависнет нестёртым. Сбой PTY-ресайза НЕ
@@ -548,6 +558,15 @@ class TerminalScreenState(
         lastRequestedSize = size
         commands.trySend(TerminalCommand.Resize(size))
     }
+
+    /**
+     * Сменить стиль курсора по умолчанию у уже открытой сессии (настройка изменилась на лету). Идёт
+     * через ту же командную очередь, что feed/resize — без гонки с однопоточным эмулятором; снимок
+     * публикуется автоматически после обработки, так что курсор перерисуется сразу.
+     */
+    fun applyCursorStyle(shape: CursorShape, blink: Boolean) {
+        commands.trySend(TerminalCommand.SetCursorDefault(shape, blink))
+    }
 }
 
 /** Команда единственному владельцу эмулятора — порядок feed/resize сохраняется очередью. */
@@ -557,4 +576,7 @@ private sealed interface TerminalCommand {
 
     /** Новый размер сетки: применяется к эмулятору и пробрасывается в PTY. */
     class Resize(val size: PtySize) : TerminalCommand
+
+    /** Новый пользовательский дефолт курсора (настройка сменилась при открытой сессии). */
+    class SetCursorDefault(val shape: CursorShape, val blink: Boolean) : TerminalCommand
 }

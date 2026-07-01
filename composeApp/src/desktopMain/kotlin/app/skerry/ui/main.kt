@@ -43,7 +43,10 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
+import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
@@ -231,6 +234,57 @@ private fun writeUiLanguage(dir: Path, language: UiLanguage) {
     }
 }
 
+/**
+ * Глубина scrollback новой сессии (Terminal → Буфер прокрутки), переживающая перезапуск: число в
+ * файле `terminal_scrollback`. Отсутствует/нечитаемо/вне [TERMINAL_SCROLLBACK_OPTIONS] → дефолт
+ * ([DEFAULT_TERMINAL_SCROLLBACK] = 10 000). Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readTerminalScrollback(dir: Path): Int {
+    val file = dir.resolve("terminal_scrollback")
+    val lines = runCatching { Files.readString(file).trim().toInt() }.getOrDefault(DEFAULT_TERMINAL_SCROLLBACK)
+    return if (lines in TERMINAL_SCROLLBACK_OPTIONS) lines else DEFAULT_TERMINAL_SCROLLBACK
+}
+
+private fun writeTerminalScrollback(dir: Path, lines: Int) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("terminal_scrollback"), lines.toString())
+    }
+}
+
+/**
+ * Стиль курсора по умолчанию (Terminal → Стиль курсора), переживающий перезапуск: стабильный id
+ * ([TerminalCursorStyle.id]) в файле `terminal_cursor_style`. Отсутствует/нечитаем/неизвестен →
+ * дефолт ([TerminalCursorStyle.DEFAULT] = мигающий блок). Запись best-effort.
+ */
+private fun readTerminalCursorStyle(dir: Path): TerminalCursorStyle {
+    val file = dir.resolve("terminal_cursor_style")
+    return runCatching { TerminalCursorStyle.fromId(Files.readString(file).trim()) }.getOrDefault(TerminalCursorStyle.DEFAULT)
+}
+
+private fun writeTerminalCursorStyle(dir: Path, style: TerminalCursorStyle) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("terminal_cursor_style"), style.id)
+    }
+}
+
+/**
+ * Показ живого OSC-заголовка терминала на вкладках (Terminal → Показывать заголовок…), переживающий
+ * перезапуск: `1`/`0` в файле `terminal_show_title`. Отсутствует/нечитаемо → дефолт (выкл). Best-effort.
+ */
+private fun readShowTerminalTitle(dir: Path): Boolean {
+    val file = dir.resolve("terminal_show_title")
+    return runCatching { Files.readString(file).trim() == "1" }.getOrDefault(false)
+}
+
+private fun writeShowTerminalTitle(dir: Path, show: Boolean) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("terminal_show_title"), if (show) "1" else "0")
+    }
+}
+
 fun main() {
     // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
     // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
@@ -372,6 +426,9 @@ fun main() {
                 writeTerminalFont(dir, TerminalFont.DEFAULT)
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
+                writeTerminalScrollback(dir, DEFAULT_TERMINAL_SCROLLBACK)
+                writeTerminalCursorStyle(dir, TerminalCursorStyle.DEFAULT)
+                writeShowTerminalTitle(dir, false)
             }
             hosts.reload()
             snippets.reload()
@@ -419,6 +476,12 @@ fun main() {
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
+                    initialTerminalScrollback = readTerminalScrollback(dir),
+                    onTerminalScrollbackChange = { writeTerminalScrollback(dir, it) },
+                    initialTerminalCursorStyle = readTerminalCursorStyle(dir),
+                    onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
+                    initialShowTerminalTitleOnTabs = readShowTerminalTitle(dir),
+                    onShowTerminalTitleOnTabsChange = { writeShowTerminalTitle(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,

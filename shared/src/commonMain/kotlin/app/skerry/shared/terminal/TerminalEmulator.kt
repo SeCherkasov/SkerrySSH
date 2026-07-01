@@ -107,6 +107,9 @@ enum class MouseTracking { Off, X10, Normal, ButtonEvent, AnyEvent }
 /** Форма курсора (DECSCUSR `CSI Ps SP q`): блок, подчёркивание или вертикальная черта. */
 enum class CursorShape { Block, Underline, Bar }
 
+/** Дефолтная глубина scrollback эмулятора (строк) — базовое значение/страховка, когда настройка не задана. */
+const val DEFAULT_MAX_SCROLLBACK = 5000
+
 /**
  * Полноценный VT/ANSI-эмулятор поверх фиксированной сетки `rows × cols` — устройство-независимая
  * логика (без Compose). UI рендерит [lines] (scrollback + экран) и блок-курсор по
@@ -137,6 +140,11 @@ class TerminalEmulator(
     cols: Int = 80,
     rows: Int = 24,
     private val maxScrollback: Int = DEFAULT_MAX_SCROLLBACK,
+    // Форма/мигание курсора ПО УМОЛЧАНИЮ (пользовательская настройка «Стиль курсора»). Действуют, пока
+    // приложение не задало своё через DECSCUSR; RIS (полный сброс) возвращает именно к ним, а не к
+    // жёсткому xterm-дефолту. Значения по умолчанию (блок + мигание) сохраняют прежнее поведение.
+    private val initialCursorShape: CursorShape = CursorShape.Block,
+    private val initialCursorBlink: Boolean = true,
     private val respond: (String) -> Unit = {},
     private val onBell: () -> Unit = {},
     private val onClipboardCopy: (String) -> Unit = {},
@@ -207,13 +215,31 @@ class TerminalEmulator(
     var cursorVisible: Boolean = true
         private set
 
-    /** Форма курсора (DECSCUSR). По умолчанию блок, как у xterm. */
-    var cursorShape: CursorShape = CursorShape.Block
+    // Пользовательский дефолт курсора (настройка «Стиль курсора»): к нему возвращает RIS и его же
+    // можно сменить на лету у открытой сессии через [applyCursorDefault]. Отдельно от текущих
+    // [cursorShape]/[cursorBlink], которые приложение может перебить своим DECSCUSR.
+    private var defaultCursorShape: CursorShape = initialCursorShape
+    private var defaultCursorBlink: Boolean = initialCursorBlink
+
+    /** Форма курсора (DECSCUSR). Стартует с настройки [initialCursorShape] (дефолт — блок, как у xterm). */
+    var cursorShape: CursorShape = initialCursorShape
         private set
 
-    /** Должен ли курсор мигать (DECSCUSR steady/blink). По умолчанию мигает (xterm DECSCUSR 1). */
-    var cursorBlink: Boolean = true
+    /** Должен ли курсор мигать (DECSCUSR steady/blink). Стартует с настройки [initialCursorBlink] (дефолт — мигает). */
+    var cursorBlink: Boolean = initialCursorBlink
         private set
+
+    /**
+     * Сменить пользовательский дефолт курсора на лету (настройка изменилась при уже открытой сессии):
+     * применяется и к текущему курсору немедленно, и к значению, к которому вернёт RIS. Приложение всё
+     * ещё может перебить форму своим DECSCUSR позже. Вызывать из корутины-владельца эмулятора.
+     */
+    fun applyCursorDefault(shape: CursorShape, blink: Boolean) {
+        defaultCursorShape = shape
+        defaultCursorBlink = blink
+        cursorShape = shape
+        cursorBlink = blink
+    }
 
     var applicationCursorKeys: Boolean = false
         private set
@@ -1177,7 +1203,7 @@ class TerminalEmulator(
         resetRegion()
         tabStops = defaultTabStops(cols)
         originMode = false; insertMode = false; autoWrap = true; cursorVisible = true
-        cursorShape = CursorShape.Block; cursorBlink = true
+        cursorShape = defaultCursorShape; cursorBlink = defaultCursorBlink
         applicationCursorKeys = false; applicationKeypad = false
         bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; mousePixels = false; focusReporting = false
         g0LineDrawing = false; g1LineDrawing = false; glG1 = false
@@ -1436,8 +1462,6 @@ class TerminalEmulator(
     }
 
     private companion object {
-        const val DEFAULT_MAX_SCROLLBACK = 5000
-
         /** Потолок длины OSC-строки (защита от OOM на недоверенном выводе); 4 MiB с запасом под OSC 52. */
         const val MAX_OSC_LEN = 4 * 1024 * 1024
 

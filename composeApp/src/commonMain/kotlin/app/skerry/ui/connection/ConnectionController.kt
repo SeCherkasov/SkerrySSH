@@ -23,6 +23,7 @@ import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.forward.PortForwardController
 import app.skerry.ui.metrics.HostMetricsController
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.TerminalSessionPrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -104,6 +105,10 @@ class ConnectionController(
     // учится только на себе). Ключ выводится из цели ([terminalHistoryKey]); сохранение уходит на IO,
     // чтобы file-IO vault не блокировал UI-поток на каждой команде.
     private val history: TerminalHistoryStore? = null,
+    // Настройки терминала (глубина scrollback + стиль курсора), читаемые в момент КАЖДОГО connect —
+    // так смена настроек влияет на новые сессии, а открытые сохраняют свой эмулятор. Дефолт (мок/тесты)
+    // даёт стандартные значения.
+    private val terminalPrefs: () -> TerminalSessionPrefs = { TerminalSessionPrefs() },
 ) {
     var uiState: ConnectionUiState by mutableStateOf(ConnectionUiState.Form)
         private set
@@ -200,10 +205,15 @@ class ConnectionController(
                 target.connectionType.name, target.username, target.host, target.port,
             )
             val loadedHistory = history?.load(historyKey).orEmpty()
+            // Снимаем настройки терминала на момент connect: применяются к новой сессии.
+            val prefs = terminalPrefs()
             val terminal = TerminalScreenState(
                 ShellTerminalSession(channel, sScope),
                 sScope,
                 initialHistory = loadedHistory,
+                scrollback = prefs.effectiveScrollback,
+                cursorShape = prefs.cursorStyle.shape,
+                cursorBlink = prefs.cursorStyle.blink,
                 onHistoryChanged = history?.let { store ->
                     // Уводим запись с UI-потока на scope контроллера (Default): команды редки, запись мелкая.
                     { snapshot -> scope.launch { store.save(historyKey, snapshot) } }

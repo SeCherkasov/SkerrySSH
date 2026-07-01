@@ -52,9 +52,13 @@
     <string name="settings_terminal_scrollback_desc">Lines kept per session.</string>
     <string name="settings_terminal_cursor_style">Cursor style</string>
     <string name="settings_terminal_cursor_block_blink">Block (blink)</string>
-    <string name="settings_terminal_copy_on_select">Copy on select</string>
+    <string name="settings_terminal_cursor_block_steady">Block</string>
+    <string name="settings_terminal_cursor_underline_blink">Underline (blink)</string>
+    <string name="settings_terminal_cursor_underline_steady">Underline</string>
+    <string name="settings_terminal_cursor_bar_blink">Bar (blink)</string>
+    <string name="settings_terminal_cursor_bar_steady">Bar</string>
     <string name="settings_terminal_show_title">Show terminal title on tabs</string>
-    <string name="settings_terminal_show_title_desc">Let the connected shell rename a tab (e.g. the running program). Off — tabs always show the saved host name. Not implemented yet.</string>
+    <string name="settings_terminal_show_title_desc">Let the connected shell rename a tab (e.g. the running program). Off — tabs always show the saved host name.</string>
 
     <!-- Account section -->
     <string name="settings_account_title">Account</string>

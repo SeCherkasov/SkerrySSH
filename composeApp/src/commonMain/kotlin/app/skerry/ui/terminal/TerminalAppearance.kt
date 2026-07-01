@@ -5,6 +5,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import app.skerry.shared.terminal.CursorShape
+import app.skerry.shared.terminal.DEFAULT_MAX_SCROLLBACK
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.hack_bold
 import app.skerry.ui.generated.resources.hack_regular
@@ -54,6 +56,49 @@ const val TERMINAL_LINE_HEIGHT_RATIO = 18f / 13f
  * выбора (для Hack безвредно, для JetBrains Mono — необходимо).
  */
 const val NO_LIGATURES = "\"liga\" 0, \"calt\" 0, \"dlig\" 0"
+
+/**
+ * Стиль курсора терминала (Settings → Терминал → «Стиль курсора»): комбинация формы (DECSCUSR
+ * блок/подчёркивание/черта) и мигания. Действует как ДЕФОЛТ для новой сессии — приложение внутри
+ * может переопределить форму через DECSCUSR (`CSI Ps SP q`); RIS вернёт именно к выбранному стилю.
+ * [id] — стабильный ключ персиста (см. desktop `main`); порядок [entries] = порядок в дропдауне.
+ */
+enum class TerminalCursorStyle(val shape: CursorShape, val blink: Boolean, val id: String) {
+    BlockBlink(CursorShape.Block, true, "block-blink"),
+    BlockSteady(CursorShape.Block, false, "block-steady"),
+    UnderlineBlink(CursorShape.Underline, true, "underline-blink"),
+    UnderlineSteady(CursorShape.Underline, false, "underline-steady"),
+    BarBlink(CursorShape.Bar, true, "bar-blink"),
+    BarSteady(CursorShape.Bar, false, "bar-steady");
+
+    companion object {
+        /** Дефолт — мигающий блок (как у xterm и как показывал прежний мок настроек). */
+        val DEFAULT = BlockBlink
+
+        /** Разобрать сохранённый [id] обратно в значение; неизвестный/`null` → [DEFAULT]. */
+        fun fromId(id: String?): TerminalCursorStyle = entries.firstOrNull { it.id == id } ?: DEFAULT
+    }
+}
+
+/** Глубина scrollback по умолчанию (Settings → Терминал → «Буфер прокрутки»), строк. */
+const val DEFAULT_TERMINAL_SCROLLBACK = 10_000
+
+/** Пресеты глубины scrollback (строк) для выпадающего списка «Буфер прокрутки». */
+val TERMINAL_SCROLLBACK_OPTIONS: List<Int> = listOf(1_000, 5_000, 10_000, 50_000)
+
+/**
+ * Настройки терминала, применяемые к НОВОЙ сессии при её создании ([app.skerry.ui.connection.ConnectionController]):
+ * глубина scrollback и стиль курсора по умолчанию. Читаются провайдером в момент connect, поэтому
+ * смена настроек влияет на последующие сессии; уже открытые сессии сохраняют свой эмулятор.
+ */
+@Immutable
+data class TerminalSessionPrefs(
+    val scrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
+    val cursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
+) {
+    /** Эффективная глубина scrollback: пресет валидируется, иначе — дефолт эмулятора (страховка). */
+    val effectiveScrollback: Int get() = scrollback.takeIf { it > 0 } ?: DEFAULT_MAX_SCROLLBACK
+}
 
 /** Внешний вид терминала, проводимый в [TerminalScreen] через [LocalTerminalAppearance]. */
 @Immutable

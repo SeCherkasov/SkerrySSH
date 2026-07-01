@@ -2,6 +2,7 @@ package app.skerry.ui.design
 
 import app.skerry.shared.host.Host
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -423,6 +424,51 @@ class DesktopDesignStateTest {
         s.chooseTerminalFontSize(11)
         assertEquals(11, s.terminalFontSize)
         assertEquals(listOf(16, 11), seen)
+    }
+
+    @Test
+    fun terminal_behaviour_honours_initial_values() {
+        val s = DesktopDesignState(
+            initialTerminalScrollback = 50_000,
+            initialTerminalCursorStyle = TerminalCursorStyle.BarSteady,
+            initialShowTerminalTitleOnTabs = true,
+        )
+        assertEquals(50_000, s.terminalScrollback)
+        assertEquals(TerminalCursorStyle.BarSteady, s.terminalCursorStyle)
+        assertEquals(true, s.showTerminalTitleOnTabs)
+    }
+
+    @Test
+    fun setTerminalScrollback_updates_and_reports_skipping_repeat_and_out_of_range() {
+        val seen = mutableListOf<Int>()
+        val s = DesktopDesignState(onTerminalScrollbackChange = { seen += it })
+        s.chooseTerminalScrollback(5_000)
+        s.chooseTerminalScrollback(5_000)   // повтор — no-op
+        s.chooseTerminalScrollback(1_234)   // вне TERMINAL_SCROLLBACK_OPTIONS — no-op
+        s.chooseTerminalScrollback(1_000)
+        assertEquals(1_000, s.terminalScrollback)
+        assertEquals(listOf(5_000, 1_000), seen)
+    }
+
+    @Test
+    fun setTerminalCursorStyle_updates_and_reports_once_skipping_repeat() {
+        val seen = mutableListOf<TerminalCursorStyle>()
+        val s = DesktopDesignState(onTerminalCursorStyleChange = { seen += it })
+        s.chooseTerminalCursorStyle(TerminalCursorStyle.UnderlineBlink)
+        s.chooseTerminalCursorStyle(TerminalCursorStyle.UnderlineBlink) // повтор — no-op
+        assertEquals(TerminalCursorStyle.UnderlineBlink, s.terminalCursorStyle)
+        assertEquals(listOf(TerminalCursorStyle.UnderlineBlink), seen)
+    }
+
+    @Test
+    fun toggleShowTerminalTitleOnTabs_flips_and_reports_each_change() {
+        val seen = mutableListOf<Boolean>()
+        val s = DesktopDesignState(onShowTerminalTitleOnTabsChange = { seen += it })
+        assertEquals(false, s.showTerminalTitleOnTabs)
+        s.toggleShowTerminalTitleOnTabs()
+        s.toggleShowTerminalTitleOnTabs()
+        assertEquals(false, s.showTerminalTitleOnTabs)
+        assertEquals(listOf(true, false), seen)
     }
 
     @Test
