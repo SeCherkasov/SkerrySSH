@@ -131,6 +131,7 @@ import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
 import app.skerry.ui.generated.resources.vault_subtitle_password
 import app.skerry.ui.generated.resources.vault_subtitle_private_key
 import app.skerry.ui.generated.resources.vault_used_by
+import app.skerry.ui.generated.resources.vault_used_by_one
 import app.skerry.ui.host.HostDraft
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -597,7 +598,11 @@ private fun LiveSecretDetail(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
-    DetailLabel(stringResource(Res.string.vault_used_by, hosts.size))
+    // Единственная привязка — единственное число («· 1 host» / «· 1 хостом»), иначе форма мн. числа.
+    DetailLabel(
+        if (hosts.size == 1) stringResource(Res.string.vault_used_by_one)
+        else stringResource(Res.string.vault_used_by, hosts.size),
+    )
     if (hosts.isEmpty()) {
         Txt(stringResource(Res.string.vault_not_attached), color = D.faint, size = 11.sp, modifier = Modifier.padding(bottom = 20.dp))
     } else {

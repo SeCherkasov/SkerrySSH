@@ -37,6 +37,7 @@
     <string name="vault_export">Export</string>
     <string name="vault_delete">Delete</string>
     <string name="vault_cancel">Cancel</string>
+    <string name="vault_used_by_one">Used by · 1 host</string>
     <string name="vault_used_by">Used by · %1$d hosts</string>
     <string name="vault_not_attached">Not attached to any host yet.</string>
     <string name="vault_cert_key_id">Key ID: %1$s</string>

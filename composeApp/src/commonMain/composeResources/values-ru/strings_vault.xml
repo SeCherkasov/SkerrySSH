@@ -37,6 +37,7 @@
     <string name="vault_export">Экспорт</string>
     <string name="vault_delete">Удалить</string>
     <string name="vault_cancel">Отмена</string>
+    <string name="vault_used_by_one">Используется · 1 хостом</string>
     <string name="vault_used_by">Используется · %1$d хостами</string>
     <string name="vault_not_attached">Пока не привязан ни к одному хосту.</string>
     <string name="vault_cert_key_id">Key ID: %1$s</string>
