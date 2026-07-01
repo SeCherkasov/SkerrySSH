@@ -8,6 +8,9 @@ import app.skerry.shared.vault.BiometricAvailability
 import app.skerry.shared.vault.BiometricEnableResult
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.BiometricUnlockResult
+import app.skerry.shared.vault.SecurityEvent
+import app.skerry.shared.vault.SecurityEventType
+import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
@@ -122,6 +125,13 @@ class VaultGateController(
      * `SyncCoordinator`). Контроллер про sync ничего не знает — лишь решает, показать ли шаг.
      */
     private val offersSyncOnboarding: Boolean = false,
+    /**
+     * Локальный журнал событий безопасности (раздел Настройки → Безопасность). `null` — журнал не
+     * ведётся (мок/превью). Контроллер пишет в него события, которыми владеет: создание/смена
+     * мастер-пароля, включение/выключение биометрии, разблокировка биометрией. Читает его же для
+     * подписи «последняя смена пароля» и списка недавних событий.
+     */
+    private val securityLog: SecurityLog? = null,
 ) {
     var state: VaultGateState by mutableStateOf(
         if (vault.exists()) VaultGateState.NeedsUnlock else VaultGateState.NeedsCreate,
@@ -163,6 +173,8 @@ class VaultGateController(
                 !password.contentEquals(confirm) -> error = VaultGateError.PasswordMismatch
                 else -> {
                     vault.create(password)
+                    // Базовая точка для подписи «последняя смена пароля» в разделе Безопасность.
+                    securityLog?.record(SecurityEventType.VaultCreated)
                     // Новый vault открыт. Сначала (если платформа дала форму) предлагаем подключить
                     // sync — он может принять dataKey аккаунта, и биометрию надо оборачивать уже под
                     // финальным ключом. Иначе сразу к биометрии / в приложение.
@@ -204,6 +216,30 @@ class VaultGateController(
         error = null
         state = VaultGateState.NeedsUnlock
     }
+
+    /**
+     * Сменить мастер-пароль (vault уже разблокирован). Возвращает `true`, если старый пароль верен и
+     * пароль сменён; при верном исходе пишет событие [SecurityEventType.MasterPasswordChanged] в
+     * журнал. Оба буфера затираются в любом исходе (как в [create]/[unlock]). Проверку минимальной
+     * длины/совпадения нового пароля делает вызывающий UI (кнопка активна лишь при валидном вводе);
+     * единственный отказ на этом уровне — неверный текущий пароль.
+     */
+    fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean {
+        try {
+            val changed = vault.changePassword(oldPassword, newPassword)
+            if (changed) securityLog?.record(SecurityEventType.MasterPasswordChanged)
+            return changed
+        } finally {
+            oldPassword.fill(' ')
+            newPassword.fill(' ')
+        }
+    }
+
+    /** Недавние события безопасности (новейшие первыми) для раздела Настройки → Безопасность. */
+    fun recentSecurityEvents(limit: Int = 20): List<SecurityEvent> = securityLog?.recent(limit) ?: emptyList()
+
+    /** Время последней смены мастер-пароля (или `null`, если журнал не знает — показать нейтральный текст). */
+    fun lastPasswordChangeAt(): String? = securityLog?.lastPasswordChangeAt()
 
     /**
      * Открыть экран подтверждения сброса (из формы входа — «забыл пароль», или с экрана [Corrupted]).
@@ -269,7 +305,10 @@ class VaultGateController(
         biometricInFlight = true
         try {
             when (bio.unlock(prompt)) {
-                BiometricUnlockResult.Unlocked -> state = VaultGateState.Unlocked
+                BiometricUnlockResult.Unlocked -> {
+                    securityLog?.record(SecurityEventType.UnlockedBiometric)
+                    state = VaultGateState.Unlocked
+                }
                 BiometricUnlockResult.Invalidated -> {
                     biometricEnabled = false
                     error = VaultGateError.BiometricReset
@@ -290,6 +329,7 @@ class VaultGateController(
         return try {
             val enabled = bio.enable(prompt) == BiometricEnableResult.Enabled
             biometricEnabled = bio.isEnabled()
+            if (enabled) securityLog?.record(SecurityEventType.BiometricEnabled)
             enabled
         } finally {
             biometricInFlight = false
@@ -299,8 +339,11 @@ class VaultGateController(
     /** Выключить биометрию (удалить ключ и `vault.bio`). */
     fun disableBiometric() {
         val bio = biometrics ?: return
+        val wasEnabled = bio.isEnabled()
         bio.disable()
         biometricEnabled = bio.isEnabled()
+        // Пишем событие только если биометрия действительно была включена (disable идемпотентен).
+        if (wasEnabled && !biometricEnabled) securityLog?.record(SecurityEventType.BiometricDisabled)
     }
 
     /**

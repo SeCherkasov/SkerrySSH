@@ -99,19 +99,42 @@
     <string name="settings_security_title">Security</string>
     <string name="settings_security_subtitle">Master password, auto-lock and two-factor authentication protect your vault.</string>
     <string name="settings_security_master_password">Master password</string>
-    <string name="settings_security_master_password_desc">Last changed 84 days ago.</string>
+    <string name="settings_security_master_password_desc">Protects your vault.</string>
+    <string name="settings_security_pw_changed_today">Changed today.</string>
+    <string name="settings_security_pw_changed_yesterday">Changed yesterday.</string>
+    <string name="settings_security_pw_changed_days">Last changed %1$d days ago.</string>
     <string name="settings_security_touch_id">Unlock with Touch ID</string>
     <string name="settings_security_touch_id_desc">Use biometrics instead of typing the master password.</string>
     <string name="settings_security_auto_lock">Auto-lock</string>
     <string name="settings_security_auto_lock_desc">Lock Skerry after inactivity.</string>
-    <string name="settings_security_after_5_min">After 5 minutes</string>
+    <string name="settings_autolock_1m">After 1 minute</string>
+    <string name="settings_autolock_5m">After 5 minutes</string>
+    <string name="settings_autolock_15m">After 15 minutes</string>
+    <string name="settings_autolock_30m">After 30 minutes</string>
+    <string name="settings_autolock_never">Never</string>
     <string name="settings_security_2fa">Two-factor authentication</string>
     <string name="settings_enabled">● enabled</string>
-    <string name="settings_security_2fa_desc">TOTP via authenticator app.</string>
+    <string name="settings_security_2fa_desc">TOTP via an authenticator app.</string>
     <string name="settings_recent_security_events">RECENT SECURITY EVENTS</string>
-    <string name="settings_security_event_1">Unlocked with Touch ID · today 09:02</string>
-    <string name="settings_security_event_2">Key deploy_ci accessed · Jun 20 18:44</string>
-    <string name="settings_security_event_3">New device paired: iPhone 16 Pro · Jun 18</string>
+    <string name="settings_security_no_events">No security events yet.</string>
+    <string name="settings_event_vault_created">Vault created</string>
+    <string name="settings_event_password_changed">Master password changed</string>
+    <string name="settings_event_biometric_enabled">Biometric unlock enabled</string>
+    <string name="settings_event_biometric_disabled">Biometric unlock disabled</string>
+    <string name="settings_event_unlocked_biometric">Unlocked with biometrics</string>
+    <string name="settings_event_device_paired">New device paired</string>
+    <string name="settings_time_today">today %1$s</string>
+    <string name="settings_time_yesterday">yesterday %1$s</string>
+    <string name="settings_time_days_ago">%1$d days ago</string>
+
+    <!-- Change master password dialog -->
+    <string name="settings_change_pw_title">Change master password</string>
+    <string name="settings_change_pw_current">Current password</string>
+    <string name="settings_change_pw_new">New password</string>
+    <string name="settings_change_pw_confirm">Confirm new password</string>
+    <string name="settings_change_pw_submit">Change password</string>
+    <string name="settings_change_pw_err_wrong">Current password is incorrect.</string>
+    <string name="settings_change_pw_ok">Master password changed.</string>
 
     <!-- Keyboard section -->
     <string name="settings_keyboard_title">Keyboard</string>

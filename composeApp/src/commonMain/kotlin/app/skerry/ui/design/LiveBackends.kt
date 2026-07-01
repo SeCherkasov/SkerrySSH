@@ -7,6 +7,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
+import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.ai.AiAssistantController
@@ -156,6 +157,13 @@ val LocalVault: ProvidableCompositionLocal<Vault?> = staticCompositionLocalOf { 
  * железа/офскрин): экран настроек прячет тумблер. Поставляется за гейтом vault теми же провайдерами.
  */
 val LocalVaultBiometrics: ProvidableCompositionLocal<VaultBiometrics?> = staticCompositionLocalOf { null }
+
+/**
+ * Локальный журнал событий безопасности (Settings → Безопасность): недавние события + дериватив
+ * «последняя смена пароля». `null` — мок/превью: секция рисует пустой журнал и нейтральную подпись.
+ * Не синкается (аудит конкретного устройства). Поставляется за гейтом vault.
+ */
+val LocalSecurityLog: ProvidableCompositionLocal<SecurityLog?> = staticCompositionLocalOf { null }
 
 /**
  * Координатор self-hosted синхронизации (Phase 2): register/login/syncNow/disconnect + поток статуса.

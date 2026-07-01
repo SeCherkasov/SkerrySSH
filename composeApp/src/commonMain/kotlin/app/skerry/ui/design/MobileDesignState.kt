@@ -12,6 +12,7 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
@@ -33,7 +34,7 @@ enum class MobileTab(val icon: String, val label: String) {
  * Полноэкранные push-экраны поверх таб-навигации (таб-бар скрыт): терминал и деталь хоста
  * открываются из Hosts, SFTP (Files) — кнопкой SFTP на карточке хоста, а Ports/Known/Team — из таба More.
  */
-enum class MobileRoute { Terminal, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai }
+enum class MobileRoute { Terminal, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai, Security }
 
 /** Что должен сделать системный «назад» на мобильном каркасе. */
 enum class MobileBackAction {
@@ -90,6 +91,10 @@ class MobileDesignState(
     // автоопределение по локали ОС для превью/тестов.
     initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
     private val onUiLanguageChange: (UiLanguage) -> Unit = {},
+    // Порог автоблокировки по простою (More → Security). Стартовое значение из персиста, колбэк пишет
+    // обратно; проводится в [app.skerry.ui.vault.VaultGate] как idleMs таймера.
+    initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
+    private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
 ) {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
     var route: MobileRoute? by mutableStateOf(null); private set
@@ -212,6 +217,16 @@ class MobileDesignState(
 
     /** Язык интерфейса (More → Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
+
+    /** Порог автоблокировки по простою (More → Security). Проводится в [app.skerry.ui.vault.VaultGate]. */
+    var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
+
+    /** Выбрать порог автоблокировки и сообщить наружу (для персиста). Повтор того же — no-op. */
+    fun chooseAutoLock(duration: AutoLockDuration) {
+        if (duration == autoLock) return
+        autoLock = duration
+        onAutoLockChange(duration)
+    }
 
     /** Выбрать шрифт терминала и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
     fun chooseTerminalFont(font: TerminalFont) {

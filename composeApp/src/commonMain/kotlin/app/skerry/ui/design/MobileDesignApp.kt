@@ -207,6 +207,7 @@ fun MobileDesignApp(
         // Vault + биометрия — экрану More для тумблера «разблокировка биометрией» (включить/перенастроить).
         LocalVault provides deps.vault,
         LocalVaultBiometrics provides deps.biometrics,
+        LocalSecurityLog provides deps.securityLog,
         // Координатор self-hosted sync — push-экран More → «Security & sync».
         LocalSync provides deps.sync,
     ) {
@@ -216,6 +217,10 @@ fun MobileDesignApp(
                 VaultGate(
                     vault = vault,
                     biometrics = deps.biometrics,
+                    securityLog = deps.securityLog,
+                    // Порог автоблокировки из настроек: смена рекомпозирует VaultGate и перезапускает
+                    // idle-таймер; Never (idleMs == null) выключает его.
+                    autoLockIdleMs = state.autoLock.idleMs,
                     onReset = onVaultReset,
                     // onPairingComplete != null (есть sync) — экран создания предлагает «у меня есть код»:
                     // координатор сам создаст vault под выбранным паролем и примет ключ аккаунта.
@@ -419,6 +424,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Appearance -> MobileAppearanceScreen(state)
         MobileRoute.Sync -> MobileSyncScreen(state)
         MobileRoute.Ai -> MobileAiScreen(state)
+        MobileRoute.Security -> MobileSecurityScreen(state)
     }
 }
 

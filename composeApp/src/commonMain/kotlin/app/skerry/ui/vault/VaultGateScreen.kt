@@ -41,6 +41,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.generated.resources.Res
@@ -114,6 +115,14 @@ expect fun deviceMandatesAutoLock(): Boolean
 fun VaultGate(
     vault: Vault,
     biometrics: VaultBiometrics? = null,
+    // Локальный журнал событий безопасности (раздел Настройки → Безопасность). Прокидывается в
+    // контроллер: он пишет туда создание/смену пароля, включение/выключение биометрии, разблокировку
+    // биометрией. `null` — журнал не ведётся (мок/превью).
+    securityLog: SecurityLog? = null,
+    // Порог автоблокировки по простою (Настройки → Безопасность). Значение из настроек: при его
+    // изменении VaultGate рекомпозируется и idle-таймер перезапускается. `null` — таймер простоя
+    // выключен ([AutoLockDuration.Never]); блокировка при уходе в фон остаётся (deviceMandatesAutoLock).
+    autoLockIdleMs: Long? = AUTO_LOCK_IDLE_MS,
     modifier: Modifier = Modifier,
     // Внешняя чистка при сбросе (хосты/known_hosts/настройки по выбранному [ResetScope]). Вызывается
     // после стирания vault; платформенная проводка (desktop `main`) подставляет реальную реализацию.
@@ -180,8 +189,8 @@ fun VaultGate(
     // Наличие формы sync не меняется в течение жизни экрана — безопасно зафиксировать на старте
     // контроллера (он решает, показывать ли шаг OfferSync).
     val offersSync = offerSyncForm != null
-    val controller = remember(vault, biometrics) {
-        VaultGateController(vault, biometrics, onReset = { currentOnReset(it) }, offersSyncOnboarding = offersSync)
+    val controller = remember(vault, biometrics, securityLog) {
+        VaultGateController(vault, biometrics, onReset = { currentOnReset(it) }, offersSyncOnboarding = offersSync, securityLog = securityLog)
     }
     // Стабильная ссылка (не новый инстанс на каждую рекомпозицию VaultGate) — иначе createForm и его
     // поддерево (аффорданс паринга) перерисовывались бы лишний раз. null, когда паринг с экрана
@@ -221,10 +230,11 @@ fun VaultGate(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Авто-лок по простою: delay перезапускается при изменении activityTick (касание пользователя).
-    if (controller.state == VaultGateState.Unlocked) {
-        LaunchedEffect(controller.activityTick) {
-            delay(AUTO_LOCK_IDLE_MS)
+    // Авто-лок по простою: delay перезапускается при изменении activityTick (касание пользователя) и
+    // при смене порога [autoLockIdleMs] из настроек. null (AutoLockDuration.Never) — таймер выключен.
+    if (controller.state == VaultGateState.Unlocked && autoLockIdleMs != null) {
+        LaunchedEffect(controller.activityTick, autoLockIdleMs) {
+            delay(autoLockIdleMs)
             controller.lock()
         }
     }

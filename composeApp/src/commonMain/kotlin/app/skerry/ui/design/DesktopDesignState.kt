@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
@@ -153,6 +154,10 @@ class DesktopDesignState(
     // (Night Sea, no-op) сохраняет прежний вид для мок/превью/тестов.
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // Порог автоблокировки по простою (Settings → Безопасность). Стартовое значение из персиста,
+    // колбэк пишет обратно; проводится в [app.skerry.ui.vault.VaultGate] как idleMs таймера.
+    initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
+    private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -211,6 +216,9 @@ class DesktopDesignState(
 
     /** Тема терминала (Appearance → карточки). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
+
+    /** Порог автоблокировки по простою (Settings → Безопасность). Проводится в [app.skerry.ui.vault.VaultGate]. */
+    var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
 
     /** Язык интерфейса (Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
@@ -409,6 +417,13 @@ class DesktopDesignState(
         if (theme == terminalTheme) return
         terminalTheme = theme
         onTerminalThemeChange(theme)
+    }
+
+    /** Выбрать порог автоблокировки и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    fun chooseAutoLock(duration: AutoLockDuration) {
+        if (duration == autoLock) return
+        autoLock = duration
+        onAutoLockChange(duration)
     }
 
     /** Выбрать язык интерфейса и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */

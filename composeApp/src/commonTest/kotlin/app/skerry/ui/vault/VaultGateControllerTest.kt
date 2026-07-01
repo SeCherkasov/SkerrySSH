@@ -8,6 +8,9 @@ import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.BiometricResult
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.SecurityEvent
+import app.skerry.shared.vault.SecurityEventType
+import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
@@ -398,6 +401,82 @@ class VaultGateControllerTest {
         assertEquals(VaultGateState.Unlocked, controller.state)
     }
 
+    // --- Журнал безопасности: контроллер пишет события, которыми владеет, и отдаёт их разделу Настройки ---
+
+    @Test
+    fun `create records a VaultCreated event as the password baseline`() {
+        val log = RecordingSecurityLog()
+        val controller = VaultGateController(FakeVault(exists = false), minPasswordLength = 8, securityLog = log)
+
+        controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
+
+        assertEquals(listOf(SecurityEventType.VaultCreated), log.events.map { it.type })
+        assertEquals("t0", controller.lastPasswordChangeAt())
+    }
+
+    @Test
+    fun `changePassword records the change on success and wipes both buffers`() {
+        val log = RecordingSecurityLog()
+        val controller = VaultGateController(FakeVault(exists = true, changePasswordResult = true), securityLog = log)
+        val old = "old password!!".toCharArray()
+        val fresh = "new password!!".toCharArray()
+
+        assertTrue(controller.changePassword(old, fresh))
+
+        assertEquals(listOf(SecurityEventType.MasterPasswordChanged), log.events.map { it.type })
+        assertTrue(old.all { it == ' ' }, "old buffer must be wiped")
+        assertTrue(fresh.all { it == ' ' }, "new buffer must be wiped")
+    }
+
+    @Test
+    fun `changePassword with a wrong current password records nothing and returns false`() {
+        val log = RecordingSecurityLog()
+        val controller = VaultGateController(FakeVault(exists = true, changePasswordResult = false), securityLog = log)
+
+        assertFalse(controller.changePassword("wrong".toCharArray(), "new password!!".toCharArray()))
+
+        assertTrue(log.events.isEmpty())
+    }
+
+    @Test
+    fun `disableBiometric records a BiometricDisabled event when it was enabled`() {
+        val log = RecordingSecurityLog()
+        val artifacts = FakeArtifacts().apply {
+            write(BioArtifact(formatVersion = 1, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
+        }
+        val controller = VaultGateController(
+            FakeVault(exists = true),
+            biometrics(BiometricAvailability.Available, artifacts),
+            securityLog = log,
+        )
+        assertTrue(controller.biometricEnabled)
+
+        controller.disableBiometric()
+
+        assertEquals(listOf(SecurityEventType.BiometricDisabled), log.events.map { it.type })
+    }
+
+    @Test
+    fun `recentSecurityEvents delegates to the log newest first`() {
+        val log = RecordingSecurityLog()
+        val controller = VaultGateController(FakeVault(exists = true), securityLog = log)
+        log.record(SecurityEventType.DevicePaired, "iPhone")
+        log.record(SecurityEventType.UnlockedBiometric)
+
+        val recent = controller.recentSecurityEvents()
+
+        assertEquals(SecurityEventType.UnlockedBiometric, recent.first().type)
+        assertEquals(SecurityEventType.DevicePaired, recent.last().type)
+    }
+
+    @Test
+    fun `security accessors are empty without a log`() {
+        val controller = VaultGateController(FakeVault(exists = true))
+
+        assertTrue(controller.recentSecurityEvents().isEmpty())
+        assertNull(controller.lastPasswordChangeAt())
+    }
+
     @Test
     fun `dismissBiometricOffer moves from the offer to Unlocked`() {
         val controller = VaultGateController(
@@ -430,6 +509,7 @@ private class FakeVault(
     exists: Boolean,
     var unlockResult: UnlockResult = UnlockResult.Success,
     private val unlockThrows: Boolean = false,
+    private val changePasswordResult: Boolean = true,
 ) : Vault {
     private var fileExists = exists
     override var isUnlocked = false
@@ -477,7 +557,12 @@ private class FakeVault(
     override fun openPayload(id: String): ByteArray? = null
     override fun put(id: String, type: RecordType, payload: ByteArray) = Unit
     override fun remove(id: String) = Unit
-    override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = false
+    override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean {
+        // Реальная реализация затирает переданные буферы — моделируем для симметрии с контроллером.
+        oldPassword.fill(' ')
+        newPassword.fill(' ')
+        return changePasswordResult
+    }
     override fun verifyPassword(password: CharArray): Boolean = false
 
     // Путь биометрии с живым dataKey покрыт в shared (DataKey-конструктор internal в :shared) — стабы.
@@ -497,6 +582,20 @@ private class FakeKeyStore(
     override suspend fun unwrap(alias: String, wrapped: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray> =
         BiometricResult.Success(wrapped.copyOf())
     override fun deleteKey(alias: String) = Unit
+}
+
+/** In-memory [SecurityLog] для тестов: монотонные штампы t0,t1,… — порядок и дериватив детерминированы. */
+private class RecordingSecurityLog : SecurityLog {
+    val events = mutableListOf<SecurityEvent>()
+    private var tick = 0
+    override fun record(type: SecurityEventType, detail: String?) {
+        events += SecurityEvent(type, "t${tick++}", detail)
+    }
+    override fun recent(limit: Int): List<SecurityEvent> = events.asReversed().take(limit)
+    override fun lastPasswordChangeAt(): String? = events.lastOrNull {
+        it.type == SecurityEventType.VaultCreated || it.type == SecurityEventType.MasterPasswordChanged
+    }?.at
+    override fun clear() = events.clear()
 }
 
 /** Фейк персистентности `vault.bio` — хранит артефакт в памяти. */

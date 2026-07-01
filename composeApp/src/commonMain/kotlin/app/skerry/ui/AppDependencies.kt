@@ -1,6 +1,7 @@
 package app.skerry.ui
 
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
@@ -41,4 +42,6 @@ data class AppDependencies(
     val biometrics: VaultBiometrics? = null,
     /** Координатор self-hosted синхронизации (Phase 2); `null` — sync не подключён на платформе. */
     val sync: SyncCoordinator? = null,
+    /** Локальный журнал событий безопасности (Settings → Безопасность); `null` — журнал не ведётся. */
+    val securityLog: SecurityLog? = null,
 )

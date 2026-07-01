@@ -99,19 +99,42 @@
     <string name="settings_security_title">Безопасность</string>
     <string name="settings_security_subtitle">Мастер-пароль, автоблокировка и двухфакторная аутентификация защищают ваше хранилище.</string>
     <string name="settings_security_master_password">Мастер-пароль</string>
-    <string name="settings_security_master_password_desc">Последнее изменение 84 дня назад.</string>
+    <string name="settings_security_master_password_desc">Защищает ваше хранилище.</string>
+    <string name="settings_security_pw_changed_today">Изменён сегодня.</string>
+    <string name="settings_security_pw_changed_yesterday">Изменён вчера.</string>
+    <string name="settings_security_pw_changed_days">Последнее изменение %1$d дн. назад.</string>
     <string name="settings_security_touch_id">Разблокировка по Touch ID</string>
     <string name="settings_security_touch_id_desc">Использовать биометрию вместо ввода мастер-пароля.</string>
     <string name="settings_security_auto_lock">Автоблокировка</string>
     <string name="settings_security_auto_lock_desc">Блокировать Skerry после простоя.</string>
-    <string name="settings_security_after_5_min">Через 5 минут</string>
+    <string name="settings_autolock_1m">Через 1 минуту</string>
+    <string name="settings_autolock_5m">Через 5 минут</string>
+    <string name="settings_autolock_15m">Через 15 минут</string>
+    <string name="settings_autolock_30m">Через 30 минут</string>
+    <string name="settings_autolock_never">Никогда</string>
     <string name="settings_security_2fa">Двухфакторная аутентификация</string>
     <string name="settings_enabled">● включена</string>
     <string name="settings_security_2fa_desc">TOTP через приложение-аутентификатор.</string>
     <string name="settings_recent_security_events">НЕДАВНИЕ СОБЫТИЯ БЕЗОПАСНОСТИ</string>
-    <string name="settings_security_event_1">Разблокировка по Touch ID · сегодня 09:02</string>
-    <string name="settings_security_event_2">Доступ к ключу deploy_ci · 20 июня 18:44</string>
-    <string name="settings_security_event_3">Привязано новое устройство: iPhone 16 Pro · 18 июня</string>
+    <string name="settings_security_no_events">Пока событий безопасности нет.</string>
+    <string name="settings_event_vault_created">Хранилище создано</string>
+    <string name="settings_event_password_changed">Мастер-пароль изменён</string>
+    <string name="settings_event_biometric_enabled">Включена разблокировка биометрией</string>
+    <string name="settings_event_biometric_disabled">Выключена разблокировка биометрией</string>
+    <string name="settings_event_unlocked_biometric">Разблокировка биометрией</string>
+    <string name="settings_event_device_paired">Привязано новое устройство</string>
+    <string name="settings_time_today">сегодня %1$s</string>
+    <string name="settings_time_yesterday">вчера %1$s</string>
+    <string name="settings_time_days_ago">%1$d дн. назад</string>
+
+    <!-- Диалог смены мастер-пароля -->
+    <string name="settings_change_pw_title">Смена мастер-пароля</string>
+    <string name="settings_change_pw_current">Текущий пароль</string>
+    <string name="settings_change_pw_new">Новый пароль</string>
+    <string name="settings_change_pw_confirm">Повторите новый пароль</string>
+    <string name="settings_change_pw_submit">Сменить пароль</string>
+    <string name="settings_change_pw_err_wrong">Текущий пароль неверен.</string>
+    <string name="settings_change_pw_ok">Мастер-пароль изменён.</string>
 
     <!-- Раздел Keyboard -->
     <string name="settings_keyboard_title">Клавиатура</string>

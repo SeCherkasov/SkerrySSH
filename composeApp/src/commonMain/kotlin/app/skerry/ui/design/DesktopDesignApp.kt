@@ -58,6 +58,7 @@ import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
@@ -91,6 +92,7 @@ import app.skerry.ui.terminal.TerminalSessionPrefs
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
+import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.generated.resources.Res
@@ -161,6 +163,9 @@ fun DesktopDesignApp(
     // Цветовая тема терминала (Appearance → карточки тем) — персистится снаружи (desktop main).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // Порог автоблокировки по простою (Settings → Безопасность) — персистится снаружи (desktop main).
+    initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
+    onAutoLockChange: (AutoLockDuration) -> Unit = {},
     state: DesktopDesignState = remember {
         DesktopDesignState(
             initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
@@ -172,10 +177,14 @@ fun DesktopDesignApp(
             initialTerminalCursorStyle, onTerminalCursorStyleChange,
             initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
             initialTerminalTheme, onTerminalThemeChange,
+            initialAutoLock, onAutoLockChange,
         )
     },
     vault: Vault? = null,
     biometrics: VaultBiometrics? = null,
+    // Локальный журнал событий безопасности (Settings → Безопасность). `null` — мок/превью: секция
+    // рисует пустой журнал и нейтральную подпись пароля.
+    securityLog: SecurityLog? = null,
     hosts: HostManagerController? = null,
     transport: SshTransport? = null,
     // Транспорт для разовой проверки «Test connection»: отдельный от [transport] (живых сессий),
@@ -303,6 +312,7 @@ fun DesktopDesignApp(
         // пароля из keychain (на desktop биометрии нет, путь сводится к мастер-паролю).
         LocalVault provides vault,
         LocalVaultBiometrics provides biometrics,
+        LocalSecurityLog provides securityLog,
         LocalSync provides sync,
         LocalAi provides ai,
     ) {
@@ -310,6 +320,10 @@ fun DesktopDesignApp(
             VaultGate(
                 vault = vault,
                 biometrics = biometrics,
+                securityLog = securityLog,
+                // Порог автоблокировки из настроек: смена в UI рекомпозирует VaultGate и перезапускает
+                // idle-таймер; Never (idleMs == null) выключает его.
+                autoLockIdleMs = state.autoLock.idleMs,
                 onReset = onVaultReset,
                 // onPairingComplete != null (есть sync) — экран создания предлагает «у меня есть код»:
                 // координатор сам создаст vault под выбранным паролем и примет ключ аккаунта.

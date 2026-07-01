@@ -20,6 +20,7 @@ import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
+import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.VaultMigration
@@ -56,6 +57,7 @@ import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
+import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.vault.ResetScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -312,6 +314,23 @@ private fun writeTerminalScrollback(dir: Path, lines: Int) {
 }
 
 /**
+ * Порог автоблокировки по простою (Settings → Безопасность), переживающий перезапуск: стабильный id
+ * ([AutoLockDuration.id]) в файле `auto_lock`. Отсутствует/нечитаем/неизвестен → дефолт (5 минут).
+ * Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readAutoLock(dir: Path): AutoLockDuration {
+    val file = dir.resolve("auto_lock")
+    return runCatching { AutoLockDuration.fromId(Files.readString(file).trim()) }.getOrDefault(AutoLockDuration.DEFAULT)
+}
+
+private fun writeAutoLock(dir: Path, duration: AutoLockDuration) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("auto_lock"), duration.id)
+    }
+}
+
+/**
  * Стиль курсора по умолчанию (Terminal → Стиль курсора), переживающий перезапуск: стабильный id
  * ([TerminalCursorStyle.id]) в файле `terminal_cursor_style`. Отсутствует/нечитаем/неизвестен →
  * дефолт ([TerminalCursorStyle.DEFAULT] = мигающий блок). Запись best-effort.
@@ -357,6 +376,12 @@ fun main() {
             dir.resolve("vault.json").toString().toPath(),
             IonspinVaultCrypto(),
             deviceId(dir),
+            FileSystem.SYSTEM,
+        ) { Instant.now().toString() }
+        // Локальный (не синкаемый) журнал событий безопасности: смена мастер-пароля, биометрия,
+        // разблокировка. Пишется контроллером за гейтом; раздел Settings → Безопасность читает его.
+        val securityLog = FileSecurityLog(
+            dir.resolve("security_events.json").toString().toPath(),
             FileSystem.SYSTEM,
         ) { Instant.now().toString() }
         // TOFU: первый ключ хоста запоминается в vault (RecordType.KNOWN_HOST — синкается между
@@ -468,6 +493,9 @@ fun main() {
         // данные ВНЕ vault и отражаем опустевший vault в менеджерах. Vault на этот момент заблокирован.
         val onVaultReset: (ResetScope) -> Unit = { resetScope ->
             tunnels.closeAll()
+            // Журнал событий безопасности относится к стёртому vault (смена пароля/биометрия/паринг) —
+            // при любом сбросе он становится неактуальным и может выдать имена устройств; чистим всегда.
+            securityLog.clear()
             // Сброс стёр dataKey → sealed refresh-токен sync обёрнут под мёртвым ключом. Рвём привязку
             // к серверу, иначе настройки висели бы «Linked» без возможности войти. (Биометрии на desktop
             // нет — deps.biometrics=null.) Чистый старт: заново создать vault и подключить sync.
@@ -490,6 +518,7 @@ fun main() {
                 writeTerminalScrollback(dir, DEFAULT_TERMINAL_SCROLLBACK)
                 writeTerminalCursorStyle(dir, TerminalCursorStyle.DEFAULT)
                 writeShowTerminalTitle(dir, false)
+                writeAutoLock(dir, AutoLockDuration.DEFAULT)
             }
             hosts.reload()
             snippets.reload()
@@ -549,8 +578,11 @@ fun main() {
                     onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
                     initialShowTerminalTitleOnTabs = readShowTerminalTitle(dir),
                     onShowTerminalTitleOnTabsChange = { writeShowTerminalTitle(dir, it) },
+                    initialAutoLock = readAutoLock(dir),
+                    onAutoLockChange = { writeAutoLock(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
+                    securityLog = securityLog,
                     hosts = deps.hosts,
                     transport = deps.transport,
                     testTransport = probeTransport,

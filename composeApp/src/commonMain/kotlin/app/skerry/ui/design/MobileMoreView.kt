@@ -49,9 +49,6 @@ import app.skerry.ui.generated.resources.more_ai_privacy
 import app.skerry.ui.generated.resources.more_ai_subtitle_byok
 import app.skerry.ui.generated.resources.more_ai_subtitle_local
 import app.skerry.ui.generated.resources.more_appearance_subtitle
-import app.skerry.ui.generated.resources.more_biometric_enabled
-import app.skerry.ui.generated.resources.more_biometric_skip
-import app.skerry.ui.generated.resources.more_biometric_unlock
 import app.skerry.ui.generated.resources.more_known_hosts
 import app.skerry.ui.generated.resources.more_lock
 import app.skerry.ui.generated.resources.more_port_forwarding
@@ -65,6 +62,7 @@ import app.skerry.ui.generated.resources.more_team
 import app.skerry.ui.generated.resources.more_title
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.i18n.label
+import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.sync.accountCardModelLocalized
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
@@ -74,7 +72,23 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MIN
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
+import app.skerry.ui.vault.AutoLockDuration
+import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
 import app.skerry.ui.vault.VaultGateController
+import app.skerry.ui.generated.resources.settings_badge_soon
+import app.skerry.ui.generated.resources.settings_change
+import app.skerry.ui.generated.resources.settings_manage
+import app.skerry.ui.generated.resources.settings_recent_security_events
+import app.skerry.ui.generated.resources.settings_security_2fa
+import app.skerry.ui.generated.resources.settings_security_2fa_desc
+import app.skerry.ui.generated.resources.settings_security_auto_lock
+import app.skerry.ui.generated.resources.settings_security_auto_lock_desc
+import app.skerry.ui.generated.resources.settings_security_master_password
+import app.skerry.ui.generated.resources.settings_security_no_events
+import app.skerry.ui.generated.resources.settings_security_subtitle
+import app.skerry.ui.generated.resources.settings_security_title
+import app.skerry.ui.generated.resources.settings_security_touch_id
+import app.skerry.ui.generated.resources.settings_security_touch_id_desc
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -111,9 +125,9 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             MoreRow("auto_awesome", D.amber, stringResource(Res.string.more_ai_privacy), if (aiLive) stringResource(Res.string.more_ai_subtitle_byok) else stringResource(Res.string.more_ai_subtitle_local), D.dim, onClick = if (aiLive) { -> state.push(MobileRoute.Ai) } else null)
             MoreRow("palette", D.cyanBright, stringResource(Res.string.appearance_title), stringResource(Res.string.more_appearance_subtitle), D.dim, onClick = { state.push(MobileRoute.Appearance) })
             MoreRow("shield_lock", D.cyanBright, stringResource(Res.string.more_security_sync), if (preview) stringResource(Res.string.more_sync_synced) else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
-            // Тумблер биометрии — живой путь за гейтом (vault открыт). Прячется, если биометрия
-            // недоступна на устройстве (нет железа/не зачислен отпечаток) или это превью/офскрин.
-            if (!preview) BiometricUnlockRow()
+            // Раздел «Безопасность»: мастер-пароль, биометрия, автоблокировка, журнал событий. Живой путь
+            // за гейтом (есть vault); в превью строка инертна (нечего настраивать без vault).
+            MoreRow("encrypted", D.cyanBright, stringResource(Res.string.settings_security_title), null, D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
             MoreRow("lock", D.sunset, stringResource(Res.string.more_lock), null, D.dim, labelColor = D.sunset, divider = false, onClick = onLock)
         }
         Spacer(Modifier.height(96.dp))
@@ -189,49 +203,154 @@ private val MOBILE_ENABLE_BIOMETRIC_PROMPT = BiometricPrompt(
     subtitle = "Confirm your biometrics to unlock Skerry without typing the master password.",
 )
 
+// Security (push-экран More → Безопасность).
+
 /**
- * Живой тумблер «Unlock with biometrics» (за гейтом vault, vault открыт). Включение оборачивает
- * `dataKey` под аппаратный `bioKey` (требует биометрического подтверждения), выключение удаляет
- * артефакт. Строка целиком скрыта, если на устройстве нет доступной биометрии — тогда настраивать
- * нечего. Контроллер собственный (vault/биометрия общие): нам нужны только реактивные
- * `biometricEnabled`/`biometricInFlight` и enable/disable, не навигация гейта.
+ * Push-экран More → Безопасность (паритет desktop-раздела [SecuritySection]). Смена мастер-пароля
+ * (диалог → [VaultGateController.changePassword]), реальный тумблер разблокировки биометрией (скрыт,
+ * когда фактора/железа нет), выбор порога автоблокировки (проводится в idle-таймер гейта через
+ * `state.autoLock`), журнал событий и подпись «последняя смена пароля» из реального [SecurityLog].
+ * Двухфакторная — метка SOON (ещё не реализована). Собственный контроллер поверх ОБЩИХ
+ * vault/биометрии/журнала (из composition-local): события пишутся в тот же файл, что и desktop.
+ * Без vault (превью) — нейтральный вид без живых действий.
  */
 @Composable
-private fun BiometricUnlockRow() {
-    val vault = LocalVault.current ?: return
-    val biometrics = LocalVaultBiometrics.current ?: return
-    val controller = remember(vault, biometrics) { VaultGateController(vault, biometrics) }
-    if (!controller.canEnableBiometric()) return
+fun MobileSecurityScreen(state: MobileDesignState) {
+    val vault = LocalVault.current
+    val biometrics = LocalVaultBiometrics.current
+    val log = LocalSecurityLog.current
+    val controller = remember(vault, biometrics, log) {
+        vault?.let { VaultGateController(it, biometrics, securityLog = log) }
+    }
+    var reload by remember { mutableStateOf(0) }
+    var changePwOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Sym("fingerprint", size = 21.sp, color = D.cyanBright)
-        Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.more_biometric_unlock), color = D.text, size = 14.5.sp)
-            Txt(
-                if (controller.biometricEnabled) stringResource(Res.string.more_biometric_enabled) else stringResource(Res.string.more_biometric_skip),
-                color = D.dim, size = 11.sp, modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Toggle(
-            on = controller.biometricEnabled,
-            onToggle = {
-                if (controller.biometricInFlight) return@Toggle
-                scope.launch {
-                    if (controller.biometricEnabled) {
-                        controller.disableBiometric()
-                    } else {
-                        controller.enableBiometric(MOBILE_ENABLE_BIOMETRIC_PROMPT)
+    Box(Modifier.fillMaxSize().background(D.bg)) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
+                Txt(stringResource(Res.string.settings_security_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            }
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
+                Txt(stringResource(Res.string.settings_security_subtitle), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+
+                // Мастер-пароль: подпись = реальная «последняя смена» из журнала (или нейтральный текст).
+                val lastChange = remember(controller, reload) { controller?.lastPasswordChangeAt() }
+                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Txt(stringResource(Res.string.settings_security_master_password), color = D.text, size = 14.5.sp)
+                        Txt(masterPasswordSubtitle(lastChange), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                    }
+                    // Смена доступна только за живым vault; без него — приглушённо/инертно.
+                    Txt(
+                        stringResource(Res.string.settings_change),
+                        color = if (controller != null) D.cyanBright else D.faint,
+                        size = 13.sp,
+                        weight = FontWeight.Medium,
+                        modifier = if (controller != null) Modifier.clickable { changePwOpen = true } else Modifier,
+                    )
+                }
+                MobileSecurityDivider()
+
+                // Разблокировка биометрией: строка только когда фактор доступен (иначе настраивать нечего).
+                if (controller != null && controller.canEnableBiometric()) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Txt(stringResource(Res.string.settings_security_touch_id), color = D.text, size = 14.5.sp)
+                            Txt(stringResource(Res.string.settings_security_touch_id_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                        }
+                        Toggle(
+                            on = controller.biometricEnabled,
+                            onToggle = {
+                                if (controller.biometricInFlight) return@Toggle
+                                scope.launch {
+                                    if (controller.biometricEnabled) controller.disableBiometric()
+                                    else controller.enableBiometric(MOBILE_ENABLE_BIOMETRIC_PROMPT)
+                                    reload++
+                                }
+                            },
+                        )
+                    }
+                    MobileSecurityDivider()
+                }
+
+                // Автоблокировка: реальный порог простоя, проводится в idle-таймер VaultGate через state.autoLock.
+                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Txt(stringResource(Res.string.settings_security_auto_lock), color = D.text, size = 14.5.sp)
+                        Txt(stringResource(Res.string.settings_security_auto_lock_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                    }
+                    Box(Modifier.width(160.dp)) { MobileAutoLockPicker(state.autoLock, onPick = state::chooseAutoLock) }
+                }
+                MobileSecurityDivider()
+
+                // Двухфакторная — ещё не реализована: честная метка SOON вместо фейкового «включена».
+                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Txt(stringResource(Res.string.settings_security_2fa), color = D.dim, size = 14.5.sp)
+                            Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
+                        }
+                        Txt(stringResource(Res.string.settings_security_2fa_desc), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                    }
+                    Txt(stringResource(Res.string.settings_manage), color = D.faint, size = 13.sp)
+                }
+
+                // Недавние события безопасности — из реального журнала (или «пока событий нет»).
+                Txt(stringResource(Res.string.settings_recent_security_events), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
+                val events = remember(controller, reload) { controller?.recentSecurityEvents(8) ?: emptyList() }
+                if (events.isEmpty()) {
+                    Txt(stringResource(Res.string.settings_security_no_events), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 3.dp))
+                } else {
+                    events.forEach { event ->
+                        Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Txt("●", color = D.moss, size = 9.sp)
+                            Txt(securityEventLine(event), color = D.dim, size = 12.sp)
+                        }
                     }
                 }
-            },
-        )
+                Spacer(Modifier.height(40.dp))
+            }
+        }
+        // Диалог смены мастер-пароля — модальный оверлей поверх экрана; back закрывает сперва его.
+        if (changePwOpen && controller != null) {
+            PlatformBackHandler(enabled = true) { changePwOpen = false }
+            ChangeMasterPasswordDialog(
+                controller = controller,
+                onClose = { changePwOpen = false },
+                onChanged = { reload++ },
+            )
+        }
     }
-    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+}
+
+/** Разделительная линия между строками раздела Безопасность (тон макета). */
+@Composable
+private fun MobileSecurityDivider() {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+}
+
+/** Выпадающий список порога автоблокировки (мобильный) — переиспользует триггер/меню Appearance. */
+@Composable
+private fun MobileAutoLockPicker(current: AutoLockDuration, onPick: (AutoLockDuration) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger(current.autoLockLabel(), onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                AutoLockDuration.entries.forEach { option ->
+                    MobileDropdownOption(option.autoLockLabel(), selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
 }
 
 // Appearance (push-экран More → Appearance).

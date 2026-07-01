@@ -23,6 +23,7 @@ import app.skerry.shared.vault.AndroidBiometricKeyStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileBioArtifactStore
 import app.skerry.shared.vault.CredentialStore
+import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
@@ -43,10 +44,11 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.i18n.AppLocaleProvider
 import app.skerry.ui.i18n.UiLanguage
-import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
+import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.vault.ResetScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -150,6 +152,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
+                    initialAutoLock = readAutoLock(dir),
+                    onAutoLockChange = { writeAutoLock(dir, it) },
                 )
             }
             AppLocaleProvider(currentUiLanguage.value) {
@@ -199,13 +203,28 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * Порог автоблокировки по простою (More → Security): стабильный [AutoLockDuration.id] в файле
+     * `auto_lock`. Отсутствует/нечитаем/неизвестен → дефолт (5 минут). Запись best-effort вне UI-потока.
+     */
+    private fun readAutoLock(dir: File): AutoLockDuration = runCatching {
+        AutoLockDuration.fromId(File(dir, "auto_lock").readText().trim())
+    }.getOrDefault(AutoLockDuration.DEFAULT)
+
+    private fun writeAutoLock(dir: File, duration: AutoLockDuration) {
+        val id = duration.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "auto_lock").writeText(id) }
+        }
+    }
+
+    /**
      * Кегль шрифта терминала, px (More → Appearance → Font size): число в файле `terminal_font_size`.
-     * Отсутствует/нечитаем/вне [TERMINAL_FONT_SIZES] → дефолт ([DEFAULT_TERMINAL_FONT_SIZE]).
+     * Отсутствует/нечитаем/вне [TERMINAL_FONT_SIZE_RANGE] → дефолт ([DEFAULT_TERMINAL_FONT_SIZE]).
      */
     private fun readTerminalFontSize(dir: File): Int {
         val px = runCatching { File(dir, "terminal_font_size").readText().trim().toInt() }
             .getOrDefault(DEFAULT_TERMINAL_FONT_SIZE)
-        return if (px in TERMINAL_FONT_SIZES) px else DEFAULT_TERMINAL_FONT_SIZE
+        return if (px in TERMINAL_FONT_SIZE_RANGE) px else DEFAULT_TERMINAL_FONT_SIZE
     }
 
     private fun writeTerminalFontSize(dir: File, px: Int) {
@@ -239,6 +258,13 @@ class MainActivity : FragmentActivity() {
             deviceId(dir),
             FileSystem.SYSTEM,
         ) { System.currentTimeMillis().toString() }
+        // Локальный (не синкаемый) журнал событий безопасности: смена мастер-пароля, биометрия,
+        // разблокировка. Пишется контроллером за гейтом; раздел More → Security читает его. Часы —
+        // ISO-инстант, чтобы securityMoment корректно разобрал время (System.currentTimeMillis не парсится).
+        val securityLog = FileSecurityLog(
+            dir.resolve("security_events.json").absolutePath.toPath(),
+            FileSystem.SYSTEM,
+        ) { Instant.now().toString() }
         val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
         // SSH-транспорт (sshj, общий JVM source set). TOFU: первый ключ хоста запоминается в vault
         // (RecordType.KNOWN_HOST — синкается между устройствами, как в Termius), при смене ключа —
@@ -342,6 +368,9 @@ class MainActivity : FragmentActivity() {
             // возможности войти. Чистый старт: заново создать vault, подключить sync, включить отпечаток.
             biometrics.disable()
             sync.disconnect()
+            // Журнал событий безопасности относится к стёртому vault — при любом сбросе неактуален
+            // (метка «последняя смена» и события указывали бы на несуществующий vault); чистим всегда.
+            securityLog.clear()
             // Хосты/группы стёрты вместе с vault при любом сбросе → чистим и их локальный UI-след
             // (свёрнутость папок), иначе в открытом виде остались бы имена групп, которых уже нет (L1).
             writeCollapsedGroups(dir, emptySet())
@@ -352,6 +381,7 @@ class MainActivity : FragmentActivity() {
                 writeTerminalFont(dir, TerminalFont.DEFAULT)
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
+                writeAutoLock(dir, AutoLockDuration.DEFAULT)
             }
             hosts.reload()
             snippets.reload()
@@ -371,6 +401,7 @@ class MainActivity : FragmentActivity() {
             tunnels = tunnels,
             snippets = snippets,
             sync = sync,
+            securityLog = securityLog,
         )
     }
 
