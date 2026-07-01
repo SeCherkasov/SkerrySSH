@@ -101,6 +101,7 @@ import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.design.ArrowKey
 import app.skerry.ui.design.arrowSequence
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -223,7 +224,13 @@ fun TerminalScreen(
         val sample = measurer.measure(AnnotatedString("M".repeat(sampleLen)), textStyle)
         TerminalMetrics(
             cellWidth = sample.size.width / sampleLen.toFloat(),
-            cellHeight = with(density) { textStyle.lineHeight.toPx() },
+            // cellHeight ОКРУГЛЯЕМ до целого пикселя: строки тайлятся встык (top = r*cellHeight), и при
+            // дробной высоте (напр. множитель 1.38 → 13×1.38 = 17.94px, либо дробный масштаб дисплея)
+            // границы соседних фон-прямоугольников попадают на дробные пиксели — Skia сглаживает стык, и
+            // на однотонном фоне (панели mc) проступают горизонтальные «полосы» каждую строку. Целая
+            // высота убирает шов. Ширину так округлять нельзя: там намеренно дробный advance (см. выше),
+            // но высоту — можно: текст каждой строки рисуется независимо от её top, дрейф не копится.
+            cellHeight = with(density) { textStyle.lineHeight.toPx() }.roundToInt().toFloat(),
         )
     }
     val handleRadiusPx = with(density) { HANDLE_RADIUS_DP.dp.toPx() }
