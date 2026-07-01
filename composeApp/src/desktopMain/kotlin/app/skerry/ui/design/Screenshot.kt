@@ -7,6 +7,7 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
+import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpEntryType
@@ -85,10 +86,18 @@ fun main() {
 
     val state = DesktopDesignState()
     runCatching { state.showView(DesktopView.valueOf(viewName)) }
+    // Тема терминала для визуальной проверки: -Dskerry.screenshot.termTheme=<id> (напр. tokyo-night).
+    System.getProperty("skerry.screenshot.termTheme")?.let { state.chooseTerminalTheme(TerminalThemes.fromId(it)) }
     when (overlay) {
         "lock" -> state.lock()
         "modal" -> state.openModal()
-        "settings" -> state.openSettings()
+        "settings" -> {
+            state.openSettings()
+            // Вкладка настроек для рендера: -Dskerry.screenshot.settingsTab=Appearance.
+            System.getProperty("skerry.screenshot.settingsTab")?.let { tab ->
+                runCatching { state.showSettingsTab(SettingsTab.valueOf(tab)) }
+            }
+        }
     }
 
     val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
