@@ -10,6 +10,8 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 /** Левый rail / основные view макета. */
 enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
@@ -256,6 +258,14 @@ class DesktopDesignState(
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
+
+    // Сигнал «сфокусировать строку ввода AI-бара» (хоткей ⌘/ / Ctrl+Shift+/). SharedFlow, а не
+    // счётчик-состояние: на подписку не реплеится, поэтому переунтаж AI-бара (смена вкладки) не крадёт
+    // фокус задним числом — фокус запрашивается только на НОВОЕ событие. extraBufferCapacity=1, чтобы
+    // tryEmit не терялся без активного коллектора в момент нажатия.
+    private val _aiBarFocusRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val aiBarFocusRequests: SharedFlow<Unit> = _aiBarFocusRequests
+    fun requestAiBarFocus() { _aiBarFocusRequests.tryEmit(Unit) }
 
     /** Свёрнута ли папка [name] (её список хостов скрыт). */
     fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
