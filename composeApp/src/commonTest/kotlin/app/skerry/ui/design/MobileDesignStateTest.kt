@@ -2,6 +2,10 @@ package app.skerry.ui.design
 
 import app.skerry.shared.host.Host
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
+import app.skerry.ui.terminal.TERMINAL_LETTER_SPACING_MIN
+import app.skerry.ui.terminal.TERMINAL_LINE_HEIGHT_MAX
 import app.skerry.ui.terminal.TerminalFont
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -57,6 +61,30 @@ class MobileDesignStateTest {
         s.chooseTerminalFontSize(11)
         assertEquals(11, s.terminalFontSize)
         assertEquals(listOf(16, 11), seen)
+    }
+
+    @Test
+    fun chooseTerminalLineHeight_clamps_and_reports_skipping_repeat() {
+        val seen = mutableListOf<Float>()
+        val s = MobileDesignState(onTerminalLineHeightChange = { seen += it })
+        assertEquals(DEFAULT_TERMINAL_LINE_HEIGHT, s.terminalLineHeight)
+        s.chooseTerminalLineHeight(1.5f)
+        s.chooseTerminalLineHeight(1.5f) // повтор — no-op
+        s.chooseTerminalLineHeight(5f)   // вне диапазона → clamp до MAX
+        assertEquals(TERMINAL_LINE_HEIGHT_MAX, s.terminalLineHeight)
+        assertEquals(listOf(1.5f, TERMINAL_LINE_HEIGHT_MAX), seen)
+    }
+
+    @Test
+    fun chooseTerminalLetterSpacing_clamps_and_reports_skipping_repeat() {
+        val seen = mutableListOf<Float>()
+        val s = MobileDesignState(onTerminalLetterSpacingChange = { seen += it })
+        assertEquals(DEFAULT_TERMINAL_LETTER_SPACING, s.terminalLetterSpacing)
+        s.chooseTerminalLetterSpacing(1f)
+        s.chooseTerminalLetterSpacing(1f)  // повтор — no-op
+        s.chooseTerminalLetterSpacing(-9f) // вне диапазона → clamp до MIN
+        assertEquals(TERMINAL_LETTER_SPACING_MIN, s.terminalLetterSpacing)
+        assertEquals(listOf(1f, TERMINAL_LETTER_SPACING_MIN), seen)
     }
 
     @Test

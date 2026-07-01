@@ -6,7 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.host.Host
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
-import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
+import app.skerry.ui.terminal.clampTerminalLetterSpacing
+import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
@@ -71,6 +75,12 @@ class MobileDesignState(
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     private val onTerminalFontSizeChange: (Int) -> Unit = {},
+    // Высота строки и межбуквенный интервал терминала (More → Appearance). На мобильном пока не
+    // персистятся (в памяти) — колбэки no-op по умолчанию, как и у остальных настроек Appearance.
+    initialTerminalLineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
+    private val onTerminalLineHeightChange: (Float) -> Unit = {},
+    initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
+    private val onTerminalLetterSpacingChange: (Float) -> Unit = {},
     // Цветовая тема терминала (More → Appearance → карточки тем). Проводится в терминал через
     // [app.skerry.ui.terminal.LocalTerminalTheme]; на мобильном пока не персистится (в памяти).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
@@ -191,6 +201,12 @@ class MobileDesignState(
     /** Кегль шрифта терминала, px (More → Appearance → Font size). */
     var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
 
+    /** Множитель высоты строки терминала (More → Appearance → Line height). */
+    var terminalLineHeight: Float by mutableStateOf(initialTerminalLineHeight); private set
+
+    /** Межбуквенный интервал терминала, sp (More → Appearance → Letter spacing). */
+    var terminalLetterSpacing: Float by mutableStateOf(initialTerminalLetterSpacing); private set
+
     /** Тема терминала (More → Appearance → карточки). Проводится через [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
@@ -212,13 +228,29 @@ class MobileDesignState(
     }
 
     /**
-     * Задать кегль шрифта терминала и сообщить наружу (для персиста). Значение вне [TERMINAL_FONT_SIZES]
+     * Задать кегль шрифта терминала и сообщить наружу (для персиста). Значение вне [TERMINAL_FONT_SIZE_RANGE]
      * и повтор текущего — no-op (ни записи, ни колбэка).
      */
     fun chooseTerminalFontSize(px: Int) {
-        if (px == terminalFontSize || px !in TERMINAL_FONT_SIZES) return
+        if (px == terminalFontSize || px !in TERMINAL_FONT_SIZE_RANGE) return
         terminalFontSize = px
         onTerminalFontSizeChange(px)
+    }
+
+    /** Задать множитель высоты строки (clamp через [clampTerminalLineHeight]); совпадение — no-op. */
+    fun chooseTerminalLineHeight(ratio: Float) {
+        val v = clampTerminalLineHeight(ratio)
+        if (v == terminalLineHeight) return
+        terminalLineHeight = v
+        onTerminalLineHeightChange(v)
+    }
+
+    /** Задать межбуквенный интервал (clamp через [clampTerminalLetterSpacing]); совпадение — no-op. */
+    fun chooseTerminalLetterSpacing(sp: Float) {
+        val v = clampTerminalLetterSpacing(sp)
+        if (v == terminalLetterSpacing) return
+        terminalLetterSpacing = v
+        onTerminalLetterSpacingChange(v)
     }
 
     /** Выбрать язык интерфейса и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */

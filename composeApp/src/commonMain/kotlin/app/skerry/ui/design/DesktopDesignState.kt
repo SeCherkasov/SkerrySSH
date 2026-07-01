@@ -9,9 +9,13 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
-import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
+import app.skerry.ui.terminal.clampTerminalLetterSpacing
+import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
@@ -121,6 +125,12 @@ class DesktopDesignState(
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     private val onTerminalFontSizeChange: (Int) -> Unit = {},
+    // Высота строки (множитель) и межбуквенный интервал терминала (Appearance → Line height / Letter
+    // spacing). Тоже персистятся снаружи (desktop main). Дефолты (18/13, 0, no-op) — для мок/превью/тестов.
+    initialTerminalLineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
+    private val onTerminalLineHeightChange: (Float) -> Unit = {},
+    initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
+    private val onTerminalLetterSpacingChange: (Float) -> Unit = {},
     // Язык интерфейса (Appearance → Language). Стартовое значение читается из персиста при запуске,
     // колбэк пишет его обратно — выбор переживает перезапуск. Дефолты (System, no-op) сохраняют
     // прежнее поведение (автоопределение по локали ОС) для мок/превью/тестов.
@@ -192,6 +202,12 @@ class DesktopDesignState(
 
     /** Кегль шрифта терминала, px (Appearance → Font size). */
     var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
+
+    /** Множитель высоты строки терминала (Appearance → Line height). */
+    var terminalLineHeight: Float by mutableStateOf(initialTerminalLineHeight); private set
+
+    /** Межбуквенный интервал терминала, sp (Appearance → Letter spacing). */
+    var terminalLetterSpacing: Float by mutableStateOf(initialTerminalLetterSpacing); private set
 
     /** Тема терминала (Appearance → карточки). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
@@ -403,13 +419,35 @@ class DesktopDesignState(
     }
 
     /**
-     * Задать кегль шрифта терминала и сообщить наружу (для персиста). Значение вне [TERMINAL_FONT_SIZES]
+     * Задать кегль шрифта терминала и сообщить наружу (для персиста). Значение вне [TERMINAL_FONT_SIZE_RANGE]
      * и повтор текущего — no-op (ни записи, ни колбэка).
      */
     fun chooseTerminalFontSize(px: Int) {
-        if (px == terminalFontSize || px !in TERMINAL_FONT_SIZES) return
+        if (px == terminalFontSize || px !in TERMINAL_FONT_SIZE_RANGE) return
         terminalFontSize = px
         onTerminalFontSizeChange(px)
+    }
+
+    /**
+     * Задать множитель высоты строки: значение приводится к диапазону/шагу ([clampTerminalLineHeight]).
+     * Совпадение с текущим — no-op (ни записи, ни колбэка).
+     */
+    fun chooseTerminalLineHeight(ratio: Float) {
+        val v = clampTerminalLineHeight(ratio)
+        if (v == terminalLineHeight) return
+        terminalLineHeight = v
+        onTerminalLineHeightChange(v)
+    }
+
+    /**
+     * Задать межбуквенный интервал: значение приводится к диапазону/шагу ([clampTerminalLetterSpacing]).
+     * Совпадение с текущим — no-op (ни записи, ни колбэка).
+     */
+    fun chooseTerminalLetterSpacing(sp: Float) {
+        val v = clampTerminalLetterSpacing(sp)
+        if (v == terminalLetterSpacing) return
+        terminalLetterSpacing = v
+        onTerminalLetterSpacingChange(v)
     }
 
     /**

@@ -174,7 +174,10 @@ fun TerminalScreen(
             fontFamily = mono,
             fontFeatureSettings = NO_LIGATURES,
             fontSize = appearance.fontSizeSp.sp,
-            lineHeight = (appearance.fontSizeSp * TERMINAL_LINE_HEIGHT_RATIO).sp,
+            lineHeight = (appearance.fontSizeSp * appearance.lineHeight).sp,
+            // Межбуквенный интервал входит в advance: cellWidth ниже меряется этим же стилем, поэтому
+            // сетка (глифы/фон/курсор/мышь) остаётся согласованной при любом значении.
+            letterSpacing = appearance.letterSpacingSp.sp,
             color = termTheme.foreground,
         )
     }

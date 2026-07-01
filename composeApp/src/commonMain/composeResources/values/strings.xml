@@ -6,6 +6,9 @@
     <string name="appearance_section_interface">INTERFACE</string>
     <string name="appearance_font">Font</string>
     <string name="appearance_font_size">Font size</string>
+    <string name="appearance_line_height">Line height</string>
+    <string name="appearance_letter_spacing">Letter spacing</string>
+    <string name="appearance_default_value">Default: %1$s</string>
     <string name="appearance_language">Language</string>
 
     <!-- Языки интерфейса. Названия конкретных языков даются автонимами (English, Русский) и не

@@ -78,6 +78,8 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncIndicatorLevel
 import app.skerry.ui.sync.syncIndicatorLocalized
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.LocalTerminalTheme
@@ -140,6 +142,11 @@ fun DesktopDesignApp(
     onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     onTerminalFontSizeChange: (Int) -> Unit = {},
+    // Высота строки и межбуквенный интервал терминала (Appearance) — персистятся снаружи (desktop main).
+    initialTerminalLineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
+    onTerminalLineHeightChange: (Float) -> Unit = {},
+    initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
+    onTerminalLetterSpacingChange: (Float) -> Unit = {},
     // Язык интерфейса (Appearance → Language) — персистится снаружи (desktop main): стартовое значение + колбэк записи.
     initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
     onUiLanguageChange: (UiLanguage) -> Unit = {},
@@ -159,6 +166,7 @@ fun DesktopDesignApp(
             initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
             initialRecentHostIds, onRecentHostIdsChange, initialCustomGroups, onCustomGroupsChange,
             initialTerminalFont, onTerminalFontChange, initialTerminalFontSize, onTerminalFontSizeChange,
+            initialTerminalLineHeight, onTerminalLineHeightChange, initialTerminalLetterSpacing, onTerminalLetterSpacingChange,
             initialUiLanguage, onUiLanguageChange,
             initialTerminalScrollback, onTerminalScrollbackChange,
             initialTerminalCursorStyle, onTerminalCursorStyleChange,
@@ -264,8 +272,8 @@ fun DesktopDesignApp(
     // DesktopDesignApp рекомпозируется на смене вкладок/сессий/событий vault. Без remember новый
     // инстанс на каждой рекомпозиции форсил бы полный пересбор поддерева потребителей (весь Canvas
     // терминала), даже когда шрифт/кегль не менялись.
-    val terminalAppearance = remember(state.terminalFont, state.terminalFontSize) {
-        TerminalAppearance(state.terminalFont, state.terminalFontSize)
+    val terminalAppearance = remember(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing) {
+        TerminalAppearance(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing)
     }
     // Язык ответов терминального AI = язык интерфейса: провайдер читает применённый тег локали
     // ([app.skerry.ui.i18n.LocalAppLocale]) и переустанавливается при смене языка (SideEffect

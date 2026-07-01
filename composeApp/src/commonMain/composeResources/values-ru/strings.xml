@@ -6,6 +6,9 @@
     <string name="appearance_section_interface">ИНТЕРФЕЙС</string>
     <string name="appearance_font">Шрифт</string>
     <string name="appearance_font_size">Размер шрифта</string>
+    <string name="appearance_line_height">Высота строки</string>
+    <string name="appearance_letter_spacing">Межбуквенный интервал</string>
+    <string name="appearance_default_value">По умолчанию: %1$s</string>
     <string name="appearance_language">Язык</string>
 
     <!-- Языки интерфейса -->

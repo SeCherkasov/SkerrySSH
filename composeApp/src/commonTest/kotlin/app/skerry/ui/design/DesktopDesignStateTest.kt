@@ -2,6 +2,12 @@ package app.skerry.ui.design
 
 import app.skerry.shared.host.Host
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MAX
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MIN
+import app.skerry.ui.terminal.TERMINAL_LETTER_SPACING_MIN
+import app.skerry.ui.terminal.TERMINAL_LINE_HEIGHT_MAX
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
@@ -433,10 +439,43 @@ class DesktopDesignStateTest {
         val s = DesktopDesignState(onTerminalFontSizeChange = { seen += it })
         s.chooseTerminalFontSize(16)
         s.chooseTerminalFontSize(16)   // повтор — no-op
-        s.chooseTerminalFontSize(99)   // вне TERMINAL_FONT_SIZES — no-op
+        s.chooseTerminalFontSize(99)   // вне TERMINAL_FONT_SIZE_RANGE — no-op
         s.chooseTerminalFontSize(11)
         assertEquals(11, s.terminalFontSize)
         assertEquals(listOf(16, 11), seen)
+    }
+
+    @Test
+    fun terminalFontSize_accepts_wide_range() {
+        val s = DesktopDesignState()
+        s.chooseTerminalFontSize(TERMINAL_FONT_SIZE_MIN)
+        assertEquals(TERMINAL_FONT_SIZE_MIN, s.terminalFontSize)
+        s.chooseTerminalFontSize(TERMINAL_FONT_SIZE_MAX)
+        assertEquals(TERMINAL_FONT_SIZE_MAX, s.terminalFontSize)
+    }
+
+    @Test
+    fun setTerminalLineHeight_clamps_rounds_and_reports_skipping_repeat() {
+        val seen = mutableListOf<Float>()
+        val s = DesktopDesignState(onTerminalLineHeightChange = { seen += it })
+        assertEquals(DEFAULT_TERMINAL_LINE_HEIGHT, s.terminalLineHeight)
+        s.chooseTerminalLineHeight(1.5f)
+        s.chooseTerminalLineHeight(1.5f)   // повтор — no-op
+        s.chooseTerminalLineHeight(5f)     // вне диапазона → clamp до MAX
+        assertEquals(TERMINAL_LINE_HEIGHT_MAX, s.terminalLineHeight)
+        assertEquals(listOf(1.5f, TERMINAL_LINE_HEIGHT_MAX), seen)
+    }
+
+    @Test
+    fun setTerminalLetterSpacing_clamps_rounds_and_reports_skipping_repeat() {
+        val seen = mutableListOf<Float>()
+        val s = DesktopDesignState(onTerminalLetterSpacingChange = { seen += it })
+        assertEquals(DEFAULT_TERMINAL_LETTER_SPACING, s.terminalLetterSpacing)
+        s.chooseTerminalLetterSpacing(1f)
+        s.chooseTerminalLetterSpacing(1f)  // повтор — no-op
+        s.chooseTerminalLetterSpacing(-9f) // вне диапазона → clamp до MIN
+        assertEquals(TERMINAL_LETTER_SPACING_MIN, s.terminalLetterSpacing)
+        assertEquals(listOf(1f, TERMINAL_LETTER_SPACING_MIN), seen)
     }
 
     @Test

@@ -152,8 +152,8 @@ fun MobileDesignApp(
     DisposableEffect(liveSessions) { onDispose { if (ownsSessions) liveSessions?.disconnectAll() } }
     // Мемоизируем: LocalTerminalAppearance — staticCompositionLocalOf (сравнение по ссылке); без
     // remember новый инстанс на каждой рекомпозиции форсил бы пересбор поддерева терминала.
-    val terminalAppearance = remember(state.terminalFont, state.terminalFontSize) {
-        TerminalAppearance(state.terminalFont, state.terminalFontSize)
+    val terminalAppearance = remember(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing) {
+        TerminalAppearance(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing)
     }
     // AI-ассистент (Phase 2, BYOK) — паритет с desktop `main`: ключ хранится записью SETTINGS в vault,
     // вызовы идут во внешний OpenAI-совместимый провайдер. Строится при наличии vault (в превью — null →

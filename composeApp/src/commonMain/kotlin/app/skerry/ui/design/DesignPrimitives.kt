@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -25,12 +28,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -293,5 +301,59 @@ fun GhostButton(
     ) {
         if (icon != null) Sym(icon, size = 15.sp, color = fg)
         Txt(label, color = fg, size = 12.sp, weight = FontWeight.Medium)
+    }
+}
+
+/**
+ * Компактный числовой ввод в стиле дизайн-системы: капсула «−  [поле]  +» с точным вводом с клавиатуры
+ * и шагом по кнопкам. Клампинг/квантование делает вызывающий — в [onValueChange] приходит значение,
+ * которое он сам приводит к диапазону (примитив лишь редактирует строку и коммитит по Enter/blur/кнопке).
+ * [format] рисует число вне фокуса, [parse] разбирает ручной ввод. Общий для desktop и mobile.
+ */
+@Composable
+fun NumberStepper(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    step: Float,
+    format: (Float) -> String,
+    parse: (String) -> Float?,
+    modifier: Modifier = Modifier,
+    suffix: String = "",
+    fieldWidth: Dp = 46.dp,
+) {
+    val fonts = LocalFonts.current
+    // Пока поле в фокусе — показываем и редактируем сырую строку [editing]; вне фокуса — format(value).
+    var editing by remember { mutableStateOf<String?>(null) }
+    val shown = editing ?: format(value)
+    val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = fonts.ui, textAlign = TextAlign.Center) }
+    fun commit() {
+        editing?.let { e -> parse(e)?.let(onValueChange) }
+        editing = null
+    }
+    Row(
+        modifier.clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StepButton("remove") { onValueChange(value - step); editing = null }
+        BasicTextField(
+            value = shown,
+            onValueChange = { editing = it },
+            singleLine = true,
+            textStyle = textStyle,
+            cursorBrush = SolidColor(D.cyan),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { commit() }),
+            modifier = Modifier.width(fieldWidth).onFocusChanged { if (!it.isFocused) commit() },
+        )
+        if (suffix.isNotEmpty()) Txt(suffix, color = D.faint, size = 12.sp)
+        StepButton("add") { onValueChange(value + step); editing = null }
+    }
+}
+
+/** Кнопка шага (−/+) степпера: квадратная зона клика с символом Material Symbols. */
+@Composable
+private fun StepButton(icon: String, onClick: () -> Unit) {
+    Box(Modifier.size(32.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Sym(icon, size = 16.sp, color = D.faint)
     }
 }

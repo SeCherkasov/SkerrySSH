@@ -12,6 +12,7 @@ import app.skerry.ui.generated.resources.hack_bold
 import app.skerry.ui.generated.resources.hack_regular
 import app.skerry.ui.generated.resources.jetbrainsmono_bold
 import app.skerry.ui.generated.resources.jetbrainsmono_regular
+import kotlin.math.round
 import org.jetbrains.compose.resources.Font
 
 /**
@@ -37,18 +38,46 @@ enum class TerminalFont(val displayName: String, val id: String) {
 
 /**
  * Размер шрифта терминала по умолчанию. Применяется как `.sp` (см. [TerminalAppearance.fontSizeSp]);
- * в выпадающем списке подписан «px» — на масштабе шрифта 1.0 это одно и то же число.
+ * в слайдере подписан «px» — на масштабе шрифта 1.0 это одно и то же число.
  */
 const val DEFAULT_TERMINAL_FONT_SIZE = 13
 
-/** Допустимые размеры шрифта терминала (px) для выпадающего списка Appearance → Font size. */
-val TERMINAL_FONT_SIZES: List<Int> = (11..18).toList()
+/**
+ * Границы кегля шрифта терминала (px), которые пользователь крутит слайдером Appearance → Font size.
+ * Диапазон широкий (8..40) — «крутить как хочешь», в отличие от прежнего фиксированного списка 11..18.
+ */
+const val TERMINAL_FONT_SIZE_MIN = 8
+const val TERMINAL_FONT_SIZE_MAX = 40
+val TERMINAL_FONT_SIZE_RANGE: IntRange = TERMINAL_FONT_SIZE_MIN..TERMINAL_FONT_SIZE_MAX
 
 /**
- * Отношение высоты строки к кеглю (13px → 18px в макете). Высота строки = кегль × это значение,
- * чтобы межстрочный интервал терминала масштабировался вместе с выбранным размером шрифта.
+ * Отношение высоты строки к кеглю по умолчанию (13px → 18px в макете). Высота строки = кегль × это
+ * значение, чтобы межстрочный интервал масштабировался вместе с кеглем. Пользователь может изменить
+ * его слайдером Appearance → Line height в пределах [TERMINAL_LINE_HEIGHT_MIN]..[TERMINAL_LINE_HEIGHT_MAX].
  */
-const val TERMINAL_LINE_HEIGHT_RATIO = 18f / 13f
+const val DEFAULT_TERMINAL_LINE_HEIGHT = 18f / 13f
+const val TERMINAL_LINE_HEIGHT_MIN = 1.0f
+const val TERMINAL_LINE_HEIGHT_MAX = 2.0f
+
+/**
+ * Межбуквенный интервал терминала (sp/px на масштабе 1.0), слайдер Appearance → Letter spacing. По
+ * умолчанию 0 (натуральный advance шрифта); отрицательное сжимает, положительное растягивает. Сетка
+ * терминала остаётся согласованной: ширина ячейки меряется тем же [TextStyle] и учитывает интервал.
+ */
+const val DEFAULT_TERMINAL_LETTER_SPACING = 0f
+const val TERMINAL_LETTER_SPACING_MIN = -1.5f
+const val TERMINAL_LETTER_SPACING_MAX = 4.0f
+
+/** Округление дробного значения до 2 знаков — чтобы слайдер не плодил «1.4000001» в состоянии/персисте. */
+private fun round2(value: Float): Float = round(value * 100f) / 100f
+
+/** Привести высоту строки к допустимому диапазону и шагу (clamp + округление). */
+fun clampTerminalLineHeight(value: Float): Float =
+    round2(value.coerceIn(TERMINAL_LINE_HEIGHT_MIN, TERMINAL_LINE_HEIGHT_MAX))
+
+/** Привести межбуквенный интервал к допустимому диапазону и шагу (clamp + округление). */
+fun clampTerminalLetterSpacing(value: Float): Float =
+    round2(value.coerceIn(TERMINAL_LETTER_SPACING_MIN, TERMINAL_LETTER_SPACING_MAX))
 
 /**
  * Выключение программных лигатур в `TextStyle.fontFeatureSettings`: гасит `liga`/`calt`/`dlig`,
@@ -105,6 +134,10 @@ data class TerminalSessionPrefs(
 data class TerminalAppearance(
     val font: TerminalFont = TerminalFont.DEFAULT,
     val fontSizeSp: Int = DEFAULT_TERMINAL_FONT_SIZE,
+    /** Множитель высоты строки (см. [DEFAULT_TERMINAL_LINE_HEIGHT]): lineHeight = кегль × это значение. */
+    val lineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
+    /** Межбуквенный интервал в sp (см. [DEFAULT_TERMINAL_LETTER_SPACING]). */
+    val letterSpacingSp: Float = DEFAULT_TERMINAL_LETTER_SPACING,
 )
 
 /**

@@ -36,9 +36,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
 import app.skerry.ui.generated.resources.appearance_language
+import app.skerry.ui.generated.resources.appearance_letter_spacing
+import app.skerry.ui.generated.resources.appearance_line_height
 import app.skerry.ui.generated.resources.appearance_section_interface
 import app.skerry.ui.generated.resources.appearance_section_terminal
 import app.skerry.ui.generated.resources.appearance_title
@@ -63,11 +66,16 @@ import app.skerry.ui.generated.resources.more_title
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.i18n.label
 import app.skerry.ui.sync.accountCardModelLocalized
-import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MAX
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MIN
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.vault.VaultGateController
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -263,8 +271,51 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                 MobileFontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
-            FontSettingRow(stringResource(Res.string.appearance_font_size)) {
-                MobileFontSizePicker(state.terminalFontSize, onPick = state::chooseTerminalFontSize)
+            MobileStepperRow(
+                label = stringResource(Res.string.appearance_font_size),
+                isDefault = state.terminalFontSize == DEFAULT_TERMINAL_FONT_SIZE,
+                defaultText = "$DEFAULT_TERMINAL_FONT_SIZE px",
+                onReset = { state.chooseTerminalFontSize(DEFAULT_TERMINAL_FONT_SIZE) },
+            ) {
+                NumberStepper(
+                    value = state.terminalFontSize.toFloat(),
+                    onValueChange = { state.chooseTerminalFontSize(it.roundToInt().coerceIn(TERMINAL_FONT_SIZE_MIN, TERMINAL_FONT_SIZE_MAX)) },
+                    step = 1f,
+                    format = { it.roundToInt().toString() },
+                    parse = { it.trim().toIntOrNull()?.toFloat() },
+                    suffix = "px",
+                )
+            }
+            MobileStepperRow(
+                label = stringResource(Res.string.appearance_line_height),
+                isDefault = formatDecimal(state.terminalLineHeight, 2) == formatDecimal(DEFAULT_TERMINAL_LINE_HEIGHT, 2),
+                defaultText = formatDecimal(DEFAULT_TERMINAL_LINE_HEIGHT, 2),
+                onReset = { state.chooseTerminalLineHeight(DEFAULT_TERMINAL_LINE_HEIGHT) },
+            ) {
+                NumberStepper(
+                    value = state.terminalLineHeight,
+                    onValueChange = state::chooseTerminalLineHeight,
+                    step = 0.05f,
+                    format = { formatDecimal(it, 2) },
+                    parse = { it.trim().replace(',', '.').toFloatOrNull() },
+                    fieldWidth = 52.dp,
+                )
+            }
+            MobileStepperRow(
+                label = stringResource(Res.string.appearance_letter_spacing),
+                isDefault = formatDecimal(state.terminalLetterSpacing, 1) == formatDecimal(DEFAULT_TERMINAL_LETTER_SPACING, 1),
+                defaultText = "${formatDecimal(DEFAULT_TERMINAL_LETTER_SPACING, 1)} px",
+                onReset = { state.chooseTerminalLetterSpacing(DEFAULT_TERMINAL_LETTER_SPACING) },
+            ) {
+                NumberStepper(
+                    value = state.terminalLetterSpacing,
+                    onValueChange = state::chooseTerminalLetterSpacing,
+                    step = 0.1f,
+                    format = { formatDecimal(it, 1) },
+                    parse = { it.trim().replace(',', '.').toFloatOrNull() },
+                    suffix = "px",
+                    fieldWidth = 52.dp,
+                )
             }
             Txt(stringResource(Res.string.appearance_section_interface), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
             FontSettingRow(stringResource(Res.string.appearance_language)) {
@@ -357,22 +408,44 @@ private fun MobileFontPicker(current: TerminalFont, onPick: (TerminalFont) -> Un
     )
 }
 
-/** Выпадающий список кегля шрифта терминала ([TERMINAL_FONT_SIZES], px). */
+/** Строка настройки со степпером (мобильная): слева подпись + подсказка дефолта, справа [NumberStepper]. */
 @Composable
-private fun MobileFontSizePicker(current: Int, onPick: (Int) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    AnchoredDropdown(
-        expanded = open,
-        onDismiss = { open = false },
-        trigger = { MobileSelectTrigger("$current px", onClick = { open = !open }) },
-        menu = { width ->
-            MobileDropdownMenu(width) {
-                TERMINAL_FONT_SIZES.forEach { size ->
-                    MobileDropdownOption("$size px", selected = size == current) { onPick(size); open = false }
-                }
-            }
-        },
-    )
+private fun MobileStepperRow(
+    label: String,
+    isDefault: Boolean,
+    defaultText: String,
+    onReset: () -> Unit,
+    stepper: @Composable () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Txt(label, color = D.text, size = 14.5.sp)
+            MobileDefaultValueHint(isDefault, defaultText, onReset)
+        }
+        stepper()
+    }
+}
+
+/** Подсказка дефолта (мобильная): серый текст когда значение дефолтное, cyan-кликабельный сброс когда изменено. */
+@Composable
+private fun MobileDefaultValueHint(isDefault: Boolean, defaultText: String, onReset: () -> Unit) {
+    val text = stringResource(Res.string.appearance_default_value, defaultText)
+    if (isDefault) {
+        Txt(text, color = D.faint, size = 12.sp, modifier = Modifier.padding(top = 3.dp))
+    } else {
+        Row(
+            Modifier.padding(top = 3.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onReset),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Sym("restart_alt", size = 14.sp, color = D.cyan)
+            Txt(text, color = D.cyan, size = 12.sp)
+        }
+    }
 }
 
 /** Триггер селекта: значение слева, шеврон справа. */

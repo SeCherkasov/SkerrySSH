@@ -26,8 +26,8 @@ class TerminalAppearanceTest {
     }
 
     @Test
-    fun default_size_is_within_allowed_sizes() {
-        assertTrue(DEFAULT_TERMINAL_FONT_SIZE in TERMINAL_FONT_SIZES)
+    fun default_size_is_within_allowed_range() {
+        assertTrue(DEFAULT_TERMINAL_FONT_SIZE in TERMINAL_FONT_SIZE_RANGE)
     }
 
     @Test
@@ -35,5 +35,21 @@ class TerminalAppearanceTest {
         val a = TerminalAppearance()
         assertEquals(TerminalFont.DEFAULT, a.font)
         assertEquals(DEFAULT_TERMINAL_FONT_SIZE, a.fontSizeSp)
+        assertEquals(DEFAULT_TERMINAL_LINE_HEIGHT, a.lineHeight)
+        assertEquals(DEFAULT_TERMINAL_LETTER_SPACING, a.letterSpacingSp)
+    }
+
+    @Test
+    fun clampLineHeight_coerces_into_range_and_rounds() {
+        assertEquals(TERMINAL_LINE_HEIGHT_MIN, clampTerminalLineHeight(0.2f))
+        assertEquals(TERMINAL_LINE_HEIGHT_MAX, clampTerminalLineHeight(5f))
+        assertEquals(1.35f, clampTerminalLineHeight(1.3456f))
+    }
+
+    @Test
+    fun clampLetterSpacing_coerces_into_range_and_rounds() {
+        assertEquals(TERMINAL_LETTER_SPACING_MIN, clampTerminalLetterSpacing(-9f))
+        assertEquals(TERMINAL_LETTER_SPACING_MAX, clampTerminalLetterSpacing(9f))
+        assertEquals(0.5f, clampTerminalLetterSpacing(0.4967f))
     }
 }

@@ -43,9 +43,13 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
-import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
+import app.skerry.ui.terminal.clampTerminalLetterSpacing
+import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
@@ -203,19 +207,55 @@ private fun writeTerminalFont(dir: Path, font: TerminalFont) {
 
 /**
  * Кегль шрифта терминала, px (Appearance → Font size), переживающий перезапуск: число в файле
- * `terminal_font_size`. Отсутствует/нечитаем/вне [TERMINAL_FONT_SIZES] → дефолт
+ * `terminal_font_size`. Отсутствует/нечитаем/вне [TERMINAL_FONT_SIZE_RANGE] → дефолт
  * ([DEFAULT_TERMINAL_FONT_SIZE]). Запись best-effort: сбой персиста не роняет UI.
  */
 private fun readTerminalFontSize(dir: Path): Int {
     val file = dir.resolve("terminal_font_size")
     val px = runCatching { Files.readString(file).trim().toInt() }.getOrDefault(DEFAULT_TERMINAL_FONT_SIZE)
-    return if (px in TERMINAL_FONT_SIZES) px else DEFAULT_TERMINAL_FONT_SIZE
+    return if (px in TERMINAL_FONT_SIZE_RANGE) px else DEFAULT_TERMINAL_FONT_SIZE
 }
 
 private fun writeTerminalFontSize(dir: Path, px: Int) {
     runCatching {
         Files.createDirectories(dir)
         Files.writeString(dir.resolve("terminal_font_size"), px.toString())
+    }
+}
+
+/**
+ * Высота строки терминала (множитель, Appearance → Line height), переживающая перезапуск: число в
+ * файле `terminal_line_height`. Отсутствует/нечитаем → дефолт ([DEFAULT_TERMINAL_LINE_HEIGHT]); любое
+ * прочитанное значение приводится к диапазону ([clampTerminalLineHeight]). Запись best-effort.
+ */
+private fun readTerminalLineHeight(dir: Path): Float {
+    val file = dir.resolve("terminal_line_height")
+    val v = runCatching { Files.readString(file).trim().toFloat() }.getOrNull() ?: return DEFAULT_TERMINAL_LINE_HEIGHT
+    return clampTerminalLineHeight(v)
+}
+
+private fun writeTerminalLineHeight(dir: Path, ratio: Float) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("terminal_line_height"), ratio.toString())
+    }
+}
+
+/**
+ * Межбуквенный интервал терминала (sp, Appearance → Letter spacing), переживающий перезапуск: число в
+ * файле `terminal_letter_spacing`. Отсутствует/нечитаем → дефолт ([DEFAULT_TERMINAL_LETTER_SPACING]);
+ * прочитанное значение приводится к диапазону ([clampTerminalLetterSpacing]). Запись best-effort.
+ */
+private fun readTerminalLetterSpacing(dir: Path): Float {
+    val file = dir.resolve("terminal_letter_spacing")
+    val v = runCatching { Files.readString(file).trim().toFloat() }.getOrNull() ?: return DEFAULT_TERMINAL_LETTER_SPACING
+    return clampTerminalLetterSpacing(v)
+}
+
+private fun writeTerminalLetterSpacing(dir: Path, sp: Float) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("terminal_letter_spacing"), sp.toString())
     }
 }
 
@@ -444,6 +484,8 @@ fun main() {
                 knownHosts.entries.toList().forEach { knownHosts.forget(it) }
                 writeTerminalFont(dir, TerminalFont.DEFAULT)
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
+                writeTerminalLineHeight(dir, DEFAULT_TERMINAL_LINE_HEIGHT)
+                writeTerminalLetterSpacing(dir, DEFAULT_TERMINAL_LETTER_SPACING)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeTerminalScrollback(dir, DEFAULT_TERMINAL_SCROLLBACK)
                 writeTerminalCursorStyle(dir, TerminalCursorStyle.DEFAULT)
@@ -493,6 +535,10 @@ fun main() {
                     onTerminalFontChange = { writeTerminalFont(dir, it) },
                     initialTerminalFontSize = readTerminalFontSize(dir),
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
+                    initialTerminalLineHeight = readTerminalLineHeight(dir),
+                    onTerminalLineHeightChange = { writeTerminalLineHeight(dir, it) },
+                    initialTerminalLetterSpacing = readTerminalLetterSpacing(dir),
+                    onTerminalLetterSpacingChange = { writeTerminalLetterSpacing(dir, it) },
                     initialTerminalTheme = readTerminalTheme(dir),
                     onTerminalThemeChange = { writeTerminalTheme(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,

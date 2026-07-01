@@ -40,9 +40,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiRole
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
 import app.skerry.ui.generated.resources.appearance_language
+import app.skerry.ui.generated.resources.appearance_section_interface
+import app.skerry.ui.generated.resources.appearance_section_terminal
+import app.skerry.ui.generated.resources.appearance_letter_spacing
+import app.skerry.ui.generated.resources.appearance_line_height
 import app.skerry.ui.generated.resources.appearance_subtitle
 import app.skerry.ui.generated.resources.appearance_title
 import app.skerry.ui.generated.resources.settings_about_documentation
@@ -178,12 +183,18 @@ import app.skerry.ui.i18n.label
 import app.skerry.ui.sync.AccountCardModel
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.accountCardModelLocalized
-import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MAX
+import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MIN
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -423,20 +434,138 @@ private fun AppearanceSection(state: DesktopDesignState) {
             if (rowThemes.size == 1) Box(Modifier.weight(1f))
         }
     }
-    Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.appearance_font), color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
-            FontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
+    // Раскладка по секциям, по одной настройке в полноширинной строке: слева подпись + подсказка дефолта
+    // (с быстрым сбросом), справа у края — контрол. Кегль/высота/интервал — точный числовой ввод (степпер).
+    SectionLabel(stringResource(Res.string.appearance_section_terminal))
+    SettingRow(label = stringResource(Res.string.appearance_font)) {
+        Box(Modifier.width(180.dp)) { FontPicker(state.terminalFont, onPick = state::chooseTerminalFont) }
+    }
+    SettingRow(
+        label = stringResource(Res.string.appearance_font_size),
+        hasHint = true,
+        isDefault = state.terminalFontSize == DEFAULT_TERMINAL_FONT_SIZE,
+        defaultText = "$DEFAULT_TERMINAL_FONT_SIZE px",
+        onReset = { state.chooseTerminalFontSize(DEFAULT_TERMINAL_FONT_SIZE) },
+    ) {
+        NumberStepper(
+            value = state.terminalFontSize.toFloat(),
+            onValueChange = { state.chooseTerminalFontSize(it.roundToInt().coerceIn(TERMINAL_FONT_SIZE_MIN, TERMINAL_FONT_SIZE_MAX)) },
+            step = 1f,
+            format = { it.roundToInt().toString() },
+            parse = { it.trim().toIntOrNull()?.toFloat() },
+            suffix = "px",
+        )
+    }
+    SettingRow(
+        label = stringResource(Res.string.appearance_line_height),
+        hasHint = true,
+        isDefault = formatDecimal(state.terminalLineHeight, 2) == formatDecimal(DEFAULT_TERMINAL_LINE_HEIGHT, 2),
+        defaultText = formatDecimal(DEFAULT_TERMINAL_LINE_HEIGHT, 2),
+        onReset = { state.chooseTerminalLineHeight(DEFAULT_TERMINAL_LINE_HEIGHT) },
+    ) {
+        NumberStepper(
+            value = state.terminalLineHeight,
+            onValueChange = state::chooseTerminalLineHeight,
+            step = 0.05f,
+            format = { formatDecimal(it, 2) },
+            parse = { it.trim().replace(',', '.').toFloatOrNull() },
+            fieldWidth = 52.dp,
+        )
+    }
+    SettingRow(
+        label = stringResource(Res.string.appearance_letter_spacing),
+        hasHint = true,
+        isDefault = formatDecimal(state.terminalLetterSpacing, 1) == formatDecimal(DEFAULT_TERMINAL_LETTER_SPACING, 1),
+        defaultText = "${formatDecimal(DEFAULT_TERMINAL_LETTER_SPACING, 1)} px",
+        onReset = { state.chooseTerminalLetterSpacing(DEFAULT_TERMINAL_LETTER_SPACING) },
+    ) {
+        NumberStepper(
+            value = state.terminalLetterSpacing,
+            onValueChange = state::chooseTerminalLetterSpacing,
+            step = 0.1f,
+            format = { formatDecimal(it, 1) },
+            parse = { it.trim().replace(',', '.').toFloatOrNull() },
+            suffix = "px",
+            fieldWidth = 52.dp,
+        )
+    }
+    SectionLabel(stringResource(Res.string.appearance_section_interface))
+    SettingRow(label = stringResource(Res.string.appearance_language)) {
+        Box(Modifier.width(180.dp)) { LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage) }
+    }
+}
+
+/**
+ * Полноширинная строка настройки: слева подпись, под ней (при [hasHint]) подсказка дефолта с быстрым
+ * сбросом; справа на той же линии — контрол ([NumberStepper]/дропдаун).
+ */
+@Composable
+private fun SettingRow(
+    label: String,
+    hasHint: Boolean = false,
+    isDefault: Boolean = true,
+    defaultText: String = "",
+    onReset: () -> Unit = {},
+    control: @Composable () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 16.dp)) {
+            Txt(label, color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            if (hasHint) DefaultValueHint(isDefault, defaultText, onReset)
         }
-        Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.appearance_font_size), color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
-            FontSizePicker(state.terminalFontSize, onPick = state::chooseTerminalFontSize)
-        }
-        Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.appearance_language), color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
-            LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
+        control()
+    }
+}
+
+/** Заголовок группы настроек: мелкие капсы в приглушённом цвете, с отступом сверху для отделения секций. */
+@Composable
+private fun SectionLabel(text: String) {
+    Txt(
+        text,
+        color = D.faint,
+        size = 11.sp,
+        weight = FontWeight.SemiBold,
+        letterSpacing = 1.sp,
+        modifier = Modifier.padding(top = 24.dp, bottom = 4.dp),
+    )
+}
+
+/**
+ * Подсказка значения по умолчанию: серый статичный текст, когда значение уже дефолтное; cyan-кликабельная
+ * строка со значком сброса, когда изменено (клик возвращает к [defaultText]-значению через [onReset]).
+ */
+@Composable
+private fun DefaultValueHint(isDefault: Boolean, defaultText: String, onReset: () -> Unit) {
+    val text = stringResource(Res.string.appearance_default_value, defaultText)
+    if (isDefault) {
+        Txt(text, color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
+    } else {
+        Row(
+            Modifier.padding(top = 2.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onReset),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Sym("restart_alt", size = 13.sp, color = D.cyan)
+            Txt(text, color = D.cyan, size = 11.sp)
         }
     }
+}
+
+/**
+ * Формат дробного значения с фиксированным числом знаков после точки (KMP-common без String.format).
+ * Корректно показывает знак для отрицательных дробей с нулевой целой частью (−0.5).
+ */
+internal fun formatDecimal(value: Float, decimals: Int): String {
+    val factor = if (decimals <= 1) 10 else 100
+    val scaled = (value * factor).roundToInt()
+    val whole = scaled / factor
+    val frac = abs(scaled % factor).toString().padStart(decimals, '0')
+    val sign = if (value < 0 && whole == 0) "-" else ""
+    return "$sign$whole.$frac"
 }
 
 /** Выпадающий список языка интерфейса (System / English / Русский). */
@@ -473,26 +602,6 @@ private fun FontPicker(current: TerminalFont, onPick: (TerminalFont) -> Unit) {
             DropdownMenuColumn(width) {
                 TerminalFont.entries.forEach { option ->
                     DropdownOption(option.displayName, selected = option == current) { onPick(option); open = false }
-                }
-            }
-        },
-    )
-}
-
-/** Выпадающий список кегля шрифта терминала ([TERMINAL_FONT_SIZES], px). */
-@Composable
-private fun FontSizePicker(current: Int, onPick: (Int) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    AnchoredDropdown(
-        expanded = open,
-        onDismiss = { open = false },
-        trigger = {
-            SelectTrigger("$current px", onClick = { open = !open })
-        },
-        menu = { width ->
-            DropdownMenuColumn(width) {
-                TERMINAL_FONT_SIZES.forEach { size ->
-                    DropdownOption("$size px", selected = size == current) { onPick(size); open = false }
                 }
             }
         },
