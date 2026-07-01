@@ -48,6 +48,8 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
 import app.skerry.ui.vault.ResetScope
@@ -214,6 +216,23 @@ private fun writeTerminalFontSize(dir: Path, px: Int) {
     runCatching {
         Files.createDirectories(dir)
         Files.writeString(dir.resolve("terminal_font_size"), px.toString())
+    }
+}
+
+/**
+ * Тема терминала (Appearance → карточки), переживающая перезапуск: стабильный id ([TerminalTheme.id])
+ * в файле `terminal_theme`. Отсутствует/нечитаем/неизвестен → дефолт ([TerminalThemes.DEFAULT] =
+ * Night Sea). Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readTerminalTheme(dir: Path): TerminalTheme {
+    val file = dir.resolve("terminal_theme")
+    return runCatching { TerminalThemes.fromId(Files.readString(file).trim()) }.getOrDefault(TerminalThemes.DEFAULT)
+}
+
+private fun writeTerminalTheme(dir: Path, theme: TerminalTheme) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("terminal_theme"), theme.id)
     }
 }
 
@@ -474,6 +493,8 @@ fun main() {
                     onTerminalFontChange = { writeTerminalFont(dir, it) },
                     initialTerminalFontSize = readTerminalFontSize(dir),
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
+                    initialTerminalTheme = readTerminalTheme(dir),
+                    onTerminalThemeChange = { writeTerminalTheme(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
                     initialTerminalScrollback = readTerminalScrollback(dir),

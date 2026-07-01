@@ -14,6 +14,8 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
@@ -135,6 +137,12 @@ class DesktopDesignState(
     private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
     initialShowTerminalTitleOnTabs: Boolean = false,
     private val onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
+    // Цветовая тема терминала (Appearance → карточки тем). Стартовое значение читается из персиста при
+    // запуске, колбэк пишет обратно — выбор переживает перезапуск. Проводится в терминал через
+    // [app.skerry.ui.terminal.LocalTerminalTheme] и применяется к открытым сессиям на лету. Дефолт
+    // (Night Sea, no-op) сохраняет прежний вид для мок/превью/тестов.
+    initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
+    private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -184,6 +192,9 @@ class DesktopDesignState(
 
     /** Кегль шрифта терминала, px (Appearance → Font size). */
     var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
+
+    /** Тема терминала (Appearance → карточки). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalTheme]. */
+    var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
     /** Язык интерфейса (Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
@@ -375,6 +386,13 @@ class DesktopDesignState(
         if (font == terminalFont) return
         terminalFont = font
         onTerminalFontChange(font)
+    }
+
+    /** Выбрать тему терминала и сообщить наружу (для персиста). Повтор той же — no-op (ни записи). */
+    fun chooseTerminalTheme(theme: TerminalTheme) {
+        if (theme == terminalTheme) return
+        terminalTheme = theme
+        onTerminalThemeChange(theme)
     }
 
     /** Выбрать язык интерфейса и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */

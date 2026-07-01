@@ -182,6 +182,8 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
@@ -404,14 +406,22 @@ private fun ProviderCard(icon: String, title: String, desc: String, selected: Bo
 private fun AppearanceSection(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
     SectionTitle(stringResource(Res.string.appearance_title), stringResource(Res.string.appearance_subtitle))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ThemeCard("Night Sea", active = true, mono = mono, modifier = Modifier.weight(1f))
-        ThemeCard("Tokyo Night", active = false, mono = mono, modifier = Modifier.weight(1f))
-    }
-    Box(Modifier.height(10.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ThemeCard("Gruvbox Dark", active = false, mono = mono, modifier = Modifier.weight(1f))
-        ThemeCard("Solarized Light", active = false, mono = mono, modifier = Modifier.weight(1f))
+    // Карточки тем сеткой 2×N из каталога [TerminalThemes]; выбор проводится в терминал на лету.
+    TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
+        if (rowIndex > 0) Box(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (theme in rowThemes) {
+                ThemeCard(
+                    theme = theme,
+                    active = theme.id == state.terminalTheme.id,
+                    mono = mono,
+                    onClick = { state.chooseTerminalTheme(theme) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            // Нечётный хвост — добиваем пустой ячейкой, чтобы карточка не растянулась на всю ширину.
+            if (rowThemes.size == 1) Box(Modifier.weight(1f))
+        }
     }
     Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.weight(1f)) {
@@ -521,20 +531,35 @@ private fun DropdownOption(label: String, selected: Boolean, onClick: () -> Unit
     )
 }
 
+/**
+ * Карточка выбора темы терминала: мини-превью `ls -la` в РЕАЛЬНЫХ цветах [theme] (фон/текст/ANSI) —
+ * так пользователь видит палитру до применения. Клик выбирает тему; активная — cyan-рамка + бейдж.
+ */
 @Composable
-private fun ThemeCard(name: String, active: Boolean, mono: FontFamily, modifier: Modifier = Modifier) {
-    Column(modifier.clip(RoundedCornerShape(8.dp)).border(1.dp, if (active) D.cyan else D.cyan08, RoundedCornerShape(8.dp))) {
-        Column(Modifier.fillMaxWidth().background(D.terminalBg).padding(10.dp)) {
-            Row { Txt("~ ", color = D.moss, size = 10.sp, font = mono); Txt("ls -la", color = D.white, size = 10.sp, font = mono) }
-            Row { Txt("drwxr-xr-x ", color = D.cyanBright, size = 10.sp, font = mono); Txt("src", color = D.textMid, size = 10.sp, font = mono) }
-            Row { Txt("-rw-r--r-- ", color = D.dim, size = 10.sp, font = mono); Txt(".env", color = D.amber, size = 10.sp, font = mono) }
+private fun ThemeCard(
+    theme: TerminalTheme,
+    active: Boolean,
+    mono: FontFamily,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, if (active) D.cyan else D.cyan08, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Column(Modifier.fillMaxWidth().background(theme.background).padding(10.dp)) {
+            Row { Txt("~ ", color = theme.ansi[2], size = 10.sp, font = mono); Txt("ls -la", color = theme.foreground, size = 10.sp, font = mono) }
+            Row { Txt("drwxr-xr-x ", color = theme.ansi[6], size = 10.sp, font = mono); Txt("src", color = theme.ansi[4], size = 10.sp, font = mono) }
+            Row { Txt("-rw-r--r-- ", color = theme.ansi[8], size = 10.sp, font = mono); Txt(".env", color = theme.ansi[3], size = 10.sp, font = mono) }
         }
         Row(
             Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Txt(name, color = D.text, size = 11.5.sp, weight = FontWeight.Medium)
+            Txt(theme.displayName, color = D.text, size = 11.5.sp, weight = FontWeight.Medium)
             if (active) Badge("ACTIVE", bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 9.sp)
         }
     }
