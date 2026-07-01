@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.shared.vault.SecurityEvent
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_font
@@ -90,7 +92,9 @@ import app.skerry.ui.generated.resources.settings_security_title
 import app.skerry.ui.generated.resources.settings_security_touch_id
 import app.skerry.ui.generated.resources.settings_security_touch_id_desc
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -240,7 +244,10 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 Txt(stringResource(Res.string.settings_security_subtitle), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
 
                 // Мастер-пароль: подпись = реальная «последняя смена» из журнала (или нейтральный текст).
-                val lastChange = remember(controller, reload) { controller?.lastPasswordChangeAt() }
+                // Чтение журнала — файловый I/O + JSON-разбор, уводим его с потока композиции.
+                val lastChange by produceState<String?>(null, controller, reload) {
+                    value = withContext(Dispatchers.Default) { controller?.lastPasswordChangeAt() }
+                }
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Txt(stringResource(Res.string.settings_security_master_password), color = D.text, size = 14.5.sp)
@@ -303,7 +310,9 @@ fun MobileSecurityScreen(state: MobileDesignState) {
 
                 // Недавние события безопасности — из реального журнала (или «пока событий нет»).
                 Txt(stringResource(Res.string.settings_recent_security_events), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
-                val events = remember(controller, reload) { controller?.recentSecurityEvents(8) ?: emptyList() }
+                val events by produceState(emptyList<SecurityEvent>(), controller, reload) {
+                    value = withContext(Dispatchers.Default) { controller?.recentSecurityEvents(8) ?: emptyList() }
+                }
                 if (events.isEmpty()) {
                     Txt(stringResource(Res.string.settings_security_no_events), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 3.dp))
                 } else {
