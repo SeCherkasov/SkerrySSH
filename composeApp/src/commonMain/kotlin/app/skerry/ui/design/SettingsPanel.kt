@@ -665,27 +665,68 @@ private fun SecuritySection() {
 
 @Composable
 private fun KeyboardSection() {
-    SectionTitle("Keyboard", "Shortcuts. Click any binding to rebind it.")
-    val shortcuts = listOf(
-        "New connection" to "⌘N",
-        "Command palette / search" to "⌘K",
-        "Split terminal" to "⌘D",
-        "Next / previous tab" to "⌃Tab",
-        "Focus AI bar" to "⌃/",
-        "Open SFTP" to "⌘⇧F",
-        "Lock Skerry" to "⌘L",
+    SectionTitle("Keyboard", "Shortcuts adapt to your platform. Terminal bindings apply while a session is focused.")
+    // Подпись под платформу: ⌘/⌥ на macOS, Ctrl+Shift/Alt на Linux/Windows — ровно то, что распознаёт
+    // matchDesktopShortcut. На Ctrl-пути требуется Shift, поэтому чистый Ctrl+буква (Ctrl+L очистка,
+    // Ctrl+D EOF, Ctrl+C сигнал) остаётся терминалу.
+    val mac = isApplePlatform()
+    val mod: (String) -> String = { k -> if (mac) "⌘$k" else "Ctrl+Shift+$k" }
+    // Терминальные аккорды — литеральные Ctrl/Shift/Tab (не app-модификатор): на macOS показываем
+    // символами ⌃/⇧, иначе словами.
+    val ctrl: (String) -> String = { k -> if (mac) "⌃$k" else "Ctrl+$k" }
+    val ctrlShift: (String) -> String = { k -> if (mac) "⌃⇧$k" else "Ctrl+Shift+$k" }
+    val shift: (String) -> String = { k -> if (mac) "⇧$k" else "Shift+$k" }
+
+    val global = listOf(
+        KeyboardBinding("New connection", mod("N"), live = true),
+        KeyboardBinding("Command palette / search", mod("K"), live = false),
+        KeyboardBinding("Split terminal", mod("D"), live = true),
+        KeyboardBinding("Next / previous tab", "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
+        KeyboardBinding("Select tab by number", if (mac) "⌥1–9" else "Alt+1–9", live = true),
+        KeyboardBinding("Focus AI bar", mod("/"), live = true),
+        KeyboardBinding("Open SFTP", mod("F"), live = true),
+        KeyboardBinding("Lock Skerry", mod("L"), live = true),
     )
+    // Хоткеи внутри терминала (обрабатывает TerminalScreen): автодополнение fish-стиля и reverse-search
+    // истории (Ctrl-R) + копипаст. Работают, пока сфокусирован терминал сессии.
+    val terminal = listOf(
+        KeyboardBinding("Accept autocomplete suggestion", "Tab", live = true),
+        KeyboardBinding("Cycle suggestions", shift("Tab"), live = true),
+        KeyboardBinding("Search command history", ctrl("R"), live = true),
+        KeyboardBinding("Copy selection", ctrlShift("C"), live = true),
+        KeyboardBinding("Paste", ctrlShift("V"), live = true),
+    )
+
     val mono = LocalFonts.current.mono
-    shortcuts.forEach { (label, key) ->
-        Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Txt(label, color = D.textBright, size = 12.5.sp)
-            Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x0AFFFFFF)).border(1.dp, D.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
-                Txt(key, color = D.dim, size = 11.sp, font = mono)
-            }
-        }
-        HLine()
-    }
+    KeyboardGroupLabel("GLOBAL", top = 4.dp)
+    global.forEach { KeyboardRow(it, mono) }
+    KeyboardGroupLabel("TERMINAL & AUTOCOMPLETE", top = 18.dp)
+    terminal.forEach { KeyboardRow(it, mono) }
 }
+
+@Composable
+private fun KeyboardGroupLabel(text: String, top: Dp) {
+    Txt(text, color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = top, bottom = 8.dp))
+}
+
+@Composable
+private fun KeyboardRow(b: KeyboardBinding, mono: FontFamily) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Txt(b.label, color = if (b.live) D.textBright else D.dim, size = 12.5.sp)
+            // «Command palette» ещё нет как фичи — честно помечаем биндинг как будущий, а не молча
+            // показываем нерабочий аккорд наравне с живыми.
+            if (!b.live) Badge("SOON", bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
+        }
+        Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x0AFFFFFF)).border(1.dp, D.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+            Txt(b.binding, color = D.dim, size = 11.sp, font = mono)
+        }
+    }
+    HLine()
+}
+
+/** Строка страницы Keyboard: подпись, аккорд и признак «уже работает» (иначе — метка SOON). */
+private data class KeyboardBinding(val label: String, val binding: String, val live: Boolean)
 
 // About.
 

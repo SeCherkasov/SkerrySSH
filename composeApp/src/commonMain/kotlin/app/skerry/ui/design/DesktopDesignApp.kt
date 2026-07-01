@@ -69,6 +69,7 @@ import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
@@ -370,10 +371,26 @@ private fun DesktopChrome(
         // на экране живая сессия (нет app-оверлея/модалки/настроек) — иначе аккорд, набранный в полях
         // редактора сниппета (Command/ShortcutField) или New connection, ушёл бы командой в терминал.
         val snippets = LocalSnippets.current
+        // Живой lock (сбрасывает туннели/учётки) на живом пути; state.lock — мок/превью. Через
+        // rememberUpdatedState, чтобы держать onRootKey стабильным (onLockWithTunnels — новая лямбда
+        // на каждую рекомпозицию), не пересоздавая обработчик впустую.
+        val lockAction = rememberUpdatedState(onLockWithTunnels ?: state::lock)
+        // Глобальные хоткеи каркаса (⌘/Ctrl+Shift — New conn/Split/SFTP/AI-bar/Lock, Ctrl+Tab —
+        // соседняя вкладка, Alt+цифра — вкладка по номеру) проверяются ПЕРЕД хоткеем сниппета. Тот же
+        // гейт: только на живом сессионном экране (нет оверлея/модалки/настроек), чтобы аккорд из полей
+        // редактора не ушёл в терминал/навигацию. SelectTab/Next вне диапазона возвращает false и
+        // проваливается в сниппет-матчинг (Alt+7 при 4 вкладках может остаться сниппетом).
         val onRootKey = remember(snippets, sessions, state) {
             { event: KeyEvent ->
-                if (state.appOverlay != null || state.modalOpen || state.settingsOpen) false
-                else runSnippetHotkey(event, snippets, sessions)
+                if (event.type != KeyEventType.KeyDown) false
+                else if (state.appOverlay != null || state.modalOpen || state.settingsOpen) false
+                else {
+                    val shortcut = matchDesktopShortcut(
+                        event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
+                    )
+                    if (shortcut != null && runDesktopShortcut(shortcut, state, sessions, lockAction.value)) true
+                    else runSnippetHotkey(event, snippets, sessions)
+                }
             }
         }
         Box(Modifier.fillMaxSize().background(D.bg).onPreviewKeyEvent(onRootKey)) {
@@ -501,6 +518,64 @@ private fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, sessions
     val entry = manager.forShortcut(combo) ?: return false
     val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
     manager.run(entry.id) { terminal.send(it) }
+    return true
+}
+
+/**
+ * Исполнить глобальный хоткей каркаса ([matchDesktopShortcut]). Возвращает `true`, если действие
+ * применилось (событие поглощаем), `false` — если нет цели (напр. Alt+цифра вне числа вкладок): тогда
+ * вызывающий пропускает клавишу дальше (в т.ч. в хоткей сниппета). Живой режим адресует вкладки через
+ * [SessionsController]; мок/превью (нет живых сессий) — через демо-вкладки [DesktopDesignState].
+ */
+private fun runDesktopShortcut(
+    shortcut: DesktopShortcut,
+    state: DesktopDesignState,
+    sessions: SessionsController?,
+    onLock: () -> Unit,
+): Boolean {
+    when (shortcut) {
+        is DesktopShortcut.SelectTab -> return selectTabByIndex(shortcut.index, state, sessions)
+        DesktopShortcut.NextTab -> return cycleTab(+1, state, sessions)
+        DesktopShortcut.PrevTab -> return cycleTab(-1, state, sessions)
+        DesktopShortcut.NewConnection -> state.openModal()
+        DesktopShortcut.SplitTerminal -> if (sessions != null) sessions.toggleSplit() else state.toggleSplit()
+        DesktopShortcut.OpenSftp -> if (sessions != null) {
+            state.clearOverlay(); sessions.setActiveView(SessionView.Sftp)
+        } else {
+            state.showView(DesktopView.Sftp)
+        }
+        DesktopShortcut.Lock -> onLock()
+        DesktopShortcut.FocusAiBar -> state.requestAiBarFocus()
+    }
+    return true
+}
+
+/** Выбрать вкладку по 0-based индексу; `false`, если такой вкладки нет (клавиша пойдёт дальше). */
+internal fun selectTabByIndex(index: Int, state: DesktopDesignState, sessions: SessionsController?): Boolean {
+    if (sessions != null) {
+        val target = sessions.sessions.getOrNull(index) ?: return false
+        sessions.activate(target.id)
+        return true
+    }
+    if (index !in state.tabs.indices) return false
+    state.setTab(index)
+    return true
+}
+
+/** Циклически сдвинуть активную вкладку на [delta] (по кругу); `false`, если вкладок нет. */
+internal fun cycleTab(delta: Int, state: DesktopDesignState, sessions: SessionsController?): Boolean {
+    if (sessions != null) {
+        val list = sessions.sessions
+        if (list.isEmpty()) return false
+        val current = list.indexOfFirst { it.id == sessions.activeId }.coerceAtLeast(0)
+        val next = ((current + delta) % list.size + list.size) % list.size
+        sessions.activate(list[next].id)
+        return true
+    }
+    val count = state.tabs.size
+    if (count == 0) return false
+    val next = ((state.activeTab + delta) % count + count) % count
+    state.setTab(next)
     return true
 }
 

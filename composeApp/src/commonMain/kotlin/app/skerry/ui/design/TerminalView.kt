@@ -39,6 +39,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -129,7 +132,7 @@ fun TerminalView(state: DesktopDesignState) {
             }
             // Всё в одной строке бара: команда + инлайн-пояснение/причина риска + кнопки; Thinking/blocked/
             // error там же. Ничего не перекрывает терминал и не меняет его высоту (нет «дёрга»). Off/мок → слот.
-            if (aiController != null) AiBarInput(aiController, aiTerminal) else TerminalAiBarSlot()
+            if (aiController != null) AiBarInput(aiController, aiTerminal, state.aiBarFocusRequests) else TerminalAiBarSlot()
         }
     }
 }
@@ -1318,12 +1321,31 @@ private fun TerminalAiBarSlot() {
  * подтверждение (команда + CR → в шелл); для [CommandRisk.Danger] нужен второй тап («Run anyway» → «Confirm run»).
  */
 @Composable
-private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScreenState?) {
+private fun AiBarInput(
+    controller: TerminalAiController,
+    terminal: TerminalScreenState?,
+    focusRequests: SharedFlow<Unit> = MutableSharedFlow(),
+) {
     val mono = LocalFonts.current.mono
     var prompt by remember { mutableStateOf("") }
     val submit = {
         val text = prompt.trim()
         if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
+    }
+    // Хоткей ⌘/ / Ctrl+Shift+/ фокусирует строку ввода. requestFocus обёрнут в runCatching: если бар
+    // сейчас показывает pending/thinking (поля ввода нет в композиции), FocusRequester не привязан —
+    // запрос просто игнорируется, а не падает. SharedFlow не реплеится → переунтаж бара фокус не крадёт.
+    val promptFocus = remember { FocusRequester() }
+    LaunchedEffect(focusRequests) {
+        focusRequests.collect {
+            // «/» из аккорда роняет KEY_TYPED в только что сфокусированное поле (typed-события идут мимо
+            // onPreviewKeyEvent, который мы погасили лишь на KeyDown). Фокус = чистый слейт: чистим до и
+            // после короткого окна, чтобы стереть утёкший символ раньше, чем человек начнёт печатать.
+            prompt = ""
+            runCatching { promptFocus.requestFocus() }
+            delay(50)
+            prompt = ""
+        }
     }
     val pending = controller.pending
     val risk = controller.pendingRisk?.risk ?: CommandRisk.None
@@ -1376,7 +1398,7 @@ private fun AiBarInput(controller: TerminalAiController, terminal: TerminalScree
                             cursorBrush = SolidColor(D.cyan),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { submit() }),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().focusRequester(promptFocus),
                         )
                     }
                 }
