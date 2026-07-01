@@ -367,6 +367,11 @@ class VaultGateController(
      */
     fun completePairing() {
         if (state != VaultGateState.NeedsCreate) return
+        // Единственный момент, когда гейт достоверно знает, что устройство привязано к аккаунту по коду
+        // (координатор паринга уже создал/разблокировал vault и принял ключ аккаунта, а форма дождалась
+        // перехода в Online). Пишем событие здесь, а не в координаторе: сюда сходятся все пути join'а
+        // (desktop и mobile, через общий гейт), и это ровно та точка, где паринг завершился успехом.
+        securityLog?.record(SecurityEventType.DevicePaired)
         state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
     }
 

@@ -401,6 +401,37 @@ class VaultGateControllerTest {
         assertEquals(VaultGateState.Unlocked, controller.state)
     }
 
+    @Test
+    fun `completePairing records a DevicePaired event`() {
+        // Экран create-join: координатор паринга уже создал и разблокировал локальный vault, гейт
+        // подтверждает связывание — единственный момент, когда мы честно знаем, что устройство привязано.
+        val log = RecordingSecurityLog()
+        val controller = VaultGateController(
+            FakeVault(exists = false),
+            biometrics(BiometricAvailability.NotEnrolled),
+            securityLog = log,
+        )
+        assertEquals(VaultGateState.NeedsCreate, controller.state)
+
+        controller.completePairing()
+
+        assertEquals(listOf(SecurityEventType.DevicePaired), log.events.map { it.type })
+    }
+
+    @Test
+    fun `completePairing past the create step records nothing`() {
+        val log = RecordingSecurityLog()
+        val controller = VaultGateController(
+            FakeVault(exists = true, unlockResult = UnlockResult.Success),
+            securityLog = log,
+        )
+        controller.unlock("correct horse".toCharArray())
+
+        controller.completePairing() // no-op вне NeedsCreate → и в журнал ничего не пишет
+
+        assertTrue(log.events.none { it.type == SecurityEventType.DevicePaired })
+    }
+
     // --- Журнал безопасности: контроллер пишет события, которыми владеет, и отдаёт их разделу Настройки ---
 
     @Test
