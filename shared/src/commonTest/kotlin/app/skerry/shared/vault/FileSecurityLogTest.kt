@@ -87,6 +87,16 @@ class FileSecurityLogTest {
     }
 
     @Test
+    fun hardensFileBeforeMove() {
+        // Хук приватных прав зовётся на временном файле (до atomicMove), а не на цели — у готового
+        // файла не должно быть окна с правами по umask.
+        val hardened = mutableListOf<String>()
+        val l = FileSecurityLog(path, fs, harden = { hardened += it.name }) { "2026-01-01T00:00:00Z" }
+        l.record(SecurityEventType.VaultCreated)
+        assertEquals(listOf("${path.name}.tmp"), hardened)
+    }
+
+    @Test
     fun corruptFileReadsAsEmpty() {
         fs.createDirectories(path.parent!!)
         fs.write(path) { writeUtf8("{ not json") }

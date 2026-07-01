@@ -383,6 +383,7 @@ fun main() {
         val securityLog = FileSecurityLog(
             dir.resolve("security_events.json").toString().toPath(),
             FileSystem.SYSTEM,
+            harden = { PrivateConfig.harden(Path.of(it.toString())) },
         ) { Instant.now().toString() }
         // TOFU: первый ключ хоста запоминается в vault (RecordType.KNOWN_HOST — синкается между
         // устройствами, как в популярных SSH-клиентах), при смене ключа — отказ + запись события в локальный (НЕ

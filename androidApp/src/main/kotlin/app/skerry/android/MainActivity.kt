@@ -264,6 +264,7 @@ class MainActivity : FragmentActivity() {
         val securityLog = FileSecurityLog(
             dir.resolve("security_events.json").absolutePath.toPath(),
             FileSystem.SYSTEM,
+            harden = { app.skerry.shared.io.PrivateConfig.harden(java.nio.file.Path.of(it.toString())) },
         ) { Instant.now().toString() }
         val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
         // SSH-транспорт (sshj, общий JVM source set). TOFU: первый ключ хоста запоминается в vault

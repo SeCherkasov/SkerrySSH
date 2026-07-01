@@ -1,5 +1,7 @@
 package app.skerry.shared.vault
 
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okio.FileSystem
@@ -69,29 +71,43 @@ interface SecurityLog {
  * — desktop и Android одним кодом, как [FileVault]). Хранится в хронологическом порядке; при превышении
  * [max] вытесняются самые старые. Чтение битого/отсутствующего файла даёт пустой журнал (журнал —
  * вспомогательный, его порча не должна ничего ронять). Запись атомарна через временный файл.
+ *
+ * Мутации ([record]/[clear]) — read-modify-write, поэтому сериализуются мультиплатформенным
+ * [SynchronizedObject] (как [FileVault]): журнал зовут с UI-корутины и потенциально из фонового
+ * паринга/sync, две гонящиеся записи без блокировки потеряли бы событие (lost update).
+ *
+ * [harden] — платформенный хук, выставляющий готовому файлу приватные права (0600 на POSIX), чтобы
+ * аудит-метаданные (имена привязанных устройств, штампы смены пароля) не были мир-читаемыми под общим
+ * домашним каталогом. По умолчанию no-op (тесты на [okio.fakefilesystem]); JVM-сайты передают
+ * `PrivateConfig.harden`. Хук зовётся на временном файле до [FileSystem.atomicMove], чтобы у цели не
+ * было окна с правами по umask.
  */
 class FileSecurityLog(
     private val path: Path,
     private val fileSystem: FileSystem,
     private val max: Int = 50,
+    private val harden: (Path) -> Unit = {},
     private val clock: () -> String,
 ) : SecurityLog {
     private val json = Json { ignoreUnknownKeys = true }
+    private val lock = SynchronizedObject()
 
-    override fun record(type: SecurityEventType, detail: String?) {
+    override fun record(type: SecurityEventType, detail: String?): Unit = synchronized(lock) {
         val events = (read() + SecurityEvent(type, clock(), detail)).takeLast(max)
         write(events)
     }
 
-    override fun recent(limit: Int): List<SecurityEvent> =
+    override fun recent(limit: Int): List<SecurityEvent> = synchronized(lock) {
         read().asReversed().take(limit)
+    }
 
-    override fun lastPasswordChangeAt(): String? =
+    override fun lastPasswordChangeAt(): String? = synchronized(lock) {
         read().lastOrNull {
             it.type == SecurityEventType.VaultCreated || it.type == SecurityEventType.MasterPasswordChanged
         }?.at
+    }
 
-    override fun clear() {
+    override fun clear(): Unit = synchronized(lock) {
         if (fileSystem.exists(path)) fileSystem.delete(path)
     }
 
@@ -106,6 +122,7 @@ class FileSecurityLog(
         path.parent?.let { fileSystem.createDirectories(it) }
         val tmp = path.parent?.resolve("${path.name}.tmp") ?: "${path.name}.tmp".toPath()
         fileSystem.write(tmp) { writeUtf8(json.encodeToString(events)) }
+        harden(tmp) // права ставим на tmp до move — у цели не будет окна с 0644
         fileSystem.atomicMove(tmp, path)
     }
 }
