@@ -1,0 +1,60 @@
+<resources>
+    <!-- Known hosts -->
+    <string name="lib_known_title">Известные хосты</string>
+    <string name="lib_known_subtitle">Проверенные отпечатки ключей хостов. Skerry предупредит при смене ключа.</string>
+    <string name="lib_known_col_host">ХОСТ</string>
+    <string name="lib_known_col_key_type">ТИП КЛЮЧА</string>
+    <string name="lib_known_col_fingerprint">ОТПЕЧАТОК (SHA256)</string>
+    <string name="lib_known_col_first_seen">ПЕРВЫЙ РАЗ</string>
+    <string name="lib_known_col_status">СТАТУС</string>
+    <string name="lib_known_key_changed_for">Ключ хоста изменился: %1$s</string>
+    <string name="lib_known_mismatch_body">Отпечаток %1$s отличается от записанного Skerry. Это может быть переустановка — или атака посредника. Проверьте перед повторным подключением.</string>
+    <string name="lib_known_review_fingerprint">Проверить отпечаток</string>
+    <string name="lib_known_reject_block">Отклонить и заблокировать</string>
+    <string name="lib_known_dismiss">Скрыть</string>
+    <string name="lib_known_status_changed">Изменён</string>
+    <string name="lib_known_status_verified">Проверен</string>
+    <string name="lib_known_forget_key">Забыть ключ</string>
+    <string name="lib_known_empty_title">Пока нет известных хостов</string>
+    <string name="lib_known_empty_desc">Подключитесь к хосту — его ключ становится доверенным при первом подключении и сохраняется здесь.</string>
+    <string name="lib_known_empty_desc_mobile">Подключитесь к хосту — его ключ доверяется при первом подключении</string>
+    <string name="lib_known_fp_mismatch">Несовпадение отпечатка</string>
+    <string name="lib_known_previously_recorded">РАНЕЕ ЗАПИСАНО</string>
+    <string name="lib_known_now_offered">СЕЙЧАС ПРЕДЛОЖЕНО</string>
+    <string name="lib_known_reinstall_note">Если вы недавно переустановили этот хост, принять безопасно. Иначе расценивайте это как возможный перехват.</string>
+    <string name="lib_known_accept_new_key">Принять новый ключ</string>
+    <string name="lib_known_accept">Принять</string>
+    <string name="lib_known_reject">Отклонить</string>
+
+    <!-- Snippets -->
+    <string name="lib_snippets_library">БИБЛИОТЕКА</string>
+    <string name="lib_snippets_empty">Пока нет сниппетов</string>
+    <string name="lib_snippets_no_matches">Нет совпадений</string>
+    <string name="lib_snippets_new">Новый сниппет</string>
+    <string name="lib_snippets_edit">Изменить сниппет</string>
+    <string name="lib_snippets_untitled">Без названия</string>
+    <string name="lib_snippets_field_name">Название</string>
+    <string name="lib_snippets_field_command">Команда</string>
+    <string name="lib_snippets_field_tags">Теги</string>
+    <string name="lib_snippets_field_shortcut">Горячая клавиша</string>
+    <string name="lib_snippets_ph_name">Отчёт об использовании диска</string>
+    <string name="lib_snippets_add_tag">добавить тег…</string>
+    <string name="lib_snippets_press_keys">Нажмите клавиши…</string>
+    <string name="lib_snippets_shortcut_conflict">Уже используется в \"%1$s\"</string>
+    <string name="lib_snippets_select_or_create">Выберите сниппет или создайте новый.</string>
+    <string name="lib_snippets_save">Сохранить</string>
+    <string name="lib_snippets_delete">Удалить</string>
+    <string name="lib_snippets_search">Поиск сниппетов…</string>
+    <string name="lib_snippets_screen_title">Сниппеты</string>
+    <string name="lib_snippets_empty_mobile">Пока нет сниппетов. Нажмите +, чтобы сохранить команду.</string>
+    <string name="lib_snippets_run_title">Запустить сниппет</string>
+    <string name="lib_snippets_run_empty">Пока нет сниппетов. Добавьте их на вкладке «Сниппеты».</string>
+    <string name="lib_snippets_run_in_terminal">Запустить в терминале</string>
+    <string name="lib_snippets_save_snippet">Сохранить сниппет</string>
+
+    <!-- Teams -->
+    <string name="lib_teams_sidebar">КОМАНДЫ</string>
+    <string name="lib_teams_invite">Пригласить</string>
+    <string name="lib_teams_members">Участники</string>
+    <string name="lib_teams_recent_activity">Недавние действия</string>
+</resources>

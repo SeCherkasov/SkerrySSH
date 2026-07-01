@@ -28,6 +28,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shtail_host_address
+import app.skerry.ui.generated.resources.shtail_host_ask_on_connect
+import app.skerry.ui.generated.resources.shtail_host_auth
+import app.skerry.ui.generated.resources.shtail_host_group
+import app.skerry.ui.generated.resources.shtail_host_port
+import app.skerry.ui.generated.resources.shtail_host_saved_credential
+import app.skerry.ui.host.ungroupedLabel
+import app.skerry.ui.generated.resources.shell_host
+import app.skerry.ui.generated.resources.shell_host_not_found
+import app.skerry.ui.generated.resources.shell_connect
+import app.skerry.ui.generated.resources.shell_quick_sftp
+import app.skerry.ui.generated.resources.shell_quick_tunnels
+import app.skerry.ui.generated.resources.shell_quick_snippets
+import app.skerry.ui.generated.resources.shell_details
+import app.skerry.ui.generated.resources.shell_edit_host
+import app.skerry.ui.generated.resources.shell_delete_host
+import org.jetbrains.compose.resources.stringResource
 
 /** Коралл экрана детали (Delete host) — `#E07A5F` из мока; в палитре `D` отдельного токена нет. */
 private val DetailCoral = Color(0xFFE07A5F)
@@ -42,11 +60,16 @@ data class HostDetailRow(val label: String, val value: String, val mono: Boolean
  * Auth отражает наличие привязанного keychain-секрета (`Saved credential` / `Ask on connect`), Group
  * падает в «Ungrouped». AI-политика и онлайн-статус из макета здесь отсутствуют (нет в модели).
  */
+@Composable
 fun mobileHostDetailRows(host: Host): List<HostDetailRow> = listOf(
-    HostDetailRow("Address", host.address, mono = true),
-    HostDetailRow("Port", host.port.toString(), mono = true),
-    HostDetailRow("Auth", if (host.credentialId != null) "Saved credential" else "Ask on connect", mono = false),
-    HostDetailRow("Group", host.group?.takeIf { it.isNotBlank() } ?: "Ungrouped", mono = false),
+    HostDetailRow(stringResource(Res.string.shtail_host_address), host.address, mono = true),
+    HostDetailRow(stringResource(Res.string.shtail_host_port), host.port.toString(), mono = true),
+    HostDetailRow(
+        stringResource(Res.string.shtail_host_auth),
+        if (host.credentialId != null) stringResource(Res.string.shtail_host_saved_credential) else stringResource(Res.string.shtail_host_ask_on_connect),
+        mono = false,
+    ),
+    HostDetailRow(stringResource(Res.string.shtail_host_group), host.group?.takeIf { it.isNotBlank() } ?: ungroupedLabel(), mono = false),
 )
 
 /**
@@ -78,12 +101,12 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                     onClick = state::pop,
                 ),
             )
-            Txt("Host", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.shell_host), color = D.text, size = 18.sp, weight = FontWeight.Bold)
         }
 
         if (host == null) {
             Txt(
-                "Host not found",
+                stringResource(Res.string.shell_host_not_found),
                 color = D.faint,
                 size = 13.sp,
                 modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
@@ -132,7 +155,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             ) {
                 Sym("terminal", size = 21.sp, color = Color(0xFF0A1A26))
-                Txt("Connect", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.shell_connect), color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
             }
         }
 
@@ -144,12 +167,12 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            QuickAction("folder", "SFTP", Modifier.weight(1f), onClick = { openSftp(host) })
-            QuickAction("lan", "Tunnels", Modifier.weight(1f), onClick = { state.push(MobileRoute.Ports) })
-            QuickAction("code_blocks", "Snippets", Modifier.weight(1f), onClick = null)
+            QuickAction("folder", stringResource(Res.string.shell_quick_sftp), Modifier.weight(1f), onClick = { openSftp(host) })
+            QuickAction("lan", stringResource(Res.string.shell_quick_tunnels), Modifier.weight(1f), onClick = { state.push(MobileRoute.Ports) })
+            QuickAction("code_blocks", stringResource(Res.string.shell_quick_snippets), Modifier.weight(1f), onClick = null)
         }
 
-        HostsDetailLabel("Details")
+        HostsDetailLabel(stringResource(Res.string.shell_details))
         Column(
             Modifier
                 .padding(horizontal = 18.dp)
@@ -198,7 +221,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                         .padding(13.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Txt("Edit host", color = D.cyanBright, size = 14.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.shell_edit_host), color = D.cyanBright, size = 14.sp, weight = FontWeight.Medium)
                 }
             }
             val onDelete = controller?.let { ctrl -> { ctrl.delete(host.id); state.pop() } }
@@ -211,7 +234,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                     .padding(13.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt("Delete host", color = DetailCoral, size = 14.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.shell_delete_host), color = DetailCoral, size = 14.sp, weight = FontWeight.Medium)
             }
         }
     }

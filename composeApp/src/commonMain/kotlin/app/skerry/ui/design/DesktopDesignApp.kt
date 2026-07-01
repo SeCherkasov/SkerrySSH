@@ -76,14 +76,30 @@ import app.skerry.ui.snippet.SnippetShortcut
 import androidx.compose.runtime.collectAsState
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncIndicatorLevel
-import app.skerry.ui.sync.syncIndicator
+import app.skerry.ui.sync.syncIndicatorLocalized
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.TerminalAppearance
+import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_this_session
+import app.skerry.ui.generated.resources.shell_disconnect_title
+import app.skerry.ui.generated.resources.shell_disconnect_message
+import app.skerry.ui.generated.resources.shell_disconnect
+import app.skerry.ui.generated.resources.shell_close_split_title
+import app.skerry.ui.generated.resources.shell_close_split_message
+import app.skerry.ui.generated.resources.shell_close_panel
+import app.skerry.ui.generated.resources.shell_unlocked
+import app.skerry.ui.generated.resources.shell_settings
+import app.skerry.ui.generated.resources.shell_status_connected
+import app.skerry.ui.generated.resources.shell_status_disconnected
+import app.skerry.ui.generated.resources.shell_status_encoding
+import app.skerry.ui.generated.resources.shtail_new_tab
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Корень десктопного приложения. Поставляет шрифты
@@ -118,11 +134,15 @@ fun DesktopDesignApp(
     onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     onTerminalFontSizeChange: (Int) -> Unit = {},
+    // Язык интерфейса (Appearance → Language) — персистится снаружи (desktop main): стартовое значение + колбэк записи.
+    initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
+    onUiLanguageChange: (UiLanguage) -> Unit = {},
     state: DesktopDesignState = remember {
         DesktopDesignState(
             initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
             initialRecentHostIds, onRecentHostIdsChange, initialCustomGroups, onCustomGroupsChange,
             initialTerminalFont, onTerminalFontChange, initialTerminalFontSize, onTerminalFontSizeChange,
+            initialUiLanguage, onUiLanguageChange,
         )
     },
     vault: Vault? = null,
@@ -196,6 +216,13 @@ fun DesktopDesignApp(
     // терминала), даже когда шрифт/кегль не менялись.
     val terminalAppearance = remember(state.terminalFont, state.terminalFontSize) {
         TerminalAppearance(state.terminalFont, state.terminalFontSize)
+    }
+    // Язык ответов терминального AI = язык интерфейса: провайдер читает применённый тег локали
+    // ([app.skerry.ui.i18n.LocalAppLocale]) и переустанавливается при смене языка (SideEffect
+    // перезапускается по смене тега), так что INFO/ASK идут на текущем языке без пересоздания контроллера.
+    val aiLocaleTag = app.skerry.ui.i18n.LocalAppLocale.current
+    androidx.compose.runtime.SideEffect {
+        ai?.uiLanguageProvider = { app.skerry.ui.i18n.aiResponseLanguageName(aiLocaleTag) }
     }
     CompositionLocalProvider(
         LocalFonts provides fonts,
@@ -481,20 +508,20 @@ private fun DesktopChrome(
             // Подтверждение разрыва сессии (power) / закрытия split-панели — деструктивно, без авто-реконнекта.
             when (val pc = state.pendingClose) {
                 is PendingClose.Session -> {
-                    val name = sessions?.sessions?.firstOrNull { it.id == pc.id }?.displayTitle ?: "this session"
+                    val name = sessions?.sessions?.firstOrNull { it.id == pc.id }?.displayTitle ?: stringResource(Res.string.shell_this_session)
                     ConfirmActionDialog(
-                        title = "Disconnect \"$name\"?",
-                        message = "The SSH session and its terminal close now. Auto-reconnect won't bring it back — you'll need to connect again.",
-                        confirmLabel = "Disconnect",
+                        title = stringResource(Res.string.shell_disconnect_title, name),
+                        message = stringResource(Res.string.shell_disconnect_message),
+                        confirmLabel = stringResource(Res.string.shell_disconnect),
                         onConfirm = { sessions?.close(pc.id); state.dismissClose() },
                         onDismiss = state::dismissClose,
                     )
                 }
                 is PendingClose.Split -> {
                     ConfirmActionDialog(
-                        title = "Close split panel?",
-                        message = "The second session in this tab disconnects and the panel closes. The main session stays connected.",
-                        confirmLabel = "Close panel",
+                        title = stringResource(Res.string.shell_close_split_title),
+                        message = stringResource(Res.string.shell_close_split_message),
+                        confirmLabel = stringResource(Res.string.shell_close_panel),
                         onConfirm = { sessions?.closeSplit(pc.parentId); state.dismissClose() },
                         onDismiss = state::dismissClose,
                     )
@@ -645,6 +672,9 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
         ) {
             // Живые вкладки из менеджера сессий (за гейтом vault); иначе — мок-вкладки.
             val sessions = LocalSessions.current
+            // Локализованная подпись новой пустой вкладки резолвится здесь (composable-сторона):
+            // в SessionsController stringResource недоступен, поэтому лейбл прокидываем в openBlank.
+            val newTabTitle = stringResource(Res.string.shtail_new_tab)
             if (sessions != null) {
                 // Состояние drag-reorder вкладок: перетаскивание чипов местами.
                 val tabDrag = remember { TabDragState() }
@@ -687,7 +717,7 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
                     if (sessions != null) {
                         // Новая пустая вкладка стартует с подвью Terminal (дефолт Session.view);
                         // снимаем оверлей, чтобы показать её терминал-плейсхолдер.
-                        sessions.openBlank()
+                        sessions.openBlank(newTabTitle)
                         state.clearOverlay()
                     } else {
                         state.openModal()
@@ -709,7 +739,7 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Sym("lock_open", size = 14.sp, color = D.cyan)
-                Txt("Unlocked", color = D.cyan, size = 11.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.shell_unlocked), color = D.cyan, size = 11.sp, weight = FontWeight.Medium)
             }
         }
     }
@@ -828,7 +858,7 @@ private fun IconRail(state: DesktopDesignState) {
             )
         }
         Spacer(Modifier.weight(1f))
-        RailButton(icon = "settings", label = "Settings", active = false, onClick = state::openSettings)
+        RailButton(icon = "settings", label = stringResource(Res.string.shell_settings), active = false, onClick = state::openSettings)
     }
 }
 
@@ -870,7 +900,7 @@ private fun StatusBar() {
     val active = sessions?.active
     val connected = active?.controller?.uiState is ConnectionUiState.Connected
     val live = sessions != null
-    val statusText = if (!live || connected) "Connected" else "Disconnected"
+    val statusText = if (!live || connected) stringResource(Res.string.shell_status_connected) else stringResource(Res.string.shell_status_disconnected)
     val statusColor = if (!live || connected) D.moss else D.faint
     // Поллер скорости канала активной сессии (когда подключена). remember безусловный — ключи
     // (сессия + флаг connected) пересоздают его при смене сессии/подключения; openThroughput
@@ -910,7 +940,7 @@ private fun StatusBar() {
             // активной сессии + доступном сервере; привязано-но-не-подключено → «Sync paused», и т.д.
             // Прячем, когда sync не настроен / ещё не пинговали.
             val syncC = LocalSync.current
-            val ind = syncC?.let { syncIndicator(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
+            val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
             if (ind != null) {
                 StatusItem(
                     ind.icon,
@@ -925,7 +955,7 @@ private fun StatusBar() {
             }
             // Версия сервера — live ident активной сессии (до коннекта/если транспорт молчит — «—»).
             StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
-            Txt("UTF-8 · LF", color = D.faint, size = 10.5.sp, font = mono)
+            Txt(stringResource(Res.string.shell_status_encoding), color = D.faint, size = 10.5.sp, font = mono)
             Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
         }
     }

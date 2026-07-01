@@ -74,6 +74,35 @@ import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_route_team
+import app.skerry.ui.generated.resources.shell_lock_title
+import app.skerry.ui.generated.resources.shell_unlock_subtitle_mobile
+import app.skerry.ui.generated.resources.shell_master_password
+import app.skerry.ui.generated.resources.shell_unlock
+import app.skerry.ui.generated.resources.shell_use_biometrics
+import app.skerry.ui.generated.resources.shell_forgot_password
+import app.skerry.ui.generated.resources.shell_create_title
+import app.skerry.ui.generated.resources.shell_create_subtitle
+import app.skerry.ui.generated.resources.shell_repeat_password
+import app.skerry.ui.generated.resources.shell_create_vault
+import app.skerry.ui.generated.resources.shell_pairing_link
+import app.skerry.ui.generated.resources.shell_quick_unlock_title
+import app.skerry.ui.generated.resources.shell_quick_unlock_subtitle
+import app.skerry.ui.generated.resources.shell_not_now
+import app.skerry.ui.generated.resources.shell_corrupted_title
+import app.skerry.ui.generated.resources.shell_corrupted_subtitle
+import app.skerry.ui.generated.resources.shell_reset_skerry
+import app.skerry.ui.generated.resources.shell_reset_subtitle
+import app.skerry.ui.generated.resources.shell_reset_scope_secrets_title
+import app.skerry.ui.generated.resources.shell_reset_scope_secrets_subtitle
+import app.skerry.ui.generated.resources.shell_reset_scope_all_title
+import app.skerry.ui.generated.resources.shell_reset_scope_all_subtitle
+import app.skerry.ui.generated.resources.shell_reset_confirm_placeholder
+import app.skerry.ui.generated.resources.shell_reset_permanently
+import app.skerry.ui.generated.resources.shell_cancel
+import app.skerry.ui.generated.resources.shell_footer_never_leaves_short
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Корень мобильного макета. Поставляет шрифты через [LocalFonts] и живые бэкенды через
@@ -149,6 +178,12 @@ fun MobileDesignApp(
     val syncStatus = deps.sync?.status?.collectAsState()?.value
     LaunchedEffect(syncStatus) {
         if (syncStatus is SyncStatus.Online && syncStatus.lastPulled > 0) ai?.refresh()
+    }
+    // Язык ответов терминального AI = язык интерфейса (см. DesktopDesignApp): провайдер читает
+    // применённый тег локали и переустанавливается при смене языка.
+    val aiLocaleTag = app.skerry.ui.i18n.LocalAppLocale.current
+    androidx.compose.runtime.SideEffect {
+        ai?.uiLanguageProvider = { app.skerry.ui.i18n.aiResponseLanguageName(aiLocaleTag) }
     }
     CompositionLocalProvider(
         LocalFonts provides fonts,
@@ -377,7 +412,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
         MobileRoute.Ports -> MobilePortsScreen(state)
         MobileRoute.Known -> MobileKnownScreen(state)
-        MobileRoute.Team -> MobileRoutePlaceholder(state, "Team")
+        MobileRoute.Team -> MobileRoutePlaceholder(state, stringResource(Res.string.shell_route_team))
         MobileRoute.Appearance -> MobileAppearanceScreen(state)
         MobileRoute.Sync -> MobileSyncScreen(state)
         MobileRoute.Ai -> MobileAiScreen(state)
@@ -462,10 +497,10 @@ fun MobileUnlockScreen(
     val submit = { if (pwd.isNotEmpty()) onUnlock(pwd.toCharArray()) }
     // Защита ввода мастер-пароля от снимков экрана/превью в Recent Apps (Android; desktop — no-op).
     SecureScreen()
-    MobileLockScaffold(title = "Skerry is locked", subtitle = "Enter your master password", error = error) {
-        MobileLockField(pwd, { pwd = it }, "Master password", ImeAction.Done, onSubmit = submit)
+    MobileLockScaffold(title = stringResource(Res.string.shell_lock_title), subtitle = stringResource(Res.string.shell_unlock_subtitle_mobile), error = error) {
+        MobileLockField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
-        MobileWideButton("Unlock", onClick = submit)
+        MobileWideButton(stringResource(Res.string.shell_unlock), onClick = submit)
         if (canUseBiometric) {
             Spacer(Modifier.height(18.dp))
             Row(
@@ -474,13 +509,13 @@ fun MobileUnlockScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Sym("fingerprint", size = 24.sp, color = D.cyanBright)
-                Txt("Use biometrics", color = D.dim, size = 14.sp)
+                Txt(stringResource(Res.string.shell_use_biometrics), color = D.dim, size = 14.sp)
             }
         }
         // Тупик забытого пароля расшивается только сбросом (zero-knowledge); ведёт на [MobileResetScreen].
         Spacer(Modifier.height(18.dp))
         Txt(
-            "Forgot your master password?",
+            stringResource(Res.string.shell_forgot_password),
             color = D.faint,
             size = 13.sp,
             modifier = Modifier.clickable(onClick = onForgotPassword),
@@ -518,19 +553,19 @@ fun MobileCreateScreen(
     }
 
     MobileLockScaffold(
-        title = "Set a master password",
-        subtitle = "It encrypts this vault and never leaves the device — there is no recovery.",
+        title = stringResource(Res.string.shell_create_title),
+        subtitle = stringResource(Res.string.shell_create_subtitle),
         error = error,
     ) {
-        MobileLockField(pwd, { pwd = it }, "Master password", ImeAction.Next)
+        MobileLockField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Next)
         Spacer(Modifier.height(12.dp))
-        MobileLockField(confirm, { confirm = it }, "Repeat password", ImeAction.Done, onSubmit = submit)
+        MobileLockField(confirm, { confirm = it }, stringResource(Res.string.shell_repeat_password), ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
-        MobileWideButton("Create vault", onClick = submit)
+        MobileWideButton(stringResource(Res.string.shell_create_vault), onClick = submit)
         if (sync != null && onPairingComplete != null) {
             Spacer(Modifier.height(18.dp))
             Txt(
-                "Linking from another device? Use a pairing code",
+                stringResource(Res.string.shell_pairing_link),
                 color = D.cyanBright, size = 13.sp,
                 modifier = Modifier.clickable { joining = true },
             )
@@ -546,17 +581,17 @@ fun MobileCreateScreen(
 @Composable
 fun MobileBiometricOfferScreen(inFlight: Boolean, onEnable: () -> Unit, onSkip: () -> Unit) {
     MobileLockScaffold(
-        title = "Quick unlock",
-        subtitle = "Open Skerry with your fingerprint instead of the master password.",
+        title = stringResource(Res.string.shell_quick_unlock_title),
+        subtitle = stringResource(Res.string.shell_quick_unlock_subtitle),
         error = null,
     ) {
-        MobileWideButton("Use biometrics", onClick = { if (!inFlight) onEnable() }, enabled = !inFlight)
+        MobileWideButton(stringResource(Res.string.shell_use_biometrics), onClick = { if (!inFlight) onEnable() }, enabled = !inFlight)
         Spacer(Modifier.height(14.dp))
         Box(
             Modifier.fillMaxWidth().clickable(enabled = !inFlight, onClick = onSkip).padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Txt("Not now", color = D.dim, size = 14.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.shell_not_now), color = D.dim, size = 14.sp, weight = FontWeight.Medium)
         }
     }
 }
@@ -568,11 +603,11 @@ fun MobileBiometricOfferScreen(inFlight: Boolean, onEnable: () -> Unit, onSkip: 
 @Composable
 fun MobileCorruptedScreen(onReset: () -> Unit) {
     MobileLockScaffold(
-        title = "Storage is damaged",
-        subtitle = "The vault file can't be read or decrypted. To use Skerry again you'll need to reset it.",
+        title = stringResource(Res.string.shell_corrupted_title),
+        subtitle = stringResource(Res.string.shell_corrupted_subtitle),
         error = null,
     ) {
-        MobileWideButton("Reset Skerry", onClick = onReset)
+        MobileWideButton(stringResource(Res.string.shell_reset_skerry), onClick = onReset)
     }
 }
 
@@ -587,30 +622,30 @@ fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
     var confirmText by remember { mutableStateOf("") }
     val canConfirm = confirmText.trim() == RESET_CONFIRM_WORD
     MobileLockScaffold(
-        title = "Reset Skerry",
-        subtitle = "This is permanent. Saved passwords, keys and identities are erased — there is no recovery.",
+        title = stringResource(Res.string.shell_reset_skerry),
+        subtitle = stringResource(Res.string.shell_reset_subtitle),
         error = null,
     ) {
         MobileResetScopeRow(
             selected = scope == ResetScope.SecretsOnly,
-            title = "Secrets only",
-            subtitle = "Keep host profiles and known_hosts.",
+            title = stringResource(Res.string.shell_reset_scope_secrets_title),
+            subtitle = stringResource(Res.string.shell_reset_scope_secrets_subtitle),
             onSelect = { scope = ResetScope.SecretsOnly },
         )
         Spacer(Modifier.height(10.dp))
         MobileResetScopeRow(
             selected = scope == ResetScope.Everything,
-            title = "Erase everything",
-            subtitle = "Also remove host profiles, known_hosts and settings.",
+            title = stringResource(Res.string.shell_reset_scope_all_title),
+            subtitle = stringResource(Res.string.shell_reset_scope_all_subtitle),
             onSelect = { scope = ResetScope.Everything },
         )
         Spacer(Modifier.height(14.dp))
-        MobileLockPlainField(confirmText, { confirmText = it }, "Type $RESET_CONFIRM_WORD to confirm", ImeAction.Done) {
+        MobileLockPlainField(confirmText, { confirmText = it }, stringResource(Res.string.shell_reset_confirm_placeholder, RESET_CONFIRM_WORD), ImeAction.Done) {
             if (canConfirm) onConfirm(scope)
         }
         Spacer(Modifier.height(14.dp))
         MobileWideButton(
-            "Reset permanently",
+            stringResource(Res.string.shell_reset_permanently),
             onClick = { if (canConfirm) onConfirm(scope) },
             bg = if (canConfirm) D.storm else Color(0x14FFFFFF),
             fg = if (canConfirm) Color(0xFF0A1A26) else D.faint,
@@ -620,7 +655,7 @@ fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
         // Единственный выход из необратимого экрана — тап-зона на всю ширину (паритет desktop),
         // иначе промах пальцем оставляет на danger-экране без очевидного отступления.
         Txt(
-            "Cancel",
+            stringResource(Res.string.shell_cancel),
             color = D.dim,
             size = 13.sp,
             modifier = Modifier
@@ -699,7 +734,7 @@ private fun MobileLockScaffold(
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("shield_lock", size = 14.sp, color = D.faint)
-            Txt("Never leaves this device", color = D.faint, size = 11.sp)
+            Txt(stringResource(Res.string.shell_footer_never_leaves_short), color = D.faint, size = 11.sp)
         }
     }
 }

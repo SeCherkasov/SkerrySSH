@@ -1,0 +1,115 @@
+<resources>
+    <!-- Vault section: keychain manager, secret cards/details, dialogs, and the master-password gate. -->
+    <string name="vault_title">Vault</string>
+    <string name="vault_sidebar_header">VAULT</string>
+    <string name="vault_e2e_encrypted">End-to-end encrypted</string>
+    <string name="vault_e2e_description">Private keys are sealed with your master password and never sync in plaintext.</string>
+    <string name="vault_banner_encrypted">End-to-end encrypted · sealed with your master password</string>
+    <string name="vault_generate_key">Generate key</string>
+    <string name="vault_add_password">Add password</string>
+    <string name="vault_import_certificate">Import certificate</string>
+
+    <!-- Secret card meta (leading word + a runtime "used by" fragment). -->
+    <string name="vault_meta_certificate">Certificate · %1$s</string>
+    <string name="vault_meta_any_principal">any principal · %1$s</string>
+    <string name="vault_meta_password">Password · %1$s</string>
+
+    <!-- Empty category states. -->
+    <string name="vault_empty_ssh_title">No SSH keys yet</string>
+    <string name="vault_empty_ssh_hint">Generate a key — it\'s sealed in your vault and ready to attach to hosts.</string>
+    <string name="vault_empty_passwords_title">No passwords yet</string>
+    <string name="vault_empty_passwords_hint">Add a password — it\'s stored encrypted and reusable across hosts.</string>
+    <string name="vault_empty_certificates_title">No certificates yet</string>
+    <string name="vault_empty_certificates_hint">Import a CA-signed certificate with its private key — sealed in your vault and ready to attach to hosts.</string>
+    <string name="vault_empty_certificates_hint_short">Import a CA-signed certificate with its private key — sealed in your vault.</string>
+
+    <!-- Secret detail: subtitles and labels. -->
+    <string name="vault_subtitle_certificate">Certificate</string>
+    <string name="vault_subtitle_certificate_typed">%1$s certificate</string>
+    <string name="vault_subtitle_private_key">Private key</string>
+    <string name="vault_subtitle_password">Password</string>
+    <string name="vault_label_public_key">Public key</string>
+    <string name="vault_key_unreadable">Key could not be read</string>
+    <string name="vault_label_fingerprint">Fingerprint</string>
+    <string name="vault_copy_certificate">Copy certificate</string>
+    <string name="vault_copy_public_key">Copy public key</string>
+    <string name="vault_copy_password">Copy password</string>
+    <string name="vault_export">Export</string>
+    <string name="vault_delete">Delete</string>
+    <string name="vault_cancel">Cancel</string>
+    <string name="vault_used_by">Used by · %1$d hosts</string>
+    <string name="vault_not_attached">Not attached to any host yet.</string>
+    <string name="vault_cert_key_id">Key ID: %1$s</string>
+    <string name="vault_cert_unreadable">Certificate could not be read</string>
+    <string name="vault_label_principals">Principals</string>
+    <string name="vault_any_principal">any principal</string>
+    <string name="vault_label_valid">Valid</string>
+    <string name="vault_badge_expired">EXPIRED</string>
+    <string name="vault_label_serial">Serial</string>
+    <string name="vault_label_signing_ca">Signing CA</string>
+
+    <!-- Generate SSH key dialog. -->
+    <string name="vault_dialog_generate_title">Generate SSH key</string>
+    <string name="vault_dialog_generate_subtitle">A new key pair is sealed in your vault — no passphrase needed.</string>
+    <string name="vault_field_name">NAME</string>
+    <string name="vault_placeholder_name_key">e.g. work-laptop</string>
+    <string name="vault_field_algorithm">ALGORITHM</string>
+    <string name="vault_generate">Generate</string>
+
+    <!-- Add password dialog. -->
+    <string name="vault_dialog_add_password_subtitle">Stored encrypted in your vault and reusable across hosts.</string>
+    <string name="vault_placeholder_name_password">e.g. db-admin</string>
+    <string name="vault_field_password">PASSWORD</string>
+    <string name="vault_placeholder_password">secret</string>
+    <string name="vault_add">Add</string>
+
+    <!-- Import certificate dialog. -->
+    <string name="vault_dialog_import_subtitle">A CA-signed certificate and its private key are sealed in your vault.</string>
+    <string name="vault_placeholder_name_cert">e.g. prod-access</string>
+    <string name="vault_field_private_key_pem">PRIVATE KEY (PEM)</string>
+    <string name="vault_field_certificate">CERTIFICATE (*-cert.pub)</string>
+    <string name="vault_field_passphrase">PASSPHRASE (if any)</string>
+    <string name="vault_placeholder_optional">optional</string>
+    <string name="vault_cert_read_error">Couldn\'t read this certificate — expected an OpenSSH *-cert.pub line.</string>
+    <string name="vault_cert_valid_summary">%1$s · %2$s · valid until %3$s</string>
+    <string name="vault_import">Import</string>
+
+    <!-- Confirm master password before copying a secret. -->
+    <string name="vault_confirm_master_title">Confirm master password</string>
+    <string name="vault_confirm_master_subtitle">Enter your master password to copy this secret to the clipboard.</string>
+    <string name="vault_field_master_password">MASTER PASSWORD</string>
+    <string name="vault_placeholder_master_password">master password</string>
+    <string name="vault_password_mismatch_retry">That password didn\'t match — try again.</string>
+    <string name="vault_copy">Copy</string>
+
+    <!-- Delete secret dialog. -->
+    <string name="vault_delete_title">Delete \"%1$s\"?</string>
+    <string name="vault_delete_detail_none">This is removed from your vault. This can\'t be undone.</string>
+    <string name="vault_delete_detail_bound">%1$d hosts will lose this credential and ask for a password on next connect. This can\'t be undone.</string>
+
+    <!-- Master-password gate: create / unlock / biometric offer / corrupted / reset. -->
+    <string name="vault_create_title">Create a master password</string>
+    <string name="vault_create_subtitle">It encrypts your local vault. The password never leaves this device and can\'t be recovered — forget it and the data can\'t be decrypted.</string>
+    <string name="vault_master_password_label">Master password</string>
+    <string name="vault_confirm_password_label">Confirm password</string>
+    <string name="vault_create_button">Create vault</string>
+    <string name="vault_biometric_offer_title">Quick unlock</string>
+    <string name="vault_biometric_offer_subtitle">Turn on biometric unlock to open the vault without typing your master password. You can change this later in settings.</string>
+    <string name="vault_biometric_enable">Enable biometrics</string>
+    <string name="vault_not_now">Not now</string>
+    <string name="vault_unlock_title">Unlock vault</string>
+    <string name="vault_unlock_subtitle">Enter your master password to open your hosts, keys and sessions.</string>
+    <string name="vault_unlock_button">Unlock</string>
+    <string name="vault_unlock_biometric">Unlock with biometrics</string>
+    <string name="vault_forgot_password">Forgot your master password?</string>
+    <string name="vault_corrupted_title">Vault is corrupted</string>
+    <string name="vault_corrupted_subtitle">The vault file can\'t be read or decrypted. To keep using the app you\'ll have to reset the vault and start over.</string>
+    <string name="vault_reset_vault">Reset vault</string>
+    <string name="vault_reset_subtitle">This is irreversible. Saved passwords, keys and credentials will be erased beyond recovery — your master password doesn\'t protect them, it starts fresh.</string>
+    <string name="vault_reset_scope_secrets_title">Secrets only</string>
+    <string name="vault_reset_scope_secrets_subtitle">Host profiles and known_hosts are kept.</string>
+    <string name="vault_reset_scope_everything_title">Erase everything</string>
+    <string name="vault_reset_scope_everything_subtitle">Also delete host profiles, known_hosts and settings.</string>
+    <string name="vault_reset_confirm_label">Type %1$s to confirm</string>
+    <string name="vault_reset_confirm_button">Reset permanently</string>
+</resources>

@@ -1,0 +1,22 @@
+<resources>
+    <!-- SFTP / file transfer tail: deferred non-@Composable strings (F-key panel labels + controller errors) -->
+
+    <!-- F-key panel labels (mc/Total Commander bottom bar) -->
+    <string name="ftail_fkey_rename">Rename</string>
+    <string name="ftail_fkey_view">View</string>
+    <string name="ftail_fkey_edit">Edit</string>
+    <string name="ftail_fkey_copy">Copy</string>
+    <string name="ftail_fkey_move">Move</string>
+    <string name="ftail_fkey_mkdir">MkDir</string>
+    <string name="ftail_fkey_delete">Delete</string>
+    <string name="ftail_fkey_refresh">Refresh</string>
+    <string name="ftail_fkey_quit">Quit</string>
+
+    <!-- Controller / effect error fallbacks -->
+    <string name="ftail_open_failed">Failed to open SFTP</string>
+    <string name="ftail_transfer_error">Transfer error</string>
+    <string name="ftail_sftp_error">SFTP error</string>
+    <string name="ftail_file_pane_error">File panel error</string>
+    <string name="ftail_delete_source_failed">Failed to delete source after move</string>
+    <string name="ftail_file_fallback">file</string>
+</resources>

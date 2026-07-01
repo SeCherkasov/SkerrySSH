@@ -37,6 +37,18 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.nowMillis
 import app.skerry.ui.sync.qr.QrImage
 import kotlinx.coroutines.delay
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.sync_link_device
+import app.skerry.ui.generated.resources.sync_pairing_dialog_desc
+import app.skerry.ui.generated.resources.sync_zero_knowledge
+import app.skerry.ui.generated.resources.sync_done
+import app.skerry.ui.generated.resources.sync_pairing_gen_failed
+import app.skerry.ui.generated.resources.sync_generating_code
+import app.skerry.ui.generated.resources.sync_code_expired
+import app.skerry.ui.generated.resources.sync_expires_in
+import app.skerry.ui.generated.resources.sync_copied
+import app.skerry.ui.generated.resources.sync_copy
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Desktop-диалог «Link a device» (вошедшее устройство): скрим + карточка, как [SyncSetupDialog].
@@ -62,9 +74,9 @@ fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 .clickable(interactionSource = noop, indication = null, onClick = {})
                 .padding(26.dp),
         ) {
-            Txt("Link a device", color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(stringResource(Res.string.sync_link_device), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             Txt(
-                "On the new device pick “I have a pairing code”, then scan this QR or paste the code below. It works once.",
+                stringResource(Res.string.sync_pairing_dialog_desc),
                 color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
             PairingOfferContent(sync)
@@ -75,9 +87,9 @@ fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
             ) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Sym("shield_lock", size = 14.sp, color = D.moss)
-                    Txt("Zero-knowledge", color = D.faint, size = 11.sp)
+                    Txt(stringResource(Res.string.sync_zero_knowledge), color = D.faint, size = 11.sp)
                 }
-                PrimaryButton("Done", onClick = onDismiss)
+                PrimaryButton(stringResource(Res.string.sync_done), onClick = onDismiss)
             }
         }
     }
@@ -95,10 +107,11 @@ fun PairingOfferContent(sync: SyncCoordinator) {
     var copied by remember { mutableStateOf(false) }
     var remaining by remember { mutableStateOf<Long?>(null) } // секунд до протухания
     val clipboard = LocalClipboardManager.current
+    val genFailedMessage = stringResource(Res.string.sync_pairing_gen_failed)
 
     LaunchedEffect(Unit) {
         val o = sync.startPairing()
-        if (o == null) error = "Не удалось создать код связывания." else offer = o
+        if (o == null) error = genFailedMessage else offer = o
     }
     LaunchedEffect(offer) {
         val o = offer ?: return@LaunchedEffect
@@ -127,7 +140,7 @@ fun PairingOfferContent(sync: SyncCoordinator) {
             Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Txt("Generating code…", color = D.dim, size = 12.sp)
+            Txt(stringResource(Res.string.sync_generating_code), color = D.dim, size = 12.sp)
         }
 
         else -> {
@@ -155,15 +168,15 @@ fun PairingOfferContent(sync: SyncCoordinator) {
                 val expired = left != null && left <= 0L
                 Txt(
                     when {
-                        expired -> "Code expired — close and start again"
-                        left != null -> "Expires in ${formatMmSs(left)}"
+                        expired -> stringResource(Res.string.sync_code_expired)
+                        left != null -> stringResource(Res.string.sync_expires_in, formatMmSs(left))
                         else -> ""
                     },
                     color = if (expired) D.sunset else D.faint, size = 11.sp,
                     modifier = Modifier.weight(1f),
                 )
                 GhostButton(
-                    if (copied) "Copied" else "Copy",
+                    if (copied) stringResource(Res.string.sync_copied) else stringResource(Res.string.sync_copy),
                     onClick = { clipboard.setText(AnnotatedString(offer!!.payload)); copied = true },
                     icon = if (copied) "check" else "content_copy",
                 )

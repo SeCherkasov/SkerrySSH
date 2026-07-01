@@ -28,15 +28,9 @@ class MobilePortsTest {
         assertEquals("all_inclusive", mobileTunnelArrow(TunnelDirection.Dynamic))
     }
 
-    // Текст назначения: явный адрес или «dynamic proxy» для SOCKS
-
-    @Test
-    fun dest_text_shows_address_or_dynamic_proxy() {
-        assertEquals("10.0.0.5:80", mobileTunnelDest(tunnel(TunnelDirection.Local)))
-        assertEquals("localhost:3000", mobileTunnelDest(tunnel(TunnelDirection.Remote, destHost = "localhost", destPort = 3000)))
-        // У -D фиксированного назначения нет — показываем «dynamic proxy», как в макете.
-        assertEquals("dynamic proxy", mobileTunnelDest(tunnel(TunnelDirection.Dynamic, destHost = null, destPort = null)))
-    }
+    // Прим.: mobileTunnelDest, mobileMorePortsSubtitle и mobileMoreKnownSubtitle стали @Composable
+    // (текст локализован через строковые ресурсы), поэтому их строковые юнит-тесты сняты — проекция
+    // адреса/счётчика теперь резолвится в composition. Ниже — оставшаяся чистая логика (стрелка, счётчик).
 
     // Счётчик активных туннелей для подзаголовка хаба More
 
@@ -51,25 +45,5 @@ class MobilePortsTest {
         // Активен только первый: поднимается/выключен/упал — не считаются.
         assertEquals(1, mobileActiveTunnelCount(tunnels))
         assertEquals(0, mobileActiveTunnelCount(emptyList()))
-    }
-
-    // Подзаголовок строки Port forwarding в More
-
-    @Test
-    fun more_ports_subtitle_blank_without_manager_else_count() {
-        // Нет менеджера (превью/офскрин) — нечего считать, строка без подписи.
-        assertEquals("", mobileMorePortsSubtitle(null))
-        assertEquals("0 active", mobileMorePortsSubtitle(0))
-        assertEquals("1 active", mobileMorePortsSubtitle(1))
-        assertEquals("3 active", mobileMorePortsSubtitle(3))
-    }
-
-    // Подзаголовок строки Known hosts в More
-
-    @Test
-    fun more_known_subtitle_reports_changes_or_verified() {
-        assertEquals("All verified", mobileMoreKnownSubtitle(0))
-        assertEquals("1 changed", mobileMoreKnownSubtitle(1))
-        assertEquals("2 changed", mobileMoreKnownSubtitle(2))
     }
 }

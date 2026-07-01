@@ -1,0 +1,30 @@
+<resources>
+    <!-- Settings nav labels (SettingsPanel.kt · SettingsTab.navLabel) -->
+    <string name="shtail_nav_account">Аккаунт</string>
+    <string name="shtail_nav_ai">AI</string>
+    <string name="shtail_nav_sync">Синхронизация</string>
+    <string name="shtail_nav_security">Безопасность</string>
+    <string name="shtail_nav_appearance">Оформление</string>
+    <string name="shtail_nav_terminal">Терминал</string>
+    <string name="shtail_nav_keyboard">Клавиатура</string>
+    <string name="shtail_nav_about">О программе</string>
+
+    <!-- Mobile host detail rows (MobileHostDetailView.kt · mobileHostDetailRows) -->
+    <string name="shtail_host_address">Адрес</string>
+    <string name="shtail_host_port">Порт</string>
+    <string name="shtail_host_auth">Аутентификация</string>
+    <string name="shtail_host_saved_credential">Сохранённые данные</string>
+    <string name="shtail_host_ask_on_connect">Спрашивать при подключении</string>
+    <string name="shtail_host_group">Группа</string>
+
+    <!-- Host grouping: synthetic bucket for hosts without a group (display only) -->
+    <string name="shtail_ungrouped">Без группы</string>
+
+    <!-- Mobile known hosts (MobileKnown.kt) -->
+    <string name="shtail_known_changed">изменён</string>
+    <string name="shtail_known_key_changed_title">Ключ изменён: %1$s</string>
+    <string name="shtail_known_mismatch_body">Отпечаток %1$s отличается от записанного. Проверьте перед повторным подключением.</string>
+
+    <!-- Session tabs: default title for a blank tab (SessionsController.openBlank caller) -->
+    <string name="shtail_new_tab">Новая вкладка</string>
+</resources>

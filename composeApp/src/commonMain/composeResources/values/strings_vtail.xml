@@ -1,0 +1,35 @@
+<resources>
+    <!-- Leftover non-@Composable user-facing strings from the vault surface (prefix vtail_). -->
+
+    <!-- Biometric prompts (title / cancel button / subtitle): vault-gate enable & unlock, secret-copy re-auth. -->
+    <string name="vtail_bio_enable_title">Enable biometrics</string>
+    <string name="vtail_bio_enable_cancel">Cancel</string>
+    <string name="vtail_bio_enable_subtitle">Confirm your biometrics to bind vault unlock.</string>
+    <string name="vtail_bio_unlock_title">Unlock Skerry</string>
+    <string name="vtail_bio_unlock_cancel">Enter password</string>
+    <string name="vtail_bio_unlock_subtitle">Confirm your biometrics to open the vault.</string>
+    <string name="vtail_bio_copy_title">Confirm it\'s you</string>
+    <string name="vtail_bio_copy_cancel">Cancel</string>
+    <string name="vtail_bio_copy_subtitle">Verify your biometrics to copy this secret to the clipboard.</string>
+
+    <!-- Auth picker: keychain credential type labels. -->
+    <string name="vtail_picker_type_password">Password</string>
+    <string name="vtail_picker_type_ssh_key">SSH key</string>
+    <string name="vtail_picker_type_certificate">Certificate</string>
+
+    <!-- Vault-gate error messages (keys ready; wiring blocked by VaultGateErrorMessageTest). -->
+    <string name="vtail_error_password_too_short">Password is too short — at least %1$d characters.</string>
+    <string name="vtail_error_password_mismatch">Passwords don\'t match.</string>
+    <string name="vtail_error_wrong_password">Wrong master password.</string>
+    <string name="vtail_error_corrupted">The vault file is corrupted or unreadable.</string>
+    <string name="vtail_error_biometric_reset">Biometrics were reset — sign in with your master password.</string>
+
+    <!-- Secret card "used by" fragment, singular / plural (keys ready; wiring blocked by VaultPresentationTest). -->
+    <string name="vtail_used_by_one">used by 1 host</string>
+    <string name="vtail_used_by_other">used by %1$d hosts</string>
+
+    <!-- Vault sidebar category titles (keys ready; wiring blocked by field access in VaultView/MobileVaultView). -->
+    <string name="vtail_category_ssh_keys">SSH keys</string>
+    <string name="vtail_category_passwords">Passwords</string>
+    <string name="vtail_category_certificates">Certificates</string>
+</resources>

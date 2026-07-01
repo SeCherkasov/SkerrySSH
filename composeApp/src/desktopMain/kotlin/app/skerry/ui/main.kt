@@ -1,5 +1,7 @@
 package app.skerry.ui
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,8 @@ import app.skerry.shared.ai.OpenAiProvider
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.i18n.AppLocaleProvider
+import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.snippet.SnippetManager
@@ -210,6 +214,23 @@ private fun writeTerminalFontSize(dir: Path, px: Int) {
     }
 }
 
+/**
+ * Язык интерфейса (Appearance → Language), переживающий перезапуск: стабильный id ([UiLanguage.id]) в
+ * файле `ui_language`. Отсутствует/нечитаем/неизвестен → дефолт ([UiLanguage.DEFAULT] = System —
+ * автоопределение по локали ОС). Запись best-effort: сбой персиста не роняет UI.
+ */
+private fun readUiLanguage(dir: Path): UiLanguage {
+    val file = dir.resolve("ui_language")
+    return runCatching { UiLanguage.fromId(Files.readString(file).trim()) }.getOrDefault(UiLanguage.DEFAULT)
+}
+
+private fun writeUiLanguage(dir: Path, language: UiLanguage) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("ui_language"), language.id)
+    }
+}
+
 fun main() {
     // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
     // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
@@ -350,6 +371,7 @@ fun main() {
                 knownHosts.entries.toList().forEach { knownHosts.forget(it) }
                 writeTerminalFont(dir, TerminalFont.DEFAULT)
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
+                writeUiLanguage(dir, UiLanguage.DEFAULT)
             }
             hosts.reload()
             snippets.reload()
@@ -358,6 +380,10 @@ fun main() {
         val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync)
         // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
         // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
+        // Язык интерфейса живёт в корне: провайдер локали над темой должен реагировать на смену из
+        // настроек и рекомпозировать всё дерево. onUiLanguageChange (из DesktopDesignState) обновляет
+        // это состояние и пишет персист; DesktopDesignState держит копию для отображения в дропдауне.
+        val currentUiLanguage = remember { mutableStateOf(readUiLanguage(dir)) }
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
         val windowState = rememberWindowState(
             size = optimalWindowSize(DpSize(screen.width.dp, screen.height.dp)),
@@ -371,7 +397,8 @@ fun main() {
             // Живой vault + хосты + сессии + known-hosts подключены: chrome закрыт гейтом мастер-пароля,
             // клик по хосту открывает живой SSH-терминал во вкладке (transport+identities из `deps`),
             // менеджер known-hosts работает поверх своих сторов (knownHosts из `deps`).
-            app.skerry.ui.theme.SkerryTheme {
+            AppLocaleProvider(currentUiLanguage.value) {
+              app.skerry.ui.theme.SkerryTheme {
                 app.skerry.ui.design.DesktopDesignApp(
                     initialInfoPanel = readInfoPanel(dir),
                     onInfoPanelChange = { writeInfoPanel(dir, it) },
@@ -390,6 +417,8 @@ fun main() {
                     onTerminalFontChange = { writeTerminalFont(dir, it) },
                     initialTerminalFontSize = readTerminalFontSize(dir),
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
+                    initialUiLanguage = currentUiLanguage.value,
+                    onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     hosts = deps.hosts,
@@ -406,6 +435,7 @@ fun main() {
                     onVaultUnlocked = onVaultUnlocked,
                     onVaultReset = onVaultReset,
                 )
+              }
             }
         }
     }

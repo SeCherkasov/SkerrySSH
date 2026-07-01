@@ -1,0 +1,22 @@
+<resources>
+    <!-- SFTP / передача файлов: отложенные строки вне @Composable (подписи F-панели + ошибки контроллеров) -->
+
+    <!-- Подписи панели F-клавиш (нижняя строка mc/Total Commander) -->
+    <string name="ftail_fkey_rename">Переименовать</string>
+    <string name="ftail_fkey_view">Просмотр</string>
+    <string name="ftail_fkey_edit">Правка</string>
+    <string name="ftail_fkey_copy">Копировать</string>
+    <string name="ftail_fkey_move">Перенести</string>
+    <string name="ftail_fkey_mkdir">Каталог</string>
+    <string name="ftail_fkey_delete">Удалить</string>
+    <string name="ftail_fkey_refresh">Обновить</string>
+    <string name="ftail_fkey_quit">Выход</string>
+
+    <!-- Резервные сообщения об ошибках контроллеров/эффектов -->
+    <string name="ftail_open_failed">Не удалось открыть SFTP</string>
+    <string name="ftail_transfer_error">Ошибка передачи</string>
+    <string name="ftail_sftp_error">Ошибка SFTP</string>
+    <string name="ftail_file_pane_error">Ошибка файловой панели</string>
+    <string name="ftail_delete_source_failed">Не удалось удалить источник после переноса</string>
+    <string name="ftail_file_fallback">файл</string>
+</resources>

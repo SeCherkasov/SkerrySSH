@@ -1,5 +1,14 @@
 package app.skerry.ui.sync
 
+import androidx.compose.runtime.Composable
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.stail_sync_online
+import app.skerry.ui.generated.resources.stail_sync_offline
+import app.skerry.ui.generated.resources.stail_syncing
+import app.skerry.ui.generated.resources.stail_sync_paused
+import app.skerry.ui.generated.resources.stail_sync_error
+import org.jetbrains.compose.resources.stringResource
+
 /** Семантический уровень индикатора синхронизации (UI красит: OK→moss, WARN→amber, ERROR→sunset). */
 enum class SyncIndicatorLevel { OK, WARN, ERROR }
 
@@ -30,4 +39,25 @@ fun syncIndicator(status: SyncStatus?, reachable: ServerReachable): SyncIndicato
         is SyncStatus.Failed -> SyncIndicator("cloud_off", "Sync error", SyncIndicatorLevel.ERROR)
         SyncStatus.Disabled -> null // покрыто ранним возвратом; ветка для исчерпывающего when
     }
+}
+
+/**
+ * UI-обёртка [syncIndicator] с локализованной подписью. Иконка/уровень берутся из чистой (тестируемой)
+ * проекции, а [SyncIndicator.label] резолвится через [stringResource] по тому же статусу. Чистая версия
+ * оставлена для тестов и любого не-composable кода; здесь мы лишь подменяем англоязычный label.
+ */
+@Composable
+fun syncIndicatorLocalized(status: SyncStatus?, reachable: ServerReachable): SyncIndicator? {
+    val base = syncIndicator(status, reachable) ?: return null
+    val label = when (status) {
+        is SyncStatus.Online ->
+            if (reachable == ServerReachable.REACHABLE) stringResource(Res.string.stail_sync_online)
+            else stringResource(Res.string.stail_sync_offline)
+        SyncStatus.Busy -> stringResource(Res.string.stail_syncing)
+        is SyncStatus.Configured -> stringResource(Res.string.stail_sync_paused)
+        is SyncStatus.Failed -> stringResource(Res.string.stail_sync_error)
+        // base != null исключает Disabled/null — но when по статусу должен быть исчерпывающим.
+        null, SyncStatus.Disabled -> base.label
+    }
+    return base.copy(label = label)
 }

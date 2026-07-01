@@ -1,0 +1,58 @@
+<resources>
+    <!-- SFTP / file transfer: двухпанельный desktop (SftpView) и мобильный Files (MobileFilesView) -->
+
+    <!-- Заголовки и шапка -->
+    <string name="sftp_title">File transfer</string>
+    <string name="sftp_subtitle_host">%1$s · SFTP</string>
+    <string name="sftp_files_title">Files</string>
+
+    <!-- Действия тулбара / FAB -->
+    <string name="sftp_upload">Upload</string>
+    <string name="sftp_new_folder">New folder</string>
+    <string name="sftp_create">Create</string>
+    <string name="sftp_create_directory">Create directory</string>
+    <string name="sftp_upload_file">Upload file</string>
+    <string name="sftp_download_to_device">Download to device</string>
+
+    <!-- Метки панелей -->
+    <string name="sftp_pane_local">Local</string>
+    <string name="sftp_pane_remote">Remote</string>
+
+    <!-- Статусы / уведомления -->
+    <string name="sftp_unavailable">SFTP unavailable</string>
+    <string name="sftp_opening">Opening SFTP…</string>
+    <string name="sftp_connecting">Connecting…</string>
+    <string name="sftp_loading">Loading…</string>
+    <string name="sftp_error">Error</string>
+    <string name="sftp_no_session">No active session</string>
+    <string name="sftp_no_session_hint">Connect a host to browse files</string>
+
+    <!-- Общие кнопки диалогов -->
+    <string name="sftp_cancel">Cancel</string>
+    <string name="sftp_delete">Delete</string>
+    <string name="sftp_copy">Copy</string>
+    <string name="sftp_move">Move</string>
+    <string name="sftp_rename">Rename</string>
+
+    <!-- Диалог имени (New folder / Rename) -->
+    <string name="sftp_already_exists">«%1$s» already exists</string>
+
+    <!-- Диалоги удаления -->
+    <string name="sftp_delete_folder_q">Delete folder?</string>
+    <string name="sftp_delete_file_q">Delete file?</string>
+    <string name="sftp_delete_items_q">Delete %1$d items?</string>
+    <string name="sftp_delete_folder_body">«%1$s» and everything inside it will be removed permanently.</string>
+    <string name="sftp_delete_file_body">«%1$s» will be removed permanently.</string>
+    <string name="sftp_delete_items_dirs_body">%1$d items (folders with their contents) will be removed permanently.</string>
+    <string name="sftp_delete_items_body">%1$d items will be removed permanently.</string>
+
+    <!-- Диалоги копирования / перемещения -->
+    <string name="sftp_what_single">«%1$s»</string>
+    <string name="sftp_items_count">%1$d items</string>
+    <string name="sftp_copy_to_q">Copy to %1$s?</string>
+    <string name="sftp_move_to_q">Move to %1$s?</string>
+    <string name="sftp_transfer_body">%1$s → %2$s</string>
+
+    <!-- Ошибка передачи (имя: сообщение) -->
+    <string name="sftp_transfer_error">%1$s: %2$s</string>
+</resources>

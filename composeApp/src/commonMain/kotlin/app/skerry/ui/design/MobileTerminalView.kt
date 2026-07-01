@@ -51,6 +51,22 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.term_mobile_title_fallback
+import app.skerry.ui.generated.resources.term_no_active_session
+import app.skerry.ui.generated.resources.term_mobile_open_host_connect
+import app.skerry.ui.generated.resources.term_connecting
+import app.skerry.ui.generated.resources.term_connection_failed
+import app.skerry.ui.generated.resources.term_ai_thinking
+import app.skerry.ui.generated.resources.term_ai_ask_short
+import app.skerry.ui.generated.resources.term_ai_run
+import app.skerry.ui.generated.resources.term_ai_run_anyway
+import app.skerry.ui.generated.resources.term_ai_confirm
+import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_password_label
+import app.skerry.ui.generated.resources.term_connect
+import app.skerry.ui.generated.resources.term_disconnect
+import org.jetbrains.compose.resources.stringResource
 
 /** Фон клавишной панели терминала (`#0E1A24` из мока). Клавиши — белый 6%, моноширинные. */
 private val KeybarBg = Color(0xFF0E1A24)
@@ -117,7 +133,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     Box(Modifier.fillMaxSize().background(D.terminalBg)) {
         Column(Modifier.fillMaxSize()) {
             MobileTerminalHeader(
-                title = active?.displayTitle ?: "Terminal",
+                title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
                 status = active?.controller?.uiState,
                 controller = active?.controller,
                 onBack = state::pop,
@@ -126,9 +142,9 @@ fun MobileTerminalScreen(state: MobileDesignState) {
             )
             when (val st = active?.controller?.uiState) {
                 null, ConnectionUiState.Form ->
-                    MobileTerminalNotice("terminal", "No active session", "Open a host and tap Connect.")
+                    MobileTerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_mobile_open_host_connect))
                 ConnectionUiState.Connecting ->
-                    MobileTerminalNotice("sync", "Connecting…", active.subtitle)
+                    MobileTerminalNotice("sync", stringResource(Res.string.term_connecting), active.subtitle)
                 is ConnectionUiState.Connected -> {
                     // AI-контроллер (или null): общий на транзиент-оверлей и строку ввода; key() пересоздаёт
                     // при смене хоста/политики. Транзиент рисуется поверх низа терминала, чтобы его появление
@@ -153,7 +169,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
                 }
                 is ConnectionUiState.Error ->
-                    MobileTerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+                    MobileTerminalNotice("error", stringResource(Res.string.term_connection_failed), st.message, color = D.sunset)
                 // Обрыв: застывший экран на момент потери, без keybar (канал мёртв). Статус в шапке —
                 // «disconnected» красным. Детальный мобильный паритет (авто-реконнект) — отдельной задачей.
                 is ConnectionUiState.Disconnected ->
@@ -214,11 +230,11 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                             if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }
-                    controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)
+                    controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = D.dim, size = 13.sp)
                     controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     else -> {
-                        if (prompt.isEmpty()) Txt("Ask Skerry…", color = D.dim, size = 13.sp)
+                        if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = D.dim, size = 13.sp)
                         BasicTextField(
                             value = prompt,
                             onValueChange = { prompt = it },
@@ -234,14 +250,14 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
             }
             when {
                 pending != null -> {
-                    MobileAiChip(when { !danger -> "Run"; !armed -> "Run anyway"; else -> "Confirm" }, accent) {
+                    MobileAiChip(when { !danger -> stringResource(Res.string.term_ai_run); !armed -> stringResource(Res.string.term_ai_run_anyway); else -> stringResource(Res.string.term_ai_confirm) }, accent) {
                         if (danger && !armed) armed = true
                         else controller.confirm()?.let { terminal.send(it + "\r") }
                     }
-                    MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
+                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
                 }
                 controller.blocked != null || controller.error != null ->
-                    MobileAiChip("Dismiss", D.faint) { controller.dismiss() }
+                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
                 else -> {
                     Txt(controller.policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)
                     Box(
@@ -360,7 +376,7 @@ private fun MobileTerminalHeader(
                 MobileActionSheet(
                     title = title,
                     actions = listOf(
-                        MobileSheetAction("Disconnect", onClick = onDisconnect, icon = "power_settings_new", danger = true),
+                        MobileSheetAction(stringResource(Res.string.term_disconnect), onClick = onDisconnect, icon = "power_settings_new", danger = true),
                     ),
                     onDismiss = { menuOpen = false },
                 )
@@ -522,7 +538,7 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
             Spacer(Modifier.height(3.dp))
             Txt("${host.username}@${host.address}:${host.port}", color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono)
             Spacer(Modifier.height(18.dp))
-            Txt("PASSWORD", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+            Txt(stringResource(Res.string.term_password_label), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
             Spacer(Modifier.height(6.dp))
             Box(
                 Modifier
@@ -555,7 +571,7 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt("Connect", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.term_connect), color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
             }
         }
 }

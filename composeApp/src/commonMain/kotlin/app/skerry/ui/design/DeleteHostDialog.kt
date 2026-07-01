@@ -24,6 +24,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_delete_host_title
+import app.skerry.ui.generated.resources.shell_delete_host_body
+import app.skerry.ui.generated.resources.shell_cancel
+import app.skerry.ui.generated.resources.shell_delete
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Диалог подтверждения удаления профиля хоста (вызывается из контекстного меню сайдбара). Удаляется
@@ -50,10 +56,10 @@ fun DesktopDeleteHostDialog(host: Host, onDismiss: () -> Unit, onConfirm: () -> 
                 .clickable(interactionSource = noop, indication = null, onClick = {})
                 .padding(26.dp),
         ) {
-            Txt("Delete \"${host.label}\"?", color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(stringResource(Res.string.shell_delete_host_title, host.label), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             Txt(host.connectionSubtitle(), color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
             Txt(
-                "This connection profile is removed from your archipelago. Any stored credential stays in your vault. This can't be undone.",
+                stringResource(Res.string.shell_delete_host_body),
                 color = D.dim, size = 12.5.sp, lineHeight = 18.sp,
             )
             Row(
@@ -62,9 +68,9 @@ fun DesktopDeleteHostDialog(host: Host, onDismiss: () -> Unit, onConfirm: () -> 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt("Cancel", color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
                 }
-                PrimaryButton("Delete", onClick = onConfirm, bg = D.sunset, fg = Color(0xFF1A0B07))
+                PrimaryButton(stringResource(Res.string.shell_delete), onClick = onConfirm, bg = D.sunset, fg = Color(0xFF1A0B07))
             }
         }
     }

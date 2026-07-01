@@ -38,6 +38,34 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vault_add_password
+import app.skerry.ui.generated.resources.vault_badge_expired
+import app.skerry.ui.generated.resources.vault_banner_encrypted
+import app.skerry.ui.generated.resources.vault_copy_certificate
+import app.skerry.ui.generated.resources.vault_copy_password
+import app.skerry.ui.generated.resources.vault_copy_public_key
+import app.skerry.ui.generated.resources.vault_delete
+import app.skerry.ui.generated.resources.vault_empty_certificates_hint_short
+import app.skerry.ui.generated.resources.vault_empty_certificates_title
+import app.skerry.ui.generated.resources.vault_empty_passwords_hint
+import app.skerry.ui.generated.resources.vault_empty_passwords_title
+import app.skerry.ui.generated.resources.vault_empty_ssh_hint
+import app.skerry.ui.generated.resources.vault_empty_ssh_title
+import app.skerry.ui.generated.resources.vault_export
+import app.skerry.ui.generated.resources.vault_generate_key
+import app.skerry.ui.generated.resources.vault_import_certificate
+import app.skerry.ui.generated.resources.vault_key_unreadable
+import app.skerry.ui.generated.resources.vault_label_fingerprint
+import app.skerry.ui.generated.resources.vault_label_public_key
+import app.skerry.ui.generated.resources.vault_meta_any_principal
+import app.skerry.ui.generated.resources.vault_meta_certificate
+import app.skerry.ui.generated.resources.vault_meta_password
+import app.skerry.ui.generated.resources.vault_subtitle_certificate
+import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
+import app.skerry.ui.generated.resources.vault_subtitle_password
+import app.skerry.ui.generated.resources.vault_subtitle_private_key
+import app.skerry.ui.generated.resources.vault_title
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -46,12 +74,14 @@ import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.vault.SecretCopyAuthorizer
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
+import app.skerry.ui.vault.title
 import app.skerry.ui.vault.copyPasswordToClipboard
 import app.skerry.ui.vault.copyTextToClipboard
 import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Корневой таб Vault: три keychain-категории (SSH keys/Passwords/Certificates) переключаются
@@ -111,7 +141,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-                Txt("Vault", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+                Txt(stringResource(Res.string.vault_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
             }
             MobileVaultBanner()
             MobileCategoryPills(category, allCreds) { category = it; selectedId = null }
@@ -248,7 +278,7 @@ private fun MobileVaultBanner() {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Sym("lock", size = 19.sp, color = D.moss)
-        Txt("End-to-end encrypted · sealed with your master password", color = D.dim, size = 12.sp)
+        Txt(stringResource(Res.string.vault_banner_encrypted), color = D.dim, size = 12.sp)
     }
 }
 
@@ -272,7 +302,7 @@ private fun MobileCategoryPills(active: VaultCategoryKind, credentials: List<Cre
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Sym(kind.icon, size = 15.sp, color = if (on) D.cyanBright else D.dim)
-                Txt(kind.title, color = if (on) D.cyanBright else D.dim, size = 12.5.sp, weight = FontWeight.Medium)
+                Txt(kind.title(), color = if (on) D.cyanBright else D.dim, size = 12.5.sp, weight = FontWeight.Medium)
                 Txt(count.toString(), color = D.faint, size = 10.sp)
             }
         }
@@ -291,9 +321,9 @@ private fun MobileVaultAction(
 ) {
     Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
         when (category) {
-            VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton("Generate key", onClick = onGenerate, icon = "add", modifier = Modifier.fillMaxWidth())
-            VaultCategoryKind.PASSWORDS -> PrimaryButton("Add password", onClick = onAddPassword, icon = "add", modifier = Modifier.fillMaxWidth())
-            VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton("Import certificate", onClick = onImportCert, icon = "add", modifier = Modifier.fillMaxWidth())
+            VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add", modifier = Modifier.fillMaxWidth())
+            VaultCategoryKind.PASSWORDS -> PrimaryButton(stringResource(Res.string.vault_add_password), onClick = onAddPassword, icon = "add", modifier = Modifier.fillMaxWidth())
+            VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add", modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -335,7 +365,7 @@ private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: Fon
                         keyInfo?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, size = 9.sp) }
                     is CredentialSecret.Certificate -> {
                         certInfo?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, size = 9.sp) }
-                        if (certInfo?.expired == true) Badge("EXPIRED", bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, size = 9.sp)
+                        if (certInfo?.expired == true) Badge(stringResource(Res.string.vault_badge_expired), bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, size = 9.sp)
                     }
                     is CredentialSecret.Password -> Unit
                 }
@@ -344,11 +374,11 @@ private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: Fon
                 is CredentialSecret.PrivateKey ->
                     if (keyInfo != null) "${shortFingerprint(keyInfo.fingerprintSha256)} · $usedBy" else usedBy
                 is CredentialSecret.Certificate -> when {
-                    certInfo == null -> "Certificate · $usedBy"
-                    certInfo.principals.isEmpty() -> "any principal · $usedBy"
+                    certInfo == null -> stringResource(Res.string.vault_meta_certificate, usedBy)
+                    certInfo.principals.isEmpty() -> stringResource(Res.string.vault_meta_any_principal, usedBy)
                     else -> "${certInfo.principals.joinToString(", ")} · $usedBy"
                 }
-                is CredentialSecret.Password -> "Password · $usedBy"
+                is CredentialSecret.Password -> stringResource(Res.string.vault_meta_password, usedBy)
             }
             Txt(meta, color = D.dim, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
         }
@@ -362,9 +392,9 @@ private fun MobileVaultEmpty(category: VaultCategoryKind) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym(category.icon, size = 26.sp, color = D.faint)
             val (title, hint) = when (category) {
-                VaultCategoryKind.SSH_KEYS -> "No SSH keys yet" to "Generate a key — it's sealed in your vault and ready to attach to hosts."
-                VaultCategoryKind.PASSWORDS -> "No passwords yet" to "Add a password — it's stored encrypted and reusable across hosts."
-                VaultCategoryKind.CERTIFICATES -> "No certificates yet" to "Import a CA-signed certificate with its private key — sealed in your vault."
+                VaultCategoryKind.SSH_KEYS -> stringResource(Res.string.vault_empty_ssh_title) to stringResource(Res.string.vault_empty_ssh_hint)
+                VaultCategoryKind.PASSWORDS -> stringResource(Res.string.vault_empty_passwords_title) to stringResource(Res.string.vault_empty_passwords_hint)
+                VaultCategoryKind.CERTIFICATES -> stringResource(Res.string.vault_empty_certificates_title) to stringResource(Res.string.vault_empty_certificates_hint_short)
             }
             Txt(title, color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
             Txt(hint, color = D.faint, size = 11.5.sp)
@@ -402,9 +432,9 @@ private fun MobileSecretDetailSheet(
         is CredentialSecret.Password -> Triple("password", D.dim, false)
     }
     val subtitle = when (secret) {
-        is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { "$it certificate" } ?: "Certificate"
-        is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: "Private key"
-        is CredentialSecret.Password -> "Password"
+        is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { stringResource(Res.string.vault_subtitle_certificate_typed, it) } ?: stringResource(Res.string.vault_subtitle_certificate)
+        is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: stringResource(Res.string.vault_subtitle_private_key)
+        is CredentialSecret.Password -> stringResource(Res.string.vault_subtitle_password)
     }
     // Скрим на весь экран; тап мимо листа закрывает. Сам лист гасит клик, чтобы не закрываться.
     // Лист подгоняется под содержимое (короткий пароль ⇒ невысокая шторка), но не выше 85% экрана —
@@ -423,11 +453,11 @@ private fun MobileSecretDetailSheet(
                 when (secret) {
                     is CredentialSecret.Certificate -> CertificateDetailBody(certInfo, mono)
                     is CredentialSecret.PrivateKey -> {
-                        DetailLabel("Public key")
+                        DetailLabel(stringResource(Res.string.vault_label_public_key))
                         Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(D.terminalBg).border(1.dp, D.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                            Txt(keyInfo?.publicKeyOpenSsh ?: "Key could not be read", color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
+                            Txt(keyInfo?.publicKeyOpenSsh ?: stringResource(Res.string.vault_key_unreadable), color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
                         }
-                        DetailLabel("Fingerprint")
+                        DetailLabel(stringResource(Res.string.vault_label_fingerprint))
                         Txt(keyInfo?.fingerprintSha256 ?: "—", color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
                     }
                     is CredentialSecret.Password -> Unit
@@ -436,25 +466,25 @@ private fun MobileSecretDetailSheet(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     when (secret) {
                         is CredentialSecret.Certificate -> {
-                            MobileSheetButton("Copy certificate", onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                            MobileSheetButton(stringResource(Res.string.vault_copy_certificate), onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                MobileSheetButton("Export", onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, filled = false, modifier = Modifier.weight(1f))
-                                MobileSheetButton("Delete", onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
+                                MobileSheetButton(stringResource(Res.string.vault_export), onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, filled = false, modifier = Modifier.weight(1f))
+                                MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
                             }
                         }
                         is CredentialSecret.PrivateKey -> {
-                            MobileSheetButton("Copy public key", onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                            MobileSheetButton(stringResource(Res.string.vault_copy_public_key), onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                MobileSheetButton("Export", onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, filled = false, modifier = Modifier.weight(1f))
-                                MobileSheetButton("Delete", onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
+                                MobileSheetButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, filled = false, modifier = Modifier.weight(1f))
+                                MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
                             }
                         }
                         is CredentialSecret.Password -> {
                             // Пароль — чувствительный: копирование требует повторной аутентификации
                             // (биометрия/мастер-пароль, см. onCopyPassword) и идёт платформенным путём
                             // (Android: sensitive-клип + автоочистка), а не обычным буфером, как cert/публичный ключ.
-                            MobileSheetButton("Copy password", onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                            MobileSheetButton("Delete", onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
+                            MobileSheetButton(stringResource(Res.string.vault_copy_password), onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                            MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
                         }
                     }
                 }
@@ -471,7 +501,7 @@ private fun MobileVaultMock() {
     val mono = LocalFonts.current.mono
     Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
         Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-            Txt("Vault", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+            Txt(stringResource(Res.string.vault_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
         }
         MobileVaultBanner()
         Txt(

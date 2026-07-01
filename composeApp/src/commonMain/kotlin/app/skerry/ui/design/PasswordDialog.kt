@@ -35,6 +35,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_connect_to
+import app.skerry.ui.generated.resources.shell_password_caps
+import app.skerry.ui.generated.resources.shell_password_host_placeholder
+import app.skerry.ui.generated.resources.shell_not_stored_once
+import app.skerry.ui.generated.resources.shell_cancel
+import app.skerry.ui.generated.resources.shell_connect
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Диалог ввода пароля при подключении к хосту без привязанной identity (паритет с мобильным
@@ -62,10 +70,10 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
                 .clickable(interactionSource = noop, indication = null, onClick = {})
                 .padding(26.dp),
         ) {
-            Txt("Connect to ${host.label}", color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(stringResource(Res.string.shell_connect_to, host.label), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             Txt(host.connectionSubtitle(), color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
 
-            Txt("PASSWORD", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
+            Txt(stringResource(Res.string.shell_password_caps), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -75,7 +83,7 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
                 val ui = LocalFonts.current.ui
                 val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
                 Box(Modifier.fillMaxWidth()) {
-                    if (password.isEmpty()) Txt("master password for this host", color = D.faint, size = 13.sp)
+                    if (password.isEmpty()) Txt(stringResource(Res.string.shell_password_host_placeholder), color = D.faint, size = 13.sp)
                     BasicTextField(
                         value = password,
                         onValueChange = { password = it },
@@ -96,12 +104,12 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
             ) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Sym("shield_lock", size = 14.sp, color = D.moss)
-                    Txt("Not stored · used once", color = D.faint, size = 11.sp)
+                    Txt(stringResource(Res.string.shell_not_stored_once), color = D.faint, size = 11.sp)
                 }
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt("Cancel", color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
                 }
-                PrimaryButton("Connect", onClick = submit, bg = if (password.isNotEmpty()) D.cyan else D.cyan.copy(alpha = 0.4f))
+                PrimaryButton(stringResource(Res.string.shell_connect), onClick = submit, bg = if (password.isNotEmpty()) D.cyan else D.cyan.copy(alpha = 0.4f))
             }
         }
     }

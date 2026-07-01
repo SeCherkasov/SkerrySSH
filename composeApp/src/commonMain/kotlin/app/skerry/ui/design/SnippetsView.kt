@@ -57,6 +57,25 @@ import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
 import app.skerry.ui.snippet.snippetTagSuggestions
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_snippets_add_tag
+import app.skerry.ui.generated.resources.lib_snippets_delete
+import app.skerry.ui.generated.resources.lib_snippets_empty
+import app.skerry.ui.generated.resources.lib_snippets_field_command
+import app.skerry.ui.generated.resources.lib_snippets_field_name
+import app.skerry.ui.generated.resources.lib_snippets_field_shortcut
+import app.skerry.ui.generated.resources.lib_snippets_field_tags
+import app.skerry.ui.generated.resources.lib_snippets_library
+import app.skerry.ui.generated.resources.lib_snippets_new
+import app.skerry.ui.generated.resources.lib_snippets_no_matches
+import app.skerry.ui.generated.resources.lib_snippets_ph_name
+import app.skerry.ui.generated.resources.lib_snippets_press_keys
+import app.skerry.ui.generated.resources.lib_snippets_save
+import app.skerry.ui.generated.resources.lib_snippets_search
+import app.skerry.ui.generated.resources.lib_snippets_select_or_create
+import app.skerry.ui.generated.resources.lib_snippets_shortcut_conflict
+import app.skerry.ui.generated.resources.lib_snippets_untitled
+import org.jetbrains.compose.resources.stringResource
 
 private data class MockSnippet(val icon: String, val title: String, val cmd: String, val selected: Boolean = false)
 
@@ -105,10 +124,10 @@ private fun LiveSnippetsView(manager: SnippetManager, mono: FontFamily) {
             }
             HLine()
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 8.dp)) {
-                Txt("LIBRARY", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp))
+                Txt(stringResource(Res.string.lib_snippets_library), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp))
                 if (filtered.isEmpty()) {
                     Txt(
-                        if (all.isEmpty()) "No snippets yet" else "No matches",
+                        if (all.isEmpty()) stringResource(Res.string.lib_snippets_empty) else stringResource(Res.string.lib_snippets_no_matches),
                         color = D.faint, size = 11.5.sp, font = mono,
                         modifier = Modifier.padding(start = 10.dp, top = 6.dp),
                     )
@@ -130,7 +149,7 @@ private fun LiveSnippetsView(manager: SnippetManager, mono: FontFamily) {
             }
             HLine()
             Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                PrimaryButton("New snippet", onClick = { adding = true; selectedId = null }, icon = "add", modifier = Modifier.fillMaxWidth())
+                PrimaryButton(stringResource(Res.string.lib_snippets_new), onClick = { adding = true; selectedId = null }, icon = "add", modifier = Modifier.fillMaxWidth())
             }
         }
         VLine(D.line)
@@ -175,7 +194,7 @@ private fun LiveSnippetRow(entry: SnippetEntry, selected: Boolean, mono: FontFam
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Sym("code_blocks", size = 15.sp, color = if (selected) D.cyanBright else D.dim)
-            Txt(s.label.ifBlank { "Untitled" }, color = if (selected) D.cyanBright else D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+            Txt(s.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = if (selected) D.cyanBright else D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
         }
         Txt(s.command, color = if (selected) D.dim else D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
     }
@@ -219,7 +238,7 @@ private fun SnippetEditor(
         Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Sym("code_blocks", size = 20.sp, color = D.cyanBright)
-                Txt(label.ifBlank { "New snippet" }, color = D.text, size = 17.sp, weight = FontWeight.SemiBold)
+                Txt(label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = D.text, size = 17.sp, weight = FontWeight.SemiBold)
             }
             if (tags.isNotEmpty()) {
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -229,14 +248,14 @@ private fun SnippetEditor(
         }
         HLine()
         Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-            FieldLabelSnip("Name")
-            SnipEditField(label, { label = it }, "Disk usage report", mono)
+            FieldLabelSnip(stringResource(Res.string.lib_snippets_field_name))
+            SnipEditField(label, { label = it }, stringResource(Res.string.lib_snippets_ph_name), mono)
             Column(Modifier.padding(top = 20.dp)) {
-                FieldLabelSnip("Command")
+                FieldLabelSnip(stringResource(Res.string.lib_snippets_field_command))
                 SnipCommandField(command, { command = it }, "df -h | sort -k5 -r", mono)
             }
             Column(Modifier.padding(top = 20.dp)) {
-                FieldLabelSnip("Tags")
+                FieldLabelSnip(stringResource(Res.string.lib_snippets_field_tags))
                 // Подсказки из других сниппетов (свой исключаем: иначе только что снятый тег вернулся
                 // бы в список). Мемоизация — чтобы правка label/command не пересчитывала скан.
                 val tagSugs = remember(manager.snippets, tags, tagDraft, entry?.id) {
@@ -253,7 +272,7 @@ private fun SnippetEditor(
                 )
             }
             Column(Modifier.padding(top = 20.dp).width(220.dp)) {
-                FieldLabelSnip("Shortcut")
+                FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
                 // Коллизию считаем по другим сниппетам (свой хоткей не конфликт): UI не даёт занять
                 // один аккорд дважды, чего [SnippetManager.forShortcut] на чтении не гарантирует.
                 val conflict = remember(manager.snippets, shortcut, entry?.id) {
@@ -263,13 +282,13 @@ private fun SnippetEditor(
             }
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrimaryButton(
-                    "Save",
+                    stringResource(Res.string.lib_snippets_save),
                     onClick = { if (canSave) onSaved(persist()) },
                     enabled = canSave,
                     bg = if (canSave) D.cyan else D.cyan.copy(alpha = 0.3f),
                 )
                 if (entry != null) {
-                    GhostButton("Delete", onClick = { manager.delete(entry.id); onDeleted() }, fg = D.storm, border = D.storm.copy(alpha = 0.4f))
+                    GhostButton(stringResource(Res.string.lib_snippets_delete), onClick = { manager.delete(entry.id); onDeleted() }, fg = D.storm, border = D.storm.copy(alpha = 0.4f))
                 }
             }
         }
@@ -279,7 +298,7 @@ private fun SnippetEditor(
 @Composable
 private fun EmptyEditorHint() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Txt("Select a snippet or create a new one.", color = D.faint, size = 13.sp)
+        Txt(stringResource(Res.string.lib_snippets_select_or_create), color = D.faint, size = 13.sp)
     }
 }
 
@@ -328,7 +347,7 @@ private fun SnipTagsField(
                     modifier = Modifier.widthIn(min = 72.dp).onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
-                            if (draft.isEmpty()) Txt("add tag…", color = D.faint, size = 12.5.sp, font = mono)
+                            if (draft.isEmpty()) Txt(stringResource(Res.string.lib_snippets_add_tag), color = D.faint, size = 12.5.sp, font = mono)
                             inner()
                         }
                     },
@@ -407,14 +426,14 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: Strin
                 .clickable { requester.requestFocus() }
                 .padding(horizontal = 11.dp, vertical = 9.dp),
         ) {
-            val text = value ?: if (focused) "Press keys…" else "—"
+            val text = value ?: if (focused) stringResource(Res.string.lib_snippets_press_keys) else "—"
             Txt(text, color = if (value != null) D.text else D.faint, size = 13.sp, font = mono)
         }
         // Аккорд уже занят другим сниппетом — назначение остаётся (поле захватывает аккорд), но
         // предупреждаем явно; на сохранении ничего не блокируем, выбор за пользователем.
         if (conflictLabel != null) {
             Txt(
-                "Already used by \"$conflictLabel\"",
+                stringResource(Res.string.lib_snippets_shortcut_conflict, conflictLabel),
                 color = D.storm, size = 11.sp,
                 modifier = Modifier.padding(top = 6.dp),
             )
@@ -435,7 +454,7 @@ private fun MockSnippetsView(mono: FontFamily) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Sym("search", size = 16.sp, color = D.faint)
-                    Txt("Search snippets…", color = D.faint, size = 12.5.sp)
+                    Txt(stringResource(Res.string.lib_snippets_search), color = D.faint, size = 12.5.sp)
                 }
             }
             HLine()
@@ -447,7 +466,7 @@ private fun MockSnippetsView(mono: FontFamily) {
             }
             HLine()
             Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                PrimaryButton("New snippet", onClick = {}, icon = "add", modifier = Modifier.fillMaxWidth())
+                PrimaryButton(stringResource(Res.string.lib_snippets_new), onClick = {}, icon = "add", modifier = Modifier.fillMaxWidth())
             }
         }
         VLine(D.line)
@@ -465,7 +484,7 @@ private fun MockSnippetsView(mono: FontFamily) {
             }
             HLine()
             Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-                FieldLabelSnip("Command")
+                FieldLabelSnip(stringResource(Res.string.lib_snippets_field_command))
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(D.terminalBg).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
@@ -477,11 +496,11 @@ private fun MockSnippetsView(mono: FontFamily) {
                     Txt(" -n 10", color = D.textBright, size = 13.sp, font = mono)
                 }
                 Column(Modifier.padding(top = 20.dp).width(220.dp)) {
-                    FieldLabelSnip("Shortcut")
+                    FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
                     SnipInput("⌘⇧D", mono)
                 }
                 Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PrimaryButton("Save", onClick = {})
+                    PrimaryButton(stringResource(Res.string.lib_snippets_save), onClick = {})
                 }
             }
         }
@@ -571,7 +590,7 @@ private fun SnipSearchField(value: String, onValueChange: (String) -> Unit, mono
             ) {
                 Sym("search", size = 16.sp, color = D.faint)
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt("Search snippets…", color = D.faint, size = 12.5.sp, font = mono)
+                    if (value.isEmpty()) Txt(stringResource(Res.string.lib_snippets_search), color = D.faint, size = 12.5.sp, font = mono)
                     inner()
                 }
             }

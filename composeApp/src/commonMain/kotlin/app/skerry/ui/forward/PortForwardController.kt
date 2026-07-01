@@ -9,10 +9,13 @@ import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
 import app.skerry.shared.ssh.RemoteForwardSpec
 import app.skerry.shared.ssh.SshConnection
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ptail_forward_raise_failed
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Направление проброса: локальный (`-L`), обратный (`-R`) или динамический SOCKS (`-D`). */
@@ -165,7 +168,7 @@ class PortForwardController(
             } catch (e: Exception) {
                 // Ожидаемая ошибка — PortForwardException; ловим шире, чтобы нежданное исключение из
                 // sshj не уронило общий scope сессии (его делит SFTP), а осело в строке как Failed.
-                entry.status = ForwardStatus.Failed(e.message ?: "Не удалось поднять проброс")
+                entry.status = ForwardStatus.Failed(e.message ?: getString(Res.string.ptail_forward_raise_failed))
             }
         }
     }

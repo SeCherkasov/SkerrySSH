@@ -1,0 +1,62 @@
+<resources>
+    <string name="conn_title_new">Новое подключение</string>
+    <string name="conn_title_edit">Изменить подключение</string>
+    <string name="conn_subtitle_new">Настройте новый skerry в вашем архипелаге. Учётные данные шифруются мастер-паролем.</string>
+    <string name="conn_subtitle_edit">Обновите профиль этого skerry. Учётные данные шифруются мастер-паролем.</string>
+    <string name="conn_subtitle_mobile">Учётные данные шифруются мастер-паролем и остаются на этом устройстве.</string>
+
+    <string name="conn_field_name">Имя</string>
+    <string name="conn_field_protocol">Протокол</string>
+    <string name="conn_field_host_address">Адрес хоста</string>
+    <string name="conn_field_device">Устройство</string>
+    <string name="conn_field_port">Порт</string>
+    <string name="conn_field_baud">Скорость</string>
+    <string name="conn_field_username">Пользователь</string>
+    <string name="conn_field_authentication">Аутентификация</string>
+    <string name="conn_field_group">Группа</string>
+    <string name="conn_field_tags">Теги</string>
+    <string name="conn_field_jump_host">Прыжковый хост (необязательно)</string>
+    <string name="conn_field_keep_alive">Keep-alive</string>
+    <string name="conn_field_ai_policy">Политика AI для этого подключения</string>
+    <string name="conn_field_ai_policy_short">Политика AI</string>
+
+    <string name="conn_protocol_ssh">SSH</string>
+    <string name="conn_protocol_telnet">Telnet</string>
+    <string name="conn_protocol_serial">Serial</string>
+
+    <string name="conn_jump_none">Нет — напрямую</string>
+    <string name="conn_keepalive_30s">Каждые 30 с</string>
+
+    <string name="conn_cancel">Отмена</string>
+    <string name="conn_test">Проверить</string>
+    <string name="conn_save">Сохранить</string>
+    <string name="conn_save_changes">Сохранить изменения</string>
+    <string name="conn_save_connection">Сохранить подключение</string>
+    <string name="conn_create">Создать</string>
+    <string name="conn_footer_encrypted">Зашифровано · не покидает устройство</string>
+
+    <string name="conn_auth_ask">Спрашивать каждый раз</string>
+    <string name="conn_auth_password">Пароль</string>
+    <string name="conn_auth_private_key">Приватный ключ</string>
+    <string name="conn_auth_select_credential">Выбрать учётные данные…</string>
+    <string name="conn_auth_existing_saved">%1$s (сохранён)</string>
+    <string name="conn_auth_ask_desc">пароль запрашивается при подключении</string>
+    <string name="conn_auth_password_option">Пароль…</string>
+    <string name="conn_auth_password_desc">сохранить пароль в хранилище</string>
+    <string name="conn_auth_key_option">Вставить приватный ключ…</string>
+    <string name="conn_auth_key_desc">сохранить SSH-ключ в хранилище</string>
+    <string name="conn_auth_password_placeholder">пароль для сохранения</string>
+    <string name="conn_auth_passphrase_placeholder">пароль ключа (необязательно)</string>
+
+    <string name="conn_group_none">Без группы</string>
+    <string name="conn_group_new">Новая группа…</string>
+    <string name="conn_group_new_title">Новая группа</string>
+    <string name="conn_group_rename_title">Переименовать группу</string>
+    <string name="conn_group_rename_hint">Хосты этой группы переедут с новым именем.</string>
+    <string name="conn_group_delete">Удалить группу</string>
+    <string name="conn_tag_add_placeholder">добавить тег…</string>
+
+    <string name="conn_test_checking">Проверка подключения…</string>
+    <string name="conn_test_connected">Подключено</string>
+    <string name="conn_test_connected_ms">Подключено · %1$d мс</string>
+</resources>

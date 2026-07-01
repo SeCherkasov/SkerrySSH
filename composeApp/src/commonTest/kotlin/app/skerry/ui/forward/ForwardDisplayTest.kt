@@ -16,12 +16,9 @@ class ForwardDisplayTest {
         status: ForwardStatus = ForwardStatus.Starting,
     ) = ForwardEntry(0, direction, bindHost, requestedPort, destHost, destPort).also { it.status = status }
 
-    @Test
-    fun `type label maps direction to table badge`() {
-        assertEquals("LOCAL", forwardTypeLabel(ForwardDirection.Local))
-        assertEquals("REMOTE", forwardTypeLabel(ForwardDirection.Remote))
-        assertEquals("SOCKS", forwardTypeLabel(ForwardDirection.Dynamic))
-    }
+    // Прим.: forwardTypeLabel теперь @Composable (метки LOCAL/REMOTE/SOCKS — строковые ресурсы,
+    // technical-бейджи идентичны в обоих языках), поэтому юнит-тест маппинга снят: это простой
+    // ресурс-лукап, проверяемый только в composition. Ниже — чистые хелперы форматирования.
 
     @Test
     fun `listen port is the bound port once active`() {

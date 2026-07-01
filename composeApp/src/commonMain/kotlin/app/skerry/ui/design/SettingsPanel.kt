@@ -39,12 +39,146 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiRole
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.appearance_font
+import app.skerry.ui.generated.resources.appearance_font_size
+import app.skerry.ui.generated.resources.appearance_language
+import app.skerry.ui.generated.resources.appearance_subtitle
+import app.skerry.ui.generated.resources.appearance_title
+import app.skerry.ui.generated.resources.settings_about_documentation
+import app.skerry.ui.generated.resources.settings_about_footer
+import app.skerry.ui.generated.resources.settings_about_licenses
+import app.skerry.ui.generated.resources.settings_about_tagline
+import app.skerry.ui.generated.resources.settings_about_whats_new
+import app.skerry.ui.generated.resources.settings_account_subtitle
+import app.skerry.ui.generated.resources.settings_account_title
+import app.skerry.ui.generated.resources.settings_ai_ask
+import app.skerry.ui.generated.resources.settings_ai_badge_private
+import app.skerry.ui.generated.resources.settings_ai_confirm
+import app.skerry.ui.generated.resources.settings_ai_confirm_desc
+import app.skerry.ui.generated.resources.settings_ai_default_provider
+import app.skerry.ui.generated.resources.settings_ai_default_provider_desc
+import app.skerry.ui.generated.resources.settings_ai_field_api_key
+import app.skerry.ui.generated.resources.settings_ai_field_endpoint
+import app.skerry.ui.generated.resources.settings_ai_field_model
+import app.skerry.ui.generated.resources.settings_ai_key_saved
+import app.skerry.ui.generated.resources.settings_ai_live_subtitle
+import app.skerry.ui.generated.resources.settings_ai_mock_subtitle
+import app.skerry.ui.generated.resources.settings_ai_not_configured
+import app.skerry.ui.generated.resources.settings_ai_preview
+import app.skerry.ui.generated.resources.settings_ai_preview_desc
+import app.skerry.ui.generated.resources.settings_ai_prompt_placeholder_needs_key
+import app.skerry.ui.generated.resources.settings_ai_prompt_placeholder_ready
+import app.skerry.ui.generated.resources.settings_ai_provider_byok
+import app.skerry.ui.generated.resources.settings_ai_provider_byok_desc
+import app.skerry.ui.generated.resources.settings_ai_provider_custom
+import app.skerry.ui.generated.resources.settings_ai_provider_custom_desc
+import app.skerry.ui.generated.resources.settings_ai_provider_device
+import app.skerry.ui.generated.resources.settings_ai_provider_device_desc
+import app.skerry.ui.generated.resources.settings_ai_quick_chat
+import app.skerry.ui.generated.resources.settings_ai_quick_chat_desc
+import app.skerry.ui.generated.resources.settings_ai_sanitize
+import app.skerry.ui.generated.resources.settings_ai_sanitize_desc
+import app.skerry.ui.generated.resources.settings_ai_sending
+import app.skerry.ui.generated.resources.settings_ai_title
+import app.skerry.ui.generated.resources.settings_badge_soon
+import app.skerry.ui.generated.resources.settings_cancel
+import app.skerry.ui.generated.resources.settings_change
+import app.skerry.ui.generated.resources.settings_clear
+import app.skerry.ui.generated.resources.settings_confirm
+import app.skerry.ui.generated.resources.settings_device_sub_current
+import app.skerry.ui.generated.resources.settings_device_sub_other
+import app.skerry.ui.generated.resources.settings_devices_load_failed
+import app.skerry.ui.generated.resources.settings_disconnect
+import app.skerry.ui.generated.resources.settings_enabled
+import app.skerry.ui.generated.resources.settings_hosts_groups
+import app.skerry.ui.generated.resources.settings_kb_accept_autocomplete
+import app.skerry.ui.generated.resources.settings_kb_command_palette
+import app.skerry.ui.generated.resources.settings_kb_copy_selection
+import app.skerry.ui.generated.resources.settings_kb_cycle_suggestions
+import app.skerry.ui.generated.resources.settings_kb_focus_ai
+import app.skerry.ui.generated.resources.settings_kb_global
+import app.skerry.ui.generated.resources.settings_kb_lock
+import app.skerry.ui.generated.resources.settings_kb_new_connection
+import app.skerry.ui.generated.resources.settings_kb_next_prev_tab
+import app.skerry.ui.generated.resources.settings_kb_open_sftp
+import app.skerry.ui.generated.resources.settings_kb_paste
+import app.skerry.ui.generated.resources.settings_kb_search_history
+import app.skerry.ui.generated.resources.settings_kb_select_tab_number
+import app.skerry.ui.generated.resources.settings_kb_split_terminal
+import app.skerry.ui.generated.resources.settings_kb_terminal_group
+import app.skerry.ui.generated.resources.settings_keyboard_subtitle
+import app.skerry.ui.generated.resources.settings_keyboard_title
+import app.skerry.ui.generated.resources.settings_link_device
+import app.skerry.ui.generated.resources.settings_linked_devices
+import app.skerry.ui.generated.resources.settings_loading_devices
+import app.skerry.ui.generated.resources.settings_manage
+import app.skerry.ui.generated.resources.settings_nav_header
+import app.skerry.ui.generated.resources.settings_on
+import app.skerry.ui.generated.resources.settings_only_this_device
+import app.skerry.ui.generated.resources.settings_open_account
+import app.skerry.ui.generated.resources.settings_reconnect
+import app.skerry.ui.generated.resources.settings_recent_security_events
+import app.skerry.ui.generated.resources.settings_revoke
+import app.skerry.ui.generated.resources.settings_save
+import app.skerry.ui.generated.resources.settings_security_2fa
+import app.skerry.ui.generated.resources.settings_security_2fa_desc
+import app.skerry.ui.generated.resources.settings_security_after_5_min
+import app.skerry.ui.generated.resources.settings_security_auto_lock
+import app.skerry.ui.generated.resources.settings_security_auto_lock_desc
+import app.skerry.ui.generated.resources.settings_security_event_1
+import app.skerry.ui.generated.resources.settings_security_event_2
+import app.skerry.ui.generated.resources.settings_security_event_3
+import app.skerry.ui.generated.resources.settings_security_master_password
+import app.skerry.ui.generated.resources.settings_security_master_password_desc
+import app.skerry.ui.generated.resources.settings_security_subtitle
+import app.skerry.ui.generated.resources.settings_security_title
+import app.skerry.ui.generated.resources.settings_security_touch_id
+import app.skerry.ui.generated.resources.settings_security_touch_id_desc
+import app.skerry.ui.generated.resources.settings_set_up_sync
+import app.skerry.ui.generated.resources.settings_snippets
+import app.skerry.ui.generated.resources.settings_sync_connected
+import app.skerry.ui.generated.resources.settings_sync_error
+import app.skerry.ui.generated.resources.settings_sync_linked
+import app.skerry.ui.generated.resources.settings_sync_linked_desc
+import app.skerry.ui.generated.resources.settings_sync_not_connected
+import app.skerry.ui.generated.resources.settings_sync_not_connected_desc
+import app.skerry.ui.generated.resources.settings_sync_now
+import app.skerry.ui.generated.resources.settings_sync_pushed_pulled
+import app.skerry.ui.generated.resources.settings_sync_subtitle
+import app.skerry.ui.generated.resources.settings_sync_summary_mock
+import app.skerry.ui.generated.resources.settings_sync_synced_ago
+import app.skerry.ui.generated.resources.settings_sync_syncing
+import app.skerry.ui.generated.resources.settings_sync_syncing_desc
+import app.skerry.ui.generated.resources.settings_sync_title
+import app.skerry.ui.generated.resources.settings_terminal_copy_on_select
+import app.skerry.ui.generated.resources.settings_terminal_cursor_block_blink
+import app.skerry.ui.generated.resources.settings_terminal_cursor_style
+import app.skerry.ui.generated.resources.settings_terminal_scrollback
+import app.skerry.ui.generated.resources.settings_terminal_scrollback_desc
+import app.skerry.ui.generated.resources.settings_terminal_show_title
+import app.skerry.ui.generated.resources.settings_terminal_show_title_desc
+import app.skerry.ui.generated.resources.settings_terminal_subtitle
+import app.skerry.ui.generated.resources.settings_terminal_title
+import app.skerry.ui.generated.resources.settings_this_device
+import app.skerry.ui.generated.resources.settings_what_syncs
+import app.skerry.ui.generated.resources.shtail_nav_about
+import app.skerry.ui.generated.resources.shtail_nav_account
+import app.skerry.ui.generated.resources.shtail_nav_ai
+import app.skerry.ui.generated.resources.shtail_nav_appearance
+import app.skerry.ui.generated.resources.shtail_nav_keyboard
+import app.skerry.ui.generated.resources.shtail_nav_security
+import app.skerry.ui.generated.resources.shtail_nav_sync
+import app.skerry.ui.generated.resources.shtail_nav_terminal
+import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.i18n.label
 import app.skerry.ui.sync.AccountCardModel
 import app.skerry.ui.sync.SyncStatus
-import app.skerry.ui.sync.accountCardModel
+import app.skerry.ui.sync.accountCardModelLocalized
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /** Панель настроек (модалка 760×560): nav 200dp + контент с 8 секциями (AI/Appearance/…/About). */
 @Composable
@@ -70,7 +204,7 @@ fun SettingsPanel(state: DesktopDesignState) {
             val aiVisible = features.ai || LocalAi.current != null
             val effectiveTab = if (state.settingsTab == SettingsTab.AI && !aiVisible) SettingsTab.Account else state.settingsTab
             Column(Modifier.width(200.dp).fillMaxHeight().background(Color(0x33000000)).padding(horizontal = 8.dp, vertical = 16.dp)) {
-                Txt("SETTINGS", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+                Txt(stringResource(Res.string.settings_nav_header), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
                 SETTINGS_NAV.filter { aiVisible || it.tab != SettingsTab.AI }.forEach { item ->
                     NavRow(item, active = effectiveTab == item.tab, onClick = { state.showSettingsTab(item.tab) })
                 }
@@ -100,8 +234,21 @@ private fun NavRow(item: SettingsNavItem, active: Boolean, onClick: () -> Unit) 
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Sym(item.icon, size = 16.sp, color = if (active) D.cyanBright else D.dim)
-        Txt(item.name, color = if (active) D.cyanBright else D.dim, size = 12.5.sp)
+        Txt(item.tab.navLabel(), color = if (active) D.cyanBright else D.dim, size = 12.5.sp)
     }
+}
+
+/** Локализованная подпись пункта навигации настроек (данные [SettingsNavItem.name] — только fallback). */
+@Composable
+private fun SettingsTab.navLabel(): String = when (this) {
+    SettingsTab.Account -> stringResource(Res.string.shtail_nav_account)
+    SettingsTab.AI -> stringResource(Res.string.shtail_nav_ai)
+    SettingsTab.Sync -> stringResource(Res.string.shtail_nav_sync)
+    SettingsTab.Security -> stringResource(Res.string.shtail_nav_security)
+    SettingsTab.Appearance -> stringResource(Res.string.shtail_nav_appearance)
+    SettingsTab.Terminal -> stringResource(Res.string.shtail_nav_terminal)
+    SettingsTab.Keyboard -> stringResource(Res.string.shtail_nav_keyboard)
+    SettingsTab.About -> stringResource(Res.string.shtail_nav_about)
 }
 
 @Composable
@@ -139,29 +286,29 @@ private fun AiSection(state: DesktopDesignState) {
  */
 @Composable
 private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
-    SectionTitle("AI", "Connect your own OpenAI-compatible provider (BYOK). Your key is stored encrypted in the vault and only ever sent to the provider you configure.")
+    SectionTitle(stringResource(Res.string.settings_ai_title), stringResource(Res.string.settings_ai_live_subtitle))
 
     var key by remember(ai.settings) { mutableStateOf(ai.settings.apiKey) }
     var model by remember(ai.settings) { mutableStateOf(ai.settings.model) }
     var baseUrl by remember(ai.settings) { mutableStateOf(ai.settings.baseUrl) }
 
-    FieldLabel("OPENAI API KEY", top = 4.dp)
+    FieldLabel(stringResource(Res.string.settings_ai_field_api_key), top = 4.dp)
     SyncField(placeholder = "sk-…", value = key, icon = "key", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { key = it }
-    FieldLabel("MODEL")
+    FieldLabel(stringResource(Res.string.settings_ai_field_model))
     SyncField(placeholder = "gpt-4o-mini", value = model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Next) { model = it }
-    FieldLabel("ENDPOINT")
+    FieldLabel(stringResource(Res.string.settings_ai_field_endpoint))
     SyncField(placeholder = "https://api.openai.com/v1", value = baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done) { baseUrl = it }
 
     Box(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        RevokeChip("Save", fg = D.cyan) { ai.save(key, model, baseUrl) }
-        if (ai.isConfigured) Txt("Key saved", color = D.moss, size = 11.5.sp)
-        else Txt("Not configured yet", color = D.faint, size = 11.5.sp)
+        RevokeChip(stringResource(Res.string.settings_save), fg = D.cyan) { ai.save(key, model, baseUrl) }
+        if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = D.moss, size = 11.5.sp)
+        else Txt(stringResource(Res.string.settings_ai_not_configured), color = D.faint, size = 11.5.sp)
     }
 
     Box(Modifier.padding(top = 18.dp)); HLine(); Box(Modifier.height(12.dp))
-    Txt("Quick chat", color = D.text, size = 13.sp, weight = FontWeight.Medium)
-    Txt("Ask the assistant a question to verify the connection.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
+    Txt(stringResource(Res.string.settings_ai_quick_chat), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+    Txt(stringResource(Res.string.settings_ai_quick_chat_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
 
     ai.turns.forEach { turn -> ChatBubble(turn.role, turn.text) }
     ai.streaming?.let { ChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
@@ -171,7 +318,7 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
     var prompt by remember { mutableStateOf("") }
     val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
     SyncField(
-        placeholder = if (ai.isConfigured) "Ask about ssh, scp, tunnels…" else "Save an API key first",
+        placeholder = if (ai.isConfigured) stringResource(Res.string.settings_ai_prompt_placeholder_ready) else stringResource(Res.string.settings_ai_prompt_placeholder_needs_key),
         value = prompt,
         icon = "chat",
         keyboardType = KeyboardType.Text,
@@ -180,8 +327,8 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
     ) { prompt = it }
     Box(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        RevokeChip(if (ai.busy) "Sending…" else "Ask", fg = if (ai.isConfigured && !ai.busy) D.cyan else D.faint) { send() }
-        if (ai.turns.isNotEmpty()) RevokeChip("Clear", fg = D.dim) { ai.clearConversation() }
+        RevokeChip(if (ai.busy) stringResource(Res.string.settings_ai_sending) else stringResource(Res.string.settings_ai_ask), fg = if (ai.isConfigured && !ai.busy) D.cyan else D.faint) { send() }
+        if (ai.turns.isNotEmpty()) RevokeChip(stringResource(Res.string.settings_clear), fg = D.dim) { ai.clearConversation() }
     }
 }
 
@@ -202,18 +349,18 @@ private fun ChatBubble(role: AiRole, text: String) {
 
 @Composable
 private fun AiSectionMock(state: DesktopDesignState) {
-    SectionTitle("AI", "Configure where AI runs. The default is on this device — your commands never leave Skerry. Each connection can override these settings.")
-    Txt("Default AI provider", color = D.text, size = 13.sp, weight = FontWeight.Medium)
-    Txt("Used for connections without a specific override.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
-    ProviderCard("lock", "On this device", "Qwen 2.5 Coder 1.5B · 982 MB · ready. No data leaves your machine.", selected = true, badge = "PRIVATE")
+    SectionTitle(stringResource(Res.string.settings_ai_title), stringResource(Res.string.settings_ai_mock_subtitle))
+    Txt(stringResource(Res.string.settings_ai_default_provider), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+    Txt(stringResource(Res.string.settings_ai_default_provider_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+    ProviderCard("lock", stringResource(Res.string.settings_ai_provider_device), stringResource(Res.string.settings_ai_provider_device_desc), selected = true, badge = stringResource(Res.string.settings_ai_badge_private))
     Box(Modifier.height(8.dp))
-    ProviderCard("cloud", "Custom endpoint", "Connect to your own Ollama or OpenAI-compatible server.", selected = false)
+    ProviderCard("cloud", stringResource(Res.string.settings_ai_provider_custom), stringResource(Res.string.settings_ai_provider_custom_desc), selected = false)
     Box(Modifier.height(8.dp))
-    ProviderCard("key", "My API key (BYOK)", "Use your OpenAI, Anthropic, or OpenRouter key. You pay the provider directly.", selected = false)
+    ProviderCard("key", stringResource(Res.string.settings_ai_provider_byok), stringResource(Res.string.settings_ai_provider_byok_desc), selected = false)
     Box(Modifier.padding(top = 18.dp)); HLine(); Box(Modifier.height(6.dp))
-    SettingToggleRow("Sanitize secrets before sending", "Strip obvious passwords, tokens and keys from prompts before they reach external providers.", state.sanitize, state::toggleSanitize)
-    SettingToggleRow("Preview prompt before sending", "Show the exact text sent externally, with redactions highlighted. Edit or cancel before transmission.", state.preview, state::togglePreview)
-    SettingToggleRow("Confirm before running AI suggestions", "Every AI-suggested command requires a deliberate click. Mitigates prompt injection from compromised servers.", state.confirm, state::toggleConfirm)
+    SettingToggleRow(stringResource(Res.string.settings_ai_sanitize), stringResource(Res.string.settings_ai_sanitize_desc), state.sanitize, state::toggleSanitize)
+    SettingToggleRow(stringResource(Res.string.settings_ai_preview), stringResource(Res.string.settings_ai_preview_desc), state.preview, state::togglePreview)
+    SettingToggleRow(stringResource(Res.string.settings_ai_confirm), stringResource(Res.string.settings_ai_confirm_desc), state.confirm, state::toggleConfirm)
 }
 
 @Composable
@@ -251,7 +398,7 @@ private fun ProviderCard(icon: String, title: String, desc: String, selected: Bo
 @Composable
 private fun AppearanceSection(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
-    SectionTitle("Appearance", "Pick a terminal theme. Themes apply per-connection or globally.")
+    SectionTitle(stringResource(Res.string.appearance_title), stringResource(Res.string.appearance_subtitle))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         ThemeCard("Night Sea", active = true, mono = mono, modifier = Modifier.weight(1f))
         ThemeCard("Tokyo Night", active = false, mono = mono, modifier = Modifier.weight(1f))
@@ -263,14 +410,38 @@ private fun AppearanceSection(state: DesktopDesignState) {
     }
     Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.weight(1f)) {
-            Txt("Font", color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
+            Txt(stringResource(Res.string.appearance_font), color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
             FontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
         }
         Column(Modifier.weight(1f)) {
-            Txt("Font size", color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
+            Txt(stringResource(Res.string.appearance_font_size), color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
             FontSizePicker(state.terminalFontSize, onPick = state::chooseTerminalFontSize)
         }
+        Column(Modifier.weight(1f)) {
+            Txt(stringResource(Res.string.appearance_language), color = D.text, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.padding(bottom = 6.dp))
+            LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
+        }
     }
+}
+
+/** Выпадающий список языка интерфейса (System / English / Русский). */
+@Composable
+private fun LanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = {
+            SelectTrigger(current.label(), onClick = { open = !open })
+        },
+        menu = { width ->
+            DropdownMenuColumn(width) {
+                UiLanguage.entries.forEach { option ->
+                    DropdownOption(option.label(), selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
 }
 
 /** Выпадающий список шрифта терминала (Hack / JetBrains Mono) — оба без лигатур. */
@@ -368,23 +539,23 @@ private fun ThemeCard(name: String, active: Boolean, mono: FontFamily, modifier:
 
 @Composable
 private fun TerminalSection() {
-    SectionTitle("Terminal", "Shell behaviour, scrollback and bell.")
-    SettingValueRow("Scrollback buffer", "Lines kept per session.", "10 000")
+    SectionTitle(stringResource(Res.string.settings_terminal_title), stringResource(Res.string.settings_terminal_subtitle))
+    SettingValueRow(stringResource(Res.string.settings_terminal_scrollback), stringResource(Res.string.settings_terminal_scrollback_desc), "10 000")
     HLine()
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { Txt("Cursor style", color = D.text, size = 13.sp, weight = FontWeight.Medium) }
-        Box(Modifier.width(160.dp)) { SettingsSelect("Block (blink)") }
+        Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_cursor_style), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
+        Box(Modifier.width(160.dp)) { SettingsSelect(stringResource(Res.string.settings_terminal_cursor_block_blink)) }
     }
     HLine()
-    SettingValueRow("Copy on select", "", "On")
+    SettingValueRow(stringResource(Res.string.settings_terminal_copy_on_select), "", stringResource(Res.string.settings_on))
     HLine()
     // ЗАГЛУШКА (техдолг, см. память tab-title-host-label): сейчас вкладка всегда показывает лейбл
     // хоста, а живой OSC 0/2-заголовок терминала (vim, htop, root@host…) игнорируется. Когда дойдут
     // руки — этот тоггл должен включать ветку effectiveTabTitle в Session.displayTitle. Пока он
     // визуально present, но выключен и без обработчика (как и прочие мок-настройки этой секции).
     SettingToggleRow(
-        "Show terminal title on tabs",
-        "Let the connected shell rename a tab (e.g. the running program). Off — tabs always show the saved host name. Not implemented yet.",
+        stringResource(Res.string.settings_terminal_show_title),
+        stringResource(Res.string.settings_terminal_show_title_desc),
         on = false,
         onToggle = {},
     )
@@ -394,12 +565,12 @@ private fun TerminalSection() {
 
 @Composable
 private fun AccountSection(state: DesktopDesignState) {
-    SectionTitle("Account", "Your Skerry account and the devices linked to it.")
+    SectionTitle(stringResource(Res.string.settings_account_title), stringResource(Res.string.settings_account_subtitle))
     // Реальная модель — self-hosted zero-knowledge sync (без биллинга/PRO): карточка отражает живое
     // состояние из координатора. Превью/офскрин (нет бэкенда) — локальный vault с «Set up sync».
     val sync = LocalSync.current
     if (sync == null) {
-        AccountCard(accountCardModel(null), sync = null, state = state)
+        AccountCard(accountCardModelLocalized(null), sync = null, state = state)
     } else {
         LiveAccountSection(sync, state)
     }
@@ -409,7 +580,7 @@ private fun AccountSection(state: DesktopDesignState) {
 @Composable
 private fun LiveAccountSection(sync: app.skerry.ui.sync.SyncCoordinator, state: DesktopDesignState) {
     val status = sync.status.collectAsState().value
-    val model = accountCardModel(status, sync.savedConfig?.serverUrl)
+    val model = accountCardModelLocalized(status, sync.savedConfig?.serverUrl)
     AccountCard(model, sync, state)
     // Список устройств серверу известен только при активной сессии (Online) — иначе нечем спрашивать.
     if (model.connected) LinkedDevices(sync, onLink = state::openPairing)
@@ -433,9 +604,9 @@ private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCo
         // Account владеет жизненным циклом ПОДКЛЮЧЕНИЯ (set up / reconnect / disconnect). Действие
         // «Sync now» здесь НЕ дублируем — оно про движок синка и живёт во вкладке Sync.
         when {
-            model.connected && sync != null -> GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
-            model.linked -> PrimaryButton("Reconnect", onClick = state::openSyncSetup, icon = "cloud_sync")
-            else -> PrimaryButton("Set up sync", onClick = state::openSyncSetup, icon = "cloud_sync")
+            model.connected && sync != null -> GhostButton(stringResource(Res.string.settings_disconnect), onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
+            model.linked -> PrimaryButton(stringResource(Res.string.settings_reconnect), onClick = state::openSyncSetup, icon = "cloud_sync")
+            else -> PrimaryButton(stringResource(Res.string.settings_set_up_sync), onClick = state::openSyncSetup, icon = "cloud_sync")
         }
     }
 }
@@ -456,18 +627,18 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -
         loading = false
     }
 
-    Txt("LINKED DEVICES", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
+    Txt(stringResource(Res.string.settings_linked_devices), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
     when {
-        loading -> Txt("Loading devices…", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        loading -> Txt(stringResource(Res.string.settings_loading_devices), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
         // На активной сессии сервер всегда возвращает хотя бы текущее устройство; пустой список =
         // listDevices проглотил ошибку (нет связи/протух токен) — честно говорим, а не «только вы».
-        devices.isEmpty() -> Txt("Couldn't load devices. Try Sync now.", color = D.amber, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
-        devices.size == 1 && devices.first().current -> Txt("Only this device so far.", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.isEmpty() -> Txt(stringResource(Res.string.settings_devices_load_failed), color = D.amber, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.size == 1 && devices.first().current -> Txt(stringResource(Res.string.settings_only_this_device), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
         else -> devices.forEach { d ->
             DeviceRow(
                 icon = "devices",
                 name = d.name,
-                sub = if (d.current) "linked · this device" else "linked device",
+                sub = if (d.current) stringResource(Res.string.settings_device_sub_current) else stringResource(Res.string.settings_device_sub_other),
                 thisDevice = d.current,
                 onRevoke = if (d.current || d.revoked) null else {
                     { scope.launch { if (sync.revokeDevice(d.id)) reload++ } }
@@ -476,7 +647,7 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -
         }
     }
     // Быстрый паринг: показать новому устройству QR/код, чтобы привязать его без мастер-пароля аккаунта.
-    GhostButton("Link a device", onClick = onLink, icon = "qr_code", modifier = Modifier.padding(top = 12.dp))
+    GhostButton(stringResource(Res.string.settings_link_device), onClick = onLink, icon = "qr_code", modifier = Modifier.padding(top = 12.dp))
 }
 
 @Composable
@@ -493,7 +664,7 @@ private fun DeviceRow(icon: String, name: String, sub: String, trailing: String?
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Txt(name, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-                if (thisDevice) Txt("● this device", color = D.moss, size = 10.sp)
+                if (thisDevice) Txt(stringResource(Res.string.settings_this_device), color = D.moss, size = 10.sp)
             }
             Txt(sub, color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
         }
@@ -501,11 +672,11 @@ private fun DeviceRow(icon: String, name: String, sub: String, trailing: String?
         if (onRevoke != null) {
             if (confirming) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    RevokeChip("Confirm", D.sunset) { confirming = false; onRevoke() }
-                    RevokeChip("Cancel", D.dim) { confirming = false }
+                    RevokeChip(stringResource(Res.string.settings_confirm), D.sunset) { confirming = false; onRevoke() }
+                    RevokeChip(stringResource(Res.string.settings_cancel), D.dim) { confirming = false }
                 }
             } else {
-                RevokeChip("Revoke", D.dim) { confirming = true }
+                RevokeChip(stringResource(Res.string.settings_revoke), D.dim) { confirming = true }
             }
         }
     }
@@ -525,7 +696,7 @@ private fun RevokeChip(label: String, fg: Color, onClick: () -> Unit) {
 
 @Composable
 private fun SyncSection(state: DesktopDesignState) {
-    SectionTitle("Sync", "End-to-end encrypted sync across your devices. Skerry never sees your data in plaintext.")
+    SectionTitle(stringResource(Res.string.settings_sync_title), stringResource(Res.string.settings_sync_subtitle))
     // Мок-путь и живой путь — разные composable (а не условный remember/collectAsState в одном теле):
     // rememberCoroutineScope/collectAsState должны вызываться безусловно в своём composable (правило
     // слотовой таблицы Compose). LocalSync.current стабилен (staticCompositionLocalOf), но строгий
@@ -533,17 +704,17 @@ private fun SyncSection(state: DesktopDesignState) {
     val sync = LocalSync.current
     if (sync == null) {
         // Мок-путь/превью без бэкенда: статичная карточка макета (подключённое состояние).
-        SyncStatusCard("cloud_done", D.moss, "Synced 2 minutes ago", "9 hosts · 4 snippets · 3 keys · 2 vaults") {
-            GhostButton("Sync now", onClick = {})
+        SyncStatusCard("cloud_done", D.moss, stringResource(Res.string.settings_sync_synced_ago), stringResource(Res.string.settings_sync_summary_mock)) {
+            GhostButton(stringResource(Res.string.settings_sync_now), onClick = {})
         }
     } else {
         LiveSyncStatus(sync, state)
     }
-    Txt("WHAT SYNCS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+    Txt(stringResource(Res.string.settings_what_syncs), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
     if (sync == null) {
         // Превью без бэкенда: статичные тумблеры (как в макете).
-        SettingToggleRow("Hosts & groups", "", on = true, onToggle = {})
-        SettingToggleRow("Snippets", "", on = true, onToggle = {})
+        SettingToggleRow(stringResource(Res.string.settings_hosts_groups), "", on = true, onToggle = {})
+        SettingToggleRow(stringResource(Res.string.settings_snippets), "", on = true, onToggle = {})
     } else {
         WhatSyncsToggles(sync)
     }
@@ -561,11 +732,11 @@ private fun WhatSyncsToggles(sync: app.skerry.ui.sync.SyncCoordinator) {
     LaunchedEffect(Unit) { sync.refreshSyncSettings() } // vault уже открыт на экране настроек
     // В onToggle читаем АКТУАЛЬНОЕ значение из flow, не снимок композиции: иначе быстрый второй тап
     // (по другому тумблеру) до перерисовки откатил бы первый (stale-closure write-write).
-    SettingToggleRow("Hosts & groups", "", on = settings.syncHosts, onToggle = {
+    SettingToggleRow(stringResource(Res.string.settings_hosts_groups), "", on = settings.syncHosts, onToggle = {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncHosts = !current.syncHosts))
     })
-    SettingToggleRow("Snippets", "", on = settings.syncSnippets, onToggle = {
+    SettingToggleRow(stringResource(Res.string.settings_snippets), "", on = settings.syncSnippets, onToggle = {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncSnippets = !current.syncSnippets))
     })
@@ -580,20 +751,20 @@ private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: Desk
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> SyncStatusCard(
             "cloud_done", D.moss,
-            "Connected · ${status.accountId}",
-            "Pushed ${status.lastPushed} · pulled ${status.lastPulled} this session",
+            stringResource(Res.string.settings_sync_connected, status.accountId),
+            stringResource(Res.string.settings_sync_pushed_pulled, status.lastPushed, status.lastPulled),
         ) {
-            GhostButton("Sync now", onClick = { sync.syncNow() })
+            GhostButton(stringResource(Res.string.settings_sync_now), onClick = { sync.syncNow() })
         }
-        SyncStatus.Busy -> SyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.") {}
-        is SyncStatus.Configured -> SyncStatusCard("cloud_off", D.amber, "Linked · ${status.accountId}", "Reconnect from Account to resume syncing.") {
-            GhostButton("Open Account", onClick = toAccount)
+        SyncStatus.Busy -> SyncStatusCard("sync", D.cyanBright, stringResource(Res.string.settings_sync_syncing), stringResource(Res.string.settings_sync_syncing_desc)) {}
+        is SyncStatus.Configured -> SyncStatusCard("cloud_off", D.amber, stringResource(Res.string.settings_sync_linked, status.accountId), stringResource(Res.string.settings_sync_linked_desc)) {
+            GhostButton(stringResource(Res.string.settings_open_account), onClick = toAccount)
         }
-        is SyncStatus.Failed -> SyncStatusCard("cloud_off", D.sunset, "Sync error", status.message) {
-            GhostButton("Open Account", onClick = toAccount)
+        is SyncStatus.Failed -> SyncStatusCard("cloud_off", D.sunset, stringResource(Res.string.settings_sync_error), status.message) {
+            GhostButton(stringResource(Res.string.settings_open_account), onClick = toAccount)
         }
-        SyncStatus.Disabled -> SyncStatusCard("cloud_off", D.faint, "Not connected", "Connect your account to sync across devices.") {
-            GhostButton("Open Account", onClick = toAccount)
+        SyncStatus.Disabled -> SyncStatusCard("cloud_off", D.faint, stringResource(Res.string.settings_sync_not_connected), stringResource(Res.string.settings_sync_not_connected_desc)) {
+            GhostButton(stringResource(Res.string.settings_open_account), onClick = toAccount)
         }
     }
 }
@@ -619,40 +790,40 @@ private fun SyncStatusCard(icon: String, iconColor: Color, title: String, subtit
 
 @Composable
 private fun SecuritySection() {
-    SectionTitle("Security", "Master password, auto-lock and two-factor authentication protect your vault.")
+    SectionTitle(stringResource(Res.string.settings_security_title), stringResource(Res.string.settings_security_subtitle))
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Txt("Master password", color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt("Last changed 84 days ago.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+            Txt(stringResource(Res.string.settings_security_master_password), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.settings_security_master_password_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        GhostButton("Change", onClick = {})
+        GhostButton(stringResource(Res.string.settings_change), onClick = {})
     }
     HLine()
-    SettingToggleRow("Unlock with Touch ID", "Use biometrics instead of typing the master password.", on = true, onToggle = {})
+    SettingToggleRow(stringResource(Res.string.settings_security_touch_id), stringResource(Res.string.settings_security_touch_id_desc), on = true, onToggle = {})
     HLine()
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Txt("Auto-lock", color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt("Lock Skerry after inactivity.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+            Txt(stringResource(Res.string.settings_security_auto_lock), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.settings_security_auto_lock_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        Box(Modifier.width(170.dp)) { SettingsSelect("After 5 minutes") }
+        Box(Modifier.width(170.dp)) { SettingsSelect(stringResource(Res.string.settings_security_after_5_min)) }
     }
     HLine()
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Txt("Two-factor authentication", color = D.text, size = 13.sp, weight = FontWeight.Medium)
-                Txt("● enabled", color = D.moss, size = 10.sp)
+                Txt(stringResource(Res.string.settings_security_2fa), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.settings_enabled), color = D.moss, size = 10.sp)
             }
-            Txt("TOTP via authenticator app.", color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+            Txt(stringResource(Res.string.settings_security_2fa_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        GhostButton("Manage", onClick = {})
+        GhostButton(stringResource(Res.string.settings_manage), onClick = {})
     }
-    Txt("RECENT SECURITY EVENTS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+    Txt(stringResource(Res.string.settings_recent_security_events), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
     listOf(
-        "Unlocked with Touch ID · today 09:02",
-        "Key deploy_ci accessed · Jun 20 18:44",
-        "New device paired: iPhone 16 Pro · Jun 18",
+        stringResource(Res.string.settings_security_event_1),
+        stringResource(Res.string.settings_security_event_2),
+        stringResource(Res.string.settings_security_event_3),
     ).forEach {
         Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Txt("●", color = D.moss, size = 9.sp)
@@ -665,7 +836,7 @@ private fun SecuritySection() {
 
 @Composable
 private fun KeyboardSection() {
-    SectionTitle("Keyboard", "Shortcuts adapt to your platform. Terminal bindings apply while a session is focused.")
+    SectionTitle(stringResource(Res.string.settings_keyboard_title), stringResource(Res.string.settings_keyboard_subtitle))
     // Подпись под платформу: ⌘/⌥ на macOS, Ctrl+Shift/Alt на Linux/Windows — ровно то, что распознаёт
     // matchDesktopShortcut. На Ctrl-пути требуется Shift, поэтому чистый Ctrl+буква (Ctrl+L очистка,
     // Ctrl+D EOF, Ctrl+C сигнал) остаётся терминалу.
@@ -678,29 +849,29 @@ private fun KeyboardSection() {
     val shift: (String) -> String = { k -> if (mac) "⇧$k" else "Shift+$k" }
 
     val global = listOf(
-        KeyboardBinding("New connection", mod("N"), live = true),
-        KeyboardBinding("Command palette / search", mod("K"), live = false),
-        KeyboardBinding("Split terminal", mod("D"), live = true),
-        KeyboardBinding("Next / previous tab", "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
-        KeyboardBinding("Select tab by number", if (mac) "⌥1–9" else "Alt+1–9", live = true),
-        KeyboardBinding("Focus AI bar", mod("/"), live = true),
-        KeyboardBinding("Open SFTP", mod("F"), live = true),
-        KeyboardBinding("Lock Skerry", mod("L"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_new_connection), mod("N"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_command_palette), mod("K"), live = false),
+        KeyboardBinding(stringResource(Res.string.settings_kb_split_terminal), mod("D"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_next_prev_tab), "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_select_tab_number), if (mac) "⌥1–9" else "Alt+1–9", live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_focus_ai), mod("/"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_open_sftp), mod("F"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_lock), mod("L"), live = true),
     )
     // Хоткеи внутри терминала (обрабатывает TerminalScreen): автодополнение fish-стиля и reverse-search
     // истории (Ctrl-R) + копипаст. Работают, пока сфокусирован терминал сессии.
     val terminal = listOf(
-        KeyboardBinding("Accept autocomplete suggestion", "Tab", live = true),
-        KeyboardBinding("Cycle suggestions", shift("Tab"), live = true),
-        KeyboardBinding("Search command history", ctrl("R"), live = true),
-        KeyboardBinding("Copy selection", ctrlShift("C"), live = true),
-        KeyboardBinding("Paste", ctrlShift("V"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_accept_autocomplete), "Tab", live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_cycle_suggestions), shift("Tab"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_search_history), ctrl("R"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), ctrlShift("C"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_paste), ctrlShift("V"), live = true),
     )
 
     val mono = LocalFonts.current.mono
-    KeyboardGroupLabel("GLOBAL", top = 4.dp)
+    KeyboardGroupLabel(stringResource(Res.string.settings_kb_global), top = 4.dp)
     global.forEach { KeyboardRow(it, mono) }
-    KeyboardGroupLabel("TERMINAL & AUTOCOMPLETE", top = 18.dp)
+    KeyboardGroupLabel(stringResource(Res.string.settings_kb_terminal_group), top = 18.dp)
     terminal.forEach { KeyboardRow(it, mono) }
 }
 
@@ -716,7 +887,7 @@ private fun KeyboardRow(b: KeyboardBinding, mono: FontFamily) {
             Txt(b.label, color = if (b.live) D.textBright else D.dim, size = 12.5.sp)
             // «Command palette» ещё нет как фичи — честно помечаем биндинг как будущий, а не молча
             // показываем нерабочий аккорд наравне с живыми.
-            if (!b.live) Badge("SOON", bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
+            if (!b.live) Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
         }
         Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x0AFFFFFF)).border(1.dp, D.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
             Txt(b.binding, color = D.dim, size = 11.sp, font = mono)
@@ -738,13 +909,13 @@ private fun AboutSection() {
         }
         Txt("Skerry", color = D.text, size = 20.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp))
         Txt("Version 2.4.0 · build 2026.06.21", color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 4.dp))
-        Txt("A private-first SSH client. Local AI, end-to-end encrypted sync, and a terminal that respects your secrets.", color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 12.dp, start = 20.dp, end = 20.dp))
+        Txt(stringResource(Res.string.settings_about_tagline), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 12.dp, start = 20.dp, end = 20.dp))
         Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            GhostButton("What's new", onClick = {})
-            GhostButton("Documentation", onClick = {})
-            GhostButton("Open-source licenses", onClick = {})
+            GhostButton(stringResource(Res.string.settings_about_whats_new), onClick = {})
+            GhostButton(stringResource(Res.string.settings_about_documentation), onClick = {})
+            GhostButton(stringResource(Res.string.settings_about_licenses), onClick = {})
         }
-        Txt("Built on the open seas · © 2026 Skerry", color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 20.dp))
+        Txt(stringResource(Res.string.settings_about_footer), color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 20.dp))
     }
 }
 

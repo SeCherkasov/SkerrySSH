@@ -46,6 +46,36 @@ import app.skerry.ui.vault.RESET_CONFIRM_WORD
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_lock_title
+import app.skerry.ui.generated.resources.shell_unlock_subtitle_desktop
+import app.skerry.ui.generated.resources.shell_master_password
+import app.skerry.ui.generated.resources.shell_unlock
+import app.skerry.ui.generated.resources.shell_forgot_password
+import app.skerry.ui.generated.resources.shell_footer_never_leaves
+import app.skerry.ui.generated.resources.shell_corrupted_title
+import app.skerry.ui.generated.resources.shell_corrupted_subtitle
+import app.skerry.ui.generated.resources.shell_reset_skerry
+import app.skerry.ui.generated.resources.shell_reset_subtitle
+import app.skerry.ui.generated.resources.shell_reset_scope_secrets_title
+import app.skerry.ui.generated.resources.shell_reset_scope_secrets_subtitle
+import app.skerry.ui.generated.resources.shell_reset_scope_all_title
+import app.skerry.ui.generated.resources.shell_reset_scope_all_subtitle
+import app.skerry.ui.generated.resources.shell_reset_confirm_placeholder
+import app.skerry.ui.generated.resources.shell_reset_permanently
+import app.skerry.ui.generated.resources.shell_cancel
+import app.skerry.ui.generated.resources.shell_create_title
+import app.skerry.ui.generated.resources.shell_create_subtitle
+import app.skerry.ui.generated.resources.shell_repeat_password
+import app.skerry.ui.generated.resources.shell_create_vault
+import app.skerry.ui.generated.resources.shell_pairing_link
+import app.skerry.ui.generated.resources.shell_no_recovery_ack
+import app.skerry.ui.generated.resources.shell_password_strength
+import app.skerry.ui.generated.resources.shell_password_strength_weak
+import app.skerry.ui.generated.resources.shell_password_strength_fair
+import app.skerry.ui.generated.resources.shell_password_strength_good
+import app.skerry.ui.generated.resources.shell_password_strength_strong
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Оверлей блокировки (мок-путь): радиальный фон, крупный логотип,
@@ -56,12 +86,12 @@ import app.skerry.ui.vault.vaultGateErrorMessage
 fun LockScreen(state: DesktopDesignState) {
     var pwd by remember { mutableStateOf("") }
     LockScaffold(
-        title = "Skerry is locked",
-        subtitle = "Enter your master password to unlock the harbor",
+        title = stringResource(Res.string.shell_lock_title),
+        subtitle = stringResource(Res.string.shell_unlock_subtitle_desktop),
     ) {
-        LockPasswordField(pwd, { pwd = it }, "Master password", ImeAction.Done, onSubmit = state::unlock)
+        LockPasswordField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Done, onSubmit = state::unlock)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton("Unlock", onClick = state::unlock, modifier = Modifier.weight(1f))
+            PrimaryButton(stringResource(Res.string.shell_unlock), onClick = state::unlock, modifier = Modifier.weight(1f))
             BiometricButton(onClick = state::unlock)
         }
     }
@@ -89,19 +119,19 @@ fun DesktopUnlockScreen(
         LaunchedEffect(Unit) { onBiometric() }
     }
     LockScaffold(
-        title = "Skerry is locked",
-        subtitle = "Enter your master password to unlock the harbor",
+        title = stringResource(Res.string.shell_lock_title),
+        subtitle = stringResource(Res.string.shell_unlock_subtitle_desktop),
         error = error,
     ) {
-        LockPasswordField(pwd, { pwd = it }, "Master password", ImeAction.Done, onSubmit = submit, autoFocus = true)
+        LockPasswordField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Done, onSubmit = submit, autoFocus = true)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton("Unlock", onClick = submit, modifier = Modifier.weight(1f))
+            PrimaryButton(stringResource(Res.string.shell_unlock), onClick = submit, modifier = Modifier.weight(1f))
             if (canUseBiometric) BiometricButton(onClick = onBiometric)
         }
         // Тупик забытого пароля расшивается только сбросом (zero-knowledge): ненавязчивая ссылка
         // под кнопкой ведёт на экран подтверждения.
         Txt(
-            "Forgot your master password?",
+            stringResource(Res.string.shell_forgot_password),
             color = D.faint,
             size = 12.sp,
             modifier = Modifier
@@ -119,10 +149,10 @@ fun DesktopUnlockScreen(
 @Composable
 fun DesktopCorruptedScreen(onReset: () -> Unit) {
     LockScaffold(
-        title = "Storage is damaged",
-        subtitle = "The vault file can't be read or decrypted. To use Skerry again you'll need to reset it.",
+        title = stringResource(Res.string.shell_corrupted_title),
+        subtitle = stringResource(Res.string.shell_corrupted_subtitle),
     ) {
-        PrimaryButton("Reset Skerry", onClick = onReset, modifier = Modifier.fillMaxWidth())
+        PrimaryButton(stringResource(Res.string.shell_reset_skerry), onClick = onReset, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -137,26 +167,26 @@ fun DesktopResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
     var confirmText by remember { mutableStateOf("") }
     val canConfirm = confirmText.trim() == RESET_CONFIRM_WORD
     LockScaffold(
-        title = "Reset Skerry",
-        subtitle = "This is permanent. Saved passwords, keys and identities are erased — there is no recovery.",
+        title = stringResource(Res.string.shell_reset_skerry),
+        subtitle = stringResource(Res.string.shell_reset_subtitle),
     ) {
         ResetScopeRow(
             selected = scope == ResetScope.SecretsOnly,
-            title = "Secrets only",
-            subtitle = "Keep host profiles and known_hosts.",
+            title = stringResource(Res.string.shell_reset_scope_secrets_title),
+            subtitle = stringResource(Res.string.shell_reset_scope_secrets_subtitle),
             onSelect = { scope = ResetScope.SecretsOnly },
         )
         ResetScopeRow(
             selected = scope == ResetScope.Everything,
-            title = "Erase everything",
-            subtitle = "Also remove host profiles, known_hosts and settings.",
+            title = stringResource(Res.string.shell_reset_scope_all_title),
+            subtitle = stringResource(Res.string.shell_reset_scope_all_subtitle),
             onSelect = { scope = ResetScope.Everything },
         )
-        LockTextField(confirmText, { confirmText = it }, "Type $RESET_CONFIRM_WORD to confirm", ImeAction.Done) {
+        LockTextField(confirmText, { confirmText = it }, stringResource(Res.string.shell_reset_confirm_placeholder, RESET_CONFIRM_WORD), ImeAction.Done) {
             if (canConfirm) onConfirm(scope)
         }
         PrimaryButton(
-            "Reset permanently",
+            stringResource(Res.string.shell_reset_permanently),
             onClick = { if (canConfirm) onConfirm(scope) },
             modifier = Modifier.fillMaxWidth(),
             bg = if (canConfirm) D.storm else Color(0x14FFFFFF),
@@ -164,7 +194,7 @@ fun DesktopResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
             enabled = canConfirm,
         )
         Txt(
-            "Cancel",
+            stringResource(Res.string.shell_cancel),
             color = D.dim,
             size = 12.sp,
             modifier = Modifier
@@ -236,16 +266,16 @@ fun DesktopCreateScreen(
     }
 
     LockScaffold(
-        title = "Set a master password",
-        subtitle = "It encrypts this vault and never leaves the device — there is no recovery.",
+        title = stringResource(Res.string.shell_create_title),
+        subtitle = stringResource(Res.string.shell_create_subtitle),
         error = error,
     ) {
-        LockPasswordField(pwd, { pwd = it }, "Master password", ImeAction.Next, autoFocus = true)
+        LockPasswordField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Next, autoFocus = true)
         passwordStrength(pwd)?.let { PasswordStrengthMeter(it) }
-        LockPasswordField(confirm, { confirm = it }, "Repeat password", ImeAction.Done, onSubmit = submit)
+        LockPasswordField(confirm, { confirm = it }, stringResource(Res.string.shell_repeat_password), ImeAction.Done, onSubmit = submit)
         NoRecoveryAcknowledge(acknowledged) { acknowledged = !acknowledged }
         PrimaryButton(
-            "Create vault",
+            stringResource(Res.string.shell_create_vault),
             onClick = submit,
             modifier = Modifier.fillMaxWidth(),
             bg = if (canCreate) D.cyan else Color(0x14FFFFFF),
@@ -254,7 +284,7 @@ fun DesktopCreateScreen(
         )
         if (sync != null && onPairingComplete != null) {
             Txt(
-                "Linking from another device? Use a pairing code",
+                stringResource(Res.string.shell_pairing_link),
                 color = D.cyanBright, size = 12.5.sp,
                 modifier = Modifier.fillMaxWidth().clickable { joining = true },
             )
@@ -266,10 +296,10 @@ fun DesktopCreateScreen(
 @Composable
 private fun PasswordStrengthMeter(strength: PasswordStrength) {
     val (filled, color, label) = when (strength) {
-        PasswordStrength.Weak -> Triple(1, D.storm, "Weak")
-        PasswordStrength.Fair -> Triple(2, D.amber, "Fair")
-        PasswordStrength.Good -> Triple(3, D.cyan, "Good")
-        PasswordStrength.Strong -> Triple(4, D.moss, "Strong")
+        PasswordStrength.Weak -> Triple(1, D.storm, stringResource(Res.string.shell_password_strength_weak))
+        PasswordStrength.Fair -> Triple(2, D.amber, stringResource(Res.string.shell_password_strength_fair))
+        PasswordStrength.Good -> Triple(3, D.cyan, stringResource(Res.string.shell_password_strength_good))
+        PasswordStrength.Strong -> Triple(4, D.moss, stringResource(Res.string.shell_password_strength_strong))
     }
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -280,7 +310,7 @@ private fun PasswordStrengthMeter(strength: PasswordStrength) {
                 )
             }
         }
-        Txt("Password strength: $label", color = color, size = 11.sp)
+        Txt(stringResource(Res.string.shell_password_strength, label), color = color, size = 11.sp)
     }
 }
 
@@ -303,7 +333,7 @@ private fun NoRecoveryAcknowledge(checked: Boolean, onToggle: () -> Unit) {
             if (checked) Sym("check", size = 13.sp, color = D.cyan)
         }
         Txt(
-            "I understand my master password can't be recovered or reset. If I lose it, this vault is gone.",
+            stringResource(Res.string.shell_no_recovery_ack),
             color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.weight(1f),
         )
     }
@@ -355,7 +385,7 @@ private fun LockScaffold(
         Box(Modifier.height(28.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("shield_lock", size = 14.sp, color = D.faint)
-            Txt("Master password never leaves this device", color = D.faint, size = 11.sp)
+            Txt(stringResource(Res.string.shell_footer_never_leaves), color = D.faint, size = 11.sp)
         }
     }
 }

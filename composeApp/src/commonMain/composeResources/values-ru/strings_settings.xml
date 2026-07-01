@@ -1,0 +1,138 @@
+<resources>
+    <!-- Панель настроек (desktop). Ключи с префиксом settings_*. -->
+
+    <!-- Навигация -->
+    <string name="settings_nav_header">НАСТРОЙКИ</string>
+
+    <!-- Общие действия -->
+    <string name="settings_save">Сохранить</string>
+    <string name="settings_clear">Очистить</string>
+    <string name="settings_confirm">Подтвердить</string>
+    <string name="settings_cancel">Отмена</string>
+    <string name="settings_revoke">Отозвать</string>
+    <string name="settings_change">Изменить</string>
+    <string name="settings_manage">Управление</string>
+    <string name="settings_on">Вкл</string>
+
+    <!-- Раздел AI -->
+    <string name="settings_ai_title">AI</string>
+    <string name="settings_ai_live_subtitle">Подключите свой OpenAI-совместимый провайдер (BYOK). Ключ хранится в хранилище в зашифрованном виде и отправляется только тому провайдеру, который вы указали.</string>
+    <string name="settings_ai_field_api_key">КЛЮЧ API OPENAI</string>
+    <string name="settings_ai_field_model">МОДЕЛЬ</string>
+    <string name="settings_ai_field_endpoint">ЭНДПОИНТ</string>
+    <string name="settings_ai_key_saved">Ключ сохранён</string>
+    <string name="settings_ai_not_configured">Ещё не настроено</string>
+    <string name="settings_ai_quick_chat">Быстрый чат</string>
+    <string name="settings_ai_quick_chat_desc">Задайте ассистенту вопрос, чтобы проверить соединение.</string>
+    <string name="settings_ai_prompt_placeholder_ready">Спросите про ssh, scp, туннели…</string>
+    <string name="settings_ai_prompt_placeholder_needs_key">Сначала сохраните ключ API</string>
+    <string name="settings_ai_sending">Отправка…</string>
+    <string name="settings_ai_ask">Спросить</string>
+    <string name="settings_ai_mock_subtitle">Выберите, где выполняется AI. По умолчанию — на этом устройстве, ваши команды не покидают Skerry. Каждое подключение может переопределить эти настройки.</string>
+    <string name="settings_ai_default_provider">Провайдер AI по умолчанию</string>
+    <string name="settings_ai_default_provider_desc">Используется для подключений без отдельного переопределения.</string>
+    <string name="settings_ai_provider_device">На этом устройстве</string>
+    <string name="settings_ai_provider_device_desc">Qwen 2.5 Coder 1.5B · 982 МБ · готово. Данные не покидают вашу машину.</string>
+    <string name="settings_ai_badge_private">ЛОКАЛЬНО</string>
+    <string name="settings_ai_provider_custom">Свой эндпоинт</string>
+    <string name="settings_ai_provider_custom_desc">Подключитесь к своему серверу Ollama или OpenAI-совместимому.</string>
+    <string name="settings_ai_provider_byok">Мой ключ API (BYOK)</string>
+    <string name="settings_ai_provider_byok_desc">Используйте свой ключ OpenAI, Anthropic или OpenRouter. Оплата напрямую провайдеру.</string>
+    <string name="settings_ai_sanitize">Очищать секреты перед отправкой</string>
+    <string name="settings_ai_sanitize_desc">Вырезать очевидные пароли, токены и ключи из запросов до отправки внешним провайдерам.</string>
+    <string name="settings_ai_preview">Показывать запрос перед отправкой</string>
+    <string name="settings_ai_preview_desc">Показать точный текст, уходящий наружу, с подсветкой скрытых мест. Можно отредактировать или отменить перед отправкой.</string>
+    <string name="settings_ai_confirm">Подтверждать перед выполнением подсказок AI</string>
+    <string name="settings_ai_confirm_desc">Каждая предложенная AI команда требует осознанного клика. Снижает риск инъекции промпта со скомпрометированных серверов.</string>
+
+    <!-- Раздел Terminal -->
+    <string name="settings_terminal_title">Терминал</string>
+    <string name="settings_terminal_subtitle">Поведение шелла, история прокрутки и звонок.</string>
+    <string name="settings_terminal_scrollback">Буфер прокрутки</string>
+    <string name="settings_terminal_scrollback_desc">Сколько строк хранить на сессию.</string>
+    <string name="settings_terminal_cursor_style">Стиль курсора</string>
+    <string name="settings_terminal_cursor_block_blink">Блок (мигающий)</string>
+    <string name="settings_terminal_copy_on_select">Копировать при выделении</string>
+    <string name="settings_terminal_show_title">Показывать заголовок терминала на вкладках</string>
+    <string name="settings_terminal_show_title_desc">Разрешить подключённому шеллу переименовывать вкладку (например, по запущенной программе). Выкл — вкладки всегда показывают сохранённое имя хоста. Пока не реализовано.</string>
+
+    <!-- Раздел Account -->
+    <string name="settings_account_title">Аккаунт</string>
+    <string name="settings_account_subtitle">Ваш аккаунт Skerry и привязанные к нему устройства.</string>
+    <string name="settings_disconnect">Отключить</string>
+    <string name="settings_reconnect">Переподключить</string>
+    <string name="settings_set_up_sync">Настроить синхронизацию</string>
+    <string name="settings_linked_devices">ПРИВЯЗАННЫЕ УСТРОЙСТВА</string>
+    <string name="settings_loading_devices">Загрузка устройств…</string>
+    <string name="settings_devices_load_failed">Не удалось загрузить устройства. Попробуйте «Синхронизировать».</string>
+    <string name="settings_only_this_device">Пока только это устройство.</string>
+    <string name="settings_device_sub_current">привязано · это устройство</string>
+    <string name="settings_device_sub_other">привязанное устройство</string>
+    <string name="settings_this_device">● это устройство</string>
+    <string name="settings_link_device">Привязать устройство</string>
+
+    <!-- Раздел Sync -->
+    <string name="settings_sync_title">Синхронизация</string>
+    <string name="settings_sync_subtitle">Сквозное шифрование синхронизации между устройствами. Skerry никогда не видит ваши данные в открытом виде.</string>
+    <string name="settings_sync_synced_ago">Синхронизировано 2 минуты назад</string>
+    <string name="settings_sync_summary_mock">9 хостов · 4 сниппета · 3 ключа · 2 хранилища</string>
+    <string name="settings_sync_now">Синхронизировать</string>
+    <string name="settings_what_syncs">ЧТО СИНХРОНИЗИРУЕТСЯ</string>
+    <string name="settings_hosts_groups">Хосты и группы</string>
+    <string name="settings_snippets">Сниппеты</string>
+    <string name="settings_sync_connected">Подключено · %1$s</string>
+    <string name="settings_sync_pushed_pulled">Отправлено %1$d · получено %2$d за сессию</string>
+    <string name="settings_sync_syncing">Синхронизация…</string>
+    <string name="settings_sync_syncing_desc">Идёт обмен с вашим сервером синхронизации.</string>
+    <string name="settings_sync_linked">Привязано · %1$s</string>
+    <string name="settings_sync_linked_desc">Переподключитесь из раздела «Аккаунт», чтобы возобновить синхронизацию.</string>
+    <string name="settings_open_account">Открыть аккаунт</string>
+    <string name="settings_sync_error">Ошибка синхронизации</string>
+    <string name="settings_sync_not_connected">Не подключено</string>
+    <string name="settings_sync_not_connected_desc">Подключите аккаунт, чтобы синхронизировать между устройствами.</string>
+
+    <!-- Раздел Security -->
+    <string name="settings_security_title">Безопасность</string>
+    <string name="settings_security_subtitle">Мастер-пароль, автоблокировка и двухфакторная аутентификация защищают ваше хранилище.</string>
+    <string name="settings_security_master_password">Мастер-пароль</string>
+    <string name="settings_security_master_password_desc">Последнее изменение 84 дня назад.</string>
+    <string name="settings_security_touch_id">Разблокировка по Touch ID</string>
+    <string name="settings_security_touch_id_desc">Использовать биометрию вместо ввода мастер-пароля.</string>
+    <string name="settings_security_auto_lock">Автоблокировка</string>
+    <string name="settings_security_auto_lock_desc">Блокировать Skerry после простоя.</string>
+    <string name="settings_security_after_5_min">Через 5 минут</string>
+    <string name="settings_security_2fa">Двухфакторная аутентификация</string>
+    <string name="settings_enabled">● включена</string>
+    <string name="settings_security_2fa_desc">TOTP через приложение-аутентификатор.</string>
+    <string name="settings_recent_security_events">НЕДАВНИЕ СОБЫТИЯ БЕЗОПАСНОСТИ</string>
+    <string name="settings_security_event_1">Разблокировка по Touch ID · сегодня 09:02</string>
+    <string name="settings_security_event_2">Доступ к ключу deploy_ci · 20 июня 18:44</string>
+    <string name="settings_security_event_3">Привязано новое устройство: iPhone 16 Pro · 18 июня</string>
+
+    <!-- Раздел Keyboard -->
+    <string name="settings_keyboard_title">Клавиатура</string>
+    <string name="settings_keyboard_subtitle">Горячие клавиши подстраиваются под вашу платформу. Терминальные привязки работают, когда сессия в фокусе.</string>
+    <string name="settings_kb_new_connection">Новое подключение</string>
+    <string name="settings_kb_command_palette">Палитра команд / поиск</string>
+    <string name="settings_kb_split_terminal">Разделить терминал</string>
+    <string name="settings_kb_next_prev_tab">Следующая / предыдущая вкладка</string>
+    <string name="settings_kb_select_tab_number">Выбрать вкладку по номеру</string>
+    <string name="settings_kb_focus_ai">Фокус на строке AI</string>
+    <string name="settings_kb_open_sftp">Открыть SFTP</string>
+    <string name="settings_kb_lock">Заблокировать Skerry</string>
+    <string name="settings_kb_accept_autocomplete">Принять подсказку автодополнения</string>
+    <string name="settings_kb_cycle_suggestions">Перебрать подсказки</string>
+    <string name="settings_kb_search_history">Поиск по истории команд</string>
+    <string name="settings_kb_copy_selection">Копировать выделение</string>
+    <string name="settings_kb_paste">Вставить</string>
+    <string name="settings_kb_global">ОБЩИЕ</string>
+    <string name="settings_kb_terminal_group">ТЕРМИНАЛ И АВТОДОПОЛНЕНИЕ</string>
+    <string name="settings_badge_soon">СКОРО</string>
+
+    <!-- Раздел About -->
+    <string name="settings_about_tagline">SSH-клиент с приоритетом приватности. Локальный AI, сквозное шифрование синхронизации и терминал, который бережёт ваши секреты.</string>
+    <string name="settings_about_whats_new">Что нового</string>
+    <string name="settings_about_documentation">Документация</string>
+    <string name="settings_about_licenses">Лицензии открытого ПО</string>
+    <string name="settings_about_footer">Построено на открытых морях · © 2026 Skerry</string>
+</resources>

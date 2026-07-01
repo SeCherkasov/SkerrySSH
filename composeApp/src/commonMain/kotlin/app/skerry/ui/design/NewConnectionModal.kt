@@ -59,6 +59,55 @@ import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_auth_ask
+import app.skerry.ui.generated.resources.conn_auth_ask_desc
+import app.skerry.ui.generated.resources.conn_auth_existing_saved
+import app.skerry.ui.generated.resources.conn_auth_key_desc
+import app.skerry.ui.generated.resources.conn_auth_key_option
+import app.skerry.ui.generated.resources.conn_auth_passphrase_placeholder
+import app.skerry.ui.generated.resources.conn_auth_password
+import app.skerry.ui.generated.resources.conn_auth_password_desc
+import app.skerry.ui.generated.resources.conn_auth_password_option
+import app.skerry.ui.generated.resources.conn_auth_password_placeholder
+import app.skerry.ui.generated.resources.conn_auth_private_key
+import app.skerry.ui.generated.resources.conn_auth_select_credential
+import app.skerry.ui.generated.resources.conn_cancel
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_field_ai_policy
+import app.skerry.ui.generated.resources.conn_field_authentication
+import app.skerry.ui.generated.resources.conn_field_baud
+import app.skerry.ui.generated.resources.conn_field_device
+import app.skerry.ui.generated.resources.conn_field_group
+import app.skerry.ui.generated.resources.conn_field_host_address
+import app.skerry.ui.generated.resources.conn_field_jump_host
+import app.skerry.ui.generated.resources.conn_field_keep_alive
+import app.skerry.ui.generated.resources.conn_field_name
+import app.skerry.ui.generated.resources.conn_field_port
+import app.skerry.ui.generated.resources.conn_field_protocol
+import app.skerry.ui.generated.resources.conn_field_tags
+import app.skerry.ui.generated.resources.conn_field_username
+import app.skerry.ui.generated.resources.conn_footer_encrypted
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_new_title
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.conn_jump_none
+import app.skerry.ui.generated.resources.conn_keepalive_30s
+import app.skerry.ui.generated.resources.conn_protocol_serial
+import app.skerry.ui.generated.resources.conn_protocol_ssh
+import app.skerry.ui.generated.resources.conn_protocol_telnet
+import app.skerry.ui.generated.resources.conn_save
+import app.skerry.ui.generated.resources.conn_save_changes
+import app.skerry.ui.generated.resources.conn_subtitle_edit
+import app.skerry.ui.generated.resources.conn_subtitle_new
+import app.skerry.ui.generated.resources.conn_tag_add_placeholder
+import app.skerry.ui.generated.resources.conn_test
+import app.skerry.ui.generated.resources.conn_test_checking
+import app.skerry.ui.generated.resources.conn_test_connected
+import app.skerry.ui.generated.resources.conn_test_connected_ms
+import app.skerry.ui.generated.resources.conn_title_edit
+import app.skerry.ui.generated.resources.conn_title_new
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Модалка «New connection» / «Edit connection»: форма профиля хоста + выбор AI-политики. С живым
@@ -124,30 +173,30 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
         ) {
             Box(Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 14.dp)) {
                 Column {
-                    Txt(if (editHost != null) "Edit connection" else "New connection", color = D.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+                    Txt(if (editHost != null) stringResource(Res.string.conn_title_edit) else stringResource(Res.string.conn_title_new), color = D.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
                     Txt(
-                        if (editHost != null) "Update this skerry's profile. Credentials are encrypted with your master password."
-                        else "Configure a new skerry in your archipelago. Credentials are encrypted with your master password.",
+                        if (editHost != null) stringResource(Res.string.conn_subtitle_edit)
+                        else stringResource(Res.string.conn_subtitle_new),
                         color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp),
                     )
                 }
                 IconBtn("close", onClick = state::closeModal, modifier = Modifier.align(Alignment.TopEnd))
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(start = 26.dp, end = 26.dp, top = 6.dp, bottom = 22.dp)) {
-                Field("Name") { ModalTextField(form.name, { form.name = it }, "e.g. prod-web-01") }
+                Field(stringResource(Res.string.conn_field_name)) { ModalTextField(form.name, { form.name = it }, "e.g. prod-web-01") }
                 Spacer14()
-                Field("Protocol") { ProtocolPicker(form) }
+                Field(stringResource(Res.string.conn_field_protocol)) { ProtocolPicker(form) }
                 Spacer14()
                 val serial = form.connectionType == ConnectionType.SERIAL
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field(if (serial) "Device" else "Host address", Modifier.weight(1f)) {
+                    Field(if (serial) stringResource(Res.string.conn_field_device) else stringResource(Res.string.conn_field_host_address), Modifier.weight(1f)) {
                         ModalTextField(
                             form.address, { form.address = it },
                             if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45 or example.com",
                             icon = if (serial) "usb" else "dns",
                         )
                     }
-                    Field(if (serial) "Baud" else "Port", Modifier.width(110.dp)) {
+                    Field(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(110.dp)) {
                         ModalTextField(form.port, { form.port = it }, if (serial) "9600" else "22", keyboardType = KeyboardType.Number)
                     }
                 }
@@ -158,21 +207,21 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 // у Serial аутентификации нет вовсе.
                 if (form.connectionType == ConnectionType.SSH) {
                     Spacer14()
-                    Field("Username") { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
+                    Field(stringResource(Res.string.conn_field_username)) { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
                     Spacer14()
-                    Field("Authentication") { AuthPicker(form) }
+                    Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form) }
                 }
                 Spacer14()
-                Field("Group") { GroupPicker(form, allHosts) }
+                Field(stringResource(Res.string.conn_field_group)) { GroupPicker(form, allHosts) }
                 if (form.connectionType == ConnectionType.SSH) {
                     Spacer14()
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Field("Jump host (optional)", Modifier.weight(1f)) { ModalSelect("None — direct") }
-                        Field("Keep-alive", Modifier.weight(1f)) { ModalSelect("Every 30s") }
+                        Field(stringResource(Res.string.conn_field_jump_host), Modifier.weight(1f)) { ModalSelect(stringResource(Res.string.conn_jump_none)) }
+                        Field(stringResource(Res.string.conn_field_keep_alive), Modifier.weight(1f)) { ModalSelect(stringResource(Res.string.conn_keepalive_30s)) }
                     }
                 }
                 Spacer14()
-                Field("Tags") {
+                Field(stringResource(Res.string.conn_field_tags)) {
                     // Подсказки = теги других хостов, ещё не добавленные сюда, сужённые набранным черновиком.
                     var tagFocused by remember(editHost) { mutableStateOf(false) }
                     val tagSugs = remember(allHosts, form.tags, tagDraft) { tagSuggestions(allHosts, form.tags, tagDraft) }
@@ -209,7 +258,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 // Пишется прямо в форму → профиль хоста (Host.aiPolicy).
                 if (LocalFeatures.current.ai || LocalAi.current != null) {
                     Spacer14()
-                    Field("AI policy for this connection") {
+                    Field(stringResource(Res.string.conn_field_ai_policy)) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             POLICY_OPTIONS.forEach { opt ->
                                 PolicyRow(opt, selected = form.aiPolicy == opt.policy, onClick = { form.aiPolicy = opt.policy })
@@ -229,16 +278,16 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     val status = tester?.status ?: ConnectionTestStatus.Idle
                     if (status == ConnectionTestStatus.Idle) {
                         Sym("shield_lock", size = 14.sp, color = D.moss)
-                        Txt("Encrypted · stays on this device", color = D.faint, size = 11.sp)
+                        Txt(stringResource(Res.string.conn_footer_encrypted), color = D.faint, size = 11.sp)
                     } else {
                         TestStatusLabel(status)
                     }
                 }
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = state::closeModal).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt("Cancel", color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.conn_cancel), color = D.dim, size = 12.5.sp)
                 }
                 GhostButton(
-                    "Test",
+                    stringResource(Res.string.conn_test),
                     onClick = {
                         // Секрет материализуем здесь (только на время коннекта), цель — из полей формы.
                         val auth = when (form.authMode) {
@@ -255,7 +304,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     border = if (canTest) D.lineStrong else D.line,
                 )
                 PrimaryButton(
-                    if (editHost != null) "Save changes" else "Save",
+                    if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save),
                     onClick = {
                         if (submitting) {
                             // повторное нажатие до закрытия — игнорируем
@@ -396,9 +445,9 @@ private fun ProtocolPicker(form: NewConnectionFormState) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        ProtocolSegment("SSH", "lan", form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
-        ProtocolSegment("Telnet", "terminal", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
-        ProtocolSegment("Serial", "cable", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
+        ProtocolSegment(stringResource(Res.string.conn_protocol_ssh), "lan", form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
+        ProtocolSegment(stringResource(Res.string.conn_protocol_telnet), "terminal", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
+        ProtocolSegment(stringResource(Res.string.conn_protocol_serial), "cable", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
     }
 }
 
@@ -426,10 +475,10 @@ private fun AuthPicker(form: NewConnectionFormState) {
     val saved = credentials?.credentials ?: emptyList()
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
-        AuthMode.ASK -> "Ask every time"
-        AuthMode.NEW_PASSWORD -> "Password"
-        AuthMode.NEW_KEY -> "Private key"
-        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { "${it.label} (saved)" } ?: "Select credential…"
+        AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)
+        AuthMode.NEW_PASSWORD -> stringResource(Res.string.conn_auth_password)
+        AuthMode.NEW_KEY -> stringResource(Res.string.conn_auth_private_key)
+        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { stringResource(Res.string.conn_auth_existing_saved, it.label) } ?: stringResource(Res.string.conn_auth_select_credential)
     }
     Column {
         AnchoredDropdown(
@@ -448,13 +497,13 @@ private fun AuthPicker(form: NewConnectionFormState) {
             menu = { width ->
                 // Меню всплывает НАД формой (Popup), а не раздвигает её; ширина = ширине триггера, скролл при переполнении.
                 Column(Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
-                    AuthOption("vpn_key_off", "Ask every time", "password requested on connect", form.authMode == AuthMode.ASK) {
+                    AuthOption("vpn_key_off", stringResource(Res.string.conn_auth_ask), stringResource(Res.string.conn_auth_ask_desc), form.authMode == AuthMode.ASK) {
                         form.authMode = AuthMode.ASK; menuOpen = false
                     }
-                    AuthOption("password", "Password…", "store a password in your vault", form.authMode == AuthMode.NEW_PASSWORD) {
+                    AuthOption("password", stringResource(Res.string.conn_auth_password_option), stringResource(Res.string.conn_auth_password_desc), form.authMode == AuthMode.NEW_PASSWORD) {
                         form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false
                     }
-                    AuthOption("key", "Paste private key…", "store an SSH key in your vault", form.authMode == AuthMode.NEW_KEY) {
+                    AuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
                         form.authMode = AuthMode.NEW_KEY; menuOpen = false
                     }
                     if (saved.isNotEmpty()) {
@@ -471,14 +520,14 @@ private fun AuthPicker(form: NewConnectionFormState) {
         when (form.authMode) {
             AuthMode.NEW_PASSWORD -> {
                 Spacer14()
-                ModalTextField(form.password, { form.password = it }, "password to store", icon = "key", masked = true)
+                ModalTextField(form.password, { form.password = it }, stringResource(Res.string.conn_auth_password_placeholder), icon = "key", masked = true)
             }
             AuthMode.NEW_KEY -> {
                 Spacer14()
                 // keyboardType=Password гасит автокоррект/подсказки IME (Android), чтобы ключ не оседал в словаре.
                 ModalTextField(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 96)
                 Spacer14()
-                ModalTextField(form.passphrase, { form.passphrase = it }, "key passphrase (optional)", icon = "lock", masked = true)
+                ModalTextField(form.passphrase, { form.passphrase = it }, stringResource(Res.string.conn_auth_passphrase_placeholder), icon = "lock", masked = true)
             }
             else -> {}
         }
@@ -536,18 +585,18 @@ private fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(if (hasGroup) form.group else "No group", color = if (hasGroup) D.text else D.faint, size = 13.sp)
+                Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) D.text else D.faint, size = 13.sp)
                 Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
             }
         },
         menu = { width ->
             SuggestionMenu(width) {
-                GroupOption("No group", selected = !hasGroup) { form.group = ""; menuOpen = false }
+                GroupOption(stringResource(Res.string.conn_group_none), selected = !hasGroup) { form.group = ""; menuOpen = false }
                 groups.forEach { group ->
                     key(group) { GroupOption(group, selected = form.group == group) { form.group = group; menuOpen = false } }
                 }
                 HLine(modifier = Modifier.padding(vertical = 4.dp))
-                GroupOption("New group…", selected = false, icon = "add") { menuOpen = false; createOpen = true }
+                GroupOption(stringResource(Res.string.conn_group_new), selected = false, icon = "add") { menuOpen = false; createOpen = true }
             }
         },
     )
@@ -595,15 +644,15 @@ private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit)
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                     .padding(22.dp),
             ) {
-                Txt("New group", color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.conn_group_new_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
                 Spacer14()
                 ModalTextField(name, { name = it }, "Production")
                 Spacer14()
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
                     Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                        Txt("Cancel", color = D.dim, size = 12.5.sp)
+                        Txt(stringResource(Res.string.conn_cancel), color = D.dim, size = 12.5.sp)
                     }
-                    PrimaryButton("Create", onClick = { if (canCreate) onCreate(name) }, bg = if (canCreate) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    PrimaryButton(stringResource(Res.string.conn_create), onClick = { if (canCreate) onCreate(name) }, bg = if (canCreate) D.cyan else D.cyan.copy(alpha = 0.4f))
                 }
             }
         }
@@ -652,12 +701,12 @@ private fun TestStatusLabel(status: ConnectionTestStatus) {
         ConnectionTestStatus.Idle -> {}
         ConnectionTestStatus.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("progress_activity", size = 14.sp, color = D.dim)
-            Txt("Testing connection…", color = D.dim, size = 11.5.sp)
+            Txt(stringResource(Res.string.conn_test_checking), color = D.dim, size = 11.5.sp)
         }
         is ConnectionTestStatus.Success -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("check_circle", size = 14.sp, color = D.moss)
             Txt(
-                "Connected" + (status.roundTripMillis?.let { " · $it ms" } ?: ""),
+                status.roundTripMillis?.let { stringResource(Res.string.conn_test_connected_ms, it) } ?: stringResource(Res.string.conn_test_connected),
                 color = D.moss, size = 11.5.sp,
             )
         }
@@ -684,7 +733,7 @@ private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: (
         modifier = Modifier.widthIn(min = 72.dp).onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) Txt("add tag…", color = D.faint, size = 12.5.sp)
+                if (value.isEmpty()) Txt(stringResource(Res.string.conn_tag_add_placeholder), color = D.faint, size = 12.5.sp)
                 inner()
             }
         },
