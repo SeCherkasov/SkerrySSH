@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -223,7 +224,9 @@ import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
 /** Панель настроек (модалка 760×560): nav 200dp + контент с 8 секциями (AI/Appearance/…/About). */
@@ -1071,8 +1074,11 @@ private fun SecuritySection(
 ) {
     SectionTitle(stringResource(Res.string.settings_security_title), stringResource(Res.string.settings_security_subtitle))
 
-    // Мастер-пароль: подпись = реальная «последняя смена» из журнала (или нейтральный текст).
-    val lastChange = remember(controller, reload) { controller?.lastPasswordChangeAt() }
+    // Мастер-пароль: подпись = реальная «последняя смена» из журнала (или нейтральный текст). Чтение
+    // журнала — файловый I/O + JSON-разбор, поэтому уводим его с потока композиции на фоновый диспетчер.
+    val lastChange by produceState<String?>(null, controller, reload) {
+        value = withContext(Dispatchers.Default) { controller?.lastPasswordChangeAt() }
+    }
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.settings_security_master_password), color = D.text, size = 13.sp, weight = FontWeight.Medium)
@@ -1129,7 +1135,9 @@ private fun SecuritySection(
 
     // Недавние события безопасности — из реального журнала (или «пока событий нет»).
     Txt(stringResource(Res.string.settings_recent_security_events), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
-    val events = remember(controller, reload) { controller?.recentSecurityEvents(8) ?: emptyList() }
+    val events by produceState(emptyList<SecurityEvent>(), controller, reload) {
+        value = withContext(Dispatchers.Default) { controller?.recentSecurityEvents(8) ?: emptyList() }
+    }
     if (events.isEmpty()) {
         Txt(stringResource(Res.string.settings_security_no_events), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 3.dp))
     } else {
@@ -1233,16 +1241,30 @@ internal fun ChangeMasterPasswordDialog(
     var fresh by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var wrongCurrent by remember { mutableStateOf(false) }
+    // Argon2id-деривация ключа (дважды) + перезапись vault — намеренно дорогие; гоняем их на фоновом
+    // диспетчере, а не на потоке композиции, иначе UI замирает (на Android — вплоть до ANR). [busy]
+    // держит кнопку неактивной, пока смена идёт, чтобы не запустить её повторно.
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val tooShort = fresh.isNotEmpty() && fresh.length < MIN_MASTER_PASSWORD_LENGTH
     val mismatch = confirm.isNotEmpty() && fresh != confirm
-    val canSubmit = current.isNotEmpty() && fresh.length >= MIN_MASTER_PASSWORD_LENGTH && fresh == confirm
+    val canSubmit = current.isNotEmpty() && fresh.length >= MIN_MASTER_PASSWORD_LENGTH && fresh == confirm && !busy
 
     val submit = {
         if (canSubmit) {
             wrongCurrent = false
-            val ok = controller.changePassword(current.toCharArray(), fresh.toCharArray())
-            if (ok) { onChanged(); onClose() } else wrongCurrent = true
+            busy = true
+            // Снимаем буферы до запуска корутины (contro­ller их затирает); строки в slot-table живут
+            // до рекомпозиции — их гигиена вне контракта смены, как и в форме входа.
+            val old = current.toCharArray()
+            val next = fresh.toCharArray()
+            scope.launch {
+                val ok = withContext(Dispatchers.Default) { controller.changePassword(old, next) }
+                busy = false
+                if (ok) { onChanged(); onClose() } else wrongCurrent = true
+            }
+            Unit
         }
     }
 
