@@ -65,6 +65,8 @@ import app.skerry.ui.i18n.label
 import app.skerry.ui.sync.accountCardModelLocalized
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.vault.VaultGateController
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -227,8 +229,8 @@ private fun BiometricUnlockRow() {
 // Appearance (push-экран More → Appearance).
 
 /**
- * Push-экран More → Appearance: выбор шрифта терминала и кегля. Тема пока не редактируется
- * (заглушка). Оба шрифта рендерятся без лигатур (см. [app.skerry.ui.terminal.TerminalAppearance]).
+ * Push-экран More → Appearance: выбор темы терминала (карточки), шрифта и кегля. Оба шрифта
+ * рендерятся без лигатур (см. [app.skerry.ui.terminal.TerminalAppearance]).
  */
 @Composable
 fun MobileAppearanceScreen(state: MobileDesignState) {
@@ -243,6 +245,20 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Txt(stringResource(Res.string.appearance_section_terminal), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp))
+            // Карточки тем сеткой 2×N из каталога [TerminalThemes]; выбор проводится в терминал на лету.
+            TerminalThemes.all.chunked(2).forEach { rowThemes ->
+                Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (theme in rowThemes) {
+                        MobileThemeCard(
+                            theme = theme,
+                            active = theme.id == state.terminalTheme.id,
+                            onClick = { state.chooseTerminalTheme(theme) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (rowThemes.size == 1) Box(Modifier.weight(1f))
+                }
+            }
             FontSettingRow(stringResource(Res.string.appearance_font)) {
                 MobileFontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
             }
@@ -254,6 +270,40 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             FontSettingRow(stringResource(Res.string.appearance_language)) {
                 MobileLanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
             }
+        }
+    }
+}
+
+/**
+ * Мобильная карточка выбора темы терминала: мини-превью `ls -la` в реальных цветах [theme]; клик
+ * выбирает, активная — cyan-рамка + бейдж ACTIVE. Зеркалит desktop-карточку из SettingsPanel.
+ */
+@Composable
+private fun MobileThemeCard(
+    theme: TerminalTheme,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val mono = LocalFonts.current.mono
+    Column(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, if (active) D.cyan else D.cyan.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Column(Modifier.fillMaxWidth().background(theme.background).padding(8.dp)) {
+            Row { Txt("~ ", color = theme.ansi[2], size = 9.sp, font = mono); Txt("ls -la", color = theme.foreground, size = 9.sp, font = mono) }
+            Row { Txt("drwxr-xr-x ", color = theme.ansi[6], size = 9.sp, font = mono); Txt("src", color = theme.ansi[4], size = 9.sp, font = mono) }
+            Row { Txt("-rw-r--r-- ", color = theme.ansi[8], size = 9.sp, font = mono); Txt(".env", color = theme.ansi[3], size = 9.sp, font = mono) }
+        }
+        Row(
+            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Txt(theme.displayName, color = D.text, size = 11.sp, weight = FontWeight.Medium, maxLines = 1)
+            if (active) Badge("ACTIVE", bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 8.sp)
         }
     }
 }

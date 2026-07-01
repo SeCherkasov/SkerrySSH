@@ -68,6 +68,7 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.terminal.LocalTerminalAppearance
+import app.skerry.ui.terminal.LocalTerminalTheme
 import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.vault.RESET_CONFIRM_WORD
 import app.skerry.ui.vault.ResetScope
@@ -189,6 +190,8 @@ fun MobileDesignApp(
         LocalFonts provides fonts,
         // Внешний вид терминала из настроек (More → Appearance): шрифт + кегль читает TerminalScreen.
         LocalTerminalAppearance provides terminalAppearance,
+        // Цветовая тема терминала (More → Appearance → карточки): фон/текст/ANSI/курсор — тот же рендер.
+        LocalTerminalTheme provides state.terminalTheme,
         LocalHosts provides deps.hosts,
         LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,

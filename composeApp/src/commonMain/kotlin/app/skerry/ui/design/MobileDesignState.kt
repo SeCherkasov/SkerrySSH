@@ -9,6 +9,8 @@ import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TerminalFont
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
 
 /**
  * Нижняя навигация — ровно 4 корневых таба ([showTabs]=true). [icon] — лигатура Material Symbols
@@ -69,6 +71,10 @@ class MobileDesignState(
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     private val onTerminalFontSizeChange: (Int) -> Unit = {},
+    // Цветовая тема терминала (More → Appearance → карточки тем). Проводится в терминал через
+    // [app.skerry.ui.terminal.LocalTerminalTheme]; на мобильном пока не персистится (в памяти).
+    initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
+    private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
     // Язык интерфейса (More → Appearance → Language). Стартовое значение читается из персиста при
     // запуске, колбэк пишет его обратно — выбор переживает перезапуск. Дефолты (System, no-op) —
     // автоопределение по локали ОС для превью/тестов.
@@ -185,6 +191,9 @@ class MobileDesignState(
     /** Кегль шрифта терминала, px (More → Appearance → Font size). */
     var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
 
+    /** Тема терминала (More → Appearance → карточки). Проводится через [app.skerry.ui.terminal.LocalTerminalTheme]. */
+    var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
+
     /** Язык интерфейса (More → Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
 
@@ -193,6 +202,13 @@ class MobileDesignState(
         if (font == terminalFont) return
         terminalFont = font
         onTerminalFontChange(font)
+    }
+
+    /** Выбрать тему терминала и сообщить наружу. Повтор той же — no-op. */
+    fun chooseTerminalTheme(theme: TerminalTheme) {
+        if (theme == terminalTheme) return
+        terminalTheme = theme
+        onTerminalThemeChange(theme)
     }
 
     /**
