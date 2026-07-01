@@ -14,8 +14,13 @@ import app.skerry.shared.sftp.SftpException
 import app.skerry.ui.sftp.DownloadTarget
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.UploadSource
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_delete_source_failed
+import app.skerry.ui.generated.resources.ftail_file_fallback
+import app.skerry.ui.generated.resources.ftail_transfer_error
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Состояние пакетной передачи между панелями для нижней полосы переноса. */
@@ -143,7 +148,7 @@ class TransferCoordinator(
             try {
                 delete(item)
             } catch (e: FileBrowserException) {
-                return TransferState.Failed(item.name, e.message ?: "Не удалось удалить источник после переноса")
+                return TransferState.Failed(item.name, e.message ?: getString(Res.string.ftail_delete_source_failed))
             }
         }
         return null
@@ -174,7 +179,7 @@ class TransferCoordinator(
                 throw e
             } catch (e: Exception) {
                 runCatching { target.discard() }
-                transfer = TransferState.Failed(target.displayName, e.message ?: "Ошибка передачи")
+                transfer = TransferState.Failed(target.displayName, e.message ?: getString(Res.string.ftail_transfer_error))
             } finally {
                 busy = false
             }
@@ -202,7 +207,7 @@ class TransferCoordinator(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                transfer = TransferState.Failed(source.name, e.message ?: "Ошибка передачи")
+                transfer = TransferState.Failed(source.name, e.message ?: getString(Res.string.ftail_transfer_error))
             } finally {
                 runCatching { source.cleanup() }
                 busy = false
@@ -231,8 +236,8 @@ class TransferCoordinator(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val name = (transfer as? TransferState.Active)?.name ?: "файл"
-                transfer = TransferState.Failed(name, e.message ?: "Ошибка передачи")
+                val name = (transfer as? TransferState.Active)?.name ?: getString(Res.string.ftail_file_fallback)
+                transfer = TransferState.Failed(name, e.message ?: getString(Res.string.ftail_transfer_error))
             } finally {
                 busy = false
             }

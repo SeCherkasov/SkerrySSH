@@ -8,8 +8,11 @@ import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.FileBrowserException
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_file_pane_error
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Состояние листинга одной файловой панели (локальной или удалённой). */
@@ -369,7 +372,7 @@ class FilePaneController(
             rawEntries = raw
             FilePaneState.Loaded(visible(raw))
         } catch (e: FileBrowserException) {
-            FilePaneState.Error(e.message ?: "Ошибка файловой панели")
+            FilePaneState.Error(e.message ?: getString(Res.string.ftail_file_pane_error))
         }
 
     /** Листинг с учётом [showHidden]: скрытые — те, чьё имя начинается с точки (POSIX-конвенция). */
@@ -406,7 +409,7 @@ class FilePaneController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FileBrowserException) {
-                state = FilePaneState.Error(e.message ?: "Ошибка файловой панели")
+                state = FilePaneState.Error(e.message ?: getString(Res.string.ftail_file_pane_error))
             } finally {
                 busy = false
             }

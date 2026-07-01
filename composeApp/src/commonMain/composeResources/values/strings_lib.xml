@@ -1,0 +1,60 @@
+<resources>
+    <!-- Known hosts (KnownHostsView, MobileKnownView) -->
+    <string name="lib_known_title">Known hosts</string>
+    <string name="lib_known_subtitle">Verified host key fingerprints. Skerry warns when a key changes.</string>
+    <string name="lib_known_col_host">HOST</string>
+    <string name="lib_known_col_key_type">KEY TYPE</string>
+    <string name="lib_known_col_fingerprint">FINGERPRINT (SHA256)</string>
+    <string name="lib_known_col_first_seen">FIRST SEEN</string>
+    <string name="lib_known_col_status">STATUS</string>
+    <string name="lib_known_key_changed_for">Host key changed for %1$s</string>
+    <string name="lib_known_mismatch_body">The %1$s fingerprint differs from the one Skerry recorded. This could be a re-install — or a man-in-the-middle. Verify before reconnecting.</string>
+    <string name="lib_known_review_fingerprint">Review fingerprint</string>
+    <string name="lib_known_reject_block">Reject &amp; block</string>
+    <string name="lib_known_dismiss">Dismiss</string>
+    <string name="lib_known_status_changed">Changed</string>
+    <string name="lib_known_status_verified">Verified</string>
+    <string name="lib_known_forget_key">Forget key</string>
+    <string name="lib_known_empty_title">No known hosts yet</string>
+    <string name="lib_known_empty_desc">Connect to a host — its key is trusted on first use and recorded here.</string>
+    <string name="lib_known_empty_desc_mobile">Connect a host — its key is trusted on first use</string>
+    <string name="lib_known_fp_mismatch">Fingerprint mismatch</string>
+    <string name="lib_known_previously_recorded">PREVIOUSLY RECORDED</string>
+    <string name="lib_known_now_offered">NOW OFFERED</string>
+    <string name="lib_known_reinstall_note">If you recently re-installed this host, accepting is safe. Otherwise treat this as a possible interception.</string>
+    <string name="lib_known_accept_new_key">Accept new key</string>
+    <string name="lib_known_accept">Accept</string>
+    <string name="lib_known_reject">Reject</string>
+
+    <!-- Snippets (SnippetsView, MobileSnippetsView) -->
+    <string name="lib_snippets_library">LIBRARY</string>
+    <string name="lib_snippets_empty">No snippets yet</string>
+    <string name="lib_snippets_no_matches">No matches</string>
+    <string name="lib_snippets_new">New snippet</string>
+    <string name="lib_snippets_edit">Edit snippet</string>
+    <string name="lib_snippets_untitled">Untitled</string>
+    <string name="lib_snippets_field_name">Name</string>
+    <string name="lib_snippets_field_command">Command</string>
+    <string name="lib_snippets_field_tags">Tags</string>
+    <string name="lib_snippets_field_shortcut">Shortcut</string>
+    <string name="lib_snippets_ph_name">Disk usage report</string>
+    <string name="lib_snippets_add_tag">add tag…</string>
+    <string name="lib_snippets_press_keys">Press keys…</string>
+    <string name="lib_snippets_shortcut_conflict">Already used by \"%1$s\"</string>
+    <string name="lib_snippets_select_or_create">Select a snippet or create a new one.</string>
+    <string name="lib_snippets_save">Save</string>
+    <string name="lib_snippets_delete">Delete</string>
+    <string name="lib_snippets_search">Search snippets…</string>
+    <string name="lib_snippets_screen_title">Snippets</string>
+    <string name="lib_snippets_empty_mobile">No snippets yet. Tap + to save a command.</string>
+    <string name="lib_snippets_run_title">Run snippet</string>
+    <string name="lib_snippets_run_empty">No snippets yet. Add some on the Snippets tab.</string>
+    <string name="lib_snippets_run_in_terminal">Run in terminal</string>
+    <string name="lib_snippets_save_snippet">Save snippet</string>
+
+    <!-- Teams (TeamsView) -->
+    <string name="lib_teams_sidebar">TEAMS</string>
+    <string name="lib_teams_invite">Invite</string>
+    <string name="lib_teams_members">Members</string>
+    <string name="lib_teams_recent_activity">Recent activity</string>
+</resources>

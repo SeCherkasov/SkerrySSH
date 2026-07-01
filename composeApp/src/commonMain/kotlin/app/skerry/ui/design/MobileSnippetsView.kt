@@ -53,6 +53,25 @@ import app.skerry.ui.snippet.SnippetDraft
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.snippetTagSuggestions
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_snippets_add_tag
+import app.skerry.ui.generated.resources.lib_snippets_delete
+import app.skerry.ui.generated.resources.lib_snippets_edit
+import app.skerry.ui.generated.resources.lib_snippets_empty_mobile
+import app.skerry.ui.generated.resources.lib_snippets_field_command
+import app.skerry.ui.generated.resources.lib_snippets_field_name
+import app.skerry.ui.generated.resources.lib_snippets_field_tags
+import app.skerry.ui.generated.resources.lib_snippets_new
+import app.skerry.ui.generated.resources.lib_snippets_no_matches
+import app.skerry.ui.generated.resources.lib_snippets_ph_name
+import app.skerry.ui.generated.resources.lib_snippets_run_empty
+import app.skerry.ui.generated.resources.lib_snippets_run_in_terminal
+import app.skerry.ui.generated.resources.lib_snippets_run_title
+import app.skerry.ui.generated.resources.lib_snippets_save_snippet
+import app.skerry.ui.generated.resources.lib_snippets_screen_title
+import app.skerry.ui.generated.resources.lib_snippets_search
+import app.skerry.ui.generated.resources.lib_snippets_untitled
+import org.jetbrains.compose.resources.stringResource
 
 private data class MockMobileSnippet(val icon: String, val title: String, val cmd: String)
 
@@ -99,11 +118,11 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-                Txt("Snippets", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+                Txt(stringResource(Res.string.lib_snippets_screen_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
             }
             if (snippets.isEmpty()) {
                 Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 30.dp)) {
-                    Txt("No snippets yet. Tap + to save a command.", color = D.faint, size = 13.sp)
+                    Txt(stringResource(Res.string.lib_snippets_empty_mobile), color = D.faint, size = 13.sp)
                 }
             } else {
                 Column(
@@ -174,7 +193,7 @@ private fun MobileSnippetCard(snippet: Snippet, mono: FontFamily, onClick: () ->
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             Sym("code_blocks", size = 18.sp, color = D.cyanBright)
-            Txt(snippet.label.ifBlank { "Untitled" }, color = D.text, size = 14.5.sp, weight = FontWeight.SemiBold)
+            Txt(snippet.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = D.text, size = 14.5.sp, weight = FontWeight.SemiBold)
         }
         if (snippet.command.isNotBlank()) {
             Box(
@@ -214,10 +233,10 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
     // через Popup: focusable-Popup менял инсеты окна и слегка сдвигал шапку терминала.
     MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.7f) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Txt("Run snippet", color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            SnippetSheetInput(query, { query = it }, "Search snippets…")
+            Txt(stringResource(Res.string.lib_snippets_run_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            SnippetSheetInput(query, { query = it }, stringResource(Res.string.lib_snippets_search))
             if (filtered.isEmpty()) {
-                Txt(if (all.isEmpty()) "No snippets yet. Add some on the Snippets tab." else "No matches", color = D.faint, size = 13.sp)
+                Txt(if (all.isEmpty()) stringResource(Res.string.lib_snippets_run_empty) else stringResource(Res.string.lib_snippets_no_matches), color = D.faint, size = 13.sp)
             } else {
                 filtered.forEach { entry ->
                     key(entry.id) {
@@ -261,14 +280,14 @@ private fun MobileSnippetEditSheet(
 
     MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.9f) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Txt(if (entry == null) "New snippet" else "Edit snippet", color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            SnippetSheetField("Name") {
-                SnippetSheetInput(label, { label = it }, "Disk usage report")
+            Txt(if (entry == null) stringResource(Res.string.lib_snippets_new) else stringResource(Res.string.lib_snippets_edit), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            SnippetSheetField(stringResource(Res.string.lib_snippets_field_name)) {
+                SnippetSheetInput(label, { label = it }, stringResource(Res.string.lib_snippets_ph_name))
             }
-            SnippetSheetField("Command") {
+            SnippetSheetField(stringResource(Res.string.lib_snippets_field_command)) {
                 SnippetSheetInput(command, { command = it }, "df -h | sort -k5 -r", mono = true, singleLine = false, minHeightDp = 88)
             }
-            SnippetSheetField("Tags") {
+            SnippetSheetField(stringResource(Res.string.lib_snippets_field_tags)) {
                 SnippetSheetTags(
                     tags = tags,
                     onRemove = { tag -> tags = tags - tag },
@@ -281,10 +300,10 @@ private fun MobileSnippetEditSheet(
                 )
             }
             if (canRun) {
-                MobileSheetButton("Run in terminal", onClick = onRun, icon = "bolt", filled = false, modifier = Modifier.fillMaxWidth())
+                MobileSheetButton(stringResource(Res.string.lib_snippets_run_in_terminal), onClick = onRun, icon = "bolt", filled = false, modifier = Modifier.fillMaxWidth())
             }
             MobileSheetButton(
-                "Save snippet",
+                stringResource(Res.string.lib_snippets_save_snippet),
                 onClick = {
                     if (canSave) {
                         // Дослать недозафиксированный черновик тега (юзер набрал тег и сразу жмёт Save,
@@ -296,7 +315,7 @@ private fun MobileSnippetEditSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
             if (onDelete != null) {
-                MobileSheetButton("Delete", onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
+                MobileSheetButton(stringResource(Res.string.lib_snippets_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(4.dp))
         }
@@ -417,7 +436,7 @@ private fun SnippetSheetTags(
                     modifier = Modifier.widthIn(min = 90.dp).onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
-                            if (draft.isEmpty()) Txt("add tag…", color = D.faint, size = 14.sp)
+                            if (draft.isEmpty()) Txt(stringResource(Res.string.lib_snippets_add_tag), color = D.faint, size = 14.sp)
                             inner()
                         }
                     },
@@ -457,7 +476,7 @@ private fun MobileSnippetsMock() {
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-                Txt("Snippets", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+                Txt(stringResource(Res.string.lib_snippets_screen_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
             }
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 18.dp),

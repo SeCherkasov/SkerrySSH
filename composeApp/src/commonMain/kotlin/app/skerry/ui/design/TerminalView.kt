@@ -79,6 +79,54 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.terminal.TerminalScreen
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.term_hosts_section
+import app.skerry.ui.generated.resources.term_no_hosts_match
+import app.skerry.ui.generated.resources.term_recent_section
+import app.skerry.ui.generated.resources.term_new_connection
+import app.skerry.ui.generated.resources.term_search_hosts_placeholder
+import app.skerry.ui.generated.resources.term_menu_run_snippet
+import app.skerry.ui.generated.resources.term_menu_edit
+import app.skerry.ui.generated.resources.term_menu_delete
+import app.skerry.ui.generated.resources.term_no_active_session
+import app.skerry.ui.generated.resources.term_run_snippet_placeholder
+import app.skerry.ui.generated.resources.term_no_snippets_yet
+import app.skerry.ui.generated.resources.term_no_matches
+import app.skerry.ui.generated.resources.term_untitled
+import app.skerry.ui.generated.resources.term_notice_pick_host_to_connect
+import app.skerry.ui.generated.resources.term_notice_not_connected
+import app.skerry.ui.generated.resources.term_notice_pick_or_new
+import app.skerry.ui.generated.resources.term_connecting
+import app.skerry.ui.generated.resources.term_connection_failed
+import app.skerry.ui.generated.resources.term_session_closed
+import app.skerry.ui.generated.resources.term_reconnecting
+import app.skerry.ui.generated.resources.term_connection_lost
+import app.skerry.ui.generated.resources.term_select_host_placeholder
+import app.skerry.ui.generated.resources.term_no_host_selected
+import app.skerry.ui.generated.resources.term_notice_pick_side_by_side
+import app.skerry.ui.generated.resources.term_no_hosts_in_catalog
+import app.skerry.ui.generated.resources.term_info_connection
+import app.skerry.ui.generated.resources.term_info_live
+import app.skerry.ui.generated.resources.term_info_host
+import app.skerry.ui.generated.resources.term_info_address
+import app.skerry.ui.generated.resources.term_info_user
+import app.skerry.ui.generated.resources.term_info_auth
+import app.skerry.ui.generated.resources.term_info_cipher
+import app.skerry.ui.generated.resources.term_info_uptime
+import app.skerry.ui.generated.resources.term_auth_identity
+import app.skerry.ui.generated.resources.term_auth_password
+import app.skerry.ui.generated.resources.term_live_metrics
+import app.skerry.ui.generated.resources.term_metric_cpu
+import app.skerry.ui.generated.resources.term_metric_memory
+import app.skerry.ui.generated.resources.term_metric_disk
+import app.skerry.ui.generated.resources.term_info_system
+import app.skerry.ui.generated.resources.term_ai_thinking
+import app.skerry.ui.generated.resources.term_ai_ask_placeholder
+import app.skerry.ui.generated.resources.term_ai_run
+import app.skerry.ui.generated.resources.term_ai_run_anyway
+import app.skerry.ui.generated.resources.term_ai_confirm_run
+import app.skerry.ui.generated.resources.term_ai_dismiss
+import org.jetbrains.compose.resources.stringResource
 
 /** Общая высота шапки панели (основной и split) — чтобы заголовки были вровень. */
 private val PANE_HEADER_HEIGHT = 40.dp
@@ -199,7 +247,7 @@ private fun HostsSidebar(state: DesktopDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt("HOSTS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+                Txt(stringResource(Res.string.term_hosts_section), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
                 // Создать новую (пока пустую) группу — в живом каталоге; в мок-пути иконка декоративна.
                 if (liveHosts != null) {
                     IconBtn("create_new_folder", onClick = state::openCreateGroup, box = 20, icon = 14.sp, tint = D.faint)
@@ -226,7 +274,7 @@ private fun HostsSidebar(state: DesktopDesignState) {
                 // пустого каталога, где ниже всё равно покажется секция RECENT/кнопка New connection).
                 if (folders.isEmpty() && (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP)) {
                     Txt(
-                        "No hosts match",
+                        stringResource(Res.string.term_no_hosts_match),
                         color = D.faint, size = 12.sp,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp),
                     )
@@ -274,7 +322,7 @@ private fun HostsSidebar(state: DesktopDesignState) {
         }
         HLine()
         Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            PrimaryButton("New connection", onClick = state::openModal, icon = "add_link", modifier = Modifier.fillMaxWidth())
+            PrimaryButton(stringResource(Res.string.term_new_connection), onClick = state::openModal, icon = "add_link", modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -307,7 +355,7 @@ private fun HostSearchField(state: DesktopDesignState, mono: FontFamily) {
             ) {
                 Sym("search", size = 16.sp, color = D.faint)
                 Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Txt("Search hosts, tags, IPs…", color = D.faint, size = 12.5.sp)
+                    if (query.isEmpty()) Txt(stringResource(Res.string.term_search_hosts_placeholder), color = D.faint, size = 12.5.sp)
                     inner()
                 }
                 if (query.isEmpty()) {
@@ -360,7 +408,7 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
 @Composable
 private fun RecentSectionHeader() {
     Txt(
-        "RECENT",
+        stringResource(Res.string.term_recent_section),
         color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
         modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 16.dp, bottom = 4.dp),
     )
@@ -598,13 +646,13 @@ private fun HostEntryRow(
                             Modifier.clip(RoundedCornerShape(7.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
                         ) {
                             if (canRunSnippet) {
-                                HostMenuItem("Run snippet…", D.text) { menuOpen = false; snippetPickerOpen = true }
+                                HostMenuItem(stringResource(Res.string.term_menu_run_snippet), D.text) { menuOpen = false; snippetPickerOpen = true }
                             }
                             onEdit?.let { edit ->
-                                HostMenuItem("Edit", D.text) { menuOpen = false; edit() }
+                                HostMenuItem(stringResource(Res.string.term_menu_edit), D.text) { menuOpen = false; edit() }
                             }
                             onDelete?.let { delete ->
-                                HostMenuItem("Delete", D.sunset) { menuOpen = false; delete() }
+                                HostMenuItem(stringResource(Res.string.term_menu_delete), D.sunset) { menuOpen = false; delete() }
                             }
                         }
                     }
@@ -663,7 +711,7 @@ private fun SessionToolbar(state: DesktopDesignState) {
                     Dot(sessionDotColor(active.controller.uiState))
                 } else if (sessions != null) {
                     // Живой режим без активной сессии: честное пустое состояние, без фейкового хоста.
-                    Txt("No active session", color = D.faint, size = 12.sp, font = mono)
+                    Txt(stringResource(Res.string.term_no_active_session), color = D.faint, size = 12.sp, font = mono)
                 } else {
                     // Мок/превью (офскрин-рендер без LocalSessions): статичный заголовок.
                     Txt("root@prod-web-01", color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
@@ -743,13 +791,13 @@ private fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> Un
         ) {
             Sym("search", size = 15.sp, color = D.faint)
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Txt("Run a snippet…", color = D.faint, size = 12.5.sp, font = mono)
+                if (query.isEmpty()) Txt(stringResource(Res.string.term_run_snippet_placeholder), color = D.faint, size = 12.5.sp, font = mono)
                 BasicTextField(query, { query = it }, singleLine = true, textStyle = style, cursorBrush = SolidColor(D.cyan), modifier = Modifier.fillMaxWidth().focusRequester(searchFocus))
             }
         }
         Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
             if (filtered.isEmpty()) {
-                Txt(if (all.isEmpty()) "No snippets yet" else "No matches", color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+                Txt(if (all.isEmpty()) stringResource(Res.string.term_no_snippets_yet) else stringResource(Res.string.term_no_matches), color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
             } else {
                 filtered.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
             }
@@ -765,7 +813,7 @@ private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Uni
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Sym("code_blocks", size = 14.sp, color = D.dim)
-            Txt(s.label.ifBlank { "Untitled" }, color = D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+            Txt(s.label.ifBlank { stringResource(Res.string.term_untitled) }, color = D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
             if (!s.shortcut.isNullOrBlank()) {
                 Box(Modifier.clip(RoundedCornerShape(4.dp)).background(D.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
                     Txt(s.shortcut!!, color = D.faint, size = 10.sp, font = mono)
@@ -795,12 +843,12 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
     val active = sessions.active
     Box(modifier.fillMaxHeight().fillMaxWidth().background(D.terminalBg)) {
         when (val st = active?.controller?.uiState) {
-            null -> TerminalNotice("terminal", "No active session", "Pick a host from the sidebar to connect.")
+            null -> TerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_notice_pick_host_to_connect))
             // Form у активной вкладки = пустой таб («+»): соединение ещё не запускалось.
-            ConnectionUiState.Form -> TerminalNotice("terminal", "Not connected", "Pick a host from the sidebar or start a New connection.")
-            ConnectionUiState.Connecting -> TerminalNotice("sync", "Connecting…", active.subtitle)
+            ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new))
+            ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), active.subtitle)
             is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
-            is ConnectionUiState.Error -> TerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+            is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), st.message, color = D.sunset)
             // Обрыв: экран застыл на момент потери ([ConnectionUiState.Disconnected.terminal]) — показываем
             // его под баннером разрыва, чтобы вывод не пропал, а статус (реконнект/сдача) был ясен.
             is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
@@ -830,9 +878,9 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
         else -> "link_off"
     }
     val text = when {
-        state.cleanExit -> "Session closed"
-        state.reconnecting -> "Reconnecting… #${state.attempt}"
-        else -> "Connection lost"
+        state.cleanExit -> stringResource(Res.string.term_session_closed)
+        state.reconnecting -> stringResource(Res.string.term_reconnecting, state.attempt)
+        else -> stringResource(Res.string.term_connection_lost)
     }
     Row(
         modifier
@@ -1055,7 +1103,7 @@ private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignStat
                         Dot(sessionDotColor(split.controller.uiState))
                         Spacer(Modifier.weight(1f))
                     } else {
-                        Txt("Select a host…", color = D.faint, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+                        Txt(stringResource(Res.string.term_select_host_placeholder), color = D.faint, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
                     }
                     Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
                 }
@@ -1076,11 +1124,11 @@ private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignStat
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val st = split?.controller?.uiState) {
-                null -> TerminalNotice("splitscreen_right", "No host selected", "Pick a host to open it side by side.")
-                ConnectionUiState.Form -> TerminalNotice("terminal", "Session closed", split.subtitle)
-                ConnectionUiState.Connecting -> TerminalNotice("sync", "Connecting…", split.subtitle)
+                null -> TerminalNotice("splitscreen_right", stringResource(Res.string.term_no_host_selected), stringResource(Res.string.term_notice_pick_side_by_side))
+                ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_session_closed), split.subtitle)
+                ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), split.subtitle)
                 is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
-                is ConnectionUiState.Error -> TerminalNotice("error", "Connection failed", st.message, color = D.sunset)
+                is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), st.message, color = D.sunset)
                 is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                     TerminalScreen(st.terminal, Modifier.fillMaxSize())
                     DisconnectedBanner(st, Modifier.align(Alignment.TopCenter))
@@ -1111,7 +1159,7 @@ private fun SplitHostPicker(onPicked: () -> Unit) {
             .padding(4.dp),
     ) {
         if (hosts.isEmpty()) {
-            Txt("No hosts in catalog", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
+            Txt(stringResource(Res.string.term_no_hosts_in_catalog), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
         }
         hosts.forEach { host ->
             Row(
@@ -1205,10 +1253,11 @@ private fun InfoPanel() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Txt("CONNECTION", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+            Txt(stringResource(Res.string.term_info_connection), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 val dot = if (live) sessionDotColor(active?.controller?.uiState) else D.moss
-                val label = if (!live) "LIVE" else if (connected) "LIVE" else "—"
+                val liveLabel = stringResource(Res.string.term_info_live)
+                val label = if (!live) liveLabel else if (connected) liveLabel else "—"
                 Dot(dot)
                 Txt(label, color = dot, size = 10.sp)
             }
@@ -1217,33 +1266,38 @@ private fun InfoPanel() {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             // Host/Address/User — из живого профиля активной сессии; cipher — из транспорта,
             // uptime — из live-метрик (до первого опроса «…»); в мок-режиме — статичные значения.
-            InfoRow("Host", if (live) (host?.label ?: active?.title ?: "—") else "prod-web-01", mono)
-            InfoRow("Address", if (live) (host?.let { "${it.address}:${it.port}" } ?: "—") else "192.168.1.45:22", mono)
-            InfoRow("User", if (live) (host?.username ?: "—") else "root", mono)
-            InfoRow("Auth", if (live) (host?.identityId?.let { "identity" } ?: "password") else "id_ed25519", mono)
-            InfoRow("Cipher", if (live) (shortCipher(active?.controller?.cipher) ?: "…") else "aes256-gcm", mono)
-            InfoRow("Uptime", if (live) (liveMetrics?.uptimeSeconds?.let { formatUptime(it) } ?: "…") else "04:12:45", mono)
+            val authIdentity = stringResource(Res.string.term_auth_identity)
+            val authPassword = stringResource(Res.string.term_auth_password)
+            InfoRow(stringResource(Res.string.term_info_host), if (live) (host?.label ?: active?.title ?: "—") else "prod-web-01", mono)
+            InfoRow(stringResource(Res.string.term_info_address), if (live) (host?.let { "${it.address}:${it.port}" } ?: "—") else "192.168.1.45:22", mono)
+            InfoRow(stringResource(Res.string.term_info_user), if (live) (host?.username ?: "—") else "root", mono)
+            InfoRow(stringResource(Res.string.term_info_auth), if (live) (host?.identityId?.let { authIdentity } ?: authPassword) else "id_ed25519", mono)
+            InfoRow(stringResource(Res.string.term_info_cipher), if (live) (shortCipher(active?.controller?.cipher) ?: "…") else "aes256-gcm", mono)
+            InfoRow(stringResource(Res.string.term_info_uptime), if (live) (liveMetrics?.uptimeSeconds?.let { formatUptime(it) } ?: "…") else "04:12:45", mono)
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
-            Txt("LIVE METRICS", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
+            Txt(stringResource(Res.string.term_live_metrics), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
+            val cpuLabel = stringResource(Res.string.term_metric_cpu)
+            val memoryLabel = stringResource(Res.string.term_metric_memory)
+            val diskLabel = stringResource(Res.string.term_metric_disk)
             if (!live) {
                 // Мок-путь (превью/офскрин): статичные значения.
-                Meter("CPU", "34%", 0.34f, D.cyan, D.textBright, mono)
-                Meter("Memory", "2.1 / 4 GB", 0.52f, D.moss, D.textBright, mono)
-                Meter("Disk /", "87%", 0.87f, D.sunset, D.sunset, mono)
+                Meter(cpuLabel, "34%", 0.34f, D.cyan, D.textBright, mono)
+                Meter(memoryLabel, "2.1 / 4 GB", 0.52f, D.moss, D.textBright, mono)
+                Meter(diskLabel, "87%", 0.87f, D.sunset, D.sunset, mono)
             } else {
                 // Живой опрос ресурсов сессии (контроллер поднят выше). До первого удачного
                 // опроса (или на не-Linux хосте) — «…».
                 val m = liveMetrics
                 val cpu = m?.cpuPercent
-                Meter("CPU", cpu?.let { "$it%" } ?: "…", m?.cpuFraction ?: 0f, D.cyan, if ((cpu ?: 0) > 85) D.sunset else D.textBright, mono)
-                Meter("Memory", m?.let { "${gb(it.memUsedBytes)} / ${gb(it.memTotalBytes)} GB" } ?: "…", m?.memFraction ?: 0f, D.moss, D.textBright, mono)
+                Meter(cpuLabel, cpu?.let { "$it%" } ?: "…", m?.cpuFraction ?: 0f, D.cyan, if ((cpu ?: 0) > 85) D.sunset else D.textBright, mono)
+                Meter(memoryLabel, m?.let { "${gb(it.memUsedBytes)} / ${gb(it.memTotalBytes)} GB" } ?: "…", m?.memFraction ?: 0f, D.moss, D.textBright, mono)
                 val disk = m?.diskPercent
-                Meter("Disk /", disk?.let { "$it%" } ?: "…", m?.diskFraction ?: 0f, if ((disk ?: 0) > 85) D.sunset else D.cyan, if ((disk ?: 0) > 85) D.sunset else D.textBright, mono)
+                Meter(diskLabel, disk?.let { "$it%" } ?: "…", m?.diskFraction ?: 0f, if ((disk ?: 0) > 85) D.sunset else D.cyan, if ((disk ?: 0) > 85) D.sunset else D.textBright, mono)
             }
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-            Txt("SYSTEM", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
+            Txt(stringResource(Res.string.term_info_system), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
             // Живой блок собирается из фактов хоста (ОС / ядро / CPU+load); до первого опроса — «…».
             // В мок-режиме (превью/офскрин) — статичный текст.
             val systemText = if (live) liveSystemSummary(liveMetrics) else MOCK_SYSTEM
@@ -1385,11 +1439,11 @@ private fun AiBarInput(
                             if (info != null) Txt(info, color = infoColor, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }
-                    controller.busy -> Txt("Thinking…", color = D.dim, size = 13.sp)
+                    controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = D.dim, size = 13.sp)
                     controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     else -> {
-                        if (prompt.isEmpty()) Txt("Ask Skerry: 'find files larger than 100MB'", color = D.dim, size = 13.sp)
+                        if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_placeholder), color = D.dim, size = 13.sp)
                         BasicTextField(
                             value = prompt,
                             onValueChange = { prompt = it },
@@ -1406,17 +1460,17 @@ private fun AiBarInput(
             when {
                 pending != null -> {
                     AiActionChip(
-                        label = when { !danger -> "Run"; !armed -> "Run anyway"; else -> "Confirm run" },
+                        label = when { !danger -> stringResource(Res.string.term_ai_run); !armed -> stringResource(Res.string.term_ai_run_anyway); else -> stringResource(Res.string.term_ai_confirm_run) },
                         color = accent,
                         enabled = terminal != null,
                     ) {
                         if (danger && !armed) armed = true
                         else controller.confirm()?.let { terminal?.send(it + "\r") }
                     }
-                    AiActionChip("Dismiss", D.faint) { controller.dismiss() }
+                    AiActionChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
                 }
                 controller.blocked != null || controller.error != null ->
-                    AiActionChip("Dismiss", D.faint) { controller.dismiss() }
+                    AiActionChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
                 else -> {
                     AiBarTag("verified_user", controller.policy.name.uppercase(), mono)
                     Box(

@@ -1,0 +1,20 @@
+<resources>
+    <!-- Sync-индикатор (status-bar desktop / шапка mobile) — см. syncIndicator -->
+    <string name="stail_sync_online">Sync online</string>
+    <string name="stail_sync_offline">Sync offline</string>
+    <string name="stail_syncing">Syncing…</string>
+    <string name="stail_sync_paused">Sync paused</string>
+    <string name="stail_sync_error">Sync error</string>
+
+    <!-- Карточка аккаунта (Settings → Account / mobile More) — см. accountCardModel -->
+    <string name="stail_local_vault">Local vault</string>
+    <string name="stail_encrypted_on_device">Encrypted on this device</string>
+    <string name="stail_synced_host">Synced · %1$s</string>
+    <string name="stail_synced">Synced</string>
+    <string name="stail_linked_locked">Linked · locked</string>
+
+    <!-- Промпт перерегистрации биометрии после смены ключа sync -->
+    <string name="stail_reenroll_prompt_title">Re-enable biometric unlock</string>
+    <string name="stail_reenroll_prompt_cancel">Cancel</string>
+    <string name="stail_reenroll_prompt_subtitle">Confirm your biometrics to bind quick unlock to the new account key.</string>
+</resources>

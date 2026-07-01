@@ -1,0 +1,62 @@
+<resources>
+    <string name="conn_title_new">New connection</string>
+    <string name="conn_title_edit">Edit connection</string>
+    <string name="conn_subtitle_new">Configure a new skerry in your archipelago. Credentials are encrypted with your master password.</string>
+    <string name="conn_subtitle_edit">Update this skerry\'s profile. Credentials are encrypted with your master password.</string>
+    <string name="conn_subtitle_mobile">Credentials are encrypted with your master password and stay on this device.</string>
+
+    <string name="conn_field_name">Name</string>
+    <string name="conn_field_protocol">Protocol</string>
+    <string name="conn_field_host_address">Host address</string>
+    <string name="conn_field_device">Device</string>
+    <string name="conn_field_port">Port</string>
+    <string name="conn_field_baud">Baud</string>
+    <string name="conn_field_username">Username</string>
+    <string name="conn_field_authentication">Authentication</string>
+    <string name="conn_field_group">Group</string>
+    <string name="conn_field_tags">Tags</string>
+    <string name="conn_field_jump_host">Jump host (optional)</string>
+    <string name="conn_field_keep_alive">Keep-alive</string>
+    <string name="conn_field_ai_policy">AI policy for this connection</string>
+    <string name="conn_field_ai_policy_short">AI policy</string>
+
+    <string name="conn_protocol_ssh">SSH</string>
+    <string name="conn_protocol_telnet">Telnet</string>
+    <string name="conn_protocol_serial">Serial</string>
+
+    <string name="conn_jump_none">None — direct</string>
+    <string name="conn_keepalive_30s">Every 30s</string>
+
+    <string name="conn_cancel">Cancel</string>
+    <string name="conn_test">Test</string>
+    <string name="conn_save">Save</string>
+    <string name="conn_save_changes">Save changes</string>
+    <string name="conn_save_connection">Save connection</string>
+    <string name="conn_create">Create</string>
+    <string name="conn_footer_encrypted">Encrypted · stays on this device</string>
+
+    <string name="conn_auth_ask">Ask every time</string>
+    <string name="conn_auth_password">Password</string>
+    <string name="conn_auth_private_key">Private key</string>
+    <string name="conn_auth_select_credential">Select credential…</string>
+    <string name="conn_auth_existing_saved">%1$s (saved)</string>
+    <string name="conn_auth_ask_desc">password requested on connect</string>
+    <string name="conn_auth_password_option">Password…</string>
+    <string name="conn_auth_password_desc">store a password in your vault</string>
+    <string name="conn_auth_key_option">Paste private key…</string>
+    <string name="conn_auth_key_desc">store an SSH key in your vault</string>
+    <string name="conn_auth_password_placeholder">password to store</string>
+    <string name="conn_auth_passphrase_placeholder">key passphrase (optional)</string>
+
+    <string name="conn_group_none">No group</string>
+    <string name="conn_group_new">New group…</string>
+    <string name="conn_group_new_title">New group</string>
+    <string name="conn_group_rename_title">Rename group</string>
+    <string name="conn_group_rename_hint">Hosts in this group move with the new name.</string>
+    <string name="conn_group_delete">Delete group</string>
+    <string name="conn_tag_add_placeholder">add tag…</string>
+
+    <string name="conn_test_checking">Testing connection…</string>
+    <string name="conn_test_connected">Connected</string>
+    <string name="conn_test_connected_ms">Connected · %1$d ms</string>
+</resources>

@@ -1,0 +1,30 @@
+<resources>
+    <!-- Settings nav labels (SettingsPanel.kt · SettingsTab.navLabel) -->
+    <string name="shtail_nav_account">Account</string>
+    <string name="shtail_nav_ai">AI</string>
+    <string name="shtail_nav_sync">Sync</string>
+    <string name="shtail_nav_security">Security</string>
+    <string name="shtail_nav_appearance">Appearance</string>
+    <string name="shtail_nav_terminal">Terminal</string>
+    <string name="shtail_nav_keyboard">Keyboard</string>
+    <string name="shtail_nav_about">About</string>
+
+    <!-- Mobile host detail rows (MobileHostDetailView.kt · mobileHostDetailRows) -->
+    <string name="shtail_host_address">Address</string>
+    <string name="shtail_host_port">Port</string>
+    <string name="shtail_host_auth">Auth</string>
+    <string name="shtail_host_saved_credential">Saved credential</string>
+    <string name="shtail_host_ask_on_connect">Ask on connect</string>
+    <string name="shtail_host_group">Group</string>
+
+    <!-- Host grouping: synthetic bucket for hosts without a group (display only) -->
+    <string name="shtail_ungrouped">Ungrouped</string>
+
+    <!-- Mobile known hosts (MobileKnown.kt) -->
+    <string name="shtail_known_changed">changed</string>
+    <string name="shtail_known_key_changed_title">Key changed: %1$s</string>
+    <string name="shtail_known_mismatch_body">The %1$s fingerprint differs from the one recorded. Verify before reconnecting.</string>
+
+    <!-- Session tabs: default title for a blank tab (SessionsController.openBlank caller) -->
+    <string name="shtail_new_tab">New tab</string>
+</resources>

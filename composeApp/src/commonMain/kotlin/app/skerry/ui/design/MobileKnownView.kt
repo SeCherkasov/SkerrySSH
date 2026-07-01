@@ -36,6 +36,14 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.known.KnownHostEntry
 import app.skerry.ui.known.KnownHostStatus
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_known_accept
+import app.skerry.ui.generated.resources.lib_known_empty_desc_mobile
+import app.skerry.ui.generated.resources.lib_known_empty_title
+import app.skerry.ui.generated.resources.lib_known_forget_key
+import app.skerry.ui.generated.resources.lib_known_reject
+import app.skerry.ui.generated.resources.lib_known_title
+import org.jetbrains.compose.resources.stringResource
 
 /** Фон строки доверенного ключа (белый 3%). */
 private val KnownRowBg = Color(0x08FFFFFF)
@@ -77,7 +85,7 @@ private fun MobileKnownHeader(onBack: () -> Unit) {
                 onClick = onBack,
             ),
         )
-        Txt("Known hosts", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+        Txt(stringResource(Res.string.lib_known_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
     }
 }
 
@@ -149,7 +157,7 @@ private fun LiveKnownRow(entry: KnownHostEntry, mono: FontFamily, onForget: () -
             title = entry.host.host,
             subtitle = mobileKnownSubtitle(entry),
             actions = listOf(
-                MobileSheetAction("Forget key", onClick = onForget, icon = "delete", danger = true),
+                MobileSheetAction(stringResource(Res.string.lib_known_forget_key), onClick = onForget, icon = "delete", danger = true),
             ),
             onDismiss = { menuOpen = false },
         )
@@ -162,8 +170,8 @@ private fun MobileEmptyKnown() {
     Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym("fingerprint", size = 28.sp, color = D.faint)
-            Txt("No known hosts yet", color = D.text, size = 14.sp, weight = FontWeight.Medium)
-            Txt("Connect a host — its key is trusted on first use", color = D.faint, size = 12.sp)
+            Txt(stringResource(Res.string.lib_known_empty_title), color = D.text, size = 14.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.lib_known_empty_desc_mobile), color = D.faint, size = 12.sp)
         }
     }
 }
@@ -194,7 +202,7 @@ private fun MobileMismatchBanner(title: String, body: String, onAccept: () -> Un
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BannerButton(
-                label = "Accept",
+                label = stringResource(Res.string.lib_known_accept),
                 fg = D.text,
                 bg = Color.Transparent,
                 border = D.cyan14,
@@ -203,7 +211,7 @@ private fun MobileMismatchBanner(title: String, body: String, onAccept: () -> Un
                 modifier = Modifier.weight(1f),
             )
             BannerButton(
-                label = "Reject",
+                label = stringResource(Res.string.lib_known_reject),
                 fg = D.sunset,
                 bg = D.sunset.copy(alpha = 0.12f),
                 border = D.sunset.copy(alpha = 0.3f),

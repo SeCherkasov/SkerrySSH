@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.host.Host
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
+import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TerminalFont
 
 /**
@@ -68,6 +69,11 @@ class MobileDesignState(
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     private val onTerminalFontSizeChange: (Int) -> Unit = {},
+    // Язык интерфейса (More → Appearance → Language). Стартовое значение читается из персиста при
+    // запуске, колбэк пишет его обратно — выбор переживает перезапуск. Дефолты (System, no-op) —
+    // автоопределение по локали ОС для превью/тестов.
+    initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
+    private val onUiLanguageChange: (UiLanguage) -> Unit = {},
 ) {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
     var route: MobileRoute? by mutableStateOf(null); private set
@@ -179,6 +185,9 @@ class MobileDesignState(
     /** Кегль шрифта терминала, px (More → Appearance → Font size). */
     var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
 
+    /** Язык интерфейса (More → Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
+    var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
+
     /** Выбрать шрифт терминала и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
     fun chooseTerminalFont(font: TerminalFont) {
         if (font == terminalFont) return
@@ -194,5 +203,12 @@ class MobileDesignState(
         if (px == terminalFontSize || px !in TERMINAL_FONT_SIZES) return
         terminalFontSize = px
         onTerminalFontSizeChange(px)
+    }
+
+    /** Выбрать язык интерфейса и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    fun chooseUiLanguage(language: UiLanguage) {
+        if (language == uiLanguage) return
+        uiLanguage = language
+        onUiLanguageChange(language)
     }
 }

@@ -45,9 +45,27 @@ import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.TransferState
 import app.skerry.ui.files.platformLocalBrowser
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_open_failed
+import app.skerry.ui.generated.resources.sftp_connecting
+import app.skerry.ui.generated.resources.sftp_create
+import app.skerry.ui.generated.resources.sftp_create_directory
+import app.skerry.ui.generated.resources.sftp_delete
+import app.skerry.ui.generated.resources.sftp_download_to_device
+import app.skerry.ui.generated.resources.sftp_error
+import app.skerry.ui.generated.resources.sftp_files_title
+import app.skerry.ui.generated.resources.sftp_loading
+import app.skerry.ui.generated.resources.sftp_new_folder
+import app.skerry.ui.generated.resources.sftp_no_session
+import app.skerry.ui.generated.resources.sftp_no_session_hint
+import app.skerry.ui.generated.resources.sftp_rename
+import app.skerry.ui.generated.resources.sftp_transfer_error
+import app.skerry.ui.generated.resources.sftp_unavailable
+import app.skerry.ui.generated.resources.sftp_upload_file
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.pickDownloadTarget
 import app.skerry.ui.sftp.pickUploadSource
+import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -101,6 +119,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     // UI-scope только для нативного пикера файла (FAB Upload); сама передача живёт на scope сессии
     // внутри координатора и переживёт уход вью из композиции.
     val uiScope = rememberCoroutineScope()
+    // stringResource нельзя звать внутри LaunchedEffect — поднимаем значение заранее.
+    val openFailedMsg = stringResource(Res.string.ftail_open_failed)
     LaunchedEffect(controller) {
         openError = null
         try {
@@ -108,7 +128,7 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            openError = e.message ?: "Не удалось открыть SFTP"
+            openError = e.message ?: openFailedMsg
         }
     }
 
@@ -121,9 +141,9 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                 // открытие SFTP-канала → первый листинг каталога. Текст и позиция не меняются (как у
                 // терминала — «какая разница terminal это или sftp»), поэтому экран не мигает и не
                 // «прыгает» вертикально. Хлебную крошку + список показываем только когда листинг готов.
-                openError != null -> MobileFilesNoticeBox("error", "SFTP unavailable", openError, D.sunset)
+                openError != null -> MobileFilesNoticeBox("error", stringResource(Res.string.sftp_unavailable), openError, D.sunset)
                 c == null || c.remote.state is FilePaneState.Loading ->
-                    MobileFilesNoticeBox("sync", "Connecting…", subtitle, D.cyanBright)
+                    MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_connecting), subtitle, D.cyanBright)
                 else -> {
                     val pane = c.remote
                     // Видимое действие строки-файла (ios_share): скачать НАРУЖУ из песочницы через
@@ -174,11 +194,11 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (fabOpen) {
-                    MobileFabAction("create_new_folder", "Создать директорию") {
+                    MobileFabAction("create_new_folder", stringResource(Res.string.sftp_create_directory)) {
                         fabOpen = false
                         creatingFolder = true
                     }
-                    MobileFabAction("upload", "Загрузить файл") {
+                    MobileFabAction("upload", stringResource(Res.string.sftp_upload_file)) {
                         fabOpen = false
                         uiScope.launch { pickUploadSource()?.let { c.uploadSource(it) } }
                     }
@@ -191,8 +211,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
             // (валидирует пустоту/«/»/«.»/«..»/управляющие), как desktop «New folder».
             val pane = c.remote
             NameDialog(
-                title = "New folder",
-                confirmLabel = "Create",
+                title = stringResource(Res.string.sftp_new_folder),
+                confirmLabel = stringResource(Res.string.sftp_create),
                 initial = "",
                 onConfirm = { pane.mkdir(it); creatingFolder = false },
                 onDismiss = { creatingFolder = false },
@@ -227,8 +247,8 @@ private fun MobileLivePane(
 
     Box(modifier.fillMaxWidth()) {
         when (val st = pane.state) {
-            FilePaneState.Loading -> MobileFilesNoticeBox("sync", "Loading…", null, D.faint)
-            is FilePaneState.Error -> MobileFilesNoticeBox("error", "Error", st.message, D.sunset)
+            FilePaneState.Loading -> MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_loading), null, D.faint)
+            is FilePaneState.Error -> MobileFilesNoticeBox("error", stringResource(Res.string.sftp_error), st.message, D.sunset)
             is FilePaneState.Loaded -> Column(
                 Modifier.fillMaxSize().verticalScroll(scroll).padding(top = 12.dp, start = 12.dp, end = 12.dp),
             ) {
@@ -257,8 +277,8 @@ private fun MobileLivePane(
 
     renaming?.let { entry ->
         NameDialog(
-            title = "Rename",
-            confirmLabel = "Rename",
+            title = stringResource(Res.string.sftp_rename),
+            confirmLabel = stringResource(Res.string.sftp_rename),
             initial = entry.name,
             onConfirm = { pane.rename(entry, it); renaming = null },
             onDismiss = { renaming = null },
@@ -314,10 +334,10 @@ private fun MobileFileRow(
             title = entry.name,
             actions = buildList {
                 onDownloadHere?.let { dl ->
-                    add(MobileSheetAction("Download to device", onClick = dl, icon = "download"))
+                    add(MobileSheetAction(stringResource(Res.string.sftp_download_to_device), onClick = dl, icon = "download"))
                 }
-                add(MobileSheetAction("Rename", onClick = onRename, icon = "edit"))
-                add(MobileSheetAction("Delete", onClick = onDelete, icon = "delete", danger = true))
+                add(MobileSheetAction(stringResource(Res.string.sftp_rename), onClick = onRename, icon = "edit"))
+                add(MobileSheetAction(stringResource(Res.string.sftp_delete), onClick = onDelete, icon = "delete", danger = true))
             },
             onDismiss = { menuOpen = false },
         )
@@ -391,7 +411,7 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 Sym("error", size = 17.sp, color = D.sunset)
-                Txt("${transfer.name}: ${transfer.message}", color = D.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Txt(stringResource(Res.string.sftp_transfer_error, transfer.name, transfer.message), color = D.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 IconBtn("close", onClick = onDismiss, box = 26, icon = 16.sp)
             }
         }
@@ -420,7 +440,7 @@ private fun MobileFilesTitle(onBack: (() -> Unit)? = null) {
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onBack),
             )
         }
-        Txt("Files", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+        Txt(stringResource(Res.string.sftp_files_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
     }
 }
 
@@ -499,7 +519,7 @@ private fun MobileFilesNoticeContent(icon: String, title: String, subtitle: Stri
 private fun NoSessionMobileFilesView(mono: FontFamily, onBack: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
         MobileFilesTitle(onBack)
-        MobileFilesNoticeBox("cloud_off", "No active session", "Connect a host to browse files", D.faint)
+        MobileFilesNoticeBox("cloud_off", stringResource(Res.string.sftp_no_session), stringResource(Res.string.sftp_no_session_hint), D.faint)
     }
 }
 
@@ -508,7 +528,7 @@ private fun NoSessionMobileFilesView(mono: FontFamily, onBack: (() -> Unit)? = n
 private fun ConnectingMobileFilesView(subtitle: String, onBack: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
         MobileFilesTitle(onBack)
-        MobileFilesNoticeBox("sync", "Connecting…", subtitle, D.cyanBright)
+        MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_connecting), subtitle, D.cyanBright)
     }
 }
 

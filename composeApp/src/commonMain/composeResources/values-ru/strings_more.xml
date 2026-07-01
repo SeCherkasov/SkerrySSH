@@ -1,0 +1,37 @@
+<resources>
+    <string name="more_title">Ещё</string>
+    <string name="more_port_forwarding">Проброс портов</string>
+    <string name="more_known_hosts">Известные хосты</string>
+    <string name="more_team">Команда</string>
+    <string name="more_ai_privacy">ИИ и приватность</string>
+    <string name="more_ai_subtitle_byok">OpenAI · BYOK</string>
+    <string name="more_ai_subtitle_local">Локально</string>
+    <string name="more_appearance_subtitle">Night Sea</string>
+    <string name="more_security_sync">Безопасность и синхронизация</string>
+    <string name="more_lock">Заблокировать Skerry</string>
+    <string name="more_sync_local_only">Только локально</string>
+    <string name="more_sync_synced">Синхронизировано</string>
+    <string name="more_sync_syncing">Синхронизация…</string>
+    <string name="more_sync_linked_locked">Привязано · заблокировано</string>
+    <string name="more_sync_error">Ошибка синхронизации</string>
+    <string name="more_biometric_unlock">Разблокировка по биометрии</string>
+    <string name="more_biometric_enabled">Включено на этом устройстве</string>
+    <string name="more_biometric_skip">Без ввода мастер-пароля</string>
+    <string name="more_ai_byok_desc">Подключите свой OpenAI-совместимый провайдер (BYOK). Ключ хранится в зашифрованном виде в хранилище и отправляется только выбранному вами провайдеру.</string>
+    <string name="more_ai_label_api_key">КЛЮЧ API OPENAI</string>
+    <string name="more_ai_placeholder_api_key">sk-…</string>
+    <string name="more_ai_label_model">МОДЕЛЬ</string>
+    <string name="more_ai_placeholder_model">gpt-4o-mini</string>
+    <string name="more_ai_label_endpoint">АДРЕС</string>
+    <string name="more_ai_placeholder_endpoint">https://api.openai.com/v1</string>
+    <string name="more_ai_save">Сохранить</string>
+    <string name="more_ai_key_saved">Ключ сохранён</string>
+    <string name="more_ai_not_configured">Ещё не настроено</string>
+    <string name="more_ai_quick_chat">Быстрый чат</string>
+    <string name="more_ai_quick_chat_desc">Задайте ассистенту вопрос, чтобы проверить соединение.</string>
+    <string name="more_ai_input_placeholder_ready">Спросите про ssh, scp, туннели…</string>
+    <string name="more_ai_input_placeholder_setup">Сначала сохраните ключ API</string>
+    <string name="more_ai_sending">Отправка…</string>
+    <string name="more_ai_ask">Спросить</string>
+    <string name="more_ai_clear">Очистить</string>
+</resources>

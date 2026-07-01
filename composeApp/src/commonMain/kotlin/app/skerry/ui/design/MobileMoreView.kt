@@ -35,11 +35,39 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.vault.BiometricPrompt
-import app.skerry.ui.sync.accountCardModel
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.appearance_font
+import app.skerry.ui.generated.resources.appearance_font_size
+import app.skerry.ui.generated.resources.appearance_language
+import app.skerry.ui.generated.resources.appearance_section_interface
+import app.skerry.ui.generated.resources.appearance_section_terminal
+import app.skerry.ui.generated.resources.appearance_title
+import app.skerry.ui.generated.resources.more_ai_privacy
+import app.skerry.ui.generated.resources.more_ai_subtitle_byok
+import app.skerry.ui.generated.resources.more_ai_subtitle_local
+import app.skerry.ui.generated.resources.more_appearance_subtitle
+import app.skerry.ui.generated.resources.more_biometric_enabled
+import app.skerry.ui.generated.resources.more_biometric_skip
+import app.skerry.ui.generated.resources.more_biometric_unlock
+import app.skerry.ui.generated.resources.more_known_hosts
+import app.skerry.ui.generated.resources.more_lock
+import app.skerry.ui.generated.resources.more_port_forwarding
+import app.skerry.ui.generated.resources.more_security_sync
+import app.skerry.ui.generated.resources.more_sync_error
+import app.skerry.ui.generated.resources.more_sync_linked_locked
+import app.skerry.ui.generated.resources.more_sync_local_only
+import app.skerry.ui.generated.resources.more_sync_synced
+import app.skerry.ui.generated.resources.more_sync_syncing
+import app.skerry.ui.generated.resources.more_team
+import app.skerry.ui.generated.resources.more_title
+import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.i18n.label
+import app.skerry.ui.sync.accountCardModelLocalized
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.vault.VaultGateController
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Корневой таб More: заголовок + карточка профиля + список разделов-ссылок. Хаб навигации к
@@ -56,7 +84,7 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
     val preview = onLock == null
     Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
         Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 14.dp)) {
-            Txt("More", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+            Txt(stringResource(Res.string.more_title), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
         }
         if (preview) MockProfileCard() else LocalVaultCard()
 
@@ -65,18 +93,18 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             val known = if (preview) "1 changed" else knownSubtitle()
             val knownWarn = if (preview) true else knownChanged() > 0
 
-            MoreRow("lan", D.cyanBright, "Port forwarding", ports, D.moss, onClick = { state.push(MobileRoute.Ports) })
-            MoreRow("fingerprint", D.cyanBright, "Known hosts", known, if (knownWarn) D.sunset else D.moss, onClick = { state.push(MobileRoute.Known) })
-            MoreRow("groups", D.cyanBright, "Team", if (preview) "Platform crew" else null, D.dim, onClick = { state.push(MobileRoute.Team) })
+            MoreRow("lan", D.cyanBright, stringResource(Res.string.more_port_forwarding), ports, D.moss, onClick = { state.push(MobileRoute.Ports) })
+            MoreRow("fingerprint", D.cyanBright, stringResource(Res.string.more_known_hosts), known, if (knownWarn) D.sunset else D.moss, onClick = { state.push(MobileRoute.Known) })
+            MoreRow("groups", D.cyanBright, stringResource(Res.string.more_team), if (preview) "Platform crew" else null, D.dim, onClick = { state.push(MobileRoute.Team) })
             // AI: живой путь (есть контроллер) → push экрана настроек AI; иначе инертная заглушка (превью).
             val aiLive = LocalAi.current != null
-            MoreRow("auto_awesome", D.amber, "AI & privacy", if (aiLive) "OpenAI · BYOK" else "Local", D.dim, onClick = if (aiLive) { -> state.push(MobileRoute.Ai) } else null)
-            MoreRow("palette", D.cyanBright, "Appearance", "Night Sea", D.dim, onClick = { state.push(MobileRoute.Appearance) })
-            MoreRow("shield_lock", D.cyanBright, "Security & sync", if (preview) "Synced" else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
+            MoreRow("auto_awesome", D.amber, stringResource(Res.string.more_ai_privacy), if (aiLive) stringResource(Res.string.more_ai_subtitle_byok) else stringResource(Res.string.more_ai_subtitle_local), D.dim, onClick = if (aiLive) { -> state.push(MobileRoute.Ai) } else null)
+            MoreRow("palette", D.cyanBright, stringResource(Res.string.appearance_title), stringResource(Res.string.more_appearance_subtitle), D.dim, onClick = { state.push(MobileRoute.Appearance) })
+            MoreRow("shield_lock", D.cyanBright, stringResource(Res.string.more_security_sync), if (preview) stringResource(Res.string.more_sync_synced) else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
             // Тумблер биометрии — живой путь за гейтом (vault открыт). Прячется, если биометрия
             // недоступна на устройстве (нет железа/не зачислен отпечаток) или это превью/офскрин.
             if (!preview) BiometricUnlockRow()
-            MoreRow("lock", D.sunset, "Lock Skerry", null, D.dim, labelColor = D.sunset, divider = false, onClick = onLock)
+            MoreRow("lock", D.sunset, stringResource(Res.string.more_lock), null, D.dim, labelColor = D.sunset, divider = false, onClick = onLock)
         }
         Spacer(Modifier.height(96.dp))
     }
@@ -93,13 +121,13 @@ private fun portsSubtitle(): String {
 /** Подзаголовок строки «Security & sync»: статус координатора sync (нет/локально/подключено). */
 @Composable
 private fun syncSubtitle(): String {
-    val sync = LocalSync.current ?: return "Local only"
+    val sync = LocalSync.current ?: return stringResource(Res.string.more_sync_local_only)
     return when (sync.status.collectAsState().value) {
-        is app.skerry.ui.sync.SyncStatus.Online -> "Synced"
-        app.skerry.ui.sync.SyncStatus.Busy -> "Syncing…"
-        is app.skerry.ui.sync.SyncStatus.Configured -> "Linked · locked"
-        is app.skerry.ui.sync.SyncStatus.Failed -> "Sync error"
-        app.skerry.ui.sync.SyncStatus.Disabled -> "Local only"
+        is app.skerry.ui.sync.SyncStatus.Online -> stringResource(Res.string.more_sync_synced)
+        app.skerry.ui.sync.SyncStatus.Busy -> stringResource(Res.string.more_sync_syncing)
+        is app.skerry.ui.sync.SyncStatus.Configured -> stringResource(Res.string.more_sync_linked_locked)
+        is app.skerry.ui.sync.SyncStatus.Failed -> stringResource(Res.string.more_sync_error)
+        app.skerry.ui.sync.SyncStatus.Disabled -> stringResource(Res.string.more_sync_local_only)
     }
 }
 
@@ -173,9 +201,9 @@ private fun BiometricUnlockRow() {
     ) {
         Sym("fingerprint", size = 21.sp, color = D.cyanBright)
         Column(Modifier.weight(1f)) {
-            Txt("Unlock with biometrics", color = D.text, size = 14.5.sp)
+            Txt(stringResource(Res.string.more_biometric_unlock), color = D.text, size = 14.5.sp)
             Txt(
-                if (controller.biometricEnabled) "Enabled on this device" else "Skip the master password",
+                if (controller.biometricEnabled) stringResource(Res.string.more_biometric_enabled) else stringResource(Res.string.more_biometric_skip),
                 color = D.dim, size = 11.sp, modifier = Modifier.padding(top = 2.dp),
             )
         }
@@ -211,19 +239,41 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
-            Txt("Appearance", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.appearance_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
-            Txt("TERMINAL", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp))
-            FontSettingRow("Font") {
+            Txt(stringResource(Res.string.appearance_section_terminal), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp))
+            FontSettingRow(stringResource(Res.string.appearance_font)) {
                 MobileFontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
-            FontSettingRow("Font size") {
+            FontSettingRow(stringResource(Res.string.appearance_font_size)) {
                 MobileFontSizePicker(state.terminalFontSize, onPick = state::chooseTerminalFontSize)
+            }
+            Txt(stringResource(Res.string.appearance_section_interface), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+            FontSettingRow(stringResource(Res.string.appearance_language)) {
+                MobileLanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
             }
         }
     }
+}
+
+/** Выпадающий список языка интерфейса (System / English / Русский). */
+@Composable
+private fun MobileLanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger(current.label(), onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                UiLanguage.entries.forEach { option ->
+                    MobileDropdownOption(option.label(), selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
 }
 
 /** Строка настройки: подпись слева + контрол (дропдаун) справа фиксированной ширины. */
@@ -321,14 +371,14 @@ private fun MobileDropdownOption(label: String, selected: Boolean, onClick: () -
 @Composable
 private fun LocalVaultCard() {
     when (val sync = LocalSync.current) {
-        null -> AccountProfileCard(accountCardModel(null))
+        null -> AccountProfileCard(accountCardModelLocalized(null))
         else -> LiveLocalVaultCard(sync)
     }
 }
 
 @Composable
 private fun LiveLocalVaultCard(sync: app.skerry.ui.sync.SyncCoordinator) {
-    AccountProfileCard(accountCardModel(sync.status.collectAsState().value, sync.savedConfig?.serverUrl))
+    AccountProfileCard(accountCardModelLocalized(sync.status.collectAsState().value, sync.savedConfig?.serverUrl))
 }
 
 @Composable

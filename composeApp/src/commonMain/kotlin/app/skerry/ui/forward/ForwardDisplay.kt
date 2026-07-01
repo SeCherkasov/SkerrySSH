@@ -1,5 +1,12 @@
 package app.skerry.ui.forward
 
+import androidx.compose.runtime.Composable
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ptail_type_local
+import app.skerry.ui.generated.resources.ptail_type_remote
+import app.skerry.ui.generated.resources.ptail_type_socks
+import org.jetbrains.compose.resources.stringResource
+
 /**
  * Чистые хелперы представления одного проброса в виде колонок таблицы туннелей нового дизайна
  * (`TunnelsView`): таблица desktop показывает source и destination раздельными ячейками. Общий
@@ -7,10 +14,11 @@ package app.skerry.ui.forward
  */
 
 /** Метка типа проброса для бейджа таблицы: `-L`→LOCAL, `-R`→REMOTE, `-D`→SOCKS. */
+@Composable
 fun forwardTypeLabel(direction: ForwardDirection): String = when (direction) {
-    ForwardDirection.Local -> "LOCAL"
-    ForwardDirection.Remote -> "REMOTE"
-    ForwardDirection.Dynamic -> "SOCKS"
+    ForwardDirection.Local -> stringResource(Res.string.ptail_type_local)
+    ForwardDirection.Remote -> stringResource(Res.string.ptail_type_remote)
+    ForwardDirection.Dynamic -> stringResource(Res.string.ptail_type_socks)
 }
 
 /**

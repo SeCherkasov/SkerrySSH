@@ -157,10 +157,13 @@ class SessionsController(
     /**
      * Открыть пустую вкладку без сессии (кнопка «+»): соединение НЕ стартует, контроллер остаётся
      * в [ConnectionUiState.Form]. Становится активной; заполнится первым [connect]. Возвращает id.
+     *
+     * [title] — подпись вкладки-заглушки; локализованный лейбл резолвит вызывающая composable-сторона
+     * (в контроллере stringResource недоступен). `null` → пустая подпись (для тестов/ad-hoc).
      */
-    fun openBlank(title: String = "New tab"): String {
+    fun openBlank(title: String? = null): String {
         val controller = controllerFactory()
-        val session = Session(newId(), hostId = null, title = title, subtitle = "", controller)
+        val session = Session(newId(), hostId = null, title = title ?: "", subtitle = "", controller)
         sessions = sessions + session
         activeId = session.id
         return session.id

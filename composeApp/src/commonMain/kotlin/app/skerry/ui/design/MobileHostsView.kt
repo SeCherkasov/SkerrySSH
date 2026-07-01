@@ -8,7 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.collectAsState
 import app.skerry.ui.sync.SyncIndicatorLevel
-import app.skerry.ui.sync.syncIndicator
+import app.skerry.ui.sync.syncIndicatorLocalized
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +46,11 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.UNGROUPED_LABEL
+import app.skerry.ui.host.ungroupedLabel
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_hosts
+import app.skerry.ui.generated.resources.shell_search_hosts
+import org.jetbrains.compose.resources.stringResource
 
 /** Превью-каталог для пути без живого [LocalHosts] (офскрин/превью). */
 internal val MOBILE_PREVIEW_HOSTS = listOf(
@@ -146,7 +151,10 @@ private fun MobileHostFolder(
             Modifier
         }
         Box(headerMod) {
-            MobileFolderHeader(folder.name, folder.hosts.size, collapsed, isDropTarget, onToggle, onEdit)
+            // folder.name — стабильный ключ (drag/collapse); для корзины без группы показываем
+            // локализованную подпись, оставляя ключ техническим ([UNGROUPED_LABEL]).
+            val folderTitle = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folder.name
+            MobileFolderHeader(folderTitle, folder.hosts.size, collapsed, isDropTarget, onToggle, onEdit)
         }
         // Свёрнутая папка показывает только заголовок; список хостов (и его drag-цели) скрыт.
         if (!collapsed) {
@@ -207,12 +215,12 @@ private fun HostsHeader(onAvatar: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Txt("Hosts", color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+        Txt(stringResource(Res.string.shell_hosts), color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // Индикатор sync по статусу сессии (см. syncIndicator), не только по доступности сервера:
             // «paused/error» при отсутствии рабочей сессии, а не ложно-зелёный online.
             val syncC = LocalSync.current
-            val ind = syncC?.let { syncIndicator(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
+            val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
             if (ind != null) {
                 Sym(ind.icon, size = 19.sp, color = when (ind.level) {
                     SyncIndicatorLevel.OK -> D.moss
@@ -256,7 +264,7 @@ private fun HostsSearch(query: String, onChange: (String) -> Unit) {
             ) {
                 Sym("search", size = 19.sp, color = D.faint)
                 Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Txt("Search hosts, tags…", color = D.faint, size = 15.sp)
+                    if (query.isEmpty()) Txt(stringResource(Res.string.shell_search_hosts), color = D.faint, size = 15.sp)
                     inner()
                 }
             }

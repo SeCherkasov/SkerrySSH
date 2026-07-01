@@ -1,5 +1,8 @@
 package app.skerry.ui.tunnel
 
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ptail_err_host_not_trusted
+import org.jetbrains.compose.resources.getString
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
@@ -144,7 +147,9 @@ class TunnelManagerTest {
         manager.activate(id)
 
         val status = assertIs<TunnelStatus.Failed>(manager.tunnels.single().status)
-        assertEquals("Host key not trusted", status.message)
+        // Сообщение локализовано (strings_ptail); сверяем с самим ресурсом, чтобы тест не зависел от
+        // локали машины (getString уважает системную локаль — на ru-машине это русский текст).
+        assertEquals(getString(Res.string.ptail_err_host_not_trusted), status.message)
         assertTrue(conn.disconnected) // соединение не утекло
     }
 

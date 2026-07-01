@@ -40,6 +40,23 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupForm
 import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.sync_setup_title
+import app.skerry.ui.generated.resources.sync_setup_dialog_desc
+import app.skerry.ui.generated.resources.sync_field_server_url
+import app.skerry.ui.generated.resources.sync_placeholder_server_url
+import app.skerry.ui.generated.resources.sync_field_account
+import app.skerry.ui.generated.resources.sync_placeholder_account
+import app.skerry.ui.generated.resources.sync_field_master_password
+import app.skerry.ui.generated.resources.sync_placeholder_master_password
+import app.skerry.ui.generated.resources.sync_insecure_url_warning
+import app.skerry.ui.generated.resources.sync_connecting
+import app.skerry.ui.generated.resources.sync_zero_knowledge
+import app.skerry.ui.generated.resources.sync_cancel
+import app.skerry.ui.generated.resources.sync_connect
+import app.skerry.ui.generated.resources.sync_keep_connected
+import app.skerry.ui.generated.resources.sync_keep_connected_sub_long
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Модалка-онбординг self-hosted sync (в макете её нет — макет показывает только подключённое
@@ -104,20 +121,20 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 .clickable(interactionSource = noop, indication = null, onClick = {})
                 .padding(26.dp),
         ) {
-            Txt("Set up sync", color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(stringResource(Res.string.sync_setup_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             Txt(
-                "End-to-end encrypted. Skerry never sees your data in plaintext — only your device holds the master password.",
+                stringResource(Res.string.sync_setup_dialog_desc),
                 color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
 
-            FieldLabel("SERVER URL", top = 16.dp)
-            SyncField("https://sync.example.com", serverUrl, "dns", KeyboardType.Uri, ImeAction.Next) { serverUrl = it }
+            FieldLabel(stringResource(Res.string.sync_field_server_url), top = 16.dp)
+            SyncField(stringResource(Res.string.sync_placeholder_server_url), serverUrl, "dns", KeyboardType.Uri, ImeAction.Next) { serverUrl = it }
 
-            FieldLabel("ACCOUNT")
-            SyncField("you@example.com", account, "person", KeyboardType.Text, ImeAction.Next) { account = it }
+            FieldLabel(stringResource(Res.string.sync_field_account))
+            SyncField(stringResource(Res.string.sync_placeholder_account), account, "person", KeyboardType.Text, ImeAction.Next) { account = it }
 
-            FieldLabel("MASTER PASSWORD")
-            SyncField("master password", password, "key", KeyboardType.Password, ImeAction.Done, secret = true, onSubmit = { submit() }) { password = it }
+            FieldLabel(stringResource(Res.string.sync_field_master_password))
+            SyncField(stringResource(Res.string.sync_placeholder_master_password), password, "key", KeyboardType.Password, ImeAction.Done, secret = true, onSubmit = { submit() }) { password = it }
 
             KeepConnectedRow(keepConnected) { keepConnected = it }
 
@@ -125,7 +142,7 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
             if (form.isInsecureUrl) {
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Sym("warning", size = 14.sp, color = D.sunset)
-                    Txt("Plain http:// — not encrypted in transit. Use https:// for anything but local testing.", color = D.sunset, size = 11.sp, lineHeight = 15.sp)
+                    Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp)
                 }
             }
 
@@ -145,14 +162,14 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Sym("shield_lock", size = 14.sp, color = D.moss)
                     Txt(
-                        if (status == SyncStatus.Busy) "Connecting…" else "Zero-knowledge",
+                        if (status == SyncStatus.Busy) stringResource(Res.string.sync_connecting) else stringResource(Res.string.sync_zero_knowledge),
                         color = D.faint, size = 11.sp,
                     )
                 }
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt("Cancel", color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.sync_cancel), color = D.dim, size = 12.5.sp)
                 }
-                PrimaryButton("Connect", onClick = { submit() }, enabled = canSubmit, bg = if (canSubmit) D.cyan else D.cyan.copy(alpha = 0.4f))
+                PrimaryButton(stringResource(Res.string.sync_connect), onClick = { submit() }, enabled = canSubmit, bg = if (canSubmit) D.cyan else D.cyan.copy(alpha = 0.4f))
             }
         }
     }
@@ -175,8 +192,8 @@ private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
             if (checked) Sym("check", size = 13.sp, color = Color(0xFF0A1A26))
         }
         Column(Modifier.weight(1f)) {
-            Txt("Keep me connected", color = D.text, size = 12.5.sp, weight = FontWeight.Medium)
-            Txt("Reconnect automatically after restart — no password needed.", color = D.faint, size = 11.sp)
+            Txt(stringResource(Res.string.sync_keep_connected), color = D.text, size = 12.5.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.sync_keep_connected_sub_long), color = D.faint, size = 11.sp)
         }
     }
 }

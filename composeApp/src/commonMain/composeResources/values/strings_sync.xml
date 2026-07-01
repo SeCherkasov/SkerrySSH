@@ -1,0 +1,99 @@
+<resources>
+    <!-- Sync / self-hosted синхронизация (mobile Sync screen, онбординг, диалоги паринга) -->
+    <string name="sync_title">Sync</string>
+    <string name="sync_mobile_intro">End-to-end encrypted sync across your devices. Skerry never sees your data in plaintext.</string>
+    <string name="sync_unavailable_title">Sync unavailable</string>
+    <string name="sync_unavailable_subtitle">Not configured on this device.</string>
+    <string name="sync_back">Back</string>
+
+    <!-- Онбординг / форма подключения -->
+    <string name="sync_setup_title">Set up sync</string>
+    <string name="sync_setup_desc">Connect this device to your sync server. End-to-end encrypted — Skerry never sees your data in plaintext.</string>
+    <string name="sync_connecting">Connecting…</string>
+    <string name="sync_connecting_sub">Talking to your sync server.</string>
+    <string name="sync_syncing">Syncing…</string>
+
+    <!-- Развилка хранения -->
+    <string name="sync_storage_choice_title">Where should Skerry keep your vault?</string>
+    <string name="sync_storage_choice_desc">Your hosts and keys are always encrypted. Choose whether they stay only on this device or sync across your devices through a server you run.</string>
+    <string name="sync_storage_local_title">Local encrypted storage</string>
+    <string name="sync_storage_local_sub">Everything stays on this device. No account, no server — the simplest setup.</string>
+    <string name="sync_storage_server_title">Self-hosted sync server</string>
+    <string name="sync_storage_server_sub">End-to-end encrypted sync across your devices through a server you run.</string>
+    <string name="sync_switch_later">You can switch later in Settings.</string>
+
+    <!-- Перерегистрация биометрии после смены ключа -->
+    <string name="sync_reenroll_title">Re-enable fingerprint</string>
+    <string name="sync_reenroll_desc">Connecting to your account changed the vault key, so biometric unlock was turned off. Set it up again to keep opening Skerry with your fingerprint.</string>
+    <string name="sync_reenroll_action">Re-enable</string>
+    <string name="sync_not_now">Not now</string>
+
+    <!-- Подключённое состояние -->
+    <string name="sync_connected_title">Connected · %1$s</string>
+    <string name="sync_session_stats">Pushed %1$d · pulled %2$d this session</string>
+    <string name="sync_sync_now">Sync now</string>
+    <string name="sync_disconnect">Disconnect</string>
+    <string name="sync_linked_title">Linked · %1$s</string>
+    <string name="sync_reconnect_password">Reconnect with your master password.</string>
+
+    <!-- Поля формы -->
+    <string name="sync_field_server_url">SERVER URL</string>
+    <string name="sync_placeholder_server_url">https://sync.example.com</string>
+    <string name="sync_field_account">ACCOUNT</string>
+    <string name="sync_placeholder_account">you@example.com</string>
+    <string name="sync_field_master_password">MASTER PASSWORD</string>
+    <string name="sync_placeholder_master_password">master password</string>
+    <string name="sync_keep_connected">Keep me connected</string>
+    <string name="sync_keep_connected_sub">Reconnect automatically after restart.</string>
+    <string name="sync_keep_connected_sub_long">Reconnect automatically after restart — no password needed.</string>
+    <string name="sync_insecure_url_warning">Plain http:// — not encrypted in transit. Use https:// for anything but local testing.</string>
+    <string name="sync_connect">Connect</string>
+    <string name="sync_zero_knowledge">Zero-knowledge</string>
+    <string name="sync_zero_knowledge_password">Zero-knowledge · password never leaves this device</string>
+
+    <!-- Связывание по коду (join) -->
+    <string name="sync_join_title">Link with a code</string>
+    <string name="sync_join_desc">On a device that\'s already signed in, open Settings → Account → Link a device, then scan its QR or paste the code here. The password you choose below encrypts this device\'s vault and can\'t be recovered — if you lose it, you\'ll re-link from scratch.</string>
+    <string name="sync_field_pairing_code">PAIRING CODE</string>
+    <string name="sync_placeholder_pairing_code">Paste code (sk1.…)</string>
+    <string name="sync_scan_qr">Scan QR code</string>
+    <string name="sync_field_choose_password">CHOOSE A PASSWORD FOR THIS DEVICE</string>
+    <string name="sync_placeholder_min_chars">at least %1$d characters</string>
+    <string name="sync_field_repeat_password">REPEAT PASSWORD</string>
+    <string name="sync_placeholder_repeat">repeat to confirm</string>
+    <string name="sync_passwords_mismatch">Passwords don\'t match.</string>
+    <string name="sync_link_this_device">Link this device</string>
+    <string name="sync_zero_knowledge_account">Zero-knowledge · the account password never travels</string>
+
+    <!-- Что синхронизируется -->
+    <string name="sync_what_syncs">WHAT SYNCS</string>
+    <string name="sync_what_hosts">Hosts &amp; groups</string>
+    <string name="sync_what_snippets">Snippets</string>
+
+    <!-- Секция связывания устройства -->
+    <string name="sync_link_device">Link a device</string>
+    <string name="sync_hide">Hide</string>
+
+    <!-- Связанные устройства -->
+    <string name="sync_linked_devices">LINKED DEVICES</string>
+    <string name="sync_loading_devices">Loading devices…</string>
+    <string name="sync_load_devices_failed">Couldn\'t load devices. Try Sync now.</string>
+    <string name="sync_only_this_device">Only this device so far.</string>
+    <string name="sync_this_device_badge">● this device</string>
+    <string name="sync_device_linked_current">linked · this device</string>
+    <string name="sync_device_linked">linked device</string>
+    <string name="sync_confirm">Confirm</string>
+    <string name="sync_cancel">Cancel</string>
+    <string name="sync_revoke">Revoke</string>
+
+    <!-- Desktop-диалоги -->
+    <string name="sync_setup_dialog_desc">End-to-end encrypted. Skerry never sees your data in plaintext — only your device holds the master password.</string>
+    <string name="sync_pairing_dialog_desc">On the new device pick “I have a pairing code”, then scan this QR or paste the code below. It works once.</string>
+    <string name="sync_done">Done</string>
+    <string name="sync_pairing_gen_failed">Couldn\'t create a pairing code.</string>
+    <string name="sync_generating_code">Generating code…</string>
+    <string name="sync_code_expired">Code expired — close and start again</string>
+    <string name="sync_expires_in">Expires in %1$s</string>
+    <string name="sync_copied">Copied</string>
+    <string name="sync_copy">Copy</string>
+</resources>

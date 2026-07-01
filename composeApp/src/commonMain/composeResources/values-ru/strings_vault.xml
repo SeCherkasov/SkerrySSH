@@ -1,0 +1,115 @@
+<resources>
+    <!-- Раздел Vault: менеджер keychain, карточки/детали секретов, диалоги и гейт мастер-пароля. -->
+    <string name="vault_title">Хранилище</string>
+    <string name="vault_sidebar_header">ХРАНИЛИЩЕ</string>
+    <string name="vault_e2e_encrypted">Сквозное шифрование</string>
+    <string name="vault_e2e_description">Приватные ключи запечатаны мастер-паролем и никогда не синхронизируются в открытом виде.</string>
+    <string name="vault_banner_encrypted">Сквозное шифрование · запечатано мастер-паролем</string>
+    <string name="vault_generate_key">Создать ключ</string>
+    <string name="vault_add_password">Добавить пароль</string>
+    <string name="vault_import_certificate">Импортировать сертификат</string>
+
+    <!-- Мета карточки секрета (ведущее слово + рантайм-фрагмент «используется»). -->
+    <string name="vault_meta_certificate">Сертификат · %1$s</string>
+    <string name="vault_meta_any_principal">любой principal · %1$s</string>
+    <string name="vault_meta_password">Пароль · %1$s</string>
+
+    <!-- Пустые состояния категорий. -->
+    <string name="vault_empty_ssh_title">Пока нет SSH-ключей</string>
+    <string name="vault_empty_ssh_hint">Создайте ключ — он запечатывается в хранилище и готов к привязке к хостам.</string>
+    <string name="vault_empty_passwords_title">Пока нет паролей</string>
+    <string name="vault_empty_passwords_hint">Добавьте пароль — он хранится в зашифрованном виде и переиспользуется на разных хостах.</string>
+    <string name="vault_empty_certificates_title">Пока нет сертификатов</string>
+    <string name="vault_empty_certificates_hint">Импортируйте сертификат, подписанный CA, вместе с приватным ключом — он запечатывается в хранилище и готов к привязке к хостам.</string>
+    <string name="vault_empty_certificates_hint_short">Импортируйте сертификат, подписанный CA, вместе с приватным ключом — он запечатывается в хранилище.</string>
+
+    <!-- Детали секрета: подзаголовки и подписи. -->
+    <string name="vault_subtitle_certificate">Сертификат</string>
+    <string name="vault_subtitle_certificate_typed">сертификат %1$s</string>
+    <string name="vault_subtitle_private_key">Приватный ключ</string>
+    <string name="vault_subtitle_password">Пароль</string>
+    <string name="vault_label_public_key">Открытый ключ</string>
+    <string name="vault_key_unreadable">Не удалось прочитать ключ</string>
+    <string name="vault_label_fingerprint">Отпечаток</string>
+    <string name="vault_copy_certificate">Скопировать сертификат</string>
+    <string name="vault_copy_public_key">Скопировать открытый ключ</string>
+    <string name="vault_copy_password">Скопировать пароль</string>
+    <string name="vault_export">Экспорт</string>
+    <string name="vault_delete">Удалить</string>
+    <string name="vault_cancel">Отмена</string>
+    <string name="vault_used_by">Используется · %1$d хостами</string>
+    <string name="vault_not_attached">Пока не привязан ни к одному хосту.</string>
+    <string name="vault_cert_key_id">Key ID: %1$s</string>
+    <string name="vault_cert_unreadable">Не удалось прочитать сертификат</string>
+    <string name="vault_label_principals">Principals</string>
+    <string name="vault_any_principal">любой principal</string>
+    <string name="vault_label_valid">Срок действия</string>
+    <string name="vault_badge_expired">ИСТЁК</string>
+    <string name="vault_label_serial">Серийный номер</string>
+    <string name="vault_label_signing_ca">Подписавший CA</string>
+
+    <!-- Диалог создания SSH-ключа. -->
+    <string name="vault_dialog_generate_title">Создать SSH-ключ</string>
+    <string name="vault_dialog_generate_subtitle">Новая пара ключей запечатывается в хранилище — парольная фраза не нужна.</string>
+    <string name="vault_field_name">ИМЯ</string>
+    <string name="vault_placeholder_name_key">напр. work-laptop</string>
+    <string name="vault_field_algorithm">АЛГОРИТМ</string>
+    <string name="vault_generate">Создать</string>
+
+    <!-- Диалог добавления пароля. -->
+    <string name="vault_dialog_add_password_subtitle">Хранится в зашифрованном виде и переиспользуется на разных хостах.</string>
+    <string name="vault_placeholder_name_password">напр. db-admin</string>
+    <string name="vault_field_password">ПАРОЛЬ</string>
+    <string name="vault_placeholder_password">секрет</string>
+    <string name="vault_add">Добавить</string>
+
+    <!-- Диалог импорта сертификата. -->
+    <string name="vault_dialog_import_subtitle">Сертификат, подписанный CA, и его приватный ключ запечатываются в хранилище.</string>
+    <string name="vault_placeholder_name_cert">напр. prod-access</string>
+    <string name="vault_field_private_key_pem">ПРИВАТНЫЙ КЛЮЧ (PEM)</string>
+    <string name="vault_field_certificate">СЕРТИФИКАТ (*-cert.pub)</string>
+    <string name="vault_field_passphrase">ПАРОЛЬНАЯ ФРАЗА (если есть)</string>
+    <string name="vault_placeholder_optional">необязательно</string>
+    <string name="vault_cert_read_error">Не удалось прочитать сертификат — ожидалась строка OpenSSH *-cert.pub.</string>
+    <string name="vault_cert_valid_summary">%1$s · %2$s · действителен до %3$s</string>
+    <string name="vault_import">Импорт</string>
+
+    <!-- Подтверждение мастер-пароля перед копированием секрета. -->
+    <string name="vault_confirm_master_title">Подтвердите мастер-пароль</string>
+    <string name="vault_confirm_master_subtitle">Введите мастер-пароль, чтобы скопировать секрет в буфер обмена.</string>
+    <string name="vault_field_master_password">МАСТЕР-ПАРОЛЬ</string>
+    <string name="vault_placeholder_master_password">мастер-пароль</string>
+    <string name="vault_password_mismatch_retry">Пароль не подошёл — попробуйте ещё раз.</string>
+    <string name="vault_copy">Скопировать</string>
+
+    <!-- Диалог удаления секрета. -->
+    <string name="vault_delete_title">Удалить «%1$s»?</string>
+    <string name="vault_delete_detail_none">Секрет будет удалён из хранилища. Это действие необратимо.</string>
+    <string name="vault_delete_detail_bound">%1$d хостов потеряют эти учётные данные и запросят пароль при следующем подключении. Это действие необратимо.</string>
+
+    <!-- Гейт мастер-пароля: создание / разблокировка / предложение биометрии / повреждение / сброс. -->
+    <string name="vault_create_title">Создать мастер-пароль</string>
+    <string name="vault_create_subtitle">Им шифруется локальное хранилище. Пароль не покидает устройство и не восстанавливается — забыли его, и данные не расшифровать.</string>
+    <string name="vault_master_password_label">Мастер-пароль</string>
+    <string name="vault_confirm_password_label">Повторите пароль</string>
+    <string name="vault_create_button">Создать хранилище</string>
+    <string name="vault_biometric_offer_title">Быстрая разблокировка</string>
+    <string name="vault_biometric_offer_subtitle">Включите вход по биометрии, чтобы открывать хранилище без ввода мастер-пароля. Это можно изменить позже в настройках.</string>
+    <string name="vault_biometric_enable">Включить биометрию</string>
+    <string name="vault_not_now">Не сейчас</string>
+    <string name="vault_unlock_title">Разблокировать хранилище</string>
+    <string name="vault_unlock_subtitle">Введите мастер-пароль, чтобы открыть хосты, ключи и сессии.</string>
+    <string name="vault_unlock_button">Разблокировать</string>
+    <string name="vault_unlock_biometric">Разблокировать биометрией</string>
+    <string name="vault_forgot_password">Забыли мастер-пароль?</string>
+    <string name="vault_corrupted_title">Хранилище повреждено</string>
+    <string name="vault_corrupted_subtitle">Файл хранилища не читается, и расшифровать его нельзя. Чтобы пользоваться приложением, придётся сбросить хранилище и начать заново.</string>
+    <string name="vault_reset_vault">Сбросить хранилище</string>
+    <string name="vault_reset_subtitle">Это необратимо. Сохранённые пароли, ключи и учётные данные будут стёрты без возможности восстановления — мастер-пароль их не защищает, а пересоздаёт.</string>
+    <string name="vault_reset_scope_secrets_title">Только секреты</string>
+    <string name="vault_reset_scope_secrets_subtitle">Профили хостов и known_hosts останутся.</string>
+    <string name="vault_reset_scope_everything_title">Стереть всё</string>
+    <string name="vault_reset_scope_everything_subtitle">Также удалить профили хостов, known_hosts и настройки.</string>
+    <string name="vault_reset_confirm_label">Впишите %1$s для подтверждения</string>
+    <string name="vault_reset_confirm_button">Сбросить безвозвратно</string>
+</resources>

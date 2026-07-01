@@ -8,18 +8,16 @@ import app.skerry.shared.vault.BiometricConfirmResult
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vtail_bio_copy_cancel
+import app.skerry.ui.generated.resources.vtail_bio_copy_subtitle
+import app.skerry.ui.generated.resources.vtail_bio_copy_title
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/** Промпт повторной аутентификации перед копированием чувствительного секрета в буфер обмена. */
-internal val COPY_PROMPT = BiometricPrompt(
-    title = "Confirm it's you",
-    cancelLabel = "Cancel",
-    subtitle = "Verify your biometrics to copy this secret to the clipboard.",
-)
+import org.jetbrains.compose.resources.getString
 
 /**
  * Повторная аутентификация перед копированием чувствительного секрета (пароля) в буфер обмена:
@@ -72,9 +70,14 @@ internal class SecretCopyAuthorizer(
             if (biometricInFlight) return
             biometricInFlight = true
             scope.launch {
+                val prompt = BiometricPrompt(
+                    title = getString(Res.string.vtail_bio_copy_title),
+                    cancelLabel = getString(Res.string.vtail_bio_copy_cancel),
+                    subtitle = getString(Res.string.vtail_bio_copy_subtitle),
+                )
                 // confirm зовёт платформенный BiometricPrompt — на некоторых устройствах он может
                 // бросить исключение; не роняем композицию, а откатываемся на мастер-пароль.
-                val result = runCatching { bio.confirm(COPY_PROMPT) }.getOrNull()
+                val result = runCatching { bio.confirm(prompt) }.getOrNull()
                 biometricInFlight = false
                 when (result) {
                     BiometricConfirmResult.Confirmed -> onAuthorized()

@@ -39,6 +39,10 @@ class TerminalAiController(
     private val settings: () -> AiSettings,
     private val providerFactory: (OpenAiConfig) -> AiProvider,
     private val scope: CoroutineScope,
+    // Язык, на котором модель должна писать INFO/ASK (= язык интерфейса). Читается лениво при каждом
+    // запросе, чтобы смена языка в настройках отражалась без пересоздания контроллера. Значение —
+    // англоязычное имя языка для промпта («English»/«Russian»); дефолт English (мок/превью/тесты).
+    private val responseLanguage: () -> String = { "English" },
 ) {
     private val decision = AiPolicyDecision.of(policy)
 
@@ -94,7 +98,7 @@ class TerminalAiController(
         streaming = ""
         val gen = ++generation
         val config = current.toOpenAiConfig()
-        val messages = listOf(AiMessage(AiRole.SYSTEM, COMMAND_PROMPT), AiMessage(AiRole.USER, outbound))
+        val messages = listOf(AiMessage(AiRole.SYSTEM, commandPrompt(responseLanguage())), AiMessage(AiRole.USER, outbound))
         job = scope.launch {
             var provider: AiProvider? = null
             val sb = StringBuilder()
@@ -272,19 +276,17 @@ class TerminalAiController(
         )
 
         /**
-         * Язык человекочитаемого текста (INFO/ASK) — язык UI приложения. Сейчас интерфейс англоязычный
-         * (строки захардкожены), поэтому English. Когда появится локализация — прокинуть сюда текущую
-         * локаль (риск-причины [CommandRiskClassifier] тоже английские, консистентно).
+         * Промпт превращения запроса в команду. [language] — англоязычное имя языка интерфейса
+         * («English»/«Russian»), на котором модель должна писать человекочитаемые INFO/ASK, независимо
+         * от языка запроса пользователя. Прокидывается из настроек через [responseLanguage].
          */
-        private const val UI_LANGUAGE = "English"
-
-        const val COMMAND_PROMPT =
+        fun commandPrompt(language: String): String =
             "You turn the user's request into a shell command for a POSIX/Linux SSH session. " +
                 "Reply in ONE of two forms, nothing else:\n" +
                 "1) If you can produce a command — first line `CMD: <command>` (only the command, no markdown, " +
                 "no backticks); second line `INFO: <max 8-word description of what it does>`.\n" +
                 "2) If the request is unclear, unsafe, or impossible — a single line `ASK: <short clarification or reason>`.\n" +
-                "Always write the INFO and ASK text in " + UI_LANGUAGE + ", regardless of the language the user asked in. " +
+                "Always write the INFO and ASK text in " + language + ", regardless of the language the user asked in. " +
                 "Never invent credentials or hostnames."
     }
 }

@@ -1,0 +1,20 @@
+<resources>
+    <!-- Sync-индикатор -->
+    <string name="stail_sync_online">Синхронизация активна</string>
+    <string name="stail_sync_offline">Синхронизация офлайн</string>
+    <string name="stail_syncing">Синхронизация…</string>
+    <string name="stail_sync_paused">Синхронизация на паузе</string>
+    <string name="stail_sync_error">Ошибка синхронизации</string>
+
+    <!-- Карточка аккаунта -->
+    <string name="stail_local_vault">Локальное хранилище</string>
+    <string name="stail_encrypted_on_device">Зашифровано на этом устройстве</string>
+    <string name="stail_synced_host">Синхронизировано · %1$s</string>
+    <string name="stail_synced">Синхронизировано</string>
+    <string name="stail_linked_locked">Привязано · заперто</string>
+
+    <!-- Промпт перерегистрации биометрии -->
+    <string name="stail_reenroll_prompt_title">Снова включить биометрическую разблокировку</string>
+    <string name="stail_reenroll_prompt_cancel">Отмена</string>
+    <string name="stail_reenroll_prompt_subtitle">Подтвердите биометрию, чтобы привязать быструю разблокировку к новому ключу аккаунта.</string>
+</resources>

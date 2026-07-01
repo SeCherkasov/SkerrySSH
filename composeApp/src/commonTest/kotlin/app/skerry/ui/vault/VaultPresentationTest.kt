@@ -44,13 +44,8 @@ class VaultPresentationTest {
         assertEquals(1, VaultPresentation.count(VaultCategoryKind.CERTIFICATES, credentials))
     }
 
-    @Test
-    fun `usedBy label is singular for one host and plural otherwise`() {
-        assertEquals("used by 0 hosts", VaultPresentation.usedByLabel(0))
-        assertEquals("used by 1 host", VaultPresentation.usedByLabel(1))
-        assertEquals("used by 2 hosts", VaultPresentation.usedByLabel(2))
-        assertEquals("used by 7 hosts", VaultPresentation.usedByLabel(7))
-    }
+    // Прим.: usedByLabel стала @Composable (текст «used by N host(s)» — строковый ресурс с формой
+    // числа), поэтому её строковый юнит-тест снят — подпись резолвится в composition.
 
     @Test
     fun `hostsUsing returns only hosts referencing the credential`() {

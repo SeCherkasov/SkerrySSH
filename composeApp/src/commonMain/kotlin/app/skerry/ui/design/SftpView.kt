@@ -64,10 +64,55 @@ import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.TransferState
 import app.skerry.ui.files.platformLocalBrowser
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_fkey_copy
+import app.skerry.ui.generated.resources.ftail_fkey_delete
+import app.skerry.ui.generated.resources.ftail_fkey_edit
+import app.skerry.ui.generated.resources.ftail_fkey_mkdir
+import app.skerry.ui.generated.resources.ftail_fkey_move
+import app.skerry.ui.generated.resources.ftail_fkey_quit
+import app.skerry.ui.generated.resources.ftail_fkey_refresh
+import app.skerry.ui.generated.resources.ftail_fkey_rename
+import app.skerry.ui.generated.resources.ftail_fkey_view
+import app.skerry.ui.generated.resources.ftail_open_failed
+import app.skerry.ui.generated.resources.sftp_already_exists
+import app.skerry.ui.generated.resources.sftp_cancel
+import app.skerry.ui.generated.resources.sftp_copy
+import app.skerry.ui.generated.resources.sftp_copy_to_q
+import app.skerry.ui.generated.resources.sftp_create
+import app.skerry.ui.generated.resources.sftp_delete
+import app.skerry.ui.generated.resources.sftp_delete_file_body
+import app.skerry.ui.generated.resources.sftp_delete_file_q
+import app.skerry.ui.generated.resources.sftp_delete_folder_body
+import app.skerry.ui.generated.resources.sftp_delete_folder_q
+import app.skerry.ui.generated.resources.sftp_delete_items_body
+import app.skerry.ui.generated.resources.sftp_delete_items_dirs_body
+import app.skerry.ui.generated.resources.sftp_delete_items_q
+import app.skerry.ui.generated.resources.sftp_error
+import app.skerry.ui.generated.resources.sftp_items_count
+import app.skerry.ui.generated.resources.sftp_loading
+import app.skerry.ui.generated.resources.sftp_move
+import app.skerry.ui.generated.resources.sftp_move_to_q
+import app.skerry.ui.generated.resources.sftp_new_folder
+import app.skerry.ui.generated.resources.sftp_no_session
+import app.skerry.ui.generated.resources.sftp_no_session_hint
+import app.skerry.ui.generated.resources.sftp_opening
+import app.skerry.ui.generated.resources.sftp_pane_local
+import app.skerry.ui.generated.resources.sftp_pane_remote
+import app.skerry.ui.generated.resources.sftp_rename
+import app.skerry.ui.generated.resources.sftp_subtitle_host
+import app.skerry.ui.generated.resources.sftp_title
+import app.skerry.ui.generated.resources.sftp_transfer_body
+import app.skerry.ui.generated.resources.sftp_transfer_error
+import app.skerry.ui.generated.resources.sftp_unavailable
+import app.skerry.ui.generated.resources.sftp_upload
+import app.skerry.ui.generated.resources.sftp_what_single
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.sftp.pickUploadSource
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -125,7 +170,7 @@ private fun SftpTopBar(subtitle: String, mono: FontFamily) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Sym("drive_file_move", size = 18.sp, color = D.cyanBright)
-        Txt("File transfer", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+        Txt(stringResource(Res.string.sftp_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
         Txt(subtitle, color = D.faint, size = 11.5.sp, font = mono)
     }
 }
@@ -165,6 +210,8 @@ private fun LiveSftpView(
     // UI-scope только для показа нативного пикера файла (fallback Upload); сама передача живёт на
     // scope сессии внутри координатора и переживёт уход вью из композиции.
     val uiScope = rememberCoroutineScope()
+    // stringResource нельзя звать внутри LaunchedEffect — поднимаем значение заранее.
+    val openFailedMsg = stringResource(Res.string.ftail_open_failed)
     LaunchedEffect(controller) {
         openError = null
         try {
@@ -172,7 +219,7 @@ private fun LiveSftpView(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            openError = e.message ?: "Не удалось открыть SFTP"
+            openError = e.message ?: openFailedMsg
         }
     }
 
@@ -268,14 +315,14 @@ private fun LiveSftpView(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Sym("drive_file_move", size = 18.sp, color = D.cyanBright)
-                Txt("File transfer", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-                Txt("$subtitle · SFTP", color = D.faint, size = 11.5.sp, font = mono)
+                Txt(stringResource(Res.string.sftp_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.sftp_subtitle_host, subtitle), color = D.faint, size = 11.5.sp, font = mono)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Upload: есть выделение локальных файлов → передаём их; иначе fallback — нативный
                 // диалог выбора файла → заливаем в текущий каталог remote-панели. New folder — в remote.
                 GhostButton(
-                    "Upload",
+                    stringResource(Res.string.sftp_upload),
                     onClick = {
                         val coord = c
                         if (coord != null) {
@@ -288,21 +335,21 @@ private fun LiveSftpView(
                     },
                     icon = "upload",
                 )
-                GhostButton("New folder", onClick = { if (c != null) creatingFolder = true }, icon = "create_new_folder")
+                GhostButton(stringResource(Res.string.sftp_new_folder), onClick = { if (c != null) creatingFolder = true }, icon = "create_new_folder")
             }
         }
         HLine()
         when {
             openError != null -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaneNotice("error", "SFTP unavailable", openError, D.sunset)
+                PaneNotice("error", stringResource(Res.string.sftp_unavailable), openError, D.sunset)
             }
             c == null -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaneNotice("sync", "Opening SFTP…", null, D.faint)
+                PaneNotice("sync", stringResource(Res.string.sftp_opening), null, D.faint)
             }
             else -> {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     LivePane(
-                        c.local, "computer", D.dim, "Local", mono,
+                        c.local, "computer", D.dim, stringResource(Res.string.sftp_pane_local), mono,
                         listState = localList,
                         active = active == ActivePane.Local,
                         onActivate = { active = ActivePane.Local; focus.requestFocus() },
@@ -310,7 +357,7 @@ private fun LiveSftpView(
                     )
                     VLine(D.line)
                     LivePane(
-                        c.remote, "dns", D.moss, "Remote", mono,
+                        c.remote, "dns", D.moss, stringResource(Res.string.sftp_pane_remote), mono,
                         listState = remoteList,
                         active = active == ActivePane.Remote,
                         onActivate = { active = ActivePane.Remote; focus.requestFocus() },
@@ -329,8 +376,8 @@ private fun LiveSftpView(
         // панели папка «улетала» в remote и казалось, что мы провалились в чужой каталог.
         val target = if (active == ActivePane.Local) c.local else c.remote
         NameDialog(
-            title = "New folder",
-            confirmLabel = "Create",
+            title = stringResource(Res.string.sftp_new_folder),
+            confirmLabel = stringResource(Res.string.sftp_create),
             initial = "",
             existing = (target.state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet(),
             onConfirm = { target.mkdir(it); creatingFolder = false },
@@ -366,7 +413,7 @@ private fun LiveSftpView(
             val destPath = if (fromLocal) coord.remote.path else coord.local.path
             ConfirmMoveDialog(
                 items = items,
-                destLabel = if (fromLocal) "Remote" else "Local",
+                destLabel = if (fromLocal) stringResource(Res.string.sftp_pane_remote) else stringResource(Res.string.sftp_pane_local),
                 destPath = destPath,
                 onConfirm = { coord.moveSelection(fromLocal); moveTarget = null },
                 onDismiss = { moveTarget = null },
@@ -386,7 +433,7 @@ private fun LiveSftpView(
             val destPath = if (fromLocal) coord.remote.path else coord.local.path
             ConfirmCopyDialog(
                 items = items,
-                destLabel = if (fromLocal) "Remote" else "Local",
+                destLabel = if (fromLocal) stringResource(Res.string.sftp_pane_remote) else stringResource(Res.string.sftp_pane_local),
                 destPath = destPath,
                 onConfirm = {
                     if (fromLocal) coord.uploadSelection() else coord.downloadSelection()
@@ -400,8 +447,8 @@ private fun LiveSftpView(
     // F2 Rename строки под курсором активной панели (классика mc — клавиатурный путь, без меню).
     renameTarget?.let { (pane, item) ->
         NameDialog(
-            title = "Rename",
-            confirmLabel = "Rename",
+            title = stringResource(Res.string.sftp_rename),
+            confirmLabel = stringResource(Res.string.sftp_rename),
             initial = item.name,
             existing = (pane.state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet(),
             onConfirm = { pane.rename(item, it); renameTarget = null },
@@ -423,18 +470,18 @@ private fun ensureOperandSelection(pane: FilePaneController) {
  * [done] = клавиша реально что-то делает; false — заглушка. Нерабочие помечены «*»
  * в панели, чтобы было видно, что подключено, а что ещё нет.
  */
-private data class FKeyDef(val n: Int, val label: String, val done: Boolean)
+private data class FKeyDef(val n: Int, val label: StringResource, val done: Boolean)
 
 private val FKEY_LABELS = listOf(
-    FKeyDef(2, "Rename", done = true),
-    FKeyDef(3, "View", done = false),
-    FKeyDef(4, "Edit", done = false),
-    FKeyDef(5, "Copy", done = true),
-    FKeyDef(6, "Move", done = true),
-    FKeyDef(7, "MkDir", done = true),
-    FKeyDef(8, "Delete", done = true),
-    FKeyDef(9, "Refresh", done = true),
-    FKeyDef(10, "Quit", done = true),
+    FKeyDef(2, Res.string.ftail_fkey_rename, done = true),
+    FKeyDef(3, Res.string.ftail_fkey_view, done = false),
+    FKeyDef(4, Res.string.ftail_fkey_edit, done = false),
+    FKeyDef(5, Res.string.ftail_fkey_copy, done = true),
+    FKeyDef(6, Res.string.ftail_fkey_move, done = true),
+    FKeyDef(7, Res.string.ftail_fkey_mkdir, done = true),
+    FKeyDef(8, Res.string.ftail_fkey_delete, done = true),
+    FKeyDef(9, Res.string.ftail_fkey_refresh, done = true),
+    FKeyDef(10, Res.string.ftail_fkey_quit, done = true),
 )
 
 /**
@@ -473,7 +520,7 @@ private fun FKeyCell(
     ) {
         Txt("F${def.n}", color = if (enabled) D.cyanBright else D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, font = mono)
         Txt(
-            def.label,
+            stringResource(def.label),
             color = if (enabled) D.text else D.faint,
             size = 11.sp,
             maxLines = 1,
@@ -545,8 +592,8 @@ private fun LivePane(
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val st = pane.state) {
-                FilePaneState.Loading -> PaneNotice("sync", "Loading…", null, D.faint)
-                is FilePaneState.Error -> PaneNotice("error", "Error", st.message, D.sunset)
+                FilePaneState.Loading -> PaneNotice("sync", stringResource(Res.string.sftp_loading), null, D.faint)
+                is FilePaneState.Error -> PaneNotice("error", stringResource(Res.string.sftp_error), st.message, D.sunset)
                 is FilePaneState.Loaded -> LivePaneList(
                     pane = pane,
                     entries = st.entries,
@@ -794,7 +841,7 @@ private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismi
             ) {
                 Sym("error", size = 16.sp, color = D.sunset)
                 Txt(
-                    "${transfer.name}: ${transfer.message}",
+                    stringResource(Res.string.sftp_transfer_error, transfer.name, transfer.message),
                     color = D.sunset,
                     size = 11.5.sp,
                     maxLines = 2,
@@ -881,13 +928,13 @@ internal fun NameDialog(
                     ) { inner() }
                 },
             )
-            if (conflict) Txt("«$trimmed» already exists", color = D.sunset, size = 11.5.sp)
+            if (conflict) Txt(stringResource(Res.string.sftp_already_exists, trimmed), color = D.sunset, size = 11.5.sp)
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                GhostButton("Cancel", onClick = onDismiss)
+                GhostButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
                 PrimaryButton(
                     confirmLabel,
                     onClick = submit,
@@ -907,18 +954,18 @@ private fun ConfirmDeleteItemsDialog(items: List<FileItem>, onConfirm: () -> Uni
     val single = items.singleOrNull()
     val hasDir = items.any { it.type == FileItemType.Directory }
     val title = when {
-        single != null && single.type == FileItemType.Directory -> "Delete folder?"
-        single != null -> "Delete file?"
-        else -> "Delete ${items.size} items?"
+        single != null && single.type == FileItemType.Directory -> stringResource(Res.string.sftp_delete_folder_q)
+        single != null -> stringResource(Res.string.sftp_delete_file_q)
+        else -> stringResource(Res.string.sftp_delete_items_q, items.size)
     }
     val body = when {
         single != null && single.type == FileItemType.Directory ->
-            "«${single.name}» and everything inside it will be removed permanently."
-        single != null -> "«${single.name}» will be removed permanently."
-        hasDir -> "${items.size} items (folders with their contents) will be removed permanently."
-        else -> "${items.size} items will be removed permanently."
+            stringResource(Res.string.sftp_delete_folder_body, single.name)
+        single != null -> stringResource(Res.string.sftp_delete_file_body, single.name)
+        hasDir -> stringResource(Res.string.sftp_delete_items_dirs_body, items.size)
+        else -> stringResource(Res.string.sftp_delete_items_body, items.size)
     }
-    ConfirmDangerDialog(title, body, "Delete", onConfirm, onDismiss)
+    ConfirmDangerDialog(title, body, stringResource(Res.string.sftp_delete), onConfirm, onDismiss)
 }
 
 /**
@@ -933,11 +980,11 @@ private fun ConfirmCopyDialog(
     onDismiss: () -> Unit,
 ) {
     val single = items.singleOrNull()
-    val what = if (single != null) "«${single.name}»" else "${items.size} items"
+    val what = if (single != null) stringResource(Res.string.sftp_what_single, single.name) else stringResource(Res.string.sftp_items_count, items.size)
     ConfirmDangerDialog(
-        title = "Copy to $destLabel?",
-        body = "$what → $destPath",
-        confirmLabel = "Copy",
+        title = stringResource(Res.string.sftp_copy_to_q, destLabel),
+        body = stringResource(Res.string.sftp_transfer_body, what, destPath),
+        confirmLabel = stringResource(Res.string.sftp_copy),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         confirmBg = D.cyan,
@@ -958,11 +1005,11 @@ private fun ConfirmMoveDialog(
     onDismiss: () -> Unit,
 ) {
     val single = items.singleOrNull()
-    val what = if (single != null) "«${single.name}»" else "${items.size} items"
+    val what = if (single != null) stringResource(Res.string.sftp_what_single, single.name) else stringResource(Res.string.sftp_items_count, items.size)
     ConfirmDangerDialog(
-        title = "Move to $destLabel?",
-        body = "$what → $destPath",
-        confirmLabel = "Move",
+        title = stringResource(Res.string.sftp_move_to_q, destLabel),
+        body = stringResource(Res.string.sftp_transfer_body, what, destPath),
+        confirmLabel = stringResource(Res.string.sftp_move),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
         confirmBg = D.cyan,
@@ -1016,7 +1063,7 @@ private fun ConfirmDangerDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                DialogButtonFocus(focused = !focusConfirm) { GhostButton("Cancel", onClick = onDismiss) }
+                DialogButtonFocus(focused = !focusConfirm) { GhostButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss) }
                 DialogButtonFocus(focused = focusConfirm) {
                     PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmBg, fg = confirmFg)
                 }
@@ -1050,10 +1097,10 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Txt(if (isDir) "Delete folder?" else "Delete file?", color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
+            Txt(if (isDir) stringResource(Res.string.sftp_delete_folder_q) else stringResource(Res.string.sftp_delete_file_q), color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
             Txt(
-                if (isDir) "«${entry.name}» and everything inside it will be removed permanently."
-                else "«${entry.name}» will be removed permanently.",
+                if (isDir) stringResource(Res.string.sftp_delete_folder_body, entry.name)
+                else stringResource(Res.string.sftp_delete_file_body, entry.name),
                 color = D.faint,
                 size = 12.sp,
             )
@@ -1062,8 +1109,8 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                GhostButton("Cancel", onClick = onDismiss)
-                PrimaryButton("Delete", onClick = onConfirm, bg = D.sunset, fg = Color(0xFF0A1A26))
+                GhostButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
+                PrimaryButton(stringResource(Res.string.sftp_delete), onClick = onConfirm, bg = D.sunset, fg = Color(0xFF0A1A26))
             }
         }
     }
@@ -1097,10 +1144,10 @@ private fun fileItemIcon(type: FileItemType): String = when (type) {
 @Composable
 private fun NoSessionSftpView(mono: FontFamily) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        SftpTopBar("No active session", mono)
+        SftpTopBar(stringResource(Res.string.sftp_no_session), mono)
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            PaneNotice("cloud_off", "No active session", "Connect a host to browse files", D.faint)
+            PaneNotice("cloud_off", stringResource(Res.string.sftp_no_session), stringResource(Res.string.sftp_no_session_hint), D.faint)
         }
     }
 }
@@ -1116,19 +1163,19 @@ private fun MockSftpView(mono: FontFamily) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Sym("drive_file_move", size = 18.sp, color = D.cyanBright)
-                Txt("File transfer", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.sftp_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
                 Txt("root@prod-web-01 · SFTP", color = D.faint, size = 11.5.sp, font = mono)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GhostButton("Upload", onClick = {}, icon = "upload")
-                GhostButton("New folder", onClick = {}, icon = "create_new_folder")
+                GhostButton(stringResource(Res.string.sftp_upload), onClick = {}, icon = "upload")
+                GhostButton(stringResource(Res.string.sftp_new_folder), onClick = {}, icon = "create_new_folder")
             }
         }
         HLine()
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            MockPane("computer", D.dim, "Local", "~/projects", LOCAL_FILES, mono, Modifier.weight(1f))
+            MockPane("computer", D.dim, stringResource(Res.string.sftp_pane_local), "~/projects", LOCAL_FILES, mono, Modifier.weight(1f))
             VLine(D.line)
-            MockPane("dns", D.moss, "Remote", "/var/www", REMOTE_FILES, mono, Modifier.weight(1f))
+            MockPane("dns", D.moss, stringResource(Res.string.sftp_pane_remote), "/var/www", REMOTE_FILES, mono, Modifier.weight(1f))
         }
         HLine()
         Row(

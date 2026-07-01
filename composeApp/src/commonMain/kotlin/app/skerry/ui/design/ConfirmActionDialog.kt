@@ -22,6 +22,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_cancel
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Универсальный диалог подтверждения деструктивного действия (разрыв сессии, закрытие split-панели,
@@ -62,7 +65,7 @@ fun ConfirmActionDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt("Cancel", color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
                 }
                 PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmColor, fg = Color(0xFF1A0B07))
             }

@@ -52,6 +52,14 @@ class AiAssistantController(
 
     val isConfigured: Boolean get() = settings.isConfigured
 
+    /**
+     * Язык (англоязычное имя: «English»/«Russian»), на котором терминальный AI-бар должен писать
+     * INFO/ASK — = язык интерфейса. Выставляется из корня UI по [app.skerry.ui.i18n.LocalAppLocale];
+     * читается лениво при каждом запросе (см. [TerminalAiController.responseLanguage]), поэтому смена
+     * языка в настройках подхватывается без пересоздания контроллеров.
+     */
+    var uiLanguageProvider: () -> String = { "English" }
+
     /** Перечитать настройки из хранилища (после разблокировки vault). */
     fun refresh() { settings = reload() }
 
@@ -60,7 +68,13 @@ class AiAssistantController(
      * с этим ассистентом (BYOK-ключ один на приложение). Настройки читаются лениво — свежие после [refresh].
      */
     fun terminalController(policy: AiPolicy): TerminalAiController =
-        TerminalAiController(policy, settings = { settings }, providerFactory = providerFactory, scope = scope)
+        TerminalAiController(
+            policy,
+            settings = { settings },
+            providerFactory = providerFactory,
+            scope = scope,
+            responseLanguage = { uiLanguageProvider() },
+        )
 
     /** Сохранить BYOK-настройки (ключ шифруется в vault на стороне [persist]). */
     fun save(apiKey: String, model: String, baseUrl: String) {

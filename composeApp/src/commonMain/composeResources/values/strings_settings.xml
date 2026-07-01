@@ -1,0 +1,138 @@
+<resources>
+    <!-- Settings panel (desktop Settings modal). Keys are prefixed settings_* to avoid collisions. -->
+
+    <!-- Nav rail -->
+    <string name="settings_nav_header">SETTINGS</string>
+
+    <!-- Shared action labels -->
+    <string name="settings_save">Save</string>
+    <string name="settings_clear">Clear</string>
+    <string name="settings_confirm">Confirm</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="settings_revoke">Revoke</string>
+    <string name="settings_change">Change</string>
+    <string name="settings_manage">Manage</string>
+    <string name="settings_on">On</string>
+
+    <!-- AI section -->
+    <string name="settings_ai_title">AI</string>
+    <string name="settings_ai_live_subtitle">Connect your own OpenAI-compatible provider (BYOK). Your key is stored encrypted in the vault and only ever sent to the provider you configure.</string>
+    <string name="settings_ai_field_api_key">OPENAI API KEY</string>
+    <string name="settings_ai_field_model">MODEL</string>
+    <string name="settings_ai_field_endpoint">ENDPOINT</string>
+    <string name="settings_ai_key_saved">Key saved</string>
+    <string name="settings_ai_not_configured">Not configured yet</string>
+    <string name="settings_ai_quick_chat">Quick chat</string>
+    <string name="settings_ai_quick_chat_desc">Ask the assistant a question to verify the connection.</string>
+    <string name="settings_ai_prompt_placeholder_ready">Ask about ssh, scp, tunnels…</string>
+    <string name="settings_ai_prompt_placeholder_needs_key">Save an API key first</string>
+    <string name="settings_ai_sending">Sending…</string>
+    <string name="settings_ai_ask">Ask</string>
+    <string name="settings_ai_mock_subtitle">Configure where AI runs. The default is on this device — your commands never leave Skerry. Each connection can override these settings.</string>
+    <string name="settings_ai_default_provider">Default AI provider</string>
+    <string name="settings_ai_default_provider_desc">Used for connections without a specific override.</string>
+    <string name="settings_ai_provider_device">On this device</string>
+    <string name="settings_ai_provider_device_desc">Qwen 2.5 Coder 1.5B · 982 MB · ready. No data leaves your machine.</string>
+    <string name="settings_ai_badge_private">PRIVATE</string>
+    <string name="settings_ai_provider_custom">Custom endpoint</string>
+    <string name="settings_ai_provider_custom_desc">Connect to your own Ollama or OpenAI-compatible server.</string>
+    <string name="settings_ai_provider_byok">My API key (BYOK)</string>
+    <string name="settings_ai_provider_byok_desc">Use your OpenAI, Anthropic, or OpenRouter key. You pay the provider directly.</string>
+    <string name="settings_ai_sanitize">Sanitize secrets before sending</string>
+    <string name="settings_ai_sanitize_desc">Strip obvious passwords, tokens and keys from prompts before they reach external providers.</string>
+    <string name="settings_ai_preview">Preview prompt before sending</string>
+    <string name="settings_ai_preview_desc">Show the exact text sent externally, with redactions highlighted. Edit or cancel before transmission.</string>
+    <string name="settings_ai_confirm">Confirm before running AI suggestions</string>
+    <string name="settings_ai_confirm_desc">Every AI-suggested command requires a deliberate click. Mitigates prompt injection from compromised servers.</string>
+
+    <!-- Terminal section -->
+    <string name="settings_terminal_title">Terminal</string>
+    <string name="settings_terminal_subtitle">Shell behaviour, scrollback and bell.</string>
+    <string name="settings_terminal_scrollback">Scrollback buffer</string>
+    <string name="settings_terminal_scrollback_desc">Lines kept per session.</string>
+    <string name="settings_terminal_cursor_style">Cursor style</string>
+    <string name="settings_terminal_cursor_block_blink">Block (blink)</string>
+    <string name="settings_terminal_copy_on_select">Copy on select</string>
+    <string name="settings_terminal_show_title">Show terminal title on tabs</string>
+    <string name="settings_terminal_show_title_desc">Let the connected shell rename a tab (e.g. the running program). Off — tabs always show the saved host name. Not implemented yet.</string>
+
+    <!-- Account section -->
+    <string name="settings_account_title">Account</string>
+    <string name="settings_account_subtitle">Your Skerry account and the devices linked to it.</string>
+    <string name="settings_disconnect">Disconnect</string>
+    <string name="settings_reconnect">Reconnect</string>
+    <string name="settings_set_up_sync">Set up sync</string>
+    <string name="settings_linked_devices">LINKED DEVICES</string>
+    <string name="settings_loading_devices">Loading devices…</string>
+    <string name="settings_devices_load_failed">Couldn\'t load devices. Try Sync now.</string>
+    <string name="settings_only_this_device">Only this device so far.</string>
+    <string name="settings_device_sub_current">linked · this device</string>
+    <string name="settings_device_sub_other">linked device</string>
+    <string name="settings_this_device">● this device</string>
+    <string name="settings_link_device">Link a device</string>
+
+    <!-- Sync section -->
+    <string name="settings_sync_title">Sync</string>
+    <string name="settings_sync_subtitle">End-to-end encrypted sync across your devices. Skerry never sees your data in plaintext.</string>
+    <string name="settings_sync_synced_ago">Synced 2 minutes ago</string>
+    <string name="settings_sync_summary_mock">9 hosts · 4 snippets · 3 keys · 2 vaults</string>
+    <string name="settings_sync_now">Sync now</string>
+    <string name="settings_what_syncs">WHAT SYNCS</string>
+    <string name="settings_hosts_groups">Hosts &amp; groups</string>
+    <string name="settings_snippets">Snippets</string>
+    <string name="settings_sync_connected">Connected · %1$s</string>
+    <string name="settings_sync_pushed_pulled">Pushed %1$d · pulled %2$d this session</string>
+    <string name="settings_sync_syncing">Syncing…</string>
+    <string name="settings_sync_syncing_desc">Talking to your sync server.</string>
+    <string name="settings_sync_linked">Linked · %1$s</string>
+    <string name="settings_sync_linked_desc">Reconnect from Account to resume syncing.</string>
+    <string name="settings_open_account">Open Account</string>
+    <string name="settings_sync_error">Sync error</string>
+    <string name="settings_sync_not_connected">Not connected</string>
+    <string name="settings_sync_not_connected_desc">Connect your account to sync across devices.</string>
+
+    <!-- Security section -->
+    <string name="settings_security_title">Security</string>
+    <string name="settings_security_subtitle">Master password, auto-lock and two-factor authentication protect your vault.</string>
+    <string name="settings_security_master_password">Master password</string>
+    <string name="settings_security_master_password_desc">Last changed 84 days ago.</string>
+    <string name="settings_security_touch_id">Unlock with Touch ID</string>
+    <string name="settings_security_touch_id_desc">Use biometrics instead of typing the master password.</string>
+    <string name="settings_security_auto_lock">Auto-lock</string>
+    <string name="settings_security_auto_lock_desc">Lock Skerry after inactivity.</string>
+    <string name="settings_security_after_5_min">After 5 minutes</string>
+    <string name="settings_security_2fa">Two-factor authentication</string>
+    <string name="settings_enabled">● enabled</string>
+    <string name="settings_security_2fa_desc">TOTP via authenticator app.</string>
+    <string name="settings_recent_security_events">RECENT SECURITY EVENTS</string>
+    <string name="settings_security_event_1">Unlocked with Touch ID · today 09:02</string>
+    <string name="settings_security_event_2">Key deploy_ci accessed · Jun 20 18:44</string>
+    <string name="settings_security_event_3">New device paired: iPhone 16 Pro · Jun 18</string>
+
+    <!-- Keyboard section -->
+    <string name="settings_keyboard_title">Keyboard</string>
+    <string name="settings_keyboard_subtitle">Shortcuts adapt to your platform. Terminal bindings apply while a session is focused.</string>
+    <string name="settings_kb_new_connection">New connection</string>
+    <string name="settings_kb_command_palette">Command palette / search</string>
+    <string name="settings_kb_split_terminal">Split terminal</string>
+    <string name="settings_kb_next_prev_tab">Next / previous tab</string>
+    <string name="settings_kb_select_tab_number">Select tab by number</string>
+    <string name="settings_kb_focus_ai">Focus AI bar</string>
+    <string name="settings_kb_open_sftp">Open SFTP</string>
+    <string name="settings_kb_lock">Lock Skerry</string>
+    <string name="settings_kb_accept_autocomplete">Accept autocomplete suggestion</string>
+    <string name="settings_kb_cycle_suggestions">Cycle suggestions</string>
+    <string name="settings_kb_search_history">Search command history</string>
+    <string name="settings_kb_copy_selection">Copy selection</string>
+    <string name="settings_kb_paste">Paste</string>
+    <string name="settings_kb_global">GLOBAL</string>
+    <string name="settings_kb_terminal_group">TERMINAL &amp; AUTOCOMPLETE</string>
+    <string name="settings_badge_soon">SOON</string>
+
+    <!-- About section -->
+    <string name="settings_about_tagline">A private-first SSH client. Local AI, end-to-end encrypted sync, and a terminal that respects your secrets.</string>
+    <string name="settings_about_whats_new">What\'s new</string>
+    <string name="settings_about_documentation">Documentation</string>
+    <string name="settings_about_licenses">Open-source licenses</string>
+    <string name="settings_about_footer">Built on the open seas · © 2026 Skerry</string>
+</resources>

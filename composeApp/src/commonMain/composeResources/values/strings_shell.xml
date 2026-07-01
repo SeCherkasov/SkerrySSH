@@ -1,0 +1,97 @@
+<resources>
+    <!-- Vault lock / unlock / create / reset (LockScreen.kt, MobileDesignApp.kt) -->
+    <string name="shell_lock_title">Skerry is locked</string>
+    <string name="shell_unlock_subtitle_desktop">Enter your master password to unlock the harbor</string>
+    <string name="shell_unlock_subtitle_mobile">Enter your master password</string>
+    <string name="shell_master_password">Master password</string>
+    <string name="shell_unlock">Unlock</string>
+    <string name="shell_forgot_password">Forgot your master password?</string>
+    <string name="shell_use_biometrics">Use biometrics</string>
+    <string name="shell_footer_never_leaves">Master password never leaves this device</string>
+    <string name="shell_footer_never_leaves_short">Never leaves this device</string>
+
+    <string name="shell_create_title">Set a master password</string>
+    <string name="shell_create_subtitle">It encrypts this vault and never leaves the device — there is no recovery.</string>
+    <string name="shell_repeat_password">Repeat password</string>
+    <string name="shell_create_vault">Create vault</string>
+    <string name="shell_pairing_link">Linking from another device? Use a pairing code</string>
+    <string name="shell_no_recovery_ack">I understand my master password can\'t be recovered or reset. If I lose it, this vault is gone.</string>
+
+    <string name="shell_password_strength">Password strength: %1$s</string>
+    <string name="shell_password_strength_weak">Weak</string>
+    <string name="shell_password_strength_fair">Fair</string>
+    <string name="shell_password_strength_good">Good</string>
+    <string name="shell_password_strength_strong">Strong</string>
+
+    <string name="shell_quick_unlock_title">Quick unlock</string>
+    <string name="shell_quick_unlock_subtitle">Open Skerry with your fingerprint instead of the master password.</string>
+    <string name="shell_not_now">Not now</string>
+
+    <string name="shell_corrupted_title">Storage is damaged</string>
+    <string name="shell_corrupted_subtitle">The vault file can\'t be read or decrypted. To use Skerry again you\'ll need to reset it.</string>
+
+    <string name="shell_reset_skerry">Reset Skerry</string>
+    <string name="shell_reset_subtitle">This is permanent. Saved passwords, keys and identities are erased — there is no recovery.</string>
+    <string name="shell_reset_scope_secrets_title">Secrets only</string>
+    <string name="shell_reset_scope_secrets_subtitle">Keep host profiles and known_hosts.</string>
+    <string name="shell_reset_scope_all_title">Erase everything</string>
+    <string name="shell_reset_scope_all_subtitle">Also remove host profiles, known_hosts and settings.</string>
+    <string name="shell_reset_confirm_placeholder">Type %1$s to confirm</string>
+    <string name="shell_reset_permanently">Reset permanently</string>
+
+    <!-- Common actions -->
+    <string name="shell_cancel">Cancel</string>
+    <string name="shell_save">Save</string>
+    <string name="shell_create">Create</string>
+    <string name="shell_connect">Connect</string>
+    <string name="shell_delete">Delete</string>
+
+    <!-- Group dialog (GroupDialog.kt) -->
+    <string name="shell_group_rename_title">Rename group</string>
+    <string name="shell_group_new_title">New group</string>
+    <string name="shell_group_rename_subtitle">Hosts in this group move with the new name.</string>
+    <string name="shell_group_new_subtitle">Create an empty group, then drag hosts in or pick it when adding a connection.</string>
+    <string name="shell_group_name_placeholder">Group name</string>
+    <string name="shell_group_delete">Delete group</string>
+
+    <!-- Password dialog (PasswordDialog.kt) -->
+    <string name="shell_connect_to">Connect to %1$s</string>
+    <string name="shell_password_caps">PASSWORD</string>
+    <string name="shell_password_host_placeholder">master password for this host</string>
+    <string name="shell_not_stored_once">Not stored · used once</string>
+
+    <!-- Delete host dialog (DeleteHostDialog.kt) -->
+    <string name="shell_delete_host_title">Delete \"%1$s\"?</string>
+    <string name="shell_delete_host_body">This connection profile is removed from your archipelago. Any stored credential stays in your vault. This can\'t be undone.</string>
+
+    <!-- Mobile host detail (MobileHostDetailView.kt) -->
+    <string name="shell_host">Host</string>
+    <string name="shell_host_not_found">Host not found</string>
+    <string name="shell_quick_sftp">SFTP</string>
+    <string name="shell_quick_tunnels">Tunnels</string>
+    <string name="shell_quick_snippets">Snippets</string>
+    <string name="shell_details">Details</string>
+    <string name="shell_edit_host">Edit host</string>
+    <string name="shell_delete_host">Delete host</string>
+
+    <!-- Mobile hosts list (MobileHostsView.kt) -->
+    <string name="shell_hosts">Hosts</string>
+    <string name="shell_search_hosts">Search hosts, tags…</string>
+
+    <!-- Mobile route placeholder (MobileDesignApp.kt) -->
+    <string name="shell_route_team">Team</string>
+
+    <!-- Desktop chrome: confirm dialogs, title bar, status bar (DesktopDesignApp.kt) -->
+    <string name="shell_this_session">this session</string>
+    <string name="shell_disconnect_title">Disconnect \"%1$s\"?</string>
+    <string name="shell_disconnect_message">The SSH session and its terminal close now. Auto-reconnect won\'t bring it back — you\'ll need to connect again.</string>
+    <string name="shell_disconnect">Disconnect</string>
+    <string name="shell_close_split_title">Close split panel?</string>
+    <string name="shell_close_split_message">The second session in this tab disconnects and the panel closes. The main session stays connected.</string>
+    <string name="shell_close_panel">Close panel</string>
+    <string name="shell_unlocked">Unlocked</string>
+    <string name="shell_settings">Settings</string>
+    <string name="shell_status_connected">Connected</string>
+    <string name="shell_status_disconnected">Disconnected</string>
+    <string name="shell_status_encoding">UTF-8 · LF</string>
+</resources>

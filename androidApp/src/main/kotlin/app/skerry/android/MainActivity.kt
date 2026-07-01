@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import app.skerry.shared.host.VaultHostStore
@@ -39,6 +41,8 @@ import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.i18n.AppLocaleProvider
+import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
@@ -131,22 +135,32 @@ class MainActivity : FragmentActivity() {
         // DesktopDesignState): набор имён переживает перезапуск. Создаётся один раз здесь и
         // удерживается composition (переживание поворота берёт на себя файл-персист).
         val dir = filesDir
-        val designState = MobileDesignState(
-            initialCollapsedGroups = readCollapsedGroups(dir),
-            onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
-            initialTerminalFont = readTerminalFont(dir),
-            onTerminalFontChange = { writeTerminalFont(dir, it) },
-            initialTerminalFontSize = readTerminalFontSize(dir),
-            onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
-        )
         setContent {
-            MobileDesignApp(
-                deps,
-                state = designState,
-                onVaultReset = onVaultReset,
-                // Перенос workspace в vault + миграция секретов + reload + восстановление sync-сессии.
-                onVaultUnlocked = onVaultUnlocked,
-            )
+            // Язык интерфейса живёт в корне: провайдер локали над MobileDesignApp реагирует на смену
+            // из настроек и рекомпозирует всё дерево. onUiLanguageChange (из MobileDesignState)
+            // обновляет это состояние и пишет персист; MobileDesignState держит копию для дропдауна.
+            val currentUiLanguage = remember { mutableStateOf(readUiLanguage(dir)) }
+            val designState = remember {
+                MobileDesignState(
+                    initialCollapsedGroups = readCollapsedGroups(dir),
+                    onCollapsedGroupsChange = { writeCollapsedGroups(dir, it) },
+                    initialTerminalFont = readTerminalFont(dir),
+                    onTerminalFontChange = { writeTerminalFont(dir, it) },
+                    initialTerminalFontSize = readTerminalFontSize(dir),
+                    onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
+                    initialUiLanguage = currentUiLanguage.value,
+                    onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
+                )
+            }
+            AppLocaleProvider(currentUiLanguage.value) {
+                MobileDesignApp(
+                    deps,
+                    state = designState,
+                    onVaultReset = onVaultReset,
+                    // Перенос workspace в vault + миграция секретов + reload + восстановление sync-сессии.
+                    onVaultUnlocked = onVaultUnlocked,
+                )
+            }
         }
     }
 
@@ -197,6 +211,22 @@ class MainActivity : FragmentActivity() {
     private fun writeTerminalFontSize(dir: File, px: Int) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_font_size").writeText(px.toString()) }
+        }
+    }
+
+    /**
+     * Язык интерфейса (More → Appearance → Language): стабильный id ([UiLanguage.id]) в файле
+     * `ui_language` (зеркало desktop `main.kt`). Отсутствует/нечитаем/неизвестен → дефолт
+     * ([UiLanguage.DEFAULT] = System — автоопределение по локали ОС). Запись best-effort вне UI-потока.
+     */
+    private fun readUiLanguage(dir: File): UiLanguage = runCatching {
+        UiLanguage.fromId(File(dir, "ui_language").readText().trim())
+    }.getOrDefault(UiLanguage.DEFAULT)
+
+    private fun writeUiLanguage(dir: File, language: UiLanguage) {
+        val id = language.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "ui_language").writeText(id) }
         }
     }
 
@@ -321,6 +351,7 @@ class MainActivity : FragmentActivity() {
                 knownHosts.entries.toList().forEach { knownHosts.forget(it) }
                 writeTerminalFont(dir, TerminalFont.DEFAULT)
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
+                writeUiLanguage(dir, UiLanguage.DEFAULT)
             }
             hosts.reload()
             snippets.reload()

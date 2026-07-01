@@ -1,18 +1,34 @@
 package app.skerry.ui.vault
 
+import androidx.compose.runtime.Composable
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vtail_category_certificates
+import app.skerry.ui.generated.resources.vtail_category_passwords
+import app.skerry.ui.generated.resources.vtail_category_ssh_keys
+import app.skerry.ui.generated.resources.vtail_used_by_one
+import app.skerry.ui.generated.resources.vtail_used_by_other
+import org.jetbrains.compose.resources.stringResource
 
 /**
- * Категории менеджера vault ([title]/[icon] — текст и
- * Material-Symbols-иконка sidebar). Три keychain-категории ([SSH_KEYS]/[PASSWORDS]/[CERTIFICATES])
- * наполняются [Credential] по типу секрета. Все категории живые (бэкенд — открытый vault).
+ * Категории менеджера vault ([icon] — Material-Symbols-иконка sidebar; локализованная подпись —
+ * [title]). Три keychain-категории ([SSH_KEYS]/[PASSWORDS]/[CERTIFICATES]) наполняются [Credential]
+ * по типу секрета. Все категории живые (бэкенд — открытый vault).
  */
-enum class VaultCategoryKind(val title: String, val icon: String) {
-    SSH_KEYS("SSH keys", "key"),
-    PASSWORDS("Passwords", "password"),
-    CERTIFICATES("Certificates", "vpn_lock"),
+enum class VaultCategoryKind(val icon: String) {
+    SSH_KEYS("key"),
+    PASSWORDS("password"),
+    CERTIFICATES("vpn_lock"),
+}
+
+/** Локализованная подпись категории Vault (sidebar/заголовок). */
+@Composable
+fun VaultCategoryKind.title(): String = when (this) {
+    VaultCategoryKind.SSH_KEYS -> stringResource(Res.string.vtail_category_ssh_keys)
+    VaultCategoryKind.PASSWORDS -> stringResource(Res.string.vtail_category_passwords)
+    VaultCategoryKind.CERTIFICATES -> stringResource(Res.string.vtail_category_certificates)
 }
 
 /**
@@ -48,7 +64,9 @@ object VaultPresentation {
     fun hostsUsing(credentialId: String, hosts: List<Host>): List<Host> =
         hosts.filter { it.credentialId == credentialId }
 
-    /** Подпись «used by N host(s)» с правильной формой числа для карточки секрета (desktop + mobile). */
+    /** Локализованная подпись «used by N host(s)» для карточки секрета (desktop + mobile). */
+    @Composable
     fun usedByLabel(count: Int): String =
-        if (count == 1) "used by 1 host" else "used by $count hosts"
+        if (count == 1) stringResource(Res.string.vtail_used_by_one)
+        else stringResource(Res.string.vtail_used_by_other, count)
 }

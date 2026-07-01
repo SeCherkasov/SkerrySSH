@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
+import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZES
@@ -115,6 +116,11 @@ class DesktopDesignState(
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     private val onTerminalFontSizeChange: (Int) -> Unit = {},
+    // Язык интерфейса (Appearance → Language). Стартовое значение читается из персиста при запуске,
+    // колбэк пишет его обратно — выбор переживает перезапуск. Дефолты (System, no-op) сохраняют
+    // прежнее поведение (автоопределение по локали ОС) для мок/превью/тестов.
+    initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
+    private val onUiLanguageChange: (UiLanguage) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -164,6 +170,9 @@ class DesktopDesignState(
 
     /** Кегль шрифта терминала, px (Appearance → Font size). */
     var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
+
+    /** Язык интерфейса (Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
+    var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
 
     /** Открытый диалог управления группой (создание/правка) или `null`. */
     var groupDialog: GroupDialog? by mutableStateOf(null); private set
@@ -343,6 +352,13 @@ class DesktopDesignState(
         if (font == terminalFont) return
         terminalFont = font
         onTerminalFontChange(font)
+    }
+
+    /** Выбрать язык интерфейса и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    fun chooseUiLanguage(language: UiLanguage) {
+        if (language == uiLanguage) return
+        uiLanguage = language
+        onUiLanguageChange(language)
     }
 
     /**

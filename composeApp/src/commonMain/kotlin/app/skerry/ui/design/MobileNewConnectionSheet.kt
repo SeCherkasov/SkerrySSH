@@ -54,6 +54,49 @@ import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.secure.SecureScreen
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_auth_ask
+import app.skerry.ui.generated.resources.conn_auth_ask_desc
+import app.skerry.ui.generated.resources.conn_auth_existing_saved
+import app.skerry.ui.generated.resources.conn_auth_key_desc
+import app.skerry.ui.generated.resources.conn_auth_key_option
+import app.skerry.ui.generated.resources.conn_auth_passphrase_placeholder
+import app.skerry.ui.generated.resources.conn_auth_password
+import app.skerry.ui.generated.resources.conn_auth_password_desc
+import app.skerry.ui.generated.resources.conn_auth_password_option
+import app.skerry.ui.generated.resources.conn_auth_password_placeholder
+import app.skerry.ui.generated.resources.conn_auth_private_key
+import app.skerry.ui.generated.resources.conn_auth_select_credential
+import app.skerry.ui.generated.resources.conn_cancel
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_field_ai_policy_short
+import app.skerry.ui.generated.resources.conn_field_authentication
+import app.skerry.ui.generated.resources.conn_field_baud
+import app.skerry.ui.generated.resources.conn_field_device
+import app.skerry.ui.generated.resources.conn_field_group
+import app.skerry.ui.generated.resources.conn_field_host_address
+import app.skerry.ui.generated.resources.conn_field_name
+import app.skerry.ui.generated.resources.conn_field_port
+import app.skerry.ui.generated.resources.conn_field_protocol
+import app.skerry.ui.generated.resources.conn_field_tags
+import app.skerry.ui.generated.resources.conn_field_username
+import app.skerry.ui.generated.resources.conn_group_delete
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_new_title
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.conn_group_rename_hint
+import app.skerry.ui.generated.resources.conn_group_rename_title
+import app.skerry.ui.generated.resources.conn_protocol_serial
+import app.skerry.ui.generated.resources.conn_protocol_ssh
+import app.skerry.ui.generated.resources.conn_protocol_telnet
+import app.skerry.ui.generated.resources.conn_save
+import app.skerry.ui.generated.resources.conn_save_changes
+import app.skerry.ui.generated.resources.conn_save_connection
+import app.skerry.ui.generated.resources.conn_subtitle_mobile
+import app.skerry.ui.generated.resources.conn_tag_add_placeholder
+import app.skerry.ui.generated.resources.conn_title_edit
+import app.skerry.ui.generated.resources.conn_title_new
+import org.jetbrains.compose.resources.stringResource
 
 
 /**
@@ -122,7 +165,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(if (editHost != null) "Edit connection" else "New connection", color = D.text, size = 20.sp, weight = FontWeight.Bold)
+                Txt(if (editHost != null) stringResource(Res.string.conn_title_edit) else stringResource(Res.string.conn_title_new), color = D.text, size = 20.sp, weight = FontWeight.Bold)
                 Sym(
                     "close",
                     size = 24.sp,
@@ -135,19 +178,19 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 )
             }
             Txt(
-                "Credentials are encrypted with your master password and stay on this device.",
+                stringResource(Res.string.conn_subtitle_mobile),
                 color = D.dim,
                 size = 12.5.sp,
                 lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 18.dp),
             )
 
-            SheetField("Name") { SheetInput(form.name, { form.name = it }, "prod-web-01") }
+            SheetField(stringResource(Res.string.conn_field_name)) { SheetInput(form.name, { form.name = it }, "prod-web-01") }
             Spacer(Modifier.height(14.dp))
-            SheetField("Protocol") { MobileProtocolPicker(form) }
+            SheetField(stringResource(Res.string.conn_field_protocol)) { MobileProtocolPicker(form) }
             Spacer(Modifier.height(14.dp))
             val serial = form.connectionType == ConnectionType.SERIAL
-            SheetField(if (serial) "Device" else "Host address") {
+            SheetField(if (serial) stringResource(Res.string.conn_field_device) else stringResource(Res.string.conn_field_host_address)) {
                 SheetInput(form.address, { form.address = it }, if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45")
             }
             // Пикер обнаруженных портов (Android — USB-OTG): тап заполняет Device. Пусто — только ручной ввод.
@@ -155,27 +198,27 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             Spacer(Modifier.height(14.dp))
             if (form.connectionType == ConnectionType.SSH) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SheetField("Username", Modifier.weight(1f)) {
+                    SheetField(stringResource(Res.string.conn_field_username), Modifier.weight(1f)) {
                         SheetInput(form.username, { form.username = it }, "root")
                     }
-                    SheetField("Port", Modifier.width(84.dp)) {
+                    SheetField(stringResource(Res.string.conn_field_port), Modifier.width(84.dp)) {
                         SheetInput(form.port, { form.port = it }, "22", keyboardType = KeyboardType.Number)
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                SheetField("Authentication") { MobileAuthPicker(form) }
+                SheetField(stringResource(Res.string.conn_field_authentication)) { MobileAuthPicker(form) }
                 Spacer(Modifier.height(14.dp))
             } else {
                 // Telnet/Serial: аутентификации нет; показываем только порт/скорость.
-                SheetField(if (serial) "Baud" else "Port", Modifier.width(120.dp)) {
+                SheetField(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
                     SheetInput(form.port, { form.port = it }, if (serial) "9600" else "23", keyboardType = KeyboardType.Number)
                 }
                 Spacer(Modifier.height(14.dp))
             }
             // Подсказки группы — из уже созданных хостов (паритет desktop GroupPicker); в превью список пуст.
-            SheetField("Group") { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
+            SheetField(stringResource(Res.string.conn_field_group)) { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
             Spacer(Modifier.height(14.dp))
-            SheetField("Tags") {
+            SheetField(stringResource(Res.string.conn_field_tags)) {
                 SheetTags(
                     tags = form.tags,
                     onRemove = { form.removeTag(it) },
@@ -191,7 +234,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
 
             if (LocalFeatures.current.ai || LocalAi.current != null) {
                 Spacer(Modifier.height(14.dp))
-                SheetField("AI policy") { AiPolicyPills(form) }
+                SheetField(stringResource(Res.string.conn_field_ai_policy_short)) { AiPolicyPills(form) }
             }
 
             Spacer(Modifier.height(22.dp))
@@ -204,7 +247,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(if (editHost != null) "Save changes" else "Save connection", color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
+                Txt(if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save_connection), color = Color(0xFF0A1A26), size = 16.sp, weight = FontWeight.Bold)
             }
     }
     // Оверлей «New group» — сиблингом над листом (свой полноэкранный скрим), чтобы корректно подниматься над клавиатурой.
@@ -341,7 +384,7 @@ private fun SheetTags(
                     modifier = Modifier.widthIn(min = 90.dp).onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
-                            if (draft.isEmpty()) Txt("add tag…", color = D.faint, size = 14.sp)
+                            if (draft.isEmpty()) Txt(stringResource(Res.string.conn_tag_add_placeholder), color = D.faint, size = 14.sp)
                             inner()
                         }
                     },
@@ -418,9 +461,9 @@ private fun MobileProtocolPicker(form: NewConnectionFormState) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        MobileProtocolSegment("SSH", form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
-        MobileProtocolSegment("Telnet", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
-        MobileProtocolSegment("Serial", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
+        MobileProtocolSegment(stringResource(Res.string.conn_protocol_ssh), form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
+        MobileProtocolSegment(stringResource(Res.string.conn_protocol_telnet), form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
+        MobileProtocolSegment(stringResource(Res.string.conn_protocol_serial), form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
     }
 }
 
@@ -450,10 +493,10 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
     val saved = credentials?.credentials ?: emptyList()
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
-        AuthMode.ASK -> "Ask every time"
-        AuthMode.NEW_PASSWORD -> "Password"
-        AuthMode.NEW_KEY -> "Private key"
-        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { "${it.label} (saved)" } ?: "Select credential…"
+        AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)
+        AuthMode.NEW_PASSWORD -> stringResource(Res.string.conn_auth_password)
+        AuthMode.NEW_KEY -> stringResource(Res.string.conn_auth_private_key)
+        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { stringResource(Res.string.conn_auth_existing_saved, it.label) } ?: stringResource(Res.string.conn_auth_select_credential)
     }
     Column {
         AnchoredDropdown(
@@ -487,13 +530,13 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
                         .verticalScroll(rememberScrollState())
                         .padding(vertical = 4.dp),
                 ) {
-                    MobileAuthOption("vpn_key_off", "Ask every time", "password requested on connect", form.authMode == AuthMode.ASK) {
+                    MobileAuthOption("vpn_key_off", stringResource(Res.string.conn_auth_ask), stringResource(Res.string.conn_auth_ask_desc), form.authMode == AuthMode.ASK) {
                         form.authMode = AuthMode.ASK; menuOpen = false
                     }
-                    MobileAuthOption("password", "Password…", "store a password in your vault", form.authMode == AuthMode.NEW_PASSWORD) {
+                    MobileAuthOption("password", stringResource(Res.string.conn_auth_password_option), stringResource(Res.string.conn_auth_password_desc), form.authMode == AuthMode.NEW_PASSWORD) {
                         form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false
                     }
-                    MobileAuthOption("key", "Paste private key…", "store an SSH key in your vault", form.authMode == AuthMode.NEW_KEY) {
+                    MobileAuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
                         form.authMode = AuthMode.NEW_KEY; menuOpen = false
                     }
                     // Разделитель перед сохранёнными секретами (паритет desktop AuthPicker).
@@ -511,7 +554,7 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
         when (form.authMode) {
             AuthMode.NEW_PASSWORD -> {
                 Spacer(Modifier.height(12.dp))
-                SheetInput(form.password, { form.password = it }, "password to store", masked = true)
+                SheetInput(form.password, { form.password = it }, stringResource(Res.string.conn_auth_password_placeholder), masked = true)
             }
             AuthMode.NEW_KEY -> {
                 Spacer(Modifier.height(12.dp))
@@ -520,7 +563,7 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
                 // ключа и его визуальную проверку — осознанный trade-off, как на desktop ModalTextField.
                 SheetInput(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 104)
                 Spacer(Modifier.height(12.dp))
-                SheetInput(form.passphrase, { form.passphrase = it }, "key passphrase (optional)", masked = true)
+                SheetInput(form.passphrase, { form.passphrase = it }, stringResource(Res.string.conn_auth_passphrase_placeholder), masked = true)
             }
             else -> {}
         }
@@ -555,7 +598,7 @@ private fun MobileGroupPicker(form: NewConnectionFormState, allHosts: List<Host>
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Txt(if (hasGroup) form.group else "No group", color = if (hasGroup) D.text else D.faint, size = 15.sp)
+                    Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) D.text else D.faint, size = 15.sp)
                     Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
                 }
             },
@@ -570,14 +613,14 @@ private fun MobileGroupPicker(form: NewConnectionFormState, allHosts: List<Host>
                         .verticalScroll(rememberScrollState())
                         .padding(vertical = 4.dp),
                 ) {
-                    MobileGroupOption("No group", selected = !hasGroup) { form.group = ""; menuOpen = false }
+                    MobileGroupOption(stringResource(Res.string.conn_group_none), selected = !hasGroup) { form.group = ""; menuOpen = false }
                     groups.forEach { group ->
                         key(group) {
                             MobileGroupOption(group, selected = form.group == group) { form.group = group; menuOpen = false }
                         }
                     }
                     HLine(modifier = Modifier.padding(vertical = 4.dp))
-                    MobileGroupOption("New group…", selected = false, icon = "add") { menuOpen = false; onCreateGroup() }
+                    MobileGroupOption(stringResource(Res.string.conn_group_new), selected = false, icon = "add") { menuOpen = false; onCreateGroup() }
                 }
             },
         )
@@ -631,7 +674,7 @@ private fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) ->
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .padding(20.dp),
         ) {
-            Txt("New group", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.conn_group_new_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(14.dp))
             SheetInput(name, { name = it }, "Production")
             Spacer(Modifier.height(18.dp))
@@ -645,7 +688,7 @@ private fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) ->
                         .padding(vertical = 13.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Txt("Cancel", color = D.dim, size = 15.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.conn_cancel), color = D.dim, size = 15.sp, weight = FontWeight.Medium)
                 }
                 Box(
                     Modifier
@@ -656,7 +699,7 @@ private fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) ->
                         .padding(vertical = 13.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Txt("Create", color = Color(0xFF0A1A26), size = 15.sp, weight = FontWeight.Bold)
+                    Txt(stringResource(Res.string.conn_create), color = Color(0xFF0A1A26), size = 15.sp, weight = FontWeight.Bold)
                 }
             }
         }
@@ -701,9 +744,9 @@ internal fun MobileGroupRenameDialog(
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .padding(20.dp),
         ) {
-            Txt("Rename group", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.conn_group_rename_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
-            Txt("Hosts in this group move with the new name.", color = D.dim, size = 12.5.sp)
+            Txt(stringResource(Res.string.conn_group_rename_hint), color = D.dim, size = 12.5.sp)
             Spacer(Modifier.height(14.dp))
             SheetInput(name, { name = it }, "Production")
             Spacer(Modifier.height(18.dp))
@@ -714,7 +757,7 @@ internal fun MobileGroupRenameDialog(
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDelete)
                         .padding(horizontal = 14.dp, vertical = 13.dp),
                 ) {
-                    Txt("Delete group", color = D.sunset, size = 15.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.conn_group_delete), color = D.sunset, size = 15.sp, weight = FontWeight.Medium)
                 }
                 Spacer(Modifier.weight(1f))
                 Box(
@@ -724,7 +767,7 @@ internal fun MobileGroupRenameDialog(
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
                         .padding(horizontal = 18.dp, vertical = 13.dp),
                 ) {
-                    Txt("Save", color = Color(0xFF0A1A26), size = 15.sp, weight = FontWeight.Bold)
+                    Txt(stringResource(Res.string.conn_save), color = Color(0xFF0A1A26), size = 15.sp, weight = FontWeight.Bold)
                 }
             }
         }

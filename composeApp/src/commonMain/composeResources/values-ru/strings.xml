@@ -1,0 +1,13 @@
+<resources>
+    <!-- Appearance / раздел оформления -->
+    <string name="appearance_title">Оформление</string>
+    <string name="appearance_subtitle">Выберите тему терминала. Темы применяются к подключению или глобально.</string>
+    <string name="appearance_section_terminal">ТЕРМИНАЛ</string>
+    <string name="appearance_section_interface">ИНТЕРФЕЙС</string>
+    <string name="appearance_font">Шрифт</string>
+    <string name="appearance_font_size">Размер шрифта</string>
+    <string name="appearance_language">Язык</string>
+
+    <!-- Языки интерфейса -->
+    <string name="language_system">Системный</string>
+</resources>

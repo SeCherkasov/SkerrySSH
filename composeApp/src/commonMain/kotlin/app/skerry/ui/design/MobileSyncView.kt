@@ -54,6 +54,76 @@ import app.skerry.ui.sync.SyncSetupForm
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.qr.QrScannerScreen
 import app.skerry.ui.sync.qr.qrScannerAvailable
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.sync_title
+import app.skerry.ui.generated.resources.sync_mobile_intro
+import app.skerry.ui.generated.resources.sync_unavailable_title
+import app.skerry.ui.generated.resources.sync_unavailable_subtitle
+import app.skerry.ui.generated.resources.sync_back
+import app.skerry.ui.generated.resources.sync_setup_title
+import app.skerry.ui.generated.resources.sync_setup_desc
+import app.skerry.ui.generated.resources.sync_connecting
+import app.skerry.ui.generated.resources.sync_connecting_sub
+import app.skerry.ui.generated.resources.sync_syncing
+import app.skerry.ui.generated.resources.sync_storage_choice_title
+import app.skerry.ui.generated.resources.sync_storage_choice_desc
+import app.skerry.ui.generated.resources.sync_storage_local_title
+import app.skerry.ui.generated.resources.sync_storage_local_sub
+import app.skerry.ui.generated.resources.sync_storage_server_title
+import app.skerry.ui.generated.resources.sync_storage_server_sub
+import app.skerry.ui.generated.resources.sync_switch_later
+import app.skerry.ui.generated.resources.sync_reenroll_title
+import app.skerry.ui.generated.resources.sync_reenroll_desc
+import app.skerry.ui.generated.resources.sync_reenroll_action
+import app.skerry.ui.generated.resources.sync_not_now
+import app.skerry.ui.generated.resources.sync_connected_title
+import app.skerry.ui.generated.resources.sync_session_stats
+import app.skerry.ui.generated.resources.sync_sync_now
+import app.skerry.ui.generated.resources.sync_disconnect
+import app.skerry.ui.generated.resources.sync_linked_title
+import app.skerry.ui.generated.resources.sync_reconnect_password
+import app.skerry.ui.generated.resources.sync_field_server_url
+import app.skerry.ui.generated.resources.sync_placeholder_server_url
+import app.skerry.ui.generated.resources.sync_field_account
+import app.skerry.ui.generated.resources.sync_placeholder_account
+import app.skerry.ui.generated.resources.sync_field_master_password
+import app.skerry.ui.generated.resources.sync_placeholder_master_password
+import app.skerry.ui.generated.resources.sync_keep_connected
+import app.skerry.ui.generated.resources.sync_keep_connected_sub
+import app.skerry.ui.generated.resources.sync_insecure_url_warning
+import app.skerry.ui.generated.resources.sync_connect
+import app.skerry.ui.generated.resources.sync_zero_knowledge_password
+import app.skerry.ui.generated.resources.sync_join_title
+import app.skerry.ui.generated.resources.sync_join_desc
+import app.skerry.ui.generated.resources.sync_field_pairing_code
+import app.skerry.ui.generated.resources.sync_placeholder_pairing_code
+import app.skerry.ui.generated.resources.sync_scan_qr
+import app.skerry.ui.generated.resources.sync_field_choose_password
+import app.skerry.ui.generated.resources.sync_placeholder_min_chars
+import app.skerry.ui.generated.resources.sync_field_repeat_password
+import app.skerry.ui.generated.resources.sync_placeholder_repeat
+import app.skerry.ui.generated.resources.sync_passwords_mismatch
+import app.skerry.ui.generated.resources.sync_link_this_device
+import app.skerry.ui.generated.resources.sync_zero_knowledge_account
+import app.skerry.ui.generated.resources.sync_what_syncs
+import app.skerry.ui.generated.resources.sync_what_hosts
+import app.skerry.ui.generated.resources.sync_what_snippets
+import app.skerry.ui.generated.resources.sync_link_device
+import app.skerry.ui.generated.resources.sync_hide
+import app.skerry.ui.generated.resources.sync_linked_devices
+import app.skerry.ui.generated.resources.sync_loading_devices
+import app.skerry.ui.generated.resources.sync_load_devices_failed
+import app.skerry.ui.generated.resources.sync_only_this_device
+import app.skerry.ui.generated.resources.sync_this_device_badge
+import app.skerry.ui.generated.resources.sync_device_linked_current
+import app.skerry.ui.generated.resources.sync_device_linked
+import app.skerry.ui.generated.resources.sync_confirm
+import app.skerry.ui.generated.resources.sync_cancel
+import app.skerry.ui.generated.resources.sync_revoke
+import app.skerry.ui.generated.resources.stail_reenroll_prompt_title
+import app.skerry.ui.generated.resources.stail_reenroll_prompt_cancel
+import app.skerry.ui.generated.resources.stail_reenroll_prompt_subtitle
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Push-экран More → «Security & sync»: self-hosted синхронизация (Phase 2). В мобильном идиоме
@@ -71,16 +141,16 @@ fun MobileSyncScreen(state: MobileDesignState) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = Modifier.clickable(onClick = state::pop))
-            Txt("Sync", color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.sync_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Txt(
-                "End-to-end encrypted sync across your devices. Skerry never sees your data in plaintext.",
+                stringResource(Res.string.sync_mobile_intro),
                 color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
             val sync = LocalSync.current
             if (sync == null) {
-                MobileSyncStatusCard("cloud_off", D.faint, "Sync unavailable", "Not configured on this device.")
+                MobileSyncStatusCard("cloud_off", D.faint, stringResource(Res.string.sync_unavailable_title), stringResource(Res.string.sync_unavailable_subtitle))
             } else {
                 SyncBody(sync)
             }
@@ -139,21 +209,20 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Sym("chevron_left", size = 20.sp, color = D.dim)
-                    Txt("Back", color = D.dim, size = 13.sp)
+                    Txt(stringResource(Res.string.sync_back), color = D.dim, size = 13.sp)
                 }
                 Spacer(Modifier.height(10.dp))
 
-                Txt("Set up sync", color = D.text, size = 22.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.sync_setup_title), color = D.text, size = 22.sp, weight = FontWeight.Bold)
                 Txt(
-                    "Connect this device to your sync server. End-to-end encrypted — Skerry never sees your " +
-                        "data in plaintext.",
+                    stringResource(Res.string.sync_setup_desc),
                     color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
                 )
 
                 when (val s = status) {
                     SyncStatus.Busy -> {
                         Spacer(Modifier.height(8.dp))
-                        MobileSyncStatusCard("sync", D.cyanBright, "Connecting…", "Talking to your sync server.")
+                        MobileSyncStatusCard("sync", D.cyanBright, stringResource(Res.string.sync_connecting), stringResource(Res.string.sync_connecting_sub))
                     }
                     is SyncStatus.Failed -> SyncSetupBody(sync, errorMessage = s.message)
                     else -> SyncSetupBody(sync, errorMessage = null)
@@ -171,28 +240,27 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
 @Composable
 private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit) {
     Txt(
-        "Where should Skerry keep your vault?",
+        stringResource(Res.string.sync_storage_choice_title),
         color = D.text, size = 22.sp, weight = FontWeight.Bold, lineHeight = 28.sp,
     )
     Txt(
-        "Your hosts and keys are always encrypted. Choose whether they stay only on this device or " +
-            "sync across your devices through a server you run.",
+        stringResource(Res.string.sync_storage_choice_desc),
         color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 22.dp),
     )
 
     SyncChoiceCard(
         icon = "lock",
         iconColor = D.moss,
-        title = "Local encrypted storage",
-        subtitle = "Everything stays on this device. No account, no server — the simplest setup.",
+        title = stringResource(Res.string.sync_storage_local_title),
+        subtitle = stringResource(Res.string.sync_storage_local_sub),
         onClick = onLocal,
     )
     Spacer(Modifier.height(12.dp))
     SyncChoiceCard(
         icon = "cloud_sync",
         iconColor = D.cyanBright,
-        title = "Self-hosted sync server",
-        subtitle = "End-to-end encrypted sync across your devices through a server you run.",
+        title = stringResource(Res.string.sync_storage_server_title),
+        subtitle = stringResource(Res.string.sync_storage_server_sub),
         onClick = onSync,
     )
 
@@ -202,7 +270,7 @@ private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Sym("shield_lock", size = 14.sp, color = D.moss)
-        Txt("You can switch later in Settings.", color = D.faint, size = 11.5.sp)
+        Txt(stringResource(Res.string.sync_switch_later), color = D.faint, size = 11.5.sp)
     }
 }
 
@@ -235,13 +303,6 @@ private fun SyncChoiceCard(
     }
 }
 
-/** Промпт включения биометрии при перерегистрации после смены ключа sync (англоязычный, под mobile). */
-private val REENROLL_BIOMETRIC_PROMPT = BiometricPrompt(
-    title = "Re-enable biometric unlock",
-    cancelLabel = "Cancel",
-    subtitle = "Confirm your biometrics to bind quick unlock to the new account key.",
-)
-
 /**
  * Приглашение перерегистрировать отпечаток после того, как подключение к аккаунту приняло его ключ
  * и сбросило включённую биометрию (см. [SyncCoordinator.biometricResetNeeded]). Видно только когда
@@ -262,6 +323,13 @@ private fun BiometricReenrollCard(sync: SyncCoordinator) {
         return
     }
     val scope = rememberCoroutineScope()
+    // Строки промпта резолвим в composable-scope (stringResource нельзя в onClick-лямбде) и держим готовый
+    // объект для передачи в enableBiometric.
+    val reenrollPrompt = BiometricPrompt(
+        title = stringResource(Res.string.stail_reenroll_prompt_title),
+        cancelLabel = stringResource(Res.string.stail_reenroll_prompt_cancel),
+        subtitle = stringResource(Res.string.stail_reenroll_prompt_subtitle),
+    )
 
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.surfaceDeep)
@@ -270,17 +338,16 @@ private fun BiometricReenrollCard(sync: SyncCoordinator) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Sym("fingerprint", size = 22.sp, color = D.cyanBright)
             Column(Modifier.weight(1f)) {
-                Txt("Re-enable fingerprint", color = D.text, size = 14.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.sync_reenroll_title), color = D.text, size = 14.sp, weight = FontWeight.Medium)
                 Txt(
-                    "Connecting to your account changed the vault key, so biometric unlock was turned off. " +
-                        "Set it up again to keep opening Skerry with your fingerprint.",
+                    stringResource(Res.string.sync_reenroll_desc),
                     color = D.faint, size = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp),
                 )
             }
         }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PrimaryButton(
-                "Re-enable",
+                stringResource(Res.string.sync_reenroll_action),
                 icon = "fingerprint",
                 enabled = !controller.biometricInFlight,
                 onClick = {
@@ -288,12 +355,12 @@ private fun BiometricReenrollCard(sync: SyncCoordinator) {
                     // enable оборачивает dataKey под новым ключом; флаг гасим в любом исходе (включил
                     // или отменил промпт) — повторно покажем лишь после следующего принятия ключа.
                     scope.launch {
-                        controller.enableBiometric(REENROLL_BIOMETRIC_PROMPT)
+                        controller.enableBiometric(reenrollPrompt)
                         sync.acknowledgeBiometricReset()
                     }
                 },
             )
-            GhostButton("Not now", onClick = { sync.acknowledgeBiometricReset() }, fg = D.dim)
+            GhostButton(stringResource(Res.string.sync_not_now), onClick = { sync.acknowledgeBiometricReset() }, fg = D.dim)
         }
     }
     Spacer(Modifier.height(16.dp))
@@ -304,21 +371,21 @@ private fun SyncBody(sync: SyncCoordinator) {
     BiometricReenrollCard(sync)
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> {
-            MobileSyncStatusCard("cloud_done", D.moss, "Connected · ${status.accountId}", "Pushed ${status.lastPushed} · pulled ${status.lastPulled} this session")
+            MobileSyncStatusCard("cloud_done", D.moss, stringResource(Res.string.sync_connected_title, status.accountId), stringResource(Res.string.sync_session_stats, status.lastPushed, status.lastPulled))
             // Кнопки в том же стиле, что на desktop (ghost, не залитый primary) — паритет платформ.
             // Mobile объединяет вкладки Account+Sync desktop в один экран, поэтому Sync now и
             // Disconnect живут рядом (на desktop они разнесены по вкладкам).
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                GhostButton("Sync now", onClick = { sync.syncNow() })
-                GhostButton("Disconnect", onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
+                GhostButton(stringResource(Res.string.sync_sync_now), onClick = { sync.syncNow() })
+                GhostButton(stringResource(Res.string.sync_disconnect), onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
             }
             MobileLinkDeviceSection(sync)
             MobileWhatSyncs(sync)
             MobileLinkedDevices(sync)
         }
-        SyncStatus.Busy -> MobileSyncStatusCard("sync", D.cyanBright, "Syncing…", "Talking to your sync server.")
+        SyncStatus.Busy -> MobileSyncStatusCard("sync", D.cyanBright, stringResource(Res.string.sync_syncing), stringResource(Res.string.sync_connecting_sub))
         is SyncStatus.Configured -> {
-            MobileSyncStatusCard("cloud_off", D.amber, "Linked · ${status.accountId}", "Reconnect with your master password.")
+            MobileSyncStatusCard("cloud_off", D.amber, stringResource(Res.string.sync_linked_title, status.accountId), stringResource(Res.string.sync_reconnect_password))
             Spacer(Modifier.height(16.dp))
             SyncSetupBody(sync, errorMessage = null)
         }
@@ -342,12 +409,12 @@ private fun SyncSetupBody(
     val form = SyncSetupForm(serverUrl, account)
     val canSubmit = form.canSubmit(password.length)
 
-    SyncFieldLabel("SERVER URL")
-    MobileSyncField(serverUrl, "https://sync.example.com", KeyboardType.Uri, icon = "dns") { serverUrl = it }
-    SyncFieldLabel("ACCOUNT")
-    MobileSyncField(account, "you@example.com", KeyboardType.Text, icon = "person") { account = it }
-    SyncFieldLabel("MASTER PASSWORD")
-    MobileSyncField(password, "master password", KeyboardType.Password, masked = true, icon = "key") { password = it }
+    SyncFieldLabel(stringResource(Res.string.sync_field_server_url))
+    MobileSyncField(serverUrl, stringResource(Res.string.sync_placeholder_server_url), KeyboardType.Uri, icon = "dns") { serverUrl = it }
+    SyncFieldLabel(stringResource(Res.string.sync_field_account))
+    MobileSyncField(account, stringResource(Res.string.sync_placeholder_account), KeyboardType.Text, icon = "person") { account = it }
+    SyncFieldLabel(stringResource(Res.string.sync_field_master_password))
+    MobileSyncField(password, stringResource(Res.string.sync_placeholder_master_password), KeyboardType.Password, masked = true, icon = "key") { password = it }
 
     Row(
         Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
@@ -363,8 +430,8 @@ private fun SyncSetupBody(
             if (keepConnected) Sym("check", size = 14.sp, color = Color(0xFF0A1A26))
         }
         Column(Modifier.weight(1f)) {
-            Txt("Keep me connected", color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt("Reconnect automatically after restart.", color = D.faint, size = 11.5.sp)
+            Txt(stringResource(Res.string.sync_keep_connected), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.sync_keep_connected_sub), color = D.faint, size = 11.5.sp)
         }
     }
 
@@ -372,7 +439,7 @@ private fun SyncSetupBody(
     if (form.isInsecureUrl) {
         Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("warning", size = 14.sp, color = D.sunset)
-            Txt("Plain http:// — not encrypted in transit. Use https:// for anything but local testing.", color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
+            Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
         }
     }
 
@@ -384,7 +451,7 @@ private fun SyncSetupBody(
     }
 
     PrimaryButton(
-        "Connect",
+        stringResource(Res.string.sync_connect),
         onClick = {
             if (!canSubmit) return@PrimaryButton
             val pw = password.toCharArray() // координатор затрёт массив
@@ -403,7 +470,7 @@ private fun SyncSetupBody(
     )
     Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Sym("shield_lock", size = 14.sp, color = D.moss)
-        Txt("Zero-knowledge · password never leaves this device", color = D.faint, size = 11.sp)
+        Txt(stringResource(Res.string.sync_zero_knowledge_password), color = D.faint, size = 11.sp)
     }
 }
 
@@ -447,14 +514,12 @@ fun PairingJoinScreen(sync: SyncCoordinator, onBack: () -> Unit, onDone: () -> U
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Sym("chevron_left", size = 20.sp, color = D.dim)
-                Txt("Back", color = D.dim, size = 13.sp)
+                Txt(stringResource(Res.string.sync_back), color = D.dim, size = 13.sp)
             }
             Spacer(Modifier.height(10.dp))
-            Txt("Link with a code", color = D.text, size = 22.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.sync_join_title), color = D.text, size = 22.sp, weight = FontWeight.Bold)
             Txt(
-                "On a device that's already signed in, open Settings → Account → Link a device, then " +
-                    "scan its QR or paste the code here. The password you choose below encrypts this " +
-                    "device's vault and can't be recovered — if you lose it, you'll re-link from scratch.",
+                stringResource(Res.string.sync_join_desc),
                 color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
             )
             SyncJoinBody(sync, errorMessage = (status as? SyncStatus.Failed)?.message)
@@ -490,19 +555,19 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     val passwordsMatch = password == confirm
     val canSubmit = code.isNotBlank() && password.length >= MIN_MASTER_PASSWORD_LENGTH && passwordsMatch
 
-    SyncFieldLabel("PAIRING CODE")
-    MobileSyncField(code, "Paste code (sk1.…)", KeyboardType.Text, icon = "qr_code") { code = it }
+    SyncFieldLabel(stringResource(Res.string.sync_field_pairing_code))
+    MobileSyncField(code, stringResource(Res.string.sync_placeholder_pairing_code), KeyboardType.Text, icon = "qr_code") { code = it }
     if (qrScannerAvailable) {
-        GhostButton("Scan QR code", onClick = { showScanner = true }, icon = "photo_camera", modifier = Modifier.padding(top = 10.dp))
+        GhostButton(stringResource(Res.string.sync_scan_qr), onClick = { showScanner = true }, icon = "photo_camera", modifier = Modifier.padding(top = 10.dp))
     }
-    SyncFieldLabel("CHOOSE A PASSWORD FOR THIS DEVICE")
-    MobileSyncField(password, "at least $MIN_MASTER_PASSWORD_LENGTH characters", KeyboardType.Password, masked = true, icon = "key") { password = it }
-    SyncFieldLabel("REPEAT PASSWORD")
-    MobileSyncField(confirm, "repeat to confirm", KeyboardType.Password, masked = true, icon = "key") { confirm = it }
+    SyncFieldLabel(stringResource(Res.string.sync_field_choose_password))
+    MobileSyncField(password, stringResource(Res.string.sync_placeholder_min_chars, MIN_MASTER_PASSWORD_LENGTH), KeyboardType.Password, masked = true, icon = "key") { password = it }
+    SyncFieldLabel(stringResource(Res.string.sync_field_repeat_password))
+    MobileSyncField(confirm, stringResource(Res.string.sync_placeholder_repeat), KeyboardType.Password, masked = true, icon = "key") { confirm = it }
     if (confirm.isNotEmpty() && !passwordsMatch) {
         Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("error", size = 14.sp, color = D.sunset)
-            Txt("Passwords don't match.", color = D.sunset, size = 11.5.sp)
+            Txt(stringResource(Res.string.sync_passwords_mismatch), color = D.sunset, size = 11.5.sp)
         }
     }
 
@@ -520,8 +585,8 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
             if (keepConnected) Sym("check", size = 14.sp, color = Color(0xFF0A1A26))
         }
         Column(Modifier.weight(1f)) {
-            Txt("Keep me connected", color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt("Reconnect automatically after restart.", color = D.faint, size = 11.5.sp)
+            Txt(stringResource(Res.string.sync_keep_connected), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.sync_keep_connected_sub), color = D.faint, size = 11.5.sp)
         }
     }
 
@@ -533,7 +598,7 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     }
 
     PrimaryButton(
-        "Link this device",
+        stringResource(Res.string.sync_link_this_device),
         onClick = {
             if (!canSubmit) return@PrimaryButton
             val pw = password.toCharArray() // координатор затрёт массив
@@ -548,7 +613,7 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     )
     Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Sym("shield_lock", size = 14.sp, color = D.moss)
-        Txt("Zero-knowledge · the account password never travels", color = D.faint, size = 11.sp)
+        Txt(stringResource(Res.string.sync_zero_knowledge_account), color = D.faint, size = 11.sp)
     }
 }
 
@@ -562,13 +627,13 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
 private fun MobileWhatSyncs(sync: SyncCoordinator) {
     val settings = sync.syncSettings.collectAsState().value
     LaunchedEffect(Unit) { sync.refreshSyncSettings() }
-    Txt("WHAT SYNCS", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 4.dp))
+    Txt(stringResource(Res.string.sync_what_syncs), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 4.dp))
     // onToggle читает актуальное значение из flow, не снимок композиции (stale-closure write-write).
-    MobileSyncToggleRow("Hosts & groups", null, on = settings.syncHosts) {
+    MobileSyncToggleRow(stringResource(Res.string.sync_what_hosts), null, on = settings.syncHosts) {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncHosts = !current.syncHosts))
     }
-    MobileSyncToggleRow("Snippets", null, on = settings.syncSnippets) {
+    MobileSyncToggleRow(stringResource(Res.string.sync_what_snippets), null, on = settings.syncSnippets) {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncSnippets = !current.syncSnippets))
     }
@@ -582,7 +647,7 @@ private fun MobileWhatSyncs(sync: SyncCoordinator) {
 private fun MobileLinkDeviceSection(sync: SyncCoordinator) {
     var show by remember { mutableStateOf(false) }
     if (!show) {
-        GhostButton("Link a device", onClick = { show = true }, icon = "qr_code", modifier = Modifier.padding(top = 12.dp))
+        GhostButton(stringResource(Res.string.sync_link_device), onClick = { show = true }, icon = "qr_code", modifier = Modifier.padding(top = 12.dp))
         return
     }
     Spacer(Modifier.height(16.dp))
@@ -591,9 +656,9 @@ private fun MobileLinkDeviceSection(sync: SyncCoordinator) {
             .border(1.dp, D.cyan14, RoundedCornerShape(13.dp)).padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Txt("Link a device", color = D.text, size = 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Txt(stringResource(Res.string.sync_link_device), color = D.text, size = 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable { show = false }.padding(horizontal = 10.dp, vertical = 5.dp)) {
-                Txt("Hide", color = D.dim, size = 12.sp)
+                Txt(stringResource(Res.string.sync_hide), color = D.dim, size = 12.sp)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -636,11 +701,11 @@ private fun MobileLinkedDevices(sync: SyncCoordinator) {
         loading = false
     }
 
-    Txt("LINKED DEVICES", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 6.dp))
+    Txt(stringResource(Res.string.sync_linked_devices), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 6.dp))
     when {
-        loading -> Txt("Loading devices…", color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
-        devices.isEmpty() -> Txt("Couldn't load devices. Try Sync now.", color = D.amber, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
-        devices.size == 1 && devices.first().current -> Txt("Only this device so far.", color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        loading -> Txt(stringResource(Res.string.sync_loading_devices), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.isEmpty() -> Txt(stringResource(Res.string.sync_load_devices_failed), color = D.amber, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.size == 1 && devices.first().current -> Txt(stringResource(Res.string.sync_only_this_device), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
         else -> devices.forEach { d ->
             MobileDeviceRow(
                 device = d,
@@ -665,18 +730,18 @@ private fun MobileDeviceRow(device: RemoteDevice, onRevoke: (() -> Unit)?) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Txt(device.name, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
-                if (device.current) Txt("● this device", color = D.moss, size = 10.sp)
+                if (device.current) Txt(stringResource(Res.string.sync_this_device_badge), color = D.moss, size = 10.sp)
             }
-            Txt(if (device.current) "linked · this device" else "linked device", color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+            Txt(if (device.current) stringResource(Res.string.sync_device_linked_current) else stringResource(Res.string.sync_device_linked), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
         }
         if (onRevoke != null) {
             if (confirming) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MobileRevokeChip("Confirm", D.sunset) { confirming = false; onRevoke() }
-                    MobileRevokeChip("Cancel", D.dim) { confirming = false }
+                    MobileRevokeChip(stringResource(Res.string.sync_confirm), D.sunset) { confirming = false; onRevoke() }
+                    MobileRevokeChip(stringResource(Res.string.sync_cancel), D.dim) { confirming = false }
                 }
             } else {
-                MobileRevokeChip("Revoke", D.dim) { confirming = true }
+                MobileRevokeChip(stringResource(Res.string.sync_revoke), D.dim) { confirming = true }
             }
         }
     }

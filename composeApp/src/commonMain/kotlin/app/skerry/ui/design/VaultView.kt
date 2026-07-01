@@ -63,6 +63,74 @@ import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.SshKeyType
 import app.skerry.shared.vault.SshPublicKeyInfo
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vault_add
+import app.skerry.ui.generated.resources.vault_add_password
+import app.skerry.ui.generated.resources.vault_any_principal
+import app.skerry.ui.generated.resources.vault_badge_expired
+import app.skerry.ui.generated.resources.vault_cancel
+import app.skerry.ui.generated.resources.vault_cert_key_id
+import app.skerry.ui.generated.resources.vault_cert_read_error
+import app.skerry.ui.generated.resources.vault_cert_unreadable
+import app.skerry.ui.generated.resources.vault_cert_valid_summary
+import app.skerry.ui.generated.resources.vault_confirm_master_subtitle
+import app.skerry.ui.generated.resources.vault_confirm_master_title
+import app.skerry.ui.generated.resources.vault_copy
+import app.skerry.ui.generated.resources.vault_copy_certificate
+import app.skerry.ui.generated.resources.vault_copy_password
+import app.skerry.ui.generated.resources.vault_copy_public_key
+import app.skerry.ui.generated.resources.vault_delete
+import app.skerry.ui.generated.resources.vault_delete_detail_bound
+import app.skerry.ui.generated.resources.vault_delete_detail_none
+import app.skerry.ui.generated.resources.vault_delete_title
+import app.skerry.ui.generated.resources.vault_dialog_add_password_subtitle
+import app.skerry.ui.generated.resources.vault_dialog_generate_subtitle
+import app.skerry.ui.generated.resources.vault_dialog_generate_title
+import app.skerry.ui.generated.resources.vault_dialog_import_subtitle
+import app.skerry.ui.generated.resources.vault_e2e_description
+import app.skerry.ui.generated.resources.vault_e2e_encrypted
+import app.skerry.ui.generated.resources.vault_empty_certificates_hint
+import app.skerry.ui.generated.resources.vault_empty_certificates_title
+import app.skerry.ui.generated.resources.vault_empty_passwords_hint
+import app.skerry.ui.generated.resources.vault_empty_passwords_title
+import app.skerry.ui.generated.resources.vault_empty_ssh_hint
+import app.skerry.ui.generated.resources.vault_empty_ssh_title
+import app.skerry.ui.generated.resources.vault_export
+import app.skerry.ui.generated.resources.vault_field_algorithm
+import app.skerry.ui.generated.resources.vault_field_certificate
+import app.skerry.ui.generated.resources.vault_field_master_password
+import app.skerry.ui.generated.resources.vault_field_name
+import app.skerry.ui.generated.resources.vault_field_passphrase
+import app.skerry.ui.generated.resources.vault_field_password
+import app.skerry.ui.generated.resources.vault_field_private_key_pem
+import app.skerry.ui.generated.resources.vault_generate
+import app.skerry.ui.generated.resources.vault_generate_key
+import app.skerry.ui.generated.resources.vault_import
+import app.skerry.ui.generated.resources.vault_import_certificate
+import app.skerry.ui.generated.resources.vault_key_unreadable
+import app.skerry.ui.generated.resources.vault_label_fingerprint
+import app.skerry.ui.generated.resources.vault_label_principals
+import app.skerry.ui.generated.resources.vault_label_public_key
+import app.skerry.ui.generated.resources.vault_label_serial
+import app.skerry.ui.generated.resources.vault_label_signing_ca
+import app.skerry.ui.generated.resources.vault_label_valid
+import app.skerry.ui.generated.resources.vault_meta_any_principal
+import app.skerry.ui.generated.resources.vault_meta_certificate
+import app.skerry.ui.generated.resources.vault_meta_password
+import app.skerry.ui.generated.resources.vault_not_attached
+import app.skerry.ui.generated.resources.vault_password_mismatch_retry
+import app.skerry.ui.generated.resources.vault_placeholder_master_password
+import app.skerry.ui.generated.resources.vault_placeholder_name_cert
+import app.skerry.ui.generated.resources.vault_placeholder_name_key
+import app.skerry.ui.generated.resources.vault_placeholder_name_password
+import app.skerry.ui.generated.resources.vault_placeholder_optional
+import app.skerry.ui.generated.resources.vault_placeholder_password
+import app.skerry.ui.generated.resources.vault_sidebar_header
+import app.skerry.ui.generated.resources.vault_subtitle_certificate
+import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
+import app.skerry.ui.generated.resources.vault_subtitle_password
+import app.skerry.ui.generated.resources.vault_subtitle_private_key
+import app.skerry.ui.generated.resources.vault_used_by
 import app.skerry.ui.host.HostDraft
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -72,6 +140,7 @@ import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.vault.SecretCopyAuthorizer
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
+import app.skerry.ui.vault.title
 import app.skerry.ui.vault.copyPasswordToClipboard
 import app.skerry.ui.vault.copyTextToClipboard
 import app.skerry.ui.vault.exportTextFile
@@ -79,6 +148,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Vault view. С живым keychain ([LocalCredentials]) рисует реальные данные открытого vault:
@@ -267,11 +337,11 @@ private fun VaultSidebar(
     onSelect: (VaultCategoryKind) -> Unit,
 ) {
     Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
-        Txt("VAULT", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+        Txt(stringResource(Res.string.vault_sidebar_header), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
         VaultPresentation.sidebarCategories.forEach { kind ->
             VaultCategoryRow(
                 icon = kind.icon,
-                label = kind.title,
+                label = kind.title(),
                 count = VaultPresentation.count(kind, credentials).toString(),
                 active = kind == active,
                 onClick = { onSelect(kind) },
@@ -283,9 +353,9 @@ private fun VaultSidebar(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Sym("lock", size = 15.sp, color = D.moss)
-                Txt("End-to-end encrypted", color = D.moss, size = 11.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.vault_e2e_encrypted), color = D.moss, size = 11.sp, weight = FontWeight.SemiBold)
             }
-            Txt("Private keys are sealed with your master password and never sync in plaintext.", color = D.dim, size = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp))
+            Txt(stringResource(Res.string.vault_e2e_description), color = D.dim, size = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
@@ -322,11 +392,11 @@ private fun VaultHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Txt(category.title, color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+        Txt(category.title(), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
         when (category) {
-            VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton("Generate key", onClick = onGenerate, icon = "add")
-            VaultCategoryKind.PASSWORDS -> PrimaryButton("Add password", onClick = onAddPassword, icon = "add")
-            VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton("Import certificate", onClick = onImportCert, icon = "add")
+            VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add")
+            VaultCategoryKind.PASSWORDS -> PrimaryButton(stringResource(Res.string.vault_add_password), onClick = onAddPassword, icon = "add")
+            VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add")
         }
     }
 }
@@ -359,11 +429,11 @@ private fun LiveSecretCard(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Txt(credential.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
                         info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp) }
-                        if (info?.expired == true) Badge("EXPIRED", bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, radius = 3, size = 9.5.sp)
+                        if (info?.expired == true) Badge(stringResource(Res.string.vault_badge_expired), bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, radius = 3, size = 9.5.sp)
                     }
                     val meta = when {
-                        info == null -> "Certificate · $usedBy"
-                        info.principals.isEmpty() -> "any principal · $usedBy"
+                        info == null -> stringResource(Res.string.vault_meta_certificate, usedBy)
+                        info.principals.isEmpty() -> stringResource(Res.string.vault_meta_any_principal, usedBy)
                         else -> "${info.principals.joinToString(", ")} · $usedBy"
                     }
                     Txt(meta, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
@@ -385,7 +455,7 @@ private fun LiveSecretCard(
                 SecretIcon("password", tinted = false, color = D.dim)
                 Column(Modifier.weight(1f)) {
                     Txt(credential.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-                    Txt("Password · $usedBy", color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
+                    Txt(stringResource(Res.string.vault_meta_password, usedBy), color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
                 }
             }
         }
@@ -409,9 +479,9 @@ private fun VaultEmptyCategory(category: VaultCategoryKind) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym(category.icon, size = 26.sp, color = D.faint)
             val (title, hint) = when (category) {
-                VaultCategoryKind.SSH_KEYS -> "No SSH keys yet" to "Generate a key — it's sealed in your vault and ready to attach to hosts."
-                VaultCategoryKind.PASSWORDS -> "No passwords yet" to "Add a password — it's stored encrypted and reusable across hosts."
-                VaultCategoryKind.CERTIFICATES -> "No certificates yet" to "Import a CA-signed certificate with its private key — sealed in your vault and ready to attach to hosts."
+                VaultCategoryKind.SSH_KEYS -> stringResource(Res.string.vault_empty_ssh_title) to stringResource(Res.string.vault_empty_ssh_hint)
+                VaultCategoryKind.PASSWORDS -> stringResource(Res.string.vault_empty_passwords_title) to stringResource(Res.string.vault_empty_passwords_hint)
+                VaultCategoryKind.CERTIFICATES -> stringResource(Res.string.vault_empty_certificates_title) to stringResource(Res.string.vault_empty_certificates_hint)
             }
             Txt(title, color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
             if (hint.isNotEmpty()) Txt(hint, color = D.faint, size = 11.5.sp)
@@ -470,9 +540,9 @@ private fun LiveSecretDetail(
         is CredentialSecret.Password -> Triple("password", D.dim, false)
     }
     val subtitle = when (secret) {
-        is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { "$it certificate" } ?: "Certificate"
-        is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: "Private key"
-        is CredentialSecret.Password -> "Password"
+        is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { stringResource(Res.string.vault_subtitle_certificate_typed, it) } ?: stringResource(Res.string.vault_subtitle_certificate)
+        is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: stringResource(Res.string.vault_subtitle_private_key)
+        is CredentialSecret.Password -> stringResource(Res.string.vault_subtitle_password)
     }
     Column(Modifier.width(340.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
         Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
@@ -485,11 +555,11 @@ private fun LiveSecretDetail(
         when (secret) {
             is CredentialSecret.Certificate -> CertificateDetailBody(certInfo, mono)
             is CredentialSecret.PrivateKey -> {
-                DetailLabel("Public key")
+                DetailLabel(stringResource(Res.string.vault_label_public_key))
                 Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(D.terminalBg).border(1.dp, D.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Txt(keyInfo?.publicKeyOpenSsh ?: "Key could not be read", color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
+                    Txt(keyInfo?.publicKeyOpenSsh ?: stringResource(Res.string.vault_key_unreadable), color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
                 }
-                DetailLabel("Fingerprint")
+                DetailLabel(stringResource(Res.string.vault_label_fingerprint))
                 Txt(keyInfo?.fingerprintSha256 ?: "—", color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
             }
             is CredentialSecret.Password -> Unit
@@ -498,25 +568,25 @@ private fun LiveSecretDetail(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             when (secret) {
                 is CredentialSecret.Certificate -> {
-                    PrimaryButton("Copy certificate", onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                    PrimaryButton(stringResource(Res.string.vault_copy_certificate), onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GhostButton("Export", onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, modifier = Modifier.weight(1f))
-                        GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                        GhostButton(stringResource(Res.string.vault_export), onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, modifier = Modifier.weight(1f))
+                        GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
                     }
                 }
                 is CredentialSecret.PrivateKey -> {
-                    PrimaryButton("Copy public key", onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                    PrimaryButton(stringResource(Res.string.vault_copy_public_key), onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GhostButton("Export", onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
-                        GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                        GhostButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
+                        GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
                     }
                 }
                 is CredentialSecret.Password -> {
                     // Пароль — чувствительный: копирование требует повторной аутентификации
                     // (биометрия/мастер-пароль, см. onCopyPassword) и идёт платформенным путём
                     // (Android: sensitive-клип + автоочистка), а не обычным буфером, как cert/публичный ключ.
-                    PrimaryButton("Copy password", onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                    GhostButton("Delete", onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
+                    PrimaryButton(stringResource(Res.string.vault_copy_password), onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                    GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -527,9 +597,9 @@ private fun LiveSecretDetail(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
-    DetailLabel("Used by · ${hosts.size} ${if (hosts.size == 1) "host" else "hosts"}")
+    DetailLabel(stringResource(Res.string.vault_used_by, hosts.size))
     if (hosts.isEmpty()) {
-        Txt("Not attached to any host yet.", color = D.faint, size = 11.sp, modifier = Modifier.padding(bottom = 20.dp))
+        Txt(stringResource(Res.string.vault_not_attached), color = D.faint, size = 11.sp, modifier = Modifier.padding(bottom = 20.dp))
     } else {
         FlowRow(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             hosts.forEach { HostPill(it.label, mono) }
@@ -541,30 +611,30 @@ internal fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun CertificateDetailBody(info: SshCertificateInfo?, mono: FontFamily) {
-    DetailLabel("Certificate")
+    DetailLabel(stringResource(Res.string.vault_subtitle_certificate))
     Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(D.terminalBg).border(1.dp, D.moss.copy(alpha = 0.12f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
         Txt(
-            if (info != null) "Key ID: ${info.keyId}" else "Certificate could not be read",
+            if (info != null) stringResource(Res.string.vault_cert_key_id, info.keyId) else stringResource(Res.string.vault_cert_unreadable),
             color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp,
         )
     }
     if (info == null) return
-    DetailLabel("Principals")
+    DetailLabel(stringResource(Res.string.vault_label_principals))
     if (info.principals.isEmpty()) {
-        Txt("any principal", color = D.faint, size = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+        Txt(stringResource(Res.string.vault_any_principal), color = D.faint, size = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
     } else {
         FlowRow(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             info.principals.forEach { HostPill(it, mono) }
         }
     }
-    DetailLabel("Valid")
+    DetailLabel(stringResource(Res.string.vault_label_valid))
     Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Txt("${info.validFrom} → ${info.validUntil}", color = D.textBright, size = 11.sp, font = mono)
-        if (info.expired) Badge("EXPIRED", bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, radius = 3, size = 9.5.sp)
+        if (info.expired) Badge(stringResource(Res.string.vault_badge_expired), bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, radius = 3, size = 9.5.sp)
     }
-    DetailLabel("Serial")
+    DetailLabel(stringResource(Res.string.vault_label_serial))
     Txt(info.serial, color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
-    DetailLabel("Signing CA")
+    DetailLabel(stringResource(Res.string.vault_label_signing_ca))
     Txt(info.caFingerprintSha256, color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
 }
 
@@ -575,15 +645,15 @@ internal fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, t
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(SshKeyType.ED25519) }
     val valid = name.isNotBlank()
-    VaultDialogScaffold("Generate SSH key", "A new key pair is sealed in your vault — no passphrase needed.", onDismiss) {
-        DialogField("NAME", name, { name = it }, placeholder = "e.g. work-laptop")
-        Txt("ALGORITHM", color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 16.dp, bottom = 6.dp))
+    VaultDialogScaffold(stringResource(Res.string.vault_dialog_generate_title), stringResource(Res.string.vault_dialog_generate_subtitle), onDismiss) {
+        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = stringResource(Res.string.vault_placeholder_name_key))
+        Txt(stringResource(Res.string.vault_field_algorithm), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 16.dp, bottom = 6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SshKeyType.entries.forEach { option ->
                 Chip(option.label, active = option == type, modifier = Modifier.clickable { type = option })
             }
         }
-        DialogButtons(confirmLabel = "Generate", confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), type) })
+        DialogButtons(confirmLabel = stringResource(Res.string.vault_generate), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), type) })
     }
 }
 
@@ -592,12 +662,12 @@ internal fun AddPasswordDialog(onDismiss: () -> Unit, onCreate: (name: String, p
     var name by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val valid = name.isNotBlank() && password.isNotEmpty()
-    VaultDialogScaffold("Add password", "Stored encrypted in your vault and reusable across hosts.", onDismiss) {
-        DialogField("NAME", name, { name = it }, placeholder = "e.g. db-admin")
+    VaultDialogScaffold(stringResource(Res.string.vault_add_password), stringResource(Res.string.vault_dialog_add_password_subtitle), onDismiss) {
+        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = stringResource(Res.string.vault_placeholder_name_password))
         Box(Modifier.padding(top = 16.dp)) {
-            DialogField("PASSWORD", password, { password = it }, placeholder = "secret", password = true)
+            DialogField(stringResource(Res.string.vault_field_password), password, { password = it }, placeholder = stringResource(Res.string.vault_placeholder_password), password = true)
         }
-        DialogButtons(confirmLabel = "Add", confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), password) })
+        DialogButtons(confirmLabel = stringResource(Res.string.vault_add), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), password) })
     }
 }
 
@@ -616,25 +686,28 @@ internal fun ImportCertificateDialog(
     val certInvalid = certificate.isNotBlank() && info == null
     val valid = name.isNotBlank() && pem.isNotBlank() && info != null
 
-    VaultDialogScaffold("Import certificate", "A CA-signed certificate and its private key are sealed in your vault.", onDismiss) {
-        DialogField("NAME", name, { name = it }, placeholder = "e.g. prod-access")
+    VaultDialogScaffold(stringResource(Res.string.vault_import_certificate), stringResource(Res.string.vault_dialog_import_subtitle), onDismiss) {
+        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = stringResource(Res.string.vault_placeholder_name_cert))
         Box(Modifier.padding(top = 16.dp)) {
-            DialogField("PRIVATE KEY (PEM)", pem, { pem = it }, placeholder = "-----BEGIN OPENSSH PRIVATE KEY-----", singleLine = false, keyboardType = KeyboardType.Password)
+            DialogField(stringResource(Res.string.vault_field_private_key_pem), pem, { pem = it }, placeholder = "-----BEGIN OPENSSH PRIVATE KEY-----", singleLine = false, keyboardType = KeyboardType.Password)
         }
         Box(Modifier.padding(top = 16.dp)) {
-            DialogField("CERTIFICATE (*-cert.pub)", certificate, { certificate = it }, placeholder = "ssh-…-cert-v01@openssh.com …", singleLine = false)
+            DialogField(stringResource(Res.string.vault_field_certificate), certificate, { certificate = it }, placeholder = "ssh-…-cert-v01@openssh.com …", singleLine = false)
         }
         Box(Modifier.padding(top = 16.dp)) {
-            DialogField("PASSPHRASE (if any)", passphrase, { passphrase = it }, placeholder = "optional", password = true)
+            DialogField(stringResource(Res.string.vault_field_passphrase), passphrase, { passphrase = it }, placeholder = stringResource(Res.string.vault_placeholder_optional), password = true)
         }
         when {
-            certInvalid -> Txt("Couldn't read this certificate — expected an OpenSSH *-cert.pub line.", color = D.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
-            info != null -> Txt(
-                "${info.keyTypeLabel} · ${if (info.principals.isEmpty()) "any principal" else info.principals.joinToString(", ")} · valid until ${info.validUntil}",
-                color = D.moss, size = 11.sp, modifier = Modifier.padding(top = 12.dp),
-            )
+            certInvalid -> Txt(stringResource(Res.string.vault_cert_read_error), color = D.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
+            info != null -> {
+                val principalsPart = if (info.principals.isEmpty()) stringResource(Res.string.vault_any_principal) else info.principals.joinToString(", ")
+                Txt(
+                    stringResource(Res.string.vault_cert_valid_summary, info.keyTypeLabel, principalsPart, info.validUntil),
+                    color = D.moss, size = 11.sp, modifier = Modifier.padding(top = 12.dp),
+                )
+            }
         }
-        DialogButtons(confirmLabel = "Import", confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), pem.trim(), certificate.trim(), passphrase.ifBlank { null }) })
+        DialogButtons(confirmLabel = stringResource(Res.string.vault_import), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), pem.trim(), certificate.trim(), passphrase.ifBlank { null }) })
     }
 }
 
@@ -646,28 +719,28 @@ internal fun ImportCertificateDialog(
 @Composable
 internal fun PasswordConfirmDialog(error: Boolean, busy: Boolean, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var password by remember { mutableStateOf("") }
-    VaultDialogScaffold("Confirm master password", "Enter your master password to copy this secret to the clipboard.", onDismiss) {
-        DialogField("MASTER PASSWORD", password, { password = it }, placeholder = "master password", password = true)
-        if (error) Txt("That password didn't match — try again.", color = D.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
+    VaultDialogScaffold(stringResource(Res.string.vault_confirm_master_title), stringResource(Res.string.vault_confirm_master_subtitle), onDismiss) {
+        DialogField(stringResource(Res.string.vault_field_master_password), password, { password = it }, placeholder = stringResource(Res.string.vault_placeholder_master_password), password = true)
+        if (error) Txt(stringResource(Res.string.vault_password_mismatch_retry), color = D.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
         // confirmEnabled гаснет на время сверки (Argon2id) — без этого двойной тап запустил бы её дважды.
-        DialogButtons(confirmLabel = "Copy", confirmEnabled = password.isNotEmpty() && !busy, onDismiss = onDismiss, onConfirm = { onConfirm(password) })
+        DialogButtons(confirmLabel = stringResource(Res.string.vault_copy), confirmEnabled = password.isNotEmpty() && !busy, onDismiss = onDismiss, onConfirm = { onConfirm(password) })
     }
 }
 
 @Composable
 internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    VaultDialogScaffold("Delete \"$label\"?", null, onDismiss) {
+    VaultDialogScaffold(stringResource(Res.string.vault_delete_title, label), null, onDismiss) {
         val detail = if (boundHostCount == 0) {
-            "This is removed from your vault. This can't be undone."
+            stringResource(Res.string.vault_delete_detail_none)
         } else {
-            "$boundHostCount ${if (boundHostCount == 1) "host" else "hosts"} will lose this credential and ask for a password on next connect. This can't be undone."
+            stringResource(Res.string.vault_delete_detail_bound, boundHostCount)
         }
         Txt(detail, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 4.dp))
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                Txt("Cancel", color = D.dim, size = 12.5.sp)
+                Txt(stringResource(Res.string.vault_cancel), color = D.dim, size = 12.5.sp)
             }
-            PrimaryButton("Delete", onClick = onConfirm, bg = D.sunset, fg = Color(0xFF1A0B07))
+            PrimaryButton(stringResource(Res.string.vault_delete), onClick = onConfirm, bg = D.sunset, fg = Color(0xFF1A0B07))
         }
     }
 }
@@ -782,7 +855,7 @@ private fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDismi
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-            Txt("Cancel", color = D.dim, size = 12.5.sp)
+            Txt(stringResource(Res.string.vault_cancel), color = D.dim, size = 12.5.sp)
         }
         PrimaryButton(confirmLabel, onClick = { if (confirmEnabled) onConfirm() }, bg = if (confirmEnabled) D.cyan else D.cyan.copy(alpha = 0.4f))
     }
@@ -796,7 +869,7 @@ private fun MockVaultView() {
     val mono = LocalFonts.current.mono
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
-            Txt("VAULT", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+            Txt(stringResource(Res.string.vault_sidebar_header), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
             VaultCategory("key", "SSH keys", "4", active = true)
             VaultCategory("password", "Passwords", "12")
             VaultCategory("vpn_lock", "Certificates", "2")
@@ -806,9 +879,9 @@ private fun MockVaultView() {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Sym("lock", size = 15.sp, color = D.moss)
-                    Txt("End-to-end encrypted", color = D.moss, size = 11.sp, weight = FontWeight.SemiBold)
+                    Txt(stringResource(Res.string.vault_e2e_encrypted), color = D.moss, size = 11.sp, weight = FontWeight.SemiBold)
                 }
-                Txt("Private keys are sealed with your master password and never sync in plaintext.", color = D.dim, size = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp))
+                Txt(stringResource(Res.string.vault_e2e_description), color = D.dim, size = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
         VLine(D.line)
@@ -819,7 +892,7 @@ private fun MockVaultView() {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Txt("SSH keys", color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-                PrimaryButton("Generate key", onClick = {}, icon = "add")
+                PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = {}, icon = "add")
             }
             HLine()
             Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -932,11 +1005,11 @@ private fun KeyDetail(mono: FontFamily) {
                 Txt("ED25519 · 256-bit", color = D.dim, size = 11.5.sp)
             }
         }
-        DetailLabel("Public key")
+        DetailLabel(stringResource(Res.string.vault_label_public_key))
         Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(D.terminalBg).border(1.dp, D.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
             Txt("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH8c3F1a2bQz9pK7mLwR0vNqz9pKmaya@skerry.dev", color = D.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
         }
-        DetailLabel("Fingerprint")
+        DetailLabel(stringResource(Res.string.vault_label_fingerprint))
         Txt("SHA256:8c3F1a2bQz9pK7mLwR0vNqz9pK", color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
         DetailLabel("Used by · 6 hosts")
         Row(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -949,10 +1022,10 @@ private fun KeyDetail(mono: FontFamily) {
             HostPill("+2", mono, dim = true)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton("Copy public key", onClick = {}, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+            PrimaryButton(stringResource(Res.string.vault_copy_public_key), onClick = {}, icon = "content_copy", modifier = Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GhostButton("Export", onClick = {}, modifier = Modifier.weight(1f))
-                GhostButton("Delete", onClick = {}, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                GhostButton(stringResource(Res.string.vault_export), onClick = {}, modifier = Modifier.weight(1f))
+                GhostButton(stringResource(Res.string.vault_delete), onClick = {}, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
             }
         }
     }

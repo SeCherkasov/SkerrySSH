@@ -37,6 +37,30 @@ import app.skerry.ui.known.KnownHostEntry
 import app.skerry.ui.known.KnownHostStatus
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.known.shortFingerprint
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_known_accept_new_key
+import app.skerry.ui.generated.resources.lib_known_col_fingerprint
+import app.skerry.ui.generated.resources.lib_known_col_first_seen
+import app.skerry.ui.generated.resources.lib_known_col_host
+import app.skerry.ui.generated.resources.lib_known_col_key_type
+import app.skerry.ui.generated.resources.lib_known_col_status
+import app.skerry.ui.generated.resources.lib_known_dismiss
+import app.skerry.ui.generated.resources.lib_known_empty_desc
+import app.skerry.ui.generated.resources.lib_known_empty_title
+import app.skerry.ui.generated.resources.lib_known_forget_key
+import app.skerry.ui.generated.resources.lib_known_fp_mismatch
+import app.skerry.ui.generated.resources.lib_known_key_changed_for
+import app.skerry.ui.generated.resources.lib_known_mismatch_body
+import app.skerry.ui.generated.resources.lib_known_now_offered
+import app.skerry.ui.generated.resources.lib_known_previously_recorded
+import app.skerry.ui.generated.resources.lib_known_reinstall_note
+import app.skerry.ui.generated.resources.lib_known_reject_block
+import app.skerry.ui.generated.resources.lib_known_review_fingerprint
+import app.skerry.ui.generated.resources.lib_known_status_changed
+import app.skerry.ui.generated.resources.lib_known_status_verified
+import app.skerry.ui.generated.resources.lib_known_subtitle
+import app.skerry.ui.generated.resources.lib_known_title
+import org.jetbrains.compose.resources.stringResource
 
 private data class KnownHost(val name: String, val keyType: String, val fp: String, val seen: String, val changed: Boolean)
 
@@ -65,8 +89,8 @@ fun KnownHostsView() {
 @Composable
 private fun KnownHostsHeader() {
     Column(Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 22.dp, vertical = 14.dp)) {
-        Txt("Known hosts", color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-        Txt("Verified host key fingerprints. Skerry warns when a key changes.", color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
+        Txt(stringResource(Res.string.lib_known_title), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+        Txt(stringResource(Res.string.lib_known_subtitle), color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
     }
 }
 
@@ -76,11 +100,11 @@ private fun KnownHostsTableHeader() {
         Modifier.fillMaxWidth().background(Color(0x05FFFFFF)).padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        KHeader("HOST", Modifier.weight(1f))
-        KHeader("KEY TYPE", Modifier.width(90.dp))
-        KHeader("FINGERPRINT (SHA256)", Modifier.weight(1.4f))
-        KHeader("FIRST SEEN", Modifier.width(100.dp))
-        KHeader("STATUS", Modifier.width(80.dp))
+        KHeader(stringResource(Res.string.lib_known_col_host), Modifier.weight(1f))
+        KHeader(stringResource(Res.string.lib_known_col_key_type), Modifier.width(90.dp))
+        KHeader(stringResource(Res.string.lib_known_col_fingerprint), Modifier.weight(1.4f))
+        KHeader(stringResource(Res.string.lib_known_col_first_seen), Modifier.width(100.dp))
+        KHeader(stringResource(Res.string.lib_known_col_status), Modifier.width(80.dp))
     }
 }
 
@@ -147,16 +171,16 @@ private fun MismatchBanner(mismatch: HostKeyMismatch, onReview: () -> Unit, onDi
     ) {
         Sym("gpp_maybe", size = 20.sp, color = D.sunset)
         Column(Modifier.weight(1f)) {
-            Txt("Host key changed for ${mismatch.host}", color = D.sunset, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.lib_known_key_changed_for, mismatch.host), color = D.sunset, size = 13.sp, weight = FontWeight.SemiBold)
             Txt(
-                "The ${displayKeyType(mismatch.keyType).uppercase()} fingerprint differs from the one Skerry recorded. This could be a re-install — or a man-in-the-middle. Verify before reconnecting.",
+                stringResource(Res.string.lib_known_mismatch_body, displayKeyType(mismatch.keyType).uppercase()),
                 color = D.dim, size = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp),
             )
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ClickableSmallButton("Review fingerprint", D.sunset, D.sunset.copy(alpha = 0.4f), bold = true, onClick = onReview)
+                ClickableSmallButton(stringResource(Res.string.lib_known_review_fingerprint), D.sunset, D.sunset.copy(alpha = 0.4f), bold = true, onClick = onReview)
                 // «Dismiss» здесь = reject (баннер прячется, ключ блокируется). Честная подпись, чтобы
                 // пользователь не блокировал легитимную смену ключа, думая, что лишь скрывает уведомление.
-                ClickableSmallButton("Reject & block", D.dim, D.cyan14, onClick = onDismiss)
+                ClickableSmallButton(stringResource(Res.string.lib_known_reject_block), D.dim, D.cyan14, onClick = onDismiss)
             }
         }
     }
@@ -190,10 +214,10 @@ private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -
                 if (!hovered) {
                     if (changed) {
                         Sym("error", size = 14.sp, color = D.sunset)
-                        Txt("Changed", color = D.sunset, size = 11.sp)
+                        Txt(stringResource(Res.string.lib_known_status_changed), color = D.sunset, size = 11.sp)
                     } else {
                         Sym("verified", size = 14.sp, color = D.moss)
-                        Txt("Verified", color = D.moss, size = 11.sp)
+                        Txt(stringResource(Res.string.lib_known_status_verified), color = D.moss, size = 11.sp)
                     }
                 }
             }
@@ -212,7 +236,7 @@ private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Sym("delete", size = 14.sp, color = D.sunset)
-                Txt("Forget key", color = D.sunset, size = 11.5.sp)
+                Txt(stringResource(Res.string.lib_known_forget_key), color = D.sunset, size = 11.5.sp)
             }
         }
     }
@@ -223,8 +247,8 @@ private fun EmptyKnownHosts() {
     Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym("fingerprint", size = 26.sp, color = D.faint)
-            Txt("No known hosts yet", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            Txt("Connect to a host — its key is trusted on first use and recorded here.", color = D.faint, size = 11.5.sp)
+            Txt(stringResource(Res.string.lib_known_empty_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.lib_known_empty_desc), color = D.faint, size = 11.5.sp)
         }
     }
 }
@@ -234,30 +258,30 @@ private fun LiveMismatchPanel(mismatch: HostKeyMismatch, mono: FontFamily, onAcc
     Column(Modifier.width(322.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
         Row(Modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym("policy", size = 18.sp, color = D.sunset)
-            Txt("Fingerprint mismatch", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.lib_known_fp_mismatch), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
         }
         Txt("${mismatch.host} · ${displayKeyType(mismatch.keyType)}", color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
-        Txt("PREVIOUSLY RECORDED", color = D.moss, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
+        Txt(stringResource(Res.string.lib_known_previously_recorded), color = D.moss, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
         FpBox(mismatch.recordedFingerprint, D.dim, D.moss.copy(alpha = 0.2f), mono)
-        Txt("NOW OFFERED", color = D.sunset, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
+        Txt(stringResource(Res.string.lib_known_now_offered), color = D.sunset, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
         FpBox(mismatch.offeredFingerprint, D.sunset, D.sunset.copy(alpha = 0.3f), mono)
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 18.dp).clip(RoundedCornerShape(7.dp)).background(D.sunset.copy(alpha = 0.06f)).padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Sym("info", size = 15.sp, color = D.sunset)
-            Txt("If you recently re-installed this host, accepting is safe. Otherwise treat this as a possible interception.", color = D.dim, size = 11.sp, lineHeight = 16.sp)
+            Txt(stringResource(Res.string.lib_known_reinstall_note), color = D.dim, size = 11.sp, lineHeight = 16.sp)
         }
         // Безопасный выбор — primary и первым: при возможном перехвате пользователь рефлекторно жмёт
         // верхнюю/привычную кнопку, поэтому ею должен быть «Reject & block», а не «Accept». Принятие
         // нового ключа — опасное действие, оформлено danger-стилем (sunset) вторым.
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton("Reject & block", onClick = onReject, modifier = Modifier.fillMaxWidth())
+            PrimaryButton(stringResource(Res.string.lib_known_reject_block), onClick = onReject, modifier = Modifier.fillMaxWidth())
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.sunset.copy(alpha = 0.12f)).border(1.dp, D.sunset, RoundedCornerShape(7.dp)).clickable(onClick = onAccept).padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt("Accept new key", color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.lib_known_accept_new_key), color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
             }
         }
     }
@@ -289,8 +313,8 @@ private fun MockKnownHostsView() {
                         Txt("Host key changed for nas-truenas", color = D.sunset, size = 13.sp, weight = FontWeight.SemiBold)
                         Txt("The ED25519 fingerprint differs from the one recorded on Mar 4. This could be a re-install — or a man-in-the-middle. Verify before reconnecting.", color = D.dim, size = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp))
                         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SmallButton("Review fingerprint", D.sunset, D.sunset.copy(alpha = 0.4f), bold = true)
-                            SmallButton("Dismiss", D.dim, D.cyan14)
+                            SmallButton(stringResource(Res.string.lib_known_review_fingerprint), D.sunset, D.sunset.copy(alpha = 0.4f), bold = true)
+                            SmallButton(stringResource(Res.string.lib_known_dismiss), D.dim, D.cyan14)
                         }
                     }
                 }
@@ -329,10 +353,10 @@ private fun KnownRow(host: KnownHost, mono: FontFamily) {
         Row(Modifier.width(80.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             if (host.changed) {
                 Sym("error", size = 14.sp, color = D.sunset)
-                Txt("Changed", color = D.sunset, size = 11.sp)
+                Txt(stringResource(Res.string.lib_known_status_changed), color = D.sunset, size = 11.sp)
             } else {
                 Sym("verified", size = 14.sp, color = D.moss)
-                Txt("Verified", color = D.moss, size = 11.sp)
+                Txt(stringResource(Res.string.lib_known_status_verified), color = D.moss, size = 11.sp)
             }
         }
     }
@@ -343,7 +367,7 @@ private fun MismatchPanel(mono: FontFamily) {
     Column(Modifier.width(322.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
         Row(Modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym("policy", size = 18.sp, color = D.sunset)
-            Txt("Fingerprint mismatch", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.lib_known_fp_mismatch), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
         }
         Txt("nas-truenas · ed25519", color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
         Txt("PREVIOUSLY RECORDED · MAR 4", color = D.moss, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
@@ -355,16 +379,16 @@ private fun MismatchPanel(mono: FontFamily) {
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Sym("info", size = 15.sp, color = D.sunset)
-            Txt("If you recently re-installed this host, accepting is safe. Otherwise treat this as a possible interception.", color = D.dim, size = 11.sp, lineHeight = 16.sp)
+            Txt(stringResource(Res.string.lib_known_reinstall_note), color = D.dim, size = 11.sp, lineHeight = 16.sp)
         }
         // Зеркалит безопасный порядок live-панели (см. LiveMismatchPanel): Reject — primary первой.
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton("Reject & block", onClick = {}, modifier = Modifier.fillMaxWidth())
+            PrimaryButton(stringResource(Res.string.lib_known_reject_block), onClick = {}, modifier = Modifier.fillMaxWidth())
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.sunset.copy(alpha = 0.12f)).border(1.dp, D.sunset, RoundedCornerShape(7.dp)).padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt("Accept new key", color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.lib_known_accept_new_key), color = D.sunset, size = 12.5.sp, weight = FontWeight.SemiBold)
             }
         }
     }

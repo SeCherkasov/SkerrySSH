@@ -8,8 +8,12 @@ import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpEntryType
 import app.skerry.shared.sftp.SftpException
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_sftp_error
+import app.skerry.ui.generated.resources.ftail_transfer_error
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Состояние одной SFTP-панели (удалённый каталог). */
@@ -139,7 +143,7 @@ class SftpController(
             throw e
         } catch (e: Exception) {
             runCatching { target.discard() }
-            transfer = SftpTransferState.Failed(entry.name, e.message ?: "Ошибка передачи")
+            transfer = SftpTransferState.Failed(entry.name, e.message ?: getString(Res.string.ftail_transfer_error))
         }
     }
 
@@ -162,7 +166,7 @@ class SftpController(
             throw e
         } catch (e: Exception) {
             runCatching { source.cleanup() }
-            transfer = SftpTransferState.Failed(source.name, e.message ?: "Ошибка передачи")
+            transfer = SftpTransferState.Failed(source.name, e.message ?: getString(Res.string.ftail_transfer_error))
             return@op
         }
         runCatching { source.cleanup() }
@@ -183,7 +187,7 @@ class SftpController(
         state = try {
             SftpPaneState.Loaded(sftp.list(path).sortedForPane())
         } catch (e: SftpException) {
-            SftpPaneState.Error(e.message ?: "Ошибка SFTP")
+            SftpPaneState.Error(e.message ?: getString(Res.string.ftail_sftp_error))
         }
     }
 
@@ -199,7 +203,7 @@ class SftpController(
             try {
                 block()
             } catch (e: SftpException) {
-                state = SftpPaneState.Error(e.message ?: "Ошибка SFTP")
+                state = SftpPaneState.Error(e.message ?: getString(Res.string.ftail_sftp_error))
             } finally {
                 busy = false
             }

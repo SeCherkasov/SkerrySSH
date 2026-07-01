@@ -1,0 +1,99 @@
+<resources>
+    <!-- Sync / self-hosted синхронизация -->
+    <string name="sync_title">Синхронизация</string>
+    <string name="sync_mobile_intro">Сквозное шифрование синхронизации между вашими устройствами. Skerry никогда не видит ваши данные в открытом виде.</string>
+    <string name="sync_unavailable_title">Синхронизация недоступна</string>
+    <string name="sync_unavailable_subtitle">Не настроена на этом устройстве.</string>
+    <string name="sync_back">Назад</string>
+
+    <!-- Онбординг / форма подключения -->
+    <string name="sync_setup_title">Настроить синхронизацию</string>
+    <string name="sync_setup_desc">Подключите это устройство к вашему серверу синхронизации. Сквозное шифрование — Skerry никогда не видит ваши данные в открытом виде.</string>
+    <string name="sync_connecting">Подключение…</string>
+    <string name="sync_connecting_sub">Связь с сервером синхронизации.</string>
+    <string name="sync_syncing">Синхронизация…</string>
+
+    <!-- Развилка хранения -->
+    <string name="sync_storage_choice_title">Где Skerry хранить ваше хранилище?</string>
+    <string name="sync_storage_choice_desc">Ваши хосты и ключи всегда зашифрованы. Выберите, оставить их только на этом устройстве или синхронизировать между устройствами через ваш сервер.</string>
+    <string name="sync_storage_local_title">Локальное зашифрованное хранилище</string>
+    <string name="sync_storage_local_sub">Всё остаётся на этом устройстве. Без аккаунта и сервера — самый простой вариант.</string>
+    <string name="sync_storage_server_title">Собственный сервер синхронизации</string>
+    <string name="sync_storage_server_sub">Сквозное шифрование синхронизации между устройствами через ваш собственный сервер.</string>
+    <string name="sync_switch_later">Позже это можно изменить в настройках.</string>
+
+    <!-- Перерегистрация биометрии после смены ключа -->
+    <string name="sync_reenroll_title">Снова включить отпечаток</string>
+    <string name="sync_reenroll_desc">Подключение к аккаунту сменило ключ хранилища, поэтому биометрическая разблокировка была отключена. Настройте её снова, чтобы и дальше открывать Skerry по отпечатку.</string>
+    <string name="sync_reenroll_action">Включить снова</string>
+    <string name="sync_not_now">Не сейчас</string>
+
+    <!-- Подключённое состояние -->
+    <string name="sync_connected_title">Подключено · %1$s</string>
+    <string name="sync_session_stats">Отправлено %1$d · получено %2$d за сессию</string>
+    <string name="sync_sync_now">Синхронизировать</string>
+    <string name="sync_disconnect">Отключить</string>
+    <string name="sync_linked_title">Привязано · %1$s</string>
+    <string name="sync_reconnect_password">Переподключитесь с помощью мастер-пароля.</string>
+
+    <!-- Поля формы -->
+    <string name="sync_field_server_url">АДРЕС СЕРВЕРА</string>
+    <string name="sync_placeholder_server_url">https://sync.example.com</string>
+    <string name="sync_field_account">АККАУНТ</string>
+    <string name="sync_placeholder_account">you@example.com</string>
+    <string name="sync_field_master_password">МАСТЕР-ПАРОЛЬ</string>
+    <string name="sync_placeholder_master_password">мастер-пароль</string>
+    <string name="sync_keep_connected">Оставаться подключённым</string>
+    <string name="sync_keep_connected_sub">Автоматически переподключаться после перезапуска.</string>
+    <string name="sync_keep_connected_sub_long">Автоматически переподключаться после перезапуска — пароль не нужен.</string>
+    <string name="sync_insecure_url_warning">Обычный http:// — трафик не шифруется. Используйте https:// везде, кроме локальных тестов.</string>
+    <string name="sync_connect">Подключить</string>
+    <string name="sync_zero_knowledge">Zero-knowledge</string>
+    <string name="sync_zero_knowledge_password">Zero-knowledge · пароль не покидает это устройство</string>
+
+    <!-- Связывание по коду (join) -->
+    <string name="sync_join_title">Связать по коду</string>
+    <string name="sync_join_desc">На устройстве, где вы уже вошли, откройте Настройки → Аккаунт → Связать устройство, затем отсканируйте его QR-код или вставьте код сюда. Пароль, который вы зададите ниже, шифрует хранилище этого устройства и не восстанавливается — если потеряете его, придётся связывать заново.</string>
+    <string name="sync_field_pairing_code">КОД СВЯЗЫВАНИЯ</string>
+    <string name="sync_placeholder_pairing_code">Вставьте код (sk1.…)</string>
+    <string name="sync_scan_qr">Сканировать QR-код</string>
+    <string name="sync_field_choose_password">ПРИДУМАЙТЕ ПАРОЛЬ ДЛЯ ЭТОГО УСТРОЙСТВА</string>
+    <string name="sync_placeholder_min_chars">не менее %1$d символов</string>
+    <string name="sync_field_repeat_password">ПОВТОРИТЕ ПАРОЛЬ</string>
+    <string name="sync_placeholder_repeat">повторите для подтверждения</string>
+    <string name="sync_passwords_mismatch">Пароли не совпадают.</string>
+    <string name="sync_link_this_device">Связать это устройство</string>
+    <string name="sync_zero_knowledge_account">Zero-knowledge · пароль аккаунта никуда не передаётся</string>
+
+    <!-- Что синхронизируется -->
+    <string name="sync_what_syncs">ЧТО СИНХРОНИЗИРУЕТСЯ</string>
+    <string name="sync_what_hosts">Хосты и группы</string>
+    <string name="sync_what_snippets">Сниппеты</string>
+
+    <!-- Секция связывания устройства -->
+    <string name="sync_link_device">Связать устройство</string>
+    <string name="sync_hide">Скрыть</string>
+
+    <!-- Связанные устройства -->
+    <string name="sync_linked_devices">СВЯЗАННЫЕ УСТРОЙСТВА</string>
+    <string name="sync_loading_devices">Загрузка устройств…</string>
+    <string name="sync_load_devices_failed">Не удалось загрузить устройства. Нажмите «Синхронизировать».</string>
+    <string name="sync_only_this_device">Пока только это устройство.</string>
+    <string name="sync_this_device_badge">● это устройство</string>
+    <string name="sync_device_linked_current">привязано · это устройство</string>
+    <string name="sync_device_linked">привязанное устройство</string>
+    <string name="sync_confirm">Подтвердить</string>
+    <string name="sync_cancel">Отмена</string>
+    <string name="sync_revoke">Отозвать</string>
+
+    <!-- Desktop-диалоги -->
+    <string name="sync_setup_dialog_desc">Сквозное шифрование. Skerry никогда не видит ваши данные в открытом виде — мастер-пароль хранится только на вашем устройстве.</string>
+    <string name="sync_pairing_dialog_desc">На новом устройстве выберите «У меня есть код связывания», затем отсканируйте этот QR-код или вставьте код ниже. Код срабатывает один раз.</string>
+    <string name="sync_done">Готово</string>
+    <string name="sync_pairing_gen_failed">Не удалось создать код связывания.</string>
+    <string name="sync_generating_code">Создание кода…</string>
+    <string name="sync_code_expired">Код истёк — закройте и начните заново</string>
+    <string name="sync_expires_in">Истекает через %1$s</string>
+    <string name="sync_copied">Скопировано</string>
+    <string name="sync_copy">Копировать</string>
+</resources>

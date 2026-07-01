@@ -1,0 +1,35 @@
+<resources>
+    <!-- Отложенные пользовательские строки vault вне @Composable (префикс vtail_). -->
+
+    <!-- Биометрические промпты (заголовок / кнопка отмены / подзаголовок). -->
+    <string name="vtail_bio_enable_title">Включить биометрию</string>
+    <string name="vtail_bio_enable_cancel">Отмена</string>
+    <string name="vtail_bio_enable_subtitle">Подтвердите биометрию, чтобы привязать разблокировку хранилища</string>
+    <string name="vtail_bio_unlock_title">Разблокировать Skerry</string>
+    <string name="vtail_bio_unlock_cancel">Ввести пароль</string>
+    <string name="vtail_bio_unlock_subtitle">Подтвердите биометрию, чтобы открыть хранилище</string>
+    <string name="vtail_bio_copy_title">Подтвердите личность</string>
+    <string name="vtail_bio_copy_cancel">Отмена</string>
+    <string name="vtail_bio_copy_subtitle">Подтвердите биометрию, чтобы скопировать секрет в буфер обмена.</string>
+
+    <!-- Пикер аутентификации: типы секретов keychain. -->
+    <string name="vtail_picker_type_password">Пароль</string>
+    <string name="vtail_picker_type_ssh_key">SSH-ключ</string>
+    <string name="vtail_picker_type_certificate">Сертификат</string>
+
+    <!-- Сообщения об ошибках гейта хранилища (ключи готовы; проводка блокируется VaultGateErrorMessageTest). -->
+    <string name="vtail_error_password_too_short">Пароль слишком короткий — минимум %1$d символов.</string>
+    <string name="vtail_error_password_mismatch">Пароли не совпадают.</string>
+    <string name="vtail_error_wrong_password">Неверный мастер-пароль.</string>
+    <string name="vtail_error_corrupted">Файл хранилища повреждён или не читается.</string>
+    <string name="vtail_error_biometric_reset">Биометрия сброшена — войдите мастер-паролем.</string>
+
+    <!-- Фрагмент «используется» на карточке секрета, ед./мн. (ключи готовы; проводка блокируется VaultPresentationTest). -->
+    <string name="vtail_used_by_one">используется 1 хостом</string>
+    <string name="vtail_used_by_other">используется %1$d хостами</string>
+
+    <!-- Заголовки категорий сайдбара vault (ключи готовы; проводка блокируется доступом к полю в VaultView/MobileVaultView). -->
+    <string name="vtail_category_ssh_keys">SSH-ключи</string>
+    <string name="vtail_category_passwords">Пароли</string>
+    <string name="vtail_category_certificates">Сертификаты</string>
+</resources>

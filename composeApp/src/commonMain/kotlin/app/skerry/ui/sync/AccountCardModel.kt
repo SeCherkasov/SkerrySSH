@@ -1,5 +1,16 @@
 package app.skerry.ui.sync
 
+import androidx.compose.runtime.Composable
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.stail_local_vault
+import app.skerry.ui.generated.resources.stail_encrypted_on_device
+import app.skerry.ui.generated.resources.stail_syncing
+import app.skerry.ui.generated.resources.stail_synced_host
+import app.skerry.ui.generated.resources.stail_synced
+import app.skerry.ui.generated.resources.stail_linked_locked
+import app.skerry.ui.generated.resources.stail_sync_error
+import org.jetbrains.compose.resources.stringResource
+
 /**
  * Чистая (тестируемая) проекция состояния sync на карточку профиля/аккаунта — desktop Settings →
  * Account и mobile More. Заменяет статический мок «Local vault / Maya Kovac»: реальная модель —
@@ -48,6 +59,42 @@ fun accountCardModel(status: SyncStatus?, serverUrl: String? = null): AccountCar
 
 private fun localVaultCard(subtitle: String) =
     AccountCardModel(initials = "S", title = "Local vault", subtitle = subtitle, connected = false, linked = false)
+
+/**
+ * UI-версия [accountCardModel] с локализованными title/subtitle. Чистая версия оставлена для тестов и
+ * не-composable кода; здесь строки резолвятся через [stringResource]. accountId/host — данные, не мок,
+ * поэтому не переводятся; переводятся статические подписи и «Local vault».
+ */
+@Composable
+fun accountCardModelLocalized(status: SyncStatus?, serverUrl: String? = null): AccountCardModel = when (status) {
+    null, SyncStatus.Disabled -> localizedLocalVaultCard(stringResource(Res.string.stail_encrypted_on_device))
+    SyncStatus.Busy -> localizedLocalVaultCard(stringResource(Res.string.stail_syncing))
+    is SyncStatus.Online -> AccountCardModel(
+        initials = accountInitials(status.accountId),
+        title = status.accountId,
+        subtitle = serverHost(serverUrl)?.let { stringResource(Res.string.stail_synced_host, it) }
+            ?: stringResource(Res.string.stail_synced),
+        connected = true,
+        linked = false,
+    )
+    is SyncStatus.Configured -> AccountCardModel(
+        initials = accountInitials(status.accountId),
+        title = status.accountId,
+        subtitle = stringResource(Res.string.stail_linked_locked),
+        connected = false,
+        linked = true,
+    )
+    is SyncStatus.Failed -> localizedLocalVaultCard(stringResource(Res.string.stail_sync_error))
+}
+
+@Composable
+private fun localizedLocalVaultCard(subtitle: String) = AccountCardModel(
+    initials = "S",
+    title = stringResource(Res.string.stail_local_vault),
+    subtitle = subtitle,
+    connected = false,
+    linked = false,
+)
 
 /** Инициалы аватара: до двух ведущих букв/цифр локальной части accountId, в верхнем регистре. */
 fun accountInitials(accountId: String): String {

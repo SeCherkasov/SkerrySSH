@@ -43,26 +43,50 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vtail_error_biometric_reset
+import app.skerry.ui.generated.resources.vtail_error_corrupted
+import app.skerry.ui.generated.resources.vtail_error_password_mismatch
+import app.skerry.ui.generated.resources.vtail_error_password_too_short
+import app.skerry.ui.generated.resources.vtail_error_wrong_password
+import app.skerry.ui.generated.resources.vault_biometric_enable
+import app.skerry.ui.generated.resources.vault_biometric_offer_subtitle
+import app.skerry.ui.generated.resources.vault_biometric_offer_title
+import app.skerry.ui.generated.resources.vault_cancel
+import app.skerry.ui.generated.resources.vault_confirm_password_label
+import app.skerry.ui.generated.resources.vault_corrupted_subtitle
+import app.skerry.ui.generated.resources.vault_corrupted_title
+import app.skerry.ui.generated.resources.vault_create_button
+import app.skerry.ui.generated.resources.vault_create_subtitle
+import app.skerry.ui.generated.resources.vault_create_title
+import app.skerry.ui.generated.resources.vault_forgot_password
+import app.skerry.ui.generated.resources.vault_master_password_label
+import app.skerry.ui.generated.resources.vault_not_now
+import app.skerry.ui.generated.resources.vault_reset_confirm_button
+import app.skerry.ui.generated.resources.vault_reset_confirm_label
+import app.skerry.ui.generated.resources.vault_reset_scope_everything_subtitle
+import app.skerry.ui.generated.resources.vault_reset_scope_everything_title
+import app.skerry.ui.generated.resources.vault_reset_scope_secrets_subtitle
+import app.skerry.ui.generated.resources.vault_reset_scope_secrets_title
+import app.skerry.ui.generated.resources.vault_reset_subtitle
+import app.skerry.ui.generated.resources.vault_reset_vault
+import app.skerry.ui.generated.resources.vault_unlock_biometric
+import app.skerry.ui.generated.resources.vault_unlock_button
+import app.skerry.ui.generated.resources.vault_unlock_subtitle
+import app.skerry.ui.generated.resources.vault_unlock_title
+import app.skerry.ui.generated.resources.vtail_bio_enable_cancel
+import app.skerry.ui.generated.resources.vtail_bio_enable_subtitle
+import app.skerry.ui.generated.resources.vtail_bio_enable_title
+import app.skerry.ui.generated.resources.vtail_bio_unlock_cancel
+import app.skerry.ui.generated.resources.vtail_bio_unlock_subtitle
+import app.skerry.ui.generated.resources.vtail_bio_unlock_title
 import app.skerry.ui.nav.PlatformBackHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /** Авто-лок по простою: бездействие дольше этого порога блокирует vault (защита оставленного экрана). */
 private const val AUTO_LOCK_IDLE_MS = 5 * 60 * 1000L
-
-/** Промпт включения биометрии (vault уже открыт). */
-private val ENABLE_PROMPT = BiometricPrompt(
-    title = "Включить биометрию",
-    cancelLabel = "Отмена",
-    subtitle = "Подтвердите биометрию, чтобы привязать разблокировку хранилища",
-)
-
-/** Промпт разблокировки биометрией (холодный старт). */
-private val UNLOCK_PROMPT = BiometricPrompt(
-    title = "Разблокировать Skerry",
-    cancelLabel = "Ввести пароль",
-    subtitle = "Подтвердите биометрию, чтобы открыть хранилище",
-)
 
 /**
  * Нужно ли запирать vault при уходе приложения в фон (`ON_STOP`) — платформенная политика.
@@ -166,6 +190,18 @@ fun VaultGate(
         if (offersSync) remember(controller) { { controller.completePairing() } } else null
     val scope = rememberCoroutineScope()
 
+    // Промпты биометрии резолвятся в композиции (stringResource), затем прокидываются в корутины.
+    val enablePrompt = BiometricPrompt(
+        title = stringResource(Res.string.vtail_bio_enable_title),
+        cancelLabel = stringResource(Res.string.vtail_bio_enable_cancel),
+        subtitle = stringResource(Res.string.vtail_bio_enable_subtitle),
+    )
+    val unlockPrompt = BiometricPrompt(
+        title = stringResource(Res.string.vtail_bio_unlock_title),
+        cancelLabel = stringResource(Res.string.vtail_bio_unlock_cancel),
+        subtitle = stringResource(Res.string.vtail_bio_unlock_subtitle),
+    )
+
     // Авто-лок при уходе приложения в фон: чужие руки на разблокированном устройстве не должны
     // получить открытый vault после сворачивания.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -211,7 +247,7 @@ fun VaultGate(
                     controller.error,
                     controller.canUnlockWithBiometric(),
                     { password -> controller.unlock(password) },
-                    { scope.launch { controller.unlockWithBiometric(UNLOCK_PROMPT) } },
+                    { scope.launch { controller.unlockWithBiometric(unlockPrompt) } },
                     { controller.beginReset() },
                 )
 
@@ -235,7 +271,7 @@ fun VaultGate(
             VaultGateState.OfferBiometric ->
                 offerBiometricForm(
                     controller.biometricInFlight,
-                    { scope.launch { controller.enableBiometric(ENABLE_PROMPT); controller.dismissBiometricOffer() } },
+                    { scope.launch { controller.enableBiometric(enablePrompt); controller.dismissBiometricOffer() } },
                     { controller.dismissBiometricOffer() },
                 )
 
@@ -266,19 +302,18 @@ private fun CreateVaultForm(error: VaultGateError?, onCreate: (CharArray, CharAr
     val canSubmit = password.isNotEmpty() && confirm.isNotEmpty()
 
     VaultFormScaffold(
-        title = "Создать мастер-пароль",
-        subtitle = "Им шифруется локальное хранилище. Пароль не покидает устройство и не " +
-            "восстанавливается — забыли его, и данные не расшифровать.",
+        title = stringResource(Res.string.vault_create_title),
+        subtitle = stringResource(Res.string.vault_create_subtitle),
         error = error,
     ) {
-        PasswordField("Мастер-пароль", password, ImeAction.Next) { password = it }
-        PasswordField("Повторите пароль", confirm, ImeAction.Done) { confirm = it }
+        PasswordField(stringResource(Res.string.vault_master_password_label), password, ImeAction.Next) { password = it }
+        PasswordField(stringResource(Res.string.vault_confirm_password_label), confirm, ImeAction.Done) { confirm = it }
         Button(
             onClick = { if (canSubmit) onCreate(password.toCharArray(), confirm.toCharArray()) },
             enabled = canSubmit,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Создать хранилище")
+            Text(stringResource(Res.string.vault_create_button))
         }
     }
 }
@@ -291,16 +326,15 @@ private fun CreateVaultForm(error: VaultGateError?, onCreate: (CharArray, CharAr
 @Composable
 private fun OfferBiometricForm(inFlight: Boolean, onEnable: () -> Unit, onSkip: () -> Unit) {
     VaultFormScaffold(
-        title = "Быстрая разблокировка",
-        subtitle = "Включите вход по биометрии, чтобы открывать хранилище без ввода мастер-пароля. " +
-            "Это можно изменить позже в настройках.",
+        title = stringResource(Res.string.vault_biometric_offer_title),
+        subtitle = stringResource(Res.string.vault_biometric_offer_subtitle),
         error = null,
     ) {
         Button(onClick = onEnable, enabled = !inFlight, modifier = Modifier.fillMaxWidth()) {
-            Text("Включить биометрию")
+            Text(stringResource(Res.string.vault_biometric_enable))
         }
         TextButton(onClick = onSkip, enabled = !inFlight, modifier = Modifier.fillMaxWidth()) {
-            Text("Не сейчас")
+            Text(stringResource(Res.string.vault_not_now))
         }
     }
 }
@@ -322,25 +356,25 @@ private fun UnlockVaultForm(
     }
 
     VaultFormScaffold(
-        title = "Разблокировать хранилище",
-        subtitle = "Введите мастер-пароль, чтобы открыть хосты, ключи и сессии.",
+        title = stringResource(Res.string.vault_unlock_title),
+        subtitle = stringResource(Res.string.vault_unlock_subtitle),
         error = error,
     ) {
-        PasswordField("Мастер-пароль", password, ImeAction.Done) { password = it }
+        PasswordField(stringResource(Res.string.vault_master_password_label), password, ImeAction.Done) { password = it }
         Button(
             onClick = { if (canSubmit) onUnlock(password.toCharArray()) },
             enabled = canSubmit,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Разблокировать")
+            Text(stringResource(Res.string.vault_unlock_button))
         }
         if (canUseBiometric) {
             OutlinedButton(onClick = onBiometric, modifier = Modifier.fillMaxWidth()) {
-                Text("Разблокировать биометрией")
+                Text(stringResource(Res.string.vault_unlock_biometric))
             }
         }
         TextButton(onClick = onForgotPassword, modifier = Modifier.fillMaxWidth()) {
-            Text("Забыли мастер-пароль?")
+            Text(stringResource(Res.string.vault_forgot_password))
         }
     }
 }
@@ -352,13 +386,12 @@ private fun UnlockVaultForm(
 @Composable
 private fun CorruptedVaultForm(onReset: () -> Unit) {
     VaultFormScaffold(
-        title = "Хранилище повреждено",
-        subtitle = "Файл хранилища не читается, и расшифровать его нельзя. Чтобы пользоваться " +
-            "приложением, придётся сбросить хранилище и начать заново.",
+        title = stringResource(Res.string.vault_corrupted_title),
+        subtitle = stringResource(Res.string.vault_corrupted_subtitle),
         error = null,
     ) {
         Button(onClick = onReset, modifier = Modifier.fillMaxWidth()) {
-            Text("Сбросить хранилище")
+            Text(stringResource(Res.string.vault_reset_vault))
         }
     }
 }
@@ -374,27 +407,26 @@ private fun ResetVaultForm(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit
     val canConfirm = confirmText.trim() == RESET_CONFIRM_WORD
 
     VaultFormScaffold(
-        title = "Сбросить хранилище",
-        subtitle = "Это необратимо. Сохранённые пароли, ключи и учётные данные будут стёрты без " +
-            "возможности восстановления — мастер-пароль их не защищает, а пересоздаёт.",
+        title = stringResource(Res.string.vault_reset_vault),
+        subtitle = stringResource(Res.string.vault_reset_subtitle),
         error = null,
     ) {
         ResetScopeOption(
             selected = scope == ResetScope.SecretsOnly,
-            title = "Только секреты",
-            subtitle = "Профили хостов и known_hosts останутся.",
+            title = stringResource(Res.string.vault_reset_scope_secrets_title),
+            subtitle = stringResource(Res.string.vault_reset_scope_secrets_subtitle),
             onSelect = { scope = ResetScope.SecretsOnly },
         )
         ResetScopeOption(
             selected = scope == ResetScope.Everything,
-            title = "Стереть всё",
-            subtitle = "Также удалить профили хостов, known_hosts и настройки.",
+            title = stringResource(Res.string.vault_reset_scope_everything_title),
+            subtitle = stringResource(Res.string.vault_reset_scope_everything_subtitle),
             onSelect = { scope = ResetScope.Everything },
         )
         OutlinedTextField(
             value = confirmText,
             onValueChange = { confirmText = it },
-            label = { Text("Впишите $RESET_CONFIRM_WORD для подтверждения") },
+            label = { Text(stringResource(Res.string.vault_reset_confirm_label, RESET_CONFIRM_WORD)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -403,10 +435,10 @@ private fun ResetVaultForm(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit
             enabled = canConfirm,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Сбросить безвозвратно")
+            Text(stringResource(Res.string.vault_reset_confirm_button))
         }
         TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-            Text("Отмена")
+            Text(stringResource(Res.string.vault_cancel))
         }
     }
 }
@@ -463,10 +495,11 @@ private fun PasswordField(label: String, value: String, imeAction: ImeAction, on
  * дизайн-слоем (`ui/design`) поверх того же [VaultGateController]; зафиксировано
  * [app.skerry.ui.vault.VaultGateErrorMessageTest].
  */
+@Composable
 internal fun vaultGateErrorMessage(error: VaultGateError): String = when (error) {
-    VaultGateError.PasswordTooShort -> "Пароль слишком короткий — минимум $MIN_MASTER_PASSWORD_LENGTH символов."
-    VaultGateError.PasswordMismatch -> "Пароли не совпадают."
-    VaultGateError.WrongPassword -> "Неверный мастер-пароль."
-    VaultGateError.Corrupted -> "Файл хранилища повреждён или не читается."
-    VaultGateError.BiometricReset -> "Биометрия сброшена — войдите мастер-паролем."
+    VaultGateError.PasswordTooShort -> stringResource(Res.string.vtail_error_password_too_short, MIN_MASTER_PASSWORD_LENGTH)
+    VaultGateError.PasswordMismatch -> stringResource(Res.string.vtail_error_password_mismatch)
+    VaultGateError.WrongPassword -> stringResource(Res.string.vtail_error_wrong_password)
+    VaultGateError.Corrupted -> stringResource(Res.string.vtail_error_corrupted)
+    VaultGateError.BiometricReset -> stringResource(Res.string.vtail_error_biometric_reset)
 }

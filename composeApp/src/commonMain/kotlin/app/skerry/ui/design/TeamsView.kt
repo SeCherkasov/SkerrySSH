@@ -26,6 +26,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_teams_invite
+import app.skerry.ui.generated.resources.lib_teams_members
+import app.skerry.ui.generated.resources.lib_teams_recent_activity
+import app.skerry.ui.generated.resources.lib_teams_sidebar
+import org.jetbrains.compose.resources.stringResource
 
 private data class Member(val initials: String, val avatar: Color, val name: String, val email: String, val role: String, val roleBg: Color, val roleFg: Color)
 private data class SharedHost(val name: String, val members: String, val online: Boolean)
@@ -56,7 +62,7 @@ fun TeamsView() {
     val mono = LocalFonts.current.mono
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
-            Txt("TEAMS", color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+            Txt(stringResource(Res.string.lib_teams_sidebar), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
             TeamRow("rocket_launch", "Platform crew", active = true)
             TeamRow("database", "Data team")
             Spacer(Modifier.weight(1f))
@@ -80,11 +86,11 @@ fun TeamsView() {
                     Txt("Platform crew", color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
                     Txt("5 members · 9 shared hosts · 2 shared vaults", color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
                 }
-                PrimaryButton("Invite", onClick = {}, icon = "person_add")
+                PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = {}, icon = "person_add")
             }
             HLine()
             Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-                SectionLabel("Members")
+                SectionLabel(stringResource(Res.string.lib_teams_members))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MEMBERS.forEach { MemberRow(it) }
                 }
@@ -102,7 +108,7 @@ fun TeamsView() {
                     }
                 }
                 Box(Modifier.padding(top = 24.dp))
-                SectionLabel("Recent activity")
+                SectionLabel(stringResource(Res.string.lib_teams_recent_activity))
                 ACTIVITY.forEach { ActivityRow(it, mono) }
             }
         }

@@ -19,12 +19,18 @@ import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.tunnel.Tunnel
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.shared.tunnel.TunnelStore
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ptail_err_auth_failed
+import app.skerry.ui.generated.resources.ptail_err_connection_failed
+import app.skerry.ui.generated.resources.ptail_err_forward_failed
+import app.skerry.ui.generated.resources.ptail_err_host_not_trusted
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 
@@ -295,11 +301,11 @@ class TunnelManager(
     // Сырой текст исключения (адрес/внутренности sshj) в UI не выносим — только generic-сообщения,
     // как в runConnectionTest. Отказ ключа хоста выделен: туннель идёт по probe-верификатору, и это
     // ожидаемый исход для ещё не доверенного хоста.
-    private fun friendlyError(e: Exception): String = when (e) {
-        is SshHostKeyRejectedException -> "Host key not trusted"
-        is SshAuthenticationException -> "Authentication failed"
-        is PortForwardException -> "Port forwarding failed"
-        is SshConnectionException -> "Connection failed"
-        else -> "Connection failed"
+    private suspend fun friendlyError(e: Exception): String = when (e) {
+        is SshHostKeyRejectedException -> getString(Res.string.ptail_err_host_not_trusted)
+        is SshAuthenticationException -> getString(Res.string.ptail_err_auth_failed)
+        is PortForwardException -> getString(Res.string.ptail_err_forward_failed)
+        is SshConnectionException -> getString(Res.string.ptail_err_connection_failed)
+        else -> getString(Res.string.ptail_err_connection_failed)
     }
 }

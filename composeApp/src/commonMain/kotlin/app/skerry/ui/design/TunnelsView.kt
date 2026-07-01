@@ -42,6 +42,39 @@ import app.skerry.ui.tunnel.TunnelEntry
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.TunnelStatus
 import app.skerry.ui.tunnel.buildTunnelDraft
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ports_active_tunnel_one
+import app.skerry.ui.generated.resources.ports_active_tunnels_other
+import app.skerry.ui.generated.resources.ports_add_tunnel_right
+import app.skerry.ui.generated.resources.ports_changes_apply_after_restart
+import app.skerry.ui.generated.resources.ports_col_active
+import app.skerry.ui.generated.resources.ports_col_destination
+import app.skerry.ui.generated.resources.ports_col_source
+import app.skerry.ui.generated.resources.ports_col_type
+import app.skerry.ui.generated.resources.ports_col_via_host
+import app.skerry.ui.generated.resources.ports_dynamic_proxy
+import app.skerry.ui.generated.resources.ports_field_bind_address
+import app.skerry.ui.generated.resources.ports_field_destination
+import app.skerry.ui.generated.resources.ports_field_live_throughput
+import app.skerry.ui.generated.resources.ports_field_name
+import app.skerry.ui.generated.resources.ports_field_port
+import app.skerry.ui.generated.resources.ports_field_type
+import app.skerry.ui.generated.resources.ports_field_via_host
+import app.skerry.ui.generated.resources.ports_new_tunnel
+import app.skerry.ui.generated.resources.ports_no_saved_hosts
+import app.skerry.ui.generated.resources.ports_no_tunnels_yet
+import app.skerry.ui.generated.resources.ports_ph_web_tunnel
+import app.skerry.ui.generated.resources.ports_port_forwarding
+import app.skerry.ui.generated.resources.ports_remove
+import app.skerry.ui.generated.resources.ports_remove_active_message
+import app.skerry.ui.generated.resources.ports_remove_confirm_title
+import app.skerry.ui.generated.resources.ports_remove_inactive_message
+import app.skerry.ui.generated.resources.ports_save
+import app.skerry.ui.generated.resources.ports_saved_tunnels_subtitle
+import app.skerry.ui.generated.resources.ports_select_host
+import app.skerry.ui.generated.resources.ports_socks_hint
+import app.skerry.ui.generated.resources.ports_tunnel_detail
+import org.jetbrains.compose.resources.stringResource
 
 private data class TunnelRule(
     val type: String, val typeBg: Color, val typeFg: Color,
@@ -78,13 +111,13 @@ fun TunnelsView() {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column {
-                Txt("Port forwarding", color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.ports_port_forwarding), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
                 Txt(
-                    "Saved tunnels — local, remote and dynamic (SOCKS) forwards.",
+                    stringResource(Res.string.ports_saved_tunnels_subtitle),
                     color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            PrimaryButton("New tunnel", onClick = { adding = true; selectedId = null }, icon = "add")
+            PrimaryButton(stringResource(Res.string.ports_new_tunnel), onClick = { adding = true; selectedId = null }, icon = "add")
         }
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -163,7 +196,11 @@ private fun GlobalTunnelsBody(
                     }
                     Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Sym("bolt", size = 15.sp, color = D.moss)
-                        Txt("$activeCount active ${if (activeCount == 1) "tunnel" else "tunnels"}", color = D.faint, size = 11.5.sp)
+                        Txt(
+                            if (activeCount == 1) stringResource(Res.string.ports_active_tunnel_one, activeCount)
+                            else stringResource(Res.string.ports_active_tunnels_other, activeCount),
+                            color = D.faint, size = 11.5.sp,
+                        )
                     }
                 }
             }
@@ -179,13 +216,13 @@ private fun GlobalTunnelsBody(
         }
         pendingRemove?.let { entry ->
             ConfirmActionDialog(
-                title = "Remove \"${entry.tunnel.label}\"?",
+                title = stringResource(Res.string.ports_remove_confirm_title, entry.tunnel.label),
                 message = if (entry.status is TunnelStatus.Active) {
-                    "This tunnel is active — it will be disconnected and deleted. This can't be undone."
+                    stringResource(Res.string.ports_remove_active_message)
                 } else {
-                    "This saved tunnel is deleted. This can't be undone."
+                    stringResource(Res.string.ports_remove_inactive_message)
                 },
-                confirmLabel = "Remove",
+                confirmLabel = stringResource(Res.string.ports_remove),
                 onConfirm = { manager.delete(entry.id); pendingRemove = null; onNew() },
                 onDismiss = { pendingRemove = null },
             )
@@ -198,8 +235,8 @@ private fun EmptyTunnels() {
     Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym("lan", size = 26.sp, color = D.faint)
-            Txt("No tunnels yet", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            Txt("Add a tunnel on the right →", color = D.faint, size = 11.5.sp)
+            Txt(stringResource(Res.string.ports_no_tunnels_yet), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.ports_add_tunnel_right), color = D.faint, size = 11.5.sp)
         }
     }
 }
@@ -229,7 +266,7 @@ private fun TunnelRowGlobal(
             }
             Txt(sourceText(entry), color = if (dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
             Box(Modifier.width(20.dp)) { Sym(arrow, size = 16.sp, color = D.faint) }
-            Txt(dest ?: "dynamic proxy", color = if (dest == null || dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt(dest ?: stringResource(Res.string.ports_dynamic_proxy), color = if (dest == null || dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
             Txt(via, color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.width(110.dp))
             Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
                 ActiveCellGlobal(entry, onToggle)
@@ -288,60 +325,60 @@ private fun TunnelEditor(
     val draft = buildTunnelDraft(editingId, label, hostId, direction, bindHost, bindPort, destHost, destPort)
     val (badgeBg, badgeFg) = directionColors(direction)
     val hostList = hosts?.hosts ?: emptyList()
-    val hostLabel = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: "Select host…"
+    val hostLabel = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
 
     Column(
         Modifier.width(308.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
         Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Badge(directionBadge(direction), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
-            Txt(if (existing == null) "New tunnel" else "Tunnel detail", color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(if (existing == null) stringResource(Res.string.ports_new_tunnel) else stringResource(Res.string.ports_tunnel_detail), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
         }
-        FieldLabel("Name")
-        EditField(label, { label = it }, "web tunnel", mono)
+        FieldLabel(stringResource(Res.string.ports_field_name))
+        EditField(label, { label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono)
         Box(Modifier.padding(bottom = 12.dp))
-        FieldLabel("Type")
+        FieldLabel(stringResource(Res.string.ports_field_type))
         TypePicker(direction, onPick = { direction = it })
         Box(Modifier.padding(bottom = 12.dp))
-        FieldLabel("Via host")
+        FieldLabel(stringResource(Res.string.ports_field_via_host))
         HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { hostId = it })
         Box(Modifier.padding(bottom = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) { FieldLabel("Bind address"); EditField(bindHost, { bindHost = it }, "127.0.0.1", mono) }
-            Column(Modifier.width(70.dp)) { FieldLabel("Port"); EditField(bindPort, { bindPort = it }, "0", mono, KeyboardType.Number) }
+            Column(Modifier.weight(1f)) { FieldLabel(stringResource(Res.string.ports_field_bind_address)); EditField(bindHost, { bindHost = it }, "127.0.0.1", mono) }
+            Column(Modifier.width(70.dp)) { FieldLabel(stringResource(Res.string.ports_field_port)); EditField(bindPort, { bindPort = it }, "0", mono, KeyboardType.Number) }
         }
         if (!isDynamic) {
             Box(Modifier.padding(bottom = 12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) { FieldLabel("Destination"); EditField(destHost, { destHost = it }, "10.0.0.5", mono) }
-                Column(Modifier.width(70.dp)) { FieldLabel("Port"); EditField(destPort, { destPort = it }, "80", mono, KeyboardType.Number) }
+                Column(Modifier.weight(1f)) { FieldLabel(stringResource(Res.string.ports_field_destination)); EditField(destHost, { destHost = it }, "10.0.0.5", mono) }
+                Column(Modifier.width(70.dp)) { FieldLabel(stringResource(Res.string.ports_field_port)); EditField(destPort, { destPort = it }, "80", mono, KeyboardType.Number) }
             }
         } else {
             Box(Modifier.padding(bottom = 4.dp))
-            Txt("SOCKS5 proxy — destination is chosen per connection by each client.", color = D.faint, size = 11.sp, lineHeight = 15.sp)
+            Txt(stringResource(Res.string.ports_socks_hint), color = D.faint, size = 11.sp, lineHeight = 15.sp)
         }
         if (existing != null && existing.status is TunnelStatus.Active) {
             Box(Modifier.padding(bottom = 16.dp))
-            FieldLabel("Live throughput")
+            FieldLabel(stringResource(Res.string.ports_field_live_throughput))
             ThroughputRow("arrow_upward", D.cyanBright, rateFraction(existing.upRate), humanRate(existing.upRate), mono)
             Box(Modifier.padding(bottom = 8.dp))
             ThroughputRow("arrow_downward", D.moss, rateFraction(existing.downRate), humanRate(existing.downRate), mono)
             Box(Modifier.padding(bottom = 10.dp))
             // Правка активного туннеля сохраняется, но проброс уже поднят — новые параметры подхватятся
             // при следующем включении (save не перезапускает соединение).
-            Txt("Changes apply after the tunnel is restarted.", color = D.faint, size = 11.sp, lineHeight = 15.sp)
+            Txt(stringResource(Res.string.ports_changes_apply_after_restart), color = D.faint, size = 11.sp, lineHeight = 15.sp)
         }
         Box(Modifier.padding(bottom = 18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PrimaryButton(
-                label = "Save",
+                label = stringResource(Res.string.ports_save),
                 onClick = { draft?.let { onSaved(manager.save(it)) } },
                 modifier = Modifier.weight(1f),
                 bg = if (draft != null) D.cyan else Color(0x14FFFFFF),
                 fg = if (draft != null) Color(0xFF0A1A26) else D.faint,
             )
             if (existing != null) {
-                GhostButton("Remove", onClick = onRequestRemove, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                GhostButton(stringResource(Res.string.ports_remove), onClick = onRequestRemove, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
             }
         }
     }
@@ -403,7 +440,7 @@ private fun HostPicker(current: String, options: List<Pair<String, String>>, onP
                 Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
             ) {
                 if (options.isEmpty()) {
-                    Txt("No saved hosts", color = D.faint, size = 12.sp, modifier = Modifier.padding(12.dp))
+                    Txt(stringResource(Res.string.ports_no_saved_hosts), color = D.faint, size = 12.sp, modifier = Modifier.padding(12.dp))
                 } else {
                     options.forEach { (id, name) ->
                         Txt(
@@ -465,12 +502,12 @@ private fun TunnelHeaderRow() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        HeaderCell("TYPE", Modifier.width(76.dp))
-        HeaderCell("SOURCE", Modifier.weight(1f))
+        HeaderCell(stringResource(Res.string.ports_col_type), Modifier.width(76.dp))
+        HeaderCell(stringResource(Res.string.ports_col_source), Modifier.weight(1f))
         Box(Modifier.width(20.dp))
-        HeaderCell("DESTINATION", Modifier.weight(1f))
-        HeaderCell("VIA HOST", Modifier.width(110.dp))
-        HeaderCell("ACTIVE", Modifier.width(56.dp), end = true)
+        HeaderCell(stringResource(Res.string.ports_col_destination), Modifier.weight(1f))
+        HeaderCell(stringResource(Res.string.ports_col_via_host), Modifier.width(110.dp))
+        HeaderCell(stringResource(Res.string.ports_col_active), Modifier.width(56.dp), end = true)
     }
 }
 

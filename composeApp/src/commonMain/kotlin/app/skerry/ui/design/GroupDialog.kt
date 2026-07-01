@@ -34,6 +34,17 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.LaunchedEffect
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_group_rename_title
+import app.skerry.ui.generated.resources.shell_group_new_title
+import app.skerry.ui.generated.resources.shell_group_rename_subtitle
+import app.skerry.ui.generated.resources.shell_group_new_subtitle
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
+import app.skerry.ui.generated.resources.shell_group_delete
+import app.skerry.ui.generated.resources.shell_cancel
+import app.skerry.ui.generated.resources.shell_save
+import app.skerry.ui.generated.resources.shell_create
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Диалог создания/правки группы хостов: одно поле имени + кнопки. [onDelete] != null — режим правки
@@ -70,12 +81,12 @@ fun GroupDialog(
                 .padding(26.dp),
         ) {
             Txt(
-                if (editing) "Rename group" else "New group",
+                if (editing) stringResource(Res.string.shell_group_rename_title) else stringResource(Res.string.shell_group_new_title),
                 color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
             )
             Txt(
-                if (editing) "Hosts in this group move with the new name."
-                else "Create an empty group, then drag hosts in or pick it when adding a connection.",
+                if (editing) stringResource(Res.string.shell_group_rename_subtitle)
+                else stringResource(Res.string.shell_group_new_subtitle),
                 color = D.dim, size = 12.5.sp, lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
@@ -101,7 +112,7 @@ fun GroupDialog(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.fillMaxWidth()) {
-                            if (name.isEmpty()) Txt("Group name", color = D.faint, size = 13.sp)
+                            if (name.isEmpty()) Txt(stringResource(Res.string.shell_group_name_placeholder), color = D.faint, size = 13.sp)
                             inner()
                         }
                     }
@@ -114,14 +125,14 @@ fun GroupDialog(
             ) {
                 if (onDelete != null) {
                     Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDelete).padding(horizontal = 14.dp, vertical = 9.dp)) {
-                        Txt("Delete group", color = D.sunset, size = 12.5.sp)
+                        Txt(stringResource(Res.string.shell_group_delete), color = D.sunset, size = 12.5.sp)
                     }
                 }
                 Box(Modifier.weight(1f))
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt("Cancel", color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
                 }
-                PrimaryButton(if (editing) "Save" else "Create", onClick = save, enabled = canSave)
+                PrimaryButton(if (editing) stringResource(Res.string.shell_save) else stringResource(Res.string.shell_create), onClick = save, enabled = canSave)
             }
         }
     }

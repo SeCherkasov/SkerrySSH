@@ -1,0 +1,14 @@
+<resources>
+    <!-- Appearance / раздел оформления (desktop Settings → Appearance, mobile More → Appearance) -->
+    <string name="appearance_title">Appearance</string>
+    <string name="appearance_subtitle">Pick a terminal theme. Themes apply per-connection or globally.</string>
+    <string name="appearance_section_terminal">TERMINAL</string>
+    <string name="appearance_section_interface">INTERFACE</string>
+    <string name="appearance_font">Font</string>
+    <string name="appearance_font_size">Font size</string>
+    <string name="appearance_language">Language</string>
+
+    <!-- Языки интерфейса. Названия конкретных языков даются автонимами (English, Русский) и не
+         переводятся; локализуется только «System» (по языку ОС). -->
+    <string name="language_system">System</string>
+</resources>
