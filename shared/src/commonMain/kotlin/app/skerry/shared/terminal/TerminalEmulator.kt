@@ -139,7 +139,7 @@ const val DEFAULT_MAX_SCROLLBACK = 5000
 class TerminalEmulator(
     cols: Int = 80,
     rows: Int = 24,
-    private val maxScrollback: Int = DEFAULT_MAX_SCROLLBACK,
+    maxScrollback: Int = DEFAULT_MAX_SCROLLBACK,
     // Форма/мигание курсора ПО УМОЛЧАНИЮ (пользовательская настройка «Стиль курсора»). Действуют, пока
     // приложение не задало своё через DECSCUSR; RIS (полный сброс) возвращает именно к ним, а не к
     // жёсткому xterm-дефолту. Значения по умолчанию (блок + мигание) сохраняют прежнее поведение.
@@ -158,6 +158,11 @@ class TerminalEmulator(
     private var altGrid: MutableList<TermRow>? = null
     private var grid: MutableList<TermRow> = primaryGrid
     private val scrollback = ArrayDeque<TermRow>()
+
+    // Глубина scrollback (настройка «Буфер прокрутки»). Не val: её можно сменить на лету у уже
+    // открытой сессии через [applyMaxScrollback] — при уменьшении лишние старые строки сразу
+    // обрезаются, при увеличении новые строки просто дольше держатся.
+    private var maxScrollback: Int = maxScrollback.coerceAtLeast(0)
 
     /** true, когда активен альтернативный буфер (полноэкранные TUI). У него нет scrollback. */
     var altScreen: Boolean = false
@@ -239,6 +244,16 @@ class TerminalEmulator(
         defaultCursorBlink = blink
         cursorShape = shape
         cursorBlink = blink
+    }
+
+    /**
+     * Сменить глубину scrollback на лету (настройка «Буфер прокрутки» изменилась при уже открытой
+     * сессии). При уменьшении лишние старые строки сразу обрезаются с начала истории. Вызывать из
+     * корутины-владельца эмулятора.
+     */
+    fun applyMaxScrollback(lines: Int) {
+        maxScrollback = lines.coerceAtLeast(0)
+        while (scrollback.size > maxScrollback) scrollback.removeFirst()
     }
 
     var applicationCursorKeys: Boolean = false

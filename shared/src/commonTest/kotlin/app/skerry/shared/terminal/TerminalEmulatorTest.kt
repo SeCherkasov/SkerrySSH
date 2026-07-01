@@ -906,6 +906,31 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `applyMaxScrollback shrinks history of an open session immediately`() {
+        // Экран 2 строки, буфер 100; печатаем 30 строк — большая часть уходит в scrollback.
+        val emu = TerminalEmulator(cols = 10, rows = 2, maxScrollback = 100)
+        val sb = StringBuilder()
+        for (i in 0 until 30) sb.append("line$i\r\n")
+        emu.feed(sb.toString().encodeToByteArray())
+        assertTrue(emu.lines.size > 20, "история должна накопиться в scrollback")
+
+        // Уменьшаем буфер на лету — лишние старые строки обрезаются сразу (scrollback=5 + 2 экрана).
+        emu.applyMaxScrollback(5)
+        assertEquals(7, emu.lines.size)
+    }
+
+    @Test
+    fun `applyMaxScrollback keeps trimming as new lines arrive`() {
+        val emu = TerminalEmulator(cols = 10, rows = 2, maxScrollback = 100)
+        emu.applyMaxScrollback(3)
+        val sb = StringBuilder()
+        for (i in 0 until 20) sb.append("x$i\r\n")
+        emu.feed(sb.toString().encodeToByteArray())
+        // Новая глубина держится и для последующего вывода: 3 scrollback + 2 экрана.
+        assertEquals(5, emu.lines.size)
+    }
+
+    @Test
     fun `decscusr selects steady block`() {
         // CSI 2 SP q — пробел перед 'q' это intermediate-байт DECSCUSR.
         val emu = emulate(chunks = arrayOf("$esc[2 q"))

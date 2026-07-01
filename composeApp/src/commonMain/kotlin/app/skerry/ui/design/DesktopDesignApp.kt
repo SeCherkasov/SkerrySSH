@@ -242,6 +242,17 @@ fun DesktopDesignApp(
             s.splitSession?.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
         }
     }
+    // Смена буфера прокрутки в настройках так же применяется к УЖЕ открытым сессиям на лету: при
+    // уменьшении лишняя старая история обрезается, при увеличении новые строки дольше держатся.
+    // Новые сессии берут значение при connect через terminalPrefs.
+    val scrollbackLines = TerminalSessionPrefs(scrollback = state.terminalScrollback).effectiveScrollback
+    LaunchedEffect(scrollbackLines, liveSessions) {
+        val manager = liveSessions ?: return@LaunchedEffect
+        manager.sessions.forEach { s ->
+            s.liveTerminal?.applyScrollback(scrollbackLines)
+            s.splitSession?.liveTerminal?.applyScrollback(scrollbackLines)
+        }
+    }
     // Мемоизируем: LocalTerminalAppearance — staticCompositionLocalOf (сравнение по ссылке), а
     // DesktopDesignApp рекомпозируется на смене вкладок/сессий/событий vault. Без remember новый
     // инстанс на каждой рекомпозиции форсил бы полный пересбор поддерева потребителей (весь Canvas

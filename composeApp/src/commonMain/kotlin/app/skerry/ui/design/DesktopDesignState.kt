@@ -127,7 +127,8 @@ class DesktopDesignState(
     // Настройки терминала (Settings → Терминал): глубина scrollback, стиль курсора и показ живого
     // OSC-заголовка на вкладках. Стартовые значения читаются из персиста при запуске, колбэки пишут
     // обратно — выбор переживает перезапуск. Дефолты (10 000 строк, мигающий блок, показ выкл, no-op) —
-    // для мок/превью/тестов. Первые две применяются к НОВЫМ сессиям (см. [app.skerry.ui.terminal.TerminalSessionPrefs]).
+    // для мок/превью/тестов. Первые две применяются к НОВЫМ сессиям при connect (см.
+    // [app.skerry.ui.terminal.TerminalSessionPrefs]) И проталкиваются в уже открытые сессии на лету.
     initialTerminalScrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
     private val onTerminalScrollbackChange: (Int) -> Unit = {},
     initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,

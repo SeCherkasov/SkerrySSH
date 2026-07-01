@@ -221,6 +221,7 @@ class TerminalScreenState(
                 when (cmd) {
                     is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
                     is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
+                    is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
                     is TerminalCommand.Resize -> {
                         // PTY ресайзим ПЕРВЫМ, эмулятор — только при успехе: иначе сетка станет шире,
                         // чем знает приложение, и хвост строк зависнет нестёртым. Сбой PTY-ресайза НЕ
@@ -567,6 +568,15 @@ class TerminalScreenState(
     fun applyCursorStyle(shape: CursorShape, blink: Boolean) {
         commands.trySend(TerminalCommand.SetCursorDefault(shape, blink))
     }
+
+    /**
+     * Сменить глубину scrollback у уже открытой сессии (настройка «Буфер прокрутки» изменилась на
+     * лету). Идёт через ту же командную очередь — при уменьшении лишние старые строки сразу
+     * обрезаются, снимок публикуется автоматически.
+     */
+    fun applyScrollback(lines: Int) {
+        commands.trySend(TerminalCommand.SetMaxScrollback(lines))
+    }
 }
 
 /** Команда единственному владельцу эмулятора — порядок feed/resize сохраняется очередью. */
@@ -579,4 +589,7 @@ private sealed interface TerminalCommand {
 
     /** Новый пользовательский дефолт курсора (настройка сменилась при открытой сессии). */
     class SetCursorDefault(val shape: CursorShape, val blink: Boolean) : TerminalCommand
+
+    /** Новая глубина scrollback (настройка «Буфер прокрутки» сменилась при открытой сессии). */
+    class SetMaxScrollback(val lines: Int) : TerminalCommand
 }
