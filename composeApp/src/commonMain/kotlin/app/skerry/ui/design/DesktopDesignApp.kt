@@ -80,8 +80,11 @@ import app.skerry.ui.sync.syncIndicatorLocalized
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
 import app.skerry.ui.terminal.LocalTerminalAppearance
+import app.skerry.ui.terminal.LocalTerminalTheme
 import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.terminal.TerminalCursorStyle
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.terminal.TerminalSessionPrefs
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TerminalFont
@@ -148,6 +151,9 @@ fun DesktopDesignApp(
     onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
     initialShowTerminalTitleOnTabs: Boolean = false,
     onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
+    // Цветовая тема терминала (Appearance → карточки тем) — персистится снаружи (desktop main).
+    initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
+    onTerminalThemeChange: (TerminalTheme) -> Unit = {},
     state: DesktopDesignState = remember {
         DesktopDesignState(
             initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
@@ -157,6 +163,7 @@ fun DesktopDesignApp(
             initialTerminalScrollback, onTerminalScrollbackChange,
             initialTerminalCursorStyle, onTerminalCursorStyleChange,
             initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
+            initialTerminalTheme, onTerminalThemeChange,
         )
     },
     vault: Vault? = null,
@@ -282,6 +289,8 @@ fun DesktopDesignApp(
         LocalSftpPrefs provides sftpPrefs,
         // Внешний вид терминала из настроек: шрифт + кегль читает [app.skerry.ui.terminal.TerminalScreen].
         LocalTerminalAppearance provides terminalAppearance,
+        // Цветовая тема терминала (Appearance → карточки): фон/текст/ANSI/курсор — тот же рендер.
+        LocalTerminalTheme provides state.terminalTheme,
         // Открытый vault + биометрия за гейтом — нужны повторной аутентификации перед копированием
         // пароля из keychain (на desktop биометрии нет, путь сводится к мастер-паролю).
         LocalVault provides vault,

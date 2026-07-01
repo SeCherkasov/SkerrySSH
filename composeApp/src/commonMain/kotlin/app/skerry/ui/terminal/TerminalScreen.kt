@@ -157,18 +157,25 @@ fun TerminalScreen(
     // там, где провайдер не выставлен (мобильный таргет/превью/экран подключения). Лигатуры гасим
     // всегда ([NO_LIGATURES]), чтобы `->`/`=>`/`!=` не склеивались независимо от выбранного шрифта.
     val appearance = LocalTerminalAppearance.current
+    // Цветовая тема терминала (Appearance → выбор темы): фон/текст/ANSI/акцент курсора. Меняется на
+    // лету — все обращения ниже (фон Box, textStyle, cellBgColor, курсор, выделение) читают её.
+    val termTheme = LocalTerminalTheme.current
+    val cursorBg = termTheme.cursor
+    val cursorFg = termTheme.cursorText
+    val selectionBg = termTheme.selection
+    val handleColor = termTheme.cursor
     val mono = rememberTerminalFontFamily(appearance.font)
     // Ключ — сам appearance (@Immutable data class, структурное равенство): меняется ровно при выборе
     // нового шрифта/кегля. FontFamily ключом ненадёжен — равенство двух собранных инстансов зависит от
     // equals у Font compose-resources, и при reference-equality textStyle/metrics инвалидировались бы
     // на каждой рекомпозиции. mono захватывается лямбдой и согласован с appearance.font.
-    val textStyle = remember(appearance) {
+    val textStyle = remember(appearance, termTheme) {
         TextStyle(
             fontFamily = mono,
             fontFeatureSettings = NO_LIGATURES,
             fontSize = appearance.fontSizeSp.sp,
             lineHeight = (appearance.fontSizeSp * TERMINAL_LINE_HEIGHT_RATIO).sp,
-            color = SkerryColors.text,
+            color = termTheme.foreground,
         )
     }
     val sessionState by state.state.collectAsState()
@@ -328,7 +335,7 @@ fun TerminalScreen(
     // Кэш TextStyle глифа по TermStyle: toGlyphStyle делает merge() (аллокация SpanStyle+TextStyle) на
     // каждый ран. Строк/ранов на кадр — сотни, но различных стилей мало, поэтому мемоизируем. Сбрасываем
     // при смене базового стиля или палитры (OSC 4/104) — от них зависит результат.
-    val glyphStyleCache = remember(textStyle, state.palette) { HashMap<TermStyle, TextStyle>() }
+    val glyphStyleCache = remember(textStyle, state.palette, termTheme) { HashMap<TermStyle, TextStyle>() }
 
     // PathEffect для пунктирного/штрихового подчёркивания зависит только от высоты клетки (константа при
     // фиксированном шрифте) — считаем один раз, а не на каждый подчёркнутый ран в draw-фазе.
@@ -467,7 +474,7 @@ fun TerminalScreen(
         )
     }
 
-    Box(modifier.onSizeChanged { viewportSize = it }.background(SkerryColors.terminalBg)) {
+    Box(modifier.onSizeChanged { viewportSize = it }.background(termTheme.background)) {
       // Весь видимый экран рисуем ОДНИМ пер-клеточным оверлеем по моноширинной сетке (а не потоковым
       // Text): фон ячеек на полную ширину строки (включая хвостовые reverse-пробелы TUI), подсветку
       // выделения и сами глифы — каждый по своей колонке `col*cellWidth`. Так широкие символы (CJK,
@@ -491,10 +498,10 @@ fun TerminalScreen(
                   // 1) Фон ячеек — раны одного цвета схлопываем; хвостовой ран тянем до края вьюпорта.
                   var c = 0
                   while (c < row.size) {
-                      val color = cellBgColor(row[c].style, palette)
+                      val color = cellBgColor(row[c].style, palette, termTheme)
                       if (color == null) { c++; continue }
                       val s = c; c++
-                      while (c < row.size && cellBgColor(row[c].style, palette) == color) c++
+                      while (c < row.size && cellBgColor(row[c].style, palette, termTheme) == color) c++
                       val left = s * cw
                       val right = if (c >= row.size) size.width else c * cw
                       drawRect(color, topLeft = Offset(left, top), size = Size(right - left, chh))
@@ -517,11 +524,11 @@ fun TerminalScreen(
                   for (run in glyphRuns(row)) {
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
-                          val style = glyphStyleCache.getOrPut(run.style) { run.style.toGlyphStyle(textStyle, palette) }
+                          val style = glyphStyleCache.getOrPut(run.style) { run.style.toGlyphStyle(textStyle, palette, termTheme) }
                           drawText(measurer, run.text, topLeft = Offset(x, top), style = style)
                       }
                       // Подчёркивание тянем по всей ширине рана, в т.ч. под пробелами (как в xterm).
-                      if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette, underlineEffects)
+                      if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette, underlineEffects, termTheme)
                   }
                   // 4) Гиперссылки (OSC 8) подчёркиваем отдельным проходом — раны соседних клеток с
                   // одним URI; пропускаем те, что уже подчёркнуты приложением (SGR), чтобы не дублировать.
@@ -537,7 +544,7 @@ fun TerminalScreen(
                           if (row[k].style.underline) { k++; continue } // app уже подчёркивает — не дублируем
                           val runStart = k
                           while (k < to && !row[k].style.underline) k++
-                          drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects)
+                          drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects, termTheme)
                       }
                   }
               }
@@ -952,8 +959,8 @@ fun TerminalScreen(
           if (startAnchor != null && endAnchor != null) {
               Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
                   val dy = -scroll.value.toFloat()
-                  drawSelectionHandle(startAnchor.copy(y = startAnchor.y + dy), handleRadiusPx, metrics.cellHeight, SelectionHandle.START)
-                  drawSelectionHandle(endAnchor.copy(y = endAnchor.y + dy), handleRadiusPx, metrics.cellHeight, SelectionHandle.END)
+                  drawSelectionHandle(startAnchor.copy(y = startAnchor.y + dy), handleRadiusPx, metrics.cellHeight, SelectionHandle.START, handleColor)
+                  drawSelectionHandle(endAnchor.copy(y = endAnchor.y + dy), handleRadiusPx, metrics.cellHeight, SelectionHandle.END, handleColor)
               }
           }
       }
@@ -998,16 +1005,6 @@ fun TerminalScreen(
     }
 }
 
-/** Цвет курсора-блока и цвет символа под ним (контраст на cyan). */
-private val cursorBg = SkerryColors.cyan
-private val cursorFg = SkerryColors.terminalBg
-
-/** Полупрозрачная подсветка выделения — поверх собственного фона ячейки. */
-private val selectionBg = SkerryColors.cyan.copy(alpha = 0.3f)
-
-/** Цвет тач-маркеров выделения. */
-private val handleColor = SkerryColors.cyan
-
 /**
  * Рисует один тач-маркер выделения: вертикальную «ножку» вдоль границы ячейки (высотой в строку)
  * и «каплю»-кружок под якорем, смещённый наружу от текста (start — влево, end — вправо), как в
@@ -1018,6 +1015,7 @@ private fun DrawScope.drawSelectionHandle(
     radius: Float,
     cellHeight: Float,
     which: SelectionHandle,
+    handleColor: Color,
 ) {
     drawLine(
         color = handleColor,
@@ -1035,10 +1033,10 @@ private fun DrawScope.drawSelectionHandle(
  * дефолтный фон без inverse → `null` (рисовать не нужно — виден общий фон терминала). Подсветку
  * выделения накладывает сам оверлей отдельным слоем поверх фона.
  */
-private fun cellBgColor(style: TermStyle, palette: Palette): Color? = when {
-    style.inverse -> style.fg.toComposeColor(SkerryColors.text, palette)
+private fun cellBgColor(style: TermStyle, palette: Palette, theme: TerminalTheme): Color? = when {
+    style.inverse -> style.fg.toComposeColor(theme, palette)
     style.bg == TermColor.Default -> null
-    else -> style.bg.toComposeColor(SkerryColors.text, palette)
+    else -> style.bg.toComposeColor(theme, palette)
 }
 
 /**
@@ -1092,20 +1090,20 @@ internal fun glyphRuns(row: List<TermCell>): List<GlyphRun> {
  * [TextStyle] для отрисовки глифа ячейки: базовый моноширинный стиль + цвет/начертание/подчёркивание
  * из [TermStyle]. Фон убираем (его рисует оверлей отдельным слоем по полной ширине ячейки).
  */
-private fun TermStyle.toGlyphStyle(base: TextStyle, palette: Palette): TextStyle =
-    base.merge(toSpanStyle(palette).copy(background = Color.Unspecified))
+private fun TermStyle.toGlyphStyle(base: TextStyle, palette: Palette, theme: TerminalTheme): TextStyle =
+    base.merge(toSpanStyle(palette, theme).copy(background = Color.Unspecified))
 
-private fun TermStyle.toSpanStyle(palette: Palette): SpanStyle {
+private fun TermStyle.toSpanStyle(palette: Palette, theme: TerminalTheme): SpanStyle {
     // inverse меняет местами текст и фон; при дефолтном фоне он становится цветом фона терминала.
-    val resolvedFg = fg.toComposeColor(SkerryColors.text, palette)
-    val resolvedBg = if (bg == TermColor.Default) SkerryColors.terminalBg else bg.toComposeColor(SkerryColors.text, palette)
+    val resolvedFg = fg.toComposeColor(theme, palette)
+    val resolvedBg = if (bg == TermColor.Default) theme.background else bg.toComposeColor(theme, palette)
     var fgColor = if (inverse) resolvedBg else resolvedFg
     val bgColor = when {
         inverse -> resolvedFg
         bg == TermColor.Default -> Color.Unspecified
         else -> resolvedBg
     }
-    if (hidden) fgColor = bgColor.takeIf { it != Color.Unspecified } ?: SkerryColors.terminalBg
+    if (hidden) fgColor = bgColor.takeIf { it != Color.Unspecified } ?: theme.background
     if (dim) fgColor = fgColor.copy(alpha = 0.6f)
     // Подчёркивание (включая modern 4:x формы и SGR 58 цвет) рисуем вручную в Canvas — Compose
     // TextDecoration не умеет ни волнистое/пунктирное/двойное, ни отдельный цвет. Здесь только
@@ -1135,13 +1133,13 @@ private val LINK_UNDERLINE_STYLE = TermStyle(
  * Цвет линии подчёркивания: [TermStyle.underlineColor], а при [TermColor.Default] — следует цвету
  * текста (с учётом inverse и dim). Рендерится отдельно от глифа, поэтому цвет считаем тут.
  */
-private fun TermStyle.underlineDrawColor(palette: Palette): Color {
+private fun TermStyle.underlineDrawColor(palette: Palette, theme: TerminalTheme): Color {
     val base = if (underlineColor == TermColor.Default) {
         if (inverse) {
-            if (bg == TermColor.Default) SkerryColors.terminalBg else bg.toComposeColor(SkerryColors.text, palette)
-        } else fg.toComposeColor(SkerryColors.text, palette)
+            if (bg == TermColor.Default) theme.background else bg.toComposeColor(theme, palette)
+        } else fg.toComposeColor(theme, palette)
     } else {
-        underlineColor.toComposeColor(SkerryColors.text, palette)
+        underlineColor.toComposeColor(theme, palette)
     }
     return if (dim) base.copy(alpha = 0.6f) else base
 }
@@ -1150,9 +1148,9 @@ private fun TermStyle.underlineDrawColor(palette: Palette): Color {
  * Рисует линию подчёркивания нужной формы (modern SGR `4:x`) у нижней кромки ячейки/рана.
  * [left]/[width] — горизонтальный отрезок, [top] — верх строки, [chh] — высота клетки.
  */
-private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects) {
+private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects, theme: TerminalTheme) {
     if (style.underlineStyle == UnderlineStyle.None) return
-    val color = style.underlineDrawColor(palette)
+    val color = style.underlineDrawColor(palette, theme)
     val thickness = (chh / 14f).coerceAtLeast(1f)
     val y = top + chh - thickness * 1.5f
     val right = left + width
@@ -1197,18 +1195,19 @@ private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Floa
 
 /**
  * Перевод [TermColor] в Compose Color: Default — цвет из контекста; Rgb — напрямую; Indexed —
- * xterm-палитра, где первые 16 индексов взяты из темы «night sea», а 16..255 — стандартный
+ * xterm-палитра, где первые 16 индексов взяты из активной темы ([TerminalTheme.ansi]), а 16..255 — стандартный
  * 6×6×6 куб и градации серого.
  */
-private fun TermColor.toComposeColor(default: Color, palette: Palette): Color = when (this) {
-    TermColor.Default -> default
+private fun TermColor.toComposeColor(theme: TerminalTheme, palette: Palette): Color = when (this) {
+    TermColor.Default -> theme.foreground
     is TermColor.Rgb -> Color(r, g, b)
-    is TermColor.Indexed -> xtermColor(index, palette)
+    is TermColor.Indexed -> xtermColor(index, palette, theme)
 }
 
-/** ANSI 0..15 под «night sea» + стандартный xterm-куб/grayscale для 16..255; OSC 4-override приоритетнее. */
-private fun xtermColor(index: Int, palette: Palette): Color {
+/** ANSI 0..15 из активной темы + стандартный xterm-куб/grayscale для 16..255; OSC 4-override приоритетнее. */
+private fun xtermColor(index: Int, palette: Palette, theme: TerminalTheme): Color {
     palette[index]?.let { return Color(it.r, it.g, it.b) }
+    if (index in 0..15) return theme.ansi[index]
     return xtermDefaultColor(index)
 }
 

@@ -4,6 +4,8 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -412,6 +414,17 @@ class DesktopDesignStateTest {
         s.chooseTerminalFont(TerminalFont.JetBrainsMono) // повтор того же — no-op
         assertEquals(TerminalFont.JetBrainsMono, s.terminalFont)
         assertEquals(listOf(TerminalFont.JetBrainsMono), seen)
+    }
+
+    @Test
+    fun setTerminalTheme_updates_and_reports_once_skipping_repeat() {
+        val seen = mutableListOf<TerminalTheme>()
+        val s = DesktopDesignState(onTerminalThemeChange = { seen += it })
+        assertEquals(TerminalThemes.DEFAULT, s.terminalTheme) // дефолт — Night Sea
+        s.chooseTerminalTheme(TerminalThemes.GruvboxDark)
+        s.chooseTerminalTheme(TerminalThemes.GruvboxDark) // повтор той же — no-op
+        assertEquals(TerminalThemes.GruvboxDark, s.terminalTheme)
+        assertEquals(listOf(TerminalThemes.GruvboxDark), seen)
     }
 
     @Test
