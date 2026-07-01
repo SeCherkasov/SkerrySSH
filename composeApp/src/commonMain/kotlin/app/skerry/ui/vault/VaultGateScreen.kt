@@ -425,64 +425,6 @@ private fun ResetScopeOption(selected: Boolean, title: String, subtitle: String,
     }
 }
 
-/**
- * Настройки биометрии за гейтом (vault разблокирован). Тумблер включает/выключает разблокировку
- * биометрией; включение требует биометрического подтверждения (оборачивает `dataKey`). Кнопка
- * блокировки — ручной lock. Скрывается целиком, если биометрия недоступна на устройстве.
- */
-@Composable
-fun VaultBiometricSettings(
-    vault: Vault,
-    biometrics: VaultBiometrics,
-    onLock: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-) {
-    // Тумблер ходит через тот же контроллер, что и разблокировка: включение/выключение и
-    // реактивное состояние биометрии живут в VaultGateController, UI их только отображает.
-    val controller = remember(vault, biometrics) { VaultGateController(vault, biometrics) }
-    if (!controller.canEnableBiometric()) {
-        // Биометрия недоступна — показываем только ручной lock (если он есть).
-        if (onLock != null) {
-            Column(modifier.padding(24.dp)) {
-                TextButton(onClick = onLock) { Text("Заблокировать хранилище") }
-            }
-        }
-        return
-    }
-
-    val scope = rememberCoroutineScope()
-
-    Column(
-        modifier = modifier.widthIn(max = 360.dp).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "Разблокировка биометрией",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Switch(
-                checked = controller.biometricEnabled,
-                enabled = !controller.biometricInFlight,
-                onCheckedChange = { wantOn ->
-                    if (controller.biometricInFlight) return@Switch
-                    scope.launch {
-                        if (wantOn) controller.enableBiometric(ENABLE_PROMPT) else controller.disableBiometric()
-                    }
-                },
-            )
-        }
-        if (onLock != null) {
-            TextButton(onClick = onLock) { Text("Заблокировать хранилище") }
-        }
-    }
-}
-
 @Composable
 private fun VaultFormScaffold(
     title: String,

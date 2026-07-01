@@ -17,8 +17,8 @@ data class ForwardRequest(
  * Правила: порт слушателя `0..65535` (`0` = «выберет ОС/сервер»), хост назначения непуст,
  * порт назначения `1..65535` (`0` бессмыслен — туда некуда подключаться).
  *
- * Общий источник правды для desktop ([PortForwardScreen]) и мобильной формы — чтобы валидация не
- * разъезжалась между платформами.
+ * Общий источник правды для desktop-формы туннелей (`TunnelsView`) и мобильной формы — чтобы
+ * валидация не разъезжалась между платформами.
  */
 fun parseForwardInput(bindPort: String, destHost: String, destPort: String): ForwardRequest? {
     val bind = parseBindPort(bindPort) ?: return null
@@ -34,10 +34,3 @@ fun parseForwardInput(bindPort: String, destHost: String, destPort: String): For
  */
 fun parseBindPort(bindPort: String): Int? =
     bindPort.trim().toIntOrNull()?.takeIf { it in 0..65535 }
-
-/** Короткий бейдж направления (`-L`/`-R`/`-D`) для списков и переключателей. */
-internal fun directionShort(direction: ForwardDirection): String = when (direction) {
-    ForwardDirection.Local -> "-L"
-    ForwardDirection.Remote -> "-R"
-    ForwardDirection.Dynamic -> "-D"
-}
