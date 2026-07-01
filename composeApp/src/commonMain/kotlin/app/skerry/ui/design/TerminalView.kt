@@ -299,12 +299,13 @@ private fun HostsSidebar(state: DesktopDesignState) {
             // резолвится в текущие профили — удалённые/неизвестные id просто скрыты. Пусто → секции нет.
             // Мок/превью (нет живого каталога): статичная строка.
             if (liveHosts != null) {
-                // Мемоизируем по (порядок недавних, состав каталога) — как соседний `folders`: иначе
+                // Секцию можно целиком скрыть (Settings → Appearance → Interface) и ограничить её размер.
+                // Мемоизируем по (порядок недавних, состав каталога, лимит) — как соседний `folders`: иначе
                 // резолв пересчитывался бы на каждой рекомпозиции сайдбара (drag/смена чипа/таба).
-                val recent = remember(state.recentHostIds, liveHosts.hosts) {
-                    state.recentHostIds.mapNotNull { liveHosts.find(it) }
+                val recent = remember(state.recentHostIds, liveHosts.hosts, state.recentLimit) {
+                    state.recentHostIds.mapNotNull { liveHosts.find(it) }.take(state.recentLimit)
                 }
-                if (recent.isNotEmpty()) {
+                if (state.showRecent && recent.isNotEmpty()) {
                     RecentSectionHeader()
                     recent.forEach { host -> key(host.id) { RecentHostRow(host, mono) } }
                 }

@@ -10,6 +10,9 @@
     <string name="appearance_letter_spacing">Межбуквенный интервал</string>
     <string name="appearance_default_value">По умолчанию: %1$s</string>
     <string name="appearance_language">Язык</string>
+    <string name="appearance_recent_show">Недавние подключения</string>
+    <string name="appearance_recent_show_desc">Показывать недавно открытые хосты в боковой панели.</string>
+    <string name="appearance_recent_count">Сколько показывать</string>
 
     <!-- Языки интерфейса -->
     <string name="language_system">Системный</string>

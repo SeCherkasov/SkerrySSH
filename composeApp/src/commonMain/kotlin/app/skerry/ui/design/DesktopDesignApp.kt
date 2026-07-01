@@ -166,6 +166,11 @@ fun DesktopDesignApp(
     // Порог автоблокировки по простою (Settings → Безопасность) — персистится снаружи (desktop main).
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     onAutoLockChange: (AutoLockDuration) -> Unit = {},
+    // Видимость и размер секции RECENT (Settings → Appearance → Interface) — персистятся снаружи (desktop main).
+    initialShowRecent: Boolean = true,
+    onShowRecentChange: (Boolean) -> Unit = {},
+    initialRecentLimit: Int = DesktopDesignState.MAX_RECENT_HOSTS,
+    onRecentLimitChange: (Int) -> Unit = {},
     state: DesktopDesignState = remember {
         DesktopDesignState(
             initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
@@ -178,6 +183,8 @@ fun DesktopDesignApp(
             initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
             initialTerminalTheme, onTerminalThemeChange,
             initialAutoLock, onAutoLockChange,
+            initialShowRecent, onShowRecentChange,
+            initialRecentLimit, onRecentLimitChange,
         )
     },
     vault: Vault? = null,

@@ -155,6 +155,40 @@ private fun writeRecentHostIds(dir: Path, ids: List<String>) {
 }
 
 /**
+ * Видимость секции RECENT сайдбара (Settings → Appearance → Interface): файл `recent_show` (`0`/`1`).
+ * Отсутствует/нечитаем → `true` (показывать по умолчанию). Запись best-effort — сбой не роняет UI.
+ */
+private fun readRecentShow(dir: Path): Boolean {
+    val file = dir.resolve("recent_show")
+    return runCatching { Files.readString(file).trim() != "0" }.getOrDefault(true)
+}
+
+private fun writeRecentShow(dir: Path, visible: Boolean) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("recent_show"), if (visible) "1" else "0")
+    }
+}
+
+/**
+ * Число показываемых недавних хостов (Settings → Appearance → Interface): файл `recent_limit`.
+ * Отсутствует/нечитаем/невалиден → кап [DesktopDesignState.MAX_RECENT_HOSTS]. Диапазон зажимает сам
+ * state при чтении initial-значения; запись best-effort — сбой не роняет UI.
+ */
+private fun readRecentLimit(dir: Path): Int {
+    val file = dir.resolve("recent_limit")
+    return runCatching { Files.readString(file).trim().toInt() }
+        .getOrDefault(app.skerry.ui.design.DesktopDesignState.MAX_RECENT_HOSTS)
+}
+
+private fun writeRecentLimit(dir: Path, limit: Int) {
+    runCatching {
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("recent_limit"), limit.toString())
+    }
+}
+
+/**
  * Пользовательские (пока пустые) группы хостов сайдбара, переживающие перезапуск: имена групп в файле
  * `custom_groups` по одному на строку (порядок значим — папки идут в этом порядке). Отсутствует/нечитаем
  * → пусто. Запись best-effort: сбой персиста не роняет UI.
@@ -581,6 +615,10 @@ fun main() {
                     onShowTerminalTitleOnTabsChange = { writeShowTerminalTitle(dir, it) },
                     initialAutoLock = readAutoLock(dir),
                     onAutoLockChange = { writeAutoLock(dir, it) },
+                    initialShowRecent = readRecentShow(dir),
+                    onShowRecentChange = { writeRecentShow(dir, it) },
+                    initialRecentLimit = readRecentLimit(dir),
+                    onRecentLimitChange = { writeRecentLimit(dir, it) },
                     vault = deps.vault,
                     biometrics = deps.biometrics,
                     securityLog = securityLog,

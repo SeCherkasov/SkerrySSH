@@ -322,6 +322,49 @@ class DesktopDesignStateTest {
         assertTrue(seen.isEmpty())
     }
 
+    // Видимость и размер секции RECENT (Settings → Appearance → Interface)
+
+    @Test
+    fun recent_visibility_defaults_shown_full_cap() {
+        val s = DesktopDesignState()
+        assertTrue(s.showRecent)
+        assertEquals(DesktopDesignState.MAX_RECENT_HOSTS, s.recentLimit)
+    }
+
+    @Test
+    fun setRecentVisible_updates_and_reports_once() {
+        val seen = mutableListOf<Boolean>()
+        val s = DesktopDesignState(onShowRecentChange = { seen += it })
+        s.setRecentVisible(false)
+        s.setRecentVisible(false) // повтор — ни мутации, ни колбэка
+        assertFalse(s.showRecent)
+        assertEquals(listOf(false), seen)
+    }
+
+    @Test
+    fun chooseRecentLimit_coerces_into_range_and_reports() {
+        val seen = mutableListOf<Int>()
+        val s = DesktopDesignState(onRecentLimitChange = { seen += it })
+        s.chooseRecentLimit(3)
+        s.chooseRecentLimit(99) // выше капа → капнуто
+        s.chooseRecentLimit(0)  // ниже 1 → 1
+        s.chooseRecentLimit(1)  // уже 1 — no-op
+        assertEquals(1, s.recentLimit)
+        assertEquals(listOf(3, DesktopDesignState.MAX_RECENT_HOSTS, 1), seen)
+    }
+
+    @Test
+    fun recentLimit_honours_initial_value_coerced() {
+        assertEquals(2, DesktopDesignState(initialRecentLimit = 2).recentLimit)
+        assertEquals(DesktopDesignState.MAX_RECENT_HOSTS, DesktopDesignState(initialRecentLimit = 100).recentLimit)
+        assertEquals(1, DesktopDesignState(initialRecentLimit = 0).recentLimit)
+    }
+
+    @Test
+    fun showRecent_honours_initial_value() {
+        assertFalse(DesktopDesignState(initialShowRecent = false).showRecent)
+    }
+
     // Пользовательские (пустые) группы хостов
 
     @Test

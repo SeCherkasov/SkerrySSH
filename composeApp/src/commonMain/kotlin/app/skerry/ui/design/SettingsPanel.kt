@@ -52,6 +52,9 @@ import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
 import app.skerry.ui.generated.resources.appearance_language
+import app.skerry.ui.generated.resources.appearance_recent_count
+import app.skerry.ui.generated.resources.appearance_recent_show
+import app.skerry.ui.generated.resources.appearance_recent_show_desc
 import app.skerry.ui.generated.resources.appearance_section_interface
 import app.skerry.ui.generated.resources.appearance_section_terminal
 import app.skerry.ui.generated.resources.appearance_letter_spacing
@@ -559,6 +562,31 @@ private fun AppearanceSection(state: DesktopDesignState) {
     SectionLabel(stringResource(Res.string.appearance_section_interface))
     SettingRow(label = stringResource(Res.string.appearance_language)) {
         Box(Modifier.width(180.dp)) { LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage) }
+    }
+    // Секция RECENT в сайдбаре: показывать ли её и сколько хостов (степпер виден только когда включено).
+    SettingToggleRow(
+        stringResource(Res.string.appearance_recent_show),
+        stringResource(Res.string.appearance_recent_show_desc),
+        state.showRecent,
+        { state.setRecentVisible(!state.showRecent) },
+    )
+    if (state.showRecent) {
+        SettingRow(
+            label = stringResource(Res.string.appearance_recent_count),
+            hasHint = true,
+            isDefault = state.recentLimit == DesktopDesignState.MAX_RECENT_HOSTS,
+            defaultText = DesktopDesignState.MAX_RECENT_HOSTS.toString(),
+            onReset = { state.chooseRecentLimit(DesktopDesignState.MAX_RECENT_HOSTS) },
+        ) {
+            NumberStepper(
+                value = state.recentLimit.toFloat(),
+                onValueChange = { state.chooseRecentLimit(it.roundToInt()) },
+                step = 1f,
+                format = { it.roundToInt().toString() },
+                parse = { it.trim().toIntOrNull()?.toFloat() },
+                fieldWidth = 52.dp,
+            )
+        }
     }
 }
 

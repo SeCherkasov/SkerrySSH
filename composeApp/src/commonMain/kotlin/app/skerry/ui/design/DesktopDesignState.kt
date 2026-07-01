@@ -158,6 +158,14 @@ class DesktopDesignState(
     // колбэк пишет обратно; проводится в [app.skerry.ui.vault.VaultGate] как idleMs таймера.
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
+    // Видимость и размер секции RECENT в сайдбаре (Settings → Appearance → Interface). Стартовые
+    // значения из персиста, колбэки пишут обратно — выбор переживает перезапуск. Дефолты (показывать,
+    // полный кап) сохраняют прежнее поведение для мок/превью/тестов. [recentLimit] режет только показ:
+    // хранилище недавних по-прежнему копит до [MAX_RECENT_HOSTS], лимит применяется при рендере.
+    initialShowRecent: Boolean = true,
+    private val onShowRecentChange: (Boolean) -> Unit = {},
+    initialRecentLimit: Int = MAX_RECENT_HOSTS,
+    private val onRecentLimitChange: (Int) -> Unit = {},
 ) {
     // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
     // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
@@ -188,6 +196,12 @@ class DesktopDesignState(
 
     /** Id недавно подключённых хостов, новейший — первым (секция RECENT в сайдбаре). */
     var recentHostIds: List<String> by mutableStateOf(initialRecentHostIds); private set
+
+    /** Показывать ли секцию RECENT в сайдбаре (Settings → Appearance → Interface). */
+    var showRecent: Boolean by mutableStateOf(initialShowRecent); private set
+
+    /** Сколько недавних хостов показывать (1..[MAX_RECENT_HOSTS]); режет только показ, не хранилище. */
+    var recentLimit: Int by mutableStateOf(initialRecentLimit.coerceIn(1, MAX_RECENT_HOSTS)); private set
 
     /** Имена пользовательских (пока пустых) групп хостов — показываются как папки наравне с выводимыми из хостов. */
     var customGroups: List<String> by mutableStateOf(initialCustomGroups); private set
@@ -355,6 +369,24 @@ class DesktopDesignState(
         onRecentHostIdsChange(recentHostIds)
     }
 
+    /** Показать/скрыть секцию RECENT и сообщить наружу (для персиста). Повтор того же значения — no-op. */
+    fun setRecentVisible(on: Boolean) {
+        if (on == showRecent) return
+        showRecent = on
+        onShowRecentChange(on)
+    }
+
+    /**
+     * Сменить число показываемых недавних хостов (зажимается в 1..[MAX_RECENT_HOSTS]) и сообщить
+     * наружу. То же (уже зажатое) значение — no-op: ни мутации, ни записи.
+     */
+    fun chooseRecentLimit(n: Int) {
+        val next = n.coerceIn(1, MAX_RECENT_HOSTS)
+        if (next == recentLimit) return
+        recentLimit = next
+        onRecentLimitChange(next)
+    }
+
     fun openCreateGroup() { groupDialog = GroupDialog.Create }
     fun openRenameGroup(name: String) { groupDialog = GroupDialog.Rename(name) }
     fun dismissGroupDialog() { groupDialog = null }
@@ -512,7 +544,9 @@ class DesktopDesignState(
         return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, color = D.sunset)
     }
 
-    private companion object {
+    // internal (не private): MAX_RECENT_HOSTS читается настройками/персистом/тестами в этом же модуле
+    // как кап числа показываемых недавних (Settings → Appearance → Interface).
+    internal companion object {
         /** Максимум записей в секции RECENT сайдбара — старейшие вытесняются новыми коннектами. */
         const val MAX_RECENT_HOSTS = 8
 
