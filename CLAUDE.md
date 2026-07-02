@@ -57,14 +57,18 @@ AI under policy (вывод сервера = недоверенный источ
 высокоуровневый `Vault`/`VaultRecord` + UI мастер-пароля + биометрия + reset/recovery),
 двухпанельный SFTP. Паритет desktop⇆Android закрыт (роадмап A–E), проверено на S24.
 
-**Phase 2 — почти закрыт.** Self-hosted sync (Ktor+SRP-сервер, zero-knowledge E2E,
+**Phase 2 — ЗАКРЫТ.** Self-hosted sync (Ktor+SRP-сервер, zero-knowledge E2E,
 live-sync push-on-change, tombstone-propagation, персист курсора, селективный синк по типам,
 admin-консоль); паринг устройств (QR, вариант B); сниппеты; **AI-ассистент (BYOK OpenAI +
-per-host политики Strict/Balanced/Permissive/Off)** — код в `shared/ai/` и `ui/ai/`,
-последняя ветка. Teams/шеринг сознательно ОТЛОЖЕН (zero-knowledge крипто-шеринг слишком
-сложен) — не предлагать следующим шагом.
+per-host политики Strict/Balanced/Permissive/Off)** — код в `shared/ai/` и `ui/ai/`.
+Teams/шеринг сознательно ОТЛОЖЕН (zero-knowledge крипто-шеринг слишком сложен) —
+не предлагать следующим шагом.
 
-Дальше (следующая сессия): **Phase 3 — Telnet, serial-подключения, autocomplete**
-(взяты первыми, т.к. не требуют серверных пакетов). **Mosh отложен до после релиза**
-(нужен `mosh-server` на каждом хосте + UDP-порты, паритет с коммерческими клиентами не двигает). Локальная
-AI-модель на desktop — тоже Phase 3, позже.
+**Phase 3 core — ЗАКРЫТ.** Telnet (свой IAC-кодек), serial (desktop jSerialComm /
+Android USB-OTG), autocomplete терминала с историей, desktop-хоткеи — реализовано и запушено.
+
+Дальше (следующая сессия): Phase 3 core закрыт, всё запушено (`main == origin/main`,
+дерево чистое). Остались только отложенные пункты — ни один не «следующий шаг» по умолчанию:
+**Mosh** (до после релиза: нужен `mosh-server` на каждом хосте + UDP-порты), **локальная
+AI-модель на desktop** (позже), **планшетный режим** (последним). Реальное направление —
+на выбор пользователя (полировка / подготовка к релизу). Актуальный статус — в `memory/`.
