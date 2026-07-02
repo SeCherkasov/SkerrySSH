@@ -143,7 +143,7 @@ data class TerminalAppearance(
 /**
  * Внешний вид терминала для всего дерева. Дефолт ([TerminalAppearance] по умолчанию = Hack 13px)
  * действует там, где провайдер не выставлен (мобильный таргет, превью, экран подключения), сохраняя
- * прежнее поведение. Desktop-корень ([app.skerry.ui.design.DesktopDesignApp]) подменяет его выбором
+ * прежнее поведение. Desktop-корень ([app.skerry.ui.desktop.DesktopDesignApp]) подменяет его выбором
  * пользователя из настроек.
  */
 val LocalTerminalAppearance = staticCompositionLocalOf { TerminalAppearance() }

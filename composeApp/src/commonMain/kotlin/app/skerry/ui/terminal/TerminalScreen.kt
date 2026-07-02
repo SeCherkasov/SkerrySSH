@@ -99,8 +99,6 @@ import app.skerry.shared.terminal.UnderlineStyle
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
-import app.skerry.ui.design.ArrowKey
-import app.skerry.ui.design.arrowSequence
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -144,7 +142,7 @@ private const val HANDLE_TOUCH_RADIUS_DP = 22
  * На desktop оставлен `false` — там работает физическая клавиатура через [mapTerminalKey].
  *
  * [imeTransform] (только для IME-пути) пост-обрабатывает непустой результат [imeDeltaToPty] перед
- * отправкой — мобильная клавишная панель пропускает через него sticky-ctrl ([app.skerry.ui.design.applyStickyCtrl]),
+ * отправкой — мобильная клавишная панель пропускает через него sticky-ctrl ([app.skerry.ui.mobile.applyStickyCtrl]),
  * чтобы Ctrl+<буква> работал и с софт-клавиатуры, а не только с клавиш панели.
  */
 @Composable

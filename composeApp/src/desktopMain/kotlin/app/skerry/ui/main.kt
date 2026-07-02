@@ -9,7 +9,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import app.skerry.ui.design.optimalWindowSize
+import app.skerry.ui.desktop.optimalWindowSize
 import java.awt.GraphicsEnvironment
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.io.PrivateConfig
@@ -178,7 +178,7 @@ private fun writeRecentShow(dir: Path, visible: Boolean) {
 private fun readRecentLimit(dir: Path): Int {
     val file = dir.resolve("recent_limit")
     return runCatching { Files.readString(file).trim().toInt() }
-        .getOrDefault(app.skerry.ui.design.DesktopDesignState.MAX_RECENT_HOSTS)
+        .getOrDefault(app.skerry.ui.app.DesktopDesignState.MAX_RECENT_HOSTS)
 }
 
 private fun writeRecentLimit(dir: Path, limit: Int) {
@@ -581,7 +581,7 @@ fun main() {
             // менеджер known-hosts работает поверх своих сторов (knownHosts из `deps`).
             AppLocaleProvider(currentUiLanguage.value) {
               app.skerry.ui.theme.SkerryTheme {
-                app.skerry.ui.design.DesktopDesignApp(
+                app.skerry.ui.desktop.DesktopDesignApp(
                     initialInfoPanel = readInfoPanel(dir),
                     onInfoPanelChange = { writeInfoPanel(dir, it) },
                     initialCollapsedGroups = readCollapsedGroups(dir),

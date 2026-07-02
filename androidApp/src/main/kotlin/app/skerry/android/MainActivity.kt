@@ -31,8 +31,8 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.VaultMigration
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
-import app.skerry.ui.design.MobileDesignApp
-import app.skerry.ui.design.MobileDesignState
+import app.skerry.ui.mobile.MobileDesignApp
+import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.secure.WindowBridge
 import app.skerry.ui.sftp.SafBridge
 import app.skerry.ui.vault.AndroidLockContext

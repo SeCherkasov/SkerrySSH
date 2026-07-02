@@ -12,7 +12,7 @@ import app.skerry.ui.terminal.TerminalScreenState
 
 /**
  * Подвью сессии (привязана к вкладке): что показано в её рабочей области. Туннели сюда НЕ входят —
- * это глобальный раздел (модель Termius), см. [app.skerry.ui.design.DesktopView.isAppLevel].
+ * это глобальный раздел (модель Termius), см. [app.skerry.ui.app.DesktopView.isAppLevel].
  */
 enum class SessionView { Terminal, Sftp }
 

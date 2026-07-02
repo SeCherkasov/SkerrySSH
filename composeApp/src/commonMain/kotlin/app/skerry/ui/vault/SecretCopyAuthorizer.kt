@@ -26,7 +26,7 @@ import org.jetbrains.compose.resources.getString
  * биометрический промпт ([VaultBiometrics.confirm], vault не трогает); иначе — ввод мастер-пароля
  * ([Vault.verifyPassword], сверка без перевыдачи ключа). Действие выполняется только после успеха.
  *
- * Общий для desktop ([app.skerry.ui.design.VaultView]) и мобильного ([app.skerry.ui.design.MobileVaultView])
+ * Общий для desktop ([app.skerry.ui.vault.VaultView]) и мобильного ([app.skerry.ui.mobile.MobileVaultView])
  * keychain — на desktop биометрии нет (`biometrics == null`), путь естественно сводится к паролю.
  * Состояние формы пароля держится здесь (Compose snapshot state), UI рисует его платформенно.
  * Инстанцируется через `remember(vault, biometrics, scope)`.

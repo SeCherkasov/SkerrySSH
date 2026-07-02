@@ -117,6 +117,6 @@ object TerminalThemes {
 
 /**
  * Активная тема терминала. Дефолт (там, где провайдер не выставлен — мобильный/превью/экран
- * подключения) — [TerminalThemes.DEFAULT]. Провайдер ставит [app.skerry.ui.design.DesktopDesignApp].
+ * подключения) — [TerminalThemes.DEFAULT]. Провайдер ставит [app.skerry.ui.desktop.DesktopDesignApp].
  */
 val LocalTerminalTheme = staticCompositionLocalOf { TerminalThemes.DEFAULT }

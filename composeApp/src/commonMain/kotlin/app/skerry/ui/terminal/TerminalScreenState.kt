@@ -126,7 +126,7 @@ class TerminalScreenState(
     /**
      * DECCKM-режим (application-cursor-keys), снятый с эмулятора: vim/less/htop включают его, и тогда
      * клавиши-стрелки клавишной панели должны слаться как SS3 (`ESC O A`), а не CSI. UI читает флаг
-     * при кодировании стрелок ([app.skerry.ui.design.arrowSequence]).
+     * при кодировании стрелок ([app.skerry.ui.terminal.arrowSequence]).
      */
     var applicationCursorKeys: Boolean by mutableStateOf(false)
         private set
