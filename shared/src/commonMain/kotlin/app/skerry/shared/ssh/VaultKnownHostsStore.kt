@@ -28,15 +28,22 @@ class VaultKnownHostsStore(private val vault: Vault) : KnownHostsStore {
     }
 
     override fun add(host: KnownHost) {
+        // no-op на залоченном vault (симметрично [all]): TOFU-запись идёт из IO-потока sshj во время
+        // connect(), а auto-lock по таймауту может сработать ровно в этот момент — тогда vault.put бросил
+        // бы IllegalStateException прямо в стадию рукопожатия SSH (мимо контракта connect, с утечкой
+        // клиента). Не запомнить ключ безопаснее, чем уронить коннект: следующий connect переспросит TOFU.
+        if (!vault.isUnlocked) return
         vault.put(idOf(host.host, host.port, host.keyType), RecordType.KNOWN_HOST, encode(host))
     }
 
     override fun replace(host: KnownHost) {
         // Та же идентичность → тот же id → upsert. Окна «записи нет» не возникает (put атомарен).
+        if (!vault.isUnlocked) return // см. [add]: no-op на залоченном vault вместо броска в connect()
         vault.put(idOf(host.host, host.port, host.keyType), RecordType.KNOWN_HOST, encode(host))
     }
 
     override fun remove(host: String, port: Int, keyType: String) {
+        if (!vault.isUnlocked) return // см. [add]: no-op на залоченном vault
         vault.remove(idOf(host, port, keyType))
     }
 

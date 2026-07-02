@@ -42,8 +42,10 @@ class FileHostStore(private val path: Path) : HostStore {
     @Synchronized
     override fun reorder(transform: (List<Host>) -> List<Host>) {
         val updated = transform(entries.toList())
-        require(updated.map { it.id }.toSet() == entries.map { it.id }.toSet()) {
-            // Без самих Host в сообщении — у них есть credentialId.
+        // Размер + множество id: одно равенство множеств пропустило бы дубликат ([A,B,C,A]), который
+        // затем осиротил бы одну из копий (find/put адресуют первую по indexOfFirst). Симметрично
+        // VaultHostStore.reorder. Без самих Host в сообщении — у них есть credentialId.
+        require(updated.size == entries.size && updated.map { it.id }.toSet() == entries.map { it.id }.toSet()) {
             "reorder must preserve the id set (had ${entries.size}, got ${updated.size})"
         }
         entries.clear()

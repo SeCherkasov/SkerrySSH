@@ -411,7 +411,11 @@ fun main() {
             IonspinVaultCrypto(),
             deviceId(dir),
             FileSystem.SYSTEM,
-        ) { Instant.now().toString() }
+            now = { Instant.now().toString() },
+            // Сам файл главных секретов — 0600, а не только каталог (как security_events.json ниже):
+            // защита не должна быть однослойной на случай копирования/бэкапа с сохранением прав.
+            harden = { PrivateConfig.harden(Path.of(it.toString())) },
+        )
         // Локальный (не синкаемый) журнал событий безопасности: смена мастер-пароля, биометрия,
         // разблокировка. Пишется контроллером за гейтом; раздел Settings → Безопасность читает его.
         val securityLog = FileSecurityLog(
@@ -513,7 +517,10 @@ fun main() {
             ai.refresh()
         }
         val onVaultUnlocked: () -> Unit = {
+            // Миграция идемпотентна и безопасно повторяется на следующем unlock — но её сбой не должен
+            // исчезать бесследно (частично мигрированный vault: хосты без перепривязки credentialId).
             runCatching { VaultMigration(vault, hostStore).migrate() }
+                .onFailure { System.err.println("vault migration failed (retries on next unlock): ${it.message}") }
             // Vault открыт → перечитать менеджеры (включая BYOK-настройки AI) из расшифрованных записей.
             reloadManagers()
             // keep-connected: vault открыт → есть dataKey, можно бесшумно восстановить sync-сессию.

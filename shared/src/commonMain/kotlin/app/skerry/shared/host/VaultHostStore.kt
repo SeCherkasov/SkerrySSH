@@ -51,7 +51,9 @@ class VaultHostStore(
         }
     }
 
-    override fun reorder(transform: (List<Host>) -> List<Host>) {
+    override fun reorder(transform: (List<Host>) -> List<Host>) = vault.transaction {
+        // Всё чтение-вычисление-запись под одной блокировкой vault: иначе конкурентный mergeRemote из
+        // фонового sync, попавший между снимком all() и записью ниже, был бы затёрт устаревшим порядком.
         val current = all()
         val updated = transform(current)
         // Размер + множество id: одно равенство множеств пропустило бы дубликат (например [A,B,C,A]),

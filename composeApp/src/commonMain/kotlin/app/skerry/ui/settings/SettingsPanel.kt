@@ -75,7 +75,9 @@ import app.skerry.ui.generated.resources.settings_ai_confirm_desc
 import app.skerry.ui.generated.resources.settings_ai_default_provider
 import app.skerry.ui.generated.resources.settings_ai_default_provider_desc
 import app.skerry.ui.generated.resources.settings_ai_field_api_key
+import app.skerry.ui.ai.isInsecureAiEndpoint
 import app.skerry.ui.generated.resources.settings_ai_field_endpoint
+import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.generated.resources.settings_ai_field_model
 import app.skerry.ui.generated.resources.settings_ai_key_saved
 import app.skerry.ui.generated.resources.settings_ai_live_subtitle
@@ -409,6 +411,11 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
     SyncField(placeholder = "gpt-4o-mini", value = model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Next) { model = it }
     FieldLabel(stringResource(Res.string.settings_ai_field_endpoint))
     SyncField(placeholder = "https://api.openai.com/v1", value = baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done) { baseUrl = it }
+    // http:// шлёт API-ключ и промпт (при Permissive — с секретами) открытым текстом — как в sync-паринге,
+    // предупреждаем (кроме localhost, где cleartext осознан для локального прокси).
+    if (isInsecureAiEndpoint(baseUrl)) {
+        Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+    }
 
     Box(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {

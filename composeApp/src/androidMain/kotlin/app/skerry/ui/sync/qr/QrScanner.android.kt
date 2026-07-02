@@ -20,6 +20,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.qr_cancel
+import app.skerry.ui.generated.resources.qr_permission_needed
+import app.skerry.ui.generated.resources.qr_scan_hint
+import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -73,13 +78,13 @@ actual fun QrScannerScreen(onResult: (String) -> Unit, onCancel: () -> Unit) {
         if (hasPermission) {
             CameraScanPreview(onDetected = onResult)
             Text(
-                "Point the camera at the QR code on your other device",
+                stringResource(Res.string.qr_scan_hint),
                 color = Color.White, fontSize = 14.sp,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 110.dp, start = 28.dp, end = 28.dp),
             )
         } else {
             Text(
-                "Camera permission is needed to scan. Grant it, or go back and paste the code.",
+                stringResource(Res.string.qr_permission_needed),
                 color = Color.White, fontSize = 14.sp,
                 modifier = Modifier.align(Alignment.Center).padding(28.dp),
             )
@@ -89,7 +94,7 @@ actual fun QrScannerScreen(onResult: (String) -> Unit, onCancel: () -> Unit) {
                 .clip(RoundedCornerShape(9.dp)).background(Color(0xFF0E2230)).clickable(onClick = onCancel)
                 .padding(horizontal = 22.dp, vertical = 11.dp),
         ) {
-            Text("Cancel", color = Color(0xFF2BBDEE), fontSize = 14.sp)
+            Text(stringResource(Res.string.qr_cancel), color = Color(0xFF2BBDEE), fontSize = 14.sp)
         }
     }
 }

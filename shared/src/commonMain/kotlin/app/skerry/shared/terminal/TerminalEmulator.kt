@@ -677,8 +677,11 @@ class TerminalEmulator(
             'G', '`' -> { cx = (arg(0, 1) - 1).coerceIn(0, cols - 1); pendingWrap = false }
             'd' -> { cy = absRow(arg(0, 1) - 1); pendingWrap = false }
             'H', 'f' -> cursorTo(arg(0, 1) - 1, arg(1, 1) - 1)
-            'I' -> { repeat(arg(0, 1)) { cx = nextTabStop(cx) }; pendingWrap = false }
-            'Z' -> { repeat(arg(0, 1)) { cx = prevTabStop(cx) }; pendingWrap = false }
+            // Счётчик капнут числом колонок: курсор всё равно упрётся в границу, поэтому больший повтор
+            // бессмыслен. Без капа `ESC[2147483647I` дал бы ~2 млрд итераций в некооперативном цикле —
+            // сессия/UI зависли бы без возможности прервать (сервер недоверенный, см. другие repeat-команды).
+            'I' -> { repeat(arg(0, 1).coerceAtMost(cols)) { cx = nextTabStop(cx) }; pendingWrap = false }
+            'Z' -> { repeat(arg(0, 1).coerceAtMost(cols)) { cx = prevTabStop(cx) }; pendingWrap = false }
             'J' -> eraseDisplay(args.getOrNull(0)?.takeIf { it >= 0 } ?: 0)
             'K' -> eraseLine(args.getOrNull(0)?.takeIf { it >= 0 } ?: 0)
             'L' -> insertLines(arg(0, 1))

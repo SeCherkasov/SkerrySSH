@@ -16,4 +16,15 @@
 
     <!-- Языки интерфейса -->
     <string name="language_system">Системный</string>
+
+    <!-- Нижняя навигация (mobile): подписи корневых табов. -->
+    <string name="nav_tab_hosts">Хосты</string>
+    <string name="nav_tab_snippets">Сниппеты</string>
+    <string name="nav_tab_vault">Хранилище</string>
+    <string name="nav_tab_more">Ещё</string>
+
+    <!-- Экран сканирования QR (mobile, связывание устройств). -->
+    <string name="qr_scan_hint">Наведите камеру на QR-код, показанный на другом устройстве.</string>
+    <string name="qr_permission_needed">Для сканирования кода связывания нужен доступ к камере.</string>
+    <string name="qr_cancel">Отмена</string>
 </resources>

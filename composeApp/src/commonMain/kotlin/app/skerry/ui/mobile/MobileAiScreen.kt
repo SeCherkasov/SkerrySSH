@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiRole
 import app.skerry.ui.ai.AiAssistantController
+import app.skerry.ui.ai.isInsecureAiEndpoint
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.more_ai_ask
 import app.skerry.ui.generated.resources.more_ai_byok_desc
@@ -47,6 +48,7 @@ import app.skerry.ui.generated.resources.more_ai_input_placeholder_setup
 import app.skerry.ui.generated.resources.more_ai_key_saved
 import app.skerry.ui.generated.resources.more_ai_label_api_key
 import app.skerry.ui.generated.resources.more_ai_label_endpoint
+import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.generated.resources.more_ai_label_model
 import app.skerry.ui.generated.resources.more_ai_not_configured
 import app.skerry.ui.generated.resources.more_ai_placeholder_api_key
@@ -98,6 +100,10 @@ fun MobileAiScreen(state: MobileDesignState) {
             AiTextField(model, stringResource(Res.string.more_ai_placeholder_model), KeyboardType.Text, ImeAction.Next) { model = it }
             AiFieldLabel(stringResource(Res.string.more_ai_label_endpoint))
             AiTextField(baseUrl, stringResource(Res.string.more_ai_placeholder_endpoint), KeyboardType.Uri, ImeAction.Done) { baseUrl = it }
+            // http:// шлёт ключ/промпт открытым текстом (см. SettingsPanel) — предупреждаем, кроме localhost.
+            if (isInsecureAiEndpoint(baseUrl)) {
+                Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            }
 
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -5,9 +5,20 @@ import app.skerry.shared.ai.AiPolicy
 /** Вариант per-host AI-политики для пикеров (форма соединения, настройки). */
 data class PolicyOption(val policy: AiPolicy, val icon: String, val title: String, val desc: String)
 
+/**
+ * http://-endpoint AI-провайдера (кроме localhost/127.0.0.1) — повод предупредить: ключ и промпт
+ * (при Permissive — вместе с секретами) уйдут открытым текстом, как небезопасный sync-URL в паринге.
+ */
+fun isInsecureAiEndpoint(url: String): Boolean {
+    val u = url.trim()
+    if (!u.startsWith("http://")) return false
+    val host = u.removePrefix("http://")
+    return !host.startsWith("localhost") && !host.startsWith("127.0.0.1")
+}
+
 val POLICY_OPTIONS = listOf(
-    PolicyOption(AiPolicy.Strict, "shield_lock", "Strict — production safety", "Local AI only. Every suggestion needs confirmation. Secrets sanitized before any prompt."),
-    PolicyOption(AiPolicy.Balanced, "tune", "Balanced — cloud allowed", "Local AI by default. Cloud AI with explicit opt-in per request."),
-    PolicyOption(AiPolicy.Permissive, "science", "Permissive — dev / homelab", "Any provider. Auto-suggestions without confirmation."),
+    PolicyOption(AiPolicy.Strict, "shield_lock", "Strict — production safety", "Cloud AI is off for this host; nothing is sent to a provider. (Local AI is planned.)"),
+    PolicyOption(AiPolicy.Balanced, "tune", "Balanced — cloud allowed", "Cloud AI enabled. Secrets are stripped from every prompt before it is sent."),
+    PolicyOption(AiPolicy.Permissive, "science", "Permissive — dev / homelab", "Cloud AI enabled. Prompts are sent as-is, without stripping secrets."),
     PolicyOption(AiPolicy.Off, "block", "Off — no AI", "Disable AI features for this connection."),
 )

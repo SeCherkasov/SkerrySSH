@@ -93,6 +93,10 @@ import app.skerry.ui.generated.resources.sftp_items_count
 import app.skerry.ui.generated.resources.sftp_loading
 import app.skerry.ui.generated.resources.sftp_move
 import app.skerry.ui.generated.resources.sftp_move_to_q
+import app.skerry.ui.generated.resources.sftp_overwrite
+import app.skerry.ui.generated.resources.sftp_overwrite_many
+import app.skerry.ui.generated.resources.sftp_overwrite_one
+import app.skerry.ui.generated.resources.sftp_overwrite_q
 import app.skerry.ui.generated.resources.sftp_new_folder
 import app.skerry.ui.generated.resources.sftp_no_session
 import app.skerry.ui.generated.resources.sftp_no_session_hint
@@ -454,6 +458,20 @@ private fun LiveSftpView(
                 onDismiss = { copyTarget = null },
             )
         }
+    }
+
+    // Конфликт перезаписи: передача (F5/F6 или drag) нашла в приёмнике одноимённые объекты. Взводится
+    // самим координатором ПОСЛЕ подтверждения копирования — иначе тихо перезаписали бы без спроса.
+    c?.overwrite?.let { conflict ->
+        val single = conflict.names.singleOrNull()
+        ConfirmDangerDialog(
+            title = stringResource(Res.string.sftp_overwrite_q),
+            body = if (single != null) stringResource(Res.string.sftp_overwrite_one, single)
+            else stringResource(Res.string.sftp_overwrite_many, conflict.names.size),
+            confirmLabel = stringResource(Res.string.sftp_overwrite),
+            onConfirm = { c.resolveOverwrite(true) },
+            onDismiss = { c.resolveOverwrite(false) },
+        )
     }
 
     // F2 Rename строки под курсором активной панели (классика mc — клавиатурный путь, без меню).
@@ -1035,7 +1053,7 @@ private fun ConfirmMoveDialog(
  * ←/→/Tab переключают между Cancel и действием, Esc отменяет. Фокусированная кнопка обведена рамкой.
  */
 @Composable
-private fun ConfirmDangerDialog(
+internal fun ConfirmDangerDialog(
     title: String,
     body: String,
     confirmLabel: String,

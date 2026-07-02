@@ -1474,8 +1474,10 @@ private fun AiBarInput(
                         }
                         // Команда и пояснение — по общей базовой линии (разный кегль не «плавает»).
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Деструктивную команду подсвечиваем красным.
-                            Txt(pending, color = if (severe) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
+                            // Деструктивную команду подсвечиваем красным. Команда переносится (до 6 строк),
+                            // а не обрезается многоточием: пользователь должен видеть ЦЕЛИКОМ то, что
+                            // подтверждает и исполнит — иначе за «…» мог бы скрыться опасный хвост.
+                            Txt(pending, color = if (severe) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
                             if (info != null) Txt(info, color = infoColor, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }

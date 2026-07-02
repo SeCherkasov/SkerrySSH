@@ -215,27 +215,17 @@ class TerminalScreenState(
                 commands.close()
             }
         }
-        // Единственный владелец эмулятора: feed и resize выполняются строго по очереди.
+        // Единственный владелец эмулятора: feed и resize выполняются строго по очереди. Снимок
+        // публикуем ОДИН раз на пачку немедленно доступных команд: при активном выводе (сборка, cat)
+        // PTY отдаёт много чанков подряд, а publishSnapshot копирует весь scrollback целиком — делать
+        // это на каждый чанк дорого (фризы/GC, особенно на Android). Когда очередь пуста, ведёт себя
+        // как прежде (снимок сразу), поэтому задержка отклика в интерактиве не растёт.
         scope.launch {
             for (cmd in commands) {
-                when (cmd) {
-                    is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
-                    is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
-                    is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
-                    is TerminalCommand.Resize -> {
-                        // PTY ресайзим ПЕРВЫМ, эмулятор — только при успехе: иначе сетка станет шире,
-                        // чем знает приложение, и хвост строк зависнет нестёртым. Сбой PTY-ресайза НЕ
-                        // должен убивать корутину-обработчик (иначе feed перестанет обрабатываться и
-                        // терминал замёрзнет), поэтому ловим здесь.
-                        try {
-                            session.resize(cmd.size)
-                            emulator.resize(cmd.size.cols, cmd.size.rows)
-                        } catch (e: CancellationException) {
-                            throw e // отмену скоупа не глушим — structured concurrency должна свалить обработчик
-                        } catch (_: Exception) {
-                            // только восстановимые сбои (например, обрыв PTY); Error пробрасываем
-                        }
-                    }
+                applyCommand(cmd)
+                while (true) {
+                    val next = commands.tryReceive().getOrNull() ?: break
+                    applyCommand(next)
                 }
                 publishSnapshot()
             }
@@ -245,6 +235,28 @@ class TerminalScreenState(
         // синхронизации транспорта). Все отправки проходят через [outbound].
         scope.launch {
             for (bytes in outbound) session.send(bytes)
+        }
+    }
+
+    /** Применить одну команду к эмулятору (без публикации снимка — её делает вызывающий пакетно). */
+    private suspend fun applyCommand(cmd: TerminalCommand) {
+        when (cmd) {
+            is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
+            is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
+            is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
+            is TerminalCommand.Resize -> {
+                // PTY ресайзим ПЕРВЫМ, эмулятор — только при успехе: иначе сетка станет шире, чем знает
+                // приложение, и хвост строк зависнет нестёртым. Сбой PTY-ресайза НЕ должен убивать
+                // корутину-обработчик (иначе feed перестанет обрабатываться и терминал замёрзнет).
+                try {
+                    session.resize(cmd.size)
+                    emulator.resize(cmd.size.cols, cmd.size.rows)
+                } catch (e: CancellationException) {
+                    throw e // отмену скоупа не глушим — structured concurrency должна свалить обработчик
+                } catch (_: Exception) {
+                    // только восстановимые сбои (например, обрыв PTY); Error пробрасываем
+                }
+            }
         }
     }
 
@@ -361,8 +373,10 @@ class TerminalScreenState(
     fun typeInput(text: String) {
         // Сервер не эхоит ввод (ввод пароля / line-mode, сигнал от транспорта) — НЕ отслеживаем строку
         // и НЕ пишем её в историю: секрет не должен оседать в памяти и всплывать подсказкой. Для SSH
-        // эхо-статус недоступен (всегда false) — остаточный риск in-session паролей осознан.
-        if (session.echoSuppressed) {
+        // эхо-статус недоступен (всегда false), поэтому дополнительно распознаём парольный промпт по
+        // тексту текущей строки экрана ([atPasswordPrompt]) — иначе пароль из sudo/ssh/passwd попал бы
+        // в историю автодополнения и позже показался бы ghost-подсказкой прямо на экране.
+        if (session.echoSuppressed || atPasswordPrompt()) {
             autocomplete.reset()
             if (suggestionTail != null) suggestionTail = null
             send(text)
@@ -373,6 +387,23 @@ class TerminalScreenState(
         send(text)
         // Команда подтверждена Enter (и была с эхом) — персистим снимок истории для этого хоста.
         if (committed != null) onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
+    }
+
+    /**
+     * Похожа ли текущая строка курсора на парольный промпт (echo обычно выключен именно тут). Читаем
+     * ОПУБЛИКОВАННЫЙ снимок [screen] (UI-поток, без гонки с эмулятором): видимая сетка — последние
+     * [rows] строк, строка курсора внутри неё — [cursorRow]. Считаем промптом строку, которая
+     * заканчивается на «:» и содержит одно из ключевых слов — чтобы не глушить историю на обычном
+     * тексте вроде `cat passwords.txt`. Эвристика: цель — не пропустить пароль, лёгкое переусердствование
+     * (иногда не сохранить команду) безопаснее утечки секрета.
+     */
+    private fun atPasswordPrompt(): Boolean {
+        val grid = screen
+        if (grid.isEmpty() || rows <= 0) return false
+        val line = grid.getOrNull(grid.size - rows + cursorRow) ?: return false
+        val text = line.joinToString("") { it.text }.trim().lowercase()
+        if (!text.endsWith(":")) return false
+        return PASSWORD_PROMPT_HINTS.any { it in text }
     }
 
     /**
@@ -593,3 +624,11 @@ private sealed interface TerminalCommand {
     /** Новая глубина scrollback (настройка «Буфер прокрутки» сменилась при открытой сессии). */
     class SetMaxScrollback(val lines: Int) : TerminalCommand
 }
+
+/**
+ * Ключевые слова строки-промпта, при которых ввод считаем секретным и не пишем в историю (см.
+ * [TerminalScreenState.atPasswordPrompt]). Покрывают типичные приглашения sudo/ssh/passwd/su и т.п.
+ */
+private val PASSWORD_PROMPT_HINTS = listOf(
+    "password", "passphrase", "passcode", "verification code", "pin",
+)

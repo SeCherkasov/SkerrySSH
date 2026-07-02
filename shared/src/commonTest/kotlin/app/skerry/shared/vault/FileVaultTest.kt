@@ -5,6 +5,13 @@ import kotlinx.coroutines.test.TestResult
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.fakefilesystem.FakeFileSystem
@@ -225,6 +232,51 @@ class FileVaultTest {
         v.remove("ghost")
 
         assertEquals(1, v.records().size)
+    }
+
+    @Test
+    fun `unlock tolerates unknown record types and preserves them across rewrites`() = vaultTest {
+        vault().apply {
+            create("master".toCharArray())
+            put("known", RecordType.HOST, "payload".encodeToByteArray())
+            lock()
+        }
+        // Вставляем запись с типом, которого эта версия не знает (будущий RecordType), прямо в JSON —
+        // имитируем запись, синканутую с более новой версии на другом устройстве.
+        val root = json.parseToJsonElement(fs.read(file) { readUtf8() }).jsonObject
+        val future = buildJsonObject {
+            put("id", "future"); put("type", "FUTURE_TYPE"); put("version", 1L)
+            put("updatedAt", TS); put("deviceId", "device-1"); put("deleted", false)
+            put("blob", buildJsonArray { })
+        }
+        val patched = buildJsonObject {
+            put("meta", root.getValue("meta"))
+            put("records", buildJsonArray { root.getValue("records").jsonArray.forEach { add(it) }; add(future) })
+        }
+        fs.write(file) { writeUtf8(json.encodeToString(JsonObject.serializer(), patched)) }
+
+        val v = vault()
+        // Одна нераспознанная запись НЕ делает весь vault Corrupted (иначе единственный выход — reset).
+        assertEquals(UnlockResult.Success, v.unlock("master".toCharArray()))
+        assertContentEquals("payload".encodeToByteArray(), v.openPayload("known"))
+        // Перезапись файла (put) сохраняет неизвестную запись verbatim — downgrade не теряет данные.
+        v.put("known2", RecordType.HOST, "p2".encodeToByteArray())
+        val after = json.parseToJsonElement(fs.read(file) { readUtf8() }).jsonObject.getValue("records").jsonArray
+        assertTrue(after.any { it.jsonObject["id"].toString().contains("future") })
+    }
+
+    @Test
+    fun `a record with a too-short blob reads as null instead of throwing`() = vaultTest {
+        val v = vault()
+        v.create("master".toCharArray())
+        // Недоверенный sync-сервер мог бы прислать запись с blob короче nonce+tag — mergeRemote кладёт
+        // её как есть; чтение не должно бросать (иначе DoS: падение при каждой разблокировке).
+        v.mergeRemote(
+            listOf(
+                VaultRecord("evil", RecordType.HOST, version = 99, updatedAt = TS, deviceId = "z", deleted = false, blob = ByteArray(4)),
+            ),
+        )
+        assertNull(v.openPayload("evil"))
     }
 
     @Test

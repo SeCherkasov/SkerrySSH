@@ -55,4 +55,10 @@
 
     <!-- Ошибка передачи (имя: сообщение) -->
     <string name="sftp_transfer_error">%1$s: %2$s</string>
+
+    <!-- Подтверждение перезаписи: в приёмнике уже есть объекты с такими именами -->
+    <string name="sftp_overwrite_q">Overwrite existing?</string>
+    <string name="sftp_overwrite_one">%1$s already exists in the destination.</string>
+    <string name="sftp_overwrite_many">%1$d items already exist in the destination and will be overwritten.</string>
+    <string name="sftp_overwrite">Overwrite</string>
 </resources>

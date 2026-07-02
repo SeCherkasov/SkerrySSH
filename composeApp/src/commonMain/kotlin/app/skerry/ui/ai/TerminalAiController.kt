@@ -162,8 +162,29 @@ class TerminalAiController(
             }
         }
         val firstLine = text.lineSequence().firstOrNull { it.isNotBlank() } ?: return null
-        val cleaned = firstLine.filter { it == '\t' || it.code >= 0x20 }.trim().trim('`').trim()
+        val cleaned = firstLine.filter { isSafeInputChar(it) }.trim().trim('`').trim()
         return cleaned.ifEmpty { null }
+    }
+
+    /**
+     * Разрешён ли символ в команде/пояснении. Кроме control-байтов (< 0x20, кроме таба) режем ещё и
+     * Unicode-форматные/двунаправленные символы: RTL/LTR-override и isolate, zero-width, BOM, soft
+     * hyphen. Иначе (Trojan-Source) ответ модели с `U+202E` мог бы отрисоваться в баре подтверждения
+     * одной последовательностью, а уйти в PTY — другой: пользователь подтвердил бы не то, что видит.
+     * Бар подтверждения — единственный гейт безопасности AI-фичи, поэтому чистим агрессивно.
+     */
+    private fun isSafeInputChar(c: Char): Boolean {
+        if (c != '\t' && c.code < 0x20) return false
+        val code = c.code
+        val unsafeFormat = code == 0x00AD ||          // soft hyphen
+            code == 0x061C ||                          // arabic letter mark
+            code in 0x200B..0x200F ||                  // ZWSP/ZWNJ/ZWJ/LRM/RLM
+            code == 0x2028 || code == 0x2029 ||        // line/paragraph separator
+            code == 0x2060 ||                          // word joiner
+            code in 0x202A..0x202E ||                  // bidi embeddings/overrides
+            code in 0x2066..0x2069 ||                  // bidi isolates
+            code == 0xFEFF                             // ZWNBSP / BOM
+        return !unsafeFormat
     }
 
     /**
@@ -174,7 +195,7 @@ class TerminalAiController(
         val lines = raw.trim().lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
         val desc = lines.getOrNull(1) ?: return null
         val cleaned = desc.trimStart('#', '-', '*', '•', '>').trim().trim('`').trim()
-            .filter { it == '\t' || it.code >= 0x20 }.trim()
+            .filter { isSafeInputChar(it) }.trim()
         return cleaned.ifEmpty { null }?.take(120)
     }
 
@@ -225,7 +246,7 @@ class TerminalAiController(
     /** Вычистить служебную строку (INFO/ASK): бэктики, маркеры списков, control-байты; до 160 символов. */
     private fun cleanLine(s: String): String? {
         val c = s.trim().trim('`').trimStart('#', '-', '*', '•', '>').trim()
-            .filter { it == '\t' || it.code >= 0x20 }.trim()
+            .filter { isSafeInputChar(it) }.trim()
         return c.ifEmpty { null }?.take(160)
     }
 

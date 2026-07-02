@@ -10,6 +10,7 @@ import app.skerry.server.routes.pairingStartRoute
 import app.skerry.server.routes.syncWebSocket
 import app.skerry.server.routes.vaultRoutes
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationCall
@@ -30,9 +31,11 @@ import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.ratelimit.RateLimitName
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.request.contentLength
+import io.ktor.server.request.httpMethod
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
@@ -49,6 +52,8 @@ object RateLimits {
     val SRP_CHALLENGE = RateLimitName("srp-challenge")
     val SRP_VERIFY = RateLimitName("srp-verify")
     val PAIRING_CLAIM = RateLimitName("pairing-claim")
+    val REFRESH = RateLimitName("auth-refresh")
+    val ADMIN = RateLimitName("admin")
 }
 
 /** Версия сервера для /healthz и админ-консоли. */
@@ -105,12 +110,33 @@ fun Application.configureServer(services: Services) {
             rateLimiter(limit = 10, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
         }
+        // Refresh не требует пароля — по defense-in-depth ограничиваем флуд (подпись дёшева, но публичный
+        // POST без предварительной аутентификации не должен быть единственным без лимита).
+        register(RateLimits.REFRESH) {
+            rateLimiter(limit = 30, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+        // Admin-консоль защищена статическим токеном со сравнением constant-time, но от перебора токена
+        // это не спасает — добавляем частотный лимит на /admin/*.
+        register(RateLimits.ADMIN) {
+            rateLimiter(limit = 30, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
     }
-    // Жёсткая верхняя граница тела запроса: по Content-Length отвергаем раздутые тела 413-м ещё до
-    // чтения, чтобы клиент не мог исчерпать память сервера одним запросом.
+    // Жёсткая верхняя граница тела запроса. По Content-Length отвергаем раздутые тела 413-м ещё до
+    // чтения. Но одного Content-Length мало: тело с Transfer-Encoding: chunked приходит БЕЗ него, и
+    // тогда проверка ниже не сработала бы, а call.receive забуферизовал бы поток любого размера в память
+    // (OOM одним неаутентифицированным запросом). Наш клиент на теле всегда шлёт Content-Length, поэтому
+    // POST/PUT без него отвергаем как 411 — это и закрывает chunked-обход.
     val maxBody = services.config.maxRequestBodyBytes
     intercept(ApplicationCallPipeline.Plugins) {
+        val method = call.request.httpMethod
+        val carriesBody = method == HttpMethod.Post || method == HttpMethod.Put || method == HttpMethod.Patch
         val len = call.request.contentLength()
+        if (carriesBody && len == null) {
+            call.respond(HttpStatusCode.LengthRequired, ErrorResponse("Content-Length required"))
+            return@intercept finish()
+        }
         if (len != null && len > maxBody) {
             call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("request body too large"))
             return@intercept finish()
@@ -168,7 +194,9 @@ fun Application.configureServer(services: Services) {
 
         authRoutes(services)
         pairingClaimRoute(services)   // без JWT: новое устройство ещё не вошло
-        adminRoutes(services)         // своя admin-аутентификация (статический токен)
+        rateLimit(RateLimits.ADMIN) {
+            adminRoutes(services)     // своя admin-аутентификация (статический токен) + лимит на перебор
+        }
 
         authenticate("auth-jwt") {
             vaultRoutes(services)

@@ -78,6 +78,10 @@ import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.nav_tab_hosts
+import app.skerry.ui.generated.resources.nav_tab_snippets
+import app.skerry.ui.generated.resources.nav_tab_vault
+import app.skerry.ui.generated.resources.nav_tab_more
 import app.skerry.ui.generated.resources.shell_route_team
 import app.skerry.ui.generated.resources.shell_lock_title
 import app.skerry.ui.generated.resources.shell_unlock_subtitle_mobile
@@ -516,7 +520,13 @@ private fun MobileTabItem(tab: MobileTab, active: Boolean, onClick: () -> Unit) 
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Sym(tab.icon, size = 24.sp, color = color)
-        Txt(tab.label, color = color, size = 10.sp, weight = if (active) FontWeight.SemiBold else FontWeight.Normal)
+        val label = when (tab) {
+            MobileTab.Hosts -> stringResource(Res.string.nav_tab_hosts)
+            MobileTab.Snippets -> stringResource(Res.string.nav_tab_snippets)
+            MobileTab.Vault -> stringResource(Res.string.nav_tab_vault)
+            MobileTab.More -> stringResource(Res.string.nav_tab_more)
+        }
+        Txt(label, color = color, size = 10.sp, weight = if (active) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 

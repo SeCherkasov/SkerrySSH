@@ -46,6 +46,12 @@ sealed interface TransferState {
 }
 
 /**
+ * Ожидающий подтверждения конфликт перезаписи. [names] — имена объектов в каталоге-приёмнике, которые
+ * будут перезаписаны; [proceed] запускает отложенную передачу, если пользователь подтвердил.
+ */
+class OverwriteConflict(val names: List<String>, val proceed: () -> Unit)
+
+/**
  * Координатор передачи файлов между [local]- и [remote]-панелями поверх одного удалённого
  * [SftpClient]. В двухпанельном режиме передача всегда идёт между локальной ФС и SFTP, что ложится
  * на готовые `SftpClient.download`/`upload` — отдельный транспорт не нужен. Координатор берёт
@@ -69,6 +75,14 @@ class TransferCoordinator(
         private set
 
     /**
+     * Ожидающий подтверждения конфликт перезаписи: в каталоге-приёмнике уже есть объекты с именами
+     * [OverwriteConflict.names]. Пока не `null`, UI показывает диалог «Overwrite?»; [resolveOverwrite]
+     * либо запускает отложенную передачу, либо отменяет её. `null` — конфликта нет.
+     */
+    var overwrite: OverwriteConflict? by mutableStateOf(null)
+        private set
+
+    /**
      * Сериализует передачи: проверка-и-взведение [busy] не атомарны, но безопасны — `uploadSelection`/
      * `downloadSelection` зовутся из UI-обработчиков на главном потоке, а `scope` панели наследует тот
      * же главный диспетчер, так что повторный тап в том же фрейме увидит уже взведённый флаг (как в
@@ -81,12 +95,16 @@ class TransferCoordinator(
      * каталоги — рекурсивно (поддерево воссоздаётся на хосте), симметрично скачиванию. Симлинки/прочее
      * пропускаются. Прогресс/ошибка идут в [transfer]; сериализуется [busy].
      */
-    fun uploadSelection() = launchExclusive {
+    fun uploadSelection() {
         val items = local.selectedItems()
-        if (items.isEmpty()) return@launchExclusive
-        runUpload(items, remote.path)
-        remote.refresh()
-        local.clearSelection()
+        if (items.isEmpty()) return
+        confirmOverwrite(items, remote) {
+            launchExclusive {
+                runUpload(items, remote.path)
+                remote.refresh()
+                local.clearSelection()
+            }
+        }
     }
 
     /**
@@ -96,12 +114,16 @@ class TransferCoordinator(
      * счётчиком прогресса. Симлинки/прочее пропускаются (за линком в цель не идём). Прогресс/ошибка
      * идут в [transfer]; сериализуется [busy].
      */
-    fun downloadSelection() = launchExclusive {
+    fun downloadSelection() {
         val items = remote.selectedItems()
-        if (items.isEmpty()) return@launchExclusive
-        runDownload(items, local.path, remote.path)
-        local.refresh()
-        remote.clearSelection()
+        if (items.isEmpty()) return
+        confirmOverwrite(items, local) {
+            launchExclusive {
+                runDownload(items, local.path, remote.path)
+                local.refresh()
+                remote.clearSelection()
+            }
+        }
     }
 
     /**
@@ -111,29 +133,37 @@ class TransferCoordinator(
      * только при успехе передачи: ошибка оставляет источники нетронутыми (catch до delete). Источники
      * снимаются рекурсивно (каталог — со всем содержимым). Подтверждение — на стороне UI.
      */
-    fun moveSelection(fromLocal: Boolean) = launchExclusive {
+    fun moveSelection(fromLocal: Boolean) {
         if (fromLocal) {
             val items = local.selectedItems()
-            if (items.isEmpty()) return@launchExclusive
-            runUpload(items, remote.path)
-            val failed = deleteSources(items) { localBrowser.delete(it) }
-            remote.refresh()
-            local.refresh()
-            if (failed == null) local.clearSelection() else transfer = failed
+            if (items.isEmpty()) return
+            confirmOverwrite(items, remote) {
+                launchExclusive {
+                    runUpload(items, remote.path)
+                    val failed = deleteSources(items) { localBrowser.delete(it) }
+                    remote.refresh()
+                    local.refresh()
+                    if (failed == null) local.clearSelection() else transfer = failed
+                }
+            }
         } else {
-            // Снимок каталога ДО любых suspend: навигация панели (open/goUp) идёт на том же scope и
-            // могла бы сменить remote.path между скачиванием и удалением — тогда удалили бы из чужого
-            // каталога. Один и тот же снимок идёт и в runDownload, и в пересборку пути удаления.
-            val remoteDir = remote.path
             val items = remote.selectedItems()
-            if (items.isEmpty()) return@launchExclusive
-            runDownload(items, local.path, remoteDir)
-            // Удаляем источник по пути, пересобранному из снимка каталога + проверенного имени, а не из
-            // server-controlled item.path — иначе вредоносный листинг увёл бы rmdir/remove из каталога.
-            val failed = deleteSources(items) { remoteBrowser.delete(it.copy(path = safeRemoteChild(it.name, remoteDir))) }
-            local.refresh()
-            remote.refresh()
-            if (failed == null) remote.clearSelection() else transfer = failed
+            if (items.isEmpty()) return
+            confirmOverwrite(items, local) {
+                launchExclusive {
+                    // Снимок каталога ДО любых suspend: навигация панели (open/goUp) идёт на том же scope и
+                    // могла бы сменить remote.path между скачиванием и удалением — тогда удалили бы из чужого
+                    // каталога. Один и тот же снимок идёт и в runDownload, и в пересборку пути удаления.
+                    val remoteDir = remote.path
+                    runDownload(items, local.path, remoteDir)
+                    // Удаляем источник по пути, пересобранному из снимка каталога + проверенного имени, а не из
+                    // server-controlled item.path — иначе вредоносный листинг увёл бы rmdir/remove из каталога.
+                    val failed = deleteSources(items) { remoteBrowser.delete(it.copy(path = safeRemoteChild(it.name, remoteDir))) }
+                    local.refresh()
+                    remote.refresh()
+                    if (failed == null) remote.clearSelection() else transfer = failed
+                }
+            }
         }
     }
 
@@ -194,6 +224,15 @@ class TransferCoordinator(
      */
     fun uploadSource(source: UploadSource) {
         if (busy) return
+        if (source.name in remote.currentEntryNames()) {
+            overwrite = OverwriteConflict(listOf(source.name)) { runUploadSource(source) }
+            return
+        }
+        runUploadSource(source)
+    }
+
+    private fun runUploadSource(source: UploadSource) {
+        if (busy) return
         busy = true
         scope.launch {
             try {
@@ -218,6 +257,27 @@ class TransferCoordinator(
     /** Закрыть полосу передачи (сбросить в [TransferState.Idle]); идущую передачу не трогает. */
     fun clearTransfer() {
         if (transfer !is TransferState.Active) transfer = TransferState.Idle
+    }
+
+    /**
+     * Проверить конфликт имён верхнего уровня [items] с каталогом-приёмником [dest] ПЕРЕД запуском
+     * передачи. Нет пересечений — сразу [proceed]. Есть — взводим [overwrite]-диалог, отложив [proceed]
+     * до подтверждения ([resolveOverwrite]). Проверяем только верхний уровень (то, что видно в панели):
+     * это перекрывает основной сценарий «перетащил файл туда, где такой уже есть»; слияние вложенных
+     * деревьев здесь не разбираем. Если передача уже идёт ([busy]) — молча выходим, как раньше.
+     */
+    private fun confirmOverwrite(items: List<FileItem>, dest: FilePaneController, proceed: () -> Unit) {
+        if (busy) return
+        val existing = dest.currentEntryNames()
+        val clash = items.map { it.name }.filter { it in existing }
+        if (clash.isEmpty()) proceed() else overwrite = OverwriteConflict(clash, proceed)
+    }
+
+    /** Ответ пользователя на диалог перезаписи: [overwrite]=true запускает отложенную передачу, иначе отмена. */
+    fun resolveOverwrite(overwrite: Boolean) {
+        val pending = this.overwrite ?: return
+        this.overwrite = null
+        if (overwrite) pending.proceed()
     }
 
     /**

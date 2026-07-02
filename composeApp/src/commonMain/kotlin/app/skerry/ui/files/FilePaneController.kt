@@ -281,6 +281,10 @@ class FilePaneController(
     fun selectedItems(): List<FileItem> =
         (state as? FilePaneState.Loaded)?.entries?.filter { it.path in selection } ?: emptyList()
 
+    /** Имена объектов текущего каталога (для проверки конфликта перезаписи перед передачей). */
+    fun currentEntryNames(): Set<String> =
+        (state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet()
+
     /**
      * Перейти в каталог [target] АТОМАРНО: сперва загружаем его листинг, и только потом одним снимком
      * меняем path+state+выделение. Иначе path менялся бы раньше entries — старый список «висел» бы под

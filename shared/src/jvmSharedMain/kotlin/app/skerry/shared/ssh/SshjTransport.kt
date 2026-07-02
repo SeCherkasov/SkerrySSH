@@ -2,6 +2,7 @@ package app.skerry.shared.ssh
 
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SshjSftpClient
+import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
@@ -193,14 +194,22 @@ private class SshjConnection(
 
     override suspend fun exec(command: String): ExecResult = withContext(Dispatchers.IO) {
         try {
-            client.startSession().use { session ->
-                val cmd = session.exec(command)
-                // Малые объёмы вывода; потоковое чтение появится вместе с терминалом
-                val stdout = cmd.inputStream.readBytes().decodeToString()
-                val stderr = cmd.errorStream.readBytes().decodeToString()
-                cmd.join(EXEC_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                ExecResult(exitCode = cmd.exitStatus, stdout = stdout, stderr = stderr)
+            // Весь exec под таймаутом: без него зависший на сервере процесс (не закрывший stdout —
+            // `tail -f`, ожидание ввода) держал бы readAtMost вечно, а cmd.join(таймаут) до него не
+            // доходил. withTimeoutOrNull отменяет внутреннюю работу и отдаёт null (как measureRoundTrip),
+            // не путая «тайм-аут» с внешней отменой; чтение под runInterruptible реально прерывается.
+            val result = withTimeoutOrNull(EXEC_TIMEOUT_SECONDS * 1000L) {
+                client.startSession().use { session ->
+                    val cmd = session.exec(command)
+                    // Объём капнут: недоверенный/зависший сервер не должен уметь выесть память клиента
+                    // многословным выводом (в отличие от прежнего readBytes() без границы).
+                    val stdout = runInterruptible { cmd.inputStream.readAtMost(MAX_EXEC_OUTPUT_BYTES) }.decodeToString()
+                    val stderr = runInterruptible { cmd.errorStream.readAtMost(MAX_EXEC_OUTPUT_BYTES) }.decodeToString()
+                    runInterruptible { cmd.join(EXEC_TIMEOUT_SECONDS, TimeUnit.SECONDS) }
+                    ExecResult(exitCode = cmd.exitStatus, stdout = stdout, stderr = stderr)
+                }
             }
+            result ?: throw SshConnectionException("Тайм-аут выполнения команды")
         } catch (e: IOException) {
             throw SshConnectionException("Ошибка выполнения команды", e)
         }
@@ -302,14 +311,37 @@ private class SshjConnection(
             SshjDynamicForward(client, serverSocket)
         }
 
-    override suspend fun disconnect() = withContext(Dispatchers.IO) {
-        client.disconnect()
+    override suspend fun disconnect() {
+        // Таймаут + runInterruptible: штатно disconnect быстр, но запись SSH_MSG_DISCONNECT в уже мёртвый
+        // сокет (переполненный TCP-буфер) могла бы зависнуть неопределённо долго, а вызов идёт из
+        // UI-потока при закрытии вкладки. По истечении таймаута просто закрываем клиент принудительно.
+        withContext(Dispatchers.IO) {
+            withTimeoutOrNull(DISCONNECT_TIMEOUT_MILLIS) { runInterruptible { client.disconnect() } }
+                ?: runCatching { client.close() }
+            Unit
+        }
+    }
+
+    /** Прочитать не более [limit] байт из потока (остаток бросаем — session.use его закроет). */
+    private fun InputStream.readAtMost(limit: Int): ByteArray {
+        val out = ByteArrayOutputStream()
+        val chunk = ByteArray(8192)
+        var total = 0
+        while (total < limit) {
+            val n = read(chunk, 0, minOf(chunk.size, limit - total))
+            if (n < 0) break
+            out.write(chunk, 0, n)
+            total += n
+        }
+        return out.toByteArray()
     }
 
     private companion object {
         const val EXEC_TIMEOUT_SECONDS = 30L
         const val KEEPALIVE_REQUEST = "keepalive@openssh.com"
         const val PING_TIMEOUT_MILLIS = 5_000L
+        const val DISCONNECT_TIMEOUT_MILLIS = 5_000L
+        const val MAX_EXEC_OUTPUT_BYTES = 1 * 1024 * 1024 // 1 MiB на stdout и на stderr
     }
 }
 

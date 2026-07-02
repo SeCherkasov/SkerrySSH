@@ -5,7 +5,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -130,11 +129,10 @@ class IonspinVaultCryptoTest {
     }
 
     @Test
-    fun `open throws on a blob too short to hold a nonce and tag`() = cryptoTest {
-        // contract VaultCrypto: структурно некорректный вход — программная ошибка, не null
-        assertFailsWith<IllegalArgumentException> {
-            crypto.open(crypto.newDataKey(), ByteArray(39)) // NPUB(24)+ABYTES(16)-1
-        }
+    fun `open returns null on a blob too short to hold a nonce and tag`() = cryptoTest {
+        // Слишком короткий blob = обычный провал AEAD (null), НЕ программная ошибка: blob может прийти
+        // из недоверенного источника (запись sync-сервера), и бросок ронял бы весь список — DoS-вектор.
+        assertNull(crypto.open(crypto.newDataKey(), ByteArray(39))) // NPUB(24)+ABYTES(16)-1
     }
 
     @Test

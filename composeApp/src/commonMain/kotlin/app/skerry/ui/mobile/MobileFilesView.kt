@@ -56,6 +56,10 @@ import app.skerry.ui.generated.resources.sftp_error
 import app.skerry.ui.generated.resources.sftp_files_title
 import app.skerry.ui.generated.resources.sftp_loading
 import app.skerry.ui.generated.resources.sftp_new_folder
+import app.skerry.ui.generated.resources.sftp_overwrite
+import app.skerry.ui.generated.resources.sftp_overwrite_many
+import app.skerry.ui.generated.resources.sftp_overwrite_one
+import app.skerry.ui.generated.resources.sftp_overwrite_q
 import app.skerry.ui.generated.resources.sftp_no_session
 import app.skerry.ui.generated.resources.sftp_no_session_hint
 import app.skerry.ui.generated.resources.sftp_rename
@@ -68,6 +72,7 @@ import app.skerry.ui.sftp.pickUploadSource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import app.skerry.ui.sftp.ConfirmDangerDialog
 import app.skerry.ui.sftp.ConfirmDeleteDialog
 import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
@@ -225,6 +230,19 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                 initial = "",
                 onConfirm = { pane.mkdir(it); creatingFolder = false },
                 onDismiss = { creatingFolder = false },
+            )
+        }
+        // Конфликт перезаписи (скачивание/загрузка нашли одноимённый объект в приёмнике) — тот же
+        // диалог подтверждения, что на desktop; координатор общий, поэтому и состояние [overwrite] общее.
+        c?.overwrite?.let { conflict ->
+            val single = conflict.names.singleOrNull()
+            ConfirmDangerDialog(
+                title = stringResource(Res.string.sftp_overwrite_q),
+                body = if (single != null) stringResource(Res.string.sftp_overwrite_one, single)
+                else stringResource(Res.string.sftp_overwrite_many, conflict.names.size),
+                confirmLabel = stringResource(Res.string.sftp_overwrite),
+                onConfirm = { c.resolveOverwrite(true) },
+                onDismiss = { c.resolveOverwrite(false) },
             )
         }
     }

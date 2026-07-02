@@ -29,6 +29,10 @@ fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.REGISTER) {
         post("/auth/register") {
             val req = call.receive<RegisterRequest>()
+            if (tooLong(req.accountId, req.deviceId)) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
+                return@post
+            }
             // base64-декод до записи в БД: невалидный payload → 400 (BadRequestException), не 500.
             val wrapped = req.wrappedDataKey.unb64()
             try {
@@ -57,6 +61,10 @@ fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.SRP_CHALLENGE) {
         post("/auth/srp/challenge") {
         val req = call.receive<ChallengeRequest>()
+        if (tooLong(req.accountId)) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
+            return@post
+        }
         val account = services.accounts.find(req.accountId)
         // Anti-enumeration: для несуществующего аккаунта НЕ отвечаем 404 (это раскрыло бы, какие
         // accountId зарегистрированы). Вместо этого синтезируем структурно идентичный challenge с
@@ -78,6 +86,10 @@ fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.SRP_VERIFY) {
         post("/auth/srp/verify") {
         val req = call.receive<VerifyRequest>()
+        if (tooLong(req.deviceId, req.challengeId)) {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
+            return@post
+        }
         val verified = services.srp.verify(req.challengeId, req.a, req.m1)
         if (verified == null) {
             call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
@@ -100,6 +112,7 @@ fun Route.authRoutes(services: Services) {
         }
     }
 
+    rateLimit(RateLimits.REFRESH) {
     post("/auth/refresh") {
         val req = call.receive<RefreshRequest>()
         val decoded = services.tokens.verifyRefresh(req.refreshToken)
@@ -118,7 +131,16 @@ fun Route.authRoutes(services: Services) {
             ),
         )
     }
+    }
 }
+
+// Верхние границы длины клиентских идентификаторов: не даём раздутым строкам оседать в pending-картах
+// SRP/БД и давить на память ещё до общего лимита тела. Зеркалят схему (accountId varchar(320)).
+private const val MAX_ACCOUNT_ID = 320
+private const val MAX_OTHER_ID = 128
+
+private fun tooLong(accountId: String, vararg otherIds: String): Boolean =
+    accountId.length > MAX_ACCOUNT_ID || otherIds.any { it.length > MAX_OTHER_ID }
 
 private fun hmacSha256(secret: String, message: String): ByteArray {
     val mac = Mac.getInstance("HmacSHA256")

@@ -27,8 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +53,8 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.secure.SecureScreen
+import app.skerry.ui.vault.copyPasswordToClipboard
 
 /**
  * Desktop-диалог «Link a device» (вошедшее устройство): скрим + карточка, как [SyncSetupDialog].
@@ -108,11 +108,13 @@ fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
  */
 @Composable
 fun PairingOfferContent(sync: SyncCoordinator) {
+    // QR/код несут transferKey (им клеймится аккаунт в обход сервера) — защищаем экран показа от
+    // снимков и превью в «Недавних» на Android, как экран ВВОДА пароля (PairingJoinScreen). Desktop — no-op.
+    SecureScreen()
     var offer by remember { mutableStateOf<PairingOffer?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var copied by remember { mutableStateOf(false) }
     var remaining by remember { mutableStateOf<Long?>(null) } // секунд до протухания
-    val clipboard = LocalClipboardManager.current
     val genFailedMessage = stringResource(Res.string.sync_pairing_gen_failed)
 
     LaunchedEffect(Unit) {
@@ -183,7 +185,9 @@ fun PairingOfferContent(sync: SyncCoordinator) {
                 )
                 GhostButton(
                     if (copied) stringResource(Res.string.sync_copied) else stringResource(Res.string.sync_copy),
-                    onClick = { clipboard.setText(AnnotatedString(offer!!.payload)); copied = true },
+                    // Sensitive-путь (Android: скрыт из истории буфера + автоочистка), а не обычный
+                    // setText: код связывания секретен ровно как мастер-пароль (несёт transferKey).
+                    onClick = { copyPasswordToClipboard(offer!!.payload); copied = true },
                     icon = if (copied) "check" else "content_copy",
                 )
             }

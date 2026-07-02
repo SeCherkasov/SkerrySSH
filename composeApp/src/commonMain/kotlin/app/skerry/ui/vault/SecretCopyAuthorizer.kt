@@ -12,6 +12,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_bio_copy_cancel
 import app.skerry.ui.generated.resources.vtail_bio_copy_subtitle
 import app.skerry.ui.generated.resources.vtail_bio_copy_title
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,8 +77,17 @@ internal class SecretCopyAuthorizer(
                     subtitle = getString(Res.string.vtail_bio_copy_subtitle),
                 )
                 // confirm зовёт платформенный BiometricPrompt — на некоторых устройствах он может
-                // бросить исключение; не роняем композицию, а откатываемся на мастер-пароль.
-                val result = runCatching { bio.confirm(prompt) }.getOrNull()
+                // бросить исключение; не роняем композицию, а откатываемся на мастер-пароль. Отмену
+                // корутины (экран покинут/vault залочен, пока промпт в полёте) НЕ глотаем: голый
+                // runCatching поймал бы CancellationException и продолжил работу на отменённом скоупе,
+                // открыв форму пароля «из ниоткуда». Пробрасываем её, ломая structured concurrency честно.
+                val result = try {
+                    bio.confirm(prompt)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
                 biometricInFlight = false
                 when (result) {
                     BiometricConfirmResult.Confirmed -> onAuthorized()

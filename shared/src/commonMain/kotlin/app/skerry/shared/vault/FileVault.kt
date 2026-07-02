@@ -7,6 +7,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
@@ -46,6 +52,10 @@ class FileVault(
     private val crypto: VaultCrypto,
     private val deviceId: String,
     private val fileSystem: FileSystem,
+    // Хук ужесточения прав tmp-файла до 0600 перед atomicMove (desktop передаёт PrivateConfig.harden).
+    // По умолчанию no-op: тесты на FakeFileSystem и Android (filesDir приватен для UID) прав не трогают.
+    // Стоит ПЕРЕД [now], чтобы [now] оставался последним параметром (вызовы через trailing-lambda).
+    private val harden: (Path) -> Unit = {},
     private val now: () -> String,
 ) : Vault {
 
@@ -54,6 +64,14 @@ class FileVault(
     private var dataKey: DataKey? = null
     private var meta: VaultMeta? = null
     private val records = mutableListOf<VaultRecord>()
+
+    // Записи, которые эта версия приложения не смогла разобрать (незнакомый RecordType/ConnectionType
+    // после апгрейда другого устройства, или иной будущий формат). Храним их сырой JSON verbatim и
+    // дописываем при каждой перезаписи файла — иначе downgrade/старый клиент молча стёр бы синканутые
+    // данными новой версии. Одна такая запись НЕ делает весь vault Corrupted (см. [parseBody]).
+    private val unknownRecords = mutableListOf<JsonElement>()
+
+    override fun <T> transaction(block: () -> T): T = synchronized(lock) { block() }
 
     // Сигнал «локальная мутация» для live-sync (см. [Vault.localChanges]). replay=0 + DROP_OLDEST:
     // сигнал идемпотентен (важен факт изменения, не их число), а tryEmit без подписчика не должен ни
@@ -74,6 +92,7 @@ class FileVault(
             val wrapped = crypto.wrapDataKey(masterKey, freshDataKey)
             masterKey.bytes.fill(0)
             val newMeta = VaultMeta(FORMAT_VERSION, salt, wrapped)
+            unknownRecords.clear() // новый vault с нуля — не тащить сюда чужие нераспознанные записи
             try {
                 writeFile(newMeta, emptyList())
             } catch (e: Throwable) {
@@ -92,7 +111,7 @@ class FileVault(
     override fun unlock(password: CharArray): UnlockResult = synchronized(lock) {
         try {
             val body = runCatching {
-                json.decodeFromString<VaultFileBody>(fileSystem.read(path) { readUtf8() })
+                parseBody(fileSystem.read(path) { readUtf8() })
             }.getOrElse { return@synchronized UnlockResult.Corrupted }
             val masterKey = crypto.deriveMasterKey(password, body.meta.salt)
             val unwrapped = crypto.unwrapDataKey(masterKey, body.meta.wrappedDataKey)
@@ -100,9 +119,7 @@ class FileVault(
             if (unwrapped == null) return@synchronized UnlockResult.WrongPassword
             dataKey?.bytes?.fill(0) // повторный unlock не должен осиротить прежний ключ
             dataKey = unwrapped
-            meta = body.meta
-            records.clear()
-            records.addAll(body.records)
+            adoptBody(body)
             UnlockResult.Success
         } finally {
             password.fill(' ')
@@ -111,16 +128,14 @@ class FileVault(
 
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = synchronized(lock) {
         val body = runCatching {
-            json.decodeFromString<VaultFileBody>(fileSystem.read(path) { readUtf8() })
+            parseBody(fileSystem.read(path) { readUtf8() })
         }.getOrElse {
             dataKey.bytes.fill(0) // присвоить нечего — не оставлять переданный ключ висеть в памяти
             return@synchronized UnlockResult.Corrupted
         }
         this.dataKey?.bytes?.fill(0) // повторный unlock не должен осиротить прежний ключ
         this.dataKey = dataKey // присваиваем переданный ключ — вызывающий его не затирает (см. контракт)
-        meta = body.meta
-        records.clear()
-        records.addAll(body.records)
+        adoptBody(body)
         UnlockResult.Success
     }
 
@@ -160,6 +175,7 @@ class FileVault(
         dataKey = null
         meta = null
         records.clear()
+        unknownRecords.clear()
     }
 
     override fun reset(): Unit = synchronized(lock) {
@@ -170,6 +186,7 @@ class FileVault(
         meta?.wrappedDataKey?.fill(0)
         meta = null
         records.clear()
+        unknownRecords.clear()
         // mustExist=false: сброс идемпотентен и не должен падать на уже отсутствующем/битом файле.
         fileSystem.delete(path, mustExist = false)
     }
@@ -316,9 +333,54 @@ class FileVault(
     private fun writeFile(meta: VaultMeta, records: List<VaultRecord>) {
         path.parent?.let { fileSystem.createDirectories(it) }
         val tmp = path.parent?.resolve("${path.name}.tmp") ?: "${path.name}.tmp".toPath()
-        fileSystem.write(tmp) { writeUtf8(json.encodeToString(VaultFileBody(meta, records))) }
+        // Дописываем нераспознанные записи verbatim, чтобы не потерять данные, которые эта версия
+        // приложения не понимает (см. [unknownRecords]). Форма файла та же, что у VaultFileBody
+        // ({meta, records}), поэтому старые/новые клиенты читают его без изменений формата.
+        val body = buildJsonObject {
+            put("meta", json.encodeToJsonElement(VaultMeta.serializer(), meta))
+            put("records", buildJsonArray {
+                records.forEach { add(json.encodeToJsonElement(VaultRecord.serializer(), it)) }
+                unknownRecords.forEach { add(it) }
+            })
+        }
+        fileSystem.write(tmp) { writeUtf8(json.encodeToString(JsonObject.serializer(), body)) }
+        harden(tmp) // 0600 до подмены цели: сам файл секретов, а не только каталог, приватен
         fileSystem.atomicMove(tmp, path)
     }
+
+    /** Присвоить разобранный снимок файла полям сессии (общее для [unlock]/[unlockWithDataKey]). */
+    private fun adoptBody(body: ParsedBody) {
+        meta = body.meta
+        records.clear()
+        records.addAll(body.records)
+        unknownRecords.clear()
+        unknownRecords.addAll(body.unknown)
+    }
+
+    /**
+     * Разобрать файл vault толерантно: `meta` и структура обязательны (иначе файл действительно битый —
+     * исключение всплывёт как [UnlockResult.Corrupted]), но каждая запись декодируется по отдельности.
+     * Запись, которую эта версия не понимает (незнакомый enum-тип и т.п.), не роняет весь файл — она
+     * откладывается сырой в [ParsedBody.unknown] и переживает перезапись (см. [writeFile]).
+     */
+    private fun parseBody(text: String): ParsedBody {
+        val root = json.parseToJsonElement(text).jsonObject
+        val parsedMeta = json.decodeFromJsonElement(VaultMeta.serializer(), root.getValue("meta"))
+        val known = mutableListOf<VaultRecord>()
+        val unknown = mutableListOf<JsonElement>()
+        (root["records"] as? JsonArray)?.forEach { el ->
+            runCatching { json.decodeFromJsonElement(VaultRecord.serializer(), el) }
+                .onSuccess { known += it }
+                .onFailure { unknown += el }
+        }
+        return ParsedBody(parsedMeta, known, unknown)
+    }
+
+    private class ParsedBody(
+        val meta: VaultMeta,
+        val records: List<VaultRecord>,
+        val unknown: List<JsonElement>,
+    )
 
     /**
      * Стабильный AAD слота записи: `id` + [AAD_SEP] + `type.name`. Привязывает blob к id/типу,

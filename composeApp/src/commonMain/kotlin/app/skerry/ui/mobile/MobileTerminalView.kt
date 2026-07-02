@@ -240,7 +240,9 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                             else -> controller.pendingRisk?.reason
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Txt(pending, color = if (severe) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
+                            // Команда переносится (до 6 строк), не обрезается: пользователь видит целиком то,
+                            // что подтверждает и исполнит (см. TerminalView — тот же инвариант безопасности).
+                            Txt(pending, color = if (severe) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
                             if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }

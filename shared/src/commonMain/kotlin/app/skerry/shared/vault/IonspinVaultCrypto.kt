@@ -133,7 +133,10 @@ class IonspinVaultCrypto : VaultCrypto {
     private fun aeadOpen(key: ByteArray, blob: ByteArray, ad: ByteArray): ByteArray? {
         requireInitialized()
         require(key.size == KEY_BYTES) { "key must be $KEY_BYTES bytes" }
-        require(blob.size >= NPUB_BYTES + ABYTES) { "blob too short for nonce and tag" }
+        // Слишком короткий blob трактуем как обычный провал AEAD (null), а НЕ как программную ошибку:
+        // blob может прийти из недоверенного источника (запись sync-сервера кладётся mergeRemote'ом как
+        // есть). Бросок здесь ронял бы весь список при первом же чтении — DoS через вредоносный сервер.
+        if (blob.size < NPUB_BYTES + ABYTES) return null
         val nonce = blob.copyOfRange(0, NPUB_BYTES).toUByteArray()
         val cipher = blob.copyOfRange(NPUB_BYTES, blob.size).toUByteArray()
         // ionspin сигнализирует провал тега исключением, а контракт VaultCrypto ждёт null —

@@ -29,6 +29,16 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `CHT and CBT with an enormous count clamp instead of hanging`() {
+        // ESC[2147483647I / ...Z без капа = ~2 млрд итераций в некооперативном цикле (зависание
+        // сессии/UI с недоверенного сервера). С капом курсор за конечное время упирается в границу.
+        val fwd = emulate(cols = 80, rows = 24, chunks = arrayOf("${esc}[2147483647I"))
+        assertTrue(fwd.cursorCol in 0..79)
+        val back = emulate(cols = 80, rows = 24, chunks = arrayOf("col$esc[2147483647Z"))
+        assertTrue(back.cursorCol in 0..79)
+    }
+
+    @Test
     fun `grid has fixed dimensions`() {
         val emu = emulate(cols = 40, rows = 10, chunks = arrayOf("hi"))
         assertEquals(10, emu.lines.size)
