@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.TextRange
@@ -354,7 +355,9 @@ fun TerminalScreen(
     // новый TextStyle на каждый кадр; то же для «призрака» подсказки и невидимой Text-подложки.
     val structuralStyle = remember(textStyle) { textStyle.copy(color = Color.Transparent) }
     val cursorGlyphStyle = remember(textStyle, termTheme) { textStyle.copy(color = cursorFg) }
-    val ghostStyle = remember(textStyle) { textStyle.copy(color = Color(0x66E6F2FA)) }
+    // «Призрак» — приглушённый цвет ТЕКСТА темы (не захардкоженный светлый): на светлых темах
+    // (Solarized Light) полупрозрачный белый на кремовом фоне был невидим.
+    val ghostStyle = remember(textStyle, termTheme) { textStyle.copy(color = termTheme.foreground.copy(alpha = 0.45f)) }
 
     // PathEffect для пунктирного/штрихового подчёркивания зависит только от высоты клетки (константа при
     // фиксированном шрифте) — считаем один раз, а не на каждый подчёркнутый ран в draw-фазе.
@@ -539,7 +542,7 @@ fun TerminalScreen(
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
                           val style = glyphStyleCache.getOrPut(run.style) { run.style.toGlyphStyle(textStyle, palette, termTheme) }
-                          drawText(measurer, run.text, topLeft = Offset(x, top), style = style)
+                          drawGlyphText(measurer, run.text, Offset(x, top), style)
                       }
                       // Подчёркивание тянем по всей ширине рана, в т.ч. под пробелами (как в xterm).
                       if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette, underlineEffects, termTheme)
@@ -893,7 +896,7 @@ fun TerminalScreen(
                   CursorShape.Block -> {
                       drawRect(cursorBg, topLeft = Offset(x, y), size = Size(metrics.cellWidth, metrics.cellHeight))
                       if (!glyph.isNullOrBlank()) {
-                          drawText(measurer, glyph, topLeft = Offset(x, y), style = cursorGlyphStyle)
+                          drawGlyphText(measurer, glyph, Offset(x, y), cursorGlyphStyle)
                       }
                   }
                   CursorShape.Underline -> drawRect(
@@ -918,7 +921,7 @@ fun TerminalScreen(
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp).clipToBounds()) {
               val x = cursorCol * metrics.cellWidth
               val y = cursorRow * metrics.cellHeight - scroll.value.toFloat()
-              drawText(measurer, ghost, topLeft = Offset(x, y), style = ghostStyle)
+              drawGlyphText(measurer, ghost, Offset(x, y), ghostStyle)
           }
       }
 
@@ -1033,6 +1036,22 @@ private fun DrawScope.drawSelectionHandle(
     )
     val cx = anchor.x + if (which == SelectionHandle.START) -radius else radius
     drawCircle(color = handleColor, radius = radius, center = Offset(cx, anchor.y + radius))
+}
+
+/**
+ * Рисует ран глифов терминала: явный measure + отрисовка с НАЛОЖЕНИЕМ цвета поверх раскладки.
+ * Перегрузкой `drawText(measurer, text, style = …)` пользоваться нельзя: кэш [TextMeasurer]
+ * сравнивает стили только по layout-атрибутам (цвет в ключ НЕ входит), а та перегрузка красит
+ * цветом, вшитым в закэшированную раскладку, — при смене темы терминала весь экран оставался в
+ * старой палитре до пересоздания экрана (переключения вкладки), а одинаковый текст двух разных
+ * цветов в одном кадре красился бы цветом первого. Здесь цвет передаётся в момент отрисовки
+ * ([drawText] по готовому [androidx.compose.ui.text.TextLayoutResult] переопределяет его), поэтому
+ * кэш-хит безопасен; заодно ключ кэша не зависит от колонки (constraints по умолчанию не выводятся
+ * из topLeft) — одинаковые глифы в разных колонках делят одну раскладку.
+ */
+private fun DrawScope.drawGlyphText(measurer: TextMeasurer, text: String, topLeft: Offset, style: TextStyle) {
+    val layout = measurer.measure(AnnotatedString(text), style, density = this, layoutDirection = layoutDirection)
+    drawText(layout, color = style.color, topLeft = topLeft)
 }
 
 /**
