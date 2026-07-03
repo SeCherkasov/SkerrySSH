@@ -16,15 +16,25 @@ import app.skerry.server.model.HealthResponse
 import app.skerry.server.model.StatsResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.Hook
+import io.ktor.server.application.call
+import io.ktor.server.application.createRouteScopedPlugin
+import io.ktor.server.application.install
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.RouteSelector
+import io.ktor.server.routing.RouteSelectorEvaluation
+import io.ktor.server.routing.RoutingResolveContext
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
+import io.ktor.server.routing.route
 import java.security.MessageDigest
 
 /**
- * Админ-эндпоинты для self-hosted консоли. `/admin/health` открыт (liveness); остальное закрыто
- * статическим [config.adminToken] — отдельная admin-роль (`docs/skerry-sync-design.md` §3).
+ * Админ-эндпоинты для self-hosted консоли. `/admin/health` открыт (liveness); остальное поддерево
+ * `/admin` закрыто статическим [app.skerry.server.config.ServerConfig.adminToken] — отдельная
+ * admin-роль (`docs/skerry-sync-design.md` §3), проверяется одним route-scoped интерцептором.
  * Zero-knowledge сохраняется: отдаются только метаданные (счётчики, список устройств), к
  * содержимому записей доступа нет по определению.
  */
@@ -33,132 +43,151 @@ fun Route.adminRoutes(services: Services) {
         call.respond(HealthResponse("ok", SERVER_VERSION))
     }
 
-    get("/admin/stats") {
-        if (!call.adminAuthorized(services.config.adminToken)) return@get
-        val c = services.stats.counts()
-        call.respond(StatsResponse(c.accounts, c.devices, c.records, c.pairingSessions, c.storageBytes))
-    }
+    // Guard — на прозрачном дочернем узле (как у authenticate {}): роутинг мержит одинаковые
+    // селекторы, и плагин прямо на route("/admin") накрыл бы и открытый /admin/health выше.
+    val guarded = route("/admin") {}.createChild(AdminGuardSelector())
+    // Единая route-scoped проверка admin-токена на всё поддерево: при провале плагин сам
+    // отвечает 401 и обрывает pipeline — до обработчиков маршрутов запрос не доходит.
+    guarded.install(AdminAuth) { token = services.config.adminToken }
 
-    get("/admin/devices") {
-        if (!call.adminAuthorized(services.config.adminToken)) return@get
-        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 200
-        val total = services.devices.count()
-        val devices = services.devices.listAll(limit).map {
-            AdminDeviceDto(
-                accountId = it.accountId,
-                id = it.id,
-                name = it.name,
-                platform = it.platform,
-                createdAt = it.createdAt,
-                lastSeenAt = it.lastSeenAt,
-                syncVersion = it.lastSyncVersion,
-                revoked = it.revoked,
-            )
+    with(guarded) {
+        get("/stats") {
+            val c = services.stats.counts()
+            call.respond(StatsResponse(c.accounts, c.devices, c.records, c.pairingSessions, c.storageBytes))
         }
-        call.respond(AdminDevicesResponse(devices, total))
-    }
 
-    get("/admin/activity") {
-        if (!call.adminAuthorized(services.config.adminToken)) return@get
-        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 2000) ?: 50
-        val total = services.activity.count()
-        val events = services.activity.recent(limit).map {
-            AdminActivityDto(it.accountId, it.deviceId, it.event, it.detail, it.createdAt)
+        get("/devices") {
+            val limit = call.limitParam(default = 200, max = 500)
+            val total = services.devices.count()
+            val devices = services.devices.listAll(limit).map {
+                AdminDeviceDto(
+                    accountId = it.accountId,
+                    id = it.id,
+                    name = it.name,
+                    platform = it.platform,
+                    createdAt = it.createdAt,
+                    lastSeenAt = it.lastSeenAt,
+                    syncVersion = it.lastSyncVersion,
+                    revoked = it.revoked,
+                )
+            }
+            call.respond(AdminDevicesResponse(devices, total))
         }
-        call.respond(AdminActivityResponse(events, total))
-    }
 
-    delete("/admin/devices/{id}") {
-        if (!call.adminAuthorized(services.config.adminToken)) return@delete
-        val deviceId = call.parameters["id"]
-        val accountId = call.request.queryParameters["accountId"]
-        if (deviceId.isNullOrBlank() || accountId.isNullOrBlank()) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("accountId and id are required"))
-            return@delete
+        get("/activity") {
+            val limit = call.limitParam(default = 50, max = 2000)
+            val total = services.activity.count()
+            val events = services.activity.recent(limit).map {
+                AdminActivityDto(it.accountId, it.deviceId, it.event, it.detail, it.createdAt)
+            }
+            call.respond(AdminActivityResponse(events, total))
         }
-        val revoked = services.devices.revoke(accountId, deviceId)
-        if (revoked) {
-            services.activity.record(accountId, "device.revoked", "admin-revoked $deviceId")
-        }
-        call.respond(if (revoked) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
-    }
 
-    get("/admin/accounts") {
-        if (!call.adminAuthorized(services.config.adminToken)) return@get
-        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 1000) ?: 100
-        val total = services.admin.accountCount()
-        val accounts = services.admin.accountSummaries(limit).map {
-            AdminAccountDto(
-                id = it.id,
-                createdAt = it.createdAt,
-                syncSeq = it.syncSeq,
-                devices = it.devices,
-                activeDevices = it.activeDevices,
-                records = it.records,
-                tombstones = it.tombstones,
-                storageBytes = it.storageBytes,
-                lastSeenAt = it.lastSeenAt,
-            )
+        delete("/devices/{id}") {
+            val deviceId = call.parameters["id"]
+            val accountId = call.request.queryParameters["accountId"]
+            if (deviceId.isNullOrBlank() || accountId.isNullOrBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("accountId and id are required"))
+                return@delete
+            }
+            val revoked = services.devices.revoke(accountId, deviceId)
+            if (revoked) {
+                services.activity.record(accountId, "device.revoked", "admin-revoked $deviceId")
+            }
+            call.respond(if (revoked) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
         }
-        call.respond(AdminAccountsResponse(accounts, total))
-    }
 
-    get("/admin/accounts/{id}/records") {
-        if (!call.adminAuthorized(services.config.adminToken)) return@get
-        val accountId = call.parameters["id"]
-        if (accountId.isNullOrBlank()) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("account id is required"))
-            return@get
+        get("/accounts") {
+            val limit = call.limitParam(default = 100, max = 1000)
+            val total = services.admin.accountCount()
+            val accounts = services.admin.accountSummaries(limit).map {
+                AdminAccountDto(
+                    id = it.id,
+                    createdAt = it.createdAt,
+                    syncSeq = it.syncSeq,
+                    devices = it.devices,
+                    activeDevices = it.activeDevices,
+                    records = it.records,
+                    tombstones = it.tombstones,
+                    storageBytes = it.storageBytes,
+                    lastSeenAt = it.lastSeenAt,
+                )
+            }
+            call.respond(AdminAccountsResponse(accounts, total))
         }
-        val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 500) ?: 100
-        val records = services.admin.recordEnvelopes(accountId, limit).map {
-            AdminRecordDto(
-                id = it.id,
-                type = it.type,
-                version = it.version,
-                updatedAt = it.updatedAt,
-                deviceId = it.deviceId,
-                deleted = it.deleted,
-                blobBytes = it.blobBytes,
-                serverSeq = it.serverSeq,
-                previewHex = it.previewHex,
-            )
-        }
-        call.respond(AdminRecordsResponse(accountId, records))
-    }
 
-    delete("/admin/accounts/{id}/tombstones") {
-        if (!call.adminAuthorized(services.config.adminToken)) return@delete
-        val accountId = call.parameters["id"]
-        if (accountId.isNullOrBlank()) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("account id is required"))
-            return@delete
+        get("/accounts/{id}/records") {
+            val accountId = call.requiredPathId("id") ?: return@get
+            val limit = call.limitParam(default = 100, max = 500)
+            val records = services.admin.recordEnvelopes(accountId, limit).map {
+                AdminRecordDto(
+                    id = it.id,
+                    type = it.type,
+                    version = it.version,
+                    updatedAt = it.updatedAt,
+                    deviceId = it.deviceId,
+                    deleted = it.deleted,
+                    blobBytes = it.blobBytes,
+                    serverSeq = it.serverSeq,
+                    previewHex = it.previewHex,
+                )
+            }
+            call.respond(AdminRecordsResponse(accountId, records))
         }
-        val purged = services.admin.purgeTombstones(accountId)
-        if (purged > 0) {
-            services.activity.record(accountId, "tombstones.purged", "purged $purged tombstones")
-        }
-        call.respond(AdminPurgeResponse(purged))
-    }
 
-    delete("/admin/accounts/{id}") {
-        if (!call.adminAuthorized(services.config.adminToken)) return@delete
-        val accountId = call.parameters["id"]
-        if (accountId.isNullOrBlank()) {
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("account id is required"))
-            return@delete
+        delete("/accounts/{id}/tombstones") {
+            val accountId = call.requiredPathId("id") ?: return@delete
+            val purged = services.admin.purgeTombstones(accountId)
+            if (purged > 0) {
+                services.activity.record(accountId, "tombstones.purged", "purged $purged tombstones")
+            }
+            call.respond(AdminPurgeResponse(purged))
         }
-        val deleted = services.admin.deleteAccount(accountId)
-        if (deleted) {
-            services.activity.record(accountId, "account.deleted", "admin-deleted account")
+
+        delete("/accounts/{id}") {
+            val accountId = call.requiredPathId("id") ?: return@delete
+            val deleted = services.admin.deleteAccount(accountId)
+            if (deleted) {
+                services.activity.record(accountId, "account.deleted", "admin-deleted account")
+            }
+            call.respond(if (deleted) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
         }
-        call.respond(if (deleted) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
     }
+}
+
+/** Прозрачный селектор (не ест сегменты пути) — отдельный узел под guard внутри /admin. */
+private class AdminGuardSelector : RouteSelector() {
+    override suspend fun evaluate(context: RoutingResolveContext, segmentIndex: Int): RouteSelectorEvaluation =
+        RouteSelectorEvaluation.Transparent
+
+    override fun toString(): String = "(admin guard)"
+}
+
+private class AdminAuthConfig {
+    var token: String = ""
+}
+
+/**
+ * Хук с доступом к PipelineContext: в отличие от `onCall`, позволяет `finish()` — иначе после 401
+ * обработчик маршрута всё равно выполнился бы (и, например, удалил аккаунт без токена).
+ */
+private object AdminAuthHook : Hook<suspend (ApplicationCall) -> Boolean> {
+    override fun install(pipeline: ApplicationCallPipeline, handler: suspend (ApplicationCall) -> Boolean) {
+        pipeline.intercept(ApplicationCallPipeline.Plugins) {
+            if (!handler(call)) finish()
+        }
+    }
+}
+
+/** Route-scoped guard поддерева `/admin`: статический токен из [AdminAuthConfig.token]. */
+private val AdminAuth = createRouteScopedPlugin("AdminAuth", ::AdminAuthConfig) {
+    val token = pluginConfig.token
+    on(AdminAuthHook) { call -> call.adminAuthorized(token) }
 }
 
 /**
  * Constant-time проверка статического admin-токена. При отсутствии/несовпадении сразу отвечает
- * 401 и возвращает false — вызывающий обработчик делает `return`. Сравнение постоянного времени:
+ * 401 и возвращает false — вызывающий хук делает `finish()`. Сравнение постоянного времени:
  * не даём по таймингу побайтно подобрать долгоживущий токен.
  */
 private suspend fun ApplicationCall.adminAuthorized(token: String): Boolean {

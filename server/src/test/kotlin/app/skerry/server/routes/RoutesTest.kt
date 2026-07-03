@@ -14,11 +14,9 @@ import app.skerry.server.model.PairingClaimRequest
 import app.skerry.server.model.PairingClaimResponse
 import app.skerry.server.model.PairingStartRequest
 import app.skerry.server.model.PairingStartResponse
-import app.skerry.server.model.PushRequest
 import app.skerry.server.model.PushResponse
 import app.skerry.server.model.RecordDto
 import app.skerry.server.model.RecordsResponse
-import app.skerry.server.model.RegisterRequest
 import app.skerry.server.model.StatsResponse
 import app.skerry.server.model.TokenResponse
 import app.skerry.server.model.VerifyRequest
@@ -31,7 +29,6 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
-import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -57,12 +54,8 @@ class RoutesTest {
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
 
-        val reg = srpRegister(accountId, password)
         val wrapped = byteArrayOf(7, 7, 7)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, wrapped.b64(), "devA", "Laptop A"))
-        }.body()
+        val tokens = client.registerAccount(accountId, password, wrappedDataKey = wrapped)
 
         // wrappedDataKey возвращается как есть
         val keys: KeysResponse = client.get("/vault/keys") { bearerAuth(tokens.accessToken) }.body()
@@ -70,11 +63,9 @@ class RoutesTest {
 
         // push шифроблоба
         val blob = byteArrayOf(1, 2, 3, 4)
-        val push: PushResponse = client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, blob.b64()))))
-        }.body()
+        val push: PushResponse = client
+            .pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, blob.b64()))
+            .body()
         assertEquals(1L, push.cursor)
 
         // дельта since=0 отдаёт ту же запись
@@ -94,11 +85,7 @@ class RoutesTest {
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
 
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
-        }.body()
+        val tokens = client.registerAccount(accountId, password)
 
         val record = RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64())
         kotlinx.coroutines.coroutineScope {
@@ -109,17 +96,11 @@ class RoutesTest {
             }
 
             // Первый push — реальное изменение: курсор 0→1, сигнал ДОЛЖЕН прийти.
-            client.put("/vault/records") {
-                bearerAuth(tokens.accessToken); contentType(ContentType.Application.Json)
-                setBody(PushRequest(listOf(record)))
-            }
+            client.pushRecord(tokens.accessToken, record)
             assertEquals(1L, withTimeout(2_000) { published.receive() })
 
             // Повторный push той же записи — no-op (wins=false, курсор остаётся 1): сигнала быть НЕ должно.
-            client.put("/vault/records") {
-                bearerAuth(tokens.accessToken); contentType(ContentType.Application.Json)
-                setBody(PushRequest(listOf(record)))
-            }
+            client.pushRecord(tokens.accessToken, record)
             delay(300)
             assertEquals(null, published.tryReceive().getOrNull())
             watch.cancel()
@@ -132,36 +113,29 @@ class RoutesTest {
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
 
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(7).b64(), "devA", "Laptop A"))
-        }.body()
+        val tokens = client.registerAccount(accountId, password)
 
         // TUNNEL — новый тип рабочего пространства (Phase A). Сервер хранит type как строку, но
         // фильтрует по белому списку — TUNNEL должен в нём быть, иначе синк туннелей невозможен.
-        val ok = client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("t1", "TUNNEL", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
-        }
+        val ok = client.pushRecord(
+            tokens.accessToken,
+            RecordDto("t1", "TUNNEL", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()),
+        )
         assertEquals(HttpStatusCode.OK, ok.status)
 
         // SETTINGS — запись «что синхронизировать» (account-level), клиент пушит её ВСЕГДА. Без неё в
         // белом списке любой push с настройками отклоняется 400 и весь синк встаёт (selective-sync баг).
-        val settings = client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("sync.settings", "SETTINGS", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
-        }
+        val settings = client.pushRecord(
+            tokens.accessToken,
+            RecordDto("sync.settings", "SETTINGS", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()),
+        )
         assertEquals(HttpStatusCode.OK, settings.status)
 
         // Произвольный тип по-прежнему отвергается (защита от мусора/несовместимых клиентов).
-        val bad = client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("x1", "BOGUS", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
-        }
+        val bad = client.pushRecord(
+            tokens.accessToken,
+            RecordDto("x1", "BOGUS", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()),
+        )
         assertEquals(HttpStatusCode.BadRequest, bad.status)
     }
 
@@ -179,11 +153,7 @@ class RoutesTest {
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
 
-        val reg = srpRegister(accountId, password)
-        client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "A"))
-        }
+        client.registerAccount(accountId, password, deviceName = "A")
 
         // правильный пароль
         val sc = srpClient(accountId, password)
@@ -219,11 +189,7 @@ class RoutesTest {
         val services = testServices()
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
-        }.body()
+        val tokens = client.registerAccount(accountId, password)
 
         val devices: DevicesResponse = client.get("/devices") { bearerAuth(tokens.accessToken) }.body()
         assertEquals(1, devices.devices.size)
@@ -246,20 +212,13 @@ class RoutesTest {
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
 
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
-        }.body()
+        val tokens = client.registerAccount(accountId, password)
 
         // отзыв → старый токен мёртв
         client.delete("/devices/devA") { bearerAuth(tokens.accessToken) }
         assertEquals(HttpStatusCode.Unauthorized, client.get("/vault/keys") { bearerAuth(tokens.accessToken) }.status)
         // повторная регистрация невозможна (аккаунт уже есть) — клиент обязан войти
-        val reReg = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
-        }
+        val reReg = client.registerAccountResponse(accountId, password)
         assertEquals(HttpStatusCode.Conflict, reReg.status)
 
         // повторный вход тем же устройством верным паролем → register снимает отзыв, выдаёт новые токены
@@ -285,11 +244,7 @@ class RoutesTest {
         val services = testServices()
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "A"))
-        }.body()
+        val tokens = client.registerAccount(accountId, password, deviceName = "A")
 
         val transferred = byteArrayOf(9, 9, 9) // dataKey, зашифрованный transferKey (сервер не видит ключ)
         val start: PairingStartResponse = client.post("/pairing/start") {
@@ -320,21 +275,48 @@ class RoutesTest {
     }
 
     @Test
+    fun `pairing claim rejects overlong identifiers with 400 without burning the code`() = testApplication {
+        // На PostgreSQL insert сверхдлинного deviceId в varchar(64) валился бы 500-й уже после
+        // consume — код сгорал бы впустую. Валидация обязана идти ДО consume и отвечать 400.
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokens = client.registerAccount(accountId, password)
+
+        val start: PairingStartResponse = client.post("/pairing/start") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PairingStartRequest(byteArrayOf(9).b64()))
+        }.body()
+
+        val longDevice = client.post("/pairing/claim") {
+            contentType(ContentType.Application.Json)
+            setBody(PairingClaimRequest(start.code, "d".repeat(129), "Phone B"))
+        }
+        assertEquals(HttpStatusCode.BadRequest, longDevice.status)
+
+        val longCode = client.post("/pairing/claim") {
+            contentType(ContentType.Application.Json)
+            setBody(PairingClaimRequest("c".repeat(129), "devB", "Phone B"))
+        }
+        assertEquals(HttpStatusCode.BadRequest, longCode.status)
+
+        // Код не сожжён невалидными попытками: нормальный claim всё ещё проходит.
+        val claim: PairingClaimResponse = client.post("/pairing/claim") {
+            contentType(ContentType.Application.Json)
+            setBody(PairingClaimRequest(start.code, "devB", "Phone B"))
+        }.body()
+        assertEquals(accountId, claim.accountId)
+    }
+
+    @Test
     fun `admin lists devices across accounts and revokes by id`() = testApplication {
         val services = testServices(adminToken = "s3cret")
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A", platform = "Linux"))
-        }.body()
+        val tokens = client.registerAccount(accountId, password, platform = "Linux")
         // push фиксирует курсор устройства (syncVersion) — открытые метаданные для консоли
-        client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
-        }
+        client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))
 
         // список закрыт admin-токеном
         assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/devices").status)
@@ -379,16 +361,8 @@ class RoutesTest {
         val services = testServices(adminToken = "s3cret")
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
-        }.body()
-        client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
-        }
+        val tokens = client.registerAccount(accountId, password)
+        client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))
 
         // закрыто токеном
         assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/activity").status)
@@ -409,16 +383,11 @@ class RoutesTest {
         val services = testServices(adminToken = "s3cret")
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A", platform = "Linux"))
-        }.body()
-        client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(0xDE.toByte(), 0xAD.toByte()).b64()))))
-        }
+        val tokens = client.registerAccount(accountId, password, platform = "Linux")
+        client.pushRecord(
+            tokens.accessToken,
+            RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(0xDE.toByte(), 0xAD.toByte()).b64()),
+        )
 
         assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/accounts").status)
 
@@ -446,22 +415,10 @@ class RoutesTest {
         val services = testServices(adminToken = "s3cret")
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
-        }.body()
+        val tokens = client.registerAccount(accountId, password)
         // создать запись и удалить её (tombstone); курсор устройства догоняет удаление
-        client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))))
-        }
-        client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 2, "2026-06-29T00:00:01Z", "devA", true, byteArrayOf(1).b64()))))
-        }
+        client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))
+        client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 2, "2026-06-29T00:00:01Z", "devA", true, byteArrayOf(1).b64()))
         // pull двигает курсор устройства до tip (serverSeq 2) — теперь purge безопасен
         client.get("/vault/records?since=0") { bearerAuth(tokens.accessToken) }
 
@@ -496,16 +453,8 @@ class RoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/stats").status)
 
         // storageBytes = суммарный размер шифроблобов (LENGTH(blob)), считается на стороне БД
-        val reg = srpRegister(accountId, password)
-        val tokens: TokenResponse = client.post("/auth/register") {
-            contentType(ContentType.Application.Json)
-            setBody(RegisterRequest(accountId, reg.salt, reg.verifier, byteArrayOf(0).b64(), "devA", "Laptop A"))
-        }.body()
-        client.put("/vault/records") {
-            bearerAuth(tokens.accessToken)
-            contentType(ContentType.Application.Json)
-            setBody(PushRequest(listOf(RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1, 2, 3).b64()))))
-        }
+        val tokens = client.registerAccount(accountId, password)
+        client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1, 2, 3).b64()))
         val stats: StatsResponse = client.get("/admin/stats") { header("X-Admin-Token", "s3cret") }.body()
         assertEquals(1, stats.records)
         assertEquals(3L, stats.storageBytes)

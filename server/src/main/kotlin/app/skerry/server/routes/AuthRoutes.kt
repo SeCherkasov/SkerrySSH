@@ -134,14 +134,6 @@ fun Route.authRoutes(services: Services) {
     }
 }
 
-// Верхние границы длины клиентских идентификаторов: не даём раздутым строкам оседать в pending-картах
-// SRP/БД и давить на память ещё до общего лимита тела. Зеркалят схему (accountId varchar(320)).
-private const val MAX_ACCOUNT_ID = 320
-private const val MAX_OTHER_ID = 128
-
-private fun tooLong(accountId: String, vararg otherIds: String): Boolean =
-    accountId.length > MAX_ACCOUNT_ID || otherIds.any { it.length > MAX_OTHER_ID }
-
 private fun hmacSha256(secret: String, message: String): ByteArray {
     val mac = Mac.getInstance("HmacSHA256")
     mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))

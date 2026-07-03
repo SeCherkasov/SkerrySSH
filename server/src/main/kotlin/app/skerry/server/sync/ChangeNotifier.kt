@@ -3,6 +3,7 @@ package app.skerry.server.sync
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
@@ -31,4 +32,10 @@ class ChangeNotifier {
     /** Поток курсоров для конкретного аккаунта (для одной WS-сессии). */
     fun forAccount(accountId: String): Flow<Long> =
         flow.filter { it.accountId == accountId }.map { it.cursor }
+
+    /**
+     * Число активных подписчиков шины (все аккаунты). Наблюдаемость для тестов WS-сессий:
+     * закрытие сокета клиентом должно освобождать подписку, а не держать collect до следующего publish.
+     */
+    val subscriptions: StateFlow<Int> get() = flow.subscriptionCount
 }

@@ -133,20 +133,13 @@ class AdminRepository(private val db: Database) {
     }
 
     /**
-     * Физически удаляет tombstone'ы аккаунта, БЕЗОПАСНО: только те, чей `serverSeq` уже ниже
-     * watermark = минимума курсоров всех устройств аккаунта. Так каждое устройство уже дочиталось
-     * до удаления и не воскресит запись на следующем pull. Устройство без курсора (никогда не
-     * синхронизировалось) тянет watermark к 0 → ничего не чистим. Аккаунт без устройств — чистим всё
-     * (воскрешать некому). Возвращает число удалённых надгробий.
+     * Физически удаляет tombstone'ы аккаунта, БЕЗОПАСНО: только уже распространённые на все
+     * устройства — общий критерий [propagatedTombstones] по [tombstoneWatermark] (тот же, что у
+     * [RecordRepository.compactedTombstoneIds]). Возвращает число удалённых надгробий.
      */
     suspend fun purgeTombstones(accountId: String): Int = newSuspendedTransaction(Dispatchers.IO, db) {
-        val cursors = Devices.selectAll()
-            .where { Devices.accountId eq accountId }
-            .map { it[Devices.lastSyncVersion] ?: 0L }
-        val watermark = if (cursors.isEmpty()) Long.MAX_VALUE else cursors.min()
-        Records.deleteWhere {
-            (Records.accountId eq accountId) and (deleted eq true) and (serverSeq lessEq watermark)
-        }
+        val watermark = tombstoneWatermark(accountId)
+        Records.deleteWhere { propagatedTombstones(accountId, watermark) }
     }
 
     /**

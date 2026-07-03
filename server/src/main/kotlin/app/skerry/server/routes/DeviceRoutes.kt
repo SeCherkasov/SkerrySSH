@@ -6,6 +6,7 @@ import app.skerry.server.deviceId
 import app.skerry.server.jwtPrincipal
 import app.skerry.server.model.DeviceDto
 import app.skerry.server.model.DevicesResponse
+import app.skerry.server.model.ErrorResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -27,7 +28,8 @@ fun Route.deviceRoutes(services: Services) {
         val principal = call.jwtPrincipal()
         val target = call.parameters["id"]
         if (target.isNullOrBlank()) {
-            call.respond(HttpStatusCode.BadRequest)
+            // ErrorResponse-тело, как у остальных маршрутов: клиент всегда парсит {"error": …}.
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("device id is required"))
             return@delete
         }
         val revoked = services.devices.revoke(principal.accountId, target)

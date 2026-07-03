@@ -94,34 +94,21 @@ fun Application.configureServer(services: Services) {
     }
     // Rate-limit по удалённому IP: гасит брутфорс/флуд на регистрацию, SRP и claim паринга.
     install(RateLimit) {
-        register(RateLimits.REGISTER) {
-            rateLimiter(limit = 5, refillPeriod = 60.seconds)
+        // Все бакеты одного вида: N токенов на 60 секунд, ключ — удалённый IP.
+        fun perIp(name: RateLimitName, limit: Int) = register(name) {
+            rateLimiter(limit = limit, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
         }
-        register(RateLimits.SRP_CHALLENGE) {
-            rateLimiter(limit = 10, refillPeriod = 60.seconds)
-            requestKey { call -> call.request.origin.remoteHost }
-        }
-        register(RateLimits.SRP_VERIFY) {
-            rateLimiter(limit = 10, refillPeriod = 60.seconds)
-            requestKey { call -> call.request.origin.remoteHost }
-        }
-        register(RateLimits.PAIRING_CLAIM) {
-            rateLimiter(limit = 10, refillPeriod = 60.seconds)
-            requestKey { call -> call.request.origin.remoteHost }
-        }
+        perIp(RateLimits.REGISTER, limit = 5)
+        perIp(RateLimits.SRP_CHALLENGE, limit = 10)
+        perIp(RateLimits.SRP_VERIFY, limit = 10)
+        perIp(RateLimits.PAIRING_CLAIM, limit = 10)
         // Refresh не требует пароля — по defense-in-depth ограничиваем флуд (подпись дёшева, но публичный
         // POST без предварительной аутентификации не должен быть единственным без лимита).
-        register(RateLimits.REFRESH) {
-            rateLimiter(limit = 30, refillPeriod = 60.seconds)
-            requestKey { call -> call.request.origin.remoteHost }
-        }
+        perIp(RateLimits.REFRESH, limit = 30)
         // Admin-консоль защищена статическим токеном со сравнением constant-time, но от перебора токена
         // это не спасает — добавляем частотный лимит на /admin/*.
-        register(RateLimits.ADMIN) {
-            rateLimiter(limit = 30, refillPeriod = 60.seconds)
-            requestKey { call -> call.request.origin.remoteHost }
-        }
+        perIp(RateLimits.ADMIN, limit = 30)
     }
     // Жёсткая верхняя граница тела запроса. По Content-Length отвергаем раздутые тела 413-м ещё до
     // чтения. Но одного Content-Length мало: тело с Transfer-Encoding: chunked приходит БЕЗ него, и

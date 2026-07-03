@@ -49,8 +49,4 @@ class AccountRepository(private val db: Database) {
             )
         }
     }
-
-    suspend fun exists(accountId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
-        Accounts.selectAll().where { Accounts.id eq accountId }.any()
-    }
 }
