@@ -164,9 +164,11 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     // НЕ ресайзило терминал (иначе reflow-«дёрг» при вставке/выполнении).
                     val liveAi = LocalAi.current
                     val aiPolicy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
-                    val aiController = key(liveAi, aiPolicy) {
+                    // liveAi.enabled — в key: глобальный OFF в настройках убирает/возвращает бар
+                    // без пересоздания экрана (settings — Compose-state, смена рекомпозирует).
+                    val aiController = key(liveAi, aiPolicy, liveAi?.enabled) {
                         remember {
-                            if (liveAi != null && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
+                            if (liveAi != null && liveAi.enabled && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
                         }
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {

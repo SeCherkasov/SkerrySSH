@@ -63,6 +63,12 @@ class AiAssistantController(
     /** Настроен ли внешний (BYOK) провайдер — для строки статуса возле полей ключа. */
     val isConfigured: Boolean get() = settings.isConfigured
 
+    /**
+     * Включён ли AI вообще ([AiProviderKind.OFF] — глобальный kill-switch из настроек).
+     * false → терминальный AI-бар не создаётся, BYOK/quick-chat в настройках скрыты.
+     */
+    val enabled: Boolean get() = settings.provider != AiProviderKind.OFF
+
     /** Готов ли ассистент отвечать выбранным провайдером (ключ есть / модель скачана). */
     val ready: Boolean get() = route() is AiRoute.Use
 

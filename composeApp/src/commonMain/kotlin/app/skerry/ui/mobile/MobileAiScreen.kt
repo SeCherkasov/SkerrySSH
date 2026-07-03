@@ -1,10 +1,7 @@
 package app.skerry.ui.mobile
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,10 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,20 +18,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.ai.AiRole
-import app.skerry.ui.ai.AiAssistantController
+import app.skerry.ui.ai.AiChatBubble
+import app.skerry.ui.ai.AiQuickChatHeader
 import app.skerry.ui.ai.isInsecureAiEndpoint
+import app.skerry.ui.app.LocalAi
+import app.skerry.ui.app.MobileDesignState
+import app.skerry.ui.design.ChipButton
+import app.skerry.ui.design.D
+import app.skerry.ui.design.HLine
+import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.more_ai_ask
 import app.skerry.ui.generated.resources.more_ai_byok_desc
@@ -48,7 +42,6 @@ import app.skerry.ui.generated.resources.more_ai_input_placeholder_setup
 import app.skerry.ui.generated.resources.more_ai_key_saved
 import app.skerry.ui.generated.resources.more_ai_label_api_key
 import app.skerry.ui.generated.resources.more_ai_label_endpoint
-import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.generated.resources.more_ai_label_model
 import app.skerry.ui.generated.resources.more_ai_not_configured
 import app.skerry.ui.generated.resources.more_ai_placeholder_api_key
@@ -59,16 +52,17 @@ import app.skerry.ui.generated.resources.more_ai_quick_chat
 import app.skerry.ui.generated.resources.more_ai_quick_chat_desc
 import app.skerry.ui.generated.resources.more_ai_save
 import app.skerry.ui.generated.resources.more_ai_sending
-import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.D
-import app.skerry.ui.app.LocalAi
-import app.skerry.ui.app.MobileDesignState
-import app.skerry.ui.design.Txt
+import app.skerry.ui.generated.resources.settings_ai_off_note
+import app.skerry.ui.generated.resources.settings_ai_prompt_placeholder_needs_model
+import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.settings.AiProviderCards
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Мобильный экран настроек AI (More → «AI & privacy») — паритет с desktop `LiveAiSection`:
- * BYOK-поля (ключ/модель/endpoint) + Save в vault + Quick chat для проверки связи. Без живого
+ * карточки провайдера (локальная модель / BYOK / выключен), BYOK-поля + Save в vault и quick chat.
+ * Поля/подписи/кнопки — общие примитивы ([MobileFormField]/[MobileFormInput]/[ChipButton]),
+ * чтобы экран не расходился по ширине/высоте с остальными мобильными формами. Без живого
  * контроллера ([LocalAi] == null) не открывается (строка More инертна), поэтому здесь `ai` не-null.
  */
 @Composable
@@ -83,124 +77,99 @@ fun MobileAiScreen(state: MobileDesignState) {
                 color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(bottom = 12.dp),
             )
 
-            // Выбор провайдера + каталог локальных моделей — общий блок с desktop-настройками
-            // (AiProviderCards): состояние и логика едины, расходится только обрамление экрана.
-            AiProviderCards(ai)
-            Spacer(Modifier.height(18.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(D.line))
-            Spacer(Modifier.height(6.dp))
+            // Выбор провайдера — общий блок с desktop-настройками (AiProviderCards): состояние и
+            // логика едины; BYOK-поля раскрываются внутри своей карточки (мобильный layout — ниже).
+            AiProviderCards(ai, byokContent = { MobileByokFields(ai) })
 
-            var key by remember(ai.settings) { mutableStateOf(ai.settings.apiKey) }
-            var model by remember(ai.settings) { mutableStateOf(ai.settings.model) }
-            var baseUrl by remember(ai.settings) { mutableStateOf(ai.settings.baseUrl) }
-
-            AiFieldLabel(stringResource(Res.string.more_ai_label_api_key))
-            AiTextField(key, stringResource(Res.string.more_ai_placeholder_api_key), KeyboardType.Password, ImeAction.Next, secret = true) { key = it }
-            AiFieldLabel(stringResource(Res.string.more_ai_label_model))
-            AiTextField(model, stringResource(Res.string.more_ai_placeholder_model), KeyboardType.Text, ImeAction.Next) { model = it }
-            AiFieldLabel(stringResource(Res.string.more_ai_label_endpoint))
-            AiTextField(baseUrl, stringResource(Res.string.more_ai_placeholder_endpoint), KeyboardType.Uri, ImeAction.Done) { baseUrl = it }
-            // http:// шлёт ключ/промпт открытым текстом (см. SettingsPanel) — предупреждаем, кроме localhost.
-            if (isInsecureAiEndpoint(baseUrl)) {
-                Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            // AI выключен: quick-chat скрыт, конфиг сохранён и вернётся с провайдером.
+            if (!ai.enabled) {
+                Txt(
+                    stringResource(Res.string.settings_ai_off_note),
+                    color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 14.dp),
+                )
+                Spacer(Modifier.height(96.dp))
+                return@Column
             }
 
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                AiChip(stringResource(Res.string.more_ai_save), D.cyan) { ai.save(key, model, baseUrl) }
-                if (ai.isConfigured) Txt(stringResource(Res.string.more_ai_key_saved), color = D.moss, size = 11.5.sp)
-                else Txt(stringResource(Res.string.more_ai_not_configured), color = D.faint, size = 11.5.sp)
-            }
+            MobileAiDivider()
+            var chatOpen by remember { mutableStateOf(false) }
+            AiQuickChatHeader(
+                stringResource(Res.string.more_ai_quick_chat),
+                stringResource(Res.string.more_ai_quick_chat_desc),
+                open = chatOpen,
+                onToggle = { chatOpen = !chatOpen },
+            )
+            if (chatOpen) {
+                Spacer(Modifier.height(8.dp))
+                ai.turns.forEach { turn -> AiChatBubble(turn.role, turn.text) }
+                ai.streaming?.let { AiChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
+                // Ошибка запроса — error-токен (D.storm), как на desktop; D.sunset оставлен предупреждениям.
+                ai.error?.let { Txt(it, color = D.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
 
-            Spacer(Modifier.height(18.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(D.line))
-            Spacer(Modifier.height(14.dp))
-            Txt(stringResource(Res.string.more_ai_quick_chat), color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.more_ai_quick_chat_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp))
-
-            ai.turns.forEach { turn -> AiChatBubble(turn.role, turn.text) }
-            ai.streaming?.let { AiChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
-            ai.error?.let { Txt(it, color = D.sunset, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
-
-            Spacer(Modifier.height(8.dp))
-            var prompt by remember { mutableStateOf("") }
-            val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
-            AiTextField(
-                value = prompt,
-                placeholder = if (ai.ready) stringResource(Res.string.more_ai_input_placeholder_ready) else stringResource(Res.string.more_ai_input_placeholder_setup),
-                keyboardType = KeyboardType.Text,
-                imeAction = ImeAction.Send,
-                onSubmit = send,
-            ) { prompt = it }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AiChip(if (ai.busy) stringResource(Res.string.more_ai_sending) else stringResource(Res.string.more_ai_ask), if (ai.ready && !ai.busy) D.cyan else D.faint) { send() }
-                if (ai.turns.isNotEmpty()) AiChip(stringResource(Res.string.more_ai_clear), D.dim) { ai.clearConversation() }
+                var prompt by remember { mutableStateOf("") }
+                val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
+                MobileFormInput(
+                    value = prompt,
+                    onValueChange = { prompt = it },
+                    placeholder = when {
+                        ai.ready -> stringResource(Res.string.more_ai_input_placeholder_ready)
+                        ai.settings.provider == AiProviderKind.DEVICE -> stringResource(Res.string.settings_ai_prompt_placeholder_needs_model)
+                        else -> stringResource(Res.string.more_ai_input_placeholder_setup)
+                    },
+                    imeAction = ImeAction.Send,
+                    onSubmit = send,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ChipButton(if (ai.busy) stringResource(Res.string.more_ai_sending) else stringResource(Res.string.more_ai_ask), color = if (ai.ready && !ai.busy) D.cyan else D.faint, onClick = { send() })
+                    if (ai.turns.isNotEmpty()) ChipButton(stringResource(Res.string.more_ai_clear), color = D.dim, onClick = { ai.clearConversation() })
+                }
             }
             Spacer(Modifier.height(96.dp))
         }
     }
 }
 
+/**
+ * BYOK-поля внутри карточки «Мой ключ API» (мобильный layout — [MobileFormField]/[MobileFormInput]);
+ * раскрываются вместе с выбором карточки, состояние и Save — общие с desktop.
+ */
 @Composable
-private fun AiFieldLabel(text: String) {
-    Txt(text, color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
-}
+private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
+    var key by remember(ai.settings) { mutableStateOf(ai.settings.apiKey) }
+    var model by remember(ai.settings) { mutableStateOf(ai.settings.model) }
+    var baseUrl by remember(ai.settings) { mutableStateOf(ai.settings.baseUrl) }
 
-@Composable
-private fun AiTextField(
-    value: String,
-    placeholder: String,
-    keyboardType: KeyboardType,
-    imeAction: ImeAction,
-    secret: Boolean = false,
-    onSubmit: (() -> Unit)? = null,
-    onChange: (String) -> Unit,
-) {
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0x0AFFFFFF))
-            .border(1.dp, D.line, RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 12.dp),
-    ) {
-        if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
-        BasicTextField(
-            value = value,
-            onValueChange = onChange,
-            singleLine = true,
-            textStyle = TextStyle(color = D.text, fontSize = 13.sp),
-            cursorBrush = SolidColor(D.cyan),
-            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
-            keyboardActions = KeyboardActions(
-                onDone = { onSubmit?.invoke() },
-                onSend = { onSubmit?.invoke() },
-            ),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
+    Column(Modifier.padding(top = 10.dp)) {
+        MobileFormField(stringResource(Res.string.more_ai_label_api_key)) {
+            MobileFormInput(key, { key = it }, stringResource(Res.string.more_ai_placeholder_api_key), masked = true, imeAction = ImeAction.Next)
+        }
+        Spacer(Modifier.height(12.dp))
+        MobileFormField(stringResource(Res.string.more_ai_label_model)) {
+            MobileFormInput(model, { model = it }, stringResource(Res.string.more_ai_placeholder_model), imeAction = ImeAction.Next)
+        }
+        Spacer(Modifier.height(12.dp))
+        MobileFormField(stringResource(Res.string.more_ai_label_endpoint)) {
+            MobileFormInput(baseUrl, { baseUrl = it }, stringResource(Res.string.more_ai_placeholder_endpoint), keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done)
+        }
+        // http:// шлёт ключ/промпт открытым текстом (см. SettingsPanel) — предупреждаем, кроме localhost.
+        if (isInsecureAiEndpoint(baseUrl)) {
+            Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+        }
 
-@Composable
-private fun AiChip(label: String, fg: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(8.dp)).background(fg.copy(alpha = 0.12f))
-            .border(1.dp, fg.copy(alpha = 0.4f), RoundedCornerShape(8.dp)).clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    ) {
-        Txt(label, color = fg, size = 12.5.sp, weight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun AiChatBubble(role: AiRole, text: String) {
-    val mine = role == AiRole.USER
-    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
-        Box(
-            Modifier.clip(RoundedCornerShape(8.dp))
-                .background(if (mine) D.cyan.copy(alpha = 0.10f) else Color(0x0DFFFFFF))
-                .border(1.dp, if (mine) D.cyan.copy(alpha = 0.14f) else D.line, RoundedCornerShape(8.dp))
-                .padding(horizontal = 11.dp, vertical = 8.dp),
-        ) {
-            Txt(text, color = if (mine) D.text else D.dim, size = 12.5.sp, lineHeight = 18.sp)
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            ChipButton(stringResource(Res.string.more_ai_save), color = D.cyan, onClick = { ai.save(key, model, baseUrl) })
+            if (ai.isConfigured) Txt(stringResource(Res.string.more_ai_key_saved), color = D.moss, size = 11.5.sp)
+            else Txt(stringResource(Res.string.more_ai_not_configured), color = D.faint, size = 11.5.sp)
         }
     }
+}
+
+/** Разделитель блоков экрана: единый воздух сверху/снизу (18/14), как у desktop-секции. */
+@Composable
+private fun MobileAiDivider() {
+    Spacer(Modifier.height(18.dp))
+    HLine()
+    Spacer(Modifier.height(14.dp))
 }

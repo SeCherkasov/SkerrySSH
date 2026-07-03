@@ -59,6 +59,21 @@ class TerminalAiControllerTest {
     }
 
     @Test
+    fun `globally disabled provider blocks even under permissive policy`() = runTest {
+        // Бар при глобальном OFF скрыт на уровне view; этот тест — защита от отправки, если
+        // контроллер всё же жив (настройки сменились при открытом терминале).
+        val p = CapturingProvider(deltas = listOf("ls"))
+        val c = controller(AiPolicy.Permissive, AiSettings(apiKey = "sk-x", provider = app.skerry.shared.ai.AiProviderKind.OFF), p, this)
+
+        c.ask("list files")
+        advanceUntilIdle()
+
+        assertEquals(TerminalAiController.AI_DISABLED, c.blocked)
+        assertFalse(p.built)
+        assertNull(c.pending)
+    }
+
+    @Test
     fun `strict policy blocks cloud without building a provider`() = runTest {
         val p = CapturingProvider(deltas = listOf("ls"))
         val c = controller(AiPolicy.Strict, AiSettings(apiKey = "sk-x"), p, this)

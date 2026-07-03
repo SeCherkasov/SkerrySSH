@@ -76,6 +76,19 @@ class AiRouterTest {
     }
 
     @Test
+    fun `off provider is blocked as disabled where cloud is allowed`() {
+        val r = route(AiPolicy.Balanced, AiSettings(apiKey = "sk-x", provider = AiProviderKind.OFF), installed = true)
+        assertEquals(AiRoute.Blocked(AiRoute.Reason.AI_DISABLED), r)
+    }
+
+    @Test
+    fun `off provider wins over strict local routing`() {
+        // Глобальный «AI выключен» сильнее per-host политики: даже Strict со скачанной моделью не маршрутизирует.
+        val r = route(AiPolicy.Strict, AiSettings(provider = AiProviderKind.OFF), installed = true)
+        assertEquals(AiRoute.Blocked(AiRoute.Reason.AI_DISABLED), r)
+    }
+
+    @Test
     fun `missing catalog model behaves as not ready`() {
         val strict = route(AiPolicy.Strict, cloudSettings, installed = true, model = null)
         assertEquals(AiRoute.Blocked(AiRoute.Reason.STRICT_NEEDS_DEVICE), strict)

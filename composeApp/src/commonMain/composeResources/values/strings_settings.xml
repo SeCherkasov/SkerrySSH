@@ -16,7 +16,7 @@
 
     <!-- AI section -->
     <string name="settings_ai_title">AI</string>
-    <string name="settings_ai_live_subtitle">Connect your own OpenAI-compatible provider (BYOK). Your key is stored encrypted in the vault and only ever sent to the provider you configure.</string>
+    <string name="settings_ai_live_subtitle">Choose where AI runs: on this device, through your own OpenAI-compatible key (BYOK) — or turn it off entirely. Keys are stored encrypted in the vault and only ever sent to the provider you configure.</string>
     <string name="settings_ai_field_api_key">OPENAI API KEY</string>
     <string name="settings_ai_field_model">MODEL</string>
     <string name="settings_ai_field_endpoint">ENDPOINT</string>
@@ -34,10 +34,11 @@
     <string name="settings_ai_provider_device">On this device</string>
     <string name="settings_ai_provider_device_desc">Qwen 2.5 Coder 1.5B · 982 MB · ready. No data leaves your machine.</string>
     <string name="settings_ai_badge_private">PRIVATE</string>
-    <string name="settings_ai_provider_custom">Custom endpoint</string>
-    <string name="settings_ai_provider_custom_desc">Connect to your own Ollama or OpenAI-compatible server.</string>
     <string name="settings_ai_provider_byok">My API key (BYOK)</string>
     <string name="settings_ai_provider_byok_desc">Use your OpenAI, Anthropic, or OpenRouter key. You pay the provider directly.</string>
+    <string name="settings_ai_provider_off">Off — no AI</string>
+    <string name="settings_ai_provider_off_desc">Disable the assistant everywhere. Nothing is ever sent anywhere.</string>
+    <string name="settings_ai_off_note">AI is off: the terminal assistant and quick chat are hidden. Pick a provider above to bring it back.</string>
     <!-- Живая карточка «На этом устройстве»: каталог локальных моделей и их статусы -->
     <string name="settings_ai_local_desc">Runs the assistant fully offline. No data ever leaves your machine.</string>
     <string name="settings_ai_local_ready">Ready</string>
@@ -77,7 +78,7 @@
     <string name="settings_set_up_sync">Set up sync</string>
     <string name="settings_linked_devices">LINKED DEVICES</string>
     <string name="settings_loading_devices">Loading devices…</string>
-    <string name="settings_devices_load_failed">Couldn\'t load devices. Try Sync now.</string>
+    <string name="settings_devices_load_failed">Couldn't load devices. Try Sync now.</string>
     <string name="settings_only_this_device">Only this device so far.</string>
     <string name="settings_device_sub_current">linked · this device</string>
     <string name="settings_device_sub_other">linked device</string>
@@ -167,7 +168,7 @@
 
     <!-- About section -->
     <string name="settings_about_tagline">A private-first SSH client. Local AI, end-to-end encrypted sync, and a terminal that respects your secrets.</string>
-    <string name="settings_about_whats_new">What\'s new</string>
+    <string name="settings_about_whats_new">What's new</string>
     <string name="settings_about_documentation">Documentation</string>
     <string name="settings_about_licenses">Open-source licenses</string>
     <string name="settings_about_footer">Built on the open seas · © 2026 Skerry</string>

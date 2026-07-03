@@ -141,6 +141,36 @@ class AiAssistantControllerTest {
     }
 
     @Test
+    fun `off provider disables the assistant and ask is a no-op`() = runTest {
+        val c = AiAssistantController(
+            AiSettings(apiKey = "sk-x", provider = app.skerry.shared.ai.AiProviderKind.OFF),
+            persist = {},
+            providerFactory = { error("must not build a provider") },
+            scope = this,
+            localInstalled = { true },
+        )
+
+        assertFalse(c.enabled)
+        assertFalse(c.ready)
+        c.ask("hi")
+        advanceUntilIdle()
+
+        assertTrue(c.turns.isEmpty())
+    }
+
+    @Test
+    fun `selecting off keeps byok config for a later re-enable`() = runTest {
+        var saved: AiSettings? = null
+        val c = AiAssistantController(AiSettings(apiKey = "sk-x"), persist = { saved = it }, providerFactory = { error("unused") }, scope = this)
+
+        c.selectProvider(app.skerry.shared.ai.AiProviderKind.OFF)
+
+        assertEquals(app.skerry.shared.ai.AiProviderKind.OFF, saved!!.provider)
+        assertEquals("sk-x", saved!!.apiKey, "ключ BYOK не должен пропасть при выключении AI")
+        assertFalse(c.enabled)
+    }
+
+    @Test
     fun `save keeps the provider selection intact`() = runTest {
         // Регрессия: save() BYOK-полей не должен сбрасывать выбор «на устройстве» и модель.
         var saved: AiSettings? = null

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.SecurityEvent
 import app.skerry.ui.generated.resources.Res
@@ -49,6 +50,7 @@ import app.skerry.ui.generated.resources.appearance_section_terminal
 import app.skerry.ui.generated.resources.appearance_title
 import app.skerry.ui.generated.resources.more_ai_privacy
 import app.skerry.ui.generated.resources.more_ai_subtitle_byok
+import app.skerry.ui.generated.resources.more_ai_subtitle_off
 import app.skerry.ui.generated.resources.more_ai_subtitle_local
 import app.skerry.ui.generated.resources.more_appearance_subtitle
 import app.skerry.ui.generated.resources.more_biometric_prompt_cancel
@@ -150,8 +152,14 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             MoreRow("fingerprint", D.cyanBright, stringResource(Res.string.more_known_hosts), known, if (knownWarn) D.sunset else D.moss, onClick = { state.push(MobileRoute.Known) })
             MoreRow("groups", D.cyanBright, stringResource(Res.string.more_team), if (preview) "Platform crew" else null, D.dim, onClick = { state.push(MobileRoute.Team) })
             // AI: живой путь (есть контроллер) → push экрана настроек AI; иначе инертная заглушка (превью).
-            val aiLive = LocalAi.current != null
-            MoreRow("auto_awesome", D.amber, stringResource(Res.string.more_ai_privacy), if (aiLive) stringResource(Res.string.more_ai_subtitle_byok) else stringResource(Res.string.more_ai_subtitle_local), D.dim, onClick = if (aiLive) { -> state.push(MobileRoute.Ai) } else null)
+            // Подпись — выбранный провайдер по умолчанию (Local / BYOK / Off), не статичный текст.
+            val liveAi = LocalAi.current
+            val aiSubtitle = when (liveAi?.settings?.provider) {
+                AiProviderKind.DEVICE, null -> stringResource(Res.string.more_ai_subtitle_local)
+                AiProviderKind.CLOUD -> stringResource(Res.string.more_ai_subtitle_byok)
+                AiProviderKind.OFF -> stringResource(Res.string.more_ai_subtitle_off)
+            }
+            MoreRow("auto_awesome", D.amber, stringResource(Res.string.more_ai_privacy), aiSubtitle, D.dim, onClick = if (liveAi != null) { -> state.push(MobileRoute.Ai) } else null)
             MoreRow("palette", D.cyanBright, stringResource(Res.string.appearance_title), stringResource(Res.string.more_appearance_subtitle), D.dim, onClick = { state.push(MobileRoute.Appearance) })
             MoreRow("shield_lock", D.cyanBright, stringResource(Res.string.more_security_sync), if (preview) stringResource(Res.string.more_sync_synced) else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
             // Раздел «Безопасность»: мастер-пароль, биометрия, автоблокировка, журнал событий. Живой путь

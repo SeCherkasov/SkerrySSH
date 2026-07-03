@@ -86,9 +86,11 @@ fun TerminalView(state: DesktopDesignState) {
             val aiSession = LocalSessions.current?.active
             val aiPolicy = aiSession?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
             val aiTerminal = (aiSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-            val aiController = key(liveAi, aiPolicy) {
+            // liveAi.enabled — в key: глобальный OFF в настройках убирает/возвращает бар
+            // без пересоздания экрана (settings — Compose-state, смена рекомпозирует).
+            val aiController = key(liveAi, aiPolicy, liveAi?.enabled) {
                 remember {
-                    if (liveAi != null && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
+                    if (liveAi != null && liveAi.enabled && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
                 }
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {

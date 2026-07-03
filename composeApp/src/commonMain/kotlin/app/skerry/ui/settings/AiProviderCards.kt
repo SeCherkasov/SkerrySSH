@@ -47,39 +47,54 @@ import app.skerry.ui.generated.resources.settings_ai_local_verifying
 import app.skerry.ui.generated.resources.settings_ai_provider_byok
 import app.skerry.ui.generated.resources.settings_ai_provider_byok_desc
 import app.skerry.ui.generated.resources.settings_ai_provider_device
+import app.skerry.ui.generated.resources.settings_ai_provider_off
+import app.skerry.ui.generated.resources.settings_ai_provider_off_desc
 import app.skerry.ui.sftp.humanSize
 import org.jetbrains.compose.resources.stringResource
 
 /**
  * Живой выбор провайдера AI по умолчанию (хром — 1:1 с карточками прототипа): «На этом
- * устройстве» с каталогом локальных моделей (скачивание/прогресс/удаление) и BYOK. Выбор
- * сохраняется сразу ([AiAssistantController.selectProvider]); Strict-хосты всё равно идут
- * локально независимо от выбранного здесь дефолта (см. AiRouter).
+ * устройстве» с каталогом локальных моделей (скачивание/прогресс/удаление), BYOK и «выключен».
+ * Начинка раскрывается только у ВЫБРАННОЙ карточки (каталог моделей / [byokContent] — форма
+ * ключ-модель-эндпоинт, платформенный layout подаёт вызывающий). Выбор сохраняется сразу
+ * ([AiAssistantController.selectProvider]); Strict-хосты всё равно идут локально независимо
+ * от выбранного здесь дефолта (см. AiRouter).
  */
 @Composable
-internal fun AiProviderCards(ai: AiAssistantController) {
+internal fun AiProviderCards(ai: AiAssistantController, byokContent: (@Composable () -> Unit)? = null) {
     Txt(stringResource(Res.string.settings_ai_default_provider), color = D.text, size = 13.sp, weight = FontWeight.Medium)
     Txt(stringResource(Res.string.settings_ai_default_provider_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
 
     val models = ai.models
-    val deviceSelected = ai.settings.provider == AiProviderKind.DEVICE
+    val provider = ai.settings.provider
     ProviderCard(
         icon = "lock",
         title = stringResource(Res.string.settings_ai_provider_device),
         desc = stringResource(Res.string.settings_ai_local_desc),
-        selected = deviceSelected,
+        selected = provider == AiProviderKind.DEVICE,
         badge = stringResource(Res.string.settings_ai_badge_private),
         onClick = models?.let { { ai.selectProvider(AiProviderKind.DEVICE) } },
     ) {
-        if (models != null) LocalModelList(ai, models)
+        if (models != null && provider == AiProviderKind.DEVICE) LocalModelList(ai, models)
     }
     Box(Modifier.height(8.dp))
     ProviderCard(
         icon = "key",
         title = stringResource(Res.string.settings_ai_provider_byok),
         desc = stringResource(Res.string.settings_ai_provider_byok_desc),
-        selected = !deviceSelected,
+        selected = provider == AiProviderKind.CLOUD,
         onClick = { ai.selectProvider(AiProviderKind.CLOUD) },
+    ) {
+        if (provider == AiProviderKind.CLOUD) byokContent?.invoke()
+    }
+    Box(Modifier.height(8.dp))
+    // Глобальный kill-switch: AI нигде не показывается и ничего не шлёт (сильнее per-host политик).
+    ProviderCard(
+        icon = "block",
+        title = stringResource(Res.string.settings_ai_provider_off),
+        desc = stringResource(Res.string.settings_ai_provider_off_desc),
+        selected = provider == AiProviderKind.OFF,
+        onClick = { ai.selectProvider(AiProviderKind.OFF) },
     )
 }
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -28,9 +30,8 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 
 /**
- * Общие примитивы мобильных форм (шиты/диалоги): подпись поля и текстовое поле в стиле макета.
- * Единственный источник вместо трёх копий (new-connection sheet, снипеты, порты). AI-поля
- * (`MobileAiScreen`) намеренно другие по прототипу — их сюда не сводить.
+ * Общие примитивы мобильных форм (шиты/диалоги/настройки): подпись поля и текстовое поле в стиле
+ * макета. Единственный источник вместо копий (new-connection sheet, снипеты, порты, AI-настройки).
  */
 
 /** Подпись поля (капс) + содержимое. */
@@ -54,6 +55,7 @@ internal fun MobileFormField(label: String, modifier: Modifier = Modifier, conte
  * [masked] — скрывать ввод (пароль/passphrase); [singleLine] = false + [mono] + [minHeightDp] —
  * многострочная моноширинная область (вставка PEM-ключа, команда сниппета), как desktop
  * `ModalTextField`. [background] — фон рамки: сниппетная команда использует [D.terminalBg].
+ * [onSubmit] — действие Done/Send/Go клавиатуры (отправка quick-chat и т.п.).
  */
 @Composable
 internal fun MobileFormInput(
@@ -66,6 +68,8 @@ internal fun MobileFormInput(
     mono: Boolean = false,
     background: Color = D.bg,
     minHeightDp: Int? = null,
+    imeAction: ImeAction = ImeAction.Default,
+    onSubmit: (() -> Unit)? = null,
 ) {
     val fonts = LocalFonts.current
     val family = if (mono) fonts.mono else fonts.ui
@@ -81,7 +85,12 @@ internal fun MobileFormInput(
         textStyle = textStyle,
         cursorBrush = SolidColor(D.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
+        keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType, imeAction = imeAction),
+        keyboardActions = if (onSubmit != null) {
+            KeyboardActions(onDone = { onSubmit() }, onSend = { onSubmit() }, onGo = { onSubmit() })
+        } else {
+            KeyboardActions.Default
+        },
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
             Box(

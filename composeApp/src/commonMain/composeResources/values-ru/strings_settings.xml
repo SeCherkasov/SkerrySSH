@@ -16,7 +16,7 @@
 
     <!-- Раздел AI -->
     <string name="settings_ai_title">AI</string>
-    <string name="settings_ai_live_subtitle">Подключите свой OpenAI-совместимый провайдер (BYOK). Ключ хранится в хранилище в зашифрованном виде и отправляется только тому провайдеру, который вы указали.</string>
+    <string name="settings_ai_live_subtitle">Выберите, где выполняется AI: на этом устройстве, через собственный OpenAI-совместимый ключ (BYOK) — или выключите его полностью. Ключ хранится в хранилище в зашифрованном виде и отправляется только выбранному вами провайдеру.</string>
     <string name="settings_ai_field_api_key">КЛЮЧ API OPENAI</string>
     <string name="settings_ai_field_model">МОДЕЛЬ</string>
     <string name="settings_ai_field_endpoint">ЭНДПОИНТ</string>
@@ -34,10 +34,11 @@
     <string name="settings_ai_provider_device">На этом устройстве</string>
     <string name="settings_ai_provider_device_desc">Qwen 2.5 Coder 1.5B · 982 МБ · готово. Данные не покидают вашу машину.</string>
     <string name="settings_ai_badge_private">ЛОКАЛЬНО</string>
-    <string name="settings_ai_provider_custom">Свой эндпоинт</string>
-    <string name="settings_ai_provider_custom_desc">Подключитесь к своему серверу Ollama или OpenAI-совместимому.</string>
     <string name="settings_ai_provider_byok">Мой ключ API (BYOK)</string>
     <string name="settings_ai_provider_byok_desc">Используйте свой ключ OpenAI, Anthropic или OpenRouter. Оплата напрямую провайдеру.</string>
+    <string name="settings_ai_provider_off">Выключен — без AI</string>
+    <string name="settings_ai_provider_off_desc">Полностью выключить ассистента. Ничего никуда не отправляется.</string>
+    <string name="settings_ai_off_note">AI выключен: ассистент в терминале и быстрый чат скрыты. Чтобы вернуть его, выберите провайдера выше.</string>
     <!-- Живая карточка «На этом устройстве»: каталог локальных моделей и их статусы -->
     <string name="settings_ai_local_desc">Ассистент работает полностью офлайн. Данные никогда не покидают устройство.</string>
     <string name="settings_ai_local_ready">Готова</string>

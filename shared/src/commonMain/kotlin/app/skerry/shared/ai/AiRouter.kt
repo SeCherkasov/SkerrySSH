@@ -16,6 +16,9 @@ sealed interface AiRoute {
 
         /** Политика Strict требует локальную модель, а её нет на устройстве. */
         STRICT_NEEDS_DEVICE,
+
+        /** AI выключен глобально ([AiProviderKind.OFF]) — никакой маршрут невозможен. */
+        AI_DISABLED,
     }
 }
 
@@ -24,6 +27,9 @@ sealed interface AiRoute {
  * `when` по контроллерам — тот же принцип, что [AiPolicyDecision]).
  *
  * Правила:
+ * - [AiProviderKind.OFF] — AI выключен глобально: [AiRoute.Blocked] всегда, СИЛЬНЕЕ любой
+ *   per-host политики (даже Strict со скачанной моделью). Пользователь, выключивший AI в
+ *   настройках, не должен встретить его нигде.
  * - Политика запрещает облако ([AiPolicyDecision.cloudAllowed] == false, т.е. Strict) →
  *   ТОЛЬКО локальная модель, независимо от выбранного в настройках провайдера. «Strict —
  *   только локальный AI» из product brief становится рабочим, а не заглушкой.
@@ -42,6 +48,7 @@ object AiRouter {
         device: LocalModel?,
         deviceInstalled: Boolean,
     ): AiRoute {
+        if (settings.provider == AiProviderKind.OFF) return AiRoute.Blocked(AiRoute.Reason.AI_DISABLED)
         val ready = device != null && deviceInstalled
         if (!decision.cloudAllowed) {
             return if (ready) AiRoute.Use(AiEndpoint.Device(device)) else AiRoute.Blocked(AiRoute.Reason.STRICT_NEEDS_DEVICE)
@@ -49,7 +56,7 @@ object AiRouter {
         return when (settings.provider) {
             AiProviderKind.DEVICE ->
                 if (ready) AiRoute.Use(AiEndpoint.Device(device)) else AiRoute.Blocked(AiRoute.Reason.DEVICE_NOT_READY)
-            AiProviderKind.CLOUD ->
+            AiProviderKind.CLOUD, AiProviderKind.OFF ->
                 if (settings.isConfigured) AiRoute.Use(AiEndpoint.Cloud(settings.toOpenAiConfig()))
                 else AiRoute.Blocked(AiRoute.Reason.CLOUD_NOT_CONFIGURED)
         }

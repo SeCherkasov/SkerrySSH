@@ -168,6 +168,7 @@ class TerminalAiController(
         AiRoute.Reason.CLOUD_NOT_CONFIGURED -> NOT_CONFIGURED
         AiRoute.Reason.DEVICE_NOT_READY -> DEVICE_NOT_READY
         AiRoute.Reason.STRICT_NEEDS_DEVICE -> STRICT_BLOCKED
+        AiRoute.Reason.AI_DISABLED -> AI_DISABLED
     }
 
     companion object {
@@ -181,6 +182,7 @@ class TerminalAiController(
         const val NOT_CONFIGURED = "Add an API key in AI settings first."
         const val STRICT_BLOCKED = "Strict policy: download the on-device model in AI settings to use AI on this host."
         const val DEVICE_NOT_READY = "Download the on-device model in AI settings first."
+        const val AI_DISABLED = "AI is turned off in AI settings."
         const val NEEDS_CLARIFICATION = "Please clarify your request."
 
         /**

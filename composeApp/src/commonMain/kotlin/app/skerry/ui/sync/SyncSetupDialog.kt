@@ -237,7 +237,7 @@ internal fun SyncField(
                 cursorBrush = SolidColor(D.cyan),
                 visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType),
-                keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
+                keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }, onSend = { onSubmit() }),
                 modifier = Modifier.fillMaxWidth(),
             )
         }

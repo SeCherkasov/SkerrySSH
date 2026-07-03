@@ -5,9 +5,12 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultSingletonStore
 import kotlinx.serialization.Serializable
 
-/** Провайдер AI по умолчанию: внешний OpenAI-совместимый (BYOK) или локальная модель. */
+/**
+ * Провайдер AI по умолчанию: внешний OpenAI-совместимый (BYOK), локальная модель или [OFF] —
+ * AI выключен во всём приложении (глобальный kill-switch, сильнее per-host политик — см. [AiRouter]).
+ */
 @Serializable
-enum class AiProviderKind { CLOUD, DEVICE }
+enum class AiProviderKind { CLOUD, DEVICE, OFF }
 
 /**
  * Настройки AI-провайдера, хранимые в зашифрованном Vault: выбор провайдера по умолчанию
