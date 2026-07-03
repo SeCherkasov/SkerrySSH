@@ -71,24 +71,30 @@ internal class SecretCopyAuthorizer(
             if (biometricInFlight) return
             biometricInFlight = true
             scope.launch {
-                val prompt = BiometricPrompt(
-                    title = getString(Res.string.vtail_bio_copy_title),
-                    cancelLabel = getString(Res.string.vtail_bio_copy_cancel),
-                    subtitle = getString(Res.string.vtail_bio_copy_subtitle),
-                )
-                // confirm зовёт платформенный BiometricPrompt — на некоторых устройствах он может
-                // бросить исключение; не роняем композицию, а откатываемся на мастер-пароль. Отмену
-                // корутины (экран покинут/vault залочен, пока промпт в полёте) НЕ глотаем: голый
-                // runCatching поймал бы CancellationException и продолжил работу на отменённом скоупе,
-                // открыв форму пароля «из ниоткуда». Пробрасываем её, ломая structured concurrency честно.
+                // Сброс флага — в finally: отмена корутины (экран покинут/vault залочен, пока промпт в
+                // полёте) иначе оставила бы biometricInFlight взведённым навсегда, и все последующие
+                // authorize() молча игнорировались бы.
                 val result = try {
-                    bio.confirm(prompt)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    null
+                    val prompt = BiometricPrompt(
+                        title = getString(Res.string.vtail_bio_copy_title),
+                        cancelLabel = getString(Res.string.vtail_bio_copy_cancel),
+                        subtitle = getString(Res.string.vtail_bio_copy_subtitle),
+                    )
+                    // confirm зовёт платформенный BiometricPrompt — на некоторых устройствах он может
+                    // бросить исключение; не роняем композицию, а откатываемся на мастер-пароль. Отмену
+                    // корутины НЕ глотаем: голый runCatching поймал бы CancellationException и продолжил
+                    // работу на отменённом скоупе, открыв форму пароля «из ниоткуда». Пробрасываем её,
+                    // ломая structured concurrency честно.
+                    try {
+                        bio.confirm(prompt)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null
+                    }
+                } finally {
+                    biometricInFlight = false
                 }
-                biometricInFlight = false
                 when (result) {
                     BiometricConfirmResult.Confirmed -> onAuthorized()
                     BiometricConfirmResult.Cancelled, BiometricConfirmResult.Failed -> Unit
@@ -113,8 +119,13 @@ internal class SecretCopyAuthorizer(
         verifying = true
         scope.launch {
             // Argon2id дорогой — уводим с UI-потока, чтобы не подвесить кадр на время сверки.
-            val ok = withContext(kdfDispatcher) { vault?.verifyPassword(password.toCharArray()) == true }
-            verifying = false
+            // Сброс verifying — в finally: отмена корутины во время сверки иначе оставила бы флаг
+            // взведённым навсегда, и все последующие submitPassword() молча игнорировались бы.
+            val ok = try {
+                withContext(kdfDispatcher) { vault?.verifyPassword(password.toCharArray()) == true }
+            } finally {
+                verifying = false
+            }
             if (ok) {
                 val run = pending
                 dismiss()

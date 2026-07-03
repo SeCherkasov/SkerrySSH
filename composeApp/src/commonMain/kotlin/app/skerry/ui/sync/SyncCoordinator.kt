@@ -6,6 +6,7 @@ import app.skerry.shared.sync.RemoteDevice
 import app.skerry.shared.sync.SyncClient
 import app.skerry.shared.sync.SyncEngine
 import app.skerry.shared.sync.SyncException
+import app.skerry.shared.sync.SyncOutcome
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.InMemorySyncStateStore
@@ -18,10 +19,11 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -89,6 +91,15 @@ sealed interface SyncStatus {
 enum class ServerReachable { UNKNOWN, REACHABLE, UNREACHABLE }
 
 /**
+ * Один цикл синхронизации (pull/merge/push) — абстракция над [SyncEngine.sync] для инъекции в
+ * тестах: сам [SyncEngine] финальный и требует живой сети, поэтому фабрика координатора отдаёт
+ * эту функцию, а не движок (см. `engineFactory` в [SyncCoordinator]).
+ */
+fun interface SyncRunner {
+    suspend fun sync(session: SyncSession): SyncOutcome
+}
+
+/**
  * App-level склейка self-hosted sync (`docs/skerry-sync-design.md`): связывает [SyncClient],
  * [VaultCrypto] и локальный [Vault] в операции register/login/sync для UI. Zero-knowledge —
  * мастер-пароль и dataKey не покидают устройство; на сервер уходят SRP-верификатор и шифроблобы.
@@ -126,6 +137,11 @@ class SyncCoordinator(
      * перезахода. Платформа проводит сюда reload менеджеров (на главном потоке).
      */
     private val onSynced: () -> Unit = {},
+    /**
+     * Фабрика одного цикла синка над активным клиентом — точка инъекции для тестов [runSync]
+     * (см. [SyncRunner]). `null` (прод) — реальный [SyncEngine] над vault/курсором/настройками.
+     */
+    engineFactory: ((SyncClient) -> SyncRunner)? = null,
 ) {
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Disabled)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
@@ -139,16 +155,15 @@ class SyncCoordinator(
     private val _biometricResetNeeded = MutableStateFlow(false)
     val biometricResetNeeded: StateFlow<Boolean> = _biometricResetNeeded.asStateFlow()
 
-    /**
-     * Доступность сервера по health-пингу (см. [ServerReachable]). Обновляется поллером ([healthLoop])
-     * независимо от сессии — индикатор честен и при заблокированном vault.
-     */
-    private val _serverReachable = MutableStateFlow(ServerReachable.UNKNOWN)
-    val serverReachable: StateFlow<ServerReachable> = _serverReachable.asStateFlow()
-
     // «Что синхронизировать» (уровень аккаунта) — хранится записью SETTINGS в самом vault, едет тем же
     // синком (см. [SyncSettings]). Читаем лениво из vault: на залоченном vault стор отдаёт дефолт.
     private val settingsStore = SyncSettingsStore(vault)
+
+    private val engineFactory: (SyncClient) -> SyncRunner = engineFactory
+        ?: { c -> SyncRunner { s -> SyncEngine(c, vault, syncState, settings = { settingsStore.load() }).sync(s) } }
+
+    /** Запечатывание refresh-токена под dataKey vault для «keep connected» (см. [SealedTokenCodec]). */
+    private val tokens = SealedTokenCodec(crypto)
 
     /**
      * Текущее «что синхронизировать» для UI (секция WHAT SYNCS). Обновляется из vault через
@@ -160,46 +175,13 @@ class SyncCoordinator(
     val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
 
     // @Volatile: пишутся/читаются из независимых корутин на [scope] (Dispatchers.Default — пул потоков):
-    // doConnect/restoreSession ставят, disconnect зануляет, startWatch/startLocalPush/runSync читают. Без
+    // activateSession ставит, disconnect зануляет, startWatch/startLocalPush/runSync читают. Без
     // volatile запись на одном потоке не обязана быть видна чтению на другом (JMM) — например disconnect
     // ставит client=null, а startWatch видит устаревший ненулевой и стартует watch с мёртвым клиентом.
     @Volatile
     private var client: SyncClient? = null
     @Volatile
     private var session: SyncSession? = null
-
-    // URL текущей привязки для health-пинга (из конфигурации, живёт независимо от сессии). Смена цели
-    // (connect/disconnect) перезапускает цикл пинга через collectLatest. null = sync не настроен.
-    private val healthTarget = MutableStateFlow(configStore.load()?.serverUrl)
-    // Выделенный клиент только для health-пинга, переиспользуется между тиками: пересоздаётся при смене
-    // URL, закрывается при отвязке. Отдельный от рабочего [client] — пинг должен идти и без сессии.
-    private var healthClient: SyncClient? = null
-    private var healthClientUrl: String? = null
-
-    // Подписка на серверные уведомления об изменениях (WS `/sync`): пока живёт — каждое чужое
-    // изменение прилетает push-сигналом и тянет дельту, без ручного «Sync». Один на сессию; новое
-    // подключение и disconnect его отменяют. null = live-pull не активен (синк только вручную).
-    @Volatile
-    private var watchJob: kotlinx.coroutines.Job? = null
-
-    // Подписка на ЛОКАЛЬНЫЕ изменения vault ([Vault.localChanges]): правка/добавление/удаление записи
-    // на этом устройстве с дебаунсом запускает синк (push), чтобы изменение само улетело на сервер,
-    // а оттуда WS-сигналом — на другие устройства (live-sync «как у популярных SSH-клиентов»). Один на сессию; отменяется
-    // в disconnect и заменяется при реконнекте.
-    @Volatile
-    private var pushJob: kotlinx.coroutines.Job? = null
-
-    // Сериализует ВСЕ циклы синка: их запускают doConnect/restoreSession, ручной syncNow, WS-live-pull
-    // (watchJob) и авто-push локальных правок (pushJob) — на Dispatchers.Default они иначе шли бы
-    // параллельно и наперегонки писали бы курсор ([syncState]) и [_status] (kotlin-ревью MEDIUM-2:
-    // два движка читают cursor=N, оба пишут cursor=M, статус отражает «последний добежавший»). LWW и
-    // замок vault уберегли бы данные, но курсор/статус рассогласовались бы. Один синк за раз.
-    private val syncMutex = Mutex()
-
-    // Сериализует startPairing: двойной тап «Link a device» не должен плодить несколько живых pairing-
-    // сессий на сервере — каждая независимо валидна до TTL и расширяет окно атаки. tryLock: второй
-    // параллельный вызов сразу возвращает null (UI просто не покажет второй код).
-    private val pairMutex = Mutex()
 
     // Собственный scope: сетевые операции НЕ должны зависеть от жизненного цикла composable.
     // На мобильном форма перерисовывается по [status]: как только connect() ставит Busy, форма
@@ -208,19 +190,68 @@ class SyncCoordinator(
     // (тяжёлый) тоже уходит с main-потока на Dispatchers.Default.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    // Доступность сервера по health-пингу — выделенный поллер со своим клиентом (см. [ServerHealthMonitor]);
+    // живёт всё время жизни координатора, пока цель null — держит UNKNOWN.
+    private val health = ServerHealthMonitor(clientFactory, scope, initialTarget = configStore.load()?.serverUrl)
+
+    /**
+     * Доступность сервера по health-пингу (см. [ServerReachable]). Обновляется поллером [health]
+     * независимо от сессии — индикатор честен и при заблокированном vault.
+     */
+    val serverReachable: StateFlow<ServerReachable> get() = health.reachable
+
+    // Подписка на серверные уведомления об изменениях (WS `/sync`): пока живёт — каждое чужое
+    // изменение прилетает push-сигналом и тянет дельту, без ручного «Sync». Один на сессию; новое
+    // подключение и disconnect его отменяют. null = live-pull не активен (синк только вручную).
+    // Замена cancel/join/новый job — только под [opMutex] (activateSession/disconnect).
+    @Volatile
+    private var watchJob: Job? = null
+
+    // Подписка на ЛОКАЛЬНЫЕ изменения vault ([Vault.localChanges]): правка/добавление/удаление записи
+    // на этом устройстве с дебаунсом запускает синк (push), чтобы изменение само улетело на сервер,
+    // а оттуда WS-сигналом — на другие устройства (live-sync «как у популярных SSH-клиентов»). Один на сессию; отменяется
+    // в disconnect и заменяется при реконнекте — тоже строго под [opMutex].
+    @Volatile
+    private var pushJob: Job? = null
+
+    // Сериализует ВСЕ циклы синка: их запускают activateSession, ручной syncNow, WS-live-pull
+    // (watchJob) и авто-push локальных правок (pushJob) — на Dispatchers.Default они иначе шли бы
+    // параллельно и наперегонки писали бы курсор ([syncState]) и [_status] (kotlin-ревью MEDIUM-2:
+    // два движка читают cursor=N, оба пишут cursor=M, статус отражает «последний добежавший»). LWW и
+    // замок vault уберегли бы данные, но курсор/статус рассогласовались бы. Один синк за раз.
+    private val syncMutex = Mutex()
+
+    // Сериализует операции над жизненным циклом сессии: doConnect/doClaimPairing/restoreSession
+    // (присвоение client/session + перезапуск watch/push) и disconnect (их остановка + close клиента).
+    // Без него disconnect, проскочивший МЕЖДУ сетевым register и публикацией client, оставил бы живой
+    // Ktor-клиент и запущенный watch после «отключения». Инвариант порядка замков: opMutex берётся
+    // ПЕРВЫМ, syncMutex — только внутри него (runSync/disconnect) — иначе deadlock.
+    private val opMutex = Mutex()
+
+    // Сериализует startPairing: двойной тап «Link a device» не должен плодить несколько живых pairing-
+    // сессий на сервере — каждая независимо валидна до TTL и расширяет окно атаки. tryLock: второй
+    // параллельный вызов сразу возвращает null (UI просто не покажет второй код).
+    private val pairMutex = Mutex()
+
     init {
         // Восстанавливаем привязку после перезапуска: сессии/токенов в памяти нет, но сохранённый
         // сервер/аккаунт показываем как Configured — UI предложит «переподключиться» одним паролем,
         // без перенабора. Disconnect стирает конфиг → снова Disabled.
         configStore.load()?.let { _status.value = SyncStatus.Configured(it.serverUrl, it.accountId) }
-        // Health-поллер живёт всё время жизни координатора; пока [healthTarget] == null он держит UNKNOWN.
-        scope.launch { healthLoop() }
     }
 
     val isConfigured: Boolean get() = configStore.load() != null
 
     /** Сохранённая привязка (для предзаполнения формы переподключения сервером/аккаунтом). */
     val savedConfig: SyncConfig? get() = configStore.load()
+
+    /**
+     * Остановить фоновые работы координатора (health-поллер, watch/push, in-flight операции) —
+     * teardown процесса/тестов. Сохранённую привязку НЕ трогает (это делает [disconnect]).
+     */
+    fun close() {
+        scope.cancel()
+    }
 
     /**
      * Подключить устройство к аккаунту мастер-паролем — одно действие вместо раздельных
@@ -233,6 +264,13 @@ class SyncCoordinator(
      * **принимает** ключ аккаунта (см. [doConnect]).
      */
     fun connect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean = false) {
+        // Guard от двойного запуска: повторный клик, пока предыдущий connect/claim в полёте, породил
+        // бы второй Ktor-клиент (утечка пула/сокетов) и гонку статусов. Вызовы идут из UI-обработчиков
+        // на главном потоке, так что check-then-set без CAS достаточен (как busy-флаги панелей).
+        if (_status.value == SyncStatus.Busy) {
+            masterPassword.fill(' ')
+            return
+        }
         // Busy ставим СИНХРОННО, ещё до launch: онбординг-форма гасит «Skip» по статусу Busy. Поставь
         // мы Busy лишь первой строкой doConnect — остался бы dispatch-цикл, где статус ещё Disabled и
         // Skip активен: проскочив на enroll биометрии, пользователь обернул бы её под ключом, который
@@ -242,16 +280,17 @@ class SyncCoordinator(
         // не сразу, а вызывающий может затереть массив раньше — иначе deriveMasterKey получил бы
         // пустой пароль (TOCTOU). Копией владеет [doConnect] и затирает её в finally.
         val owned = masterPassword.copyOf()
-        masterPassword.fill(' ')
-        scope.launch { doConnect(serverUrl, accountId, owned, keepConnected) }
+        masterPassword.fill(' ')
+        scope.launch { opMutex.withLock { doConnect(serverUrl, accountId, owned, keepConnected) } }
     }
 
+    // Под [opMutex] (см. connect): активация сессии не должна гоняться с disconnect.
     private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean) {
         _status.value = SyncStatus.Busy
         val dataKey = vault.exportDataKey()
         if (dataKey == null) {
             _status.value = SyncStatus.Failed("vault is locked")
-            masterPassword.fill(' ')
+            masterPassword.fill(' ')
             return
         }
         // Ключевой материал держим во внешних переменных, чтобы затереть его в finally (zero-knowledge:
@@ -279,8 +318,11 @@ class SyncCoordinator(
                 s
             }
 
-            client = syncClient
-            session = newSession
+            // keep-connected: запечатываем refresh-токен под АКТУАЛЬНЫМ dataKey vault (после возможного
+            // принятия ключа аккаунта он мог смениться) — иначе restoreSession не сможет его открыть.
+            val sealed = if (keepConnected) {
+                vault.exportDataKey()?.let { dk -> try { tokens.seal(dk, newSession.refreshToken) } finally { dk.zeroize() } }
+            } else null
             // Полный re-pull (сброс курсора в 0) делаем ТОЛЬКО когда сменился dataKey, т.е. вход
             // принял ОТЛИЧНЫЙ ключ аккаунта (adoptedKey). Это ровно случай, ради которого фикс жил:
             // после reset/recreate vault локальный vault пуст и/или под новым ключом, а сохранённый
@@ -292,17 +334,12 @@ class SyncCoordinator(
             // старых тромбстоунов на все устройства. Курсор теперь персистентный
             // ([FileSyncStateStore]), так что и перезапуск процесса продолжает инкрементально; путь
             // reset покрыт двойной защитой — сбросом курсора в [disconnect] (onVaultReset) и adoptedKey.
-            if (adoptedKey) syncState.setCursor(accountId, 0)
-            // keep-connected: запечатываем refresh-токен под АКТУАЛЬНЫМ dataKey vault (после возможного
-            // принятия ключа аккаунта он мог смениться) — иначе restoreSession не сможет его открыть.
-            val sealed = if (keepConnected) {
-                vault.exportDataKey()?.let { dk -> try { sealToken(dk, newSession.refreshToken) } finally { dk.zeroize() } }
-            } else null
-            configStore.save(SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed))
-            healthTarget.value = serverUrl // включаем health-пинг этого сервера (если ещё не шёл)
-            runSync()
-            startWatch()
-            startLocalPush()
+            activateSession(
+                syncClient,
+                newSession,
+                SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed),
+                resetCursor = adoptedKey,
+            )
         } catch (e: CancellationException) {
             throw e // не глушим отмену — иначе порвём structured concurrency
         } catch (e: SyncException) {
@@ -319,6 +356,33 @@ class SyncCoordinator(
             authKey?.fill(0)
             dataKey.zeroize()
         }
+    }
+
+    /**
+     * Общий хвост включения активной сессии (из [doConnect]/[doClaimPairing]/[restoreSession]):
+     * опубликовать client/session, при необходимости сбросить курсор ([resetCursor] — случаи полного
+     * re-pull: принятый ключ аккаунта, свежеспаренное устройство), сохранить привязку, навести
+     * health-пинг на её сервер и запустить начальный синк + live-подписки (watch/push).
+     *
+     * Вызывать ТОЛЬКО под [opMutex]: присвоения client/session и cancel/join/replace подписок
+     * гоняются с [disconnect] — мьютекс сериализует активацию и teardown целиком. Для
+     * [restoreSession] наведение health-цели — no-op (URL не менялся; StateFlow дедуплицирует
+     * равные значения, пинг-цикл не перезапускается).
+     */
+    private suspend fun activateSession(
+        syncClient: SyncClient,
+        newSession: SyncSession,
+        config: SyncConfig,
+        resetCursor: Boolean,
+    ) {
+        client = syncClient
+        session = newSession
+        if (resetCursor) syncState.setCursor(config.accountId, 0)
+        configStore.save(config)
+        health.setTarget(config.serverUrl)
+        runSync()
+        startWatch()
+        startLocalPush()
     }
 
     /**
@@ -397,19 +461,25 @@ class SyncCoordinator(
      * (в обход сервера) и записать локальный vault под [localPassword] — этим паролем устройство будет
      * разблокироваться дальше, мастер-пароль аккаунта вводить не нужно. Если vault ещё не создан
      * (онбординг-join) — создаём его этим паролем; если создан, но заблокирован — разблокируем им.
-     * Запуск fire-and-forget, прогресс/итог — через [status]; хвост (client/session/курсор/конфиг/
-     * health/runSync/startWatch/startLocalPush) повторяет [doConnect].
+     * Запуск fire-and-forget, прогресс/итог — через [status]; хвост активации общий с [doConnect]
+     * ([activateSession]).
      */
     fun claimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean = false) {
+        // Guard от двойного запуска — как в [connect] (двойной сабмит утекал бы Ktor-клиентом).
+        if (_status.value == SyncStatus.Busy) {
+            localPassword.fill(' ')
+            return
+        }
         // Busy синхронно (как connect): онбординг-форма гасит «Skip»/двойной сабмит по статусу Busy.
         _status.value = SyncStatus.Busy
         // Копируем и затираем оригинал ДО launch (TOCTOU): корутина стартует не сразу, вызывающий мог бы
         // затереть массив раньше, чем vault.create/unlock его прочтёт. Копией владеет doClaimPairing.
         val owned = localPassword.copyOf()
         localPassword.fill(' ')
-        scope.launch { doClaimPairing(payload, owned, keepConnected) }
+        scope.launch { opMutex.withLock { doClaimPairing(payload, owned, keepConnected) } }
     }
 
+    // Под [opMutex] (см. claimPairing): активация сессии не должна гоняться с disconnect.
     private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean) {
         _status.value = SyncStatus.Busy
         val parsed = PairingPayload.decode(payload)
@@ -466,19 +536,19 @@ class SyncCoordinator(
                 _biometricResetNeeded.value = true
             }
 
-            client = syncClient
-            openedClient = null // владение передано полю client (его закроет disconnect)
-            session = result.session
-            // Новое устройство: локально записей нет — полный re-pull всей истории аккаунта (как adoptedKey в doConnect).
-            syncState.setCursor(result.accountId, 0)
             val sealed = if (keepConnected) {
-                vault.exportDataKey()?.let { dk -> try { sealToken(dk, result.session.refreshToken) } finally { dk.zeroize() } }
+                vault.exportDataKey()?.let { dk -> try { tokens.seal(dk, result.session.refreshToken) } finally { dk.zeroize() } }
             } else null
-            configStore.save(SyncConfig(parsed.serverUrl, result.accountId, deviceId, keepConnected, sealed))
-            healthTarget.value = parsed.serverUrl
-            runSync()
-            startWatch()
-            startLocalPush()
+            // Владение клиентом передаётся полю [client] первым же присвоением активации.
+            openedClient = null
+            // Новое устройство: локально записей нет — полный re-pull всей истории аккаунта
+            // (resetCursor, как adoptedKey в doConnect).
+            activateSession(
+                syncClient,
+                result.session,
+                SyncConfig(parsed.serverUrl, result.accountId, deviceId, keepConnected, sealed),
+                resetCursor = true,
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: SyncException) {
@@ -542,8 +612,15 @@ class SyncCoordinator(
     fun syncNow() {
         if (client == null || session == null) return
         scope.launch {
-            _status.value = SyncStatus.Busy
-            runSync()
+            syncMutex.withLock {
+                // Busy — только ПОД мьютексом и ПОСЛЕ проверки клиента: раньше статус взводился до
+                // захвата замка, и disconnect, проскочивший в эту щель, оставлял ранний return
+                // runSync без записи статуса — вечный Busy-спиннер.
+                val c = client ?: return@withLock
+                val s = session ?: return@withLock
+                _status.value = SyncStatus.Busy
+                runSyncLocked(c, s)
+            }
         }
     }
 
@@ -553,8 +630,13 @@ class SyncCoordinator(
     private suspend fun runSync() = syncMutex.withLock {
         val c = client ?: return@withLock
         val s = session ?: return@withLock
+        runSyncLocked(c, s)
+    }
+
+    // Тело одного цикла синка; вызывается ТОЛЬКО с уже захваченным [syncMutex] (runSync/syncNow).
+    private suspend fun runSyncLocked(c: SyncClient, s: SyncSession) {
         try {
-            val outcome = SyncEngine(c, vault, syncState, settings = { settingsStore.load() }).sync(s)
+            val outcome = engineFactory(c).sync(s)
             _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
             // Подтянули записи с сервера → обновить менеджеры списков, иначе синканутое не видно до перезахода.
             if (outcome.pulled > 0) {
@@ -573,16 +655,6 @@ class SyncCoordinator(
     }
 
     /**
-     * Подписаться на серверные уведомления об изменениях (WS `/sync`) и тянуть дельту на каждый сигнал —
-     * realtime live-pull вместо ручного «Sync». Отменяет прошлую подписку (реконнект). Best-effort:
-     * обрыв/ошибка WS не убивает live-pull навсегда — переподключаемся с экспоненциальным backoff
-     * ([WATCH_RETRY_MIN_MS]…[WATCH_RETRY_MAX_MS]), пока корутину не отменят (disconnect/реконнект). Без
-     * этого временная просадка сети молча гасила бы live-pull, а статус оставался бы Online (пассивное
-     * устройство переставало бы получать чужие изменения без единого сигнала). Статус в Failed НЕ роняем —
-     * иначе моргание связи гасило бы рабочий Online; ручной [syncNow] всё время доступен. [runSync] на
-     * каждый сигнал выполняется последовательно (collect не параллелит) и сам не мигает Busy.
-     */
-    /**
      * Должен ли WS-сигнал с курсором [remoteCursor] запустить дельта-pull. `true` только когда сервер
      * ушёл ВПЕРЁД нашего сохранённого курсора (= появились чужие изменения). Равный/отставший курсор —
      * это эхо нашего собственного push'а, тянуть нечего: гасим, чтобы не крутить петлю push→WS→push.
@@ -591,6 +663,17 @@ class SyncCoordinator(
     internal fun signalAdvancesCursor(accountId: String, remoteCursor: Long): Boolean =
         remoteCursor > syncState.cursor(accountId)
 
+    /**
+     * Подписаться на серверные уведомления об изменениях (WS `/sync`) и тянуть дельту на каждый сигнал —
+     * realtime live-pull вместо ручного «Sync». Отменяет прошлую подписку (реконнект); cancel/join/replace
+     * атомарны относительно [disconnect] — вызывается только под [opMutex]. Best-effort: обрыв/ошибка WS
+     * не убивает live-pull навсегда — переподключаемся с экспоненциальным backoff
+     * ([WATCH_RETRY_MIN_MS]…[WATCH_RETRY_MAX_MS]), пока корутину не отменят (disconnect/реконнект). Без
+     * этого временная просадка сети молча гасила бы live-pull, а статус оставался бы Online (пассивное
+     * устройство переставало бы получать чужие изменения без единого сигнала). Статус в Failed НЕ роняем —
+     * иначе моргание связи гасило бы рабочий Online; ручной [syncNow] всё время доступен. [runSync] на
+     * каждый сигнал выполняется последовательно (collect не параллелит) и сам не мигает Busy.
+     */
     private suspend fun startWatch() {
         val c = client ?: return
         val s = session ?: return
@@ -625,8 +708,9 @@ class SyncCoordinator(
      * Подписаться на локальные изменения vault и автоматически пушить их (live-sync «как у популярных SSH-клиентов»):
      * правка/добавление/удаление записи запускает синк, без ручного «Sync». Дебаунс [PUSH_DEBOUNCE_MS]
      * коалесцирует пачку быстрых правок (массовый импорт, переименование с автосохранением) в один синк.
-     * Отменяет прошлую подписку (реконнект). [runSync] делает pull+push: pull→merge НЕ эмитит
-     * localChanges, поэтому входящие записи не порождают новый push — цикла нет.
+     * Отменяет прошлую подписку (реконнект); как и [startWatch], вызывается только под [opMutex].
+     * [runSync] делает pull+push: pull→merge НЕ эмитит localChanges, поэтому входящие записи не
+     * порождают новый push — цикла нет.
      */
     @OptIn(kotlinx.coroutines.FlowPreview::class)
     private suspend fun startLocalPush() {
@@ -676,74 +760,42 @@ class SyncCoordinator(
 
     /** Отключить sync на этом устройстве: забыть сессию и сохранённую привязку. */
     fun disconnect() {
+        // Под [opMutex]: teardown не должен гоняться с активацией (connect/claim/restore) — иначе
+        // disconnect, проскочивший между сетевым register и публикацией client, оставил бы живой
+        // Ktor-клиент и работающий watch «после отключения». withLock дождётся завершения активации,
+        // затем снесёт её результат целиком (инвариант: после disconnect живого клиента нет).
         scope.launch {
-            // Сначала гасим обе live-подписки и ДОЖИДАЕМСЯ их остановки: cancel() лишь шлёт сигнал, а
-            // их collect мог быть в середине runSync() — без join его уже-отработавший runSync записал бы
-            // Online ПОСЛЕ выставленного ниже Disabled (статус залип бы на Online при client==null).
-            watchJob?.cancel()
-            pushJob?.cancel()
-            watchJob?.join()
-            pushJob?.join()
-            watchJob = null
-            pushJob = null
-            // close() и зануление client/session — под syncMutex: ручной syncNow() запускает runSync() и
-            // нигде не трекается/не отменяется, поэтому без замка disconnect мог бы закрыть Ktor-клиент
-            // во время его же in-flight запроса (kotlin-ревью HIGH). withLock дождётся завершения текущего
-            // runSync; следующий после зануления увидит client==null и сделает ранний возврат.
-            syncMutex.withLock {
-                // runCatching: сбой close() (I/O при teardown) не должен оставить привязку/курсор на месте —
-                // иначе disconnect молча провалился бы, а статус застрял.
-                runCatching { client?.close() }
-                client = null
-                session = null
-            }
-            // Курсор синка тоже забываем: следующее подключение (к этому или другому аккаунту в том же
-            // процессе) обязано сделать полный re-pull, а не продолжить с tip прошлой сессии. runCatching:
-            // сбой записи курсора (диск переполнен) не должен оставить configStore/healthTarget/статус в
-            // полу-отвязанном состоянии (silent-ревью: «Disconnect отработал, но устройство снова привязано»).
-            runCatching { configStore.load()?.let { syncState.setCursor(it.accountId, 0) } }
-            configStore.clear()
-            healthTarget.value = null // отвязались — гасим health-пинг (поллер закроет клиент, статус → UNKNOWN)
-            _status.value = SyncStatus.Disabled
-        }
-    }
-
-    /**
-     * Периодически пингует сервер ([SyncClient.ping] → `/healthz`) и публикует [serverReachable]. Цель —
-     * текущий [healthTarget]; смена цели (connect/disconnect) перезапускает цикл через [collectLatest]
-     * (старый пинг-луп отменяется на точке [delay]). Пинг идёт независимо от vault/сессии, поэтому
-     * индикатор честен и при заблокированном хранилище. Любой сбой пинга = [ServerReachable.UNREACHABLE].
-     */
-    private suspend fun healthLoop() {
-        healthTarget.collectLatest { url ->
-            if (url == null) {
-                closeHealthClient()
-                _serverReachable.value = ServerReachable.UNKNOWN
-                return@collectLatest
-            }
-            while (true) {
-                val reachable = runCatching { healthClientFor(url).ping() }.getOrDefault(false)
-                _serverReachable.value =
-                    if (reachable) ServerReachable.REACHABLE else ServerReachable.UNREACHABLE
-                delay(HEALTH_POLL_MS)
+            opMutex.withLock {
+                // Сначала гасим обе live-подписки и ДОЖИДАЕМСЯ их остановки: cancel() лишь шлёт сигнал, а
+                // их collect мог быть в середине runSync() — без join его уже-отработавший runSync записал бы
+                // Online ПОСЛЕ выставленного ниже Disabled (статус залип бы на Online при client==null).
+                watchJob?.cancel()
+                pushJob?.cancel()
+                watchJob?.join()
+                pushJob?.join()
+                watchJob = null
+                pushJob = null
+                // close() и зануление client/session — под syncMutex: ручной syncNow() запускает runSync() и
+                // нигде не трекается/не отменяется, поэтому без замка disconnect мог бы закрыть Ktor-клиент
+                // во время его же in-flight запроса (kotlin-ревью HIGH). withLock дождётся завершения текущего
+                // runSync; следующий после зануления увидит client==null и сделает ранний возврат.
+                syncMutex.withLock {
+                    // runCatching: сбой close() (I/O при teardown) не должен оставить привязку/курсор на месте —
+                    // иначе disconnect молча провалился бы, а статус застрял.
+                    runCatching { client?.close() }
+                    client = null
+                    session = null
+                }
+                // Курсор синка тоже забываем: следующее подключение (к этому или другому аккаунту в том же
+                // процессе) обязано сделать полный re-pull, а не продолжить с tip прошлой сессии. runCatching:
+                // сбой записи курсора (диск переполнен) не должен оставить configStore/healthTarget/статус в
+                // полу-отвязанном состоянии (silent-ревью: «Disconnect отработал, но устройство снова привязано»).
+                runCatching { configStore.load()?.let { syncState.setCursor(it.accountId, 0) } }
+                configStore.clear()
+                health.setTarget(null) // отвязались — гасим health-пинг (поллер закроет клиент, статус → UNKNOWN)
+                _status.value = SyncStatus.Disabled
             }
         }
-    }
-
-    private suspend fun healthClientFor(url: String): SyncClient {
-        if (healthClientUrl != url) {
-            closeHealthClient()
-            healthClient = clientFactory(url)
-            healthClientUrl = url
-        }
-        return healthClient!!
-    }
-
-    private suspend fun closeHealthClient() {
-        val c = healthClient
-        healthClient = null
-        healthClientUrl = null
-        if (c != null) runCatching { c.close() }
     }
 
     /**
@@ -757,46 +809,39 @@ class SyncCoordinator(
         val cfg = configStore.load() ?: return
         if (!cfg.keepConnected || cfg.sealedRefreshToken == null || session != null) return
         scope.launch {
-            val dataKey = vault.exportDataKey() ?: return@launch
-            _status.value = SyncStatus.Busy
-            try {
-                val refreshToken = openToken(dataKey, cfg.sealedRefreshToken)
-                if (refreshToken == null) {
+            opMutex.withLock {
+                // Повторная проверка под замком: параллельный connect/claim мог успеть активировать
+                // сессию, пока мы ждали opMutex — тогда восстанавливать нечего.
+                if (session != null) return@withLock
+                val dataKey = vault.exportDataKey() ?: return@withLock
+                _status.value = SyncStatus.Busy
+                try {
+                    val refreshToken = tokens.open(dataKey, cfg.sealedRefreshToken)
+                    if (refreshToken == null) {
+                        _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
+                        return@withLock
+                    }
+                    val syncClient = clientFactory(cfg.serverUrl)
+                    val newSession = syncClient.refresh(SyncSession(cfg.accountId, "", refreshToken))
+                    // refresh ротирует токен — пересохраняем запечатанным под dataKey (внутри активации).
+                    activateSession(
+                        syncClient,
+                        newSession,
+                        cfg.copy(sealedRefreshToken = tokens.seal(dataKey, newSession.refreshToken)),
+                        resetCursor = false,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Любой сбой восстановления (протух токен, нет связи, иное) — откат в Configured, привязку
+                    // не стираем (переподключение паролем). Ловим Exception, не только SyncException: иначе
+                    // непредвиденное застряло бы на Busy (вечный спиннер).
                     _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
-                    return@launch
+                } finally {
+                    dataKey.zeroize() // копия dataKey — затираем, живой ключ остаётся у vault
                 }
-                val syncClient = clientFactory(cfg.serverUrl)
-                val newSession = syncClient.refresh(SyncSession(cfg.accountId, "", refreshToken))
-                client = syncClient
-                session = newSession
-                // refresh ротирует токен — пересохраняем запечатанным под dataKey.
-                configStore.save(cfg.copy(sealedRefreshToken = sealToken(dataKey, newSession.refreshToken)))
-                runSync()
-                startWatch()
-                startLocalPush()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Любой сбой восстановления (протух токен, нет связи, иное) — откат в Configured, привязку
-                // не стираем (переподключение паролем). Ловим Exception, не только SyncException: иначе
-                // непредвиденное застряло бы на Busy (вечный спиннер).
-                _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
-            } finally {
-                dataKey.zeroize() // копия dataKey — затираем, живой ключ остаётся у vault
             }
         }
-    }
-
-    private val tokenAad = "skerry-sync-refresh-token".encodeToByteArray()
-    private fun sealToken(dataKey: DataKey, token: String): String =
-        crypto.seal(dataKey, token.encodeToByteArray(), tokenAad).toHex()
-    private fun openToken(dataKey: DataKey, hex: String): String? =
-        hex.hexToBytesOrNull()?.let { crypto.open(dataKey, it, tokenAad) }?.decodeToString()
-
-    private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
-    private fun String.hexToBytesOrNull(): ByteArray? {
-        if (length % 2 != 0) return null
-        return runCatching { ByteArray(length / 2) { i -> substring(i * 2, i * 2 + 2).toInt(16).toByte() } }.getOrNull()
     }
 
     private fun syncErrorMessage(e: SyncException): String = when (e.kind) {
@@ -817,12 +862,6 @@ class SyncCoordinator(
 private const val PUSH_DEBOUNCE_MS = 1500L
 
 /**
- * Период health-пинга сервера для индикатора доступности: достаточно часто, чтобы статус был «живым»
- * (падение/возврат сервера видно в пределах ~15 с), и достаточно редко, чтобы не нагружать сервер.
- */
-private const val HEALTH_POLL_MS = 15_000L
-
-/**
  * Backoff переподключения WS-подписки live-pull ([SyncCoordinator.startWatch]): после обрыва ждём
  * [WATCH_RETRY_MIN_MS] и удваиваем до потолка [WATCH_RETRY_MAX_MS]. Минимум мал, чтобы короткая просадка
  * сети восстанавливалась быстро; потолок ограничивает частоту попыток при долгой недоступности сервера
@@ -836,5 +875,4 @@ private const val WATCH_RETRY_MAX_MS = 60_000L
  * [VaultCrypto.newSalt] (а не `kotlin.random.Random`, не криптостойкий): deviceId не секрет, но
  * входит в alias биометрического ключа и в LWW-tie-break, поэтому предсказуемость нежелательна.
  */
-private fun randomDeviceId(crypto: VaultCrypto): String =
-    crypto.newSalt().joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
+private fun randomDeviceId(crypto: VaultCrypto): String = crypto.newSalt().toHex()

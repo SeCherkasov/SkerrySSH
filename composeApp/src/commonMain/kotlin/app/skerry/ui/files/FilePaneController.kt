@@ -135,7 +135,7 @@ class FilePaneController(
             // Удаляем по пути, пересобранному из текущего [path] + проверенного имени, а НЕ по
             // server-controlled item.path: вредоносный листинг иначе увёл бы remove/rmdir из каталога.
             val name = item.name
-            if (name.isEmpty() || "/" in name || "\\" in name || name == "." || name == "..") {
+            if (isUnsafeListingName(name)) {
                 throw FileBrowserException("Недопустимое имя в листинге: $name")
             }
             browser.delete(item.copy(path = childPath(name)))
@@ -420,8 +420,8 @@ class FilePaneController(
         }
     }
 
-    /** Путь дочернего объекта [name] в текущем каталоге (без двойного `/` в корне). */
-    private fun childPath(name: String): String = if (path == "/") "/$name" else "$path/$name"
+    /** Путь дочернего объекта [name] в текущем каталоге (общий [childPath] от текущего [path]). */
+    private fun childPath(name: String): String = childPath(path, name)
 
     /**
      * Лексический родитель абсолютного пути для кнопки «вверх». НЕ просим сервер канонизировать

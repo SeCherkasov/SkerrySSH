@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private const val LHOME = "/local/home"
@@ -346,6 +347,53 @@ class TransferCoordinatorTest {
 
         assertIs<TransferState.Failed>(r.coordinator.transfer)
         assertTrue("a.txt" in (r.local.state as FilePaneState.Loaded).entries.map { it.name })
+    }
+
+    @Test
+    fun `overwrite upload keeps the destination directory captured when the dialog was shown`() = runTest {
+        // TOCTOU: конфликт имён считается при показе диалога; навигация remote-панели при открытом
+        // диалоге не должна уводить перезапись в другой каталог.
+        val remote = remoteFake().apply {
+            seedFile("$RHOME/a.txt", size = 3)
+            seedDir("$RHOME/sub")
+        }
+        val r = rig(remote = remote)
+        r.local.toggle(r.local.entry("a.txt"))
+
+        r.coordinator.uploadSelection()
+        assertNotNull(r.coordinator.overwrite, "ожидали диалог Overwrite")
+
+        // Пока диалог открыт, пользователь увёл remote-панель в подкаталог.
+        r.remote.open(r.remote.entry("sub"))
+        advanceUntilIdle()
+        assertEquals("$RHOME/sub", r.remote.path)
+
+        r.coordinator.resolveOverwrite(true)
+        advanceUntilIdle()
+
+        assertEquals("$LHOME/a.txt" to "$RHOME/a.txt", r.remoteFake.lastUpload,
+            "перезапись должна идти в каталог, для которого считался конфликт")
+    }
+
+    @Test
+    fun `overwrite download keeps the local destination captured when the dialog was shown`() = runTest {
+        val local = localFake().apply { seedFile("$LHOME/r.txt", size = 3) }
+        val r = rig(local = local)
+        r.remote.toggle(r.remote.entry("r.txt"))
+
+        r.coordinator.downloadSelection()
+        assertNotNull(r.coordinator.overwrite, "ожидали диалог Overwrite")
+
+        // Пока диалог открыт, пользователь увёл local-панель в подкаталог.
+        r.local.open(r.local.entry("sub"))
+        advanceUntilIdle()
+        assertEquals("$LHOME/sub", r.local.path)
+
+        r.coordinator.resolveOverwrite(true)
+        advanceUntilIdle()
+
+        assertEquals("$RHOME/r.txt" to "$LHOME/r.txt", r.remoteFake.lastDownload,
+            "перезапись должна идти в каталог, для которого считался конфликт")
     }
 
     @Test

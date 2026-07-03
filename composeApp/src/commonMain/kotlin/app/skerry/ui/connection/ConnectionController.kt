@@ -470,11 +470,6 @@ class ConnectionController(
         if (conn != null) closeConnectionQuietly(conn)
     }
 
-    /** Сбросить ошибку и вернуться к форме. */
-    fun dismissError() {
-        if (uiState is ConnectionUiState.Error) uiState = ConnectionUiState.Form
-    }
-
     /** Закрыть соединение, не давая отмене scope сорвать teardown и не пробрасывая ошибки. */
     private fun closeConnectionQuietly(conn: SshConnection) {
         scope.launch(NonCancellable) { runCatching { conn.disconnect() } }

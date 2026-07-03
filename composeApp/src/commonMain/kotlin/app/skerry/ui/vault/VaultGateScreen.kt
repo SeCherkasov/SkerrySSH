@@ -189,15 +189,24 @@ fun VaultGate(
     // Наличие формы sync не меняется в течение жизни экрана — безопасно зафиксировать на старте
     // контроллера (он решает, показывать ли шаг OfferSync).
     val offersSync = offerSyncForm != null
+    // Scope композиции — и для промптов биометрии ниже, и для асинхронных create/unlock контроллера
+    // (Argon2id вне UI-потока): гейт живёт, пока живёт контроллер, так что их жизненные циклы совпадают.
+    val scope = rememberCoroutineScope()
     val controller = remember(vault, biometrics, securityLog) {
-        VaultGateController(vault, biometrics, onReset = { currentOnReset(it) }, offersSyncOnboarding = offersSync, securityLog = securityLog)
+        VaultGateController(
+            vault,
+            biometrics,
+            onReset = { currentOnReset(it) },
+            offersSyncOnboarding = offersSync,
+            securityLog = securityLog,
+            scope = scope,
+        )
     }
     // Стабильная ссылка (не новый инстанс на каждую рекомпозицию VaultGate) — иначе createForm и его
     // поддерево (аффорданс паринга) перерисовывались бы лишний раз. null, когда паринг с экрана
     // создания недоступен (нет sync).
     val onPairingComplete: (() -> Unit)? =
         if (offersSync) remember(controller) { { controller.completePairing() } } else null
-    val scope = rememberCoroutineScope()
 
     // Промпты биометрии резолвятся в композиции (stringResource), затем прокидываются в корутины.
     val enablePrompt = BiometricPrompt(

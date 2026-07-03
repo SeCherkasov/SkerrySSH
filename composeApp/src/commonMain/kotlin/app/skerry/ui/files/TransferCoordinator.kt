@@ -98,9 +98,9 @@ class TransferCoordinator(
     fun uploadSelection() {
         val items = local.selectedItems()
         if (items.isEmpty()) return
-        confirmOverwrite(items, remote) {
+        confirmOverwrite(items, remote) { destDir ->
             launchExclusive {
-                runUpload(items, remote.path)
+                runUpload(items, destDir)
                 remote.refresh()
                 local.clearSelection()
             }
@@ -110,16 +110,19 @@ class TransferCoordinator(
     /**
      * Скачать выделенные удалённые объекты в текущий каталог локальной панели. Файлы качаются как есть,
      * каталоги — рекурсивно: сначала строится план обхода дерева ([buildDownloadPlan]), затем
-     * воссоздаются локальные подкаталоги ([ensureLocalDir]) и по очереди качаются файлы дерева с общим
+     * воссоздаются локальные подкаталоги ([ensureDir]) и по очереди качаются файлы дерева с общим
      * счётчиком прогресса. Симлинки/прочее пропускаются (за линком в цель не идём). Прогресс/ошибка
      * идут в [transfer]; сериализуется [busy].
      */
     fun downloadSelection() {
         val items = remote.selectedItems()
         if (items.isEmpty()) return
-        confirmOverwrite(items, local) {
+        // Снимок каталога-источника в момент запроса: пока открыт диалог Overwrite, навигация
+        // remote-панели не должна уводить источники скачивания в другой каталог.
+        val sourceDir = remote.path
+        confirmOverwrite(items, local) { destDir ->
             launchExclusive {
-                runDownload(items, local.path, remote.path)
+                runDownload(items, destDir, sourceDir)
                 local.refresh()
                 remote.clearSelection()
             }
@@ -137,9 +140,9 @@ class TransferCoordinator(
         if (fromLocal) {
             val items = local.selectedItems()
             if (items.isEmpty()) return
-            confirmOverwrite(items, remote) {
+            confirmOverwrite(items, remote) { destDir ->
                 launchExclusive {
-                    runUpload(items, remote.path)
+                    runUpload(items, destDir)
                     val failed = deleteSources(items) { localBrowser.delete(it) }
                     remote.refresh()
                     local.refresh()
@@ -149,13 +152,14 @@ class TransferCoordinator(
         } else {
             val items = remote.selectedItems()
             if (items.isEmpty()) return
-            confirmOverwrite(items, local) {
+            // Снимок каталога-источника В МОМЕНТ ЗАПРОСА (до диалога Overwrite и до любых suspend):
+            // навигация панели (open/goUp) идёт на том же scope и могла бы сменить remote.path между
+            // подтверждением/скачиванием и удалением — тогда удалили бы из чужого каталога. Один и
+            // тот же снимок идёт и в runDownload, и в пересборку пути удаления.
+            val remoteDir = remote.path
+            confirmOverwrite(items, local) { destDir ->
                 launchExclusive {
-                    // Снимок каталога ДО любых suspend: навигация панели (open/goUp) идёт на том же scope и
-                    // могла бы сменить remote.path между скачиванием и удалением — тогда удалили бы из чужого
-                    // каталога. Один и тот же снимок идёт и в runDownload, и в пересборку пути удаления.
-                    val remoteDir = remote.path
-                    runDownload(items, local.path, remoteDir)
+                    runDownload(items, destDir, remoteDir)
                     // Удаляем источник по пути, пересобранному из снимка каталога + проверенного имени, а не из
                     // server-controlled item.path — иначе вредоносный листинг увёл бы rmdir/remove из каталога.
                     val failed = deleteSources(items) { remoteBrowser.delete(it.copy(path = safeRemoteChild(it.name, remoteDir))) }
@@ -189,14 +193,14 @@ class TransferCoordinator(
      * «Save to…», на desktop — выбранный путь). SFTP пишет байты в `target.stagingPath`; по успеху —
      * `target.finalize()` (копирование staging→Uri), при ошибке/отмене — `target.discard()`. В отличие
      * от [downloadSelection] цель не привязана к локальной панели — это путь скачивания мобильного экрана
-     * Files наружу из песочницы. Прогресс/ошибка идут в [transfer]; сериализуется тем же [busy]. Каталоги
-     * игнорируются (рекурсивная передача — позже). `discard()` под [runCatching], чтобы сбой очистки не
-     * подменил исходную ошибку.
+     * Files наружу из песочницы. Прогресс/ошибка идут в [transfer]; сериализуется тем же [busy]
+     * (через [launchExclusive]). Каталоги игнорируются (рекурсивная передача — позже). `discard()`
+     * под [runCatching], чтобы сбой очистки не подменил исходную ошибку (она уходит дальше в
+     * [launchExclusive] и станет [TransferState.Failed] с именем цели из активного шага).
      */
     fun downloadToTarget(item: FileItem, target: DownloadTarget) {
-        if (busy || item.type != FileItemType.File) return
-        busy = true
-        scope.launch {
+        if (item.type != FileItemType.File) return
+        launchExclusive {
             try {
                 transfer = TransferState.Active(target.displayName, TransferDirection.Download, 1, 1, 0, item.size)
                 sftp.download(item.path, target.stagingPath) { transferred, total ->
@@ -204,14 +208,9 @@ class TransferCoordinator(
                 }
                 target.finalize()
                 transfer = TransferState.Idle
-            } catch (e: CancellationException) {
+            } catch (e: Exception) { // включая CancellationException — staging чистим в обоих случаях
                 runCatching { target.discard() }
                 throw e
-            } catch (e: Exception) {
-                runCatching { target.discard() }
-                transfer = TransferState.Failed(target.displayName, e.message ?: getString(Res.string.ftail_transfer_error))
-            } finally {
-                busy = false
             }
         }
     }
@@ -224,33 +223,25 @@ class TransferCoordinator(
      */
     fun uploadSource(source: UploadSource) {
         if (busy) return
+        // Снимок каталога-приёмника в момент запроса: навигация remote-панели при открытом
+        // диалоге Overwrite не должна уводить заливку в другой каталог (TOCTOU).
+        val destDir = remote.path
         if (source.name in remote.currentEntryNames()) {
-            overwrite = OverwriteConflict(listOf(source.name)) { runUploadSource(source) }
+            overwrite = OverwriteConflict(listOf(source.name)) { runUploadSource(source, destDir) }
             return
         }
-        runUploadSource(source)
+        runUploadSource(source, destDir)
     }
 
-    private fun runUploadSource(source: UploadSource) {
-        if (busy) return
-        busy = true
-        scope.launch {
-            try {
-                val target = childPath(remote.path, source.name)
-                transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, 0, 0)
-                sftp.upload(source.stagingPath, target) { transferred, total ->
-                    transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, transferred, total)
-                }
-                transfer = TransferState.Idle
-                remote.refresh()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                transfer = TransferState.Failed(source.name, e.message ?: getString(Res.string.ftail_transfer_error))
-            } finally {
-                runCatching { source.cleanup() }
-                busy = false
+    private fun runUploadSource(source: UploadSource, destDir: String) {
+        launchExclusive(onFinally = { runCatching { source.cleanup() } }) {
+            val target = childPath(destDir, source.name)
+            transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, 0, 0)
+            sftp.upload(source.stagingPath, target) { transferred, total ->
+                transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, transferred, total)
             }
+            transfer = TransferState.Idle
+            remote.refresh()
         }
     }
 
@@ -265,12 +256,18 @@ class TransferCoordinator(
      * до подтверждения ([resolveOverwrite]). Проверяем только верхний уровень (то, что видно в панели):
      * это перекрывает основной сценарий «перетащил файл туда, где такой уже есть»; слияние вложенных
      * деревьев здесь не разбираем. Если передача уже идёт ([busy]) — молча выходим, как раньше.
+     *
+     * В [proceed] передаётся СНИМОК каталога-приёмника, снятый здесь же (в момент показа диалога):
+     * пока диалог открыт, панель-приёмник можно навигировать, и чтение `dest.path` в момент
+     * подтверждения увело бы перезапись в другой каталог (TOCTOU) — а конфликт имён считался ещё
+     * для старого.
      */
-    private fun confirmOverwrite(items: List<FileItem>, dest: FilePaneController, proceed: () -> Unit) {
+    private fun confirmOverwrite(items: List<FileItem>, dest: FilePaneController, proceed: (destDir: String) -> Unit) {
         if (busy) return
+        val destDir = dest.path
         val existing = dest.currentEntryNames()
         val clash = items.map { it.name }.filter { it in existing }
-        if (clash.isEmpty()) proceed() else overwrite = OverwriteConflict(clash, proceed)
+        if (clash.isEmpty()) proceed(destDir) else overwrite = OverwriteConflict(clash) { proceed(destDir) }
     }
 
     /** Ответ пользователя на диалог перезаписи: [overwrite]=true запускает отложенную передачу, иначе отмена. */
@@ -284,10 +281,12 @@ class TransferCoordinator(
      * Запустить передачу, сериализуя её флагом [busy]: пока идёт одна, новые игнорируются. Любая
      * ошибка переводит полосу в [TransferState.Failed] (имя берём из текущего активного шага),
      * [CancellationException] пробрасывается. Пустую/no-op работу [block] отсеивает сам (ранний
-     * return внутри). Колбэки прогресса приходят синхронно из передачи; запись snapshot-стейта
-     * потокобезопасна.
+     * return внутри). [onFinally] — хук завершения (успех/ошибка/отмена) для очистки ресурсов
+     * вызывающего (staging-файлы и т.п.); выполняется до снятия [busy], сбои глотать — забота
+     * вызывающего (обернуть в [runCatching]). Колбэки прогресса приходят синхронно из передачи;
+     * запись snapshot-стейта потокобезопасна.
      */
-    private fun launchExclusive(block: suspend () -> Unit) {
+    private fun launchExclusive(onFinally: suspend () -> Unit = {}, block: suspend () -> Unit) {
         if (busy) return
         busy = true
         scope.launch {
@@ -299,6 +298,7 @@ class TransferCoordinator(
                 val name = (transfer as? TransferState.Active)?.name ?: getString(Res.string.ftail_file_fallback)
                 transfer = TransferState.Failed(name, e.message ?: getString(Res.string.ftail_transfer_error))
             } finally {
+                onFinally()
                 busy = false
             }
         }
@@ -306,13 +306,13 @@ class TransferCoordinator(
 
     /**
      * Залить [items] (файлы как есть, каталоги рекурсивно — [buildUploadPlan]) в удалённый [remoteDir],
-     * воссоздавая поддерево на хосте ([ensureRemoteDir]); по завершении — [TransferState.Idle]. Без
+     * воссоздавая поддерево на хосте ([ensureDir]); по завершении — [TransferState.Idle]. Без
      * сериализации/пост-действий: вызывается внутри уже взведённого [launchExclusive]-блока.
      */
     private suspend fun runUpload(items: List<FileItem>, remoteDir: String) {
         val plan = buildUploadPlan(items, remoteDir)
         // Каталоги создаём в порядке обхода (pre-order): родитель всегда раньше детей.
-        plan.dirs.forEach { ensureRemoteDir(it) }
+        plan.dirs.forEach { ensureDir(remoteBrowser, it) }
         plan.files.forEachIndexed { index, task ->
             transfer = TransferState.Active(task.name, TransferDirection.Upload, index + 1, plan.files.size, 0, task.size)
             sftp.upload(task.localPath, task.remotePath) { transferred, total ->
@@ -324,13 +324,13 @@ class TransferCoordinator(
 
     /**
      * Скачать [items] (файлы как есть, каталоги рекурсивно — [buildDownloadPlan]) из удалённого [remoteDir]
-     * в локальный [localDir], воссоздавая поддерево ([ensureLocalDir]); по завершении — [TransferState.Idle].
+     * в локальный [localDir], воссоздавая поддерево ([ensureDir]); по завершении — [TransferState.Idle].
      * Без сериализации/пост-действий: вызывается внутри уже взведённого [launchExclusive]-блока.
      */
     private suspend fun runDownload(items: List<FileItem>, localDir: String, remoteDir: String) {
         val plan = buildDownloadPlan(items, localDir, remoteDir)
         // Каталоги создаём в порядке обхода (pre-order): родитель всегда раньше детей.
-        plan.dirs.forEach { ensureLocalDir(it) }
+        plan.dirs.forEach { ensureDir(localBrowser, it) }
         plan.files.forEachIndexed { index, task ->
             transfer = TransferState.Active(task.name, TransferDirection.Download, index + 1, plan.files.size, 0, task.size)
             sftp.download(task.remotePath, task.localPath) { transferred, total ->
@@ -378,7 +378,7 @@ class TransferCoordinator(
         localDir: String,
         plan: DownloadPlan,
     ) {
-        if (name.isEmpty() || "/" in name || "\\" in name || name == "." || name == "..") {
+        if (isUnsafeListingName(name)) {
             throw SftpException("Недопустимое имя в листинге: $name")
         }
         val localPath = childPath(localDir, name)
@@ -395,16 +395,17 @@ class TransferCoordinator(
     }
 
     /**
-     * Создать локальный каталог [path], если его ещё нет. `mkdir` без `-p` бросает на уже существующем
-     * каталоге — это нормально при повторном скачивании: проверяем листингом, что каталог реально есть,
-     * и только тогда игнорируем ошибку; иначе (нет прав/это файл) пробрасываем исходную ошибку mkdir.
+     * Создать каталог [path] в [browser] (локальном или удалённом), если его ещё нет. `mkdir` без `-p`
+     * бросает на уже существующем каталоге — это нормально при повторной передаче: проверяем листингом,
+     * что каталог реально есть, и только тогда игнорируем ошибку; иначе (нет прав/это файл)
+     * пробрасываем исходную ошибку mkdir.
      */
-    private suspend fun ensureLocalDir(path: String) {
+    private suspend fun ensureDir(browser: FileBrowser, path: String) {
         try {
-            localBrowser.mkdir(path)
+            browser.mkdir(path)
         } catch (e: FileBrowserException) {
             try {
-                localBrowser.list(path)
+                browser.list(path)
             } catch (_: FileBrowserException) {
                 throw e
             }
@@ -441,7 +442,7 @@ class TransferCoordinator(
         remoteDir: String,
         plan: UploadPlan,
     ) {
-        if (name.isEmpty() || "/" in name || "\\" in name || name == "." || name == "..") {
+        if (isUnsafeListingName(name)) {
             throw SftpException("Недопустимое имя в листинге: $name")
         }
         val remotePath = childPath(remoteDir, name)
@@ -457,33 +458,17 @@ class TransferCoordinator(
         }
     }
 
-    /** Создать удалённый каталог [path], если его ещё нет (зеркало [ensureLocalDir] для заливки). */
-    private suspend fun ensureRemoteDir(path: String) {
-        try {
-            remoteBrowser.mkdir(path)
-        } catch (e: FileBrowserException) {
-            try {
-                remoteBrowser.list(path)
-            } catch (_: FileBrowserException) {
-                throw e
-            }
-        }
-    }
-
     /**
      * Безопасный путь удалённого объекта [name] в каталоге [remoteDir] для операций удаления: проверяем,
      * что [name] — простое имя (без разделителей/`.`/`..`), и строим путь сами от [remoteDir] (снимок
      * каталога панели), не доверяя server-controlled `item.path`.
      */
     private fun safeRemoteChild(name: String, remoteDir: String): String {
-        if (name.isEmpty() || "/" in name || "\\" in name || name == "." || name == "..") {
+        if (isUnsafeListingName(name)) {
             throw SftpException("Недопустимое имя в листинге: $name")
         }
         return childPath(remoteDir, name)
     }
-
-    /** Путь дочернего объекта [name] в каталоге [dir] (без двойного `/` в корне). */
-    private fun childPath(dir: String, name: String): String = if (dir == "/") "/$name" else "$dir/$name"
 }
 
 /** Маппинг типа SFTP-записи в нейтральный [FileItemType] (для обхода дерева при скачивании). */

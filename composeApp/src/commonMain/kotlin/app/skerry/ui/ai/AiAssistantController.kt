@@ -4,18 +4,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.skerry.shared.ai.AiChatRequest
-import app.skerry.shared.ai.AiException
 import app.skerry.shared.ai.AiMessage
 import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.ai.AiProvider
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.AiSettings
 import app.skerry.shared.ai.OpenAiConfig
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 
 /** Реплика диалога с ассистентом (для отрисовки ленты чата). */
 data class AiTurn(val role: AiRole, val text: String)
@@ -38,6 +34,8 @@ class AiAssistantController(
 ) {
     var settings by mutableStateOf(initialSettings); private set
 
+    private val runner = AiStreamRunner(providerFactory, scope)
+
     /** Лента диалога (user/assistant реплики). */
     val turns = mutableStateListOf<AiTurn>()
 
@@ -57,6 +55,12 @@ class AiAssistantController(
      * INFO/ASK — = язык интерфейса. Выставляется из корня UI по [app.skerry.ui.i18n.LocalAppLocale];
      * читается лениво при каждом запросе (см. [TerminalAiController.responseLanguage]), поэтому смена
      * языка в настройках подхватывается без пересоздания контроллеров.
+     *
+     * Намеренно публичный мутабельный `var`, а не параметр конструктора: контроллер создаётся при
+     * старте приложения (до композиции), а актуальная локаль живёт в Compose-состоянии платформенных
+     * корней UI (`ui/desktop/DesktopDesignApp.kt`, `ui/mobile/MobileDesignApp.kt`) — они и присваивают
+     * лямбду уже из композиции. Перенос в конструктор потребовал бы пересоздавать контроллер на смену
+     * языка (потеряли бы ленту диалога).
      */
     var uiLanguageProvider: () -> String = { "English" }
 
@@ -99,30 +103,19 @@ class AiAssistantController(
         val history = turns.map { AiMessage(it.role, it.text) }
         val messages = listOf(AiMessage(AiRole.SYSTEM, SYSTEM_PROMPT)) + history
         val config = settings.toOpenAiConfig()
-        job = scope.launch {
-            var provider: AiProvider? = null
-            val sb = StringBuilder()
-            try {
-                provider = providerFactory(config)
-                provider.chat(AiChatRequest(config.model, messages)).collect { delta ->
-                    sb.append(delta.text)
-                    streaming = sb.toString()
-                }
-                turns.add(AiTurn(AiRole.ASSISTANT, sb.toString()))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: AiException) {
-                error = friendly(e)
-            } catch (e: Exception) {
-                error = "AI request failed: ${e.message}"
-            } finally {
-                provider?.let { runCatching { it.close() } }
+        job = runner.launch(
+            config = config,
+            messages = messages,
+            onDelta = { streaming = it },
+            onComplete = { turns.add(AiTurn(AiRole.ASSISTANT, it)) },
+            onError = { error = it },
+            onFinally = {
                 if (gen == generation) {
                     streaming = null
                     busy = false
                 }
-            }
-        }
+            },
+        )
     }
 
     /** Отменить текущий запрос (если идёт) и очистить ленту. */
@@ -133,14 +126,6 @@ class AiAssistantController(
         error = null
         streaming = null
         busy = false
-    }
-
-    private fun friendly(e: AiException): String = when (e.kind) {
-        AiException.Kind.UNAUTHORIZED -> "Invalid API key — check it in AI settings."
-        AiException.Kind.RATE_LIMITED -> "Rate limited by the provider. Try again shortly."
-        AiException.Kind.NETWORK -> "Network error reaching the AI provider."
-        AiException.Kind.INVALID_REQUEST -> "The provider rejected the request (check model/params)."
-        AiException.Kind.PROTOCOL -> "Unexpected response from the AI provider."
     }
 
     private companion object {

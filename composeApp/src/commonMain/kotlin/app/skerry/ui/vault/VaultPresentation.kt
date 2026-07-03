@@ -1,9 +1,11 @@
 package app.skerry.ui.vault
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.design.D
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_category_certificates
 import app.skerry.ui.generated.resources.vtail_category_passwords
@@ -32,6 +34,13 @@ fun VaultCategoryKind.title(): String = when (this) {
 }
 
 /**
+ * Иконка, акцентный цвет и тонировка плашки для типа keychain-секрета. Единая точка правки для
+ * всех мест, где тип секрета рисуется (desktop [VaultView], mobile-карточки/лист деталей, пикеры
+ * аутентификации), — при добавлении нового вида [CredentialSecret] они не разъезжаются.
+ */
+data class SecretTypeStyle(val icon: String, val color: Color, val tinted: Boolean)
+
+/**
  * Чистая presentation-логика раздела Vault поверх keychain-секретов ([Credential]) и каталога
  * хостов: раскладывает секреты по категориям и считает зависимости (какие хосты ссылаются на секрет).
  * Без Compose/IO — тестируется как обычная функция; UI ([VaultView]) лишь рендерит результат.
@@ -50,6 +59,13 @@ object VaultPresentation {
         is CredentialSecret.PrivateKey -> VaultCategoryKind.SSH_KEYS
         is CredentialSecret.Password -> VaultCategoryKind.PASSWORDS
         is CredentialSecret.Certificate -> VaultCategoryKind.CERTIFICATES
+    }
+
+    /** Единый стиль типа секрета: иконка/акцентный цвет/тонировка плашки (см. [SecretTypeStyle]). */
+    fun secretStyle(secret: CredentialSecret): SecretTypeStyle = when (secret) {
+        is CredentialSecret.Certificate -> SecretTypeStyle("workspace_premium", D.moss, tinted = true)
+        is CredentialSecret.PrivateKey -> SecretTypeStyle("key", D.cyanBright, tinted = true)
+        is CredentialSecret.Password -> SecretTypeStyle("password", D.dim, tinted = false)
     }
 
     /** Keychain-секреты выбранной категории. */

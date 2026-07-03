@@ -462,17 +462,6 @@ class ConnectionControllerTest {
         scope.cancel()
     }
 
-    @Test
-    fun `dismissError returns to Form`() = runTest {
-        val (controller, scope) = controllerWith(FakeSshTransport(error = SshAuthenticationException("x")))
-        controller.connect(target, SshAuth.Password("pw"))
-        assertIs<ConnectionUiState.Error>(controller.uiState)
-
-        controller.dismissError()
-
-        assertEquals(ConnectionUiState.Form, controller.uiState)
-        scope.cancel()
-    }
 }
 
 /**

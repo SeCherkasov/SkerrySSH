@@ -14,6 +14,12 @@ import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Минимальная длина мастер-пароля. Выше типичного «8» (NIST для серверных паролей со счётчиком
@@ -103,10 +109,12 @@ enum class VaultGateError {
  * Гейт мастер-пароля: блокирует доступ к остальному UI, пока [Vault] не разблокирован.
  * Стартовое состояние выбирается по [Vault.exists] — создать против разблокировать.
  *
- * [Vault] синхронный (Argon2id-деривация идёт в его реализации), поэтому контроллер, как и
- * [app.skerry.ui.host.HostManagerController], не держит корутинной scope. Пароли приходят
- * как [CharArray] и затираются здесь же: [Vault.create]/[Vault.unlock] затирают переданный
- * буфер по контракту, а подтверждение и не дошедшие до vault буферы гасит сам контроллер.
+ * [Vault] синхронный (Argon2id-деривация идёт в его реализации), но деривация ТЯЖЁЛАЯ (m=64 MiB) —
+ * [create]/[unlock] уводят её с UI-потока на [kdfDispatcher] через [scope] (иначе ANR-риск на
+ * Android; по образцу [SecretCopyAuthorizer]); на время сверки взводится [verifying]. Пароли
+ * приходят как [CharArray] и затираются здесь же: [Vault.create]/[Vault.unlock] затирают
+ * переданный буфер по контракту, а подтверждение и не дошедшие до vault буферы гасит сам
+ * контроллер (finally покрывает и путь с исключением/отменой).
  */
 @Stable
 class VaultGateController(
@@ -132,6 +140,15 @@ class VaultGateController(
      * подписи «последняя смена пароля» и списка недавних событий.
      */
     private val securityLog: SecurityLog? = null,
+    /**
+     * Скоуп асинхронных [create]/[unlock] (Argon2id вне UI-потока). По умолчанию — собственный на
+     * Main.immediate (результат — Compose snapshot-state, контроллер живёт с композицией; диспетчер
+     * трогается только при первом create/unlock, так что конструирование безопасно и без Main).
+     * [app.skerry.ui.vault.VaultGate] передаёт свой `rememberCoroutineScope`; тесты — TestScope.
+     */
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    /** Диспетчер тяжёлой деривации Argon2id (m=64 MiB); тест подменяет виртуальным. */
+    private val kdfDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     var state: VaultGateState by mutableStateOf(
         if (vault.exists()) VaultGateState.NeedsUnlock else VaultGateState.NeedsCreate,
@@ -139,6 +156,13 @@ class VaultGateController(
         private set
 
     var error: VaultGateError? by mutableStateOf(null)
+        private set
+
+    /**
+     * Идёт тяжёлая деривация/сверка пароля (Argon2id) в [create]/[unlock] — повторные сабмиты
+     * на это время игнорируются (guard), UI может гасить кнопку.
+     */
+    var verifying: Boolean by mutableStateOf(false)
         private set
 
     /** Куда вернуться, если пользователь отменил экран сброса (на форму входа или экран Corrupted). */
@@ -163,50 +187,79 @@ class VaultGateController(
     /**
      * Создать vault, если пароль проходит валидацию и совпадает с [confirm]. Оба буфера
      * затираются в любом исходе. При ошибке валидации vault не трогается, состояние остаётся
-     * [VaultGateState.NeedsCreate].
+     * [VaultGateState.NeedsCreate]. Валидация — синхронно (ошибка видна сразу); сама деривация
+     * (Argon2id) — асинхронно на [kdfDispatcher] под [verifying] (повторный сабмит игнорируется).
      */
     fun create(password: CharArray, confirm: CharArray) {
-        try {
-            error = null
-            when {
-                password.size < minPasswordLength -> error = VaultGateError.PasswordTooShort
-                !password.contentEquals(confirm) -> error = VaultGateError.PasswordMismatch
-                else -> {
-                    vault.create(password)
-                    // Базовая точка для подписи «последняя смена пароля» в разделе Безопасность.
-                    securityLog?.record(SecurityEventType.VaultCreated)
-                    // Новый vault открыт. Сначала (если платформа дала форму) предлагаем подключить
-                    // sync — он может принять dataKey аккаунта, и биометрию надо оборачивать уже под
-                    // финальным ключом. Иначе сразу к биометрии / в приложение.
-                    state = when {
-                        offersSyncOnboarding -> VaultGateState.OfferSync
-                        canEnableBiometric() -> VaultGateState.OfferBiometric
-                        else -> VaultGateState.Unlocked
+        if (verifying) {
+            password.fill(' ')
+            confirm.fill(' ')
+            return
+        }
+        error = null
+        when {
+            password.size < minPasswordLength -> {
+                error = VaultGateError.PasswordTooShort
+                password.fill(' ')
+                confirm.fill(' ')
+            }
+            !password.contentEquals(confirm) -> {
+                error = VaultGateError.PasswordMismatch
+                password.fill(' ')
+                confirm.fill(' ')
+            }
+            else -> {
+                verifying = true
+                scope.launch {
+                    try {
+                        withContext(kdfDispatcher) { vault.create(password) }
+                        // Базовая точка для подписи «последняя смена пароля» в разделе Безопасность.
+                        securityLog?.record(SecurityEventType.VaultCreated)
+                        // Новый vault открыт. Сначала (если платформа дала форму) предлагаем подключить
+                        // sync — он может принять dataKey аккаунта, и биометрию надо оборачивать уже под
+                        // финальным ключом. Иначе сразу к биометрии / в приложение.
+                        state = when {
+                            offersSyncOnboarding -> VaultGateState.OfferSync
+                            canEnableBiometric() -> VaultGateState.OfferBiometric
+                            else -> VaultGateState.Unlocked
+                        }
+                    } finally {
+                        // finally покрывает исключение vault.create И отмену корутины: verifying не
+                        // должен залипнуть взведённым, буферы — остаться незатёртыми.
+                        verifying = false
+                        password.fill(' ')
+                        confirm.fill(' ')
                     }
                 }
             }
-        } finally {
-            password.fill(' ')
-            confirm.fill(' ')
         }
     }
 
     /**
-     * Разблокировать существующий vault; на ошибке остаёмся на форме с [error]. Буфер пароля
-     * затирается в любом исходе (как в [create]): [Vault.unlock] гасит его по контракту лишь на
-     * нормальном возврате, поэтому контроллер страхует и путь с исключением.
+     * Разблокировать существующий vault; на ошибке остаёмся на форме с [error]. Деривация Argon2id —
+     * асинхронно на [kdfDispatcher] под [verifying] (повторный сабмит игнорируется). Буфер пароля
+     * затирается в любом исходе: [Vault.unlock] гасит его по контракту лишь на нормальном возврате,
+     * поэтому контроллер страхует и путь с исключением/отменой (finally).
      */
     fun unlock(password: CharArray) {
-        try {
-            error = null
-            when (vault.unlock(password)) {
-                UnlockResult.Success -> state = VaultGateState.Unlocked
-                UnlockResult.WrongPassword -> error = VaultGateError.WrongPassword
-                // Битый файл — не ошибка формы, а тупик: уводим на отдельный экран сброса.
-                UnlockResult.Corrupted -> state = VaultGateState.Corrupted
-            }
-        } finally {
+        if (verifying) {
             password.fill(' ')
+            return
+        }
+        error = null
+        verifying = true
+        scope.launch {
+            try {
+                when (withContext(kdfDispatcher) { vault.unlock(password) }) {
+                    UnlockResult.Success -> state = VaultGateState.Unlocked
+                    UnlockResult.WrongPassword -> error = VaultGateError.WrongPassword
+                    // Битый файл — не ошибка формы, а тупик: уводим на отдельный экран сброса.
+                    UnlockResult.Corrupted -> state = VaultGateState.Corrupted
+                }
+            } finally {
+                verifying = false
+                password.fill(' ')
+            }
         }
     }
 
@@ -223,6 +276,10 @@ class VaultGateController(
      * журнал. Оба буфера затираются в любом исходе (как в [create]/[unlock]). Проверку минимальной
      * длины/совпадения нового пароля делает вызывающий UI (кнопка активна лишь при валидном вводе);
      * единственный отказ на этом уровне — неверный текущий пароль.
+     *
+     * Остаётся СИНХРОННЫМ (в отличие от [create]/[unlock]): единственный вызывающий — диалог смены
+     * пароля в настройках — сам уводит его с UI-потока (`withContext(Dispatchers.Default)` в
+     * SettingsPanel) и ему нужен прямой Boolean-результат.
      */
     fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean {
         try {

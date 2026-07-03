@@ -16,6 +16,10 @@ import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.VaultRecord
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -26,9 +30,47 @@ import kotlin.test.assertTrue
 
 class VaultGateControllerTest {
 
+    /**
+     * Контроллер с немедленным (Unconfined) исполнением scope/kdfDispatcher: асинхронные
+     * [VaultGateController.create]/[VaultGateController.unlock] завершаются до возврата вызова,
+     * так что ассерты «сразу после» остаются валидными, как при старом синхронном контракте.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun gate(
+        vault: Vault,
+        biometrics: VaultBiometrics? = null,
+        minPasswordLength: Int = MIN_MASTER_PASSWORD_LENGTH,
+        onReset: (ResetScope) -> Unit = {},
+        offersSyncOnboarding: Boolean = false,
+        securityLog: SecurityLog? = null,
+        /**
+         * Куда складывать исключения scope. Обязателен для тестов, где vault бросает: без него
+         * исключение уходит в глобальный handler потока и роняет СОСЕДНИЙ тест
+         * (UncaughtExceptionsBeforeTest).
+         */
+        onException: ((Throwable) -> Unit)? = null,
+    ): VaultGateController {
+        val dispatcher = UnconfinedTestDispatcher()
+        val context = if (onException != null) {
+            dispatcher + CoroutineExceptionHandler { _, e -> onException(e) }
+        } else {
+            dispatcher
+        }
+        return VaultGateController(
+            vault = vault,
+            biometrics = biometrics,
+            minPasswordLength = minPasswordLength,
+            onReset = onReset,
+            offersSyncOnboarding = offersSyncOnboarding,
+            securityLog = securityLog,
+            scope = CoroutineScope(context),
+            kdfDispatcher = dispatcher,
+        )
+    }
+
     @Test
     fun `starts in NeedsCreate when no vault file exists`() {
-        val controller = VaultGateController(FakeVault(exists = false))
+        val controller = gate(FakeVault(exists = false))
 
         assertEquals(VaultGateState.NeedsCreate, controller.state)
         assertNull(controller.error)
@@ -36,7 +78,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `starts in NeedsUnlock when a vault file already exists`() {
-        val controller = VaultGateController(FakeVault(exists = true))
+        val controller = gate(FakeVault(exists = true))
 
         assertEquals(VaultGateState.NeedsUnlock, controller.state)
     }
@@ -44,7 +86,7 @@ class VaultGateControllerTest {
     @Test
     fun `create with matching passwords creates the vault and unlocks`() {
         val vault = FakeVault(exists = false)
-        val controller = VaultGateController(vault, minPasswordLength = 8)
+        val controller = gate(vault, minPasswordLength = 8)
 
         controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
 
@@ -56,7 +98,7 @@ class VaultGateControllerTest {
     @Test
     fun `create rejects a password shorter than the minimum without touching the vault`() {
         val vault = FakeVault(exists = false)
-        val controller = VaultGateController(vault, minPasswordLength = 8)
+        val controller = gate(vault, minPasswordLength = 8)
 
         controller.create("short".toCharArray(), "short".toCharArray())
 
@@ -68,7 +110,7 @@ class VaultGateControllerTest {
     @Test
     fun `create rejects mismatched confirmation without touching the vault`() {
         val vault = FakeVault(exists = false)
-        val controller = VaultGateController(vault, minPasswordLength = 8)
+        val controller = gate(vault, minPasswordLength = 8)
 
         controller.create("correct horse".toCharArray(), "correct house".toCharArray())
 
@@ -79,7 +121,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `create zeroes both password buffers`() {
-        val controller = VaultGateController(FakeVault(exists = false), minPasswordLength = 8)
+        val controller = gate(FakeVault(exists = false), minPasswordLength = 8)
         val password = "correct horse".toCharArray()
         val confirm = "correct horse".toCharArray()
 
@@ -91,7 +133,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `create zeroes buffers even when validation fails`() {
-        val controller = VaultGateController(FakeVault(exists = false), minPasswordLength = 8)
+        val controller = gate(FakeVault(exists = false), minPasswordLength = 8)
         val password = "correct horse".toCharArray()
         val confirm = "mismatch here".toCharArray()
 
@@ -104,7 +146,7 @@ class VaultGateControllerTest {
     @Test
     fun `unlock with the right password unlocks`() {
         val vault = FakeVault(exists = true, unlockResult = UnlockResult.Success)
-        val controller = VaultGateController(vault)
+        val controller = gate(vault)
 
         controller.unlock("correct horse".toCharArray())
 
@@ -115,7 +157,7 @@ class VaultGateControllerTest {
     @Test
     fun `unlock with a wrong password stays on the unlock screen with an error`() {
         val vault = FakeVault(exists = true, unlockResult = UnlockResult.WrongPassword)
-        val controller = VaultGateController(vault)
+        val controller = gate(vault)
 
         controller.unlock("nope".toCharArray())
 
@@ -126,18 +168,29 @@ class VaultGateControllerTest {
     @Test
     fun `unlock zeroes the password buffer even when the vault throws`() {
         // vault бросает и НЕ затирает буфер сам — затирание докажет finally контроллера.
-        val controller = VaultGateController(FakeVault(exists = true, unlockThrows = true))
+        // unlock теперь асинхронный: исключение остаётся в scope контроллера (не пробрасывается
+        // вызывающему), но finally обязан затереть буфер и снять verifying до его распространения.
+        val scopeExceptions = mutableListOf<Throwable>()
+        val controller = gate(
+            FakeVault(exists = true, unlockThrows = true),
+            onException = { scopeExceptions.add(it) },
+        )
         val password = "secret password".toCharArray()
 
-        assertFailsWith<IllegalStateException> { controller.unlock(password) }
+        controller.unlock(password)
 
         assertTrue(password.all { it == ' ' }, "password buffer must be wiped on the exception path")
+        assertFalse(controller.verifying, "verifying must be reset on the exception path")
+        assertTrue(
+            scopeExceptions.single() is IllegalStateException,
+            "the vault failure must surface through the scope, not be swallowed",
+        )
     }
 
     @Test
     fun `unlock of a corrupted vault moves to the Corrupted screen`() {
         val vault = FakeVault(exists = true, unlockResult = UnlockResult.Corrupted)
-        val controller = VaultGateController(vault)
+        val controller = gate(vault)
 
         controller.unlock("whatever".toCharArray())
 
@@ -148,14 +201,14 @@ class VaultGateControllerTest {
     @Test
     fun `beginReset opens the reset screen and cancelReset returns to where it started`() {
         // С формы входа («забыл пароль»).
-        val fromUnlock = VaultGateController(FakeVault(exists = true))
+        val fromUnlock = gate(FakeVault(exists = true))
         fromUnlock.beginReset()
         assertEquals(VaultGateState.Resetting, fromUnlock.state)
         fromUnlock.cancelReset()
         assertEquals(VaultGateState.NeedsUnlock, fromUnlock.state)
 
         // С экрана Corrupted: отмена возвращает на Corrupted, а не на бесполезную форму входа.
-        val fromCorrupted = VaultGateController(FakeVault(exists = true, unlockResult = UnlockResult.Corrupted))
+        val fromCorrupted = gate(FakeVault(exists = true, unlockResult = UnlockResult.Corrupted))
         fromCorrupted.unlock("x".toCharArray())
         assertEquals(VaultGateState.Corrupted, fromCorrupted.state)
         fromCorrupted.beginReset()
@@ -167,7 +220,7 @@ class VaultGateControllerTest {
     fun `confirmReset wipes the vault, runs external cleanup with the scope, and goes to NeedsCreate`() {
         val vault = FakeVault(exists = true)
         var cleanedScope: ResetScope? = null
-        val controller = VaultGateController(vault, onReset = { cleanedScope = it })
+        val controller = gate(vault, onReset = { cleanedScope = it })
         controller.beginReset()
 
         controller.confirmReset(ResetScope.Everything)
@@ -183,7 +236,7 @@ class VaultGateControllerTest {
         // Файл vault уже стёрт к моменту onReset — застрять на Resetting нельзя, даже если чистка
         // хостов упала: переход на форму создания гарантирован finally.
         val vault = FakeVault(exists = true)
-        val controller = VaultGateController(vault, onReset = { error("cleanup failed") })
+        val controller = gate(vault, onReset = { error("cleanup failed") })
 
         controller.confirmReset(ResetScope.Everything)
 
@@ -195,7 +248,7 @@ class VaultGateControllerTest {
     fun `confirmReset forwards SecretsOnly scope to external cleanup`() {
         val vault = FakeVault(exists = true)
         var cleanedScope: ResetScope? = null
-        val controller = VaultGateController(vault, onReset = { cleanedScope = it })
+        val controller = gate(vault, onReset = { cleanedScope = it })
 
         controller.confirmReset(ResetScope.SecretsOnly)
 
@@ -205,7 +258,7 @@ class VaultGateControllerTest {
     @Test
     fun `a successful attempt clears a previous error`() {
         val vault = FakeVault(exists = true, unlockResult = UnlockResult.WrongPassword)
-        val controller = VaultGateController(vault)
+        val controller = gate(vault)
         controller.unlock("nope".toCharArray())
         assertEquals(VaultGateError.WrongPassword, controller.error)
 
@@ -219,7 +272,7 @@ class VaultGateControllerTest {
     @Test
     fun `lock returns to the unlock screen and locks the vault`() {
         val vault = FakeVault(exists = true, unlockResult = UnlockResult.Success)
-        val controller = VaultGateController(vault)
+        val controller = gate(vault)
         controller.unlock("correct horse".toCharArray())
 
         controller.lock()
@@ -232,8 +285,8 @@ class VaultGateControllerTest {
 
     @Test
     fun `canEnableBiometric reflects device availability`() {
-        val available = VaultGateController(FakeVault(exists = true), biometrics(BiometricAvailability.Available))
-        val noHardware = VaultGateController(FakeVault(exists = true), biometrics(BiometricAvailability.NoHardware))
+        val available = gate(FakeVault(exists = true), biometrics(BiometricAvailability.Available))
+        val noHardware = gate(FakeVault(exists = true), biometrics(BiometricAvailability.NoHardware))
 
         assertTrue(available.canEnableBiometric())
         assertFalse(noHardware.canEnableBiometric())
@@ -241,7 +294,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `controller without biometrics cannot enable and disable is a no-op`() = runTest {
-        val controller = VaultGateController(FakeVault(exists = true))
+        val controller = gate(FakeVault(exists = true))
 
         assertFalse(controller.canEnableBiometric())
         assertFalse(controller.enableBiometric(PROMPT))
@@ -254,7 +307,7 @@ class VaultGateControllerTest {
         // Vault заблокирован → exportDataKey == null → VaultBiometrics.enable == VaultLocked.
         // Путь enable-успеха требует живого dataKey (DataKey-конструктор internal в :shared) и
         // покрыт там же, в shared VaultBiometricsTest; здесь проверяем делегирование контроллера.
-        val controller = VaultGateController(FakeVault(exists = true), biometrics(BiometricAvailability.Available))
+        val controller = gate(FakeVault(exists = true), biometrics(BiometricAvailability.Available))
         assertFalse(controller.biometricEnabled)
 
         assertFalse(controller.enableBiometric(PROMPT))
@@ -267,7 +320,7 @@ class VaultGateControllerTest {
         val artifacts = FakeArtifacts().apply {
             write(BioArtifact(formatVersion = 1, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
         }
-        val controller = VaultGateController(FakeVault(exists = true), biometrics(BiometricAvailability.Available, artifacts))
+        val controller = gate(FakeVault(exists = true), biometrics(BiometricAvailability.Available, artifacts))
         assertTrue(controller.biometricEnabled)
 
         controller.disableBiometric()
@@ -278,7 +331,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `create offers biometric enrollment when the device can enable it`() {
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.Available),
             minPasswordLength = 8,
@@ -291,7 +344,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `create unlocks directly when biometrics are unavailable on the device`() {
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.NotEnrolled),
             minPasswordLength = 8,
@@ -308,7 +361,7 @@ class VaultGateControllerTest {
     fun `create offers sync onboarding first when the platform provides a sync form`() {
         // Биометрия доступна, но шаг sync идёт раньше: иначе принятие ключа аккаунта обнулило бы
         // только что включённую биометрию.
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.Available),
             minPasswordLength = 8,
@@ -322,7 +375,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `completeSyncOnboarding advances to the biometric offer when the device can enable it`() {
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.Available),
             minPasswordLength = 8,
@@ -337,7 +390,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `completeSyncOnboarding unlocks directly when biometrics are unavailable`() {
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.NotEnrolled),
             minPasswordLength = 8,
@@ -353,7 +406,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `completeSyncOnboarding is a no-op outside the OfferSync step`() {
-        val controller = VaultGateController(FakeVault(exists = true, unlockResult = UnlockResult.Success))
+        val controller = gate(FakeVault(exists = true, unlockResult = UnlockResult.Success))
         controller.unlock("correct horse".toCharArray())
         assertEquals(VaultGateState.Unlocked, controller.state)
 
@@ -366,7 +419,7 @@ class VaultGateControllerTest {
     fun `completePairing advances to the biometric offer when the device can enable it`() {
         // Vault уже создан и разблокирован координатором паринга на экране создания (NeedsCreate),
         // ключ аккаунта принят — биометрию можно оборачивать сразу.
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.Available),
         )
@@ -379,7 +432,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `completePairing unlocks directly when biometrics are unavailable`() {
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.NotEnrolled),
         )
@@ -392,7 +445,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `completePairing is a no-op once past the create step`() {
-        val controller = VaultGateController(FakeVault(exists = true, unlockResult = UnlockResult.Success))
+        val controller = gate(FakeVault(exists = true, unlockResult = UnlockResult.Success))
         controller.unlock("correct horse".toCharArray())
         assertEquals(VaultGateState.Unlocked, controller.state)
 
@@ -406,7 +459,7 @@ class VaultGateControllerTest {
         // Экран create-join: координатор паринга уже создал и разблокировал локальный vault, гейт
         // подтверждает связывание — единственный момент, когда мы честно знаем, что устройство привязано.
         val log = RecordingSecurityLog()
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.NotEnrolled),
             securityLog = log,
@@ -421,7 +474,7 @@ class VaultGateControllerTest {
     @Test
     fun `completePairing past the create step records nothing`() {
         val log = RecordingSecurityLog()
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = true, unlockResult = UnlockResult.Success),
             securityLog = log,
         )
@@ -437,7 +490,7 @@ class VaultGateControllerTest {
     @Test
     fun `create records a VaultCreated event as the password baseline`() {
         val log = RecordingSecurityLog()
-        val controller = VaultGateController(FakeVault(exists = false), minPasswordLength = 8, securityLog = log)
+        val controller = gate(FakeVault(exists = false), minPasswordLength = 8, securityLog = log)
 
         controller.create("correct horse".toCharArray(), "correct horse".toCharArray())
 
@@ -448,7 +501,7 @@ class VaultGateControllerTest {
     @Test
     fun `changePassword records the change on success and wipes both buffers`() {
         val log = RecordingSecurityLog()
-        val controller = VaultGateController(FakeVault(exists = true, changePasswordResult = true), securityLog = log)
+        val controller = gate(FakeVault(exists = true, changePasswordResult = true), securityLog = log)
         val old = "old password!!".toCharArray()
         val fresh = "new password!!".toCharArray()
 
@@ -462,7 +515,7 @@ class VaultGateControllerTest {
     @Test
     fun `changePassword with a wrong current password records nothing and returns false`() {
         val log = RecordingSecurityLog()
-        val controller = VaultGateController(FakeVault(exists = true, changePasswordResult = false), securityLog = log)
+        val controller = gate(FakeVault(exists = true, changePasswordResult = false), securityLog = log)
 
         assertFalse(controller.changePassword("wrong".toCharArray(), "new password!!".toCharArray()))
 
@@ -475,7 +528,7 @@ class VaultGateControllerTest {
         val artifacts = FakeArtifacts().apply {
             write(BioArtifact(formatVersion = 1, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
         }
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = true),
             biometrics(BiometricAvailability.Available, artifacts),
             securityLog = log,
@@ -490,7 +543,7 @@ class VaultGateControllerTest {
     @Test
     fun `recentSecurityEvents delegates to the log newest first`() {
         val log = RecordingSecurityLog()
-        val controller = VaultGateController(FakeVault(exists = true), securityLog = log)
+        val controller = gate(FakeVault(exists = true), securityLog = log)
         log.record(SecurityEventType.DevicePaired, "iPhone")
         log.record(SecurityEventType.UnlockedBiometric)
 
@@ -502,7 +555,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `security accessors are empty without a log`() {
-        val controller = VaultGateController(FakeVault(exists = true))
+        val controller = gate(FakeVault(exists = true))
 
         assertTrue(controller.recentSecurityEvents().isEmpty())
         assertNull(controller.lastPasswordChangeAt())
@@ -510,7 +563,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `dismissBiometricOffer moves from the offer to Unlocked`() {
-        val controller = VaultGateController(
+        val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.Available),
             minPasswordLength = 8,

@@ -551,11 +551,7 @@ private fun LiveSecretDetail(
     val secret = credential.secret
     val keyInfo = rememberKeyInfo(credential, generator)
     val certInfo = rememberCertInfo(credential, inspector)
-    val (icon, color, tinted) = when (secret) {
-        is CredentialSecret.Certificate -> Triple("workspace_premium", D.moss, true)
-        is CredentialSecret.PrivateKey -> Triple("key", D.cyanBright, true)
-        is CredentialSecret.Password -> Triple("password", D.dim, false)
-    }
+    val (icon, color, tinted) = VaultPresentation.secretStyle(secret)
     val subtitle = when (secret) {
         is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { stringResource(Res.string.vault_subtitle_certificate_typed, it) } ?: stringResource(Res.string.vault_subtitle_certificate)
         is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: stringResource(Res.string.vault_subtitle_private_key)

@@ -3,6 +3,7 @@ package app.skerry.ui.vault
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.design.D
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -42,6 +43,13 @@ class VaultPresentationTest {
         assertEquals(2, VaultPresentation.count(VaultCategoryKind.SSH_KEYS, credentials))
         assertEquals(1, VaultPresentation.count(VaultCategoryKind.PASSWORDS, credentials))
         assertEquals(1, VaultPresentation.count(VaultCategoryKind.CERTIFICATES, credentials))
+    }
+
+    @Test
+    fun `secretStyle maps secret type to icon, accent color and tint`() {
+        assertEquals(SecretTypeStyle("key", D.cyanBright, tinted = true), VaultPresentation.secretStyle(key("k1").secret))
+        assertEquals(SecretTypeStyle("password", D.dim, tinted = false), VaultPresentation.secretStyle(pwd("p1").secret))
+        assertEquals(SecretTypeStyle("workspace_premium", D.moss, tinted = true), VaultPresentation.secretStyle(cert("c1").secret))
     }
 
     // Прим.: usedByLabel стала @Composable (текст «used by N host(s)» — строковый ресурс с формой
