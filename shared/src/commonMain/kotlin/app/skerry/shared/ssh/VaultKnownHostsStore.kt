@@ -2,7 +2,7 @@ package app.skerry.shared.ssh
 
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
-import kotlinx.serialization.json.Json
+import app.skerry.shared.vault.VaultRecordCodec
 
 /**
  * [KnownHostsStore] поверх зашифрованного [Vault]: каждый доверенный ключ — запись
@@ -20,11 +20,11 @@ import kotlinx.serialization.json.Json
  */
 class VaultKnownHostsStore(private val vault: Vault) : KnownHostsStore {
 
+    private val codec = VaultRecordCodec(vault, RecordType.KNOWN_HOST, KnownHost.serializer())
+
     override fun all(): List<KnownHost> {
         if (!vault.isUnlocked) return emptyList()
-        return vault.records()
-            .filter { it.type == RecordType.KNOWN_HOST && !it.deleted }
-            .mapNotNull { decode(vault.openPayload(it.id)) }
+        return codec.list()
     }
 
     override fun add(host: KnownHost) {
@@ -33,28 +33,21 @@ class VaultKnownHostsStore(private val vault: Vault) : KnownHostsStore {
         // бы IllegalStateException прямо в стадию рукопожатия SSH (мимо контракта connect, с утечкой
         // клиента). Не запомнить ключ безопаснее, чем уронить коннект: следующий connect переспросит TOFU.
         if (!vault.isUnlocked) return
-        vault.put(idOf(host.host, host.port, host.keyType), RecordType.KNOWN_HOST, encode(host))
+        codec.put(idOf(host.host, host.port, host.keyType), host)
     }
 
     override fun replace(host: KnownHost) {
         // Та же идентичность → тот же id → upsert. Окна «записи нет» не возникает (put атомарен).
         if (!vault.isUnlocked) return // см. [add]: no-op на залоченном vault вместо броска в connect()
-        vault.put(idOf(host.host, host.port, host.keyType), RecordType.KNOWN_HOST, encode(host))
+        codec.put(idOf(host.host, host.port, host.keyType), host)
     }
 
     override fun remove(host: String, port: Int, keyType: String) {
         if (!vault.isUnlocked) return // см. [add]: no-op на залоченном vault
-        vault.remove(idOf(host, port, keyType))
+        codec.remove(idOf(host, port, keyType))
     }
 
-    private fun encode(host: KnownHost): ByteArray = json.encodeToString(host).encodeToByteArray()
-
-    private fun decode(payload: ByteArray?): KnownHost? =
-        payload?.let { runCatching { json.decodeFromString<KnownHost>(it.decodeToString()) }.getOrNull() }
-
     private companion object {
-        private val json = Json { ignoreUnknownKeys = true }
-
         /** Детерминированный id из тройки идентичности ключа. U+001F-разделитель исключает коллизии. */
         fun idOf(host: String, port: Int, keyType: String): String = "$host\u001F$port\u001F$keyType"
     }

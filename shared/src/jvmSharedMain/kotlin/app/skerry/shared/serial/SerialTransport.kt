@@ -1,18 +1,14 @@
 package app.skerry.shared.serial
 
-import app.skerry.shared.sftp.SftpClient
-import app.skerry.shared.ssh.DynamicForwardSpec
-import app.skerry.shared.ssh.ExecResult
-import app.skerry.shared.ssh.LocalForwardSpec
-import app.skerry.shared.ssh.PortForward
 import app.skerry.shared.ssh.PtySize
-import app.skerry.shared.ssh.RemoteForwardSpec
 import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshConnectionException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.ssh.StreamOnlyConnection
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Dispatchers
@@ -50,8 +46,11 @@ class SerialTransport(
         }
 }
 
-/** Соединение поверх одного открытого порта: единственный интерактивный поток. */
-private class SerialConnection(private val handle: SerialPortHandle) : SshConnection {
+/**
+ * Соединение поверх одного открытого порта: единственный интерактивный поток. Отсутствующие у serial
+ * возможности SSH (exec, SFTP, пробросы) бросает база [StreamOnlyConnection].
+ */
+private class SerialConnection(private val handle: SerialPortHandle) : StreamOnlyConnection("Serial") {
 
     private val shellOpened = AtomicBoolean(false)
 
@@ -61,21 +60,6 @@ private class SerialConnection(private val handle: SerialPortHandle) : SshConnec
         check(shellOpened.compareAndSet(false, true)) { "Порт уже открыл свой поток" }
         return SerialShellChannel(handle)
     }
-
-    override suspend fun exec(command: String): ExecResult =
-        throw UnsupportedOperationException("Serial не поддерживает exec-каналы")
-
-    override suspend fun openSftp(): SftpClient =
-        throw UnsupportedOperationException("Serial не поддерживает SFTP")
-
-    override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward =
-        throw UnsupportedOperationException("Serial не поддерживает проброс портов")
-
-    override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward =
-        throw UnsupportedOperationException("Serial не поддерживает проброс портов")
-
-    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward =
-        throw UnsupportedOperationException("Serial не поддерживает проброс портов")
 
     override suspend fun disconnect() {
         withContext(Dispatchers.IO) { runCatching { handle.close() } }
@@ -111,9 +95,11 @@ private class SerialShellChannel(private val handle: SerialPortHandle) : ShellCh
         try {
             val buffer = ByteArray(BUFFER_SIZE)
             while (true) {
+                // Только IOException = обрыв порта (штатное завершение цикла); CancellationException
+                // от runInterruptible должна пройти наружу — это отмена сбора, а не конец данных.
                 val read = try {
                     runInterruptible(Dispatchers.IO) { handle.read(buffer) }
-                } catch (_: Exception) {
+                } catch (_: IOException) {
                     break
                 }
                 if (read < 0) break // порт закрыт/устройство отключено
@@ -132,7 +118,7 @@ private class SerialShellChannel(private val handle: SerialPortHandle) : ShellCh
                 handle.write(data)
                 _bytesUp.addAndGet(data.size.toLong())
                 Unit
-            } catch (e: Exception) {
+            } catch (e: IOException) {
                 throw SshConnectionException("Запись в последовательный порт не удалась", e)
             }
         }

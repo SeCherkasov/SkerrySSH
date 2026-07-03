@@ -137,38 +137,27 @@ class VaultBiometrics(
      * мастер-пароля; при инвалидации ключа биометрия выключается. `dataKey` из [unwrap] передаётся
      * во [Vault.unlockWithDataKey], который им владеет (а на `Corrupted` — затирает).
      */
-    suspend fun unlock(prompt: BiometricPrompt): BiometricUnlockResult {
-        val artifact = artifacts.read() ?: return BiometricUnlockResult.NotEnabled
-        // Артефакт с диска недоверенный: формат/alias/deviceId должны совпасть с ожидаемыми. Иначе
-        // это файл другого устройства, подмена или иной формат — мягкий откат на пароль, артефакт
-        // не удаляем (это не инвалидация ключа). Сверка alias заодно убирает асимметрию с disable().
-        if (artifact.formatVersion != FORMAT_VERSION || artifact.alias != alias || artifact.deviceId != deviceId) {
-            return BiometricUnlockResult.NotEnabled
-        }
-        if (keyStore.availability() != BiometricAvailability.Available) return BiometricUnlockResult.Unavailable
-        return when (val unwrapped = keyStore.unwrap(alias, artifact.wrappedBio, prompt)) {
-            is BiometricResult.Success -> {
-                val dataKey = DataKey(unwrapped.value) // владение передаём vault (он же затирает на Corrupted)
-                try {
-                    when (vault.unlockWithDataKey(dataKey)) {
-                        UnlockResult.Success -> BiometricUnlockResult.Unlocked
-                        UnlockResult.Corrupted -> BiometricUnlockResult.Corrupted
-                        // unlockWithDataKey не выводит мастер-ключ и по контракту не возвращает WrongPassword;
-                        // явная ветка вместо else — чтобы новая ветка UnlockResult не утекла молча.
-                        UnlockResult.WrongPassword -> error("unlockWithDataKey не сверяет пароль — WrongPassword недостижим")
-                    }
-                } catch (e: Throwable) {
-                    dataKey.bytes.fill(0) // нештатный путь: не оставить развёрнутый ключ в памяти
-                    throw e
+    suspend fun unlock(prompt: BiometricPrompt): BiometricUnlockResult = when (val auth = authenticate(prompt)) {
+        is BioAuth.Success -> {
+            val dataKey = DataKey(auth.key) // владение передаём vault (он же затирает на Corrupted)
+            try {
+                when (vault.unlockWithDataKey(dataKey)) {
+                    UnlockResult.Success -> BiometricUnlockResult.Unlocked
+                    UnlockResult.Corrupted -> BiometricUnlockResult.Corrupted
+                    // unlockWithDataKey не выводит мастер-ключ и по контракту не возвращает WrongPassword;
+                    // явная ветка вместо else — чтобы новая ветка UnlockResult не утекла молча.
+                    UnlockResult.WrongPassword -> error("unlockWithDataKey не сверяет пароль — WrongPassword недостижим")
                 }
-            }
-            BiometricResult.Cancelled -> BiometricUnlockResult.Cancelled
-            BiometricResult.Failed -> BiometricUnlockResult.Failed
-            BiometricResult.KeyInvalidated -> {
-                disable() // биометрия скомпрометирована сменой набора — снять и потребовать пароль
-                BiometricUnlockResult.Invalidated
+            } catch (e: Throwable) {
+                dataKey.bytes.fill(0) // нештатный путь: не оставить развёрнутый ключ в памяти
+                throw e
             }
         }
+        BioAuth.NotEnabled -> BiometricUnlockResult.NotEnabled
+        BioAuth.Unavailable -> BiometricUnlockResult.Unavailable
+        BioAuth.Cancelled -> BiometricUnlockResult.Cancelled
+        BioAuth.Failed -> BiometricUnlockResult.Failed
+        BioAuth.Invalidated -> BiometricUnlockResult.Invalidated
     }
 
     /**
@@ -179,24 +168,60 @@ class VaultBiometrics(
      * а сразу затирается: нужен лишь факт успешной аутентификации. Инвалидация ключа выключает
      * биометрию (как в [unlock]) — вызывающий откатится на мастер-пароль. Vault не трогается.
      */
-    suspend fun confirm(prompt: BiometricPrompt): BiometricConfirmResult {
-        val artifact = artifacts.read() ?: return BiometricConfirmResult.NotEnabled
+    suspend fun confirm(prompt: BiometricPrompt): BiometricConfirmResult = when (val auth = authenticate(prompt)) {
+        is BioAuth.Success -> {
+            auth.key.fill(0) // ключ не нужен — нужен лишь факт успешной аутентификации
+            BiometricConfirmResult.Confirmed
+        }
+        BioAuth.NotEnabled -> BiometricConfirmResult.NotEnabled
+        BioAuth.Unavailable -> BiometricConfirmResult.Unavailable
+        BioAuth.Cancelled -> BiometricConfirmResult.Cancelled
+        BioAuth.Failed -> BiometricConfirmResult.Failed
+        BioAuth.Invalidated -> BiometricConfirmResult.Invalidated
+    }
+
+    /**
+     * Прочитать и провалидировать `vault.bio`. Артефакт с диска недоверенный: формат/alias/deviceId
+     * должны совпасть с ожидаемыми. Иначе это файл другого устройства, подмена или иной формат —
+     * `null` (мягкий откат на пароль), артефакт не удаляем (это не инвалидация ключа). Сверка alias
+     * заодно убирает асимметрию с [disable].
+     */
+    private fun readValidArtifact(): BioArtifact? {
+        val artifact = artifacts.read() ?: return null
         if (artifact.formatVersion != FORMAT_VERSION || artifact.alias != alias || artifact.deviceId != deviceId) {
-            return BiometricConfirmResult.NotEnabled
+            return null
         }
-        if (keyStore.availability() != BiometricAvailability.Available) return BiometricConfirmResult.Unavailable
+        return artifact
+    }
+
+    /**
+     * Общий шаг [unlock]/[confirm]: валидный артефакт + доступность + системный промпт с разворотом
+     * `bioKey`. [BioAuth.Success] несёт развёрнутый dataKey — владение переходит вызывающему
+     * (unlock передаёт его vault, confirm сразу затирает). Инвалидация ключа (новый отпечаток/лицо)
+     * выключает биометрию здесь же — вызывающий откатывается на мастер-пароль.
+     */
+    private suspend fun authenticate(prompt: BiometricPrompt): BioAuth {
+        val artifact = readValidArtifact() ?: return BioAuth.NotEnabled
+        if (keyStore.availability() != BiometricAvailability.Available) return BioAuth.Unavailable
         return when (val unwrapped = keyStore.unwrap(alias, artifact.wrappedBio, prompt)) {
-            is BiometricResult.Success -> {
-                unwrapped.value.fill(0) // ключ не нужен — нужен лишь факт успешной аутентификации
-                BiometricConfirmResult.Confirmed
-            }
-            BiometricResult.Cancelled -> BiometricConfirmResult.Cancelled
-            BiometricResult.Failed -> BiometricConfirmResult.Failed
+            is BiometricResult.Success -> BioAuth.Success(unwrapped.value)
+            BiometricResult.Cancelled -> BioAuth.Cancelled
+            BiometricResult.Failed -> BioAuth.Failed
             BiometricResult.KeyInvalidated -> {
-                disable() // ключ скомпрометирован сменой набора — снять и потребовать пароль
-                BiometricConfirmResult.Invalidated
+                disable() // биометрия скомпрометирована сменой набора — снять и потребовать пароль
+                BioAuth.Invalidated
             }
         }
+    }
+
+    /** Внутренний исход [authenticate]; наружу мапится в Unlock-/Confirm-результаты 1:1. */
+    private sealed interface BioAuth {
+        class Success(val key: ByteArray) : BioAuth
+        data object NotEnabled : BioAuth
+        data object Unavailable : BioAuth
+        data object Cancelled : BioAuth
+        data object Failed : BioAuth
+        data object Invalidated : BioAuth
     }
 
     private companion object {

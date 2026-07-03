@@ -1,18 +1,13 @@
 package app.skerry.shared.telnet
 
-import app.skerry.shared.sftp.SftpClient
-import app.skerry.shared.ssh.DynamicForwardSpec
-import app.skerry.shared.ssh.ExecResult
-import app.skerry.shared.ssh.LocalForwardSpec
-import app.skerry.shared.ssh.PortForward
 import app.skerry.shared.ssh.PtySize
-import app.skerry.shared.ssh.RemoteForwardSpec
 import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshConnectionException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.ssh.StreamOnlyConnection
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -52,8 +47,11 @@ class TelnetTransport(
         }
 }
 
-/** Соединение поверх одного TCP-сокета: единственный интерактивный поток (shell), без под-каналов. */
-private class TelnetConnection(private val socket: Socket) : SshConnection {
+/**
+ * Соединение поверх одного TCP-сокета: единственный интерактивный поток (shell), без под-каналов.
+ * Отсутствующие у Telnet возможности SSH (exec, SFTP, пробросы) бросает база [StreamOnlyConnection].
+ */
+private class TelnetConnection(private val socket: Socket) : StreamOnlyConnection("Telnet") {
 
     private val shellOpened = AtomicBoolean(false)
 
@@ -64,21 +62,6 @@ private class TelnetConnection(private val socket: Socket) : SshConnection {
         check(shellOpened.compareAndSet(false, true)) { "Telnet-соединение уже открыло свой поток" }
         return TelnetShellChannel(socket, TelnetCodec(termType = term, cols = size.cols, rows = size.rows))
     }
-
-    override suspend fun exec(command: String): ExecResult =
-        throw UnsupportedOperationException("Telnet не поддерживает exec-каналы")
-
-    override suspend fun openSftp(): SftpClient =
-        throw UnsupportedOperationException("Telnet не поддерживает SFTP")
-
-    override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward =
-        throw UnsupportedOperationException("Telnet не поддерживает проброс портов")
-
-    override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward =
-        throw UnsupportedOperationException("Telnet не поддерживает проброс портов")
-
-    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward =
-        throw UnsupportedOperationException("Telnet не поддерживает проброс портов")
 
     override suspend fun disconnect() {
         withContext(Dispatchers.IO) { runCatching { socket.close() } }
@@ -156,7 +139,14 @@ private class TelnetShellChannel(
         // (DO NAWS) — незапрошенное под-сообщение строгий telnet-сервер может воспринять как ошибку
         // и закрыть соединение.
         val naws = codec.windowSize(size.cols, size.rows)
-        if (codec.nawsNegotiated) runCatching { writeRaw(naws) }
+        if (codec.nawsNegotiated) {
+            // Обрыв при отправке NAWS не критичен (размер уже запомнен в кодеке) — глотаем только
+            // ошибку записи; CancellationException должна пройти наружу, это отмена, а не сбой.
+            try {
+                writeRaw(naws)
+            } catch (_: SshConnectionException) {
+            }
+        }
     }
 
     private suspend fun writeRaw(bytes: ByteArray) = withContext(Dispatchers.IO) {

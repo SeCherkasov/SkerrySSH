@@ -563,6 +563,17 @@ class FileVaultTest {
         job.cancel()
     }
 
+    @Test
+    fun `failed atomic write cleans up the tmp file`() = vaultTest {
+        // Цель записи — существующий каталог: atomicMove в него падает, и atomicWriteUtf8 обязан
+        // подчистить tmp-файл (не оставлять на диске осиротевшую копию секретов).
+        fs.createDirectories(file)
+
+        assertFailsWith<Exception> { vault().create("m".toCharArray()) }
+
+        assertFalse(fs.exists("/vault.json.tmp".toPath()), "tmp-файл должен быть удалён при провале записи")
+    }
+
     private companion object {
         const val TS = "2026-06-12T00:00:00Z"
     }

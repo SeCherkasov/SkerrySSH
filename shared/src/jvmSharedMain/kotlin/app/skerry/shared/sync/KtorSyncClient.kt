@@ -24,6 +24,7 @@ import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
@@ -182,6 +183,8 @@ class KtorSyncClient(
         // Открытый liveness-эндпоинт (см. server Plugins.kt `/healthz`). Без bearer-токена — пинг
         // должен проходить и без сессии (vault залочен). Любой сбой = недоступен (не бросаем).
         http.get("$serverUrl/healthz").status.isSuccess()
+    } catch (e: CancellationException) {
+        throw e // отмена корутины — не «сервер недоступен», сигнал должен дойти до вызывающего
     } catch (e: Exception) {
         false
     }
@@ -202,6 +205,8 @@ class KtorSyncClient(
     /** Оборачивает сетевые сбои в [SyncException] NETWORK (вместо «голого» IOException наружу). */
     private suspend fun request(call: suspend () -> HttpResponse): HttpResponse = try {
         call()
+    } catch (e: CancellationException) {
+        throw e // отмена корутины — не сетевой сбой, глотать её нельзя (сломало бы structured concurrency)
     } catch (e: SyncException) {
         throw e
     } catch (e: Exception) {
@@ -227,6 +232,10 @@ class KtorSyncClient(
 
     private fun HttpStatusCode.isSuccess() = value in 200..299
 
+    // Ограничение zero-knowledge (как String-пароль в IonspinVaultCrypto.deriveMasterKey): Nimbus SRP
+    // принимает пароль только как String, поэтому hex authKey неизбежно живёт immutable-строкой до GC —
+    // затереть её нельзя. Время жизни сведено к вызову step1/generateVerifier; сам authKey (ByteArray)
+    // затирает вызывающий. authKey — производный субключ (Kdf от masterKey), не мастер-материал.
     private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
     private fun ByteArray.b64(): String = Base64.getEncoder().encodeToString(this)
     private fun String.unb64(): ByteArray = Base64.getDecoder().decode(this)

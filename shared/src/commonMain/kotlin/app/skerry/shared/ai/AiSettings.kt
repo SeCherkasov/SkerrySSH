@@ -2,8 +2,8 @@ package app.skerry.shared.ai
 
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultSingletonStore
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * Настройки внешнего AI-провайдера (BYOK), хранимые в зашифрованном Vault. Пустой [apiKey] значит
@@ -12,8 +12,8 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class AiSettings(
     val apiKey: String = "",
-    val model: String = "gpt-4o-mini",
-    val baseUrl: String = "https://api.openai.com/v1",
+    val model: String = OpenAiConfig.DEFAULT_MODEL,
+    val baseUrl: String = OpenAiConfig.DEFAULT_BASE_URL,
 ) {
     /** Настроен ли внешний провайдер (есть непустой ключ). */
     val isConfigured: Boolean get() = apiKey.isNotBlank()
@@ -35,23 +35,18 @@ data class AiSettings(
  */
 class AiSettingsStore(private val vault: Vault) {
 
-    fun load(): AiSettings {
-        if (!vault.isUnlocked) return AiSettings()
-        val record = vault.records().firstOrNull { it.id == SETTINGS_ID && it.type == RecordType.SETTINGS && !it.deleted }
-            ?: return AiSettings()
-        return decode(runCatching { vault.openPayload(record.id) }.getOrNull()) ?: AiSettings()
+    private val store = VaultSingletonStore(vault, SETTINGS_ID, RecordType.SETTINGS, AiSettings.serializer()) {
+        AiSettings()
     }
+
+    fun load(): AiSettings = store.load()
 
     fun save(settings: AiSettings) {
-        vault.put(SETTINGS_ID, RecordType.SETTINGS, json.encodeToString(settings).encodeToByteArray())
+        store.save(settings)
     }
-
-    private fun decode(payload: ByteArray?): AiSettings? =
-        payload?.let { runCatching { json.decodeFromString<AiSettings>(it.decodeToString()) }.getOrNull() }
 
     companion object {
         /** Стабильный id singleton-записи AI-настроек в vault. */
         const val SETTINGS_ID = "ai.settings"
-        private val json = Json { ignoreUnknownKeys = true }
     }
 }

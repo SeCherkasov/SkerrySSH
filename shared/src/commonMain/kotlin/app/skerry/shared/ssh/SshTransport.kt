@@ -38,7 +38,7 @@ sealed interface SshAuth {
     /**
      * Аутентификация по приватному ключу: [privateKeyPem] — содержимое PEM (OpenSSH/PKCS),
      * [passphrase] расшифровывает ключ (null — ключ без passphrase). Секрет берётся из vault
-     * ([app.skerry.shared.vault.IdentityAuth.PrivateKey]).
+     * ([app.skerry.shared.vault.CredentialSecret.PrivateKey]).
      */
     data class PublicKey(val privateKeyPem: String, val passphrase: String? = null) : SshAuth {
         override fun toString(): String = "PublicKey(redacted)"
@@ -48,7 +48,7 @@ sealed interface SshAuth {
      * Аутентификация по SSH-сертификату: клиент предъявляет [certificate] (строка `*-cert.pub`,
      * выданная CA) и доказывает владение приватным ключом [privateKeyPem] (PEM, [passphrase]
      * расшифровывает его при необходимости). Секрет берётся из vault
-     * ([app.skerry.shared.vault.IdentityAuth.Certificate]).
+     * ([app.skerry.shared.vault.CredentialSecret.Certificate]).
      */
     data class Certificate(
         val privateKeyPem: String,
@@ -150,7 +150,8 @@ interface ShellChannel {
     /**
      * Суммарно записано в PTY (ввод/отчёты) и прочитано из PTY (вывод) за время жизни канала, в байтах.
      * Монотонно растут. Нужны для индикатора скорости в статус-баре (дельту/период считает
-     * [app.skerry.ui.terminal.ThroughputController]). Реализация по умолчанию — `0` (фейки/тесты).
+     * `ThroughputController` в UI-слое; ссылкой не сошлёшься — модуль shared про UI не знает).
+     * Реализация по умолчанию — `0` (фейки/тесты).
      */
     val bytesUp: Long get() = 0L
     val bytesDown: Long get() = 0L

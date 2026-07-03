@@ -15,7 +15,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import okio.FileSystem
 import okio.Path
-import okio.Path.Companion.toPath
 
 /** Открытая часть файла vault: версия формата и материал для деривации/обёртки dataKey. */
 @Serializable
@@ -34,9 +33,9 @@ internal data class VaultFileBody(
 
 /**
  * Файловый [Vault] на okio — один и тот же код для desktop (JVM) и Android: I/O спрятан за
- * [FileSystem] (десктоп/мобайл подают `FileSystem.SYSTEM`, тесты — `FakeFileSystem`). По образцу
- * [app.skerry.shared.host.FileHostStore]: in-memory кеш записей, файл переписывается целиком
- * атомарно (tmp + [FileSystem.atomicMove]); битый файл при unlock — [UnlockResult.Corrupted].
+ * [FileSystem] (десктоп/мобайл подают `FileSystem.SYSTEM`, тесты — `FakeFileSystem`): in-memory
+ * кеш записей, файл переписывается целиком атомарно (tmp + [FileSystem.atomicMove]); битый файл
+ * при unlock — [UnlockResult.Corrupted].
  * Жизненный цикл добавляет `dataKey` в памяти — он есть только между [unlock]/[create] и [lock] и
  * наружу не выходит. Метку времени записей даёт [now] (инжектится — нет привязки к платформенным
  * часам в commonMain; тесты передают детерминированную заглушку).
@@ -203,7 +202,7 @@ class FileVault(
 
     override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = synchronized(lock) {
         requireUnlocked()
-        val currentMeta = meta ?: error("unlocked vault has no metadata")
+        val currentMeta = session()
         val working = records.toMutableList()
         val applied = mutableListOf<VaultRecord>()
         for (r in remote) {
@@ -219,8 +218,7 @@ class FileVault(
             }
         }
         if (applied.isNotEmpty()) {
-            writeFile(currentMeta, working) // упадёт — кеш не тронут (коммит после persist)
-            records.clear(); records.addAll(working)
+            commit(currentMeta, working)
         }
         applied
     }
@@ -235,7 +233,7 @@ class FileVault(
 
     override fun put(id: String, type: RecordType, payload: ByteArray): Unit = synchronized(lock) {
         val key = requireUnlocked()
-        val currentMeta = meta ?: error("unlocked vault has no metadata")
+        val currentMeta = session()
         val blob = crypto.seal(key, payload, aad(id, type))
         val index = records.indexOfFirst { it.id == id }
         val version = if (index >= 0) records[index].version + 1 else 1L
@@ -243,14 +241,13 @@ class FileVault(
         val updated = records.toMutableList().also {
             if (index >= 0) it[index] = record else it += record
         }
-        writeFile(currentMeta, updated) // упадёт — кеш не тронут
-        records.clear(); records.addAll(updated)
+        commit(currentMeta, updated)
         _localChanges.tryEmit(Unit) // commit удался → разбудить live-sync push
     }
 
     override fun remove(id: String): Unit = synchronized(lock) {
         requireUnlocked()
-        val currentMeta = meta ?: error("unlocked vault has no metadata")
+        val currentMeta = session()
         val index = records.indexOfFirst { it.id == id }
         if (index < 0) return@synchronized
         val current = records[index]
@@ -259,22 +256,20 @@ class FileVault(
         // до других устройств (открытым он всё равно не выдаётся — см. openPayload). Не очищать.
         val tombstone = current.copy(deleted = true, version = current.version + 1, updatedAt = now())
         val updated = records.toMutableList().also { it[index] = tombstone }
-        writeFile(currentMeta, updated)
-        records.clear(); records.addAll(updated)
+        commit(currentMeta, updated)
         _localChanges.tryEmit(Unit) // локальное удаление → разбудить live-sync push
     }
 
     override fun compact(ids: List<String>): Unit = synchronized(lock) {
         requireUnlocked()
         if (ids.isEmpty()) return@synchronized
-        val currentMeta = meta ?: error("unlocked vault has no metadata")
+        val currentMeta = session()
         val drop = ids.toHashSet()
         // Удаляем только НАДГРОБИЯ из списка: живую (более новую, ещё не запушенную) запись с тем же
         // id сохраняем — её увезёт следующий push, иначе потеряли бы непротолкнутые данные.
         val updated = records.filterNot { it.id in drop && it.deleted }
         if (updated.size == records.size) return@synchronized // нечего компактить — файл не трогаем
-        writeFile(currentMeta, updated) // упадёт — кеш не тронут (коммит после persist)
-        records.clear(); records.addAll(updated)
+        commit(currentMeta, updated)
     }
 
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = synchronized(lock) {
@@ -323,16 +318,24 @@ class FileVault(
     private fun requireUnlocked(): DataKey =
         dataKey ?: throw IllegalStateException("vault is locked")
 
+    /** [meta] открытой сессии; бросает, если инвариант «unlocked ⇒ meta есть» нарушен. */
+    private fun session(): VaultMeta = meta ?: error("unlocked vault has no metadata")
+
+    /** Persist-then-commit: атомарно записать снимок и лишь после успеха обновить кеш записей. */
+    private fun commit(meta: VaultMeta, updated: List<VaultRecord>) {
+        writeFile(meta, updated) // упадёт — кеш не тронут
+        records.clear()
+        records.addAll(updated)
+    }
+
     /**
-     * Атомарно записать снимок vault. Чистая функция от аргументов — поля не читает и не пишет.
-     * [FileSystem.atomicMove] заменяет существующую цель на всех таргетах Skerry (okio: NIO —
-     * `ATOMIC_MOVE+REPLACE_EXISTING`; legacy/native POSIX `rename(2)`; `FakeFileSystem`), поэтому
-     * отдельного «move с перезаписью» не нужно. Если move не поддержан — исключение всплывает, а
-     * поля остаются прежними (коммит идёт после persist): данные не теряются, ошибка видна выше.
+     * Атомарно записать снимок vault (tmp + move — [atomicWriteUtf8]). Чистая функция от
+     * аргументов — поля не читает и не пишет (кроме [unknownRecords], см. ниже). Если запись/move
+     * упали — исключение всплывает, а поля остаются прежними (коммит идёт после persist): данные
+     * не теряются, ошибка видна выше. [harden] ужесточает права tmp до подмены цели: сам файл
+     * секретов, а не только каталог, приватен.
      */
     private fun writeFile(meta: VaultMeta, records: List<VaultRecord>) {
-        path.parent?.let { fileSystem.createDirectories(it) }
-        val tmp = path.parent?.resolve("${path.name}.tmp") ?: "${path.name}.tmp".toPath()
         // Дописываем нераспознанные записи verbatim, чтобы не потерять данные, которые эта версия
         // приложения не понимает (см. [unknownRecords]). Форма файла та же, что у VaultFileBody
         // ({meta, records}), поэтому старые/новые клиенты читают его без изменений формата.
@@ -343,9 +346,7 @@ class FileVault(
                 unknownRecords.forEach { add(it) }
             })
         }
-        fileSystem.write(tmp) { writeUtf8(json.encodeToString(JsonObject.serializer(), body)) }
-        harden(tmp) // 0600 до подмены цели: сам файл секретов, а не только каталог, приватен
-        fileSystem.atomicMove(tmp, path)
+        atomicWriteUtf8(fileSystem, path, json.encodeToString(JsonObject.serializer(), body), harden)
     }
 
     /** Присвоить разобранный снимок файла полям сессии (общее для [unlock]/[unlockWithDataKey]). */
@@ -394,6 +395,6 @@ class FileVault(
         const val FORMAT_VERSION = 1
 
         /** Unit Separator (U+001F) между id и типом в AAD. Явный escape — управляющий байт 0x1F. */
-        const val AAD_SEP = ""
+        const val AAD_SEP = "\u001F"
     }
 }

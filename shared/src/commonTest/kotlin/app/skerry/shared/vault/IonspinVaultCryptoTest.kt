@@ -56,8 +56,8 @@ class IonspinVaultCryptoTest {
         val key = crypto.newDataKey()
         val message = "192.168.1.45 root".encodeToByteArray()
 
-        val sealed = crypto.seal(key, message)
-        val opened = crypto.open(key, sealed)
+        val sealed = crypto.seal(key, message, VaultCrypto.EMPTY_AAD)
+        val opened = crypto.open(key, sealed, VaultCrypto.EMPTY_AAD)
 
         assertContentEquals(message, opened)
     }
@@ -67,7 +67,7 @@ class IonspinVaultCryptoTest {
         val key = crypto.newDataKey()
         val message = "secret-host-name".encodeToByteArray()
 
-        val sealed = crypto.seal(key, message)
+        val sealed = crypto.seal(key, message, VaultCrypto.EMPTY_AAD)
 
         // шифротекст длиннее открытого текста (nonce + тег) и не содержит его дословно
         assertTrue(sealed.size > message.size)
@@ -79,29 +79,29 @@ class IonspinVaultCryptoTest {
         val key = crypto.newDataKey()
         val message = "same plaintext".encodeToByteArray()
 
-        val a = crypto.seal(key, message)
-        val b = crypto.seal(key, message)
+        val a = crypto.seal(key, message, VaultCrypto.EMPTY_AAD)
+        val b = crypto.seal(key, message, VaultCrypto.EMPTY_AAD)
 
         assertFalse(a.contentEquals(b))
-        assertContentEquals(message, crypto.open(key, a))
-        assertContentEquals(message, crypto.open(key, b))
+        assertContentEquals(message, crypto.open(key, a, VaultCrypto.EMPTY_AAD))
+        assertContentEquals(message, crypto.open(key, b, VaultCrypto.EMPTY_AAD))
     }
 
     @Test
     fun `open returns null when the ciphertext is tampered`() = cryptoTest {
         val key = crypto.newDataKey()
-        val sealed = crypto.seal(key, "payload".encodeToByteArray())
+        val sealed = crypto.seal(key, "payload".encodeToByteArray(), VaultCrypto.EMPTY_AAD)
 
         sealed[sealed.size - 1] = (sealed[sealed.size - 1].toInt() xor 0x01).toByte()
 
-        assertNull(crypto.open(key, sealed))
+        assertNull(crypto.open(key, sealed, VaultCrypto.EMPTY_AAD))
     }
 
     @Test
     fun `open returns null with a different data key`() = cryptoTest {
-        val sealed = crypto.seal(crypto.newDataKey(), "payload".encodeToByteArray())
+        val sealed = crypto.seal(crypto.newDataKey(), "payload".encodeToByteArray(), VaultCrypto.EMPTY_AAD)
 
-        assertNull(crypto.open(crypto.newDataKey(), sealed))
+        assertNull(crypto.open(crypto.newDataKey(), sealed, VaultCrypto.EMPTY_AAD))
     }
 
     @Test
@@ -115,14 +115,14 @@ class IonspinVaultCryptoTest {
         // чужой AAD (перестановка записи в другой слот) — тег не проходит
         assertNull(crypto.open(key, sealed, "host-99".encodeToByteArray()))
         // отсутствующий AAD — тоже не открывается
-        assertNull(crypto.open(key, sealed))
+        assertNull(crypto.open(key, sealed, VaultCrypto.EMPTY_AAD))
     }
 
     @Test
     fun `seal and open round-trips empty plaintext`() = cryptoTest {
         val key = crypto.newDataKey()
 
-        val opened = crypto.open(key, crypto.seal(key, ByteArray(0)))
+        val opened = crypto.open(key, crypto.seal(key, ByteArray(0), VaultCrypto.EMPTY_AAD), VaultCrypto.EMPTY_AAD)
 
         assertNotNull(opened)
         assertEquals(0, opened.size)
@@ -132,7 +132,7 @@ class IonspinVaultCryptoTest {
     fun `open returns null on a blob too short to hold a nonce and tag`() = cryptoTest {
         // Слишком короткий blob = обычный провал AEAD (null), НЕ программная ошибка: blob может прийти
         // из недоверенного источника (запись sync-сервера), и бросок ронял бы весь список — DoS-вектор.
-        assertNull(crypto.open(crypto.newDataKey(), ByteArray(39))) // NPUB(24)+ABYTES(16)-1
+        assertNull(crypto.open(crypto.newDataKey(), ByteArray(39), VaultCrypto.EMPTY_AAD)) // NPUB(24)+ABYTES(16)-1
     }
 
     @Test
@@ -140,14 +140,14 @@ class IonspinVaultCryptoTest {
         val salt = crypto.newSalt()
         val masterKey = crypto.deriveMasterKey("correct horse".toCharArray(), salt)
         val dataKey = crypto.newDataKey()
-        val record = crypto.seal(dataKey, "host record".encodeToByteArray())
+        val record = crypto.seal(dataKey, "host record".encodeToByteArray(), VaultCrypto.EMPTY_AAD)
 
         val wrapped = crypto.wrapDataKey(masterKey, dataKey)
         val unwrapped = crypto.unwrapDataKey(masterKey, wrapped)
 
         assertNotNull(unwrapped)
         // развёрнутый ключ функционально совпадает с исходным
-        assertContentEquals("host record".encodeToByteArray(), crypto.open(unwrapped, record))
+        assertContentEquals("host record".encodeToByteArray(), crypto.open(unwrapped, record, VaultCrypto.EMPTY_AAD))
     }
 
     @Test
@@ -206,7 +206,7 @@ class IonspinVaultCryptoTest {
     fun `transfer key round-trips the data key to a new device`() = cryptoTest {
         val dataKey = crypto.newDataKey()
         // запись, запечатанная исходным dataKey на устройстве A
-        val record = crypto.seal(dataKey, "10.0.0.1 admin".encodeToByteArray())
+        val record = crypto.seal(dataKey, "10.0.0.1 admin".encodeToByteArray(), VaultCrypto.EMPTY_AAD)
 
         val transferKey = crypto.newTransferKey()
         assertEquals(32, transferKey.size) // длина ключа XChaCha20 — годен как AEAD-ключ
@@ -215,7 +215,7 @@ class IonspinVaultCryptoTest {
         // устройство B разворачивает dataKey transferKey'ем и читает ту же запись
         val adopted = crypto.openTransferredDataKey(transferKey, envelope)
         assertNotNull(adopted)
-        assertContentEquals("10.0.0.1 admin".encodeToByteArray(), crypto.open(adopted, record))
+        assertContentEquals("10.0.0.1 admin".encodeToByteArray(), crypto.open(adopted, record, VaultCrypto.EMPTY_AAD))
     }
 
     @Test

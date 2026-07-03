@@ -38,6 +38,19 @@ class VaultBiometricsTest {
     }
 
     @Test
+    fun `bio artifact write hardens the tmp file before the move`() = bioTest {
+        // harden-хук должен быть вызван на tmp-файле ДО atomicMove (0600 без окна с правами umask).
+        val hardened = mutableListOf<String>()
+        val store = FileBioArtifactStore(bioPath, fs, harden = { hardened += it.toString() })
+
+        store.write(BioArtifact(1, "alias", "device-1", byteArrayOf(1, 2, 3)))
+
+        assertEquals(listOf("/vault.bio.tmp"), hardened)
+        assertTrue(fs.exists(bioPath))
+        assertFalse(fs.exists("/vault.bio.tmp".toPath()), "tmp должен быть переименован в цель")
+    }
+
+    @Test
     fun `enable then biometric unlock on a fresh vault opens the same record`() = bioTest {
         val keyStore = FakeBiometricKeyStore()
         // Создаём vault, кладём секрет, включаем биометрию.

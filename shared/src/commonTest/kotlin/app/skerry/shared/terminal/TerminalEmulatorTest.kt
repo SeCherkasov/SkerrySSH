@@ -308,60 +308,60 @@ class TerminalEmulatorTest {
     @Test
     fun `osc 4 overrides a palette color with rgb spec`() {
         val emu = emulate(chunks = arrayOf("$esc]4;1;rgb:ff/00/00${esc}\\"))
-        assertEquals(TermColor.Rgb(255, 0, 0), emu.paletteOverride(1))
+        assertEquals(TermColor.Rgb(255, 0, 0), emu.paletteSnapshot()[1])
     }
 
     @Test
     fun `osc 4 supports hash color spec`() {
         val emu = emulate(chunks = arrayOf("$esc]4;2;#00ff00${bel}"))
-        assertEquals(TermColor.Rgb(0, 255, 0), emu.paletteOverride(2))
+        assertEquals(TermColor.Rgb(0, 255, 0), emu.paletteSnapshot()[2])
     }
 
     @Test
     fun `osc 4 scales 4-digit rgb channels to 8-bit`() {
         // rgb:ffff/0000/8080 — каждая компонента 4 hex-цифры (X11), масштабируется в 0..255.
         val emu = emulate(chunks = arrayOf("$esc]4;5;rgb:ffff/0000/8080${esc}\\"))
-        assertEquals(TermColor.Rgb(255, 0, 128), emu.paletteOverride(5))
+        assertEquals(TermColor.Rgb(255, 0, 128), emu.paletteSnapshot()[5])
     }
 
     @Test
     fun `osc 4 short and long hash forms scale per channel`() {
         // #abc → каждая цифра дублируется в байт (как CSS): a→0xaa, b→0xbb, c→0xcc.
-        assertEquals(TermColor.Rgb(0xAA, 0xBB, 0xCC), emulate(chunks = arrayOf("$esc]4;7;#abc${esc}\\")).paletteOverride(7))
+        assertEquals(TermColor.Rgb(0xAA, 0xBB, 0xCC), emulate(chunks = arrayOf("$esc]4;7;#abc${esc}\\")).paletteSnapshot()[7])
         // 12-значная #RRRRGGGGBBBB масштабируется в 8-бит: ffff→255, 0000→0, ffff→255.
-        assertEquals(TermColor.Rgb(255, 0, 255), emulate(chunks = arrayOf("$esc]4;8;#ffff0000ffff${esc}\\")).paletteOverride(8))
+        assertEquals(TermColor.Rgb(255, 0, 255), emulate(chunks = arrayOf("$esc]4;8;#ffff0000ffff${esc}\\")).paletteSnapshot()[8])
     }
 
     @Test
     fun `osc 4 sets multiple colors in one sequence`() {
         val emu = emulate(chunks = arrayOf("$esc]4;1;rgb:11/22/33;2;rgb:44/55/66${esc}\\"))
-        assertEquals(TermColor.Rgb(0x11, 0x22, 0x33), emu.paletteOverride(1))
-        assertEquals(TermColor.Rgb(0x44, 0x55, 0x66), emu.paletteOverride(2))
+        assertEquals(TermColor.Rgb(0x11, 0x22, 0x33), emu.paletteSnapshot()[1])
+        assertEquals(TermColor.Rgb(0x44, 0x55, 0x66), emu.paletteSnapshot()[2])
     }
 
     @Test
     fun `osc 4 query form does not crash and leaves color unset`() {
         val emu = emulate(chunks = arrayOf("$esc]4;3;?${esc}\\"))
-        assertEquals(null, emu.paletteOverride(3))
+        assertEquals(null, emu.paletteSnapshot()[3])
     }
 
     @Test
     fun `osc 104 resets a single palette color`() {
         val emu = emulate(chunks = arrayOf("$esc]4;1;rgb:ff/00/00${esc}\\", "$esc]104;1${esc}\\"))
-        assertEquals(null, emu.paletteOverride(1))
+        assertEquals(null, emu.paletteSnapshot()[1])
     }
 
     @Test
     fun `osc 104 with no args resets the whole palette`() {
         val emu = emulate(chunks = arrayOf("$esc]4;1;#ff0000;2;#00ff00${esc}\\", "$esc]104${esc}\\"))
-        assertEquals(null, emu.paletteOverride(1))
-        assertEquals(null, emu.paletteOverride(2))
+        assertEquals(null, emu.paletteSnapshot()[1])
+        assertEquals(null, emu.paletteSnapshot()[2])
     }
 
     @Test
     fun `ris clears palette overrides`() {
         val emu = emulate(chunks = arrayOf("$esc]4;1;#ff0000${esc}\\", "${esc}c"))
-        assertEquals(null, emu.paletteOverride(1))
+        assertEquals(null, emu.paletteSnapshot()[1])
     }
 
     // Адресация курсора

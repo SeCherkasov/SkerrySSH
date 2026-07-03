@@ -2,9 +2,8 @@ package app.skerry.shared.host
 
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
-import app.skerry.shared.vault.WorkspaceLayout
+import app.skerry.shared.vault.VaultRecordCodec
 import app.skerry.shared.vault.WorkspaceLayoutStore
-import kotlinx.serialization.json.Json
 
 /**
  * [HostStore] поверх зашифрованного [Vault]: каждый профиль — запись [RecordType.HOST], чей payload —
@@ -23,11 +22,11 @@ class VaultHostStore(
     private val layout: WorkspaceLayoutStore = WorkspaceLayoutStore(vault),
 ) : HostStore {
 
+    private val codec = VaultRecordCodec(vault, RecordType.HOST, Host.serializer())
+
     override fun all(): List<Host> {
         if (!vault.isUnlocked) return emptyList()
-        val hosts = vault.records()
-            .filter { it.type == RecordType.HOST && !it.deleted }
-            .mapNotNull { decode(vault.openPayload(it.id)) }
+        val hosts = codec.list()
         val order = layout.read().hostOrder
         val rank = order.withIndex().associate { (i, id) -> id to i }
         // Стабильная сортировка: хосты вне порядка (новые/синканутые) сохраняют относительный
@@ -35,16 +34,19 @@ class VaultHostStore(
         return hosts.sortedBy { rank[it.id] ?: Int.MAX_VALUE }
     }
 
-    override fun put(host: Host) {
-        vault.put(host.id, RecordType.HOST, encode(host))
+    override fun put(host: Host) = vault.transaction {
+        // Профиль и read-modify-write макета — под одной блокировкой vault (как [reorder]): иначе
+        // конкурентный mergeRemote из фонового sync, попавший между read() и write(), был бы затёрт.
+        codec.put(host.id, host)
         val current = layout.read()
         if (host.id !in current.hostOrder) {
             layout.write(current.copy(hostOrder = current.hostOrder + host.id))
         }
     }
 
-    override fun remove(id: String) {
-        vault.remove(id)
+    override fun remove(id: String) = vault.transaction {
+        // См. [put]: обновление макета атомарно с удалением записи.
+        codec.remove(id)
         val current = layout.read()
         if (id in current.hostOrder) {
             layout.write(current.copy(hostOrder = current.hostOrder - id))
@@ -65,17 +67,8 @@ class VaultHostStore(
         // renameGroup) — чистая перестановка не должна бампать version каждой записи (лишний синк-трафик).
         val byId = current.associateBy { it.id }
         for (host in updated) {
-            if (byId[host.id] != host) vault.put(host.id, RecordType.HOST, encode(host))
+            if (byId[host.id] != host) codec.put(host.id, host)
         }
         layout.write(layout.read().copy(hostOrder = updated.map { it.id }))
-    }
-
-    private fun encode(host: Host): ByteArray = json.encodeToString(host).encodeToByteArray()
-
-    private fun decode(payload: ByteArray?): Host? =
-        payload?.let { runCatching { json.decodeFromString<Host>(it.decodeToString()) }.getOrNull() }
-
-    private companion object {
-        private val json = Json { ignoreUnknownKeys = true }
     }
 }

@@ -25,13 +25,13 @@ data class SshPublicKeyInfo(
 /**
  * Сгенерированная пара: приватный ключ в PEM ([privateKeyPem], формат `OPENSSH PRIVATE KEY`, без
  * passphrase — at-rest шифрует сам vault) и публичные метаданные ([info]). [privateKeyPem] — секрет,
- * кладётся в [IdentityAuth.PrivateKey] внутрь зашифрованного payload записи vault.
+ * кладётся в [CredentialSecret.PrivateKey] внутрь зашифрованного payload записи vault.
  */
 data class GeneratedSshKey(
     val privateKeyPem: String,
     val info: SshPublicKeyInfo,
 ) {
-    // Приватный ключ не должен утечь в логи/исключения (как [IdentityAuth.PrivateKey]).
+    // Приватный ключ не должен утечь в логи/исключения (как [CredentialSecret.PrivateKey]).
     override fun toString(): String = "GeneratedSshKey(redacted, fingerprint=${info.fingerprintSha256})"
 }
 

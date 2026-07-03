@@ -12,12 +12,12 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readLine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.io.IOException
 
 /**
  * JVM-реализация [AiProvider] для OpenAI-совместимого chat-completions API (desktop + Android),
@@ -69,9 +69,13 @@ class OpenAiProvider private constructor(
                     if (delta.isNotEmpty()) emit(AiDelta(delta))
                 }
             }
+        } catch (e: CancellationException) {
+            throw e // отмена корутины — не сбой провайдера, глотать/переупаковывать её нельзя
         } catch (e: AiException) {
             throw e
-        } catch (e: IOException) {
+        } catch (e: Exception) {
+            // Не только IOException: Ktor CIO кидает и UnresolvedAddressException (не-IO) на кривой
+            // хост — любой прочий сбой тоже NETWORK (по образцу KtorSyncClient.request).
             throw AiException(AiException.Kind.NETWORK, "AI request failed: ${e.message}", e)
         }
     }

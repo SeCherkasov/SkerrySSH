@@ -190,6 +190,15 @@ class AutocompleteEngineTest {
     }
 
     @Test
+    fun `four-byte utf-8 characters keep both surrogates in the tracked line`() {
+        val e = AutocompleteEngine()
+        // Эмодзи вне BMP кодируется 4 байтами UTF-8 → суррогатной парой в UTF-16: строка должна
+        // получить оба суррогата, а не только старший (иначе currentLine битый и длина «плывёт»).
+        e.onUserInput("echo 😀 ok".encodeToByteArray())
+        assertEquals("echo 😀 ok", e.currentLine)
+    }
+
+    @Test
     fun `completes a path token seen earlier in the session`() {
         val e = AutocompleteEngine()
         e.onUserInput("cat /etc/nginx/nginx.conf\r".encodeToByteArray())

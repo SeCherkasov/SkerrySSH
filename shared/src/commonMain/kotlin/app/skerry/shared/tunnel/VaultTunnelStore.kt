@@ -2,7 +2,7 @@ package app.skerry.shared.tunnel
 
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
-import kotlinx.serialization.json.Json
+import app.skerry.shared.vault.VaultRecordCodec
 
 /**
  * [TunnelStore] поверх зашифрованного [Vault]: каждый проброс — запись [RecordType.TUNNEL], чей
@@ -14,27 +14,18 @@ import kotlinx.serialization.json.Json
  */
 class VaultTunnelStore(private val vault: Vault) : TunnelStore {
 
+    private val codec = VaultRecordCodec(vault, RecordType.TUNNEL, Tunnel.serializer())
+
     override fun all(): List<Tunnel> {
         if (!vault.isUnlocked) return emptyList()
-        return vault.records()
-            .filter { it.type == RecordType.TUNNEL && !it.deleted }
-            .mapNotNull { decode(vault.openPayload(it.id)) }
+        return codec.list()
     }
 
     override fun put(tunnel: Tunnel) {
-        vault.put(tunnel.id, RecordType.TUNNEL, encode(tunnel))
+        codec.put(tunnel.id, tunnel)
     }
 
     override fun remove(id: String) {
-        vault.remove(id)
-    }
-
-    private fun encode(tunnel: Tunnel): ByteArray = json.encodeToString(tunnel).encodeToByteArray()
-
-    private fun decode(payload: ByteArray?): Tunnel? =
-        payload?.let { runCatching { json.decodeFromString<Tunnel>(it.decodeToString()) }.getOrNull() }
-
-    private companion object {
-        private val json = Json { ignoreUnknownKeys = true }
+        codec.remove(id)
     }
 }
