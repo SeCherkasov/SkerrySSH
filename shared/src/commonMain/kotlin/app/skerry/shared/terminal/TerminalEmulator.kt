@@ -301,9 +301,6 @@ class TerminalEmulator(
         return paletteCache
     }
 
-    /** Текущее переопределение цвета палитры `index` (OSC 4), либо `null`. */
-    fun paletteOverride(index: Int): TermColor.Rgb? = paletteOverrides[index]
-
     // --- Парсер ------------------------------------------------------------
 
     private enum class State { Ground, Esc, Csi, Osc, OscEsc, Consume, Utf8, StrSeq, StrSeqEsc }

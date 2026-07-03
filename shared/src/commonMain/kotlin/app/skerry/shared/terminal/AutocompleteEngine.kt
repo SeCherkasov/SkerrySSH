@@ -182,8 +182,12 @@ class AutocompleteEngine(
         return data.size - 1
     }
 
-    /** Декодировать один UTF-8 символ, начиная с [i]; вернуть (символ|null, индекс следующего байта). */
-    private fun decodeUtf8(data: ByteArray, i: Int): Pair<Char?, Int> {
+    /**
+     * Декодировать один UTF-8 символ, начиная с [i]; вернуть (строка символа|null, индекс следующего
+     * байта). Строка, а не Char: символ вне BMP (4-байтовый UTF-8) — это суррогатная ПАРА в UTF-16,
+     * одним Char её не унести (терялся младший суррогат).
+     */
+    private fun decodeUtf8(data: ByteArray, i: Int): Pair<String?, Int> {
         val b = data[i].toInt() and 0xFF
         val len = when {
             b < 0x80 -> 1
@@ -194,7 +198,7 @@ class AutocompleteEngine(
         }
         if (i + len > data.size) return null to (i + 1) // неполная последовательность в этом блоке
         val text = data.copyOfRange(i, i + len).decodeToString()
-        return text.firstOrNull() to (i + len)
+        return text.ifEmpty { null } to (i + len)
     }
 
     private companion object {

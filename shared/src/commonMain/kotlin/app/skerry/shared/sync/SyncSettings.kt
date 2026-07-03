@@ -2,8 +2,8 @@ package app.skerry.shared.sync
 
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultSingletonStore
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * Что синхронизировать между устройствами — настройка УРОВНЯ АККАУНТА (одна на весь аккаунт, не на
@@ -50,25 +50,20 @@ data class SyncSettings(
  */
 class SyncSettingsStore(private val vault: Vault) {
 
-    fun load(): SyncSettings {
-        if (!vault.isUnlocked) return SyncSettings()
-        val record = vault.records().firstOrNull { it.id == SETTINGS_ID && it.type == RecordType.SETTINGS && !it.deleted }
-            ?: return SyncSettings()
-        // openPayload оборачиваем: даже если реализация бросит на I/O/AEAD (а не вернёт null), синк
-        // должен откатиться к «синкать всё», а не падать всем циклом (drainPull это бы прервало).
-        return decode(runCatching { vault.openPayload(record.id) }.getOrNull()) ?: SyncSettings()
+    // Битый payload/бросок openPayload → дефолт «синкать всё» (см. VaultSingletonStore): цикл sync
+    // не должен падать из-за нечитаемой записи настроек (drainPull это бы прервало).
+    private val store = VaultSingletonStore(vault, SETTINGS_ID, RecordType.SETTINGS, SyncSettings.serializer()) {
+        SyncSettings()
     }
+
+    fun load(): SyncSettings = store.load()
 
     fun save(settings: SyncSettings) {
-        vault.put(SETTINGS_ID, RecordType.SETTINGS, json.encodeToString(settings).encodeToByteArray())
+        store.save(settings)
     }
-
-    private fun decode(payload: ByteArray?): SyncSettings? =
-        payload?.let { runCatching { json.decodeFromString<SyncSettings>(it.decodeToString()) }.getOrNull() }
 
     companion object {
         /** Стабильный id singleton-записи настроек синка в vault. */
         const val SETTINGS_ID = "sync.settings"
-        private val json = Json { ignoreUnknownKeys = true }
     }
 }

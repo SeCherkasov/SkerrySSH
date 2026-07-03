@@ -6,7 +6,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path
-import okio.Path.Companion.toPath
 
 /**
  * Тип события безопасности. Фиксированный набор того, что приложение реально контролирует и может
@@ -118,11 +117,8 @@ class FileSecurityLog(
         json.decodeFromString<List<SecurityEvent>>(text)
     }.getOrDefault(emptyList())
 
+    // Атомарная запись + harden на tmp до move (у цели не будет окна с 0644) — см. [atomicWriteUtf8].
     private fun write(events: List<SecurityEvent>) {
-        path.parent?.let { fileSystem.createDirectories(it) }
-        val tmp = path.parent?.resolve("${path.name}.tmp") ?: "${path.name}.tmp".toPath()
-        fileSystem.write(tmp) { writeUtf8(json.encodeToString(events)) }
-        harden(tmp) // права ставим на tmp до move — у цели не будет окна с 0644
-        fileSystem.atomicMove(tmp, path)
+        atomicWriteUtf8(fileSystem, path, json.encodeToString(events), harden)
     }
 }

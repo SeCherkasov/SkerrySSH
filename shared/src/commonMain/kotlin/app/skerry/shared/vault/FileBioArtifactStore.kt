@@ -3,7 +3,6 @@ package app.skerry.shared.vault
 import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path
-import okio.Path.Companion.toPath
 
 /**
  * Файловый [BioArtifactStore] на okio — один код для desktop/Android (как [FileVault]): I/O за
@@ -12,10 +11,16 @@ import okio.Path.Companion.toPath
  * (включённость биометрии не должна валить запуск). Кладётся рядом с `vault.json` под именем
  * `vault.bio`; ключевой материал в нём — только обёртка `wrap_bioKey(dataKey)`, бесполезная без
  * `bioKey` устройства.
+ *
+ * [harden] — платформенный хук приватных прав (0600 на POSIX), зовётся на tmp до подмены цели
+ * (см. [atomicWriteUtf8]): обёртка ключа не должна быть мир-читаемой под общим домашним каталогом.
+ * По умолчанию no-op (тесты; Android — filesDir приватен для UID); desktop передаёт
+ * `PrivateConfig.harden`.
  */
 class FileBioArtifactStore(
     private val path: Path,
     private val fileSystem: FileSystem,
+    private val harden: (Path) -> Unit = {},
 ) : BioArtifactStore {
 
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
@@ -26,15 +31,8 @@ class FileBioArtifactStore(
         runCatching { json.decodeFromString<BioArtifact>(fileSystem.read(path) { readUtf8() }) }.getOrNull()
 
     override fun write(artifact: BioArtifact) {
-        path.parent?.let { fileSystem.createDirectories(it) }
-        val tmp = path.parent?.resolve("${path.name}.tmp") ?: "${path.name}.tmp".toPath()
-        fileSystem.write(tmp) { writeUtf8(json.encodeToString(artifact)) }
-        try {
-            fileSystem.atomicMove(tmp, path)
-        } catch (e: Throwable) {
-            runCatching { fileSystem.delete(tmp, mustExist = false) } // не оставлять осиротевший tmp с обёрткой
-            throw e
-        }
+        // Атомарно, с подчисткой tmp при провале (не оставлять осиротевшую обёртку) и harden на tmp.
+        atomicWriteUtf8(fileSystem, path, json.encodeToString(artifact), harden)
     }
 
     override fun clear() {

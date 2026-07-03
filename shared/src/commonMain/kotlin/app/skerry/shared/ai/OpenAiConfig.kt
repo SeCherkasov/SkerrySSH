@@ -7,10 +7,16 @@ package app.skerry.shared.ai
  */
 data class OpenAiConfig(
     val apiKey: String,
-    val model: String = "gpt-4o-mini",
-    val baseUrl: String = "https://api.openai.com/v1",
+    val model: String = DEFAULT_MODEL,
+    val baseUrl: String = DEFAULT_BASE_URL,
 ) {
     // apiKey — секрет: не печатаем его в toString (иначе утечёт в логи/крэш-дампы при логировании объекта).
     override fun toString(): String =
         "OpenAiConfig(model=$model, baseUrl=$baseUrl, apiKey=${if (apiKey.isBlank()) "<empty>" else "<redacted>"})"
+
+    companion object {
+        /** Дефолты BYOK-провайдера — единственный источник (на них же ссылается [AiSettings]). */
+        const val DEFAULT_MODEL = "gpt-4o-mini"
+        const val DEFAULT_BASE_URL = "https://api.openai.com/v1"
+    }
 }

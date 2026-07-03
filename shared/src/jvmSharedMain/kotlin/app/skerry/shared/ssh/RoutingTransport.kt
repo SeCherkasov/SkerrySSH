@@ -6,7 +6,7 @@ import app.skerry.shared.telnet.TelnetTransport
 /**
  * Маршрутизатор транспортов: по [SshTarget.connectionType] делегирует установку соединения нужной
  * реализации — SSH (sshj), Telnet или Serial. Так весь стек сессий/терминала/реконнекта
- * ([app.skerry.ui.connection.ConnectionController]) остаётся един и работает поверх любого из трёх,
+ * (`ConnectionController` в UI-слое) остаётся един и работает поверх любого из трёх,
  * а место выбора протокола — одно.
  *
  * [ssh] инжектируется снаружи (несёт свой [HostKeyVerifier]/known-hosts); Telnet/Serial без состояния,

@@ -49,7 +49,7 @@ class DataKey internal constructor(internal val bytes: ByteArray) {
 interface VaultCrypto {
 
     companion object {
-        /** AAD по умолчанию — привязки слота нет; геттер отдаёт свежий массив (без shared-mutable). */
+        /** Пустой AAD — привязки слота нет; геттер отдаёт свежий массив (без shared-mutable). */
         val EMPTY_AAD: ByteArray get() = ByteArray(0)
     }
 
@@ -117,14 +117,15 @@ interface VaultCrypto {
      *
      * [associatedData] аутентифицируется (AEAD), но не шифруется: вызывающая сторона должна
      * привязать сюда стабильный идентификатор слота записи (напр. `id‖type`), чтобы шифроблок
-     * нельзя было бесшумно переставить в чужой слот — [open] с другим AAD вернёт `null`. По
-     * умолчанию AAD пуст (привязки нет).
+     * нельзя было бесшумно переставить в чужой слот — [open] с другим AAD вернёт `null`. AAD
+     * передаётся всегда явно (дефолта нет — молчаливо «без привязки» запечатать нельзя);
+     * сознательное отсутствие привязки — [EMPTY_AAD].
      */
-    fun seal(dataKey: DataKey, plaintext: ByteArray, associatedData: ByteArray = EMPTY_AAD): ByteArray
+    fun seal(dataKey: DataKey, plaintext: ByteArray, associatedData: ByteArray): ByteArray
 
     /**
      * Расшифровать запись. `null` ⇒ неверный ключ, повреждённый/подменённый шифротекст **или**
      * [associatedData], не совпавший с тем, под которым запись была запечатана.
      */
-    fun open(dataKey: DataKey, ciphertext: ByteArray, associatedData: ByteArray = EMPTY_AAD): ByteArray?
+    fun open(dataKey: DataKey, ciphertext: ByteArray, associatedData: ByteArray): ByteArray?
 }

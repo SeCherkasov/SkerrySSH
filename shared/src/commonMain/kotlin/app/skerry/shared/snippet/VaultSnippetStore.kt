@@ -2,7 +2,7 @@ package app.skerry.shared.snippet
 
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
-import kotlinx.serialization.json.Json
+import app.skerry.shared.vault.VaultRecordCodec
 
 /**
  * [SnippetStore] поверх зашифрованного [Vault]: каждый сниппет — запись [RecordType.SNIPPET], чей
@@ -16,27 +16,18 @@ import kotlinx.serialization.json.Json
  */
 class VaultSnippetStore(private val vault: Vault) : SnippetStore {
 
+    private val codec = VaultRecordCodec(vault, RecordType.SNIPPET, Snippet.serializer())
+
     override fun all(): List<Snippet> {
         if (!vault.isUnlocked) return emptyList()
-        return vault.records()
-            .filter { it.type == RecordType.SNIPPET && !it.deleted }
-            .mapNotNull { decode(vault.openPayload(it.id)) }
+        return codec.list()
     }
 
     override fun put(snippet: Snippet) {
-        vault.put(snippet.id, RecordType.SNIPPET, encode(snippet))
+        codec.put(snippet.id, snippet)
     }
 
     override fun remove(id: String) {
-        vault.remove(id)
-    }
-
-    private fun encode(snippet: Snippet): ByteArray = json.encodeToString(snippet).encodeToByteArray()
-
-    private fun decode(payload: ByteArray?): Snippet? =
-        payload?.let { runCatching { json.decodeFromString<Snippet>(it.decodeToString()) }.getOrNull() }
-
-    private companion object {
-        private val json = Json { ignoreUnknownKeys = true }
+        codec.remove(id)
     }
 }

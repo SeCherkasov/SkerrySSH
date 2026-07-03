@@ -1,7 +1,6 @@
 package app.skerry.shared.vault
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * Структура рабочего пространства, синхронизируемая как одна запись vault: порядок хостов в дереве
@@ -36,21 +35,18 @@ data class WorkspaceLayout(
  */
 class WorkspaceLayoutStore(private val vault: Vault) {
 
-    fun read(): WorkspaceLayout {
-        if (!vault.isUnlocked) return WorkspaceLayout()
-        val record = vault.records().firstOrNull { it.id == LAYOUT_ID && it.type == RecordType.GROUP && !it.deleted }
-            ?: return WorkspaceLayout()
-        val payload = vault.openPayload(record.id) ?: return WorkspaceLayout()
-        return runCatching { json.decodeFromString<WorkspaceLayout>(payload.decodeToString()) }.getOrDefault(WorkspaceLayout())
+    private val store = VaultSingletonStore(vault, LAYOUT_ID, RecordType.GROUP, WorkspaceLayout.serializer()) {
+        WorkspaceLayout()
     }
 
+    fun read(): WorkspaceLayout = store.load()
+
     fun write(layout: WorkspaceLayout) {
-        vault.put(LAYOUT_ID, RecordType.GROUP, json.encodeToString(layout).encodeToByteArray())
+        store.save(layout)
     }
 
     companion object {
         /** Зарезервированный id записи-макета. Не пересекается с UUID-id хостов/групп. */
         const val LAYOUT_ID = "skerry.workspace.layout"
-        private val json = Json { ignoreUnknownKeys = true }
     }
 }

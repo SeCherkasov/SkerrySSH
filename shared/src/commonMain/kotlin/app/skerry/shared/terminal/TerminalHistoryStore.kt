@@ -2,8 +2,8 @@ package app.skerry.shared.terminal
 
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultRecordCodec
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * Персист истории команд терминала per-host. Ключ [key] — стабильный идентификатор хоста
@@ -36,32 +36,22 @@ class VaultTerminalHistoryStore(
     private val cap: Int = 300,
 ) : TerminalHistoryStore {
 
+    private val codec = VaultRecordCodec(vault, RecordType.TERMINAL_HISTORY, TerminalHistoryRecord.serializer())
+
     override fun load(key: String): List<String> {
         if (!vault.isUnlocked) return emptyList()
-        val id = idOf(key)
-        val record = vault.records()
-            .firstOrNull { it.id == id && it.type == RecordType.TERMINAL_HISTORY && !it.deleted }
-            ?: return emptyList()
-        return decode(vault.openPayload(record.id))?.commands ?: emptyList()
+        return codec.get(idOf(key))?.commands ?: emptyList()
     }
 
     override fun save(key: String, commands: List<String>) {
         if (!vault.isUnlocked) return
-        val capped = commands.take(cap)
-        vault.put(idOf(key), RecordType.TERMINAL_HISTORY, encode(TerminalHistoryRecord(key, capped)))
+        codec.put(idOf(key), TerminalHistoryRecord(key, commands.take(cap)))
     }
 
     private fun idOf(key: String): String = "$ID_PREFIX$key"
 
-    private fun encode(record: TerminalHistoryRecord): ByteArray =
-        json.encodeToString(record).encodeToByteArray()
-
-    private fun decode(payload: ByteArray?): TerminalHistoryRecord? =
-        payload?.let { runCatching { json.decodeFromString<TerminalHistoryRecord>(it.decodeToString()) }.getOrNull() }
-
     private companion object {
         const val ID_PREFIX = "termhist:"
-        val json = Json { ignoreUnknownKeys = true }
     }
 }
 

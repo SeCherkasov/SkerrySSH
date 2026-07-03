@@ -75,7 +75,9 @@ class IonspinVaultCrypto : VaultCrypto {
             memLimit = MEM_LIMIT,
             algorithm = crypto_pwhash_argon2id_ALG_ARGON2ID13,
         )
-        return MasterKey(key.toByteArray())
+        // UByteArray-выход pwhash — промежуточная копия ключа: затираем после снятия ByteArray-копии,
+        // чтобы в куче оставался один экземпляр masterKey (его затирает владелец MasterKey).
+        return MasterKey(key.toByteArray()).also { key.fill(0u) }
     }
 
     override fun newDataKey(): DataKey {
@@ -88,8 +90,10 @@ class IonspinVaultCrypto : VaultCrypto {
         require(masterKey.bytes.size == KEY_BYTES) { "masterKey must be $KEY_BYTES bytes" }
         // libsodium crypto_kdf (BLAKE2b): субключ из masterKey в домене AUTH_CONTEXT. Контекст
         // отделяет authKey от любых других субключей того же masterKey (доменная изоляция).
-        return Kdf.deriveFromKey(AUTH_SUBKEY_ID, KEY_BYTES, AUTH_CONTEXT, masterKey.bytes.toUByteArray())
-            .toByteArray()
+        val masterCopy = masterKey.bytes.toUByteArray() // промежуточная копия ключа — затираем ниже
+        val subKey = Kdf.deriveFromKey(AUTH_SUBKEY_ID, KEY_BYTES, AUTH_CONTEXT, masterCopy)
+        masterCopy.fill(0u)
+        return subKey.toByteArray().also { subKey.fill(0u) }
     }
 
     override fun newTransferKey(): ByteArray {
@@ -120,13 +124,18 @@ class IonspinVaultCrypto : VaultCrypto {
         requireInitialized()
         require(key.size == KEY_BYTES) { "key must be $KEY_BYTES bytes" }
         val nonce = LibsodiumRandom.buf(NPUB_BYTES)
-        val cipher = AuthenticatedEncryptionWithAssociatedData.xChaCha20Poly1305IetfEncrypt(
-            message = plaintext.toUByteArray(),
-            associatedData = ad.toUByteArray(),
-            nonce = nonce,
-            key = key.toUByteArray(),
-        )
-        return nonce.toByteArray() + cipher.toByteArray()
+        val keyCopy = key.toUByteArray() // промежуточная копия ключа — затираем в finally
+        try {
+            val cipher = AuthenticatedEncryptionWithAssociatedData.xChaCha20Poly1305IetfEncrypt(
+                message = plaintext.toUByteArray(),
+                associatedData = ad.toUByteArray(),
+                nonce = nonce,
+                key = keyCopy,
+            )
+            return nonce.toByteArray() + cipher.toByteArray()
+        } finally {
+            keyCopy.fill(0u)
+        }
     }
 
     /** Обратное к [aeadSeal]; `null` ⇒ провал AEAD-тега (неверный ключ, подмена или чужой ad). */
@@ -141,20 +150,25 @@ class IonspinVaultCrypto : VaultCrypto {
         val cipher = blob.copyOfRange(NPUB_BYTES, blob.size).toUByteArray()
         // ionspin сигнализирует провал тега исключением, а контракт VaultCrypto ждёт null —
         // это ожидаемый, обрабатываемый исход (неверный ключ/пароль, подмена, чужой AAD).
+        val keyCopy = key.toUByteArray() // промежуточная копия ключа — затираем в finally
         return try {
             AuthenticatedEncryptionWithAssociatedData.xChaCha20Poly1305IetfDecrypt(
                 ciphertextAndTag = cipher,
                 associatedData = ad.toUByteArray(),
                 nonce = nonce,
-                key = key.toUByteArray(),
+                key = keyCopy,
             ).toByteArray()
         } catch (_: AeadCorrupedOrTamperedDataException) {
             null
+        } finally {
+            keyCopy.fill(0u)
         }
     }
 
+    // check, не require: неинициализированный libsodium — нарушение порядка запуска приложения
+    // (IllegalState), а не некорректный аргумент вызова.
     private fun requireInitialized() =
-        require(LibsodiumInitializer.isInitialized()) {
+        check(LibsodiumInitializer.isInitialized()) {
             "libsodium is not initialized; call LibsodiumInitializer.initialize() at app startup"
         }
 
