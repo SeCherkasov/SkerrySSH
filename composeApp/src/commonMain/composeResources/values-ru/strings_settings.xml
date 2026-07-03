@@ -38,6 +38,15 @@
     <string name="settings_ai_provider_custom_desc">Подключитесь к своему серверу Ollama или OpenAI-совместимому.</string>
     <string name="settings_ai_provider_byok">Мой ключ API (BYOK)</string>
     <string name="settings_ai_provider_byok_desc">Используйте свой ключ OpenAI, Anthropic или OpenRouter. Оплата напрямую провайдеру.</string>
+    <!-- Живая карточка «На этом устройстве»: каталог локальных моделей и их статусы -->
+    <string name="settings_ai_local_desc">Ассистент работает полностью офлайн. Данные никогда не покидают устройство.</string>
+    <string name="settings_ai_local_ready">Готова</string>
+    <string name="settings_ai_local_verifying">Проверка…</string>
+    <string name="settings_ai_local_download">Скачать</string>
+    <string name="settings_ai_local_cancel">Отмена</string>
+    <string name="settings_ai_local_delete">Удалить</string>
+    <string name="settings_ai_local_retry">Повторить</string>
+    <string name="settings_ai_prompt_placeholder_needs_model">Сначала скачайте локальную модель</string>
     <string name="settings_ai_sanitize">Очищать секреты перед отправкой</string>
     <string name="settings_ai_sanitize_desc">Вырезать очевидные пароли, токены и ключи из запросов до отправки внешним провайдерам.</string>
     <string name="settings_ai_preview">Показывать запрос перед отправкой</string>

@@ -64,6 +64,7 @@ import app.skerry.ui.design.D
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Txt
+import app.skerry.ui.settings.AiProviderCards
 
 /**
  * Мобильный экран настроек AI (More → «AI & privacy») — паритет с desktop `LiveAiSection`:
@@ -81,6 +82,13 @@ fun MobileAiScreen(state: MobileDesignState) {
                 stringResource(Res.string.more_ai_byok_desc),
                 color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(bottom = 12.dp),
             )
+
+            // Выбор провайдера + каталог локальных моделей — общий блок с desktop-настройками
+            // (AiProviderCards): состояние и логика едины, расходится только обрамление экрана.
+            AiProviderCards(ai)
+            Spacer(Modifier.height(18.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(D.line))
+            Spacer(Modifier.height(6.dp))
 
             var key by remember(ai.settings) { mutableStateOf(ai.settings.apiKey) }
             var model by remember(ai.settings) { mutableStateOf(ai.settings.model) }
@@ -119,14 +127,14 @@ fun MobileAiScreen(state: MobileDesignState) {
             val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
             AiTextField(
                 value = prompt,
-                placeholder = if (ai.isConfigured) stringResource(Res.string.more_ai_input_placeholder_ready) else stringResource(Res.string.more_ai_input_placeholder_setup),
+                placeholder = if (ai.ready) stringResource(Res.string.more_ai_input_placeholder_ready) else stringResource(Res.string.more_ai_input_placeholder_setup),
                 keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Send,
                 onSubmit = send,
             ) { prompt = it }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AiChip(if (ai.busy) stringResource(Res.string.more_ai_sending) else stringResource(Res.string.more_ai_ask), if (ai.isConfigured && !ai.busy) D.cyan else D.faint) { send() }
+                AiChip(if (ai.busy) stringResource(Res.string.more_ai_sending) else stringResource(Res.string.more_ai_ask), if (ai.ready && !ai.busy) D.cyan else D.faint) { send() }
                 if (ai.turns.isNotEmpty()) AiChip(stringResource(Res.string.more_ai_clear), D.dim) { ai.clearConversation() }
             }
             Spacer(Modifier.height(96.dp))

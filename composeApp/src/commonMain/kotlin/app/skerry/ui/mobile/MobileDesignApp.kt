@@ -23,7 +23,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ai.AiSettingsStore
-import app.skerry.shared.ai.OpenAiProvider
+import app.skerry.ui.ai.aiProviderFactory
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.shared.terminal.VaultTerminalHistoryStore
@@ -124,18 +124,22 @@ fun MobileDesignApp(
     val terminalAppearance = remember(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing) {
         TerminalAppearance(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing)
     }
-    // AI-ассистент (Phase 2, BYOK) — паритет с desktop `main`: ключ хранится записью SETTINGS в vault,
-    // вызовы идут во внешний OpenAI-совместимый провайдер. Строится при наличии vault (в превью — null →
-    // AI-поверхности показывают мок). На старте vault залочен (settings=дефолт); refresh при разблокировке.
+    // AI-ассистент — паритет с desktop `main`: настройки (провайдер/BYOK/локальная модель) — запись
+    // SETTINGS в vault; запрос идёт в облако или в локальный рантайм по выбору маршрутизатора
+    // (aiProviderFactory + localAi из платформенного графа). Строится при наличии vault (в превью —
+    // null → AI-поверхности показывают мок). На старте vault залочен (settings=дефолт); refresh при
+    // разблокировке.
     val ai = remember(deps.vault, scope) {
         deps.vault?.let { v ->
             val store = AiSettingsStore(v)
             AiAssistantController(
                 initialSettings = store.load(),
                 persist = store::save,
-                providerFactory = { cfg -> OpenAiProvider.pooled(cfg) },
+                providerFactory = aiProviderFactory(deps.localAi),
                 scope = scope,
                 reload = store::load,
+                localInstalled = { m -> deps.localAi?.installed(m) ?: false },
+                models = deps.localAi?.modelsController(scope),
             )
         }
     }

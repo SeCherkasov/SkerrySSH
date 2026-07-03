@@ -104,6 +104,81 @@ class AiAssistantControllerTest {
     }
 
     @Test
+    fun `device provider asks the local model when installed`() = runTest {
+        val provider = FakeProvider(deltas = listOf("ok"))
+        var endpoint: app.skerry.shared.ai.AiEndpoint? = null
+        val c = AiAssistantController(
+            AiSettings(provider = app.skerry.shared.ai.AiProviderKind.DEVICE),
+            persist = {},
+            providerFactory = { e -> endpoint = e; provider },
+            scope = this,
+            localInstalled = { true },
+        )
+
+        assertTrue(c.ready)
+        c.ask("hi")
+        advanceUntilIdle()
+
+        assertTrue(endpoint is app.skerry.shared.ai.AiEndpoint.Device, "expected on-device endpoint, got $endpoint")
+        assertEquals(2, c.turns.size)
+    }
+
+    @Test
+    fun `device provider without the model is not ready and ask is a no-op`() = runTest {
+        val c = AiAssistantController(
+            AiSettings(provider = app.skerry.shared.ai.AiProviderKind.DEVICE),
+            persist = {},
+            providerFactory = { error("must not build a provider") },
+            scope = this,
+            localInstalled = { false },
+        )
+
+        assertFalse(c.ready)
+        c.ask("hi")
+        advanceUntilIdle()
+
+        assertTrue(c.turns.isEmpty())
+    }
+
+    @Test
+    fun `save keeps the provider selection intact`() = runTest {
+        // Регрессия: save() BYOK-полей не должен сбрасывать выбор «на устройстве» и модель.
+        var saved: AiSettings? = null
+        val initial = AiSettings(provider = app.skerry.shared.ai.AiProviderKind.DEVICE, localModelId = "qwen3-4b-q4km")
+        val c = AiAssistantController(initial, persist = { saved = it }, providerFactory = { error("unused") }, scope = this)
+
+        c.save("sk-new", "gpt-4o", "")
+
+        assertEquals(app.skerry.shared.ai.AiProviderKind.DEVICE, saved!!.provider)
+        assertEquals("qwen3-4b-q4km", saved!!.localModelId)
+    }
+
+    @Test
+    fun `selectProvider persists immediately`() = runTest {
+        var saved: AiSettings? = null
+        val c = AiAssistantController(AiSettings(apiKey = "sk-x"), persist = { saved = it }, providerFactory = { error("unused") }, scope = this)
+
+        c.selectProvider(app.skerry.shared.ai.AiProviderKind.DEVICE)
+
+        assertEquals(app.skerry.shared.ai.AiProviderKind.DEVICE, saved!!.provider)
+        assertEquals("sk-x", saved!!.apiKey, "ключ BYOK не должен пропасть при смене провайдера")
+    }
+
+    @Test
+    fun `selectLocalModel persists immediately and keeps the rest intact`() = runTest {
+        var saved: AiSettings? = null
+        val initial = AiSettings(apiKey = "sk-x", provider = app.skerry.shared.ai.AiProviderKind.DEVICE)
+        val c = AiAssistantController(initial, persist = { saved = it }, providerFactory = { error("unused") }, scope = this)
+
+        c.selectLocalModel("qwen3-4b-q4km")
+
+        assertEquals("qwen3-4b-q4km", saved!!.localModelId)
+        assertEquals(app.skerry.shared.ai.AiProviderKind.DEVICE, saved!!.provider)
+        assertEquals("sk-x", saved!!.apiKey)
+        assertEquals("qwen3-4b-q4km", c.localModel.id, "контроллер сразу отражает выбор")
+    }
+
+    @Test
     fun `save trims key and defaults blank fields`() = runTest {
         var saved: AiSettings? = null
         val c = AiAssistantController(AiSettings(), persist = { saved = it }, providerFactory = { error("unused") }, scope = this)

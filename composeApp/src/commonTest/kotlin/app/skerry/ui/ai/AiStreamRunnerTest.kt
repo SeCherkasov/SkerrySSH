@@ -30,7 +30,7 @@ class AiStreamRunnerTest {
         override suspend fun close() { closed = true }
     }
 
-    private val config = AiSettings(apiKey = "sk-x").toOpenAiConfig()
+    private val config = app.skerry.shared.ai.AiEndpoint.Cloud(AiSettings(apiKey = "sk-x").toOpenAiConfig())
 
     @Test
     fun `accumulates deltas, completes with the full text and closes the provider`() = runTest {

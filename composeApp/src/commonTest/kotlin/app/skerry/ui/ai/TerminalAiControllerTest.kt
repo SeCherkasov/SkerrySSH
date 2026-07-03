@@ -23,10 +23,12 @@ private class CapturingProvider(
     private val failWith: AiException? = null,
 ) : AiProvider {
     var lastUserContent: String? = null
+    var lastTemperature: Double? = null
     var built = false
     override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
         built = true
         lastUserContent = request.messages.last().content
+        lastTemperature = request.temperature
         failWith?.let { throw it }
         deltas.forEach { emit(AiDelta(it)) }
     }
@@ -267,6 +269,75 @@ class TerminalAiControllerTest {
         assertEquals("uptime", c.pending)
         assertFalse(c.busy)
         assertNull(c.streaming)
+    }
+
+    @Test
+    fun `asks for a command at a low deterministic temperature`() = runTest {
+        // Регрессия: на дефолтной 0.7 маленькие локальные модели давали лотерею CMD/ASK.
+        val p = CapturingProvider(deltas = listOf("uptime"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("server load")
+        advanceUntilIdle()
+
+        assertEquals(TerminalAiController.COMMAND_TEMPERATURE, p.lastTemperature)
+    }
+
+    @Test
+    fun `strict policy uses the on-device model when it is installed`() = runTest {
+        val p = CapturingProvider(deltas = listOf("uptime"))
+        var endpoint: app.skerry.shared.ai.AiEndpoint? = null
+        val c = TerminalAiController(
+            AiPolicy.Strict,
+            settings = { AiSettings(apiKey = "sk-x") }, // облачный дефолт — Strict всё равно поведёт локально
+            providerFactory = { e -> endpoint = e; p },
+            scope = this,
+            localInstalled = { true },
+        )
+
+        c.ask("show uptime")
+        advanceUntilIdle()
+
+        assertTrue(endpoint is app.skerry.shared.ai.AiEndpoint.Device, "Strict must route on-device, got $endpoint")
+        assertEquals("uptime", c.pending)
+        assertNull(c.blocked)
+    }
+
+    @Test
+    fun `device default routes on-device when installed`() = runTest {
+        val p = CapturingProvider(deltas = listOf("df -h"))
+        var endpoint: app.skerry.shared.ai.AiEndpoint? = null
+        val c = TerminalAiController(
+            AiPolicy.Balanced,
+            settings = { AiSettings(provider = app.skerry.shared.ai.AiProviderKind.DEVICE) },
+            providerFactory = { e -> endpoint = e; p },
+            scope = this,
+            localInstalled = { true },
+        )
+
+        c.ask("disk usage")
+        advanceUntilIdle()
+
+        assertTrue(endpoint is app.skerry.shared.ai.AiEndpoint.Device)
+        assertEquals("df -h", c.pending)
+    }
+
+    @Test
+    fun `device default without a downloaded model is blocked`() = runTest {
+        val p = CapturingProvider(deltas = listOf("ls"))
+        val c = TerminalAiController(
+            AiPolicy.Balanced,
+            settings = { AiSettings(provider = app.skerry.shared.ai.AiProviderKind.DEVICE) },
+            providerFactory = { p },
+            scope = this,
+            localInstalled = { false },
+        )
+
+        c.ask("list files")
+        advanceUntilIdle()
+
+        assertEquals(TerminalAiController.DEVICE_NOT_READY, c.blocked)
+        assertFalse(p.built)
     }
 
     @Test

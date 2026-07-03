@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,16 +24,15 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.ai.AiRole
 import app.skerry.ui.ai.isInsecureAiEndpoint
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalAi
-import app.skerry.ui.design.Badge
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.HLine
-import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_ai_ask
@@ -54,6 +51,7 @@ import app.skerry.ui.generated.resources.settings_ai_not_configured
 import app.skerry.ui.generated.resources.settings_ai_preview
 import app.skerry.ui.generated.resources.settings_ai_preview_desc
 import app.skerry.ui.generated.resources.settings_ai_prompt_placeholder_needs_key
+import app.skerry.ui.generated.resources.settings_ai_prompt_placeholder_needs_model
 import app.skerry.ui.generated.resources.settings_ai_prompt_placeholder_ready
 import app.skerry.ui.generated.resources.settings_ai_provider_byok
 import app.skerry.ui.generated.resources.settings_ai_provider_byok_desc
@@ -90,6 +88,12 @@ internal fun AiSection(state: DesktopDesignState) {
 private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
     SectionTitle(stringResource(Res.string.settings_ai_title), stringResource(Res.string.settings_ai_live_subtitle))
 
+    // Выбор провайдера по умолчанию: «на этом устройстве» (каталог локальных моделей,
+    // скачивание/удаление) или BYOK. Ниже — поля BYOK (нужны и при локальном дефолте:
+    // Balanced/Permissive-хосты могут ходить в облако).
+    AiProviderCards(ai)
+    Box(Modifier.padding(top = 18.dp)); HLine(); Box(Modifier.height(12.dp))
+
     var key by remember(ai.settings) { mutableStateOf(ai.settings.apiKey) }
     var model by remember(ai.settings) { mutableStateOf(ai.settings.model) }
     var baseUrl by remember(ai.settings) { mutableStateOf(ai.settings.baseUrl) }
@@ -125,7 +129,11 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
     var prompt by remember { mutableStateOf("") }
     val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
     SyncField(
-        placeholder = if (ai.isConfigured) stringResource(Res.string.settings_ai_prompt_placeholder_ready) else stringResource(Res.string.settings_ai_prompt_placeholder_needs_key),
+        placeholder = when {
+            ai.ready -> stringResource(Res.string.settings_ai_prompt_placeholder_ready)
+            ai.settings.provider == AiProviderKind.DEVICE -> stringResource(Res.string.settings_ai_prompt_placeholder_needs_model)
+            else -> stringResource(Res.string.settings_ai_prompt_placeholder_needs_key)
+        },
         value = prompt,
         icon = "chat",
         keyboardType = KeyboardType.Text,
@@ -134,7 +142,7 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
     ) { prompt = it }
     Box(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ChipButton(if (ai.busy) stringResource(Res.string.settings_ai_sending) else stringResource(Res.string.settings_ai_ask), color = if (ai.isConfigured && !ai.busy) D.cyan else D.faint, onClick = { send() })
+        ChipButton(if (ai.busy) stringResource(Res.string.settings_ai_sending) else stringResource(Res.string.settings_ai_ask), color = if (ai.ready && !ai.busy) D.cyan else D.faint, onClick = { send() })
         if (ai.turns.isNotEmpty()) ChipButton(stringResource(Res.string.settings_clear), color = D.dim, onClick = { ai.clearConversation() })
     }
 }
@@ -170,32 +178,3 @@ private fun AiSectionMock(state: DesktopDesignState) {
     SettingToggleRow(stringResource(Res.string.settings_ai_confirm), stringResource(Res.string.settings_ai_confirm_desc), state.confirm, state::toggleConfirm)
 }
 
-@Composable
-private fun ProviderCard(icon: String, title: String, desc: String, selected: Boolean, badge: String? = null) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) D.cyan10 else Color.Transparent)
-            .border(1.dp, if (selected) D.cyan else D.cyan08, RoundedCornerShape(8.dp))
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(Modifier.size(32.dp).clip(RoundedCornerShape(7.dp)).background(if (selected) D.cyan.copy(alpha = 0.2f) else Color(0x0DFFFFFF)), contentAlignment = Alignment.Center) {
-            Sym(icon, size = 18.sp, color = if (selected) D.cyan else D.dim)
-        }
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-                if (badge != null) Badge(badge, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp)
-            }
-            Txt(desc, color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
-        }
-        Box(
-            Modifier.padding(top = 2.dp).size(18.dp).clip(CircleShape).background(if (selected) D.cyan else Color.Transparent).border(1.5.dp, if (selected) D.cyan else D.faint, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (selected) Sym("check", size = 12.sp, color = D.ink)
-        }
-    }
-}

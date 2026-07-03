@@ -35,7 +35,11 @@ import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.tunnel.VaultTunnelStore
 import app.skerry.ui.sync.FileSyncConfigStore
 import app.skerry.shared.ai.AiSettingsStore
-import app.skerry.shared.ai.OpenAiProvider
+import app.skerry.shared.ai.local.LlamatikRuntime
+import app.skerry.shared.ai.local.LocalModelStore
+import app.skerry.shared.ai.local.ModelDownloader
+import app.skerry.ui.ai.LocalAiDeps
+import app.skerry.ui.ai.aiProviderFactory
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.app.DesktopDesignState
@@ -80,6 +84,17 @@ private fun configDir(): Path {
     val xdg = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }
     val base = xdg?.let { Path.of(it) } ?: Path.of(System.getProperty("user.home"), ".config")
     return base.resolve("skerry").also { PrivateConfig.ensureDir(it) }
+}
+
+/**
+ * Каталог данных Skerry (не конфиг): большие артефакты — скачанные GGUF-модели локального AI.
+ * По умолчанию `~/.local/share/skerry`; уважает XDG_DATA_HOME (в Flatpak-песочнице это
+ * каталог данных приложения). Модели — публичные веса, hardening 0600 не требуется.
+ */
+private fun dataDir(): Path {
+    val xdg = System.getenv("XDG_DATA_HOME")?.takeIf { it.isNotBlank() }
+    val base = xdg?.let { Path.of(it) } ?: Path.of(System.getProperty("user.home"), ".local", "share")
+    return base.resolve("skerry").also { Files.createDirectories(it) }
 }
 
 /**
@@ -210,16 +225,25 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // Сохранённые сниппеты: библиотека команд — записи SNIPPET в vault (команды могут содержать
     // inline-креды, поэтому под общим шифрованием и E2E-синком). Запуск идёт в активный терминал.
     val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
-    // AI-ассистент (Phase 2, BYOK): ключ хранится зашифрованной записью SETTINGS в vault, вызовы
-    // идут во внешний OpenAI-совместимый провайдер. На старте vault залочен (settings = дефолт),
-    // после unlock контроллер перечитывает настройки в onVaultUnlocked.
+    // AI-ассистент: настройки (провайдер/BYOK/локальная модель) — зашифрованная запись SETTINGS
+    // в vault; запрос маршрутизируется в облако либо в локальный рантайм (Llamatik/llama.cpp).
+    // Локальный AI: GGUF-модели в ~/.local/share/skerry/models (XDG), закачка с докачкой и sha256.
+    // На старте vault залочен (settings = дефолт), после unlock контроллер перечитывает настройки.
     val aiSettingsStore = AiSettingsStore(vault)
+    val localModelStore = LocalModelStore(FileSystem.SYSTEM, dataDir().resolve("models").toString().toPath())
+    val localAi = LocalAiDeps(
+        store = localModelStore,
+        downloader = ModelDownloader(FileSystem.SYSTEM, localModelStore),
+        runtime = LlamatikRuntime(contextLength = 4096),
+    )
     val ai = AiAssistantController(
         initialSettings = aiSettingsStore.load(),
         persist = aiSettingsStore::save,
-        providerFactory = { cfg -> OpenAiProvider.pooled(cfg) },
+        providerFactory = aiProviderFactory(localAi),
         scope = tunnelScope,
         reload = aiSettingsStore::load,
+        localInstalled = localAi::installed,
+        models = localAi.modelsController(tunnelScope),
     )
     // Миграция секретов в vault (IDENTITY → CREDENTIAL, хост → прямой credentialId) при
     // разблокировке — идемпотентна. После — перечитываем менеджеры и бесшумно восстанавливаем
@@ -286,7 +310,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         snippets.reload()
         tunnels.reload()
     }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync)
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync, localAi = localAi)
     return DesktopGraph(
         deps = deps,
         securityLog = securityLog,

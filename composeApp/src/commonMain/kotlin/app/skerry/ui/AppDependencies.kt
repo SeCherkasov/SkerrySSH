@@ -2,6 +2,7 @@ package app.skerry.ui
 
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.SecurityLog
+import app.skerry.ui.ai.LocalAiDeps
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
@@ -44,4 +45,6 @@ data class AppDependencies(
     val sync: SyncCoordinator? = null,
     /** Локальный журнал событий безопасности (Settings → Безопасность); `null` — журнал не ведётся. */
     val securityLog: SecurityLog? = null,
+    /** Локальный AI (Phase 3): стор моделей + загрузчик + рантайм; `null` — превью/мок без подсистемы. */
+    val localAi: LocalAiDeps? = null,
 )

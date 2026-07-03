@@ -23,11 +23,17 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+        // Локальный AI (Llamatik/llama.cpp): AAR несёт нативы четырёх ABI (~52 МБ распакованных).
+        // Реальные Android-устройства проекта — arm64; остальные ABI — мёртвый вес в APK.
+        ndk { abiFilters += "arm64-v8a" }
     }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // .so льются страницами из несжатого APK (16KB-выравнивание Llamatik сохраняется),
+        // extractNativeLibs не нужен.
+        jniLibs { useLegacyPackaging = false }
     }
     buildTypes {
         getByName("release") {

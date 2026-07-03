@@ -1,10 +1,10 @@
 package app.skerry.ui.ai
 
 import app.skerry.shared.ai.AiChatRequest
+import app.skerry.shared.ai.AiEndpoint
 import app.skerry.shared.ai.AiException
 import app.skerry.shared.ai.AiMessage
 import app.skerry.shared.ai.AiProvider
-import app.skerry.shared.ai.OpenAiConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -21,8 +21,9 @@ internal fun AiException.friendlyMessage(): String = when (kind) {
 
 /**
  * Общий прогон одного стримингового AI-запроса — жизненный цикл, одинаковый для
- * [AiAssistantController] и [TerminalAiController]: создать провайдер из [providerFactory],
- * прогнать `chat`, аккумулируя дельты, и гарантированно закрыть провайдер.
+ * [AiAssistantController] и [TerminalAiController]: создать провайдер из [providerFactory]
+ * по выбранному [AiEndpoint] (облако или локальная модель), прогнать `chat`, аккумулируя
+ * дельты, и гарантированно закрыть провайдер.
  *
  * - [onDelta] получает НАКОПЛЕННЫЙ текст после каждой дельты (для поля streaming).
  * - [onComplete] — полный ответ по успешному завершению потока.
@@ -33,22 +34,24 @@ internal fun AiException.friendlyMessage(): String = when (kind) {
  *   состоянием busy/streaming.
  */
 internal class AiStreamRunner(
-    private val providerFactory: (OpenAiConfig) -> AiProvider,
+    private val providerFactory: (AiEndpoint) -> AiProvider,
     private val scope: CoroutineScope,
 ) {
     fun launch(
-        config: OpenAiConfig,
+        endpoint: AiEndpoint,
         messages: List<AiMessage>,
         onDelta: (String) -> Unit,
         onComplete: (String) -> Unit,
         onError: (String) -> Unit,
         onFinally: () -> Unit,
+        // null — дефолт провайдера; терминальный бар просит низкую (команда, не творчество).
+        temperature: Double? = null,
     ): Job = scope.launch {
         var provider: AiProvider? = null
         val sb = StringBuilder()
         try {
-            provider = providerFactory(config)
-            provider.chat(AiChatRequest(config.model, messages)).collect { delta ->
+            provider = providerFactory(endpoint)
+            provider.chat(AiChatRequest(endpoint.requestModel, messages, temperature = temperature)).collect { delta ->
                 sb.append(delta.text)
                 onDelta(sb.toString())
             }

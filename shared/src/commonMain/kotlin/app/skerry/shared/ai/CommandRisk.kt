@@ -34,7 +34,10 @@ object CommandRiskClassifier {
 
     // ---------- DANGER ----------
     private val FORK_BOMB_ANON = rx(""":\s*\(\s*\)\s*\{[^}]*\|[^}]*&""")
-    private val FORK_BOMB_NAMED = rx("""\b(\w+)\s*\(\s*\)\s*\{[^}]*\|[^}]*&[^}]*}\s*;\s*\1\b""")
+    // `}` вне класса — ТОЛЬКО экранированной: java.util.regex прощает голую, а ICU-движок
+    // Android (com.android.icu) бросает PatternSyntaxException — краш всего приложения при
+    // первой же оценке команды (грабли: desktop-тесты этот класс расхождений не ловят).
+    private val FORK_BOMB_NAMED = rx("""\b(\w+)\s*\(\s*\)\s*\{[^}]*\|[^}]*&[^}]*\}\s*;\s*\1\b""")
     private val RM_WORD = rx("""\brm\b""")
     private val RM_RECURSIVE = rx("""\s-\w*r|\s--recursive""")
     private val RM_FORCE = rx("""\s-\w*f|\s--force""")

@@ -8,6 +8,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import app.skerry.shared.ai.local.LlamatikRuntime
+import app.skerry.shared.ai.local.LocalModelStore
+import app.skerry.shared.ai.local.ModelDownloader
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.VaultKnownHostsStore
@@ -31,6 +34,7 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.VaultMigration
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
+import app.skerry.ui.ai.LocalAiDeps
 import app.skerry.ui.mobile.MobileDesignApp
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.secure.WindowBridge
@@ -389,6 +393,15 @@ class MainActivity : FragmentActivity() {
             snippets.reload()
             tunnels.reload()
         }
+        // Локальный AI (Phase 3): GGUF-модели в приватном filesDir/models (allowBackup=false —
+        // гигабайтные веса не ломают облачный бэкап), инференс — Llamatik/llama.cpp arm64.
+        // ctx 2048: KV-кэш на телефоне (8 ГБ RAM S24) должен оставаться в сотне-другой МиБ.
+        val localModelStore = LocalModelStore(FileSystem.SYSTEM, dir.resolve("models").absolutePath.toPath())
+        val localAi = LocalAiDeps(
+            store = localModelStore,
+            downloader = ModelDownloader(FileSystem.SYSTEM, localModelStore),
+            runtime = LlamatikRuntime(contextLength = 2048),
+        )
         return AppDependencies(
             transport = transport,
             hosts = hosts,
@@ -404,6 +417,7 @@ class MainActivity : FragmentActivity() {
             snippets = snippets,
             sync = sync,
             securityLog = securityLog,
+            localAi = localAi,
         )
     }
 
