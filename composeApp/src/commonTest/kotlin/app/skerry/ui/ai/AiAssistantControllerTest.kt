@@ -6,6 +6,7 @@ import app.skerry.shared.ai.AiException
 import app.skerry.shared.ai.AiProvider
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.AiSettings
+import app.skerry.shared.ai.SecretRedactor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -22,7 +23,9 @@ private class FakeProvider(
     private val failWith: AiException? = null,
 ) : AiProvider {
     var closed = false
+    var lastRequest: AiChatRequest? = null
     override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
+        lastRequest = request
         failWith?.let { throw it }
         deltas.forEach { emit(AiDelta(it)) }
     }
@@ -60,6 +63,34 @@ class AiAssistantControllerTest {
         assertEquals(1, c.turns.size)
         assertNotNull(c.error)
         assertFalse(c.busy)
+    }
+
+    @Test
+    fun `ask redacts secrets before storing the turn and sending to the cloud`() = runTest {
+        val provider = FakeProvider(deltas = listOf("ok"))
+        val c = AiAssistantController(AiSettings(apiKey = "sk-x"), persist = {}, providerFactory = { provider }, scope = this)
+
+        c.ask("deploy fails, config has password=hunter2 — why?")
+        advanceUntilIdle()
+
+        assertFalse(c.turns[0].text.contains("hunter2"), "секрет не должен остаться в ленте")
+        assertTrue(c.turns[0].text.contains(SecretRedactor.MASK), "лента показывает, что реально ушло")
+        val sent = provider.lastRequest!!.messages
+        assertTrue(sent.none { it.content.contains("hunter2") }, "секрет не должен уйти провайдеру")
+    }
+
+    @Test
+    fun `ask keeps earlier secrets redacted in the history it resends`() = runTest {
+        val provider = FakeProvider(deltas = listOf("ok"))
+        val c = AiAssistantController(AiSettings(apiKey = "sk-x"), persist = {}, providerFactory = { provider }, scope = this)
+
+        c.ask("token=abc123secret")
+        advanceUntilIdle()
+        c.ask("and now?")
+        advanceUntilIdle()
+
+        val sent = provider.lastRequest!!.messages
+        assertTrue(sent.none { it.content.contains("abc123secret") }, "секрет из истории не должен уйти провайдеру")
     }
 
     @Test

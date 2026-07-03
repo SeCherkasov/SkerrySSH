@@ -148,7 +148,9 @@ class FileVault(
             check(key != null) { "vault is locked" }
             // Тот же ключ (основное устройство переподключается своим же) → не переписываем meta, иначе
             // молча сменили бы пароль vault на переданный. Лишнюю копию ключа не оставляем в памяти.
-            if (newDataKey.bytes.contentEquals(key.bytes)) {
+            // Сравнение constant-time: contentEquals выходит на первом расхождении и таймингом
+            // позволял бы подбирать ключ побайтово.
+            if (constantTimeEquals(newDataKey.bytes, key.bytes)) {
                 newDataKey.bytes.fill(0)
                 return@synchronized false
             }

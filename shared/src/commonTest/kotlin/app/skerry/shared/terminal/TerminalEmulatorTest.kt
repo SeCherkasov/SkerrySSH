@@ -705,6 +705,28 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `osc title decodes UTF-8 payload`() {
+        val emu = emulate(chunks = arrayOf("$esc]2;Привет — сервер$bel"))
+        assertEquals("Привет — сервер", emu.title)
+    }
+
+    @Test
+    fun `osc title decodes UTF-8 split across feeds`() {
+        val emu = TerminalEmulator(cols = 80, rows = 24)
+        val bytes = "$esc]0;Ярус$bel".encodeToByteArray()
+        // Разрез внутри двухбайтового «Я» — байты OSC копятся до терминатора, декод не должен ломаться.
+        emu.feed(bytes.copyOfRange(0, 5))
+        emu.feed(bytes.copyOfRange(5, bytes.size))
+        assertEquals("Ярус", emu.title)
+    }
+
+    @Test
+    fun `osc 8 hyperlink URI decodes UTF-8`() {
+        val emu = emulate(chunks = arrayOf("$esc]8;;https://пример.рф/путь${bel}X$esc]8;;$bel"))
+        assertEquals("https://пример.рф/путь", emu.lines[0][0].hyperlink)
+    }
+
+    @Test
     fun `osc title strips embedded control characters`() {
         // Сервер не должен мочь протащить C0/DEL в заголовок (искажение UI вкладки, риск лог-инъекции).
         val c1 = 1.toChar(); val c31 = 31.toChar(); val del = 127.toChar()
