@@ -32,7 +32,7 @@ class SyncIndicatorTest {
 
     @Test
     fun failed_is_error() {
-        val i = syncIndicator(SyncStatus.Failed("boom"), ServerReachable.REACHABLE)!!
+        val i = syncIndicator(SyncStatus.Failed(SyncFailureReason.SyncFailed, "boom"), ServerReachable.REACHABLE)!!
         assertEquals("Sync error", i.label)
         assertEquals(SyncIndicatorLevel.ERROR, i.level)
     }

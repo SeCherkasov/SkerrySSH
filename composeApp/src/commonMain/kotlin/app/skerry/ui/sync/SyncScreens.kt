@@ -155,7 +155,7 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
                         Spacer(Modifier.height(8.dp))
                         SyncStatusNotice("sync", D.cyanBright, stringResource(Res.string.sync_connecting), stringResource(Res.string.sync_connecting_sub))
                     }
-                    is SyncStatus.Failed -> SyncSetupBody(sync, errorMessage = s.message)
+                    is SyncStatus.Failed -> SyncSetupBody(sync, errorMessage = syncFailureText(s))
                     else -> SyncSetupBody(sync, errorMessage = null)
                 }
             }
@@ -366,7 +366,7 @@ fun PairingJoinScreen(sync: SyncCoordinator, onBack: () -> Unit, onDone: () -> U
                 stringResource(Res.string.sync_join_desc),
                 color = D.dim, size = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
             )
-            SyncJoinBody(sync, errorMessage = (status as? SyncStatus.Failed)?.message)
+            SyncJoinBody(sync, errorMessage = (status as? SyncStatus.Failed)?.let { syncFailureText(it) })
         }
     }
 }
