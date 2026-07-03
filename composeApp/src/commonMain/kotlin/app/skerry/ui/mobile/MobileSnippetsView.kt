@@ -12,12 +12,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -30,8 +28,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -225,7 +221,7 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
     MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.7f) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Txt(stringResource(Res.string.lib_snippets_run_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            SnippetSheetInput(query, { query = it }, stringResource(Res.string.lib_snippets_search))
+            MobileFormInput(query, { query = it }, stringResource(Res.string.lib_snippets_search))
             if (filtered.isEmpty()) {
                 Txt(if (all.isEmpty()) stringResource(Res.string.lib_snippets_run_empty) else stringResource(Res.string.lib_snippets_no_matches), color = D.faint, size = 13.sp)
             } else {
@@ -265,13 +261,13 @@ private fun MobileSnippetEditSheet(
     MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.9f) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Txt(if (entry == null) stringResource(Res.string.lib_snippets_new) else stringResource(Res.string.lib_snippets_edit), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            SnippetSheetField(stringResource(Res.string.lib_snippets_field_name)) {
-                SnippetSheetInput(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name))
+            MobileFormField(stringResource(Res.string.lib_snippets_field_name)) {
+                MobileFormInput(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name))
             }
-            SnippetSheetField(stringResource(Res.string.lib_snippets_field_command)) {
-                SnippetSheetInput(form.command, { form.command = it }, "df -h | sort -k5 -r", mono = true, singleLine = false, minHeightDp = 88)
+            MobileFormField(stringResource(Res.string.lib_snippets_field_command)) {
+                MobileFormInput(form.command, { form.command = it }, "df -h | sort -k5 -r", mono = true, background = D.terminalBg, singleLine = false, minHeightDp = 88)
             }
-            SnippetSheetField(stringResource(Res.string.lib_snippets_field_tags)) {
+            MobileFormField(stringResource(Res.string.lib_snippets_field_tags)) {
                 // Свои теги исключаем через selected; подсказки берём из всех сниппетов (включая правимый —
                 // его собственные теги уже в selected, так что не предложатся повторно).
                 val others = remember(allSnippets, entry?.id) { allSnippets.filter { it.id != entry?.id } }
@@ -304,50 +300,6 @@ private fun MobileSnippetEditSheet(
     }
 }
 
-@Composable
-private fun SnippetSheetField(label: String, content: @Composable () -> Unit) {
-    Column {
-        Txt(label.uppercase(), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 6.dp))
-        content()
-    }
-}
-
-@Composable
-private fun SnippetSheetInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    mono: Boolean = false,
-    singleLine: Boolean = true,
-    minHeightDp: Int? = null,
-) {
-    val fonts = LocalFonts.current
-    val family = if (mono) fonts.mono else fonts.ui
-    val fontSize = if (mono) 12.5.sp else 15.sp
-    val textStyle = remember(family, fontSize) { TextStyle(color = D.text, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 17.sp else 20.sp) }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = singleLine,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
-        modifier = Modifier.fillMaxWidth(),
-        decorationBox = { inner ->
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .then(if (minHeightDp != null) Modifier.heightIn(min = minHeightDp.dp) else Modifier)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(if (mono) D.terminalBg else D.bg)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
-                    .padding(horizontal = 14.dp, vertical = 13.dp),
-            ) {
-                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
-                inner()
-            }
-        },
-    )
-}
 
 // --- Статичный мок (превью/офскрин без менеджера) ---
 

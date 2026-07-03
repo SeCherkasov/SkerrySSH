@@ -24,9 +24,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,13 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
@@ -203,40 +197,40 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 modifier = Modifier.padding(top = 4.dp, bottom = 18.dp),
             )
 
-            SheetField(stringResource(Res.string.conn_field_name)) { SheetInput(form.name, { form.name = it }, "prod-web-01") }
+            MobileFormField(stringResource(Res.string.conn_field_name)) { MobileFormInput(form.name, { form.name = it }, "prod-web-01") }
             Spacer(Modifier.height(14.dp))
-            SheetField(stringResource(Res.string.conn_field_protocol)) { MobileProtocolPicker(form) }
+            MobileFormField(stringResource(Res.string.conn_field_protocol)) { MobileProtocolPicker(form) }
             Spacer(Modifier.height(14.dp))
             val serial = form.connectionType == ConnectionType.SERIAL
-            SheetField(if (serial) stringResource(Res.string.conn_field_device) else stringResource(Res.string.conn_field_host_address)) {
-                SheetInput(form.address, { form.address = it }, if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45")
+            MobileFormField(if (serial) stringResource(Res.string.conn_field_device) else stringResource(Res.string.conn_field_host_address)) {
+                MobileFormInput(form.address, { form.address = it }, if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45")
             }
             // Пикер обнаруженных портов (Android — USB-OTG): тап заполняет Device. Пусто — только ручной ввод.
             if (serial) MobileSerialPortPicker(form)
             Spacer(Modifier.height(14.dp))
             if (form.connectionType == ConnectionType.SSH) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SheetField(stringResource(Res.string.conn_field_username), Modifier.weight(1f)) {
-                        SheetInput(form.username, { form.username = it }, "root")
+                    MobileFormField(stringResource(Res.string.conn_field_username), Modifier.weight(1f)) {
+                        MobileFormInput(form.username, { form.username = it }, "root")
                     }
-                    SheetField(stringResource(Res.string.conn_field_port), Modifier.width(84.dp)) {
-                        SheetInput(form.port, { form.port = it }, "22", keyboardType = KeyboardType.Number)
+                    MobileFormField(stringResource(Res.string.conn_field_port), Modifier.width(84.dp)) {
+                        MobileFormInput(form.port, { form.port = it }, "22", keyboardType = KeyboardType.Number)
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                SheetField(stringResource(Res.string.conn_field_authentication)) { MobileAuthPicker(form) }
+                MobileFormField(stringResource(Res.string.conn_field_authentication)) { MobileAuthPicker(form) }
                 Spacer(Modifier.height(14.dp))
             } else {
                 // Telnet/Serial: аутентификации нет; показываем только порт/скорость.
-                SheetField(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
-                    SheetInput(form.port, { form.port = it }, if (serial) "9600" else "23", keyboardType = KeyboardType.Number)
+                MobileFormField(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
+                    MobileFormInput(form.port, { form.port = it }, if (serial) "9600" else "23", keyboardType = KeyboardType.Number)
                 }
                 Spacer(Modifier.height(14.dp))
             }
             // Подсказки группы — из уже созданных хостов (паритет desktop GroupPicker); в превью список пуст.
-            SheetField(stringResource(Res.string.conn_field_group)) { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
+            MobileFormField(stringResource(Res.string.conn_field_group)) { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
             Spacer(Modifier.height(14.dp))
-            SheetField(stringResource(Res.string.conn_field_tags)) {
+            MobileFormField(stringResource(Res.string.conn_field_tags)) {
                 // Подсказки — теги других хостов, ещё не добавленные сюда (паритет desktop Tags); в превью пусто.
                 val allHosts = hosts?.hosts ?: emptyList()
                 val suggestions = remember(allHosts, form.tags, tagDraft) { tagSuggestions(allHosts, form.tags, tagDraft) }
@@ -256,7 +250,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
 
             if (LocalFeatures.current.ai || LocalAi.current != null) {
                 Spacer(Modifier.height(14.dp))
-                SheetField(stringResource(Res.string.conn_field_ai_policy_short)) { AiPolicyPills(form) }
+                MobileFormField(stringResource(Res.string.conn_field_ai_policy_short)) { AiPolicyPills(form) }
             }
 
             Spacer(Modifier.height(22.dp))
@@ -279,72 +273,6 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             onCreate = { name -> form.group = name.trim(); createGroupOpen = false },
         )
     }
-}
-
-/** Подпись поля (капс) + содержимое. */
-@Composable
-private fun SheetField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Column(modifier) {
-        Txt(
-            label.uppercase(),
-            color = D.faint,
-            size = 10.5.sp,
-            weight = FontWeight.SemiBold,
-            letterSpacing = 0.6.sp,
-            modifier = Modifier.padding(bottom = 6.dp),
-        )
-        content()
-    }
-}
-
-/**
- * Текстовое поле листа в стиле макета (тёмный фон + cyan-рамка, радиус 11).
- * [masked] — скрывать ввод (пароль/passphrase); [singleLine] = false + [mono] + [minHeightDp] —
- * многострочная моноширинная область для вставки приватного ключа (PEM), как desktop `ModalTextField`.
- * internal: переиспользуется диалогами групп ([MobileGroupCreateDialog]/[MobileGroupRenameDialog]).
- */
-@Composable
-internal fun SheetInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    masked: Boolean = false,
-    singleLine: Boolean = true,
-    mono: Boolean = false,
-    minHeightDp: Int? = null,
-) {
-    val fonts = LocalFonts.current
-    val family = if (mono) fonts.mono else fonts.ui
-    val fontSize = if (mono) 12.5.sp else 15.sp
-    val textStyle = remember(family, fontSize) {
-        TextStyle(color = D.text, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 17.sp else 20.sp)
-    }
-    // Рамка/паддинг — в decorationBox, чтобы клик по всей площади поля ставил каретку.
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = singleLine,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
-        visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
-        modifier = Modifier.fillMaxWidth(),
-        decorationBox = { inner ->
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .then(if (minHeightDp != null) Modifier.heightIn(min = minHeightDp.dp) else Modifier)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(D.bg)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
-                    .padding(horizontal = 14.dp, vertical = 13.dp),
-            ) {
-                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
-                inner()
-            }
-        },
-    )
 }
 
 /**
@@ -481,16 +409,16 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
         when (form.authMode) {
             AuthMode.NEW_PASSWORD -> {
                 Spacer(Modifier.height(12.dp))
-                SheetInput(form.password, { form.password = it }, stringResource(Res.string.conn_auth_password_placeholder), masked = true)
+                MobileFormInput(form.password, { form.password = it }, stringResource(Res.string.conn_auth_password_placeholder), masked = true)
             }
             AuthMode.NEW_KEY -> {
                 Spacer(Modifier.height(12.dp))
                 // keyboardType=Password гасит автокоррект/подсказки IME (Android), чтобы ключ не оседал в словаре.
                 // PEM показываем в открытую (не masked): маскирование многострочного поля ломает вставку
                 // ключа и его визуальную проверку — осознанный trade-off, как на desktop ModalTextField.
-                SheetInput(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 104)
+                MobileFormInput(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 104)
                 Spacer(Modifier.height(12.dp))
-                SheetInput(form.passphrase, { form.passphrase = it }, stringResource(Res.string.conn_auth_passphrase_placeholder), masked = true)
+                MobileFormInput(form.passphrase, { form.passphrase = it }, stringResource(Res.string.conn_auth_passphrase_placeholder), masked = true)
             }
             else -> {}
         }

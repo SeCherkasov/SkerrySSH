@@ -84,7 +84,7 @@ internal fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -
     MobileCenteredDialog(onDismiss = onDismiss) {
         Txt(stringResource(Res.string.conn_group_new_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
         Spacer(Modifier.height(14.dp))
-        SheetInput(name, { name = it }, "Production")
+        MobileFormInput(name, { name = it }, "Production")
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
@@ -138,7 +138,7 @@ internal fun MobileGroupRenameDialog(
         Spacer(Modifier.height(6.dp))
         Txt(stringResource(Res.string.conn_group_rename_hint), color = D.dim, size = 12.5.sp)
         Spacer(Modifier.height(14.dp))
-        SheetInput(name, { name = it }, "Production")
+        MobileFormInput(name, { name = it }, "Production")
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(

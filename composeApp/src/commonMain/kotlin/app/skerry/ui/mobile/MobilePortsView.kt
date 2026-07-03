@@ -308,21 +308,21 @@ private fun MobileTunnelEditorSheet(
                 )
             }
             Spacer(Modifier.height(18.dp))
-            PortField(stringResource(Res.string.ports_field_name)) { PortInput(form.label, { form.label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono) }
+            MobileFormField(stringResource(Res.string.ports_field_name)) { PortInput(form.label, { form.label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono) }
             Spacer(Modifier.height(14.dp))
-            PortField(stringResource(Res.string.ports_field_type)) { PortTypeSelect(form.direction) { form.direction = it } }
+            MobileFormField(stringResource(Res.string.ports_field_type)) { PortTypeSelect(form.direction) { form.direction = it } }
             Spacer(Modifier.height(14.dp))
-            PortField(stringResource(Res.string.ports_field_via_host)) { MobileHostPicker(hostName, hostList.map { it.id to it.label }) { form.hostId = it } }
+            MobileFormField(stringResource(Res.string.ports_field_via_host)) { MobileHostPicker(hostName, hostList.map { it.id to it.label }) { form.hostId = it } }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PortField(stringResource(Res.string.ports_field_bind_address), Modifier.weight(1f)) { PortInput(form.bindHost, { form.bindHost = it }, "127.0.0.1", mono) }
-                PortField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(form.bindPort, { form.bindPort = it }, "8080", mono, KeyboardType.Number) }
+                MobileFormField(stringResource(Res.string.ports_field_bind_address), Modifier.weight(1f)) { PortInput(form.bindHost, { form.bindHost = it }, "127.0.0.1", mono) }
+                MobileFormField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(form.bindPort, { form.bindPort = it }, "8080", mono, KeyboardType.Number) }
             }
             if (!form.isDynamic) {
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PortField(stringResource(Res.string.ports_field_destination), Modifier.weight(1f)) { PortInput(form.destHost, { form.destHost = it }, "10.0.0.5", mono) }
-                    PortField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(form.destPort, { form.destPort = it }, "80", mono, KeyboardType.Number) }
+                    MobileFormField(stringResource(Res.string.ports_field_destination), Modifier.weight(1f)) { PortInput(form.destHost, { form.destHost = it }, "10.0.0.5", mono) }
+                    MobileFormField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(form.destPort, { form.destPort = it }, "80", mono, KeyboardType.Number) }
                 }
             } else {
                 Spacer(Modifier.height(10.dp))
@@ -335,7 +335,7 @@ private fun MobileTunnelEditorSheet(
             }
             if (existing != null && existing.status is TunnelStatus.Active) {
                 Spacer(Modifier.height(16.dp))
-                PortField(stringResource(Res.string.ports_field_live_throughput)) {
+                MobileFormField(stringResource(Res.string.ports_field_live_throughput)) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         MobileThroughputRow("arrow_upward", D.cyanBright, rateFraction(existing.upRate), humanRate(existing.upRate), mono)
                         MobileThroughputRow("arrow_downward", D.moss, rateFraction(existing.downRate), humanRate(existing.downRate), mono)
@@ -413,14 +413,6 @@ private fun MobileHostPicker(current: String, options: List<Pair<String, String>
 }
 
 /** Подпись поля (капс) + содержимое — идиома полей листа New connection. */
-@Composable
-private fun PortField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Column(modifier) {
-        Txt(label.uppercase(), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 6.dp))
-        content()
-    }
-}
-
 @Composable
 private fun PortInput(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily, keyboardType: KeyboardType = KeyboardType.Text) {
     val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 15.sp, fontFamily = mono) }
