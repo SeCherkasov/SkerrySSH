@@ -46,7 +46,7 @@ class OpenAiProvider private constructor(
     override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
         val wire = ChatReqWire(
             model = request.model,
-            messages = request.messages.map { MsgWire(it.role.wire(), it.content) },
+            messages = request.messages.map { MsgWire(it.role.wire, it.content) },
             temperature = request.temperature,
             maxTokens = request.maxOutputTokens,
             stream = true,
@@ -116,12 +116,6 @@ class OpenAiProvider private constructor(
         private val shared: HttpClient by lazy { defaultHttpClient() }
         private fun defaultHttpClient(): HttpClient = HttpClient(CIO)
     }
-}
-
-private fun AiRole.wire(): String = when (this) {
-    AiRole.SYSTEM -> "system"
-    AiRole.USER -> "user"
-    AiRole.ASSISTANT -> "assistant"
 }
 
 @Serializable

@@ -56,6 +56,11 @@ nimbus-srp = "2.1.0"
 zxing = "3.5.3"
 # CameraX — превью камеры для сканера QR на Android (только androidMain)
 camerax = "1.4.1"
+# --- Phase 3: локальный AI ---
+# Llamatik — KMP-биндинг llama.cpp (GGUF, стриминг, chat-шаблон из GGUF): единственный
+# поддерживаемый вариант с нативами и под desktop JVM (Linux/Win/macOS), и под Android arm64
+# (16KB-страницы выровнены). MIT. java-llama.cpp (kherud) мёртв с 2025-06 и не грузит Qwen3.
+llamatik = "1.8.1"
 # ML Kit barcode-scanning — распознавание QR в кадре камеры (Android, on-device, без сети)
 mlkit-barcode = "17.3.0"
 
@@ -117,6 +122,7 @@ androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.r
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkit-barcode" }
+llamatik = { module = "com.llamatik:library", version.ref = "llamatik" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

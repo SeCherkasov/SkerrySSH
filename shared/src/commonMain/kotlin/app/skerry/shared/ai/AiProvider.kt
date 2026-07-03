@@ -5,6 +5,14 @@ import kotlinx.coroutines.flow.Flow
 /** Роль сообщения в диалоге с моделью (как в chat-completions API). */
 enum class AiRole { SYSTEM, USER, ASSISTANT }
 
+/** Wire-имя роли — общее для chat-completions JSON (OpenAiProvider) и chat-шаблонов GGUF (LlamatikRuntime). */
+val AiRole.wire: String
+    get() = when (this) {
+        AiRole.SYSTEM -> "system"
+        AiRole.USER -> "user"
+        AiRole.ASSISTANT -> "assistant"
+    }
+
 /** Одно сообщение диалога. [content] уже собран вызывающей стороной с учётом per-host политики. */
 data class AiMessage(val role: AiRole, val content: String)
 

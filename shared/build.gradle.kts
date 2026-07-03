@@ -83,6 +83,10 @@ kotlin {
                 implementation(libs.ktor.serialization.kotlinx.json)
                 // SRP-6a клиентская сторона (verifier-генератор + клиентский обмен).
                 implementation(libs.nimbus.srp)
+                // Локальный AI (Phase 3): llama.cpp за KMP-биндингом — GGUF-инференс на
+                // устройстве (desktop JVM + Android arm64) без внешних вызовов. Реализация
+                // LocalLlmRuntime одна на оба таргета (LlamatikRuntime).
+                implementation(libs.llamatik)
             }
         }
         val desktopMain by getting {

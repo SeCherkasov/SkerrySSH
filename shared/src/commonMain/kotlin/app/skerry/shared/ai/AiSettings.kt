@@ -5,17 +5,28 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultSingletonStore
 import kotlinx.serialization.Serializable
 
+/** Провайдер AI по умолчанию: внешний OpenAI-совместимый (BYOK) или локальная модель. */
+@Serializable
+enum class AiProviderKind { CLOUD, DEVICE }
+
 /**
- * Настройки внешнего AI-провайдера (BYOK), хранимые в зашифрованном Vault. Пустой [apiKey] значит
- * «не настроено» ([isConfigured] == false) — AI-возможности в UI остаются выключенными.
+ * Настройки AI-провайдера, хранимые в зашифрованном Vault: выбор провайдера по умолчанию
+ * ([provider]) плюс конфиг обеих веток — BYOK ([apiKey]/[model]/[baseUrl]) и локальной модели
+ * ([localModelId], id из [app.skerry.shared.ai.local.LocalModelCatalog]). Старые записи без новых
+ * полей читаются дефолтами (CLOUD) — поведение BYOK-пользователей не меняется.
+ *
+ * Настройки синкаются между устройствами, но скачанность локальной модели — свойство устройства:
+ * готовность проверяется на месте ([AiRouter] + `LocalModelStore`), не из настроек.
  */
 @Serializable
 data class AiSettings(
     val apiKey: String = "",
     val model: String = OpenAiConfig.DEFAULT_MODEL,
     val baseUrl: String = OpenAiConfig.DEFAULT_BASE_URL,
+    val provider: AiProviderKind = AiProviderKind.CLOUD,
+    val localModelId: String = "",
 ) {
-    /** Настроен ли внешний провайдер (есть непустой ключ). */
+    /** Настроен ли внешний (BYOK) провайдер — есть непустой ключ. Про локальную ветку см. [AiRouter]. */
     val isConfigured: Boolean get() = apiKey.isNotBlank()
 
     fun toOpenAiConfig(): OpenAiConfig = OpenAiConfig(apiKey = apiKey, model = model, baseUrl = baseUrl)
