@@ -10,6 +10,7 @@ import app.skerry.shared.ai.AiProvider
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.AiSettings
 import app.skerry.shared.ai.OpenAiConfig
+import app.skerry.shared.ai.SecretRedactor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 
@@ -91,9 +92,16 @@ class AiAssistantController(
         settings = next
     }
 
-    /** Отправить запрос ассистенту. No-op, если занят/пусто/не настроено. */
+    /**
+     * Отправить запрос ассистенту. No-op, если занят/пусто/не настроено.
+     *
+     * Quick-chat глобален — host-контекста нет, поэтому per-host [AiPolicy] не применить; секреты
+     * вычищаются ВСЕГДА (эквивалент [AiPolicy.Balanced], см. [SecretRedactor]). Редактируем до
+     * записи в [turns]: пользователь видит ровно то, что ушло в облако, и история для последующих
+     * запросов уже чистая.
+     */
     fun ask(prompt: String) {
-        val text = prompt.trim()
+        val text = SecretRedactor.redact(prompt.trim())
         if (busy || text.isEmpty() || !settings.isConfigured) return
         turns.add(AiTurn(AiRole.USER, text))
         busy = true

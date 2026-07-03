@@ -457,7 +457,11 @@ class TerminalEmulator(
     }
 
     private fun finishOsc() {
-        val s = osc.toString()
+        // Байты OSC копились как символы 1:1 (byte→char), но полезная нагрузка — UTF-8 (заголовок
+        // окна, URI гиперссылки; терминал в целом UTF-8-only, как Ground-состояние). Декодируем
+        // весь payload разом: ASCII-подкоманды (base64 OSC 52, цветовые spec) декод не меняет,
+        // битые последовательности становятся U+FFFD вместо mojibake.
+        val s = ByteArray(osc.length) { osc[it].code.toByte() }.decodeToString()
         val sep = s.indexOf(';')
         // code-only OSC (без ';') допустим — например `OSC 104 ST` (сброс всей палитры).
         val code = (if (sep < 0) s else s.substring(0, sep)).toIntOrNull() ?: return

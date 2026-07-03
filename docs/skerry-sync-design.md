@@ -8,7 +8,7 @@
 
 ```
 master password ──┐
-                  ├─ Argon2id (m=64MiB, t=3, p=4, salt = accountId)
+                  ├─ Argon2id (m=64MiB, t=3, p=1, salt = accountId)
 email/accountId ──┘
         │
         ▼
