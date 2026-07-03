@@ -8,17 +8,12 @@ import app.skerry.shared.ssh.SshConnectionException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.ssh.StreamOnlyConnection
+import app.skerry.shared.ssh.StreamShellChannel
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -70,24 +65,16 @@ private class TelnetConnection(private val socket: Socket) : StreamOnlyConnectio
 
 /**
  * Интерактивный поток Telnet: читает сокет, прогоняет через [TelnetCodec] (снимает IAC-неготиацию,
- * шлёт ответы обратно в сокет), эмитит прикладные байты в [output]. Запись пользователя удваивает
- * литеральный 0xFF ([TelnetCodec.encode]). Записи ответов неготиации и пользователя сериализованы
- * [writeLock], чтобы не переплести байты в общем выходном потоке сокета.
+ * шлёт ответы обратно в сокет — [transform]), эмитит прикладные байты в output. Запись пользователя
+ * удваивает литеральный 0xFF ([TelnetCodec.encode]). Записи ответов неготиации и пользователя
+ * сериализованы [writeLock], чтобы не переплести байты в общем выходном потоке сокета.
+ * Каркас read-цикла/close — в базе [StreamShellChannel]; read сырого сокета не реагирует на
+ * Thread.interrupt, поэтому unblockReadOnCancel = true (отмена сбора закрывает сокет).
  */
 private class TelnetShellChannel(
     private val socket: Socket,
     private val codec: TelnetCodec,
-) : ShellChannel {
-
-    private val outputClaimed = AtomicBoolean(false)
-    private val closed = AtomicBoolean(false)
-    private val eofReached = AtomicBoolean(false)
-    override val endedWithEof: Boolean get() = eofReached.get()
-
-    private val _bytesUp = AtomicLong(0)
-    private val _bytesDown = AtomicLong(0)
-    override val bytesUp: Long get() = _bytesUp.get()
-    override val bytesDown: Long get() = _bytesDown.get()
+) : StreamShellChannel(unblockReadOnCancel = true) {
 
     private val writeLock = Mutex()
 
@@ -97,41 +84,21 @@ private class TelnetShellChannel(
     // Сервер сейчас не эхоит ввод (WONT ECHO) — верхний слой не пишет набранное в историю (пароли).
     override val echoSuppressed: Boolean get() = !codec.serverEchoEnabled
 
-    override val output: Flow<ByteArray> = flow {
-        check(outputClaimed.compareAndSet(false, true)) {
-            "ShellChannel.output поддерживает только одного сборщика"
-        }
-        // Блокирующий read сырого сокета НЕ реагирует на Thread.interrupt (в отличие от sshj-очереди),
-        // поэтому отмена сбора сама его не разбудит. Закрываем сокет из обработчика завершения Job —
-        // он срабатывает на отмену независимо от заблокированного IO-потока и роняет read как IOException.
-        val disposable = currentCoroutineContext()[Job]?.invokeOnCompletion { runCatching { socket.close() } }
-        try {
-            val stream = socket.getInputStream()
-            val buffer = ByteArray(BUFFER_SIZE)
-            while (true) {
-                val read = try {
-                    runInterruptible(Dispatchers.IO) { stream.read(buffer) }
-                } catch (_: IOException) {
-                    break
-                }
-                if (read < 0) {
-                    eofReached.set(true) // сервер закрыл соединение штатно
-                    break
-                }
-                if (read == 0) continue
-                _bytesDown.addAndGet(read.toLong())
-                val decoded = codec.consume(buffer.copyOf(read))
-                if (decoded.reply.isNotEmpty()) writeRaw(decoded.reply)
-                if (decoded.data.isNotEmpty()) emit(decoded.data)
-            }
-        } finally {
-            disposable?.dispose()
-        }
+    override fun readBlocking(buffer: ByteArray): Int = socket.getInputStream().read(buffer)
+
+    override fun closeSource() {
+        runCatching { socket.close() }
+    }
+
+    override suspend fun transform(chunk: ByteArray): ByteArray {
+        val decoded = codec.consume(chunk)
+        if (decoded.reply.isNotEmpty()) writeRaw(decoded.reply)
+        return decoded.data
     }
 
     override suspend fun write(data: ByteArray) {
         writeRaw(codec.encode(data))
-        _bytesUp.addAndGet(data.size.toLong())
+        countBytesUp(data.size)
     }
 
     override suspend fun resize(size: PtySize) {
@@ -159,16 +126,5 @@ private class TelnetShellChannel(
                 throw SshConnectionException("Запись в Telnet-поток не удалась", e)
             }
         }
-    }
-
-    override suspend fun close() = withContext(Dispatchers.IO) {
-        if (!closed.compareAndSet(false, true)) return@withContext
-        // Закрываем сокет: разблокирует read в output и завершает поток.
-        runCatching { socket.close() }
-        Unit
-    }
-
-    private companion object {
-        const val BUFFER_SIZE = 8192
     }
 }
