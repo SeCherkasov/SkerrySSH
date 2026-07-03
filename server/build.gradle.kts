@@ -26,11 +26,9 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.cors)
-    implementation(libs.ktor.server.config.yaml)
     // Security-хардненинг: rate-limit (anti-flood по IP) и security-заголовки (DefaultHeaders).
-    // Версия пинуется из того же каталога, что и остальной Ktor, без правки самого каталога.
-    implementation("io.ktor:ktor-server-rate-limit:${libs.versions.ktor.get()}")
-    implementation("io.ktor:ktor-server-default-headers:${libs.versions.ktor.get()}")
+    implementation(libs.ktor.server.rate.limit)
+    implementation(libs.ktor.server.default.headers)
     implementation(libs.logback.classic)
     // Корутины: suspend-транзакции Exposed (newSuspendedTransaction) уводят БД с потока запроса.
     implementation(libs.kotlinx.coroutines.core)
@@ -48,8 +46,8 @@ dependencies {
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.content.negotiation)
-    testImplementation(libs.sqlite.jdbc)
-    testImplementation(libs.kotlinx.coroutines.core)
+    // WS-клиент для тестов /sync: обработка Close-кадра и revoke проверяются реальным рукопожатием.
+    testImplementation(libs.ktor.client.websockets)
     testImplementation(kotlin("test"))
 }
 

@@ -53,6 +53,12 @@ fun Route.pairingClaimRoute(services: Services) {
     rateLimit(RateLimits.PAIRING_CLAIM) {
         post("/pairing/claim") {
             val req = call.receive<PairingClaimRequest>()
+            // Валидация ДО consume: невалидный запрос не должен сжигать одноразовый код, а
+            // сверхдлинный deviceId на PostgreSQL валил бы insert в varchar-колонку 500-й.
+            if (anyTooLong(req.code, req.deviceId)) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
+                return@post
+            }
             val session = services.pairing.consume(req.code)
             if (session == null) {
                 call.respond(HttpStatusCode.Gone, ErrorResponse("pairing code invalid or expired"))

@@ -14,7 +14,7 @@ import app.skerry.server.sync.ChangeNotifier
 import org.jetbrains.exposed.sql.Database
 
 /** Собранные зависимости одного инстанса сервера. Создаётся один раз в [module]. */
-class Services(val config: ServerConfig, val database: Database) {
+class Services(val config: ServerConfig, private val database: Database) {
     val accounts = AccountRepository(database)
     val devices = DeviceRepository(database)
     // На PostgreSQL сериализуем upsert'ы блокировкой строки аккаунта; на SQLite (pool=1) не нужно.
