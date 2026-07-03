@@ -667,7 +667,7 @@ class TerminalEmulator(
         val args = parseArgs(raw)
         fun arg(i: Int, d: Int) = args.getOrNull(i)?.takeIf { it > 0 } ?: d
         when (final) {
-            'm' -> applySgr(parseSgrParams(raw))
+            'm' -> style = SgrParser.apply(SgrParser.parseParams(raw), style)
             '@' -> insertChars(arg(0, 1))
             'A' -> { cy = (cy - arg(0, 1)).coerceAtLeast(topLimit()); pendingWrap = false }
             'B', 'e' -> { cy = (cy + arg(0, 1)).coerceAtMost(bottomLimit()); pendingWrap = false }
@@ -792,105 +792,11 @@ class TerminalEmulator(
         }
     }
 
-    // --- SGR ---------------------------------------------------------------
-
-    /**
-     * Применяет SGR. [params] — список параметров, разделённых `;`; каждый параметр — массив своих
-     * `:`-субпараметров (modern colon-форма: `4:3`, `38:2::r:g:b`, `58:5:n`). Расширенные цвета (38/48/58)
-     * понимают обе формы: colon-субпараметры внутри одного параметра ИЛИ legacy-форму с `;`,
-     * где тип и компоненты идут отдельными параметрами (тогда они доедаются из хвоста списка).
-     */
-    private fun applySgr(params: List<IntArray>) {
-        if (params.isEmpty()) { style = TermStyle(); return }
-        var i = 0
-        while (i < params.size) {
-            val param = params[i]
-            when (val p = param.firstOrNull() ?: 0) {
-                0 -> style = TermStyle() // пустые субпараметры parseSgrParams даёт как 0, не -1
-                1 -> style = style.copy(bold = true)
-                2 -> style = style.copy(dim = true)
-                3 -> style = style.copy(italic = true)
-                4 -> style = style.copy(underlineStyle = underlineFromSub(param.getOrElse(1) { 1 }))
-                5, 6 -> style = style.copy(blink = true)
-                7 -> style = style.copy(inverse = true)
-                8 -> style = style.copy(hidden = true)
-                9 -> style = style.copy(strikethrough = true)
-                21 -> style = style.copy(underlineStyle = UnderlineStyle.Double)
-                22 -> style = style.copy(bold = false, dim = false)
-                23 -> style = style.copy(italic = false)
-                24 -> style = style.copy(underlineStyle = UnderlineStyle.None)
-                25 -> style = style.copy(blink = false)
-                27 -> style = style.copy(inverse = false)
-                28 -> style = style.copy(hidden = false)
-                29 -> style = style.copy(strikethrough = false)
-                in 30..37 -> style = style.copy(fg = TermColor.Indexed(p - 30))
-                38 -> { val (col, used) = extendedColor(params, i); style = style.copy(fg = col); i += used }
-                39 -> style = style.copy(fg = TermColor.Default)
-                in 40..47 -> style = style.copy(bg = TermColor.Indexed(p - 40))
-                48 -> { val (col, used) = extendedColor(params, i); style = style.copy(bg = col); i += used }
-                49 -> style = style.copy(bg = TermColor.Default)
-                58 -> { val (col, used) = extendedColor(params, i); style = style.copy(underlineColor = col); i += used }
-                59 -> style = style.copy(underlineColor = TermColor.Default)
-                in 90..97 -> style = style.copy(fg = TermColor.Indexed(8 + p - 90))
-                in 100..107 -> style = style.copy(bg = TermColor.Indexed(8 + p - 100))
-            }
-            i++
-        }
-    }
-
-    private fun underlineFromSub(sub: Int): UnderlineStyle = when (sub) {
-        0 -> UnderlineStyle.None
-        2 -> UnderlineStyle.Double
-        3 -> UnderlineStyle.Curly
-        4 -> UnderlineStyle.Dotted
-        5 -> UnderlineStyle.Dashed
-        else -> UnderlineStyle.Single // 1 и неизвестные подстили
-    }
-
-    /**
-     * Разбор расширенного цвета (38/48/58) в обеих формах. Возвращает цвет и число ДОПОЛНИТЕЛЬНЫХ
-     * `;`-параметров, съеденных из [params] начиная с [at] (для colon-формы — 0, цвет уже внутри параметра).
-     */
-    private fun extendedColor(params: List<IntArray>, at: Int): Pair<TermColor, Int> {
-        val param = params[at]
-        // Colon-форма: тип и компоненты — субпараметры внутри одного параметра (38:2:..., 38:5:n).
-        if (param.size > 1) return colonColor(param) to 0
-        // Legacy `;`-форма: следующий параметр — тип, далее компоненты отдельными параметрами.
-        fun nextFirst(k: Int) = params.getOrNull(at + k)?.firstOrNull()
-        return when (nextFirst(1)) {
-            5 -> (nextFirst(2)?.let { TermColor.Indexed(it.coerceIn(0, 255)) } ?: TermColor.Default) to 2
-            2 -> {
-                val r = (nextFirst(2) ?: 0).coerceIn(0, 255)
-                val g = (nextFirst(3) ?: 0).coerceIn(0, 255)
-                val b = (nextFirst(4) ?: 0).coerceIn(0, 255)
-                TermColor.Rgb(r, g, b) to 4
-            }
-            else -> TermColor.Default to 0
-        }
-    }
-
-    /**
-     * Цвет из colon-субпараметров одного параметра: `[2, cs?, r, g, b]` → Rgb (необязательное поле
-     * colorspace при 6+ элементах пропускаем), `[5, n]` → Indexed. Первый элемент — селектор 38/48/58.
-     */
-    private fun colonColor(param: IntArray): TermColor = when (param.getOrElse(1) { -1 }) {
-        5 -> TermColor.Indexed(param.getOrElse(2) { 0 }.coerceIn(0, 255))
-        2 -> {
-            val base = if (param.size >= 6) 3 else 2 // 38:2:cs:r:g:b vs 38:2:r:g:b
-            TermColor.Rgb(
-                param.getOrElse(base) { 0 }.coerceIn(0, 255),
-                param.getOrElse(base + 1) { 0 }.coerceIn(0, 255),
-                param.getOrElse(base + 2) { 0 }.coerceIn(0, 255),
-            )
-        }
-        else -> TermColor.Default
-    }
-
     // --- Печать и перемещение ---------------------------------------------
 
     private fun putCodePoint(cp: Int) {
-        if (isCombining(cp) && appendCombining(cp)) return // прицепили к базе — курсор не двигаем
-        val w = charWidth(cp)
+        if (CharMetrics.isCombining(cp) && appendCombining(cp)) return // прицепили к базе — курсор не двигаем
+        val w = CharMetrics.charWidth(cp)
         if (pendingWrap) {
             // Мягкий перенос: покидаемая строка логически продолжается на следующей — помечаем её
             // wrapped (для reflow) ДО lineFeed, пока cy ещё указывает на неё.
@@ -903,7 +809,7 @@ class TerminalEmulator(
         // иначе размещаем его как одиночный в последней клетке (нет места под continuation).
         if (w == 2 && cx >= cols - 1 && autoWrap) { grid[cy].wrapped = true; cx = 0; lineFeed() }
 
-        val text = codePointToString(cp)
+        val text = CharMetrics.codePointToString(cp)
         val row = grid[cy]
         if (insertMode) {
             repeat(w) { row.add(cx, blankCell()) }
@@ -938,68 +844,14 @@ class TerminalEmulator(
         val base = row[baseCol]
         if (base.width == CellWidth.Continuation) return false                   // защита: на голую континуацию не крепим
         if (base.text.length >= MAX_GRAPHEME_LEN) return true                    // кластер переполнен — знак глотаем
-        row[baseCol] = base.copy(text = base.text + codePointToString(cp))
+        row[baseCol] = base.copy(text = base.text + CharMetrics.codePointToString(cp))
         return true
     }
-
-    /**
-     * Комбинируемый знак нулевой ширины (упрощённая таблица, как [charWidth]): диакритика, ZWJ,
-     * вариационные селекторы, комбинируемые знаки для символов. Полная категория Mn/Me — позже.
-     * Hangul Jamo (L/V/T-композиция) намеренно НЕ здесь: его ширину держит [charWidth] (как ncurses).
-     */
-    private fun isCombining(cp: Int): Boolean =
-        cp == 0x200D ||                  // ZWJ (склейка emoji)
-        cp in 0x0300..0x036F ||          // combining diacritical marks
-        cp in 0x0483..0x0489 ||          // комбинируемые (кириллица и пр.)
-        cp in 0x0591..0x05BD ||          // иврит (огласовки, часть)
-        cp in 0x0610..0x061A ||          // арабский (часть)
-        cp in 0x064B..0x065F ||          // арабская диакритика
-        cp == 0x0670 ||
-        cp in 0x06D6..0x06DC ||
-        cp in 0x0E31..0x0E3A ||          // тайский (часть)
-        cp in 0x1AB0..0x1AFF ||          // combining diacritical marks extended
-        cp in 0x1DC0..0x1DFF ||          // combining diacritical marks supplement
-        cp in 0x20D0..0x20FF ||          // combining marks for symbols
-        cp in 0xFE00..0xFE0F ||          // variation selectors
-        cp in 0xFE20..0xFE2F ||          // combining half marks
-        cp in 0xE0100..0xE01EF           // variation selectors supplement
 
     /** REP (CSI Ps b): повторить последний печатный символ Ps раз. Кламп — не больше площади экрана. */
     private fun repeatLastChar(n: Int) {
         val cp = lastPrintedCp ?: return
         repeat(n.coerceIn(1, cols * rows)) { putCodePoint(cp) }
-    }
-
-    /**
-     * Ширина символа в колонках по упрощённой таблице East Asian Width + emoji: 2 для CJK/Hangul/
-     * kana/fullwidth-форм и эмодзи-блоков, иначе 1. Комбинируемые/нулевой ширины пока считаем за 1
-     * (отдельный слой объединения — позже).
-     */
-    private fun charWidth(cp: Int): Int = if (
-        cp in 0x1100..0x115F ||              // Hangul Jamo
-        cp in 0x2E80..0x303E ||              // CJK радикалы, Kangxi, punctuation
-        cp in 0x3041..0x33FF ||              // Hiragana/Katakana, CJK symbols
-        cp in 0x3400..0x4DBF ||              // CJK Ext A
-        cp in 0x4E00..0x9FFF ||              // CJK Unified
-        cp in 0xA000..0xA4CF ||              // Yi
-        cp in 0xAC00..0xD7A3 ||              // Hangul syllables
-        cp in 0xF900..0xFAFF ||              // CJK compatibility
-        cp in 0xFE10..0xFE19 ||              // vertical forms
-        cp in 0xFE30..0xFE6F ||              // CJK compat forms
-        cp in 0xFF00..0xFF60 ||              // fullwidth forms
-        cp in 0xFFE0..0xFFE6 ||              // fullwidth signs
-        cp in 0x1F300..0x1FAFF ||            // emoji, symbols, pictographs
-        cp in 0x20000..0x3FFFD               // CJK Ext B и далее
-    ) 2 else 1
-
-    /** Codepoint → строка: BMP — один Char, астральный — суррогатная пара, невалидный — U+FFFD. */
-    private fun codePointToString(cp: Int): String = when {
-        cp in 0..0xFFFF && cp !in 0xD800..0xDFFF -> cp.toChar().toString()
-        cp in 0x10000..0x10FFFF -> {
-            val v = cp - 0x10000
-            charArrayOf((0xD800 + (v shr 10)).toChar(), (0xDC00 + (v and 0x3FF)).toChar()).concatToString()
-        }
-        else -> "�"
     }
 
     private fun lineFeed() {
@@ -1289,137 +1141,29 @@ class TerminalEmulator(
     }
 
     /**
-     * Переукладка основного буфера (scrollback + [primaryGrid]) под ширину [nc]/высоту [nr]. Логические
-     * строки (цепочки мягко-перенесённых физических) переразбиваются по [nc]; нижние [nr] строк идут в
-     * новый [primaryGrid], остальные — в scrollback (с обрезкой по maxScrollback). Возвращает новую
-     * позицию курсора `(cy, cx)` в координатах нового grid (имеет смысл лишь при [trackCursor]).
+     * Переукладка основного буфера (scrollback + [primaryGrid]) под ширину [nc]/высоту [nr] — сам
+     * алгоритм в [TerminalReflow.reflow] (чистые функции), здесь только сбор входа и применение
+     * результата к состоянию. Возвращает новую позицию курсора `(cy, cx)` в координатах нового grid
+     * (имеет смысл лишь при [trackCursor]).
      */
     private fun reflowPrimary(nc: Int, nr: Int, trackCursor: Boolean): Pair<Int, Int> {
-        val blank = TermCell(" ")
-        val cursorAbs = scrollback.size + cy
-
-        // 1. Поток всех физических строк основного буфера.
         val src = ArrayList<TermRow>(scrollback.size + primaryGrid.size).apply {
             addAll(scrollback); addAll(primaryGrid)
         }
-
-        // 2. Группируем в логические строки (цепочки по wrapped) и находим логический индекс/колонку курсора.
-        val logicals = ArrayList<MutableList<TermCell>>()
-        var curLogIndex = 0
-        var curLogCol = cx
-        run {
-            var i = 0
-            var abs = 0
-            while (i < src.size) {
-                val cells = ArrayList<TermCell>()
-                while (true) {
-                    val row = src[i]
-                    if (trackCursor && abs == cursorAbs) {
-                        curLogIndex = logicals.size
-                        curLogCol = cells.size + cx
-                    }
-                    cells.addAll(row)
-                    val wrapped = row.wrapped
-                    i++; abs++
-                    if (!wrapped || i >= src.size) break
-                }
-                logicals.add(cells)
-            }
-        }
-
-        // 3. Каждую логическую тримим по хвостовым дефолтным пробелам и переразбиваем по nc.
-        val out = ArrayList<TermRow>(logicals.size)
-        var cursorAbsNew = 0
-        var cursorColNew = 0
-        logicals.forEachIndexed { idx, cells ->
-            var len = cells.size
-            while (len > 0 && cells[len - 1] == blank) len--
-            val isCursorLine = trackCursor && idx == curLogIndex
-            // Гарантируем, что колонка курсора достижима после трима (курсор может стоять за текстом).
-            if (isCursorLine) len = maxOf(len, curLogCol + 1)
-            val logical = if (len == cells.size) cells else cells.subList(0, len.coerceAtMost(cells.size))
-            val base = out.size
-            // Позицию курсора берём из реального прохода разбиения (а не из curLogCol/nc): wide-символы
-            // могут давать строки с nc-1 видимыми ячейками, и арифметика бы съезжала.
-            val cursorOut = IntArray(2) { -1 }
-            out.addAll(splitLogical(logical, nc, blank, if (isCursorLine) curLogCol else -1, cursorOut))
-            if (isCursorLine && cursorOut[0] >= 0) {
-                cursorAbsNew = base + cursorOut[0]
-                cursorColNew = cursorOut[1]
-            }
-        }
-
-        // 4. Отбрасываем незначимый пустой хвост (неиспользованное место внизу экрана не должно уходить
-        //    в scrollback): держим строки до последней непустой и до строки курсора включительно. Но
-        //    пустое пространство ВИДИМОГО экрана под курсором — это содержимое (после `clear`/`Ctrl+L`
-        //    под prompt'ом лежит пустой экран, а история уже в scrollback): его сохраняем, иначе reflow
-        //    схлопнет хвост и втянет историю обратно на видимый экран. Кап nr-1 — курсор не уедет за низ.
-        var significant = out.size
-        while (significant > 0 && out[significant - 1].all { it == blank }) significant--
-        if (trackCursor) {
-            val belowCursorInScreen = (rows - 1 - cy).coerceIn(0, nr - 1)
-            significant = maxOf(significant, cursorAbsNew + 1 + belowCursorInScreen)
-        }
-        significant = significant.coerceAtLeast(1).coerceAtMost(out.size)
-        val kept = out.subList(0, significant)
-
-        // 5. Делим на grid (нижние nr) и scrollback (верх), дополняя пустыми при нехватке.
-        val gridStart: Int
-        val newGrid: MutableList<TermRow>
-        if (kept.size >= nr) {
-            gridStart = kept.size - nr
-            newGrid = ArrayList(kept.subList(gridStart, kept.size))
-        } else {
-            gridStart = 0
-            newGrid = ArrayList(kept)
-            repeat(nr - kept.size) { newGrid.add(TermRow(MutableList(nc) { blank })) }
-        }
-        val newScroll = if (gridStart > 0) kept.subList(0, gridStart) else emptyList()
-
+        val result = TerminalReflow.reflow(
+            src = src,
+            nc = nc,
+            nr = nr,
+            maxScrollback = maxScrollback,
+            cursorAbs = scrollback.size + cy,
+            cursorCol = cx,
+            rowsBelowCursor = rows - 1 - cy,
+            trackCursor = trackCursor,
+        )
         scrollback.clear()
-        val drop = (newScroll.size - maxScrollback).coerceAtLeast(0)
-        for (r in drop until newScroll.size) scrollback.addLast(newScroll[r])
-        primaryGrid = newGrid
-
-        val newCy = cursorAbsNew - gridStart
-        return Pair(newCy, cursorColNew)
-    }
-
-    /**
-     * Разбивает логическую строку [cells] на физические шириной [nc], не разрывая широкие символы
-     * (Wide+Continuation не должны попадать в разные строки). Все, кроме последней, помечаются
-     * `wrapped = true`; каждая дополняется до [nc] нейтральным [pad]. Пустая логическая → одна пустая строка.
-     *
-     * Если [cursorCol] >= 0, в [cursorOut] кладётся позиция курсора в результате: `[0]` — индекс строки
-     * (внутри возвращённого списка), `[1]` — колонка в ней. Позиция берётся прямым проходом, поэтому
-     * корректна и при early-break на широком символе (когда строка несёт nc-1 видимых ячеек).
-     */
-    private fun splitLogical(
-        cells: List<TermCell>,
-        nc: Int,
-        pad: TermCell,
-        cursorCol: Int = -1,
-        cursorOut: IntArray? = null,
-    ): List<TermRow> {
-        if (cells.isEmpty()) {
-            if (cursorCol >= 0 && cursorOut != null) { cursorOut[0] = 0; cursorOut[1] = cursorCol.coerceIn(0, nc - 1) }
-            return listOf(TermRow(MutableList(nc) { pad }))
-        }
-        val out = ArrayList<TermRow>()
-        var idx = 0
-        while (idx < cells.size) {
-            val chunk = ArrayList<TermCell>(nc)
-            while (idx < cells.size && chunk.size < nc) {
-                val cell = cells[idx]
-                // Широкий символ не делим: если пара не влезает в остаток непустого chunk — оборвать раньше.
-                if (cell.width == CellWidth.Wide && chunk.isNotEmpty() && chunk.size + 2 > nc) break
-                if (idx == cursorCol && cursorOut != null) { cursorOut[0] = out.size; cursorOut[1] = chunk.size }
-                chunk.add(cell); idx++
-            }
-            while (chunk.size < nc) chunk.add(pad)
-            out.add(TermRow(chunk, wrapped = idx < cells.size))
-        }
-        return out
+        result.scrollback.forEach { scrollback.addLast(it) }
+        primaryGrid = result.grid
+        return Pair(result.cursorRow, result.cursorCol)
     }
 
     /** Ресайз сетки БЕЗ reflow (alt-screen): обрезка/дополнение строк и рядов. */
@@ -1465,19 +1209,8 @@ class TerminalEmulator(
     private fun parseArgs(raw: String): List<Int> {
         if (raw.isEmpty()) return emptyList()
         // Не-SGR CSI (курсор, DECSCUSR, режимы) colon не несут; на всякий случай сводим ':' к ';'.
-        // SGR разбирает отдельный colon-aware parseSgrParams (субпараметры там значимы).
+        // SGR разбирает отдельный colon-aware [SgrParser.parseParams] (субпараметры там значимы).
         return raw.replace(':', ';').split(';').map { it.toIntOrNull() ?: -1 }
-    }
-
-    /**
-     * Разбор SGR-параметров с сохранением структуры субпараметров: каждый `;`-параметр → массив его
-     * `:`-частей (modern colon-форма). Пустые части → 0 (например, поле colorspace в `58:2::r:g:b`).
-     */
-    private fun parseSgrParams(raw: String): List<IntArray> {
-        if (raw.isEmpty()) return emptyList()
-        return raw.split(';').map { part ->
-            part.split(':').map { it.toIntOrNull() ?: 0 }.toIntArray()
-        }
     }
 
     private companion object {
