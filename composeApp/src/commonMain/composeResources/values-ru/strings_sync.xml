@@ -96,4 +96,22 @@
     <string name="sync_expires_in">Истекает через %1$s</string>
     <string name="sync_copied">Скопировано</string>
     <string name="sync_copy">Копировать</string>
+
+    <!-- Причины SyncStatus.Failed (typed reason → текст; техническая деталь добавляется после двоеточия) -->
+    <string name="sync_fail_vault_locked">Хранилище заблокировано</string>
+    <string name="sync_fail_unauthorized">Неверный мастер-пароль или аккаунт</string>
+    <string name="sync_fail_account_not_found">Аккаунт не найден</string>
+    <string name="sync_fail_account_exists">Аккаунт уже существует</string>
+    <string name="sync_fail_pairing_expired">Код паринга истёк</string>
+    <string name="sync_fail_network">Нет связи с сервером</string>
+    <string name="sync_fail_protocol">Ошибка протокола синхронизации</string>
+    <string name="sync_fail_connect">Не удалось подключиться</string>
+    <string name="sync_fail_code_malformed">Не похоже на код связывания</string>
+    <string name="sync_fail_code_invalid">Код связывания недействителен</string>
+    <string name="sync_fail_wrong_device_password">Неверный пароль этого устройства</string>
+    <string name="sync_fail_local_vault_corrupted">Локальное хранилище повреждено</string>
+    <string name="sync_fail_pairing">Не удалось связать устройство. Проверьте код и попробуйте снова.</string>
+    <string name="sync_fail_save_settings">Не удалось сохранить настройки синхронизации</string>
+    <string name="sync_fail_sync">Ошибка синхронизации</string>
+    <string name="sync_fail_revoke">Не удалось отозвать устройство</string>
 </resources>

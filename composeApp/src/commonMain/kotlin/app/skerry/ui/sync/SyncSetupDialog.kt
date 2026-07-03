@@ -155,7 +155,7 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
             if (failed != null) {
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Sym("error", size = 14.sp, color = D.sunset)
-                    Txt(failed.message, color = D.sunset, size = 11.5.sp)
+                    Txt(syncFailureText(failed), color = D.sunset, size = 11.5.sp)
                 }
             }
 

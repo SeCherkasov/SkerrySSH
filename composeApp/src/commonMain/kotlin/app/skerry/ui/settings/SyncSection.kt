@@ -44,6 +44,7 @@ import app.skerry.ui.generated.resources.settings_sync_syncing_desc
 import app.skerry.ui.generated.resources.settings_sync_title
 import app.skerry.ui.generated.resources.settings_what_syncs
 import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.sync.syncFailureText
 import org.jetbrains.compose.resources.stringResource
 
 // Секция Sync: статус движка синхронизации + тумблеры «что синхронизировать».
@@ -114,7 +115,7 @@ private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: Desk
         is SyncStatus.Configured -> SyncStatusCard("cloud_off", D.amber, stringResource(Res.string.settings_sync_linked, status.accountId), stringResource(Res.string.settings_sync_linked_desc)) {
             GhostButton(stringResource(Res.string.settings_open_account), onClick = toAccount)
         }
-        is SyncStatus.Failed -> SyncStatusCard("cloud_off", D.sunset, stringResource(Res.string.settings_sync_error), status.message) {
+        is SyncStatus.Failed -> SyncStatusCard("cloud_off", D.sunset, stringResource(Res.string.settings_sync_error), syncFailureText(status)) {
             GhostButton(stringResource(Res.string.settings_open_account), onClick = toAccount)
         }
         SyncStatus.Disabled -> SyncStatusCard("cloud_off", D.faint, stringResource(Res.string.settings_sync_not_connected), stringResource(Res.string.settings_sync_not_connected_desc)) {

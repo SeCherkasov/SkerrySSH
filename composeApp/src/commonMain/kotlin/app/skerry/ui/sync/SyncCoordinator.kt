@@ -79,7 +79,33 @@ sealed interface SyncStatus {
      */
     data class Configured(val serverUrl: String, val accountId: String) : SyncStatus
     data class Online(val accountId: String, val lastPushed: Int, val lastPulled: Int) : SyncStatus
-    data class Failed(val message: String) : SyncStatus
+
+    /**
+     * Сбой: [reason] — типизированная причина (локализуется на UI-слое, контроллер строк не строит),
+     * [detail] — необязательная техническая деталь (сообщение исключения) для строк, где она
+     * помогает диагностике; UI добавляет её после локализованного текста.
+     */
+    data class Failed(val reason: SyncFailureReason, val detail: String? = null) : SyncStatus
+}
+
+/** Причины [SyncStatus.Failed] — по одному значению на пользовательскую ситуацию (en+ru строки в UI). */
+enum class SyncFailureReason {
+    VaultLocked,
+    Unauthorized,          // неверный мастер-пароль или аккаунт
+    AccountNotFound,
+    AccountExists,
+    PairingCodeExpired,
+    Network,               // нет связи с сервером (detail: причина)
+    Protocol,              // ошибка протокола (detail: причина)
+    ConnectFailed,         // непредвиденный сбой подключения (detail: причина)
+    PairingCodeMalformed,  // строка не похожа на код связывания
+    PairingCodeInvalid,
+    WrongDevicePassword,
+    LocalVaultCorrupted,
+    PairingFailed,         // прочие сбои паринга (без detail: не светить внутренности крипто/Ktor)
+    SaveSettingsFailed,    // не сохранились настройки синка (detail: причина)
+    SyncFailed,            // сбой цикла синхронизации (detail: причина)
+    RevokeFailed,          // не удалось отозвать устройство (detail: причина)
 }
 
 /**
@@ -289,7 +315,7 @@ class SyncCoordinator(
         _status.value = SyncStatus.Busy
         val dataKey = vault.exportDataKey()
         if (dataKey == null) {
-            _status.value = SyncStatus.Failed("vault is locked")
+            _status.value = SyncStatus.Failed(SyncFailureReason.VaultLocked)
             masterPassword.fill(' ')
             return
         }
@@ -343,11 +369,11 @@ class SyncCoordinator(
         } catch (e: CancellationException) {
             throw e // не глушим отмену — иначе порвём structured concurrency
         } catch (e: SyncException) {
-            _status.value = SyncStatus.Failed(syncErrorMessage(e))
+            _status.value = syncFailure(e)
         } catch (e: Exception) {
             // Непредвиденное (напр. vault.unlockWithDataKey при принятии ключа кинул I/O) — иначе
             // исключение ушло бы в SupervisorJob тихо, а статус навсегда застрял бы на Busy.
-            _status.value = SyncStatus.Failed("Не удалось подключиться: ${e.message}")
+            _status.value = SyncStatus.Failed(SyncFailureReason.ConnectFailed, e.message)
         } finally {
             // Затираем весь выведенный ключевой материал и пароль (zero-knowledge): masterKey/authKey —
             // субключи, dataKey — копия из exportDataKey (живой ключ остаётся у vault). Идемпотентно.
@@ -484,7 +510,7 @@ class SyncCoordinator(
         _status.value = SyncStatus.Busy
         val parsed = PairingPayload.decode(payload)
         if (parsed == null) {
-            _status.value = SyncStatus.Failed("Не похоже на код связывания")
+            _status.value = SyncStatus.Failed(SyncFailureReason.PairingCodeMalformed)
             localPassword.fill(' ')
             return
         }
@@ -504,7 +530,7 @@ class SyncCoordinator(
             if (decoded == null) {
                 // transferKey не подошёл к конверту — битый/подменённый код. claimPairing уже сжёг
                 // одноразовый код на сервере, повтор не поможет: пусть пользователь начнёт паринг заново.
-                _status.value = SyncStatus.Failed("Код связывания недействителен")
+                _status.value = SyncStatus.Failed(SyncFailureReason.PairingCodeInvalid)
                 return
             }
             accountDataKey = decoded
@@ -518,11 +544,11 @@ class SyncCoordinator(
                 when (vault.unlock(localPassword.copyOf())) {
                     UnlockResult.Success -> {}
                     UnlockResult.WrongPassword -> {
-                        _status.value = SyncStatus.Failed("Неверный пароль этого устройства")
+                        _status.value = SyncStatus.Failed(SyncFailureReason.WrongDevicePassword)
                         return
                     }
                     UnlockResult.Corrupted -> {
-                        _status.value = SyncStatus.Failed("Локальное хранилище повреждено")
+                        _status.value = SyncStatus.Failed(SyncFailureReason.LocalVaultCorrupted)
                         return
                     }
                 }
@@ -552,10 +578,10 @@ class SyncCoordinator(
         } catch (e: CancellationException) {
             throw e
         } catch (e: SyncException) {
-            _status.value = SyncStatus.Failed(syncErrorMessage(e))
+            _status.value = syncFailure(e)
         } catch (e: Exception) {
             // Без e.message: оно может нести внутренние детали крипто/Ktor наружу в UI (security-ревью).
-            _status.value = SyncStatus.Failed("Не удалось связать устройство. Проверьте код и попробуйте снова.")
+            _status.value = SyncStatus.Failed(SyncFailureReason.PairingFailed)
         } finally {
             localPassword.fill(' ')
             accountDataKey?.zeroize() // если до adopt не дошли (или ключ отвергнут) — затираем развёрнутый ключ
@@ -603,7 +629,7 @@ class SyncCoordinator(
                 // тихо, а оптимистично переключённый тумблер «отскочил» бы в прежнее значение при следующем
                 // refreshSyncSettings без объяснения (silent-ревью). Откатываем UI к previous и сигналим.
                 _syncSettings.value = previous
-                _status.value = SyncStatus.Failed("Не удалось сохранить настройки синхронизации: ${e.message}")
+                _status.value = SyncStatus.Failed(SyncFailureReason.SaveSettingsFailed, e.message)
             }
         }
     }
@@ -646,11 +672,11 @@ class SyncCoordinator(
         } catch (e: CancellationException) {
             throw e // отмену не глушим — иначе порвём structured concurrency
         } catch (e: SyncException) {
-            _status.value = SyncStatus.Failed(syncErrorMessage(e))
+            _status.value = syncFailure(e)
         } catch (e: Exception) {
             // Непредвиденное (сериализация, OOM, баг в движке) — иначе ушло бы в SupervisorJob тихо,
             // а статус навсегда застрял бы на Busy (вечный спиннер). syncNow/restoreSession зовут это.
-            _status.value = SyncStatus.Failed("Ошибка синхронизации: ${e.message}")
+            _status.value = SyncStatus.Failed(SyncFailureReason.SyncFailed, e.message)
         }
     }
 
@@ -753,7 +779,7 @@ class SyncCoordinator(
             // Отзыв — security-action (реакция на потерянное устройство): тихий false неотличим в UI от
             // «устройства нет», пользователь не знает, отозвалось ли (silent-ревью). Сигналим ошибку через
             // статус, чтобы секция Sync показала сбой, и возвращаем false (список не перечитывается).
-            _status.value = SyncStatus.Failed("Не удалось отозвать устройство: ${e.message}")
+            _status.value = SyncStatus.Failed(SyncFailureReason.RevokeFailed, e.message)
             false
         }
     }
@@ -844,13 +870,14 @@ class SyncCoordinator(
         }
     }
 
-    private fun syncErrorMessage(e: SyncException): String = when (e.kind) {
-        SyncException.Kind.UNAUTHORIZED -> "Неверный мастер-пароль или аккаунт"
-        SyncException.Kind.NOT_FOUND -> "Аккаунт не найден"
-        SyncException.Kind.CONFLICT -> "Аккаунт уже существует"
-        SyncException.Kind.GONE -> "Код паринга истёк"
-        SyncException.Kind.NETWORK -> "Нет связи с сервером: ${e.message}"
-        SyncException.Kind.PROTOCOL -> "Ошибка протокола синхронизации: ${e.message}"
+    /** [SyncException] → типизированный [SyncStatus.Failed] (тексты — на UI-слое, en+ru). */
+    private fun syncFailure(e: SyncException): SyncStatus.Failed = when (e.kind) {
+        SyncException.Kind.UNAUTHORIZED -> SyncStatus.Failed(SyncFailureReason.Unauthorized)
+        SyncException.Kind.NOT_FOUND -> SyncStatus.Failed(SyncFailureReason.AccountNotFound)
+        SyncException.Kind.CONFLICT -> SyncStatus.Failed(SyncFailureReason.AccountExists)
+        SyncException.Kind.GONE -> SyncStatus.Failed(SyncFailureReason.PairingCodeExpired)
+        SyncException.Kind.NETWORK -> SyncStatus.Failed(SyncFailureReason.Network, e.message)
+        SyncException.Kind.PROTOCOL -> SyncStatus.Failed(SyncFailureReason.Protocol, e.message)
     }
 }
 

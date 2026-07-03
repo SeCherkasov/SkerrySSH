@@ -55,8 +55,8 @@ class AccountCardModelTest {
     fun busy_and_failed_render_as_local_vault_variants() {
         assertEquals("Syncing…", accountCardModel(SyncStatus.Busy).subtitle)
         assertTrue(accountCardModel(SyncStatus.Busy).localOnly)
-        assertEquals("Sync error", accountCardModel(SyncStatus.Failed("boom")).subtitle)
-        assertTrue(accountCardModel(SyncStatus.Failed("boom")).localOnly)
+        assertEquals("Sync error", accountCardModel(SyncStatus.Failed(SyncFailureReason.SyncFailed, "boom")).subtitle)
+        assertTrue(accountCardModel(SyncStatus.Failed(SyncFailureReason.SyncFailed, "boom")).localOnly)
     }
 
     @Test

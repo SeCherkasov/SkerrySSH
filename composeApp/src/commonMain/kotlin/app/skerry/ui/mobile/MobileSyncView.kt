@@ -38,6 +38,7 @@ import app.skerry.shared.sync.RemoteDevice
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupBody
 import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.sync.syncFailureText
 import app.skerry.ui.sync.SyncStatusNotice
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sync_title
@@ -200,7 +201,7 @@ private fun SyncBody(sync: SyncCoordinator) {
             Spacer(Modifier.height(16.dp))
             SyncSetupBody(sync, errorMessage = null)
         }
-        is SyncStatus.Failed -> SyncSetupBody(sync, errorMessage = status.message)
+        is SyncStatus.Failed -> SyncSetupBody(sync, errorMessage = syncFailureText(status))
         SyncStatus.Disabled -> SyncSetupBody(sync, errorMessage = null)
     }
 }
