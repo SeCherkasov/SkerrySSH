@@ -3,7 +3,7 @@
     <string name="more_port_forwarding">Port forwarding</string>
     <string name="more_known_hosts">Known hosts</string>
     <string name="more_team">Team</string>
-    <string name="more_ai_privacy">AI &amp; privacy</string>
+    <string name="more_ai_privacy">AI assistant</string>
     <string name="more_ai_subtitle_byok">OpenAI · BYOK</string>
     <string name="more_ai_subtitle_local">Local</string>
     <string name="more_ai_subtitle_off">Off</string>

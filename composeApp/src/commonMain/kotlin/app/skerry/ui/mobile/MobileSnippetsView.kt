@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -218,7 +217,7 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
     val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
     // Инлайновый лист (как листы Vault/New connection) — рендерится на верхнем уровне Box экрана, НЕ
     // через Popup: focusable-Popup менял инсеты окна и слегка сдвигал шапку терминала.
-    MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.7f) {
+    MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.7f) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Txt(stringResource(Res.string.lib_snippets_run_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
             MobileFormInput(query, { query = it }, stringResource(Res.string.lib_snippets_search))
@@ -258,7 +257,7 @@ private fun MobileSnippetEditSheet(
     // назначенный на desktop хоткей), canSave, теги, сборка черновика.
     val form = remember { SnippetFormState.fromEntry(entry) }
 
-    MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.9f) {
+    MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.9f) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Txt(if (entry == null) stringResource(Res.string.lib_snippets_new) else stringResource(Res.string.lib_snippets_edit), color = D.text, size = 18.sp, weight = FontWeight.Bold)
             MobileFormField(stringResource(Res.string.lib_snippets_field_name)) {

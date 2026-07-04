@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -44,7 +43,8 @@ import app.skerry.ui.design.Txt
 
 /**
  * Каркас маленького центрированного модального диалога: полноэкранный скрим (тап мимо закрывает),
- * карточка по центру над клавиатурой ([imePadding]); сама карточка гасит клик, чтобы не закрываться.
+ * карточка по центру; сама карточка гасит клик, чтобы не закрываться. Над клавиатурой карточка
+ * оказывается сама: корневой `safeDrawing` ужимает область над IME, и `Center` центрирует в остатке.
  */
 @Composable
 internal fun MobileCenteredDialog(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
@@ -52,8 +52,7 @@ internal fun MobileCenteredDialog(onDismiss: () -> Unit, content: @Composable Co
         Modifier
             .fillMaxSize()
             .background(D.scrim)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
-            .imePadding(),
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Column(

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -70,9 +69,6 @@ internal fun TeamsDialogCard(onDismiss: () -> Unit, content: @Composable () -> U
             Modifier
                 .widthIn(max = 420.dp)
                 .fillMaxWidth()
-                // Поднять карточку над экранной клавиатурой (поля имени/аккаунта иначе перекрыты IME);
-                // на desktop — no-op. Идёт ДО clip/background, чтобы двигать карточку, а не раздувать рамку.
-                .imePadding()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(D.surfaceDeep)

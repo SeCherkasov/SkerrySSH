@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -768,9 +767,9 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
     // навигации каркаса (LIFO диспетчера); на desktop BackHandler без диспетчера — no-op.
     PlatformBackHandler(onBack = onDismiss)
     Box(
-        // imePadding: на мобильном поднимает центрированный диалог над экранной клавиатурой (поля
-        // NAME/PASSWORD/PEM), чтобы кнопки не уезжали под неё; на desktop WindowInsets.ime пуст — no-op.
-        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(onClick = onDismiss).imePadding(),
+        // Диалог центрируется в видимой области; над клавиатурой оказывается сам — на мобильном
+        // корневой `safeDrawing` ужимает область над IME, и `Center` центрирует в остатке (desktop — no-op).
+        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Column(
