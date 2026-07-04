@@ -208,7 +208,7 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 // Общие хосты команд (Teams): секции по командам под личным каталогом. Показываются
                 // только вне поиска/фильтра — фильтры сужают личный каталог.
                 if (query.isBlank() && effectiveChip == ALL_HOSTS_CHIP) {
-                    TeamHostsSection(liveHosts.hosts, mono)
+                    TeamHostsSection(liveHosts.hosts, state, mono)
                 }
             } else {
                 HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }
@@ -356,7 +356,7 @@ private fun TeamHostsSectionHeader() {
  * credential при шеринге стрипаются).
  */
 @Composable
-private fun TeamHostsSection(hostsSnapshot: List<Host>, mono: FontFamily) {
+private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignState, mono: FontFamily) {
     val teams = LocalTeams.current ?: return
     // Подтягиваем общие хосты команд при переходе sync в Online (см. AutoPullTeamsOnOnline).
     AutoPullTeamsOnOnline()
@@ -374,15 +374,44 @@ private fun TeamHostsSection(hostsSnapshot: List<Host>, mono: FontFamily) {
     if (sections.isEmpty()) return
     TeamHostsSectionHeader()
     sections.forEach { (name, shared) ->
-        Row(
-            Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Sym("group", size = 14.sp, color = D.cyanBright)
-            Txt(name, color = D.dim, size = 11.5.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Ключ свёртки с префиксом — иначе команда и группа хостов с одинаковым именем делили бы
+        // одно состояние в общем collapsedGroups.
+        val collapseKey = "$TEAM_COLLAPSE_PREFIX$name"
+        val collapsed = state.isGroupCollapsed(collapseKey)
+        val onToggle = remember(state, collapseKey) { { state.toggleGroupCollapsed(collapseKey) } }
+        TeamFolderHeader(name, shared.size, collapsed, onToggle)
+        if (!collapsed) {
+            shared.forEach { host -> key("team-${host.id}") { TeamHostRow(host, mono) } }
         }
-        shared.forEach { host -> key("team-${host.id}") { TeamHostRow(host, mono) } }
+    }
+}
+
+/** Префикс ключа свёртки команд в общем [DesktopDesignState.collapsedGroups] — см. [TeamHostsSection]. */
+private const val TEAM_COLLAPSE_PREFIX = " team "
+
+/**
+ * Заголовок команды в сайдбаре — по образцу [FolderHeader] (шеврон-свёртка + иконка + имя +
+ * счётчик), чтобы визуально совпасть с папками хостов; отличается лишь иконкой `group`,
+ * отмечающей происхождение из team-vault.
+ */
+@Composable
+private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
+            contentAlignment = Alignment.Center,
+        ) {
+            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = D.faint)
+        }
+        Sym("group", size = 15.sp, color = D.cyanBright)
+        Txt(name, color = D.dim, size = 12.5.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+            Txt(count.toString(), color = D.faint, size = 10.sp)
+        }
     }
 }
 
