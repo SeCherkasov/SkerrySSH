@@ -10,9 +10,9 @@ import kotlin.test.assertTrue
 class TerminalThemeTest {
 
     @Test
-    fun catalog_has_four_distinct_themes() {
+    fun catalog_has_seven_distinct_themes() {
         val all = TerminalThemes.all
-        assertEquals(4, all.size)
+        assertEquals(7, all.size)
         assertEquals(all.size, all.map { it.id }.toSet().size, "id тем должны быть уникальны")
         assertEquals(all.size, all.map { it.displayName }.toSet().size, "имена тем должны быть уникальны")
     }

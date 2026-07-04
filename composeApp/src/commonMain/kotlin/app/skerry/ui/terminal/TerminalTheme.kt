@@ -106,8 +106,59 @@ object TerminalThemes {
         selection = Color(0xFFEEE8D5),
     )
 
+    /** Catppuccin Mocha — мягкая тёмно-фиолетовая пастель (Base #1E1E2E / Text #CDD6F4). */
+    val CatppuccinMocha = TerminalTheme(
+        id = "catppuccin-mocha",
+        displayName = "Catppuccin Mocha",
+        background = Color(0xFF1E1E2E),
+        foreground = Color(0xFFCDD6F4),
+        cursor = Color(0xFFF5E0DC),
+        ansi = listOf(
+            Color(0xFF45475A), Color(0xFFF38BA8), Color(0xFFA6E3A1), Color(0xFFF9E2AF),
+            Color(0xFF89B4FA), Color(0xFFF5C2E7), Color(0xFF94E2D5), Color(0xFFBAC2DE),
+            Color(0xFF585B70), Color(0xFFF38BA8), Color(0xFFA6E3A1), Color(0xFFF9E2AF),
+            Color(0xFF89B4FA), Color(0xFFF5C2E7), Color(0xFF94E2D5), Color(0xFFA6ADC8),
+        ),
+    )
+
+    /** Dracula — фирменная тёмная палитра с яркими неоновыми акцентами (#282A36 / #F8F8F2). */
+    val Dracula = TerminalTheme(
+        id = "dracula",
+        displayName = "Dracula",
+        background = Color(0xFF282A36),
+        foreground = Color(0xFFF8F8F2),
+        cursor = Color(0xFFF8F8F2),
+        ansi = listOf(
+            Color(0xFF21222C), Color(0xFFFF5555), Color(0xFF50FA7B), Color(0xFFF1FA8C),
+            Color(0xFFBD93F9), Color(0xFFFF79C6), Color(0xFF8BE9FD), Color(0xFFF8F8F2),
+            Color(0xFF6272A4), Color(0xFFFF6E6E), Color(0xFF69FF94), Color(0xFFFFFFA5),
+            Color(0xFFD6ACFF), Color(0xFFFF92DF), Color(0xFFA4FFFF), Color(0xFFFFFFFF),
+        ),
+    )
+
+    /**
+     * Tokyo Day — светлый вариант Tokyo Night (folke tokyonight «day»). Вторая светлая тема; выделение
+     * задаём светло-голубым явно, чтобы не топить и без того нежный текст полупрозрачным акцентом.
+     */
+    val TokyoDay = TerminalTheme(
+        id = "tokyo-day",
+        displayName = "Tokyo Day",
+        background = Color(0xFFE1E2E7),
+        foreground = Color(0xFF3760BF),
+        cursor = Color(0xFF3760BF),
+        ansi = listOf(
+            Color(0xFFB4B5B9), Color(0xFFF52A65), Color(0xFF587539), Color(0xFF8C6C3E),
+            Color(0xFF2E7DE9), Color(0xFF9854F1), Color(0xFF007197), Color(0xFF6172B0),
+            Color(0xFFA1A6C5), Color(0xFFF52A65), Color(0xFF587539), Color(0xFF8C6C3E),
+            Color(0xFF2E7DE9), Color(0xFF9854F1), Color(0xFF007197), Color(0xFF3760BF),
+        ),
+        selection = Color(0xFFB7C1E3),
+    )
+
     /** Все темы в порядке карточек Appearance. */
-    val all: List<TerminalTheme> = listOf(NightSea, TokyoNight, GruvboxDark, SolarizedLight)
+    val all: List<TerminalTheme> = listOf(
+        NightSea, TokyoNight, TokyoDay, CatppuccinMocha, GruvboxDark, Dracula, SolarizedLight,
+    )
 
     val DEFAULT: TerminalTheme = NightSea
 
