@@ -74,11 +74,26 @@ import org.jetbrains.compose.resources.stringResource
 /** Общая высота шапки панели (основной и split) — чтобы заголовки были вровень. */
 private val PANE_HEADER_HEIGHT = 40.dp
 
+/**
+ * Свёрнутый сайдбар: тонкий рельс слева с единственной кнопкой — вернуть панель хостов.
+ * Держит место панели занятым, чтобы контент не «прыгал» на всю ширину при скрытии.
+ */
+@Composable
+private fun CollapsedSidebarRail(state: DesktopDesignState) {
+    Column(
+        // start=12, top=12, box=34 в точности как у кнопки в шапке развёрнутого сайдбара — кнопка
+        // не «прыгает» ни по вертикали, ни по горизонтали при сворачивании/разворачивании.
+        Modifier.width(58.dp).fillMaxHeight().background(D.surface2).padding(start = 12.dp, top = 12.dp),
+    ) {
+        IconBtn("chevron_right", onClick = state::toggleSidebar, box = 34, tint = D.dim)
+    }
+}
+
 /** Терминальный view: hosts-sidebar + main (toolbar, панели, AI-bar) + info-panel. */
 @Composable
 fun TerminalView(state: DesktopDesignState) {
     Row(Modifier.fillMaxSize()) {
-        HostsSidebar(state)
+        if (state.sidebarHidden) CollapsedSidebarRail(state) else HostsSidebar(state)
         Column(Modifier.weight(1f).fillMaxHeight()) {
             // Общий AI-контроллер живого бара (или null): один экземпляр на оверлей-слой и строку ввода;
             // key() пересоздаёт при смене активного хоста/политики. Off/мок → null (показ ниже прежним слотом).

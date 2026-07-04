@@ -113,7 +113,15 @@ internal fun HostsSidebar(state: DesktopDesignState) {
     val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
     Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
-            HostSearchField(state, mono)
+            // Кнопка свернуть сайдбар (слева) + поиск. Раскрытие — такой же кнопкой на тонком рельсе;
+            // обе на box=34 с одинаковым верхним отступом, чтобы не «прыгали» по высоте при переключении.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IconBtn("chevron_left", onClick = state::toggleSidebar, box = 34, tint = D.dim)
+                Box(Modifier.weight(1f)) { HostSearchField(state) }
+            }
             // Лента тегов-фильтров уезжает за край (узкий сайдбар) — прокручиваем по горизонтали. На
             // desktop вертикальное колесо мыши само в горизонталь не переводится, поэтому ловим Scroll
             // и крутим [chipScroll] вручную (delta.y, а если ось горизонтальная — delta.x); на тач/Android
@@ -252,7 +260,7 @@ internal fun HostsSidebar(state: DesktopDesignState) {
  * Пока пусто — справа бейдж `⌘K`; при вводе он сменяется крестиком очистки.
  */
 @Composable
-private fun HostSearchField(state: DesktopDesignState, mono: FontFamily) {
+private fun HostSearchField(state: DesktopDesignState) {
     val query = state.hostSearchQuery
     BasicTextField(
         value = query,
@@ -265,10 +273,11 @@ private fun HostSearchField(state: DesktopDesignState, mono: FontFamily) {
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .height(34.dp)
                     .clip(RoundedCornerShape(7.dp))
                     .background(D.card)
                     .border(1.dp, D.line, RoundedCornerShape(7.dp))
-                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                    .padding(horizontal = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -277,11 +286,7 @@ private fun HostSearchField(state: DesktopDesignState, mono: FontFamily) {
                     if (query.isEmpty()) Txt(stringResource(Res.string.term_search_hosts_placeholder), color = D.faint, size = 12.5.sp)
                     inner()
                 }
-                if (query.isEmpty()) {
-                    Box(Modifier.border(1.dp, D.cyan14, RoundedCornerShape(3.dp)).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                        Txt("⌘K", color = D.faint, size = 10.sp, font = mono)
-                    }
-                } else {
+                if (query.isNotEmpty()) {
                     val onClear = remember(state) { { state.onHostSearch("") } }
                     Box(
                         Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onClear),
