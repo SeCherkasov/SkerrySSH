@@ -35,7 +35,7 @@
     <string name="settings_ai_default_provider">Default AI provider</string>
     <string name="settings_ai_default_provider_desc">Used for connections without a specific override.</string>
     <string name="settings_ai_provider_device">On this device</string>
-    <string name="settings_ai_provider_device_desc">Qwen 2.5 Coder 1.5B · 982 MB · ready. No data leaves your machine.</string>
+    <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 GB · ready. No data leaves your machine.</string>
     <string name="settings_ai_badge_private">PRIVATE</string>
     <string name="settings_ai_provider_byok">My API key (BYOK)</string>
     <string name="settings_ai_provider_byok_desc">Use your OpenAI, Anthropic, or OpenRouter key. You pay the provider directly.</string>

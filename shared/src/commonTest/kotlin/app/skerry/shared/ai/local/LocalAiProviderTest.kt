@@ -26,7 +26,7 @@ private class FakeRuntime(private val deltas: List<String>) : LocalLlmRuntime {
 
 class LocalAiProviderTest {
 
-    private val model = LocalModelCatalog.qwen3_1_7b
+    private val model = LocalModelCatalog.qwen3_4b // модель с extraSystem = "/no_think"
     private val path = "/data/models/m.gguf".toPath()
 
     private fun request(vararg messages: AiMessage) = AiChatRequest(model.id, messages.toList())
