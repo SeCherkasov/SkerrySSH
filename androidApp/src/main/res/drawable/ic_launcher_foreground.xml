@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Передний план адаптивной иконки — перенос 1:1 из docs/new/Skerry Logo.html (Final mark):
+     «S»-знак (сигнал-поток) с teal-градиентом + концентрические сигнальные арки справа.
+     Исходный viewBox 120; группа масштабируется до safe-zone адаптивной иконки. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <group
+        android:pivotX="60"
+        android:pivotY="60"
+        android:scaleX="0.82"
+        android:scaleY="0.82">
+        <!-- Сигнальные арки (teal, убывающая непрозрачность) -->
+        <path
+            android:pathData="M75,40 A26,26 0 0 1 75,80"
+            android:strokeColor="#34D3C0"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round"
+            android:strokeAlpha="0.85" />
+        <path
+            android:pathData="M84,29 A40,40 0 0 1 84,91"
+            android:strokeColor="#34D3C0"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round"
+            android:strokeAlpha="0.45" />
+        <path
+            android:pathData="M93,19 A54,54 0 0 1 93,101"
+            android:strokeColor="#34D3C0"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round"
+            android:strokeAlpha="0.18" />
+        <!-- Основной знак «S» (градиент #7ff0e2 → #22b3a4) -->
+        <path
+            android:pathData="M60,44 C60,37 53,34 46,34 C36,34 31,40 31,47 C31,60 60,54 60,68 C60,77 53,81 45,81 C36,81 31,77 31,70"
+            android:strokeWidth="10.5"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="31" android:startY="32"
+                    android:endX="60" android:endY="84">
+                    <item android:offset="0" android:color="#FF7FF0E2" />
+                    <item android:offset="1" android:color="#FF22B3A4" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

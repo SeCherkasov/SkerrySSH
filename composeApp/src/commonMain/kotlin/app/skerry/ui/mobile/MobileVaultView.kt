@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -456,7 +455,7 @@ private fun MobileSecretDetailSheet(
     // Скрим на весь экран; тап мимо листа закрывает. Сам лист гасит клик, чтобы не закрываться.
     // Лист подгоняется под содержимое (короткий пароль ⇒ невысокая шторка), но не выше 85% экрана —
     // тогда контент скроллится. Фиксированная высота раздувала бы пустую шторку для секрета без тела.
-    MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.imePadding(), maxHeightFraction = 0.85f) {
+    MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.85f) {
         // weight(fill = false): при коротком содержимом колонка обнимает контент, при длинном —
         // упирается в остаток высоты шторки и скроллится (а не вылезает за край).
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {

@@ -83,7 +83,7 @@ import app.skerry.ui.session.sessionDotColor
 
 /** Фон клавишной панели терминала (`#0E1A24` из мока). Клавиши — белый 6%, моноширинные. */
 private val KeybarBg = Color(0xFF0E1A24)
-private val KeyCapBg = Color(0x0FFFFFFFF)
+private val KeyCapBg = Color(0x0FFFFFFF)
 private val KeyCapFg = Color(0xFFC9D6DE)
 
 /** ESC (0x1B) — префикс CSI-последовательностей стрелок и сама клавиша esc. */
@@ -139,6 +139,10 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // иначе инлайновый лист участвовал бы в раскладке Row и ломал её. Доступна только в коннекте и
     // когда подключена библиотека сниппетов.
     var paletteOpen by remember(active?.id) { mutableStateOf(false) }
+    // Меню more_horiz (Disconnect) — инлайновым листом на уровне корневого Box экрана, НЕ через
+    // focusable-Popup [MobileActionSheet]: над открытой софт-клавиатурой Popup меряется по ужатому окну
+    // и повисает по линии бывшей клавиатуры с провалом снизу. Инлайн живёт в том же окне с живыми инсетами.
+    var menuOpen by remember(active?.id) { mutableStateOf(false) }
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
@@ -150,7 +154,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 status = active?.controller?.uiState,
                 controller = active?.controller,
                 onBack = state::pop,
-                onDisconnect = onDisconnect,
+                onMenu = { menuOpen = true },
                 onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
             )
             when (val st = active?.controller?.uiState) {
@@ -197,6 +201,25 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 onRun = { entry -> snippets.run(entry.id) { text -> activeTerminal.send(text) }; paletteOpen = false },
                 onDismiss = { paletteOpen = false },
             )
+        }
+        if (menuOpen && onDisconnect != null) {
+            MobileBottomSheet(
+                onDismiss = { menuOpen = false },
+                panelModifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            ) {
+                Txt(active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+                Spacer(Modifier.height(14.dp))
+                Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    MobileSheetButton(
+                        label = stringResource(Res.string.term_disconnect),
+                        onClick = { menuOpen = false; onDisconnect() },
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = "power_settings_new",
+                        filled = false,
+                        danger = true,
+                    )
+                }
+            }
         }
     }
 }
@@ -317,11 +340,10 @@ private fun MobileTerminalHeader(
     status: ConnectionUiState?,
     controller: ConnectionController?,
     onBack: () -> Unit,
-    onDisconnect: (() -> Unit)?,
+    onMenu: () -> Unit,
     onSnippets: (() -> Unit)?,
 ) {
     val mono = LocalFonts.current.mono
-    var menuOpen by remember { mutableStateOf(false) }
     val connected = status is ConnectionUiState.Connected
     val throughput = remember(controller, connected) {
         if (connected && controller != null) controller.openThroughput() else null
@@ -386,18 +408,9 @@ private fun MobileTerminalHeader(
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = { menuOpen = !menuOpen },
+                    onClick = onMenu,
                 ),
             )
-            if (menuOpen && onDisconnect != null) {
-                MobileActionSheet(
-                    title = title,
-                    actions = listOf(
-                        MobileSheetAction(stringResource(Res.string.term_disconnect), onClick = onDisconnect, icon = "power_settings_new", danger = true),
-                    ),
-                    onDismiss = { menuOpen = false },
-                )
-            }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan08))
     }

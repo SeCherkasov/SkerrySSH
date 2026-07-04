@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
@@ -307,6 +309,10 @@ private fun MobileChrome(
                 null -> {}
             }
         }
+        // Клавиатуру читаем ДО того, как корневой safeDrawing её потребит (внутри Box WindowInsets.ime
+        // уже равен 0). Нужно, чтобы спрятать нижний таб-бар на время ввода: safeDrawing поднимает всё
+        // содержимое над клавиатурой, и таб-бар (BottomCenter) иначе всплывал бы полосой прямо над ней.
+        val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             val route = state.route
             Box(Modifier.fillMaxSize()) {
@@ -316,7 +322,7 @@ private fun MobileChrome(
                     MobileTabPane(state, onLock)
                 }
             }
-            if (state.showTabs) {
+            if (state.showTabs && !keyboardVisible) {
                 MobileTabBar(state, Modifier.align(Alignment.BottomCenter))
             }
             if (state.sheetNewConn) {
