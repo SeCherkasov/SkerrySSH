@@ -4,9 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -62,7 +64,7 @@ fun SettingsPanel(state: DesktopDesignState) {
     var securityReload by remember { mutableStateOf(0) }
     var changePwOpen by remember { mutableStateOf(false) }
     ModalScrim(onDismiss = state::closeSettings, scrimColor = Color(0xA6060E16)) {
-        Row(
+        Box(
             Modifier
                 .width(760.dp)
                 .height(560.dp)
@@ -71,6 +73,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                 .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks(),
         ) {
+        Row(Modifier.fillMaxSize()) {
             // AI-таб виден, когда либо включён флаг незавершённых AI-поверхностей, либо подключён
             // живой контроллер ассистента (реальный BYOK-провайдер за гейтом vault). Иначе таб скрыт,
             // а дефолтный выбор (state.settingsTab = AI, как в прототипе) проецируется на Account.
@@ -103,6 +106,17 @@ fun SettingsPanel(state: DesktopDesignState) {
                 }
             }
         }
+        // Крестик закрытия — оверлей в правом верхнем углу карточки (дублирует клик по скриму/Esc).
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = state::closeSettings)
+                .padding(8.dp),
+        ) {
+            Sym(name = "close", size = 18.sp, color = D.dim)
+        }
         // Диалог смены мастер-пароля — оверлей поверх всей карточки настроек (не внутри скролла).
         if (changePwOpen && securityController != null) {
             ChangeMasterPasswordDialog(
@@ -110,6 +124,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                 onClose = { changePwOpen = false },
                 onChanged = { securityReload++ },
             )
+        }
         }
     }
 }
