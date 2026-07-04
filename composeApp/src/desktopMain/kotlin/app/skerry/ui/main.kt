@@ -194,6 +194,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // Перечитать менеджеры списков после синка/unlock. Отложенный var: tunnels/snippets создаются
     // ниже, а sync ссылается на reload через этот var (вызывается уже после полной инициализации).
     var reloadManagers: () -> Unit = {}
+    // Teams-координатор создаётся ниже (ему нужна сессия sync), но onSynced должен его дёргать:
+    // ключ команды доезжает записью TEAM обычным аккаунтным синком. Поздняя привязка через var.
+    var teamsForSync: app.skerry.ui.teams.TeamsCoordinator? = null
     val sync = SyncCoordinator(
         clientFactory = { url -> KtorSyncClient(url) },
         crypto = IonspinVaultCrypto(),
@@ -204,8 +207,35 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         deviceIdProvider = { deviceId(dir) },
         deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
         // Синк подтянул записи прямо в vault → обновить менеджеры, иначе данные не видны до перезахода.
-        onSynced = { reloadManagers() },
+        onSynced = {
+            reloadManagers()
+            teamsForSync?.onAccountSynced()
+        },
     )
+    // Teams (шеринг записей между аккаунтами, zero-knowledge): координатор поверх той же сессии
+    // sync. Per-team vault'ы в config/teams/ (dataKey = teamKey из записи TEAM аккаунтного vault),
+    // курсоры team-синка — в своём файле. Командные WS-сигналы приходят через onTeamSignal.
+    val teams = app.skerry.ui.teams.TeamsCoordinator(
+        session = { sync.currentSession() },
+        client = { sync.currentTeamClient() },
+        vault = vault,
+        crypto = IonspinVaultCrypto(),
+        teamVaults = app.skerry.shared.team.TeamVaults(
+            dir = dir.resolve("teams").toString().toPath(),
+            crypto = IonspinVaultCrypto(),
+            deviceId = deviceId(dir),
+            fileSystem = FileSystem.SYSTEM,
+            harden = { PrivateConfig.harden(Path.of(it.toString())) },
+            now = { Instant.now().toString() },
+        ),
+        teamState = FileSyncStateStore(dir.resolve("team-cursor.json")),
+        newTeamId = { UUID.randomUUID().toString() },
+        onTeamsChanged = { reloadManagers() },
+    )
+    teamsForSync = teams
+    // Потерянный ключ команды (пропущен дельта-синком старого клиента) чинится только полным re-pull.
+    teams.onKeyMissing = { sync.recoverFullPull() }
+    sync.onTeamSignal = teams::onSignal
     // Генерация SSH-ключей в разделе Vault: BouncyCastle поверх sshj-формата (тот же, что читает транспорт).
     val keyGenerator = BouncyCastleSshKeyGenerator()
     // Разбор импортированных SSH-сертификатов (раздел Vault → Certificates) — sshj поверх ssh-wire.
@@ -279,6 +309,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // данные ВНЕ vault и отражаем опустевший vault в менеджерах. Vault на этот момент заблокирован.
     val onVaultReset: (ResetScope) -> Unit = { resetScope ->
         tunnels.closeAll()
+        // Ключи команд жили в стёртом vault — локальные team-vault'ы больше не открыть; лочим их.
+        teams.lock()
         // Журнал событий безопасности относится к стёртому vault (смена пароля/биометрия/паринг) —
         // при любом сбросе он становится неактуальным и может выдать имена устройств; чистим всегда.
         securityLog.clear()
@@ -310,7 +342,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         snippets.reload()
         tunnels.reload()
     }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync, localAi = localAi)
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync, teams = teams, localAi = localAi)
     return DesktopGraph(
         deps = deps,
         securityLog = securityLog,
@@ -406,6 +438,7 @@ fun main() {
                     tunnels = deps.tunnels,
                     snippets = deps.snippets,
                     sync = deps.sync,
+                    teams = deps.teams,
                     ai = graph.ai,
                     onVaultUnlocked = graph.onVaultUnlocked,
                     onVaultReset = graph.onVaultReset,

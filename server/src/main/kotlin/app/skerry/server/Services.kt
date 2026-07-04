@@ -10,6 +10,8 @@ import app.skerry.server.db.DeviceRepository
 import app.skerry.server.db.PairingRepository
 import app.skerry.server.db.RecordRepository
 import app.skerry.server.db.StatsRepository
+import app.skerry.server.db.TeamRecordRepository
+import app.skerry.server.db.TeamRepository
 import app.skerry.server.sync.ChangeNotifier
 import org.jetbrains.exposed.sql.Database
 
@@ -20,6 +22,8 @@ class Services(val config: ServerConfig, private val database: Database) {
     // На PostgreSQL сериализуем upsert'ы блокировкой строки аккаунта; на SQLite (pool=1) не нужно.
     val records = RecordRepository(database, lockAccountRow = config.isPostgres)
     val pairing = PairingRepository(database)
+    val teams = TeamRepository(database)
+    val teamRecords = TeamRecordRepository(database, lockTeamRow = config.isPostgres)
     val stats = StatsRepository(database)
     val activity = ActivityRepository(database)
     val admin = AdminRepository(database)

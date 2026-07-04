@@ -6,6 +6,11 @@ import com.ionspin.kotlin.crypto.aead.AuthenticatedEncryptionWithAssociatedData
 import com.ionspin.kotlin.crypto.aead.crypto_aead_xchacha20poly1305_ietf_ABYTES
 import com.ionspin.kotlin.crypto.aead.crypto_aead_xchacha20poly1305_ietf_KEYBYTES
 import com.ionspin.kotlin.crypto.aead.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+import com.ionspin.kotlin.crypto.box.Box
+import com.ionspin.kotlin.crypto.box.BoxCorruptedOrTamperedDataException
+import com.ionspin.kotlin.crypto.box.crypto_box_PUBLICKEYBYTES
+import com.ionspin.kotlin.crypto.box.crypto_box_SEALBYTES
+import com.ionspin.kotlin.crypto.box.crypto_box_SECRETKEYBYTES
 import com.ionspin.kotlin.crypto.generichash.GenericHash
 import com.ionspin.kotlin.crypto.kdf.Kdf
 import com.ionspin.kotlin.crypto.pwhash.PasswordHash
@@ -118,6 +123,45 @@ class IonspinVaultCrypto : VaultCrypto {
 
     override fun open(dataKey: DataKey, ciphertext: ByteArray, associatedData: ByteArray): ByteArray? =
         aeadOpen(dataKey.bytes, ciphertext, associatedData)
+
+    override fun newSharingKeyPair(): SharingKeyPair {
+        requireInitialized()
+        val pair = Box.keypair()
+        // UByteArray-выходы — промежуточные копии: затираем после снятия ByteArray-копий.
+        return SharingKeyPair(pair.publicKey.toByteArray(), pair.secretKey.toByteArray()).also {
+            pair.publicKey.fill(0u)
+            pair.secretKey.fill(0u)
+        }
+    }
+
+    override fun sharingKeyPairFromBytes(publicKey: ByteArray, secretKey: ByteArray): SharingKeyPair {
+        require(publicKey.size == crypto_box_PUBLICKEYBYTES) { "publicKey must be $crypto_box_PUBLICKEYBYTES bytes" }
+        require(secretKey.size == crypto_box_SECRETKEYBYTES) { "secretKey must be $crypto_box_SECRETKEYBYTES bytes" }
+        return SharingKeyPair(publicKey.copyOf(), secretKey.copyOf())
+    }
+
+    override fun sealForRecipient(recipientPublicKey: ByteArray, plaintext: ByteArray): ByteArray {
+        requireInitialized()
+        require(recipientPublicKey.size == crypto_box_PUBLICKEYBYTES) {
+            "recipientPublicKey must be $crypto_box_PUBLICKEYBYTES bytes"
+        }
+        return Box.seal(plaintext.toUByteArray(), recipientPublicKey.toUByteArray()).toByteArray()
+    }
+
+    override fun openSealedEnvelope(keyPair: SharingKeyPair, envelope: ByteArray): ByteArray? {
+        requireInitialized()
+        // Короткий/битый конверт — обычный провал (null), не бросок: конверт доставляет сервер,
+        // то есть недоверенный источник (та же логика, что в aeadOpen).
+        if (envelope.size < crypto_box_SEALBYTES) return null
+        val secretCopy = keyPair.secretKey.toUByteArray()
+        return try {
+            Box.sealOpen(envelope.toUByteArray(), keyPair.publicKey.toUByteArray(), secretCopy).toByteArray()
+        } catch (e: BoxCorruptedOrTamperedDataException) {
+            null
+        } finally {
+            secretCopy.fill(0u)
+        }
+    }
 
     /** nonce‖XChaCha20-Poly1305(key, plaintext; ad). Nonce случайный — повтор key безопасен. */
     private fun aeadSeal(key: ByteArray, plaintext: ByteArray, ad: ByteArray): ByteArray {

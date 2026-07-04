@@ -62,6 +62,7 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
+import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.LocalTunnels
 import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
@@ -187,6 +188,8 @@ fun MobileDesignApp(
         LocalSecurityLog provides deps.securityLog,
         // Координатор self-hosted sync — push-экран More → «Синхронизация».
         LocalSync provides deps.sync,
+        // Teams — push-экран More → «Команда» (шеринг хостов/сниппетов между аккаунтами).
+        LocalTeams provides deps.teams,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
             val vault = deps.vault
@@ -397,7 +400,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
         MobileRoute.Ports -> MobilePortsScreen(state)
         MobileRoute.Known -> MobileKnownScreen(state)
-        MobileRoute.Team -> MobileRoutePlaceholder(state, stringResource(Res.string.shell_route_team))
+        MobileRoute.Team -> MobileTeamsScreen(state)
         MobileRoute.Appearance -> MobileAppearanceScreen(state)
         MobileRoute.Sync -> MobileSyncScreen(state)
         MobileRoute.Ai -> MobileAiScreen(state)

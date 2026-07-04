@@ -25,11 +25,14 @@ class SyncSettingsTest {
     }
 
     @Test
-    fun `both off syncs only the settings record itself`() {
+    fun `both off syncs only the always-on record types`() {
         val s = SyncSettings(syncHosts = false, syncSnippets = false)
-        RecordType.entries.filter { it != RecordType.SETTINGS }
+        // TEAM/TEAM_IDENTITY — ключи команд и identity-пара: без них другое устройство не откроет
+        // team-vault'ы вовсе, поэтому селективный синк их не гейтит (как и сам SETTINGS-рекорд).
+        val alwaysOn = setOf(RecordType.SETTINGS, RecordType.TEAM, RecordType.TEAM_IDENTITY)
+        RecordType.entries.filter { it !in alwaysOn }
             .forEach { assertFalse(s.shouldSync(it), "$it must be gated when both off") }
-        assertTrue(s.shouldSync(RecordType.SETTINGS), "settings record always syncs so the OFF state reaches other devices")
+        alwaysOn.forEach { assertTrue(s.shouldSync(it), "$it must always sync") }
     }
 
     @Test

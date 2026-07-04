@@ -21,6 +21,17 @@ import com.nimbusds.srp6.SRP6ClientSession
 import com.nimbusds.srp6.SRP6CryptoParams
 import com.nimbusds.srp6.SRP6Exception
 import com.nimbusds.srp6.SRP6VerifierGenerator
+import app.skerry.shared.team.TeamClient
+import app.skerry.shared.team.TeamMember
+import app.skerry.shared.team.TeamMemberStatus
+import app.skerry.shared.team.TeamRole
+import app.skerry.shared.team.TeamSummary
+import app.skerry.sync.wire.AccountKeyResponse
+import app.skerry.sync.wire.PublishKeyRequest
+import app.skerry.sync.wire.TeamCreateRequest
+import app.skerry.sync.wire.TeamInviteRequest
+import app.skerry.sync.wire.TeamMembersResponse
+import app.skerry.sync.wire.TeamsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -37,6 +48,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.websocket.Frame
@@ -59,7 +71,7 @@ import java.util.Base64
 class KtorSyncClient(
     private val serverUrl: String,
     private val http: HttpClient = defaultHttpClient(),
-) : SyncClient {
+) : SyncClient, TeamClient {
 
     private val params: SRP6CryptoParams = SRP6CryptoParams.getInstance(2048, "SHA-256")
     private val random = SecureRandom()
@@ -187,13 +199,104 @@ class KtorSyncClient(
         )
     }
 
-    override fun changes(session: SyncSession): Flow<Long> = flow {
+    override fun changes(session: SyncSession): Flow<SyncSignal> = flow {
         val wsUrl = serverUrl.replaceFirst("http", "ws") + "/sync"
         http.webSocket(urlString = wsUrl, request = { bearerAuth(session.accessToken) }) {
             for (frame in incoming) {
-                if (frame is Frame.Text) frame.readText().toLongOrNull()?.let { emit(it) }
+                if (frame is Frame.Text) parseSignal(frame.readText())?.let { emit(it) }
             }
         }
+    }
+
+    // --- TeamClient ---
+
+    override suspend fun publishKey(session: SyncSession, publicKey: ByteArray) {
+        put("/account/key") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PublishKeyRequest(publicKey.b64()))
+        }.expectSuccess()
+    }
+
+    override suspend fun fetchPublicKey(session: SyncSession, accountId: String): ByteArray? {
+        val resp = get("/account/keys/${accountId.encodeURLPathPart()}") { bearerAuth(session.accessToken) }
+        if (resp.status == HttpStatusCode.NotFound) return null
+        if (!resp.status.isSuccess()) throw resp.toException()
+        return resp.body<AccountKeyResponse>().publicKey.unb64()
+    }
+
+    override suspend fun createTeam(session: SyncSession, teamId: String) {
+        post("/teams") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(TeamCreateRequest(teamId))
+        }.expectSuccess()
+    }
+
+    override suspend fun listTeams(session: SyncSession): List<TeamSummary> {
+        val resp: TeamsResponse = get("/teams") { bearerAuth(session.accessToken) }.bodyChecked()
+        return resp.teams.map {
+            TeamSummary(
+                id = it.id,
+                ownerAccountId = it.ownerAccountId,
+                role = TeamRole.fromWire(it.role),
+                status = TeamMemberStatus.fromWire(it.status),
+                createdAt = it.createdAt,
+                memberCount = it.memberCount,
+                envelope = it.envelope?.unb64(),
+            )
+        }
+    }
+
+    override suspend fun members(session: SyncSession, teamId: String): List<TeamMember> {
+        val resp: TeamMembersResponse = get("/teams/${teamId.encodeURLPathPart()}/members") {
+            bearerAuth(session.accessToken)
+        }.bodyChecked()
+        return resp.members.map {
+            TeamMember(it.accountId, TeamRole.fromWire(it.role), TeamMemberStatus.fromWire(it.status), it.createdAt)
+        }
+    }
+
+    override suspend fun invite(session: SyncSession, teamId: String, accountId: String, envelope: ByteArray) {
+        post("/teams/${teamId.encodeURLPathPart()}/members") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(TeamInviteRequest(accountId, envelope.b64()))
+        }.expectSuccess()
+    }
+
+    override suspend fun accept(session: SyncSession, teamId: String) {
+        post("/teams/${teamId.encodeURLPathPart()}/accept") { bearerAuth(session.accessToken) }.expectSuccess()
+    }
+
+    override suspend fun removeMember(session: SyncSession, teamId: String, accountId: String) {
+        request {
+            http.delete("$serverUrl/teams/${teamId.encodeURLPathPart()}/members/${accountId.encodeURLPathPart()}") {
+                bearerAuth(session.accessToken)
+            }
+        }.expectSuccess()
+    }
+
+    override suspend fun deleteTeam(session: SyncSession, teamId: String) {
+        request {
+            http.delete("$serverUrl/teams/${teamId.encodeURLPathPart()}") { bearerAuth(session.accessToken) }
+        }.expectSuccess()
+    }
+
+    override suspend fun pullTeam(session: SyncSession, teamId: String, since: Long): RecordPage {
+        val resp: RecordsResponse = get("/teams/${teamId.encodeURLPathPart()}/records?since=$since") {
+            bearerAuth(session.accessToken)
+        }.bodyChecked()
+        return RecordPage(resp.records.map { it.toRemote() }, resp.cursor, resp.compactedIds)
+    }
+
+    override suspend fun pushTeam(session: SyncSession, teamId: String, records: List<RemoteRecord>): RecordPage {
+        val resp: PushResponse = put("/teams/${teamId.encodeURLPathPart()}/records") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(records.map { it.toWire() }))
+        }.bodyChecked()
+        return RecordPage(resp.records.map { it.toRemote() }, resp.cursor)
     }
 
     override suspend fun ping(): Boolean = try {
@@ -228,6 +331,27 @@ class KtorSyncClient(
         throw e
     } catch (e: Exception) {
         throw SyncException(SyncException.Kind.NETWORK, "network error: ${e.message}", e)
+    }
+
+    /** 2xx — ок (тело не нужно), иначе [SyncException] по статусу. */
+    private suspend fun HttpResponse.expectSuccess() {
+        if (!status.isSuccess()) throw toException()
+    }
+
+    /**
+     * Кадр WS `/sync` → [SyncSignal]; незнакомый формат — null (forward-совместимость:
+     * новые типы кадров не роняют старые клиенты).
+     */
+    private fun parseSignal(text: String): SyncSignal? {
+        text.toLongOrNull()?.let { return SyncSignal.Account(it) }
+        if (text == "teams") return SyncSignal.Membership
+        if (text.startsWith("team:")) {
+            val teamId = text.substringAfter("team:").substringBeforeLast(':')
+            val cursor = text.substringAfterLast(':').toLongOrNull() ?: return null
+            if (teamId.isEmpty() || teamId.contains(':')) return null
+            return SyncSignal.Team(teamId, cursor)
+        }
+        return null
     }
 
     /** Парсит тело при 2xx, иначе бросает [SyncException] по статусу. */

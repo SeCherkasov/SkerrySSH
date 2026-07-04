@@ -8,6 +8,8 @@ import app.skerry.shared.sync.SyncEngine
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncOutcome
 import app.skerry.shared.sync.SyncSession
+import app.skerry.shared.sync.SyncSignal
+import app.skerry.shared.team.TeamClient
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.sync.SyncSettings
@@ -208,6 +210,19 @@ class SyncCoordinator(
     private var client: SyncClient? = null
     @Volatile
     private var session: SyncSession? = null
+
+    /**
+     * Хук TeamsCoordinator: сюда прилетают командные WS-сигналы ([SyncSignal.Team]/[SyncSignal.Membership])
+     * из общего `/sync`-сокета. Volatile по той же причине, что [client]; вызывается из корутины watch.
+     */
+    @Volatile
+    var onTeamSignal: ((SyncSignal) -> Unit)? = null
+
+    /** Живая сессия для team-операций; null — sync не подключён. */
+    fun currentSession(): SyncSession? = session
+
+    /** Team-API текущего клиента; null — sync не подключён (или транспорт без Teams). */
+    fun currentTeamClient(): TeamClient? = client as? TeamClient
 
     // Собственный scope: сетевые операции НЕ должны зависеть от жизненного цикла composable.
     // На мобильном форма перерисовывается по [status]: как только connect() ставит Busy, форма
@@ -634,6 +649,20 @@ class SyncCoordinator(
         }
     }
 
+    /**
+     * Восстановительный полный re-pull: сбросить курсор аккаунта в 0 и прогнать цикл — сервер отдаст
+     * все записи заново, merge (LWW) идемпотентен. Нужен, когда запись потеряна БЕЗВОЗВРАТНО для
+     * дельта-синка: старый клиент, не знавший типа (например TEAM до появления Teams), молча пропускал
+     * её, продвинув курсор, — повторные push'и других устройств seq не поднимают, и дельта её больше
+     * никогда не принесёт. No-op, если не подключены.
+     */
+    fun recoverFullPull() {
+        val s = session ?: return
+        if (client == null) return
+        syncState.setCursor(s.accountId, 0)
+        syncNow()
+    }
+
     /** Прогнать один цикл синхронизации (pull/merge/push). No-op, если не подключены. */
     fun syncNow() {
         if (client == null || session == null) return
@@ -711,12 +740,18 @@ class SyncCoordinator(
             var backoff = WATCH_RETRY_MIN_MS
             while (true) {
                 try {
-                    c.changes(s).collect { remoteCursor ->
+                    c.changes(s).collect { signal ->
                         backoff = WATCH_RETRY_MIN_MS // живой сигнал — сбрасываем задержку до минимума
-                        // Тянем дельту ТОЛЬКО если сервер ушёл вперёд нашего курсора. Иначе наш же push,
-                        // вернувшийся WS-сигналом с уже известным курсором, запускал бы лишний синк —
-                        // второй разрыватель петли push→WS→push (defense-in-depth к серверному guard'у).
-                        if (signalAdvancesCursor(s.accountId, remoteCursor)) runSync()
+                        when (signal) {
+                            is SyncSignal.Account ->
+                                // Тянем дельту ТОЛЬКО если сервер ушёл вперёд нашего курсора. Иначе наш
+                                // же push, вернувшийся WS-сигналом с уже известным курсором, запускал бы
+                                // лишний синк — второй разрыватель петли push→WS→push (defense-in-depth
+                                // к серверному guard'у).
+                                if (signalAdvancesCursor(s.accountId, signal.cursor)) runSync()
+                            // Командные сигналы — забота TeamsCoordinator (свой курсор-guard там).
+                            is SyncSignal.Team, SyncSignal.Membership -> onTeamSignal?.invoke(signal)
+                        }
                     }
                     // collect завершился без исключения = сервер штатно закрыл поток; переподключимся ниже.
                 } catch (e: CancellationException) {

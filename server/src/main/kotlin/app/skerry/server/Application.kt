@@ -44,13 +44,25 @@ private fun guardConfig(config: ServerConfig, env: Map<String, String> = System.
     }
 }
 
-/** Периодически чистит истёкшие pairing-сессии, чтобы capability-коды не копились на диске. */
+/** Тромбстоуны команд живут 90 дней (политика tombstone дизайн-дока §2), дальше — возрастная уборка. */
+private const val TEAM_TOMBSTONE_TTL_MILLIS = 90L * 24 * 60 * 60 * 1000
+
+/**
+ * Периодически чистит истёкшие pairing-сессии (capability-коды не копятся на диске) и старые
+ * team-тромбстоуны: в team-scope watermark-компакции нет — состав команды нестабилен.
+ */
 private fun Application.scheduleCleanup(services: Services) {
     launch {
         while (true) {
             delay(15 * 60 * 1000L)
             runCatching { services.pairing.cleanupExpired() }
                 .onFailure { log.warn("pairing cleanup failed", it) }
+            runCatching {
+                val cutoff = java.time.Instant
+                    .ofEpochMilli(System.currentTimeMillis() - TEAM_TOMBSTONE_TTL_MILLIS)
+                    .toString()
+                services.teamRecords.purgeTombstones(cutoff)
+            }.onFailure { log.warn("team tombstone cleanup failed", it) }
         }
     }
 }

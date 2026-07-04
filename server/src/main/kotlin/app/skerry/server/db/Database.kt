@@ -27,7 +27,10 @@ object Db {
         transaction(database) {
             // createMissingTablesAndColumns (не create): миграция добавляет новые nullable-колонки
             // (Devices.platform, Devices.lastSyncVersion) в уже существующую БД, не теряя данные.
-            SchemaUtils.createMissingTablesAndColumns(Accounts, Devices, Records, Pairing, ActivityLog)
+            SchemaUtils.createMissingTablesAndColumns(
+                Accounts, Devices, Records, Pairing, ActivityLog,
+                AccountKeys, Teams, TeamMembers, TeamRecords,
+            )
         }
     }
 }

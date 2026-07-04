@@ -8,6 +8,7 @@ import app.skerry.server.routes.deviceRoutes
 import app.skerry.server.routes.pairingClaimRoute
 import app.skerry.server.routes.pairingStartRoute
 import app.skerry.server.routes.syncWebSocket
+import app.skerry.server.routes.teamRoutes
 import app.skerry.server.routes.vaultRoutes
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -189,6 +190,7 @@ fun Application.configureServer(services: Services) {
             vaultRoutes(services)
             deviceRoutes(services)
             pairingStartRoute(services)
+            teamRoutes(services)
             syncWebSocket(services)
         }
     }

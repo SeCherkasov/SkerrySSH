@@ -9,10 +9,12 @@ import app.skerry.shared.sync.RemoteDevice
 import app.skerry.shared.sync.RemoteRecord
 import app.skerry.shared.sync.SyncClient
 import app.skerry.shared.sync.SyncSession
+import app.skerry.shared.sync.SyncSignal
 import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.MasterKey
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.SharingKeyPair
 import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
@@ -158,7 +160,7 @@ private class FakePingClient(@Volatile var reachable: Boolean) : SyncClient {
     override suspend fun refresh(session: SyncSession): SyncSession = nope()
     override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = nope()
     override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult = nope()
-    override fun changes(session: SyncSession): Flow<Long> = nope()
+    override fun changes(session: SyncSession): Flow<SyncSignal> = nope()
     private fun nope(): Nothing = throw NotImplementedError("health-поллер не должен это вызывать")
 }
 
@@ -175,6 +177,10 @@ private class StubCrypto : VaultCrypto {
     override fun unwrapDataKey(masterKey: MasterKey, wrapped: ByteArray): DataKey? = no()
     override fun seal(dataKey: DataKey, plaintext: ByteArray, associatedData: ByteArray): ByteArray = no()
     override fun open(dataKey: DataKey, ciphertext: ByteArray, associatedData: ByteArray): ByteArray? = no()
+    override fun newSharingKeyPair(): SharingKeyPair = no()
+    override fun sharingKeyPairFromBytes(publicKey: ByteArray, secretKey: ByteArray): SharingKeyPair = no()
+    override fun sealForRecipient(recipientPublicKey: ByteArray, plaintext: ByteArray): ByteArray = no()
+    override fun openSealedEnvelope(keyPair: SharingKeyPair, envelope: ByteArray): ByteArray? = no()
     private fun no(): Nothing = throw NotImplementedError()
 }
 

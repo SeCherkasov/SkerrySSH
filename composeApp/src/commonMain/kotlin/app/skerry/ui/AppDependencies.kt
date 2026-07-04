@@ -43,6 +43,8 @@ data class AppDependencies(
     val biometrics: VaultBiometrics? = null,
     /** Координатор self-hosted синхронизации (Phase 2); `null` — sync не подключён на платформе. */
     val sync: SyncCoordinator? = null,
+    /** Teams (шеринг хостов/секретов/сниппетов между аккаунтами); `null` — подсистема не подключена. */
+    val teams: app.skerry.ui.teams.TeamsCoordinator? = null,
     /** Локальный журнал событий безопасности (Settings → Безопасность); `null` — журнал не ведётся. */
     val securityLog: SecurityLog? = null,
     /** Локальный AI (Phase 3): стор моделей + загрузчик + рантайм; `null` — превью/мок без подсистемы. */

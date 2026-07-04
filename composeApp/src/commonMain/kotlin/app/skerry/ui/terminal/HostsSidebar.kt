@@ -51,6 +51,11 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalTeams
+import app.skerry.shared.host.VaultHostStore
+import app.skerry.shared.team.TeamMemberStatus
+import androidx.compose.runtime.collectAsState
+import app.skerry.ui.generated.resources.lib_teams_sidebar
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.D
@@ -199,6 +204,11 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                     }
                 }
                 if (folderLineIndex != null && folderLineIndex == otherFolders.size) DropLine()
+                // Общие хосты команд (Teams): секции по командам под личным каталогом. Показываются
+                // только вне поиска/фильтра — фильтры сужают личный каталог.
+                if (query.isBlank() && effectiveChip == ALL_HOSTS_CHIP) {
+                    TeamHostsSection(liveHosts.hosts, mono)
+                }
             } else {
                 HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }
             }
@@ -328,6 +338,71 @@ private fun RecentSectionHeader() {
  * повторяются/безлики). Клик переподключает к хосту через [LocalConnectHost] — тот же путь, что клик
  * по строке в каталоге.
  */
+@Composable
+private fun TeamHostsSectionHeader() {
+    Txt(
+        stringResource(Res.string.lib_teams_sidebar),
+        color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
+        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 14.dp, bottom = 4.dp),
+    )
+}
+
+/**
+ * Секции общих хостов команд под личным каталогом: по секции на активную команду с доехавшим
+ * ключом, у которой в team-vault есть хосты. Хосты читаются из per-team vault'а; перечитка
+ * привязана к ([hostsSnapshot], список команд) — после team-синка reloadManagers обновляет
+ * каталог, меняя снапшот. Клик — тот же [LocalConnectHost] (секрет спросится: ссылки на
+ * credential при шеринге стрипаются).
+ */
+@Composable
+private fun TeamHostsSection(hostsSnapshot: List<Host>, mono: FontFamily) {
+    val teams = LocalTeams.current ?: return
+    val teamList by teams.teams.collectAsState()
+    val sections = remember(teamList, hostsSnapshot) {
+        teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.mapNotNull { team ->
+            val vault = teams.teamVault(team.id) ?: return@mapNotNull null
+            val shared = VaultHostStore(vault).all()
+            if (shared.isEmpty()) null else team.name to shared
+        }
+    }
+    if (sections.isEmpty()) return
+    TeamHostsSectionHeader()
+    sections.forEach { (name, shared) ->
+        Row(
+            Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Sym("group", size = 14.sp, color = D.cyanBright)
+            Txt(name, color = D.dim, size = 11.5.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        shared.forEach { host -> key("team-${host.id}") { TeamHostRow(host, mono) } }
+    }
+}
+
+/** Строка общего хоста команды — как [RecentHostRow], но с иконкой шеринга. */
+@Composable
+private fun TeamHostRow(host: Host, mono: FontFamily) {
+    val connect = LocalConnectHost.current
+    val onClick = remember(host, connect) { { connect(host) } }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Sym("lan", size = 14.sp, color = D.faint)
+        Column(Modifier.weight(1f)) {
+            Txt(host.label, color = D.dim, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt("${host.username}@${host.address}", color = D.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
 @Composable
 private fun RecentHostRow(host: Host, mono: FontFamily) {
     val connect = LocalConnectHost.current
