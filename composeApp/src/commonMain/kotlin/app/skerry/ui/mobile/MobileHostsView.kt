@@ -56,12 +56,10 @@ import app.skerry.ui.design.D
 import app.skerry.ui.host.HostDragState
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
-import androidx.compose.runtime.LaunchedEffect
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSync
-import app.skerry.ui.sync.SyncStatus
-import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.MobileDesignState
+import app.skerry.ui.teams.AutoPullTeamsOnOnline
 import app.skerry.ui.app.MobileTab
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -91,16 +89,10 @@ internal val MOBILE_PREVIEW_HOSTS = listOf(
 fun MobileHostsScreen(state: MobileDesignState) {
     val controller = LocalHosts.current
     val hosts = controller?.hosts ?: MOBILE_PREVIEW_HOSTS
-    // Общие хосты команд ходят team-каналом, а не аккаунтным: их шеринг на другом устройстве НЕ
-    // будит аккаунтный WS-сигнал, поэтому без явного pull секция КОМАНДЫ оставалась пустой до
-    // захода на вкладку Teams (её LaunchedEffect и делал этот syncAll). Экран хостов пересоздаётся
-    // при каждом выборе вкладки (MobileDesignApp `when(tab)`), так что тянем актуальные общие записи
-    // при входе — как на вкладке Teams. Ошибки глушит сам координатор (markError).
-    // Триггерим pull, КОГДА sync стал Online: сразу после мастер-пароля сессия ещё восстанавливается,
-    // и ранний refresh() вышел бы по NotConnected без повтора.
-    val teams = LocalTeams.current
-    val online = LocalSync.current?.status?.collectAsState()?.value is SyncStatus.Online
-    LaunchedEffect(online) { if (online) { teams?.refresh(); teams?.syncAll() } }
+    // Подтягиваем общие хосты команд при переходе sync в Online (см. AutoPullTeamsOnOnline):
+    // экран пересоздаётся при выборе таба (MobileDesignApp `when(tab)`), так что эффект отработает
+    // на каждый вход, а его ключ по Online — единожды на подключение.
+    AutoPullTeamsOnOnline()
     var query by remember { mutableStateOf("") }
     var chip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
     val list = remember(hosts, query, chip) { buildMobileHostList(hosts, query, chip) }
