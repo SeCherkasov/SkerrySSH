@@ -190,6 +190,8 @@ class DesktopDesignState(
     var pairingOpen: Boolean by mutableStateOf(false); private set
     var settingsTab: SettingsTab by mutableStateOf(SettingsTab.AI); private set
     var split: Boolean by mutableStateOf(false); private set
+    /** Скрыт ли левый сайдбар хостов (сворачивается в тонкий рельс с кнопкой раскрытия). */
+    var sidebarHidden: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
 
     /** Имена схлопнутых папок хостов в сайдбаре (свёрнут список их хостов). */
@@ -339,6 +341,7 @@ class DesktopDesignState(
     fun closePairing() { pairingOpen = false }
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
+    fun toggleSidebar() { sidebarHidden = !sidebarHidden }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
 
     // Сигнал «сфокусировать строку ввода AI-бара» (хоткей ⌘/ / Ctrl+Shift+/). SharedFlow, а не
