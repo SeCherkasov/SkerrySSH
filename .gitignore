@@ -29,3 +29,4 @@ Thumbs.db
 # Локальные SQLite-файлы sync-сервера
 *.db
 *.db-journal
+.tokensave
