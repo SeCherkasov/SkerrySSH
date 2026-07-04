@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1013,14 +1014,14 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
                     .background(D.cyan, RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)),
             )
         }
-        Column(
+        Box(
             Modifier
-                .fillMaxWidth()
+                .align(Alignment.Center)
+                .size(38.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(if (active) D.cyan10 else if (hovered) D.cyan.copy(alpha = 0.06f) else Color.Transparent)
-                .clickable(onClick = onClick)
-                .padding(vertical = 11.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
         ) {
             Sym(icon, size = 21.sp, color = fg)
         }
