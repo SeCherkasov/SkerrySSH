@@ -79,6 +79,17 @@ class TeamsCoordinator(
     private val _teams = MutableStateFlow<List<TeamUi>>(emptyList())
     val teams: StateFlow<List<TeamUi>> = _teams
 
+    /**
+     * Монотонный счётчик, меняющийся при каждом изменении СОДЕРЖИМОГО team-vault'ов (после
+     * [syncTeam]/[shareRecord]/[unshareRecord]). UI-секции общих хостов читают team-vault
+     * императивно (не через StateFlow записей), поэтому без этого сигнала live-синк, притянувший
+     * новые записи в team-vault, не перерисовывал бы список: [_teams] при этом не меняется, а
+     * список личного каталога (на который секции были завязаны косвенно) остаётся равен прежнему —
+     * Compose пропускал бы рекомпозицию. Секции держат этот счётчик в ключе `remember`.
+     */
+    private val _revision = MutableStateFlow(0)
+    val revision: StateFlow<Int> = _revision
+
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy
 
@@ -320,6 +331,9 @@ class TeamsCoordinator(
                     settings = { SyncSettings() },
                 )
                 engine.sync(s)
+                // Содержимое team-vault могло измениться (pull притянул чужие записи, push отправил
+                // наши) — будим UI-секции общих хостов, читающие vault императивно (см. [revision]).
+                _revision.value++
                 onTeamsChanged()
             } catch (e: CancellationException) {
                 throw e

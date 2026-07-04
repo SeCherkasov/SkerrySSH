@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
 import app.skerry.shared.vault.RecordType
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.MobileDesignState
@@ -55,6 +57,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
+import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
@@ -428,7 +431,10 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>) {
     val mono = LocalFonts.current.mono
     val connect = LocalConnectHost.current
     val teamList by teams.teams.collectAsState()
-    val sections = remember(teamList, hostsSnapshot) {
+    // revision меняется при каждом team-синке — иначе live-притянутые в team-vault хосты не появятся
+    // до ручного sync (личный каталог не меняется, а секции читают vault императивно).
+    val revision by teams.revision.collectAsState()
+    val sections = remember(teamList, hostsSnapshot, revision) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.mapNotNull { team ->
             val vault = teams.teamVault(team.id) ?: return@mapNotNull null
             val shared = VaultHostStore(vault).all()
@@ -436,36 +442,67 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>) {
         }
     }
     if (sections.isEmpty()) return
+    // Супер-заголовок «КОМАНДЫ» отделяет общие хосты от личного каталога; ниже каждая команда —
+    // секция уровня папки (заголовок как MobileFolderHeader), а хосты — карточки как в личном
+    // каталоге (MobileHostRow), чтобы Teams не выбивались из общего визуала списка.
     Txt(
         stringResource(Res.string.lib_teams_sidebar),
         color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
-        modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 4.dp),
+        modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 2.dp),
     )
     sections.forEach { (name, shared) ->
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Sym("group", size = 15.sp, color = D.cyanBright)
-            Txt(name, color = D.dim, size = 12.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt(
+                name.uppercase(),
+                color = D.faint, size = 12.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            Txt(shared.size.toString(), color = D.faint, size = 11.sp)
         }
-        shared.forEach { host ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { connect(host) }
-                    .padding(horizontal = 26.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Sym("lan", size = 16.sp, color = D.faint)
-                Column(Modifier.weight(1f)) {
-                    Txt(host.label, color = D.text, size = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Txt("${host.username}@${host.address}", color = D.faint, size = 11.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+        Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            shared.forEach { host ->
+                key("team-${host.id}") { MobileTeamHostRow(host, mono, onClick = { connect(host) }) }
             }
         }
+    }
+}
+
+/**
+ * Строка общего хоста команды — карточка по образцу личного [MobileHostRow] (плашка, рамка,
+ * `user@address` моноширинно, точка статуса), но с иконкой `group` вместо `dns`, отмечающей
+ * происхождение из team-vault. Тап — подключение через [LocalConnectHost].
+ */
+@Composable
+private fun MobileTeamHostRow(host: Host, mono: androidx.compose.ui.text.font.FontFamily, onClick: () -> Unit) {
+    val dotColor = sessionDotColor(LocalSessions.current?.statusFor(host.id))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(D.card)
+            .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(13.dp),
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(D.cyan.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Sym("group", size = 21.sp, color = D.cyanBright)
+        }
+        Column(Modifier.weight(1f)) {
+            Txt(host.label, color = D.text, size = 15.sp, weight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(2.dp))
+            Txt("${host.username}@${host.address}", color = D.dim, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
     }
 }
 
