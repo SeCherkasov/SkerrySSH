@@ -44,6 +44,9 @@ import app.skerry.ui.generated.resources.settings_ai_live_subtitle
 import app.skerry.ui.generated.resources.settings_ai_mock_subtitle
 import app.skerry.ui.generated.resources.settings_ai_not_configured
 import app.skerry.ui.generated.resources.settings_ai_off_note
+import app.skerry.ui.generated.resources.settings_ai_placeholder_api_key
+import app.skerry.ui.generated.resources.settings_ai_placeholder_endpoint
+import app.skerry.ui.generated.resources.settings_ai_placeholder_model
 import app.skerry.ui.generated.resources.settings_ai_preview
 import app.skerry.ui.generated.resources.settings_ai_preview_desc
 import app.skerry.ui.generated.resources.settings_ai_prompt_placeholder_needs_key
@@ -152,11 +155,11 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
     var baseUrl by remember(ai.settings) { mutableStateOf(ai.settings.baseUrl) }
 
     FieldLabel(stringResource(Res.string.settings_ai_field_api_key), top = 10.dp)
-    SyncField(placeholder = "sk-…", value = key, icon = "key", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { key = it }
+    SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_api_key), value = key, icon = "key", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { key = it }
     FieldLabel(stringResource(Res.string.settings_ai_field_model))
-    SyncField(placeholder = "gpt-4o-mini", value = model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Next) { model = it }
+    SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_model), value = model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Next) { model = it }
     FieldLabel(stringResource(Res.string.settings_ai_field_endpoint))
-    SyncField(placeholder = "https://api.openai.com/v1", value = baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done) { baseUrl = it }
+    SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_endpoint), value = baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done) { baseUrl = it }
     // http:// шлёт API-ключ и промпт (при Permissive — с секретами) открытым текстом — как в sync-паринге,
     // предупреждаем (кроме localhost, где cleartext осознан для локального прокси).
     if (isInsecureAiEndpoint(baseUrl)) {

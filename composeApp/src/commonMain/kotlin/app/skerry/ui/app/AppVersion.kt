@@ -8,7 +8,4 @@ package app.skerry.ui.app
 object AppVersion {
     const val VERSION = "2.4.0"
     const val BUILD = "2026.06.21"
-
-    /** Строка для страницы About: «Version 2.4.0 · build 2026.06.21». */
-    const val DISPLAY = "Version $VERSION · build $BUILD"
 }

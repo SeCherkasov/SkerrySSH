@@ -185,7 +185,7 @@ fun MobileDesignApp(
         LocalVault provides deps.vault,
         LocalVaultBiometrics provides deps.biometrics,
         LocalSecurityLog provides deps.securityLog,
-        // Координатор self-hosted sync — push-экран More → «Security & sync».
+        // Координатор self-hosted sync — push-экран More → «Синхронизация».
         LocalSync provides deps.sync,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {

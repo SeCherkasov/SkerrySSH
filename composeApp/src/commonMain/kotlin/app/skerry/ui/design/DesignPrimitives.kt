@@ -100,7 +100,8 @@ fun Badge(
             .background(bg)
             .padding(horizontal = 4.dp, vertical = 1.dp),
     ) {
-        Txt(text, color = fg, size = size, weight = FontWeight.SemiBold, letterSpacing = 0.3.sp)
+        // Однострочно всегда: перенос текста («СКО/РО») ломает форму пилюли в тесных строках.
+        Txt(text, color = fg, size = size, weight = FontWeight.SemiBold, letterSpacing = 0.3.sp, maxLines = 1)
     }
 }
 

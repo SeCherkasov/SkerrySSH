@@ -19,7 +19,10 @@
     <string name="settings_ai_live_subtitle">Выберите, где выполняется AI: на этом устройстве, через собственный OpenAI-совместимый ключ (BYOK) — или выключите его полностью. Ключ хранится в хранилище в зашифрованном виде и отправляется только выбранному вами провайдеру.</string>
     <string name="settings_ai_field_api_key">КЛЮЧ API OPENAI</string>
     <string name="settings_ai_field_model">МОДЕЛЬ</string>
-    <string name="settings_ai_field_endpoint">ЭНДПОИНТ</string>
+    <string name="settings_ai_field_endpoint">АДРЕС</string>
+    <string name="settings_ai_placeholder_api_key">sk-…</string>
+    <string name="settings_ai_placeholder_model">gpt-4o-mini</string>
+    <string name="settings_ai_placeholder_endpoint">https://api.openai.com/v1</string>
     <string name="settings_ai_key_saved">Ключ сохранён</string>
     <string name="settings_ai_not_configured">Ещё не настроено</string>
     <string name="settings_ai_quick_chat">Быстрый чат</string>
@@ -167,6 +170,7 @@
     <string name="settings_badge_soon">СКОРО</string>
 
     <!-- Раздел About -->
+    <string name="settings_about_version">Версия %1$s · сборка %2$s</string>
     <string name="settings_about_tagline">SSH-клиент с приоритетом приватности. Локальный AI, сквозное шифрование синхронизации и терминал, который бережёт ваши секреты.</string>
     <string name="settings_about_whats_new">Что нового</string>
     <string name="settings_about_documentation">Документация</string>

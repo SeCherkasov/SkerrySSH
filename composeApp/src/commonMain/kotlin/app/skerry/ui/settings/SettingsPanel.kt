@@ -142,7 +142,7 @@ private fun NavRow(item: SettingsNavItem, active: Boolean, onClick: () -> Unit) 
     }
 }
 
-/** Локализованная подпись пункта навигации настроек (данные [SettingsNavItem.name] — только fallback). */
+/** Локализованная подпись пункта навигации настроек. */
 @Composable
 private fun SettingsTab.navLabel(): String = when (this) {
     SettingsTab.Account -> stringResource(Res.string.shtail_nav_account)

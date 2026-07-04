@@ -27,6 +27,7 @@ import app.skerry.ui.generated.resources.settings_about_documentation
 import app.skerry.ui.generated.resources.settings_about_footer
 import app.skerry.ui.generated.resources.settings_about_licenses
 import app.skerry.ui.generated.resources.settings_about_tagline
+import app.skerry.ui.generated.resources.settings_about_version
 import app.skerry.ui.generated.resources.settings_about_whats_new
 import org.jetbrains.compose.resources.stringResource
 
@@ -39,7 +40,7 @@ internal fun AboutSection() {
             BrandMark(size = 72.dp)
         }
         Txt("Skerry", color = D.text, size = 20.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp))
-        Txt(AppVersion.DISPLAY, color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        Txt(stringResource(Res.string.settings_about_version, AppVersion.VERSION, AppVersion.BUILD), color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 4.dp))
         Txt(stringResource(Res.string.settings_about_tagline), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 12.dp, start = 20.dp, end = 20.dp))
         Row(Modifier.padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GhostButton(stringResource(Res.string.settings_about_whats_new), onClick = {})

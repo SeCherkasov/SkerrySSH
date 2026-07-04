@@ -89,7 +89,7 @@ import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 
 /**
- * Push-экран More → «Security & sync»: self-hosted синхронизация (Phase 2). В мобильном идиоме
+ * Push-экран More → «Синхронизация»: self-hosted синхронизация (Phase 2). В мобильном идиоме
  * (отступление от макета, как Appearance) форма настройки — inline на самом экране, а не модалка.
  * Подключён — статус + «Sync now»/«Disconnect»; не подключён/ошибка — форма (сервер + accountId +
  * мастер-пароль, одно действие «Connect»). Zero-knowledge: пароль уходит в [SyncCoordinator]

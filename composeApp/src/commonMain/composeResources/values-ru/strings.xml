@@ -2,6 +2,7 @@
     <!-- Appearance / раздел оформления -->
     <string name="appearance_title">Оформление</string>
     <string name="appearance_subtitle">Выберите тему терминала. Темы применяются к подключению или глобально.</string>
+    <string name="appearance_badge_active">АКТИВНА</string>
     <string name="appearance_section_terminal">ТЕРМИНАЛ</string>
     <string name="appearance_section_interface">ИНТЕРФЕЙС</string>
     <string name="appearance_font">Шрифт</string>

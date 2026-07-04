@@ -39,6 +39,7 @@ import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.SecurityEvent
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.appearance_badge_active
 import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
@@ -52,14 +53,13 @@ import app.skerry.ui.generated.resources.more_ai_privacy
 import app.skerry.ui.generated.resources.more_ai_subtitle_byok
 import app.skerry.ui.generated.resources.more_ai_subtitle_off
 import app.skerry.ui.generated.resources.more_ai_subtitle_local
-import app.skerry.ui.generated.resources.more_appearance_subtitle
 import app.skerry.ui.generated.resources.more_biometric_prompt_cancel
 import app.skerry.ui.generated.resources.more_biometric_prompt_subtitle
 import app.skerry.ui.generated.resources.more_biometric_prompt_title
 import app.skerry.ui.generated.resources.more_known_hosts
 import app.skerry.ui.generated.resources.more_lock
 import app.skerry.ui.generated.resources.more_port_forwarding
-import app.skerry.ui.generated.resources.more_security_sync
+import app.skerry.ui.generated.resources.more_sync
 import app.skerry.ui.generated.resources.more_sync_error
 import app.skerry.ui.generated.resources.more_sync_linked_locked
 import app.skerry.ui.generated.resources.more_sync_local_only
@@ -144,8 +144,9 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
         if (preview) MockProfileCard() else LocalVaultCard()
 
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-            val ports = if (preview) "2 active" else portsSubtitle()
-            val known = if (preview) "1 changed" else knownSubtitle()
+            // Превью: те же локализованные подзаголовки, что и живой путь, только с фиксированным счётом.
+            val ports = if (preview) mobileMorePortsSubtitle(2) else portsSubtitle()
+            val known = if (preview) mobileMoreKnownSubtitle(1) else knownSubtitle()
             val knownWarn = if (preview) true else knownChanged() > 0
 
             MoreRow("lan", D.cyanBright, stringResource(Res.string.more_port_forwarding), ports, D.moss, onClick = { state.push(MobileRoute.Ports) })
@@ -160,11 +161,12 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
                 AiProviderKind.OFF -> stringResource(Res.string.more_ai_subtitle_off)
             }
             MoreRow("auto_awesome", D.amber, stringResource(Res.string.more_ai_privacy), aiSubtitle, D.dim, onClick = if (liveAi != null) { -> state.push(MobileRoute.Ai) } else null)
-            MoreRow("palette", D.cyanBright, stringResource(Res.string.appearance_title), stringResource(Res.string.more_appearance_subtitle), D.dim, onClick = { state.push(MobileRoute.Appearance) })
-            MoreRow("shield_lock", D.cyanBright, stringResource(Res.string.more_security_sync), if (preview) stringResource(Res.string.more_sync_synced) else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
+            // Подпись Appearance — реальная выбранная тема терминала, не статичный текст макета.
+            MoreRow("palette", D.cyanBright, stringResource(Res.string.appearance_title), state.terminalTheme.displayName, D.dim, onClick = { state.push(MobileRoute.Appearance) })
+            MoreRow("sync", D.cyanBright, stringResource(Res.string.more_sync), if (preview) stringResource(Res.string.more_sync_synced) else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
             // Раздел «Безопасность»: мастер-пароль, биометрия, автоблокировка, журнал событий. Живой путь
             // за гейтом (есть vault); в превью строка инертна (нечего настраивать без vault).
-            MoreRow("encrypted", D.cyanBright, stringResource(Res.string.settings_security_title), null, D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
+            MoreRow("shield_lock", D.cyanBright, stringResource(Res.string.settings_security_title), null, D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
             MoreRow("lock", D.sunset, stringResource(Res.string.more_lock), null, D.dim, labelColor = D.sunset, divider = false, onClick = onLock)
         }
         Spacer(Modifier.height(96.dp))
@@ -179,7 +181,7 @@ private fun portsSubtitle(): String {
     return mobileMorePortsSubtitle(mobileActiveTunnelCount(manager.tunnels))
 }
 
-/** Подзаголовок строки «Security & sync»: статус координатора sync (нет/локально/подключено). */
+/** Подзаголовок строки «Синхронизация»: статус координатора sync (нет/локально/подключено). */
 @Composable
 private fun syncSubtitle(): String {
     val sync = LocalSync.current ?: return stringResource(Res.string.more_sync_local_only)
@@ -325,7 +327,8 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Txt(stringResource(Res.string.settings_security_2fa), color = D.dim, size = 14.5.sp)
+                            // weight(fill=false): длинная подпись переносится сама, а бейдж не сжимается.
+                            Txt(stringResource(Res.string.settings_security_2fa), color = D.dim, size = 14.5.sp, modifier = Modifier.weight(1f, fill = false))
                             Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
                         }
                         Txt(stringResource(Res.string.settings_security_2fa_desc), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
@@ -500,7 +503,7 @@ private fun MobileThemeCard(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Txt(theme.displayName, color = D.text, size = 11.sp, weight = FontWeight.Medium, maxLines = 1)
-            if (active) Badge("ACTIVE", bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 8.sp)
+            if (active) Badge(stringResource(Res.string.appearance_badge_active), bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 8.sp)
         }
     }
 }
@@ -631,7 +634,7 @@ private fun MobileDropdownOption(label: String, selected: Boolean, onClick: () -
 /**
  * Живая карточка профиля: отражает реальное состояние sync — не настроен → локальный vault
  * («Encrypted on this device»), подключён → accountId + хост сервера. Управление синхронизацией
- * (set up / reconnect / disconnect / устройства) живёт на экране «Security & sync».
+ * (set up / reconnect / disconnect / устройства) живёт на экране «Синхронизация».
  *
  * Ветвление на отдельный [LiveLocalVaultCard] (а не условный `collectAsState` в одном теле) держит
  * composable-вызовы безусловными — правило слотовой таблицы Compose, как и на desktop ([LocalSync]

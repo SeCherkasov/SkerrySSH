@@ -20,6 +20,9 @@
     <string name="settings_ai_field_api_key">OPENAI API KEY</string>
     <string name="settings_ai_field_model">MODEL</string>
     <string name="settings_ai_field_endpoint">ENDPOINT</string>
+    <string name="settings_ai_placeholder_api_key">sk-…</string>
+    <string name="settings_ai_placeholder_model">gpt-4o-mini</string>
+    <string name="settings_ai_placeholder_endpoint">https://api.openai.com/v1</string>
     <string name="settings_ai_key_saved">Key saved</string>
     <string name="settings_ai_not_configured">Not configured yet</string>
     <string name="settings_ai_quick_chat">Quick chat</string>
@@ -167,6 +170,7 @@
     <string name="settings_badge_soon">SOON</string>
 
     <!-- About section -->
+    <string name="settings_about_version">Version %1$s · build %2$s</string>
     <string name="settings_about_tagline">A private-first SSH client. Local AI, end-to-end encrypted sync, and a terminal that respects your secrets.</string>
     <string name="settings_about_whats_new">What's new</string>
     <string name="settings_about_documentation">Documentation</string>

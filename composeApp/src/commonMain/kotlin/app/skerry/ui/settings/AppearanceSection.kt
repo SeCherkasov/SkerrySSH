@@ -29,6 +29,7 @@ import app.skerry.ui.design.NumberStepper
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.appearance_badge_active
 import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
@@ -279,7 +280,7 @@ private fun ThemeCard(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Txt(theme.displayName, color = D.text, size = 11.5.sp, weight = FontWeight.Medium)
-            if (active) Badge("ACTIVE", bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 9.sp)
+            if (active) Badge(stringResource(Res.string.appearance_badge_active), bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 9.sp)
         }
     }
 }
