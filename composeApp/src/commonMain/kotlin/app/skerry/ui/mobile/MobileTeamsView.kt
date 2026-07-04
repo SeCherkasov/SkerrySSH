@@ -57,8 +57,8 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
-import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.design.Txt
+import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
 import app.skerry.ui.generated.resources.lib_teams_create

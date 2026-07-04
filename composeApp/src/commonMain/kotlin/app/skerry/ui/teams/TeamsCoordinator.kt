@@ -80,12 +80,17 @@ class TeamsCoordinator(
     val teams: StateFlow<List<TeamUi>> = _teams
 
     /**
-     * Монотонный счётчик, меняющийся при каждом изменении СОДЕРЖИМОГО team-vault'ов (после
-     * [syncTeam]/[shareRecord]/[unshareRecord]). UI-секции общих хостов читают team-vault
-     * императивно (не через StateFlow записей), поэтому без этого сигнала live-синк, притянувший
-     * новые записи в team-vault, не перерисовывал бы список: [_teams] при этом не меняется, а
-     * список личного каталога (на который секции были завязаны косвенно) остаётся равен прежнему —
-     * Compose пропускал бы рекомпозицию. Секции держат этот счётчик в ключе `remember`.
+     * Монотонный счётчик, меняющийся при каждом РЕАЛЬНОМ изменении содержимого team-vault'ов:
+     * pull притянул чужие записи ([syncTeam] при `pulled > 0`) либо мы сами расшарили/сняли запись
+     * ([shareRecord]/[unshareRecord]). UI-секции общих хостов читают team-vault императивно (не через
+     * StateFlow записей), поэтому без этого сигнала live-синк, притянувший новые записи в team-vault,
+     * не перерисовывал бы список: [_teams] при этом не меняется, а список личного каталога (на который
+     * секции были завязаны косвенно) остаётся прежним — Compose пропускал бы рекомпозицию. Секции
+     * держат этот счётчик в ключе `remember`.
+     *
+     * Бампаем только на фактических изменениях (не на каждом [syncTeam]): [syncAll] на каждом
+     * Online-переходе прогоняет все команды, и безусловный ++ инвалидировал бы `remember` секций
+     * (→ пересчёт `VaultHostStore.all()` по всем командам) даже при пустой дельте.
      */
     private val _revision = MutableStateFlow(0)
     val revision: StateFlow<Int> = _revision
@@ -307,6 +312,7 @@ class TeamsCoordinator(
         val payload = runCatching { vault.openPayload(recordId) }.getOrNull() ?: return false
         val cleaned = stripShareFields(payload, stripFields)
         target.put(recordId, type, cleaned)
+        _revision.value++ // локальная мутация: syncTeam ниже даст pulled==0 на нашу же запись
         syncTeam(teamId)
         return true
     }
@@ -314,6 +320,7 @@ class TeamsCoordinator(
     /** Убрать запись из команды (tombstone доедет до всех участников). */
     suspend fun unshareRecord(teamId: String, recordId: String) {
         teamVault(teamId)?.remove(recordId) ?: return
+        _revision.value++ // локальная мутация: syncTeam ниже даст pulled==0 на наш же tombstone
         syncTeam(teamId)
     }
 
@@ -330,10 +337,11 @@ class TeamsCoordinator(
                     KeyedStateStore(teamState, cursorKey(teamId)),
                     settings = { SyncSettings() },
                 )
-                engine.sync(s)
-                // Содержимое team-vault могло измениться (pull притянул чужие записи, push отправил
-                // наши) — будим UI-секции общих хостов, читающие vault императивно (см. [revision]).
-                _revision.value++
+                val outcome = engine.sync(s)
+                // Будим UI-секции общих хостов (читают vault императивно, см. [revision]) лишь когда
+                // pull реально притянул чужие записи. Свой push сюда не считаем: локальные share/unshare
+                // бампают revision явно, а push-all без входящей дельты содержимое секций не меняет.
+                if (outcome.pulled > 0) _revision.value++
                 onTeamsChanged()
             } catch (e: CancellationException) {
                 throw e
