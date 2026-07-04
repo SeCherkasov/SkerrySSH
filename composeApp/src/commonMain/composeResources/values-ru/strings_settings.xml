@@ -35,7 +35,7 @@
     <string name="settings_ai_default_provider">Провайдер AI по умолчанию</string>
     <string name="settings_ai_default_provider_desc">Используется для подключений без отдельного переопределения.</string>
     <string name="settings_ai_provider_device">На этом устройстве</string>
-    <string name="settings_ai_provider_device_desc">Qwen 2.5 Coder 1.5B · 982 МБ · готово. Данные не покидают вашу машину.</string>
+    <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 ГБ · готово. Данные не покидают вашу машину.</string>
     <string name="settings_ai_badge_private">ЛОКАЛЬНО</string>
     <string name="settings_ai_provider_byok">Мой ключ API (BYOK)</string>
     <string name="settings_ai_provider_byok_desc">Используйте свой ключ OpenAI, Anthropic или OpenRouter. Оплата напрямую провайдеру.</string>
