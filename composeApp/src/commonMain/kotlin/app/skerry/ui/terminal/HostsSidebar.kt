@@ -54,7 +54,10 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTeams
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.team.TeamMemberStatus
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import app.skerry.ui.app.LocalSync
+import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.generated.resources.lib_teams_sidebar
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.Chip
@@ -357,8 +360,17 @@ private fun TeamHostsSectionHeader() {
 @Composable
 private fun TeamHostsSection(hostsSnapshot: List<Host>, mono: FontFamily) {
     val teams = LocalTeams.current ?: return
+    // Общие хосты команд ходят team-каналом, а не аккаунтным, и не тянутся автоматически при старте.
+    // Триггерим их pull, КОГДА sync стал Online: сразу после мастер-пароля сессия ещё восстанавливается,
+    // и ранний refresh() вышел бы по NotConnected, оставив секцию пустой до захода на вкладку Teams.
+    // Ключ по Online-переходу — refresh()+syncAll() отрабатывают единожды на подключение. markError глушит сбой.
+    val online = LocalSync.current?.status?.collectAsState()?.value is SyncStatus.Online
+    LaunchedEffect(online) { if (online) { teams.refresh(); teams.syncAll() } }
     val teamList by teams.teams.collectAsState()
-    val sections = remember(teamList, hostsSnapshot) {
+    // revision меняется при каждом team-синке — иначе live-притянутые в team-vault хосты не появятся
+    // до ручного sync (личный каталог не меняется, а секции читают vault императивно).
+    val revision by teams.revision.collectAsState()
+    val sections = remember(teamList, hostsSnapshot, revision) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.mapNotNull { team ->
             val vault = teams.teamVault(team.id) ?: return@mapNotNull null
             val shared = VaultHostStore(vault).all()
