@@ -51,6 +51,7 @@ import app.skerry.ui.generated.resources.settings_set_up_sync
 import app.skerry.ui.generated.resources.settings_this_device
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.sync.AccountCardModel
+import app.skerry.ui.sync.AccountIdentityBlock
 import app.skerry.ui.sync.accountCardModelLocalized
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -76,6 +77,9 @@ private fun LiveAccountSection(sync: app.skerry.ui.sync.SyncCoordinator, state: 
     val status = sync.status.collectAsState().value
     val model = accountCardModelLocalized(status, sync.savedConfig?.serverUrl)
     AccountCard(model, sync, state)
+    // Идентификаторы для Teams-приглашений (accountId + отпечаток ключа шеринга): при активной сессии
+    // model.title == accountId. Здесь, а не на вкладке Sync — это свойство аккаунта, не движка синка.
+    if (model.connected) AccountIdentityBlock(model.title, Modifier.padding(top = 12.dp))
     // Список устройств серверу известен только при активной сессии (Online) — иначе нечем спрашивать.
     if (model.connected) LinkedDevices(sync, onLink = state::openPairing)
 }

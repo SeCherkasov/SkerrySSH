@@ -114,4 +114,9 @@
     <string name="sync_fail_save_settings">Не удалось сохранить настройки синхронизации</string>
     <string name="sync_fail_sync">Ошибка синхронизации</string>
     <string name="sync_fail_revoke">Не удалось отозвать устройство</string>
+
+    <!-- Идентификаторы аккаунта для Teams-приглашений (Settings → Account / mobile Sync) -->
+    <string name="sync_account_id_label">ID аккаунта</string>
+    <string name="sync_sharing_fingerprint_label">Отпечаток ключа шеринга</string>
+    <string name="sync_identity_hint">Сообщите их владельцу команды для приглашения — не нужно искать на sync-сервере.</string>
 </resources>

@@ -114,4 +114,9 @@
     <string name="sync_fail_save_settings">Couldn't save sync settings</string>
     <string name="sync_fail_sync">Sync failed</string>
     <string name="sync_fail_revoke">Couldn't revoke the device</string>
+
+    <!-- Идентификаторы аккаунта для Teams-приглашений (Settings → Account / mobile Sync) -->
+    <string name="sync_account_id_label">Account ID</string>
+    <string name="sync_sharing_fingerprint_label">Sharing key fingerprint</string>
+    <string name="sync_identity_hint">Share these with a team owner to get invited — no need to look them up on the sync server.</string>
 </resources>

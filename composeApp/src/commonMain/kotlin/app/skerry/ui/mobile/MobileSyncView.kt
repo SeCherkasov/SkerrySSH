@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.sync.RemoteDevice
+import app.skerry.ui.sync.AccountIdentityBlock
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupBody
 import app.skerry.ui.sync.SyncStatus
@@ -184,6 +185,9 @@ private fun SyncBody(sync: SyncCoordinator) {
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> {
             SyncStatusNotice("cloud_done", D.moss, stringResource(Res.string.sync_connected_title, status.accountId), stringResource(Res.string.sync_session_stats, status.lastPushed, status.lastPulled))
+            // Идентификаторы для Teams-приглашений (accountId + отпечаток ключа шеринга) — mobile
+            // объединяет Account+Sync в один экран, поэтому блок живёт здесь (desktop — вкладка Account).
+            AccountIdentityBlock(status.accountId, Modifier.padding(top = 12.dp))
             // Кнопки в том же стиле, что на desktop (ghost, не залитый primary) — паритет платформ.
             // Mobile объединяет вкладки Account+Sync desktop в один экран, поэтому Sync now и
             // Disconnect живут рядом (на desktop они разнесены по вкладкам).
