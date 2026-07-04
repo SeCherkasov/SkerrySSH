@@ -94,8 +94,8 @@ interface SyncClient {
     /** Claim паринга на новом устройстве по коду (без входа). */
     suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult
 
-    /** Поток курсоров «появились изменения» (WS push). Завершается при закрытии соединения. */
-    fun changes(session: SyncSession): Flow<Long>
+    /** Поток сигналов «появились изменения» (WS push). Завершается при закрытии соединения. */
+    fun changes(session: SyncSession): Flow<SyncSignal>
 
     /**
      * Лёгкая проверка доступности сервера (health-пробник `GET /healthz`, без аутентификации):
@@ -107,6 +107,21 @@ interface SyncClient {
 
     /** Освобождает сетевые ресурсы (HTTP/WS клиент). */
     suspend fun close()
+}
+
+/**
+ * Сигнал live-sync из WS-канала `/sync`. Кадры не несут содержимого — только «что перечитать»:
+ * `{cursor}` → [Account]; `team:{id}:{cursor}` → [Team]; `teams` → [Membership].
+ */
+sealed interface SyncSignal {
+    /** В аккаунтном vault появились изменения до [cursor] — сделать дельта-pull. */
+    data class Account(val cursor: Long) : SyncSignal
+
+    /** В команде [teamId] появились записи до [cursor] — синкнуть team-vault. */
+    data class Team(val teamId: String, val cursor: Long) : SyncSignal
+
+    /** Изменился состав команд/приглашения аккаунта — перечитать список команд. */
+    data object Membership : SyncSignal
 }
 
 /** Ошибка sync-клиента: сетевая, протокольная или ожидаемая (нет аккаунта / неверный пароль). */

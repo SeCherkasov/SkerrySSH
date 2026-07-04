@@ -114,6 +114,11 @@ fun MobileHostsScreen(state: MobileDesignState) {
                 }
             }
             if (folderLineIndex != null && folderLineIndex == otherFolders.size) MobileDropLine()
+            // Общие хосты команд (Teams) — секции под личным каталогом, вне поиска/фильтра
+            // (паритет desktop-сайдбара). Тап — сразу подключение (LocalConnectHost).
+            if (query.isBlank() && chip == ALL_HOSTS_CHIP) {
+                MobileTeamHostsSections(hosts)
+            }
             Spacer(Modifier.height(96.dp)) // место под таб-бар и FAB
         }
         MobileFabButton(

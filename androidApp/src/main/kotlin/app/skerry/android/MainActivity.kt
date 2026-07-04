@@ -317,6 +317,9 @@ class MainActivity : FragmentActivity() {
         // Привязка к серверу персистится в sync.json (НЕсекретное: URL/accountId/deviceId); токены и
         // пароль не храним (переавторизация по мастер-паролю). deviceId — стабильный (как у записей
         // vault). Курсор синка персистится в sync-cursor.json (инкрементальный pull после перезапуска).
+        // Teams-координатор создаётся ПОСЛЕ sync (ему нужна сессия), но onSynced должен его дёргать:
+        // ключ команды доезжает записью TEAM обычным аккаунтным синком. Поздняя привязка через var.
+        var teamsForSync: app.skerry.ui.teams.TeamsCoordinator? = null
         val sync = SyncCoordinator(
             clientFactory = { url -> KtorSyncClient(url) },
             crypto = crypto,
@@ -342,8 +345,38 @@ class MainActivity : FragmentActivity() {
                 lifecycleScope.launch(Dispatchers.Main) {
                     hosts.reload(); snippets.reload(); tunnels.reload(); knownHosts.refresh()
                 }
+                teamsForSync?.onAccountSynced()
             },
         )
+        // Teams (шеринг записей между аккаунтами, zero-knowledge) — паритет desktop main.kt:
+        // координатор поверх той же sync-сессии, per-team vault'ы в filesDir/teams
+        // (dataKey = teamKey из записи TEAM аккаунтного vault), курсоры team-синка — в своём файле.
+        val teams = app.skerry.ui.teams.TeamsCoordinator(
+            session = { sync.currentSession() },
+            client = { sync.currentTeamClient() },
+            vault = vault,
+            crypto = crypto,
+            teamVaults = app.skerry.shared.team.TeamVaults(
+                dir = dir.resolve("teams").absolutePath.toPath(),
+                crypto = IonspinVaultCrypto(),
+                deviceId = deviceId(dir),
+                fileSystem = FileSystem.SYSTEM,
+                // File(...).toPath() (API 26), а не Path.of (API 34) — совместимо с minSdk 26.
+                harden = { app.skerry.shared.io.PrivateConfig.harden(java.io.File(it.toString()).toPath()) },
+                now = { Instant.now().toString() },
+            ),
+            teamState = FileSyncStateStore(File(dir, "team-cursor.json").toPath()),
+            newTeamId = { UUID.randomUUID().toString() },
+            onTeamsChanged = {
+                lifecycleScope.launch(Dispatchers.Main) {
+                    hosts.reload(); snippets.reload(); tunnels.reload()
+                }
+            },
+        )
+        teamsForSync = teams
+        // Потерянный ключ команды (пропущен дельта-синком старого клиента) чинится только полным re-pull.
+        teams.onKeyMissing = { sync.recoverFullPull() }
+        sync.onTeamSignal = teams::onSignal
         // Миграция секретов в vault (IDENTITY → CREDENTIAL) при разблокировке — идемпотентна.
         // После — reload менеджеров и восстановление sync-сессии. Переноса старого локального
         // workspace больше нет: рабочее пространство живёт записями vault, до прод-релиза миграций нет.
@@ -368,6 +401,8 @@ class MainActivity : FragmentActivity() {
         // и отражаем опустевший vault в менеджерах. Vault на этот момент заблокирован.
         onVaultReset = { resetScope ->
             tunnels.closeAll()
+            // Ключи команд жили в стёртом vault — team-vault'ы больше не открыть, лочим их след в памяти.
+            teams.lock()
             // Сброс стёр dataKey → биом-артефакт (`vault.bio`) обёрнут под мёртвым ключом, а sealed
             // refresh-токен sync — тоже. Снимаем биометрию и рвём привязку к серверу, иначе после
             // сброса отпечаток вёл бы к несуществующему ключу, а настройки висели бы «Linked» без
@@ -416,6 +451,7 @@ class MainActivity : FragmentActivity() {
             tunnels = tunnels,
             snippets = snippets,
             sync = sync,
+            teams = teams,
             securityLog = securityLog,
             localAi = localAi,
         )

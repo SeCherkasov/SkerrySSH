@@ -42,7 +42,7 @@ class SyncEngineFilterTest {
         override suspend fun refresh(session: SyncSession): SyncSession = error("unused")
         override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = error("unused")
         override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult = error("unused")
-        override fun changes(session: SyncSession): Flow<Long> = emptyFlow()
+        override fun changes(session: SyncSession): Flow<SyncSignal> = emptyFlow()
         override suspend fun ping(): Boolean = true
         override suspend fun close() {}
     }

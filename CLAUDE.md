@@ -64,8 +64,11 @@ AI under policy (вывод сервера = недоверенный источ
 live-sync push-on-change, tombstone-propagation, персист курсора, селективный синк по типам,
 admin-консоль); паринг устройств (QR, вариант B); сниппеты; **AI-ассистент (BYOK OpenAI +
 per-host политики Strict/Balanced/Permissive/Off)** — код в `shared/ai/` и `ui/ai/`.
-Teams/шеринг сознательно ОТЛОЖЕН (zero-knowledge крипто-шеринг слишком сложен) —
-не предлагать следующим шагом.
+**Teams — СДЕЛАН (2026-07-05, по явному запросу).** Полный E2E zero-knowledge шеринг
+хостов/сниппетов: X25519 sealed-envelope приглашения со сверкой фингерпринта, teamKey +
+per-team vault поверх общего SyncEngine, роли owner/member, UI desktop+mobile, секции TEAMS
+в списках хостов. Схема и модель угроз — `docs/skerry-sync-design.md` §6
+(удаление участника = ACL-отзыв без ротации ключа, модель Bitwarden).
 
 **Phase 3 core — ЗАКРЫТ.** Telnet (свой IAC-кодек), serial (desktop jSerialComm /
 Android USB-OTG), autocomplete терминала с историей, desktop-хоткеи — реализовано и запушено.

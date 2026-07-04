@@ -85,6 +85,75 @@ object ActivityLog : Table("activity_log") {
     override val primaryKey = PrimaryKey(seq)
 }
 
+/**
+ * Публичные X25519-ключи аккаунтов для Teams-приглашений. Публичный ключ — не секрет;
+ * подмена ключа сервером обнаруживается сверкой фингерпринта участниками (см.
+ * `docs/skerry-sync-design.md`, раздел Teams).
+ */
+object AccountKeys : Table("account_keys") {
+    val accountId = varchar("account_id", 320).references(Accounts.id)
+    val publicKey = blob("public_key")
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(accountId)
+}
+
+/**
+ * Команды (шеринг записей между аккаунтами). Zero-knowledge: сервер знает только состав и
+ * роли; имя команды и содержимое записей зашифрованы teamKey, которого у сервера нет.
+ * [teamSeq] — монотонный per-team курсор дельты (аналог [Accounts.syncSeq]).
+ */
+object Teams : Table("teams") {
+    val id = varchar("id", 64)
+    val ownerAccountId = varchar("owner_account_id", 320).references(Accounts.id)
+    val teamSeq = long("team_seq").default(0)
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+/**
+ * Участники команд. [envelope] — sealed-конверт (crypto_box_seal) с teamKey и именем команды,
+ * запечатанный на публичный ключ приглашённого: сервер доставляет, но не читает.
+ * Статусы: `invited` → `active`; удаление участника = удаление строки (ACL-отзыв).
+ */
+object TeamMembers : Table("team_members") {
+    val teamId = varchar("team_id", 64).references(Teams.id)
+    val accountId = varchar("account_id", 320).references(Accounts.id)
+    /** `owner` | `member`. */
+    val role = varchar("role", 16)
+    /** `invited` | `active`. */
+    val status = varchar("status", 16)
+    val envelope = blob("envelope").nullable()
+    val invitedBy = varchar("invited_by", 320)
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(teamId, accountId)
+}
+
+/**
+ * Зашифрованные записи команд — модель [Records], но в team-scope: LWW по (version, deviceId),
+ * [teamSeq] — курсор дельты. Тромбстоуны не компактятся watermark'ом (участники приходят и
+ * уходят — watermark нестабилен); их чистит периодическая уборка по возрасту.
+ */
+object TeamRecords : Table("team_records") {
+    val teamId = varchar("team_id", 64).references(Teams.id)
+    val recordId = varchar("record_id", 64)
+    val type = varchar("type", 32)
+    val version = long("version")
+    val updatedAt = text("updated_at")
+    val deviceId = varchar("device_id", 64)
+    val deleted = bool("deleted")
+    val blob = blob("blob")
+    val teamSeq = long("team_seq")
+
+    override val primaryKey = PrimaryKey(teamId, recordId)
+
+    init {
+        index("idx_team_records_delta", false, teamId, teamSeq)
+    }
+}
+
 /** Одноразовые pairing-сессии (вариант B): dataKey, зашифрованный transferKey, с TTL. */
 object Pairing : Table("pairing") {
     val code = varchar("code", 64)

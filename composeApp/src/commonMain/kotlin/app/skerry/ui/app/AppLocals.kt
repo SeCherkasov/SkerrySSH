@@ -173,6 +173,13 @@ val LocalSecurityLog: ProvidableCompositionLocal<SecurityLog?> = staticCompositi
 val LocalSync: ProvidableCompositionLocal<SyncCoordinator?> = staticCompositionLocalOf { null }
 
 /**
+ * Координатор Teams (шеринг хостов/секретов/сниппетов между аккаунтами поверх sync-сервера).
+ * `null` — мок-путь/превью или sync не подключён: экран Teams рисует пустое состояние с
+ * приглашением настроить синхронизацию. Поставляется вместе с [LocalSync].
+ */
+val LocalTeams: ProvidableCompositionLocal<app.skerry.ui.teams.TeamsCoordinator?> = staticCompositionLocalOf { null }
+
+/**
  * Контроллер AI-ассистента (внешний OpenAI-совместимый провайдер, BYOK). `null` — мок-путь/превью
  * или платформа без AI: таб «AI» в настройках рисует статичный макет. Когда контроллер задан, таб
  * становится живым (ввод ключа/модели, быстрый чат), независимо от [FeatureFlags.ai], который

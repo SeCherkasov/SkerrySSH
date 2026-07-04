@@ -52,6 +52,16 @@ interface Vault {
      */
     fun create(password: CharArray)
 
+    /**
+     * Создать vault с ЗАДАННЫМ `dataKey` (team-vault Teams: dataKey = teamKey, он хранится записью
+     * [RecordType.TEAM] в аккаунтном vault, а не обёрткой в meta этого файла). После вызова vault
+     * разблокирован; открывать в дальнейшем через [unlockWithDataKey]. Реализация присваивает
+     * переданный ключ (вызывающий его не затирает — контракт [unlockWithDataKey]).
+     * Дефолт бросает: парольным vault'ам метод не нужен.
+     */
+    fun createWithDataKey(dataKey: DataKey): Unit =
+        throw UnsupportedOperationException("createWithDataKey is only supported by file vaults")
+
     /** Разблокировать существующий vault; см. [UnlockResult]. */
     fun unlock(password: CharArray): UnlockResult
 

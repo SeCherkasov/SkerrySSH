@@ -142,6 +142,7 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
+import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.app.LocalTunnels
 import app.skerry.ui.app.LocalVault
@@ -266,6 +267,8 @@ fun DesktopDesignApp(
     // Координатор self-hosted sync (Phase 2). `null` — sync не подключён на платформе/мок-путь:
     // секция Sync в настройках рисует статичный макет, модалка-онбординг не показывается.
     sync: SyncCoordinator? = null,
+    // Координатор Teams (шеринг между аккаунтами поверх sync). `null` — экран Teams в мок-режиме.
+    teams: app.skerry.ui.teams.TeamsCoordinator? = null,
     // Контроллер AI-ассистента (BYOK, внешний OpenAI-совместимый провайдер). `null` — AI не подключён:
     // таб «AI» в настройках рисует статичный макет. Поставляется за гейтом vault (ключ хранится в vault).
     ai: app.skerry.ui.ai.AiAssistantController? = null,
@@ -385,6 +388,7 @@ fun DesktopDesignApp(
         LocalVaultBiometrics provides biometrics,
         LocalSecurityLog provides securityLog,
         LocalSync provides sync,
+        LocalTeams provides teams,
         LocalAi provides ai,
     ) {
         if (vault != null) {

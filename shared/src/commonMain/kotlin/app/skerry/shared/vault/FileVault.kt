@@ -107,6 +107,23 @@ class FileVault(
         }
     }
 
+    override fun createWithDataKey(dataKey: DataKey): Unit = synchronized(lock) {
+        // meta.wrappedDataKey пуст намеренно: ключ этого vault живёт снаружи (запись TEAM в
+        // аккаунтном vault), парольный путь unlock() для таких файлов не используется.
+        val newMeta = VaultMeta(FORMAT_VERSION, crypto.newSalt(), ByteArray(0))
+        unknownRecords.clear()
+        try {
+            writeFile(newMeta, emptyList())
+        } catch (e: Throwable) {
+            dataKey.bytes.fill(0) // запись не удалась — переданный ключ не оставляем в памяти
+            throw e
+        }
+        this.dataKey?.bytes?.fill(0)
+        this.dataKey = dataKey
+        meta = newMeta
+        records.clear()
+    }
+
     override fun unlock(password: CharArray): UnlockResult = synchronized(lock) {
         try {
             val body = runCatching {

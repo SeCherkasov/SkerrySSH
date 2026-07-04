@@ -4,7 +4,15 @@ import kotlinx.serialization.Serializable
 
 /** Тип записи vault — совпадает с моделью sync (`docs/skerry-sync-design.md` §2). */
 @Serializable
-enum class RecordType { HOST, GROUP, IDENTITY, CREDENTIAL, KNOWN_HOST, SNIPPET, TUNNEL, SETTINGS, TERMINAL_HISTORY }
+enum class RecordType {
+    HOST, GROUP, IDENTITY, CREDENTIAL, KNOWN_HOST, SNIPPET, TUNNEL, SETTINGS, TERMINAL_HISTORY,
+
+    /** Ключ и метаданные одной команды (teamKey + имя + роль) — в СОБСТВЕННОМ vault участника. */
+    TEAM,
+
+    /** X25519-пара аккаунта для приёма приглашений Teams (singleton; публичная половина — на сервере). */
+    TEAM_IDENTITY,
+}
 
 /**
  * Запись локального vault в её зашифрованном виде на диске. Метаданные (`id`, `type`,

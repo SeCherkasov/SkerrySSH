@@ -128,4 +128,50 @@ interface VaultCrypto {
      * [associatedData], не совпавший с тем, под которым запись была запечатана.
      */
     fun open(dataKey: DataKey, ciphertext: ByteArray, associatedData: ByteArray): ByteArray?
+
+    /**
+     * Новая пара ключей X25519 для приёма запечатанных конвертов ([sealForRecipient]).
+     * Публичная половина публикуется на sync-сервере, секретная хранится только записью
+     * собственного vault (TEAM_IDENTITY) и не покидает устройства в открытом виде.
+     */
+    fun newSharingKeyPair(): SharingKeyPair
+
+    /**
+     * Восстановить пару из сериализованных половин (запись vault на другом устройстве).
+     * Байты копируются; затирание входных массивов — на вызывающей стороне.
+     */
+    fun sharingKeyPairFromBytes(publicKey: ByteArray, secretKey: ByteArray): SharingKeyPair
+
+    /**
+     * Запечатать [plaintext] на публичный ключ получателя (crypto_box_seal: эфемерная пара X25519,
+     * анонимный отправитель). Открыть конверт может только владелец секретной половины —
+     * сервер, доставляющий конверт приглашения, видит лишь шифротекст.
+     */
+    fun sealForRecipient(recipientPublicKey: ByteArray, plaintext: ByteArray): ByteArray
+
+    /**
+     * Открыть запечатанный конверт своей парой. `null` ⇒ конверт адресован другой паре,
+     * повреждён или слишком короток (недоверенный вход с сервера — не бросаем).
+     */
+    fun openSealedEnvelope(keyPair: SharingKeyPair, envelope: ByteArray): ByteArray?
+}
+
+/**
+ * Пара ключей X25519 для sealed-конвертов Teams. Секретная половина держится `internal`
+ * по тем же соображениям, что и [MasterKey.bytes]; [exportSecretKey] отдаёт копию только
+ * для сериализации в запись собственного vault (шифруется dataKey'ем аккаунта).
+ */
+class SharingKeyPair internal constructor(
+    val publicKey: ByteArray,
+    internal val secretKey: ByteArray,
+) {
+    /** Копия секретной половины для записи в vault; затирание копии — на вызывающей стороне. */
+    fun exportSecretKey(): ByteArray = secretKey.copyOf()
+
+    /** Затереть секретную половину, когда пара больше не нужна. Идемпотентно. */
+    fun zeroize() {
+        secretKey.fill(0)
+    }
+
+    override fun toString(): String = "SharingKeyPair(publicKey=${publicKey.size}B, secret=redacted)"
 }

@@ -13,7 +13,13 @@ import kotlinx.coroutines.flow.map
  * self-hosted инстанса; горизонтальное масштабирование потребовало бы внешнего брокера.
  */
 class ChangeNotifier {
-    data class Change(val accountId: String, val cursor: Long)
+    /**
+     * [channel]: `acc:{accountId}` — курсор аккаунтного vault; `team:{teamId}` — курсор записей
+     * команды; `member:{accountId}` — изменился состав/приглашения (курсор не несёт смысла, 0).
+     */
+    data class Change(val channel: String, val cursor: Long)
+
+    data class TeamChange(val teamId: String, val cursor: Long)
 
     // replay=0 + DROP_OLDEST: уведомление о курсоре идемпотентно, поэтому при медленном
     // подписчике сбрасываем старые события вместо блокировки издателя (publish зовётся прямо
@@ -26,12 +32,31 @@ class ChangeNotifier {
 
     /** Не-suspend: tryEmit никогда не подвешивает издателя (буфер с DROP_OLDEST). */
     fun publish(accountId: String, cursor: Long) {
-        flow.tryEmit(Change(accountId, cursor))
+        flow.tryEmit(Change("acc:$accountId", cursor))
+    }
+
+    /** Сигнал «в команде появились записи до cursor» — для WS-сессий активных участников. */
+    fun publishTeam(teamId: String, cursor: Long) {
+        flow.tryEmit(Change("team:$teamId", cursor))
+    }
+
+    /** Сигнал «состав команд/приглашения аккаунта изменились» — клиент перечитывает список команд. */
+    fun publishMembership(accountId: String) {
+        flow.tryEmit(Change("member:$accountId", 0))
     }
 
     /** Поток курсоров для конкретного аккаунта (для одной WS-сессии). */
     fun forAccount(accountId: String): Flow<Long> =
-        flow.filter { it.accountId == accountId }.map { it.cursor }
+        flow.filter { it.channel == "acc:$accountId" }.map { it.cursor }
+
+    /** Все командные сигналы; фильтрация по членству — на стороне WS-сессии (состав меняется). */
+    fun teamChanges(): Flow<TeamChange> =
+        flow.filter { it.channel.startsWith("team:") }
+            .map { TeamChange(it.channel.removePrefix("team:"), it.cursor) }
+
+    /** Сигналы об изменении членства для конкретного аккаунта. */
+    fun forMembership(accountId: String): Flow<Unit> =
+        flow.filter { it.channel == "member:$accountId" }.map { }
 
     /**
      * Число активных подписчиков шины (все аккаунты). Наблюдаемость для тестов WS-сессий:

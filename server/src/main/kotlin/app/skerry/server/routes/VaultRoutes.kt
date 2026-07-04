@@ -21,7 +21,10 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 
 /** Допустимые значения открытого поля `type` (зеркалит `RecordType` ядра). */
-private val ALLOWED_TYPES = setOf("HOST", "GROUP", "IDENTITY", "CREDENTIAL", "KNOWN_HOST", "SNIPPET", "TUNNEL", "SETTINGS")
+private val ALLOWED_TYPES = setOf(
+    "HOST", "GROUP", "IDENTITY", "CREDENTIAL", "KNOWN_HOST", "SNIPPET", "TUNNEL", "SETTINGS",
+    "TEAM", "TEAM_IDENTITY",
+)
 
 /** Хранилище шифроблобов: обёртка dataKey, дельта-чтение и batch-push с LWW. */
 fun Route.vaultRoutes(services: Services) {

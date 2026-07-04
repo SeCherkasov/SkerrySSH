@@ -28,6 +28,9 @@ data class SyncSettings(
     /** Участвует ли тип в синхронизации при текущих флагах. [RecordType.SETTINGS] — всегда. */
     fun shouldSync(type: RecordType): Boolean = when (type) {
         RecordType.SETTINGS -> true
+        // Ключи команд и identity-пара — носители доступа к Teams: всегда едут между своими
+        // устройствами (иначе команда не открылась бы на втором устройстве аккаунта).
+        RecordType.TEAM, RecordType.TEAM_IDENTITY -> true
         RecordType.SNIPPET -> syncSnippets
         RecordType.HOST,
         RecordType.GROUP,

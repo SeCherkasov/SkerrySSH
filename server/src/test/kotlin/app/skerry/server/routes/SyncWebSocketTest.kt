@@ -17,6 +17,9 @@ import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
+/** Одна WS-сессия держит три подписки notifier: аккаунтный канал, команды, членство. */
+private const val WS_SUBSCRIPTIONS = 3
+
 class SyncWebSocketTest {
 
     private val accountId = "alice@example.com"
@@ -33,8 +36,8 @@ class SyncWebSocketTest {
         val tokens: TokenResponse = client.registerAccount(accountId, password)
 
         client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
-            // Дожидаемся регистрации серверной подписки, затем проверяем сам push-канал.
-            withTimeout(2_000) { services.notifier.subscriptions.first { it == 1 } }
+            // Дожидаемся регистрации всех серверных подписок, затем проверяем сам push-канал.
+            withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
             services.notifier.publish(accountId, 7)
             val frame = withTimeout(2_000) { incoming.receive() } as Frame.Text
             assertEquals("7", frame.readText())
@@ -57,7 +60,7 @@ class SyncWebSocketTest {
         val tokens: TokenResponse = client.registerAccount(accountId, password, deviceId = "devA")
 
         client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
-            withTimeout(2_000) { services.notifier.subscriptions.first { it == 1 } }
+            withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
             // JWT проверяется только на рукопожатии — отзыв после подключения обязан
             // перепроверяться на каждом уведомлении и закрывать сессию, а не слать push дальше.
             services.devices.revoke(accountId, "devA")
