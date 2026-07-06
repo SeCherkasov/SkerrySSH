@@ -49,6 +49,7 @@ import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.session.SessionView
 import app.skerry.ui.theme.SkerryTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -125,6 +126,14 @@ fun main() {
     val boundCredentialId = credentials?.credentials?.firstOrNull()?.id
     val hosts = if (live) seededHosts(boundCredentialId = boundCredentialId) else null
     val sessions = if (live && hosts != null) seededSessions(hosts) else null
+    // SFTP is a session sub-view: the rail view alone (showView above) does not switch the active
+    // session's panel, so set it explicitly for the offscreen SFTP render. The local pane reads the
+    // real user.home via okio, which is slow to load offscreen and would leak a personal path, so
+    // point it at a throwaway seeded home tree first.
+    if (viewName == "Sftp") {
+        seedFakeHome()
+        sessions?.setActiveView(SessionView.Sftp)
+    }
     val knownHosts = if (live) seededKnownHosts() else null
     val ai = if (live) seededAi() else null
 
@@ -209,6 +218,23 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     scene.close()
     sessions?.disconnectAll() // detach fake session collectors before exit
     println("screenshot(mobile) → $out (${File(out).length()} bytes)")
+}
+
+/**
+ * Points `user.home` at a throwaway directory holding a small demo tree, so the SFTP local pane
+ * (real okio filesystem over `user.home`) loads instantly offscreen and shows a neutral path
+ * instead of the developer's actual home. Rebuilt on each run; only used by the SFTP screenshot.
+ */
+private fun seedFakeHome() {
+    val dir = File(System.getProperty("java.io.tmpdir"), "skerry-demo-home")
+    dir.deleteRecursively()
+    dir.mkdirs()
+    listOf("Projects", "Downloads", "Documents", ".ssh", ".config").forEach { File(dir, it).mkdirs() }
+    File(dir, "notes.md").writeText("# notes\n")
+    File(dir, "backup.tar.gz").writeText("demo\n")
+    File(dir, "deploy.log").writeText("ok\n")
+    File(dir, ".bashrc").writeText("export PATH\n")
+    System.setProperty("user.home", dir.absolutePath)
 }
 
 /** Design font provider for standalone screen renders, bypassing [DesktopDesignApp]. */
