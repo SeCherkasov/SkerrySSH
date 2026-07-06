@@ -92,6 +92,10 @@ import app.skerry.ui.design.rememberSpaceGrotesk
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    // README screenshots render in a fixed UI locale (default English) regardless of the host OS
+    // locale, so the published set is language-consistent. Compose string resources read the JVM
+    // default locale (see LocalAppLocale), so pinning it here covers both desktop and mobile.
+    java.util.Locale.setDefault(java.util.Locale.forLanguageTag(System.getProperty("skerry.screenshot.locale", "en")))
     val out = System.getProperty("skerry.screenshot.out", "/tmp/skerry_design.png")
     val viewName = System.getProperty("skerry.screenshot.view", "Terminal")
     val overlay = System.getProperty("skerry.screenshot.overlay", "")

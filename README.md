@@ -1,176 +1,165 @@
 # Skerry
 
-Опенсорсный кроссплатформенный SSH-клиент с единым ядром: Kotlin Multiplatform под капотом
-и Compose Multiplatform UI. Один код ядра и один UI на **Desktop (Linux, Windows, macOS)**
-и **Android**, паритет фич между платформами.
+**English** · [Русский](README.ru.md)
 
-Версия — `0.1.0` (до первого релиза).
+An open-source, cross-platform SSH client with a single core: Kotlin Multiplatform under the
+hood and a Compose Multiplatform UI. One core codebase and one UI across
+**Desktop (Linux, Windows, macOS)** and **Android**, with feature parity between platforms.
 
-## Статус
+Version — `0.1.0` (pre first release).
 
-- **Phase 1 (MVP)** — закрыт: SSH, SFTP, port forwarding, менеджер хостов/ключей, терминал,
-  зашифрованный vault (мастер-пароль + биометрия).
-- **Phase 2** — закрыт: self-hosted zero-knowledge sync, паринг устройств (QR), сниппеты,
-  AI-ассистент (BYOK OpenAI) с per-host политиками. **Teams** — E2E zero-knowledge шеринг
-  хостов и сниппетов (X25519 sealed-envelope приглашения со сверкой фингерпринта, роли
-  owner/member, аудит-лог команды).
-- **Phase 3** — закрыты: Telnet, serial (desktop через jSerialComm, Android через USB-OTG),
-  autocomplete терминала, desktop-хоткеи и **локальный AI на устройстве** (приложение само
-  качает GGUF-модели и запускает их через llama.cpp — desktop и Android; Strict-политика
-  работает офлайн). Отложены до после релиза: **Mosh** и планшетный режим.
-- **iOS/iPadOS** — отложён: таргеты и `iosMain` удалены из исходников; крипта и хранилище
-  остаются мультиплатформенно-готовыми, чтобы возврат был дешёвым.
+## Status
 
-## Скриншоты
+- **Phase 1 (MVP)** — done: SSH, SFTP, port forwarding, host/key manager, terminal,
+  encrypted vault (master password + biometrics).
+- **Phase 2** — done: self-hosted zero-knowledge sync, device pairing (QR), snippets,
+  AI assistant (BYOK OpenAI) with per-host policies. **Teams** — E2E zero-knowledge sharing
+  of hosts and snippets (X25519 sealed-envelope invitations with fingerprint verification,
+  owner/member roles, team audit log).
+- **Phase 3** — done: Telnet, serial (desktop via jSerialComm, Android via USB-OTG),
+  terminal autocomplete, desktop hotkeys, **on-device local AI** (the app downloads GGUF
+  models itself and runs them via llama.cpp on desktop and Android; the Strict policy works
+  offline). Deferred until after release: **Mosh**, tablet layout.
+- **iOS/iPadOS** — deferred.
 
-### Desktop
+## Screenshots
 
-![Терминал с менеджером хостов, вкладками сессий и панелью живых метрик](docs/screenshots/desktop-terminal.png)
+![Terminal with host manager, session tabs, and a live metrics panel](docs/screenshots/desktop-terminal.png)
 
-![Двухпанельный SFTP в стиле mc/Total Commander](docs/screenshots/desktop-sftp.png)
+![Dual-pane SFTP commander](docs/screenshots/desktop-sftp.png)
 
-![Глобальный менеджер port forwarding](docs/screenshots/desktop-tunnels.png)
+![Port forwarding manager](docs/screenshots/desktop-tunnels.png)
 
-![Зашифрованный vault: ключи, пароли, сертификаты](docs/screenshots/desktop-vault.png)
+![Vault: keys, passwords, certificates](docs/screenshots/desktop-vault.png)
 
-![AI-ассистент с per-host политиками](docs/screenshots/desktop-ai.png)
+![AI assistant with per-host policies](docs/screenshots/desktop-ai.png)
 
-### Android
+| Host list | Terminal |
+|---|---|
+| ![Host list with groups and tags](docs/screenshots/mobile-hosts.png) | ![Mobile terminal](docs/screenshots/mobile-terminal.png) |
 
-| Список хостов | Терминал |
-|:---:|:---:|
-| ![Список хостов с группами и тегами](docs/screenshots/mobile-hosts.png) | ![Мобильный терминал](docs/screenshots/mobile-terminal.png) |
+Screenshots are rendered from the live UI by an offscreen harness (`scripts/gen-screenshots.sh`),
+with no network and no master password. Re-run to refresh: `scripts/gen-screenshots.sh`.
 
-> Скриншоты сгенерированы offscreen-рендером UI на seeded-данных (`scripts/gen-screenshots.sh`),
-> без реального подключения. Перезапустить для обновления: `bash scripts/gen-screenshots.sh`.
+## Features
 
-## Возможности
-
-**Подключения**
-- SSH (sshj + BouncyCastle) — пароль, ключи, SSH-сертификаты
-- SFTP — двухпанельный файловый менеджер (навигация в стиле mc/Total Commander)
-- Port forwarding — локальные и удалённые туннели, глобальный менеджер туннелей
-- Telnet (собственный кодек IAC-неготиации) и Serial (desktop + Android USB-OTG:
+**SSH and connections**
+- SSH (sshj + BouncyCastle), SSH certificates
+- SFTP (dual-pane commander)
+- Port forwarding: local (`-L`), remote (`-R`), dynamic/SOCKS (`-D`)
+- Telnet (custom IAC-negotiation codec), serial (desktop jSerialComm; Android USB-OTG:
   CDC/FTDI/CP210x/CH34x)
 
-**Терминал**
-- Собственная grid-реализация с конформностью VT: line-drawing, Unicode/combining, SGR,
-  OSC 8/4/52/104, мышь, bracketed-paste
-- Табы, split-view (независимая вторая сессия), авто-реконнект для SSH, drag-reorder вкладок
-- Живой статус-бар (cipher, версия сервера, throughput, RTT)
-- Переключатель шрифта (JetBrains Mono / Hack), набор цветовых тем (в т.ч. Catppuccin Mocha,
-  Dracula, Tokyo Day), autocomplete с историей команд, Ctrl-R reverse-search, циклирование
-  альтернатив
+**Terminal**
+- Custom grid emulation, VT conformance: line-drawing, Unicode/combining, SGR,
+  OSC 8/4/52/104, bracketed-paste, mouse
+- Tabs, split view (independent second session), auto-reconnect for SSH, drag-reorder tabs
+- Live status bar (cipher, server version, throughput, RTT)
+- Font switcher (JetBrains Mono / Hack), a set of color themes (incl. Catppuccin Mocha,
+  Dracula, Tokyo Day), autocomplete with command history, Ctrl-R reverse-search, cycling
+  through alternatives
 
-**Хранилище и безопасность**
-- Локальный зашифрованный vault: Argon2id → XChaCha20-Poly1305 (libsodium), zero-knowledge
-- Мастер-пароль + биометрия (Android BiometricPrompt + Keystore), reset/recovery
-- Точечный FLAG_SECURE на чувствительных экранах
-- Менеджер хостов, групп и тегов; keychain + identities (username + credential)
+**Storage and security**
+- Local encrypted vault: Argon2id → XChaCha20-Poly1305 (libsodium), zero-knowledge
+- Master password + biometrics (Android BiometricPrompt + Keystore), reset/recovery
+- Targeted FLAG_SECURE on sensitive screens
+- Host, group, and tag manager; keychain + identities (username + credential)
 
-**Sync (self-hosted, опционально)**
-- Zero-knowledge E2E синхронизация: Argon2id → masterKey → authKey/dataKey, XChaCha20-Poly1305
-- SRP-6a аутентификация (сервер хранит только verifier), JWT-сессии
-- Live-sync push-on-change через WebSocket, tombstone-propagation, персист курсора,
-  селективный синк по типам записей
-- Паринг устройств по QR (ZXing + CameraX + ML Kit on-device), admin-консоль
+**Sync (self-hosted, optional)**
+- Zero-knowledge E2E synchronization: Argon2id → masterKey → authKey/dataKey, XChaCha20-Poly1305
+- SRP-6a authentication (the server stores only the verifier), JWT sessions
+- Live-sync push-on-change over WebSocket, tombstone propagation, cursor persistence,
+  selective sync by record type
+- Device pairing via QR (ZXing + CameraX + ML Kit on-device), admin console
 
-**Teams (шеринг, опционально)**
-- E2E zero-knowledge шеринг хостов и сниппетов внутри команды поверх sync-сервера
-- Приглашения через X25519 sealed-envelope со сверкой фингерпринта устройства
-- Роли owner/member, аудит-лог команды; удаление участника = ACL-отзыв без ротации ключа
-  (модель Bitwarden). Схема — [docs/skerry-sync-design.md](docs/skerry-sync-design.md) §6
+**Teams (sharing, optional)**
+- E2E zero-knowledge sharing of hosts and snippets within a team, on top of sealed-envelope
+  invitations; owner/member roles, ACL revocation. Schema — [docs/skerry-sync-design.md](docs/skerry-sync-design.md) §6
 
-**Сниппеты и AI**
-- Сниппеты с тегами, type-ahead и детекцией конфликтов хоткеев
-- AI-ассистент (BYOK OpenAI, ключ в vault) с per-host политиками Strict/Balanced/Permissive/Off,
-  SSE-стримингом, редактированием секретов и гейтом опасных команд перед выполнением
-- Локальный AI на устройстве: приложение само качает GGUF-модели (докачка + проверка sha256)
-  и запускает их через llama.cpp — desktop и Android. Каталог coder-моделей (Qwen3, Phi-4 Mini),
-  менеджер моделей в настройках; Strict-политика роутится на локальную модель и работает офлайн
+**Snippets and AI**
+- Command library with snippet type-ahead in the terminal
+- AI assistant (BYOK OpenAI, per-host policies Strict/Balanced/Permissive/Off) with SSE streaming
+- On-device local AI: the app downloads GGUF models itself and runs them via llama.cpp
+  (catalog: Qwen3, Phi-4 Mini) — the Strict policy works offline
 
-**Интерфейс**
-- Локализация (i18n): английский и русский. Автоопределение по языку системы при старте +
-  ручное переключение в настройках (Appearance → Language) на лету, без перезапуска. Строки —
-  в Compose-ресурсах (`composeApp/src/commonMain/composeResources/values*`); смена локали в рантайме
-  через `LocalAppLocale` (переопределяет системную локаль, читаемую окружением ресурсов). Ответы
-  AI-ассистента (INFO/ASK) тоже следуют языку интерфейса.
+**Localization**
+- Strings in compose-resources (`composeApp/src/commonMain/composeResources/values*`);
+  a language switcher (`LocalAppLocale`) for the UI and for the AI assistant's reply language (INFO/ASK)
 
-Полный базис по фазам и решениям — [docs/skerry-product-brief.md](docs/skerry-product-brief.md).
+For the full rationale behind decisions and phases, see [docs/skerry-product-brief.md](docs/skerry-product-brief.md).
 
-## Технологии
+## Tech stack
 
-- **Язык/UI**: Kotlin 2.3.21 (Multiplatform), Compose Multiplatform 1.11.1
-- **Сборка**: Gradle 9.3.1, Android Gradle Plugin 9.0.1
-- **JVM-таргет**: JDK 21 (`jvmToolchain(21)` во всех модулях, `JVM_21`)
+- **Language/UI**: Kotlin 2.x, Compose Multiplatform 1.11.1
+- **Build**: Gradle 9.3.1, Android Gradle Plugin 9.0.1
+- **JVM target**: JDK 21 (`jvmToolchain(21)` in all modules, `JVM_21`)
 - **Android**: minSdk 26 (Android 8.0), compileSdk/targetSdk 36
-- **Ядро**: sshj 0.40.0, BouncyCastle 1.80.2, libsodium (ionspin KMP), okio, atomicfu
+- **Core**: sshj 0.40.0, BouncyCastle 1.80.2, libsodium (ionspin KMP), okio, atomicfu
 - **Serial**: jSerialComm 2.11.0 (desktop), usb-serial-for-android 3.9.0 (Android, jitpack)
 - **Sync**: Ktor 3.4.3 (client+server), Exposed 0.58.0, SQLite/PostgreSQL, HikariCP, Nimbus SRP-6a
 
-## Структура репозитория
+## Repository layout
 
 ```
-shared/        # ядро KMP: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ (+ai/local — on-device LLM),
-               #   telnet/, serial/, tunnel/, snippet/, host/, files/
-               #   commonMain + jvmSharedMain (общий JVM для desktop+Android) + desktopMain + androidMain
-composeApp/    # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
-androidApp/    # Android-приложение (MainActivity, манифест); applicationId app.skerry
-server/        # self-hosted sync-сервер (Ktor, AGPL-3.0)
-docs/          # HTML-прототипы (источник правды по UX) и проектные документы
+shared/       # KMP core: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ (+ai/local — on-device LLM),
+              # telnet/, serial/, tunnel/, snippet/, host/, files/
+              # commonMain + jvmSharedMain (shared JVM for desktop+Android) + desktopMain + androidMain
+composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
+androidApp/   # Android app (MainActivity, manifest); applicationId app.skerry
+server/       # self-hosted sync server (Ktor, AGPL-3.0)
+docs/         # HTML prototypes (source of truth for UX) and design documents
 ```
 
-Прототипы в `docs/new/` (`Skerry.html`, `Skerry Mobile.html`, `Skerry Tablet.html`,
-`Skerry Sync Console.html`) открываются в браузере и являются источником правды по дизайну —
-UI реализуется по ним 1:1.
+The prototypes in `docs/new/` (`Skerry.html`, `Skerry Mobile.html`, `Skerry Tablet.html`,
+`Skerry Sync Console.html`) open in a browser and are the source of truth for the design —
+the UI is implemented 1:1.
 
-## Сборка и запуск
+## Build and run
 
-Нужен **JDK 21**. Отдельно ставить его не обязательно — Gradle через `foojay-resolver` сам
-подтянет нужный тулчейн, даже если запущен на более новом JDK. Для Android-таргета нужен
-Android SDK (переменная `ANDROID_HOME`).
+Requires **JDK 21**. `foojay-resolver` will fetch a JDK if needed.
+Android requires the Android SDK (`ANDROID_HOME`).
 
-**Desktop:**
-```bash
-./gradlew :composeApp:run                              # запустить приложение
-./gradlew :composeApp:packageDistributionForCurrentOS  # .deb / .rpm / .msi / .dmg под текущую ОС
+Desktop:
+
 ```
-ProGuard/минификация для desktop-release осознанно отключены (ломали крипто-стек);
-подробности — в комментарии `composeApp/build.gradle.kts`.
+./gradlew :composeApp:run
+./gradlew :composeApp:packageDistributionForCurrentOS   # .deb / .rpm / .msi / .dmg
+```
 
-**Android** (нужен `ANDROID_HOME`):
-```bash
+ProGuard/minification for the desktop release is configured in `composeApp/build.gradle.kts`.
+
+Android (requires `ANDROID_HOME`):
+
+```
 ANDROID_HOME=$HOME/Android/Sdk ./gradlew :androidApp:installDebug
 ```
 
-**Тесты** (JUnit 5):
-```bash
-./gradlew :shared:desktopTest :composeApp:desktopTest :server:test
+Tests (JUnit 5):
+
+```
+./gradlew test
 ```
 
-## Sync-сервер
+### Sync server
 
-Self-hosted, разворачивается через Docker (по умолчанию SQLite в томе, нулевая настройка):
+Self-hosted, SQLite by default:
 
-```bash
+```
 docker compose up -d --build
 ```
 
-Образ собирается флагом `-PserverOnly` (исключает Android-модули, Android SDK не нужен) на
-`eclipse-temurin:21`, работает от непривилегированного пользователя, отдаёт `/healthz`.
-В проде обязательно задайте устойчивый `SKERRY_JWT_SECRET` (иначе токены инвалидируются при
-рестарте). Для PostgreSQL раскомментируйте сервис `db` и postgres-переменные в
-[docker-compose.yml](docker-compose.yml).
+A server-only build uses `-PserverOnly` (no Android SDK), the `eclipse-temurin:21` image, and a
+`/healthz` healthcheck. Set `SKERRY_JWT_SECRET`. For PostgreSQL, see the `db` service and the
+postgres variables in [docker-compose.yml](docker-compose.yml).
 
-## Принципы
+## Principles
 
-- **Local-first** — всё работает без сервера.
-- **Zero-knowledge** — мастер-пароль не покидает устройство.
-- **AI under policy** — вывод модели считается недоверенным; действия только после подтверждения.
-- **Паритет платформ** — фича не готова, пока не работает везде.
+- **Local-first** — everything works without a server.
+- **Zero-knowledge** — the master password never leaves the device.
+- **AI under policy** — model output is treated as untrusted; actions only after confirmation.
+- **Platform parity** — a feature isn't done until it works everywhere.
 
-## Лицензии
+## Licenses
 
-- Клиенты (`shared/`, `composeApp/`, `androidApp/`) — [GPL-3.0](LICENSE)
-- Sync-сервер (`server/`) — [AGPL-3.0](server/LICENSE)
-</content>
+- Clients (`shared/`, `composeApp/`, `androidApp/`) — [GPL-3.0](LICENSE)
+- Sync server (`server/`) — [AGPL-3.0](server/LICENSE)
