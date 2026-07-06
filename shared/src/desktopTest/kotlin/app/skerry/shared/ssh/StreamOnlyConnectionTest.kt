@@ -11,7 +11,7 @@ import kotlinx.coroutines.runBlocking
  */
 class StreamOnlyConnectionTest {
 
-    private class TestConnection : StreamOnlyConnection("Проток") {
+    private class TestConnection : StreamOnlyConnection("TestProto") {
         override val isConnected: Boolean get() = false
         override suspend fun openShell(size: PtySize, term: String): ShellChannel =
             throw UnsupportedOperationException("not needed in the test")
@@ -20,7 +20,7 @@ class StreamOnlyConnectionTest {
 
     private fun assertUnsupported(block: suspend () -> Unit) {
         val e = assertFailsWith<UnsupportedOperationException> { runBlocking { block() } }
-        assertTrue(e.message!!.startsWith("Проток does not support"), "message should carry the protocol name: ${e.message}")
+        assertTrue(e.message!!.startsWith("TestProto does not support"), "message should carry the protocol name: ${e.message}")
     }
 
     @Test
