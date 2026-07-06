@@ -79,7 +79,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Dmg)
             packageName = "Skerry"
-            packageVersion = "1.0.0"
+            packageVersion = "0.1.0"
         }
 
         // ProGuard для release ОТКЛЮЧЁН осознанно. Для крипто-стека этого SSH-клиента
