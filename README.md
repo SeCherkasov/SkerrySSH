@@ -11,12 +11,38 @@
 - **Phase 1 (MVP)** — закрыт: SSH, SFTP, port forwarding, менеджер хостов/ключей, терминал,
   зашифрованный vault (мастер-пароль + биометрия).
 - **Phase 2** — закрыт: self-hosted zero-knowledge sync, паринг устройств (QR), сниппеты,
-  AI-ассистент (BYOK OpenAI) с per-host политиками.
-- **Phase 3** — реализованы Telnet, serial (desktop через jSerialComm, Android через USB-OTG),
-  autocomplete терминала и desktop-хоткеи. Отложены: **Mosh** (до после релиза) и
-  **локальная AI-модель на desktop**.
+  AI-ассистент (BYOK OpenAI) с per-host политиками. **Teams** — E2E zero-knowledge шеринг
+  хостов и сниппетов (X25519 sealed-envelope приглашения со сверкой фингерпринта, роли
+  owner/member, аудит-лог команды).
+- **Phase 3** — закрыты: Telnet, serial (desktop через jSerialComm, Android через USB-OTG),
+  autocomplete терминала, desktop-хоткеи и **локальный AI на устройстве** (приложение само
+  качает GGUF-модели и запускает их через llama.cpp — desktop и Android; Strict-политика
+  работает офлайн). Отложены до после релиза: **Mosh** и планшетный режим.
 - **iOS/iPadOS** — отложён: таргеты и `iosMain` удалены из исходников; крипта и хранилище
   остаются мультиплатформенно-готовыми, чтобы возврат был дешёвым.
+
+## Скриншоты
+
+### Desktop
+
+![Терминал с менеджером хостов, вкладками сессий и панелью живых метрик](docs/screenshots/desktop-terminal.png)
+
+![Двухпанельный SFTP в стиле mc/Total Commander](docs/screenshots/desktop-sftp.png)
+
+![Глобальный менеджер port forwarding](docs/screenshots/desktop-tunnels.png)
+
+![Зашифрованный vault: ключи, пароли, сертификаты](docs/screenshots/desktop-vault.png)
+
+![AI-ассистент с per-host политиками](docs/screenshots/desktop-ai.png)
+
+### Android
+
+| Список хостов | Терминал |
+|:---:|:---:|
+| ![Список хостов с группами и тегами](docs/screenshots/mobile-hosts.png) | ![Мобильный терминал](docs/screenshots/mobile-terminal.png) |
+
+> Скриншоты сгенерированы offscreen-рендером UI на seeded-данных (`scripts/gen-screenshots.sh`),
+> без реального подключения. Перезапустить для обновления: `bash scripts/gen-screenshots.sh`.
 
 ## Возможности
 
@@ -32,8 +58,9 @@
   OSC 8/4/52/104, мышь, bracketed-paste
 - Табы, split-view (независимая вторая сессия), авто-реконнект для SSH, drag-reorder вкладок
 - Живой статус-бар (cipher, версия сервера, throughput, RTT)
-- Переключатель шрифта (JetBrains Mono / Hack), autocomplete с историей команд,
-  Ctrl-R reverse-search, циклирование альтернатив
+- Переключатель шрифта (JetBrains Mono / Hack), набор цветовых тем (в т.ч. Catppuccin Mocha,
+  Dracula, Tokyo Day), autocomplete с историей команд, Ctrl-R reverse-search, циклирование
+  альтернатив
 
 **Хранилище и безопасность**
 - Локальный зашифрованный vault: Argon2id → XChaCha20-Poly1305 (libsodium), zero-knowledge
@@ -48,10 +75,19 @@
   селективный синк по типам записей
 - Паринг устройств по QR (ZXing + CameraX + ML Kit on-device), admin-консоль
 
+**Teams (шеринг, опционально)**
+- E2E zero-knowledge шеринг хостов и сниппетов внутри команды поверх sync-сервера
+- Приглашения через X25519 sealed-envelope со сверкой фингерпринта устройства
+- Роли owner/member, аудит-лог команды; удаление участника = ACL-отзыв без ротации ключа
+  (модель Bitwarden). Схема — [docs/skerry-sync-design.md](docs/skerry-sync-design.md) §6
+
 **Сниппеты и AI**
 - Сниппеты с тегами, type-ahead и детекцией конфликтов хоткеев
 - AI-ассистент (BYOK OpenAI, ключ в vault) с per-host политиками Strict/Balanced/Permissive/Off,
   SSE-стримингом, редактированием секретов и гейтом опасных команд перед выполнением
+- Локальный AI на устройстве: приложение само качает GGUF-модели (докачка + проверка sha256)
+  и запускает их через llama.cpp — desktop и Android. Каталог coder-моделей (Qwen3, Phi-4 Mini),
+  менеджер моделей в настройках; Strict-политика роутится на локальную модель и работает офлайн
 
 **Интерфейс**
 - Локализация (i18n): английский и русский. Автоопределение по языку системы при старте +
@@ -75,7 +111,8 @@
 ## Структура репозитория
 
 ```
-shared/        # ядро KMP: ssh/, sftp/, vault/, sync/, terminal/, ai/, telnet/, tunnel/, snippet/, host/, files/
+shared/        # ядро KMP: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ (+ai/local — on-device LLM),
+               #   telnet/, serial/, tunnel/, snippet/, host/, files/
                #   commonMain + jvmSharedMain (общий JVM для desktop+Android) + desktopMain + androidMain
 composeApp/    # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
 androidApp/    # Android-приложение (MainActivity, манифест); applicationId app.skerry
