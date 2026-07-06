@@ -22,8 +22,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Registration and login. The server sees only the SRP salt/verifier and the wrapped dataKey
- * (`docs/skerry-sync-design.md` §3); the password and dataKey are never transmitted.
+ * Registration and login. The server sees only the SRP salt/verifier and the wrapped dataKey; the password and dataKey are never transmitted.
  */
 fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.REGISTER) {

@@ -8,7 +8,7 @@ import com.auth0.jwt.interfaces.DecodedJWT
 import java.util.Date
 
 /**
- * Issues and verifies JWTs (`docs/skerry-sync-design.md` §4: short TTL + refresh). A token is
+ * Issues and verifies JWTs (short TTL + refresh). A token is
  * bound to accountId and deviceId, and grants access only to ciphertext, never plaintext content.
  *
  * ## Refresh token revocation: stateless by design

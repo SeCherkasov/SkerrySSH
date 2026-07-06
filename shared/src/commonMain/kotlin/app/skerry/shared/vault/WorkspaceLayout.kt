@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
  * Workspace structure synced as a single vault record: host order in the tree and the group list
  * (including empty folders and their order). Stored as the single [RecordType.GROUP] with reserved
  * id [WorkspaceLayoutStore.LAYOUT_ID], so it takes part in normal LWW sync
- * (`docs/skerry-sync-design.md`): the host tree is identical on every device.
+ * The host tree is identical on every device.
  *
  * Host-to-group membership lives in [app.skerry.shared.host.Host.group]; this holds only order (of
  * hosts and groups) and the existence of empty groups (which have no host to store them). Per-device

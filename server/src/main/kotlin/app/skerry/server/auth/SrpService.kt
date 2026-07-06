@@ -7,7 +7,7 @@ import java.math.BigInteger
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Server side of SRP-6a (`docs/skerry-sync-design.md` §1, §3). The server stores only salt `s`
+ * Server side of SRP-6a. The server stores only salt `s`
  * and verifier `v` (see [app.skerry.server.db.Accounts]); the client's password/authKey is never
  * sent. Login is two steps: challenge issues an ephemeral `B`, verify checks the client's proof
  * `M1` and returns the counter-proof `M2`.

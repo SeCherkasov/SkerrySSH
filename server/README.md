@@ -5,7 +5,6 @@ Self-hosted, zero-knowledge E2E-синхронизация для Skerry (мод
 Мастер-пароль, `masterKey` и `dataKey` никогда не покидают устройство и серверу недоступны.
 
 > Лицензия: **AGPL-3.0** (см. `LICENSE`). Клиенты Skerry — GPL-3.0.
-> Протокол, иерархия ключей и модель угроз: [`../docs/skerry-sync-design.md`](../docs/skerry-sync-design.md).
 
 ## Что внутри
 
@@ -58,7 +57,7 @@ SKERRY_JWT_SECRET=dev-secret SKERRY_ADMIN_TOKEN=admin ./gradlew :server:run
 ## Админ-консоль
 
 Статическая страница на `http://localhost:8080/console` (требует `SKERRY_ADMIN_TOKEN`) — единый
-дашборд (макет `docs/skerry-sync-prototype.html`): **Overview** (аккаунты, устройства, записи,
+дашборд: **Overview** (аккаунты, устройства, записи,
 суммарный размер шифроблобов), **Devices** (платформа, последняя синхронизация, версия курсора,
 статус + отзыв), **Privacy boundary** (что сервер видит / не видит) и **Recent activity** (аудит-лог
 событий). Zero-knowledge сохраняется: консоль видит только метаданные — событие, устройство, метку

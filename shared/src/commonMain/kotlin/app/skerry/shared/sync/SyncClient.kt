@@ -52,7 +52,7 @@ data class PairingTicket(val code: String, val expiresAt: Long)
 data class PairingResult(val accountId: String, val encryptedDataKey: ByteArray, val session: SyncSession)
 
 /**
- * Client for the self-hosted sync server (`docs/skerry-sync-design.md` §3). Contract lives in the
+ * Client for the self-hosted sync server. Contract lives in the
  * core module; implementation is platform-specific (JVM: Ktor client + Nimbus SRP). Zero-knowledge:
  * only the [authKey]-derived SRP verifier and ciphertext blobs leave the device; password/masterKey/
  * dataKey never do. [authKey] is computed by the caller via `VaultCrypto.deriveAuthKey`.

@@ -53,7 +53,7 @@ class IncomingRecord(
 data class UpsertResult(val records: List<StoredRecord>, val cursor: Long, val changed: Boolean)
 
 /**
- * Encrypted vault records. Implements LWW conflict resolution (`docs/skerry-sync-design.md` §3)
+ * Encrypted vault records. Implements LWW conflict resolution
  * and delta selection by server cursor.
  *
  * [lockAccountRow] = true (PostgreSQL) takes `SELECT ... FOR UPDATE` on the account row, serializing

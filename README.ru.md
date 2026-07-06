@@ -65,7 +65,7 @@
 
 **Teams (шеринг, опционально)**
 - E2E zero-knowledge шеринг хостов и сниппетов внутри команды поверх sealed-envelope
-  приглашений; роли owner/member, ACL-отзыв. Схема — [docs/skerry-sync-design.md](docs/skerry-sync-design.md) §6
+  приглашений; роли owner/member, ACL-отзыв
 
 **Сниппеты и AI**
 - Библиотека команд со snippet type-ahead в терминале
@@ -76,8 +76,6 @@
 **Локализация**
 - Строки в compose-resources (`composeApp/src/commonMain/composeResources/values*`);
   переключатель языка (`LocalAppLocale`) для UI и языка ответов AI-ассистента (INFO/ASK)
-
-Подробности решений и фаз — [docs/skerry-product-brief.md](docs/skerry-product-brief.md).
 
 ## Технологии
 
@@ -98,12 +96,11 @@ shared/       # ядро KMP: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ 
 composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
 androidApp/   # Android-приложение (MainActivity, манифест); applicationId app.skerry
 server/       # self-hosted sync-сервер (Ktor, AGPL-3.0)
-docs/         # HTML-прототипы (источник правды по UX) и проектные документы
+docs/         # HTML-прототипы дизайна (источник правды по UX) в docs/design/
 ```
 
-Прототипы в `docs/new/` (`Skerry.html`, `Skerry Mobile.html`, `Skerry Tablet.html`,
-`Skerry Sync Console.html`) открываются в браузере и являются источником правды по дизайну —
-UI реализуется 1:1.
+Прототипы в `docs/design/` (`Skerry Tablet.html`, плюс `Skerry Logo.html` для бренд-знака)
+открываются в браузере и являются источником правды по дизайну — UI реализуется 1:1.
 
 ## Сборка и запуск
 

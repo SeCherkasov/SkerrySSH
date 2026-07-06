@@ -2,7 +2,7 @@ package app.skerry.shared.vault
 
 import kotlinx.serialization.Serializable
 
-/** Vault record type — matches the sync model (`docs/skerry-sync-design.md` §2). */
+/** Vault record type — matches the sync model. */
 @Serializable
 enum class RecordType {
     HOST, GROUP, IDENTITY, CREDENTIAL, KNOWN_HOST, SNIPPET, TUNNEL, SETTINGS, TERMINAL_HISTORY,

@@ -1,8 +1,7 @@
 package app.skerry.server.config
 
 /**
- * Server config from environment variables (single-.env model, see `docs/skerry-sync-design.md`
- * §5). All values have sane defaults for local runs; production only requires a stable [jwtSecret]
+ * Server config from environment variables (single-.env model). All values have sane defaults for local runs; production only requires a stable [jwtSecret]
  * — otherwise a restart invalidates every issued token.
  *
  * Storage: defaults to a SQLite file next to the process; PostgreSQL is enabled by pointing

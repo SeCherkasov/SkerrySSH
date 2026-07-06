@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
 /**
- * In-memory bus for "account has changes" WS push (`docs/skerry-sync-design.md` §3: push with no
+ * In-memory bus for "account has changes" WS push (no
  * payload). Carries only accountId and the new cursor, no data. Single self-hosted instance model;
  * horizontal scaling would need an external broker.
  */

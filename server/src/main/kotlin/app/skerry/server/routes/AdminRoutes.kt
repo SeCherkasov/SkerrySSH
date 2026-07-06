@@ -34,7 +34,7 @@ import java.security.MessageDigest
 /**
  * Admin endpoints for the self-hosted console. `/admin/health` is open (liveness); the rest of
  * the `/admin` subtree is gated by the static [app.skerry.server.config.ServerConfig.adminToken]
- * (a separate admin role, `docs/skerry-sync-design.md` §3), checked by one route-scoped
+ * (a separate admin role), checked by one route-scoped
  * interceptor. Zero-knowledge holds: only metadata (counts, device list) is served, no access to
  * record content.
  */

@@ -14,13 +14,12 @@ sealed interface UnlockResult {
  * Plaintext authentication material for self-hosted sync: the masterKey derivation salt and the
  * dataKey wrapper. Not secrets individually (the salt is public, the wrapper is ciphertext), but
  * they let another device derive the same masterKey from the master password and unwrap the
- * dataKey (`docs/skerry-sync-design.md` §1). Bytes are copies; the caller is free to wipe them.
+ * dataKey. Bytes are copies; the caller is free to wipe them.
  */
 class SyncMeta internal constructor(val kdfSalt: ByteArray, val wrappedDataKey: ByteArray)
 
 /**
- * Local encrypted record store (hosts/keys/identity). Key hierarchy and format are in
- * `docs/skerry-sync-design.md` (Argon2id → masterKey → dataKey, XChaCha20-Poly1305), crypto behind
+ * Local encrypted record store (hosts/keys/identity). Key hierarchy and format: Argon2id → masterKey → dataKey, XChaCha20-Poly1305; crypto behind
  * [VaultCrypto]. Unlike [app.skerry.shared.host.HostStore], the vault has a lifecycle: while
  * locked, `dataKey` isn't in memory and any CRUD call throws [IllegalStateException].
  *
@@ -72,8 +71,7 @@ interface Vault {
      * (the caller doesn't wipe it) and loads records from the file; [UnlockResult.Corrupted] if the
      * file can't be read. The method deliberately doesn't verify that `dataKey` is correct (there's
      * no master key to check against): a wrong key simply fails to open records (AEAD failure in
-     * [openPayload]). Use only from the trusted biometrics path — see
-     * `docs/skerry-biometric-design.md` §4.
+     * [openPayload]). Use only from the trusted biometrics path.
      */
     fun unlockWithDataKey(dataKey: DataKey): UnlockResult
 
@@ -133,13 +131,12 @@ interface Vault {
     /**
      * The masterKey derivation salt and dataKey wrapper for sync authentication. `null` if the
      * vault is locked. From these the caller (knowing the master password) derives the
-     * authKey/SRP verifier and can unwrap the dataKey on a new device — see [SyncMeta] and
-     * `docs/skerry-sync-design.md` §1.
+     * authKey/SRP verifier and can unwrap the dataKey on a new device — see [SyncMeta].
      */
     fun syncMeta(): SyncMeta?
 
     /**
-     * Merges records from sync using the LWW rule (`docs/skerry-sync-design.md` §3): for each, the
+     * Merges records from sync using the LWW rule: for each, the
      * one with the greater (`version`, then lexicographic `deviceId`) wins; otherwise the local one
      * stays. Records are stored **as-is** (blob/version/deviceId/deleted verbatim) — version isn't
      * bumped, the payload isn't re-encrypted, so Lamport counters stay consistent across devices.

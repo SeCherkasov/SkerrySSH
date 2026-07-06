@@ -23,7 +23,7 @@ class InMemorySyncStateStore : SyncStateStore {
 data class SyncOutcome(val pulled: Int, val pushed: Int, val cursor: Long)
 
 /**
- * Client-side sync engine (`docs/skerry-sync-design.md` §3). Runs deltas between the local [Vault]
+ * Client-side sync engine. Runs deltas between the local [Vault]
  * and the server via [SyncClient], resolving LWW conflicts inside [Vault.mergeRemote]. Operates on
  * ciphertext blobs — never decrypts the payload (zero-knowledge); the cursor is held by [SyncStateStore].
  *
