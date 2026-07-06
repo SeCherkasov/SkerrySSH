@@ -4,23 +4,14 @@
 
 An open-source, cross-platform SSH client with a single core: Kotlin Multiplatform under the
 hood and a Compose Multiplatform UI. One core codebase and one UI across
-**Desktop (Linux, Windows, macOS)** and **Android**, with feature parity between platforms.
+**Desktop (Linux, Windows)** and **Android**, with feature parity between platforms.
 
 Version — `0.1.0` (pre first release).
 
 ## Status
 
-- **Phase 1 (MVP)** — done: SSH, SFTP, port forwarding, host/key manager, terminal,
-  encrypted vault (master password + biometrics).
-- **Phase 2** — done: self-hosted zero-knowledge sync, device pairing (QR), snippets,
-  AI assistant (BYOK OpenAI) with per-host policies. **Teams** — E2E zero-knowledge sharing
-  of hosts and snippets (X25519 sealed-envelope invitations with fingerprint verification,
-  owner/member roles, team audit log).
-- **Phase 3** — done: Telnet, serial (desktop via jSerialComm, Android via USB-OTG),
-  terminal autocomplete, desktop hotkeys, **on-device local AI** (the app downloads GGUF
-  models itself and runs them via llama.cpp on desktop and Android; the Strict policy works
-  offline). Deferred until after release: **Mosh**, tablet layout.
-- **iOS/iPadOS** — deferred.
+Actively developed for **Linux**, **Windows**, and **Android**. **macOS** and **iOS/iPadOS**
+are planned.
 
 ## Screenshots
 

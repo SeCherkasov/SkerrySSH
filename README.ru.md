@@ -3,24 +3,15 @@
 [English](README.md) · **Русский**
 
 Опенсорсный кроссплатформенный SSH-клиент с единым ядром: Kotlin Multiplatform под капотом
-и Compose Multiplatform UI. Один код ядра и один UI на **Desktop (Linux, Windows, macOS)**
+и Compose Multiplatform UI. Один код ядра и один UI на **Desktop (Linux, Windows)**
 и **Android**, паритет фич между платформами.
 
 Версия — `0.1.0` (до первого релиза).
 
 ## Статус
 
-- **Phase 1 (MVP)** — закрыт: SSH, SFTP, port forwarding, менеджер хостов/ключей, терминал,
-  зашифрованный vault (мастер-пароль + биометрия).
-- **Phase 2** закрыт: self-hosted zero-knowledge sync, паринг устройств (QR), сниппеты,
-  AI-ассистент (BYOK OpenAI) с per-host политиками. **Teams** — E2E zero-knowledge шеринг
-  хостов и сниппетов (X25519 sealed-envelope приглашения со сверкой фингерпринта, роли
-  owner/member, аудит-лог команды).
-- **Phase 3** закрыты: Telnet, serial (desktop через jSerialComm, Android через USB-OTG),
-  autocomplete терминала, desktop-хоткеи, **локальный AI на устройстве** (приложение само
-  качает GGUF-модели и запускает их через llama.cpp на desktop и Android; Strict-политика
-  работает офлайн). Отложены до после релиза: **Mosh**, планшетный режим.
-- **iOS/iPadOS** отложён.
+В активной разработке под **Linux**, **Windows** и **Android**. **macOS** и **iOS/iPadOS**
+— в планах.
 
 ## Скриншоты
 
