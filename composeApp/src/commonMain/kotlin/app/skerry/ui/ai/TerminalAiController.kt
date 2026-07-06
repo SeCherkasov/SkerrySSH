@@ -21,65 +21,65 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 
 /**
- * Контроллер терминального AI-бара: превращает запрос на естественном языке в ОДНУ shell-команду
- * под per-host политикой [AiPolicy] (принцип «AI under policy»).
+ * Terminal AI-bar controller: turns a natural-language request into ONE shell command under the
+ * per-host [AiPolicy].
  *
- * Инварианты безопасности:
- * - **Подтверждение перед выполнением — всегда.** [ask] лишь кладёт предложенную команду в [pending];
- *   исполнить (вставить в ввод терминала) её можно только через явный [confirm]. Автозапуска нет
- *   ни при какой политике — вывод модели (в т.ч. локальной) считается недоверенным.
- * - Политика + настройки выбирают эндпоинт через [AiRouter]: [AiPolicy.Off] — бар скрыт;
- *   [AiPolicy.Strict] — только локальная модель (без неё → [blocked]); Balanced/Permissive —
- *   провайдер из настроек, различаются вычисткой секретов из промпта ([SecretRedactor]).
- * - Разбор/санитизация ответа модели — в [AiReplyParser] (чистые функции, тестируются напрямую).
+ * Safety invariants:
+ * - Confirmation before execution: [ask] only stores the proposed command in [pending]; it runs
+ *   (is inserted into terminal input) only via explicit [confirm]. No auto-run under any policy;
+ *   model output (including local) is untrusted.
+ * - Policy + settings select the endpoint via [AiRouter]: [AiPolicy.Off] hides the bar;
+ *   [AiPolicy.Strict] uses the local model only (absent it → [blocked]); Balanced/Permissive use
+ *   the configured provider, differing by prompt secret redaction ([SecretRedactor]).
+ * - Model reply parsing/sanitization is in [AiReplyParser].
  *
- * Независим от Vault: настройки подаются лямбдой [settings] (как в [AiAssistantController]);
- * [localInstalled] — скачана ли локальная модель на этом устройстве.
+ * Independent of Vault: settings supplied via [settings] lambda; [localInstalled] reports whether
+ * the local model is downloaded on this device.
  */
 class TerminalAiController(
     val policy: AiPolicy,
     private val settings: () -> AiSettings,
     providerFactory: (AiEndpoint) -> AiProvider,
     scope: CoroutineScope,
-    // Язык, на котором модель должна писать INFO/ASK (= язык интерфейса). Читается лениво при каждом
-    // запросе, чтобы смена языка в настройках отражалась без пересоздания контроллера. Значение —
-    // англоязычное имя языка для промпта («English»/«Russian»); дефолт English (мок/превью/тесты).
+    // Language for the model's INFO/ASK text (= UI language). Read lazily per request so a settings
+    // change applies without recreating the controller. English name of the language (e.g. "English",
+    // "Russian"); defaults to English.
     private val responseLanguage: () -> String = { "English" },
     private val localInstalled: (LocalModel) -> Boolean = { false },
 ) {
     private val decision = AiPolicyDecision.of(policy)
     private val runner = AiStreamRunner(providerFactory, scope)
 
-    /** Показывать ли бар для этого хоста вообще (false только для [AiPolicy.Off]). */
+    /** Whether the bar is shown for this host at all (false only for [AiPolicy.Off]). */
     val aiEnabled: Boolean get() = decision.aiEnabled
 
-    /** Предложенная команда, ждущая подтверждения пользователя; `null` — предложения нет. */
+    /** Proposed command awaiting user confirmation; `null` if none. */
     var pending by mutableStateOf<String?>(null); private set
 
     /**
-     * Оценка риска [pending] ([CommandRiskClassifier]); `null` — нет предложения. UI показывает
-     * предупреждение и для [app.skerry.shared.ai.CommandRisk.Danger] требует доп. подтверждения.
+     * Risk assessment of [pending] ([CommandRiskClassifier]); `null` if none. The UI warns and, for
+     * [app.skerry.shared.ai.CommandRisk.Danger], requires extra confirmation.
      */
     var pendingRisk by mutableStateOf<CommandAssessment?>(null); private set
 
-    /** Краткое пояснение, что делает [pending] (вторая строка ответа модели); `null` — нет. */
+    /** Short description of what [pending] does (the model's second reply line); `null` if none. */
     var pendingInfo by mutableStateOf<String?>(null); private set
 
-    /** Частичный ответ во время генерации; `null` — генерации нет. */
+    /** Partial reply while streaming; `null` when not generating. */
     var streaming by mutableStateOf<String?>(null); private set
     var busy by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
 
-    /** Причина, по которой запрос не ушёл (политика/не настроено); `null` — не заблокировано. */
+    /** Reason the request was not sent (policy/not configured); `null` if not blocked. */
     var blocked by mutableStateOf<String?>(null); private set
 
     private var job: Job? = null
-    // Поколение активного запроса. cancel()/новый ask() увеличивают его; finally сбрасывает busy/streaming
-    // только если его поколение всё ещё текущее — иначе поздно завершившийся отменённый запрос затирал бы
-    // состояние уже запущенного следующего (job-reassignment race).
+    // Generation of the active request. cancel()/a new ask() increments it; the finally block resets
+    // busy/streaming only if its generation is still current, so a late-finishing cancelled request
+    // can't clobber the state of the next one.
     private var generation = 0
 
-    /** Запросить команду. No-op, если занят/пусто/AI выключен. Ничего не уходит, пока маршрут не разрешён. */
+    /** Request a command. No-op if busy, empty, or AI is disabled. Nothing is sent until the route is resolved. */
     fun ask(prompt: String) {
         val text = prompt.trim()
         if (busy || text.isEmpty() || !decision.aiEnabled) return
@@ -117,10 +117,9 @@ class TerminalAiController(
     }
 
     /**
-     * Пользователь подтвердил (нажал Run). Возвращает команду и очищает [pending]. Вызывающий шлёт её
-     * в терминал с CR (Enter) — это и есть подтверждение перед выполнением. Команда гарантированно одна
-     * строка без управляющих байтов ([AiReplyParser.sanitizeCommand]), поэтому один CR исполняет ровно
-     * её, не цепочку.
+     * User confirmed (pressed Run). Returns the command and clears [pending]; the caller sends it to
+     * the terminal followed by CR. The command is guaranteed single-line with no control bytes
+     * ([AiReplyParser.sanitizeCommand]), so one CR executes exactly it, not a chain.
      */
     fun confirm(): String? {
         val command = pending
@@ -130,7 +129,7 @@ class TerminalAiController(
         return command
     }
 
-    /** Разложить разобранный [AiReplyParser.parse]-ответ по слотам состояния бара. */
+    /** Dispatch a parsed [AiReplyParser.parse] reply into the bar's state fields. */
     private fun applyReply(raw: String) {
         when (val reply = AiReplyParser.parse(raw)) {
             is AiReplyParser.Reply.Command -> setPending(reply.command, reply.info)
@@ -146,7 +145,7 @@ class TerminalAiController(
         pendingInfo = info
     }
 
-    /** Отклонить предложение/сбросить сообщения. */
+    /** Dismiss the proposal and clear messages. */
     fun dismiss() {
         pending = null
         pendingRisk = null
@@ -155,7 +154,7 @@ class TerminalAiController(
         blocked = null
     }
 
-    /** Отменить активный запрос (если идёт). */
+    /** Cancel the active request, if any. */
     fun cancel() {
         generation++
         job?.cancel()
@@ -163,7 +162,7 @@ class TerminalAiController(
         streaming = null
     }
 
-    /** Человекочитаемое объяснение, почему запрос не ушёл (маппинг причин [AiRouter]). */
+    /** Human-readable explanation for why the request was blocked (maps [AiRouter] reasons). */
     private fun blockedMessage(reason: AiRoute.Reason): String = when (reason) {
         AiRoute.Reason.CLOUD_NOT_CONFIGURED -> NOT_CONFIGURED
         AiRoute.Reason.DEVICE_NOT_READY -> DEVICE_NOT_READY
@@ -172,11 +171,7 @@ class TerminalAiController(
     }
 
     companion object {
-        /**
-         * Температура генерации команды: почти детерминированная. На 0.7 маленькие локальные
-         * модели превращают ответ в лотерею «CMD или ASK» — тот же вопрос то давал uptime,
-         * то просил «уточнить метрику».
-         */
+        /** Command-generation temperature: near-deterministic; small local models are unreliable at higher values. */
         const val COMMAND_TEMPERATURE = 0.2
 
         const val NOT_CONFIGURED = "Add an API key in AI settings first."
@@ -186,14 +181,11 @@ class TerminalAiController(
         const val NEEDS_CLARIFICATION = "Please clarify your request."
 
         /**
-         * Промпт превращения запроса в команду. [language] — англоязычное имя языка интерфейса
-         * («English»/«Russian»), на котором модель должна писать человекочитаемые INFO/ASK, независимо
-         * от языка запроса пользователя. Прокидывается из настроек через [responseLanguage].
-         *
-         * Формулировка рассчитана и на маленькие локальные модели (1–4B): им нужно ЯВНО сказать,
-         * что команда выполнится на уже подключённом удалённом сервере (иначе «какая нагрузка на
-         * сервере?» превращается в просьбу «дать информацию о сервере»), и показать few-shot-примеры —
-         * без них мелкая модель уходит в ASK вместо очевидной команды.
+         * Prompt that turns a request into a command. [language] is the English name of the UI
+         * language in which the model must write INFO/ASK text, independent of the user's request
+         * language; supplied from settings via [responseLanguage]. States explicitly that the command
+         * runs on the already-connected remote server and includes few-shot examples, since small
+         * local models otherwise default to asking for clarification.
          */
         fun commandPrompt(language: String): String =
             "You turn the user's request into ONE shell command for a POSIX/Linux system.\n" +

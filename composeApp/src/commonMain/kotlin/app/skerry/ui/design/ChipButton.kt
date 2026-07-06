@@ -18,10 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Компактная кнопка-чип (скругление 6dp, обводка, горизонтальный паддинг 12dp). Две формы:
- * контурная (по умолчанию — прозрачный фон + [D.cyan14]-граница, как Revoke/Confirm/Save в
- * настройках) и залитая ([filled] — тонированный фон/граница от [color], как Run/Dismiss в
- * AI-баре терминала; выключенная — приглушённая).
+ * Compact chip button (6dp corner radius, border, 12dp horizontal padding). Two variants:
+ * outline (default — transparent background + [D.cyan14] border) and filled ([filled] —
+ * tinted background/border from [color]; disabled state is dimmed).
  */
 @Composable
 fun ChipButton(

@@ -7,10 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Дизайн-токены Skerry — палитра «night sea».
+ * Skerry design tokens ("night sea" palette).
  */
 object SkerryColors {
-    // Поверхности
+    // Surfaces
     val deep = Color(0xFF0E2230)
     val deep2 = Color(0xFF0A1A26)
     val nightSea = Color(0xFF07141E)
@@ -23,17 +23,17 @@ object SkerryColors {
     val cyanSoft = cyan.copy(alpha = 0.10f)
     val cyanDim = cyan.copy(alpha = 0.20f)
 
-    // Secondary: amber — ТОЛЬКО AI suggestions и lighthouse-моменты
+    // Secondary: amber — AI suggestions and highlight moments only
     val amber = Color(0xFFF2A65A)
     val amberBright = Color(0xFFFFC078)
     val amberSoft = amber.copy(alpha = 0.14f)
 
-    // Семантические
+    // Semantic colors
     val moss = Color(0xFF5DCE9E)
     val sunset = Color(0xFFE07A5F)
     val storm = Color(0xFFE94B4B)
 
-    // Линии и текст
+    // Lines and text
     val line = cyan.copy(alpha = 0.06f)
     val lineStrong = cyan.copy(alpha = 0.14f)
     val text = Color(0xFFE6ECEF)

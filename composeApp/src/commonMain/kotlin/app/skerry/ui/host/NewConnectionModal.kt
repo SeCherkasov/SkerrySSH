@@ -130,48 +130,48 @@ import app.skerry.ui.i18n.label
 import app.skerry.ui.vault.title
 
 /**
- * Модалка «New connection» / «Edit connection»: форма профиля хоста + выбор AI-политики. С живым
- * [LocalHosts] (за гейтом vault) Save создаёт или (при [editHost] != null) обновляет профиль через
- * [app.skerry.ui.host.HostManagerController] и выделяет его в сайдбаре; без него (мок/превью) Save
- * просто закрывает модалку. В режиме правки форма предзаполняется из [editHost]
- * ([NewConnectionFormState.fromHost]), а сохранение удерживает его [Host.id]. Теги редактируемы
- * (пилюли + инлайн-ввод, проводка к [NewConnectionFormState]); jump/keep-alive/AI-политика — пока
- * визуальные заглушки.
+ * "New connection" / "Edit connection" modal: host profile form plus AI policy selection. With a
+ * live [LocalHosts] (behind the vault gate), Save creates or (when [editHost] != null) updates the
+ * profile via [app.skerry.ui.host.HostManagerController] and highlights it in the sidebar; without
+ * it (mock/preview), Save just closes the modal. In edit mode the form is prefilled from
+ * [editHost] ([NewConnectionFormState.fromHost]), and saving keeps its [Host.id]. Tags are editable
+ * (pills plus inline input, wired to [NewConnectionFormState]); jump/keep-alive/AI policy are still
+ * visual stubs.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
     val hosts = LocalHosts.current
-    // Уже созданные хосты — источник подсказок для пикеров Group/Tags (в мок/превью список пуст).
+    // Already-created hosts, the suggestion source for the Group/Tags pickers (empty in mock/preview).
     val allHosts = hosts?.hosts ?: emptyList()
     val credentials = LocalCredentials.current
-    // Ключ по editHost: открытие модалки на правку (или смена цели) пересоздаёт форму из профиля.
+    // Keyed by editHost: opening the modal for editing (or switching target) rebuilds the form from the profile.
     val form = remember(editHost) { editHost?.let { NewConnectionFormState.fromHost(it) } ?: NewConnectionFormState() }
-    // Гард повторного Save (Enter/двойной клик) до закрытия модалки — иначе дубль секрета+хоста в vault.
-    // Ключ по editHost вместе с form: смена цели сбрасывает гард, а не залипает на прежней.
+    // Guards repeated Save (Enter/double click) until the modal closes, otherwise a duplicate secret+host in the vault.
+    // Keyed by editHost along with form: switching target resets the guard instead of sticking to the old one.
     var submitting by remember(editHost) { mutableStateOf(false) }
-    // Незакоммиченный ввод тега (пилюля ещё не создана). Хоистится сюда, чтобы Save мог его дофиксировать.
+    // Uncommitted tag input (pill not created yet). Hoisted here so Save can commit it.
     var tagDraft by remember(editHost) { mutableStateOf("") }
-    // «Test connection»: разовый коннект без открытия сессии. Только при живом транспорте (за гейтом vault);
-    // в мок/превью tester == null и кнопка недоступна.
+    // "Test connection": a one-off connect without opening a session. Only with a live transport
+    // (behind the vault gate); in mock/preview tester == null and the button is disabled.
     val transport = LocalTestTransport.current
     val testScope = rememberCoroutineScope()
     val tester = remember(transport, testScope) { transport?.let { ConnectionTestController(it, testScope) } }
-    // При смене транспорта (новый tester) или закрытии модалки отменяем in-flight проверку прежнего
-    // tester — иначе осиротевший коннект-пробник тянул бы сеть до своего таймаута.
+    // On transport change (new tester) or modal close, cancel the old tester's in-flight check,
+    // otherwise an orphaned connection probe would keep the network busy until its own timeout.
     DisposableEffect(tester) { onDispose { tester?.reset() } }
-    // Готов ли способ аутентификации для теста — БЕЗ материализации секрета (его собираем только в onClick,
-    // чтобы копия пароля/ключа жила лишь на время коннекта, а не весь срок открытой модалки).
+    // Whether auth is ready for testing, WITHOUT materializing the secret (that's only assembled in
+    // onClick, so the password/key copy lives just for the connect, not the whole time the modal is open).
     val hasTestSecret = when (form.authMode) {
         AuthMode.NEW_PASSWORD -> form.password.isNotEmpty()
         AuthMode.NEW_KEY -> form.privateKeyPem.isNotBlank()
         AuthMode.EXISTING -> credentials?.credentials?.any { it.id == form.existingCredentialId } == true
         AuthMode.ASK -> false
     }
-    // «Test connection» — только для SSH (у Telnet/Serial аутентификации/пробы шифра нет).
+    // "Test connection" is SSH-only (Telnet/Serial have no auth/cipher probe).
     val canTest = tester != null && form.connectionType == ConnectionType.SSH && hasTestSecret &&
         form.address.isNotBlank() && form.username.isNotBlank() && form.portOrNull != null
-    // Правка полей коннекта/аутентификации обнуляет прежний результат теста — он больше не релевантен.
+    // Editing connection/auth fields invalidates the previous test result, it's no longer relevant.
     LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase) {
         tester?.reset()
     }
@@ -216,11 +216,11 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         ModalTextField(form.port, { form.port = it }, if (serial) "9600" else "22", keyboardType = KeyboardType.Number)
                     }
                 }
-                // Пикер обнаруженных портов (desktop — jSerialComm, Android — USB-OTG): тап заполняет
-                // поле Device. Пусто (нет адаптера / нет USB Host) — чипсов нет, остаётся ручной ввод.
+                // Picker of discovered ports (desktop: jSerialComm, Android: USB-OTG): tapping fills
+                // the Device field. Empty (no adapter / no USB Host) means no chips, manual input remains.
                 if (serial) SerialPortPicker(form)
-                // Аутентификация — только SSH: у Telnet логин/пароль вводятся в самом терминале,
-                // у Serial аутентификации нет вовсе.
+                // Auth is SSH-only: Telnet enters login/password in the terminal itself,
+                // Serial has no auth at all.
                 if (form.connectionType == ConnectionType.SSH) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_username)) { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
@@ -238,13 +238,13 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 }
                 Spacer14()
                 Field(stringResource(Res.string.conn_field_tags)) {
-                    // Подсказки = теги других хостов, ещё не добавленные сюда, сужённые набранным черновиком.
+                    // Suggestions = other hosts' tags not yet added here, narrowed by the typed draft.
                     var tagFocused by remember(editHost) { mutableStateOf(false) }
                     val tagSugs = remember(allHosts, form.tags, tagDraft) { tagSuggestions(allHosts, form.tags, tagDraft) }
                     AnchoredDropdown(
                         expanded = tagFocused && tagSugs.isNotEmpty(),
                         onDismiss = { tagFocused = false },
-                        focusable = false, // не красть фокус у поля ввода тега
+                        focusable = false, // don't steal focus from the tag input field
                         trigger = {
                             FlowRow(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
@@ -254,7 +254,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                                 form.tags.forEach { tag -> key(tag) { RemovableTagPill(tag) { form.removeTag(tag) } } }
                                 TagInput(
                                     value = tagDraft,
-                                    // Запятая фиксирует тег(и) сразу; одиночный тег — по Enter (onCommit).
+                                    // A comma commits tag(s) immediately; a single tag commits on Enter (onCommit).
                                     onValueChange = { v -> if (v.contains(',')) { form.addTag(v); tagDraft = "" } else tagDraft = v },
                                     onCommit = { form.addTag(tagDraft); tagDraft = "" },
                                     onFocusChanged = { tagFocused = it },
@@ -263,15 +263,15 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         },
                         menu = { width ->
                             SuggestionMenu(width) {
-                                // Клик по подсказке добавляет тег; фокус остаётся на поле — можно набирать дальше,
-                                // меню пересчитается без только что добавленного.
+                                // Clicking a suggestion adds the tag; focus stays on the field so typing
+                                // can continue, and the menu recomputes without the just-added tag.
                                 tagSugs.forEach { tag -> key(tag) { SuggestionRow("#$tag") { form.addTag(tag); tagDraft = "" } } }
                             }
                         },
                     )
                 }
-                // Выбор AI-политики виден, когда AI реально доступен (живой контроллер или фича-флаг).
-                // Пишется прямо в форму → профиль хоста (Host.aiPolicy).
+                // AI policy selection is visible when AI is actually available (live controller or feature flag).
+                // Written directly into the form -> host profile (Host.aiPolicy).
                 if (LocalFeatures.current.ai || LocalAi.current != null) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_ai_policy)) {
@@ -290,7 +290,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Пока тест не запускался — подсказка о шифровании; иначе её место занимает статус теста.
+                    // Before the test runs, an encryption hint; otherwise the test status takes its place.
                     val status = tester?.status ?: ConnectionTestStatus.Idle
                     if (status == ConnectionTestStatus.Idle) {
                         Sym("shield_lock", size = 14.sp, color = D.moss)
@@ -305,7 +305,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 GhostButton(
                     stringResource(Res.string.conn_test),
                     onClick = {
-                        // Секрет материализуем здесь (только на время коннекта), цель — из полей формы.
+                        // Secret is materialized here (only for the connect's duration), target from form fields.
                         val auth = when (form.authMode) {
                             AuthMode.NEW_PASSWORD -> form.password.takeIf { it.isNotEmpty() }?.let { SshAuth.Password(it) }
                             AuthMode.NEW_KEY -> form.privateKeyPem.takeIf { it.isNotBlank() }?.let { SshAuth.PublicKey(it, form.passphrase.ifBlank { null }) }
@@ -323,27 +323,28 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save),
                     onClick = {
                         if (submitting) {
-                            // повторное нажатие до закрытия — игнорируем
+                            // repeated click before close, ignore
                         } else if (hosts == null) {
-                            state.closeModal() // мок/превью: сохранять некуда
+                            state.closeModal() // mock/preview: nowhere to save
                         } else if (form.canSave) {
-                            // Дофиксировать незакоммиченный ввод тега, чтобы он не потерялся при Save.
+                            // Commit any uncommitted tag input so it isn't lost on Save.
                             if (tagDraft.isNotBlank()) { form.addTag(tagDraft); tagDraft = "" }
-                            // Новый секрет (пароль/ключ) запечатывается в keychain, его id напрямую
-                            // привязывается к хосту; ASK/мок-путь без vault → credentialId = null.
+                            // A new secret (password/key) is sealed into the keychain, its id attached
+                            // directly to the host; ASK/mock path with no vault -> credentialId = null.
                             submitting = true
-                            // Секрет создаём только при живом keychain: иначе он осел бы в vault без
-                            // ссылки на хост (orphan). За гейтом credentials всегда присутствует;
-                            // гард — fail-closed на рассинхрон. В режиме правки EXISTING-привязка
-                            // возвращается как есть (секрет не пересоздаётся).
+                            // Secret is created only with a live keychain, otherwise it would sit in the
+                            // vault with no link to a host (orphan). credentials is always present behind
+                            // the gate; this guard fails closed on desync. In edit mode an EXISTING
+                            // attachment is returned as-is (secret isn't recreated).
                             val credentialId = form.resolveCredentialId(
                                 saveCredential = { draft -> credentials?.save(draft) },
                             )
-                            // editHost?.id != null → обновление существующего профиля по месту.
+                            // editHost?.id != null means updating the existing profile in place.
                             state.selectHost(hosts.save(form.toDraft(id = editHost?.id, credentialId = credentialId)))
-                            // Секрет уже запечатан в vault — снимаем ссылки на него из state формы, сокращая
-                            // окно жизни ключа/пароля в куче (String на JVM не занулить на месте, но ссылку
-                            // убираем). Тот же приём, что в мобильном MobileNewConnectionSheet.
+                            // Secret is already sealed in the vault, clear references to it from the form
+                            // state to shrink the key/password's lifetime on the heap (a JVM String can't
+                            // be zeroed in place, but the reference is dropped). Same trick as mobile's
+                            // MobileNewConnectionSheet.
                             form.password = ""; form.privateKeyPem = ""; form.passphrase = ""
                             state.closeModal()
                         }
@@ -367,9 +368,9 @@ private fun Field(label: String, modifier: Modifier = Modifier, content: @Compos
 }
 
 /**
- * Редактируемое текстовое поле формы (опц. иконка слева): стиль макета + плейсхолдер.
- * [masked] — скрывать ввод (пароль/passphrase); [singleLine] = false + [mono] + [minHeightDp] —
- * многострочная моноширинная область для вставки приватного ключа (PEM).
+ * Editable form text field (optional leading icon): layout style plus placeholder.
+ * [masked] hides input (password/passphrase); [singleLine] = false plus [mono] plus [minHeightDp]
+ * gives a multi-line monospace area for pasting a private key (PEM).
  */
 @Composable
 private fun ModalTextField(
@@ -389,7 +390,7 @@ private fun ModalTextField(
     val textStyle = remember(family, fontSize) {
         TextStyle(color = D.text, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 16.sp else 18.sp)
     }
-    // Рамка/иконка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    // Border/icon live in decorationBox so a click anywhere on the field places the caret.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -420,13 +421,13 @@ private fun ModalTextField(
 }
 
 /**
- * Сегментированный выбор транспорта (SSH / Telnet / Serial): пишет [NewConnectionFormState.connectionType]
- * через [NewConnectionFormState.chooseConnectionType] (тот подставляет дефолтный порт/скорость). Смена
- * типа перестраивает форму (скрывает аутентификацию, меняет подписи адрес/порт).
+ * Segmented transport picker (SSH / Telnet / Serial): writes [NewConnectionFormState.connectionType]
+ * via [NewConnectionFormState.chooseConnectionType] (which substitutes the default port/speed). Changing
+ * the type rebuilds the form (hides auth, changes the address/port labels).
  */
 @Composable
 private fun SerialPortPicker(form: NewConnectionFormState) {
-    // Перечисляем один раз при открытии формы (enumerate дёшев и без разрешения). Пусто — ничего не рисуем.
+    // Enumerated once when the form opens (cheap, no permission needed). Empty means nothing rendered.
     val ports = remember { listSerialPorts() }
     if (ports.isEmpty()) return
     FlowRow(
@@ -467,7 +468,7 @@ private fun ProtocolPicker(form: NewConnectionFormState) {
     }
 }
 
-/** Одна пилюля сегментированного выбора протокола: активная — на cyan-подложке. */
+/** One pill of the segmented protocol picker: the active one sits on a cyan backing. */
 @Composable
 private fun ProtocolSegment(label: String, icon: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
@@ -481,9 +482,9 @@ private fun ProtocolSegment(label: String, icon: String, selected: Boolean, modi
 }
 
 /**
- * Выбор аутентификации хоста: рабочий дропдаун (Ask every time / новый пароль / новый ключ / уже
- * сохранённые keychain-секреты из vault) + инлайн-поля под новый секрет. Список сохранённых берётся
- * из живого [LocalCredentials] (за гейтом vault); в мок-пути остаются только варианты без vault.
+ * Host auth selection: a working dropdown (Ask every time / new password / new key / already-saved
+ * keychain secrets from the vault) plus inline fields for a new secret. The saved list comes from the
+ * live [LocalCredentials] (behind the vault gate); in the mock path only the no-vault options remain.
  */
 @Composable
 private fun AuthPicker(form: NewConnectionFormState) {
@@ -511,7 +512,7 @@ private fun AuthPicker(form: NewConnectionFormState) {
                 }
             },
             menu = { width ->
-                // Меню всплывает НАД формой (Popup), а не раздвигает её; ширина = ширине триггера, скролл при переполнении.
+                // The menu floats ABOVE the form (Popup) rather than pushing it apart; width = trigger width, scrolls on overflow.
                 Column(Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
                     AuthOption("vpn_key_off", stringResource(Res.string.conn_auth_ask), stringResource(Res.string.conn_auth_ask_desc), form.authMode == AuthMode.ASK) {
                         form.authMode = AuthMode.ASK; menuOpen = false
@@ -540,7 +541,7 @@ private fun AuthPicker(form: NewConnectionFormState) {
             }
             AuthMode.NEW_KEY -> {
                 Spacer14()
-                // keyboardType=Password гасит автокоррект/подсказки IME (Android), чтобы ключ не оседал в словаре.
+                // keyboardType=Password suppresses IME autocorrect/suggestions (Android) so the key doesn't end up in the dictionary.
                 ModalTextField(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 96)
                 Spacer14()
                 ModalTextField(form.passphrase, { form.passphrase = it }, stringResource(Res.string.conn_auth_passphrase_placeholder), icon = "lock", masked = true)
@@ -550,7 +551,7 @@ private fun AuthPicker(form: NewConnectionFormState) {
     }
 }
 
-/** Строка-вариант в дропдауне аутентификации: иконка + название + подпись + галочка выбранного. */
+/** One option row in the auth dropdown: icon plus title plus subtitle plus a checkmark when selected. */
 @Composable
 private fun AuthOption(icon: String, title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
     Row(
@@ -580,11 +581,11 @@ private fun ModalSelect(value: String) {
 }
 
 /**
- * Поле «Group»: выпадающий селект (как [AuthPicker]) — «No group», уже созданные группы каталога
- * ([groupSuggestions]) и «New group…», открывающий диалог создания. Выбранная группа хранится в
- * [NewConnectionFormState.group]; создание новой просто проставляет её имя (профиль заведёт папку при
- * сохранении). Свободного ввода в самом поле нет — только список + явное создание, чтобы не плодить
- * опечатки-дубли групп.
+ * "Group" field: a dropdown select (like [AuthPicker]) - "No group", already-created catalog groups
+ * ([groupSuggestions]), and "New group..." opening the create dialog. The selected group is stored in
+ * [NewConnectionFormState.group]; creating a new one just sets its name (the profile creates the folder
+ * on save). No free-text input in the field itself, only the list plus explicit creation, to avoid
+ * typo-duplicate groups.
  */
 @Composable
 private fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
@@ -621,7 +622,7 @@ private fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
     }
 }
 
-/** Строка-вариант селекта группы: опц. иконка + название + галочка выбранного. */
+/** One option row of the group select: optional icon plus title plus a checkmark when selected. */
 @Composable
 private fun GroupOption(title: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
     Row(
@@ -636,9 +637,9 @@ private fun GroupOption(title: String, selected: Boolean, icon: String? = null, 
 }
 
 /**
- * Модальный диалог создания новой группы (Popup поверх модалки коннекта): поле имени + Cancel/Create.
- * Пустое имя не создаёт (кнопка неактивна). Имя только проставляется в форму — папка появится в
- * каталоге при сохранении хоста.
+ * Modal dialog for creating a new group (Popup over the connection modal): name field plus Cancel/Create.
+ * A blank name doesn't create anything (button disabled). The name is only set on the form, the folder
+ * appears in the catalog when the host is saved.
  */
 @Composable
 private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
@@ -672,7 +673,7 @@ private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit)
     }
 }
 
-/** Контейнер выпадающих подсказок (group/tags): ширина триггера, скролл при переполнении, стиль меню. */
+/** Container for suggestion dropdowns (group/tags): trigger width, scrolls on overflow, menu style. */
 @Composable
 private fun SuggestionMenu(width: Dp, content: @Composable () -> Unit) {
     Column(
@@ -681,7 +682,7 @@ private fun SuggestionMenu(width: Dp, content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** Строка-подсказка в выпадающем списке: одна метка, клик — выбор. */
+/** One suggestion row in the dropdown list: a single label, click to select. */
 @Composable
 private fun SuggestionRow(label: String, onClick: () -> Unit) {
     Row(
@@ -692,7 +693,7 @@ private fun SuggestionRow(label: String, onClick: () -> Unit) {
     }
 }
 
-/** Пилюля тега с крестиком удаления; [tag] — каноническая форма, на экране с префиксом `#`. */
+/** Tag pill with a remove cross; [tag] is the canonical form, shown on screen with a `#` prefix. */
 @Composable
 private fun RemovableTagPill(tag: String, onRemove: () -> Unit) {
     Row(
@@ -707,7 +708,7 @@ private fun RemovableTagPill(tag: String, onRemove: () -> Unit) {
     }
 }
 
-/** Статус «Test connection» в футере модалки: проверка/успех (с RTT)/ошибка с причиной. */
+/** "Test connection" status in the modal footer: checking / success (with RTT) / failure with a reason. */
 @Composable
 private fun TestStatusLabel(status: ConnectionTestStatus) {
     when (status) {
@@ -730,7 +731,7 @@ private fun TestStatusLabel(status: ConnectionTestStatus) {
     }
 }
 
-/** Инлайн-ввод нового тега внутри блока Tags: Enter ([onCommit]) или запятая фиксирует пилюлю. */
+/** Inline input for a new tag inside the Tags block: Enter ([onCommit]) or a comma commits the pill. */
 @Composable
 private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: () -> Unit, onFocusChanged: ((Boolean) -> Unit)? = null) {
     val fonts = LocalFonts.current

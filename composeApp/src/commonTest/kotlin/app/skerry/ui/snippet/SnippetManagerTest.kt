@@ -101,7 +101,7 @@ class SnippetManagerTest {
     fun `forShortcut finds the snippet bound to a hotkey`() {
         val manager = managerWith()
         val id = manager.save(draft(label = "Disk").copy(shortcut = "Ctrl+Shift+D"))
-        manager.save(draft(label = "Mem")) // без хоткея
+        manager.save(draft(label = "Mem")) // no hotkey
 
         assertEquals(id, manager.forShortcut("Ctrl+Shift+D")?.id)
     }

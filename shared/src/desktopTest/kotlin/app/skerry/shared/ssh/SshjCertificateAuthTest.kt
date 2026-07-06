@@ -18,10 +18,10 @@ import kotlin.test.assertTrue
 private val acceptAllHostKeys = HostKeyVerifier { _, _, _, _ -> true }
 
 /**
- * Интеграционные тесты аутентификации по SSH-сертификату ([SshAuth.Certificate]) против встроенного
- * Apache MINA SSHD. Сервер доверяет тестовому CA из [CertificateFixtures]: при входе по сертификату
- * MINA сам проверяет подпись CA, срок действия и principal, а наш authenticator решает лишь вопрос
- * доверия к самому удостоверяющему центру (сравнением его публичного ключа).
+ * Integration tests for SSH certificate auth ([SshAuth.Certificate]) against an embedded
+ * Apache MINA SSHD. The server trusts the test CA from [CertificateFixtures]: MINA itself
+ * verifies the CA signature, validity, and principal on certificate login; our authenticator
+ * only decides whether to trust the CA itself (by comparing its public key).
  */
 class SshjCertificateAuthTest {
 
@@ -36,8 +36,8 @@ class SshjCertificateAuthTest {
             port = 0
             keyPairProvider = SimpleGeneratorHostKeyProvider()
             publickeyAuthenticator = PublickeyAuthenticator { _, key, _ ->
-                // Принимаем только сертификат, выписанный нашим доверенным CA. Подпись/срок/principal
-                // MINA уже проверил до этого вызова — невалидный сертификат сюда не дойдёт.
+                // Accept only a certificate issued by our trusted CA. MINA already validated
+                // signature/validity/principal before this call — an invalid cert never reaches here.
                 key is OpenSshCertificate && key.caPubKey.encoded.contentEquals(trustedCa.encoded)
             }
             commandFactory = ProcessShellCommandFactory.INSTANCE
@@ -64,9 +64,9 @@ class SshjCertificateAuthTest {
 
     @Test
     fun `rejects a bare key when the server trusts only certificates`() = runTest {
-        // Тот же приватный ключ, но без сертификата: authenticator принимает лишь OpenSshCertificate,
-        // поэтому голый публичный ключ должен быть отклонён — подтверждает, что прошлый тест прошёл
-        // именно по сертификату, а не по ключу.
+        // Same private key but no certificate: the authenticator only accepts OpenSshCertificate,
+        // so a bare public key must be rejected — confirms the previous test passed via the
+        // certificate, not the key.
         assertFailsWith<SshAuthenticationException> {
             SshjTransport(acceptAllHostKeys).connect(
                 target(CertificateFixtures.ED25519_PRINCIPAL),

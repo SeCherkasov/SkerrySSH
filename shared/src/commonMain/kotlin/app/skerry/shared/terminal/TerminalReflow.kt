@@ -1,14 +1,13 @@
 package app.skerry.shared.terminal
 
 /**
- * Reflow основного буфера при ресайзе — чистые функции над списками [TermRow], без состояния
- * эмулятора: мягко-перенесённые (`wrapped`) физические строки склеиваются в логические и
- * переразбиваются по новой ширине, курсор едет со своим текстом. Тестируется напрямую и через
- * resize-тесты эмулятора.
+ * Reflow of the main buffer on resize — pure functions over [TermRow] lists, no emulator state:
+ * soft-wrapped (`wrapped`) physical rows are joined into logical rows and re-split at the new
+ * width, with the cursor following its text. Tested directly and via emulator resize tests.
  */
 internal object TerminalReflow {
 
-    /** Результат reflow: новые scrollback/grid и позиция курсора в координатах нового grid. */
+    /** Reflow result: new scrollback/grid and cursor position in the new grid's coordinates. */
     class Result(
         val scrollback: List<TermRow>,
         val grid: MutableList<TermRow>,
@@ -17,11 +16,11 @@ internal object TerminalReflow {
     )
 
     /**
-     * Переукладка основного буфера под ширину [nc]/высоту [nr]. [src] — все физические строки
-     * (scrollback + экран); нижние [nr] результата идут в grid, остальные — в scrollback (с обрезкой
-     * по [maxScrollback]). [cursorAbs]/[cursorCol] — позиция курсора в [src] (значима при
-     * [trackCursor]); [rowsBelowCursor] — строк видимого экрана ниже курсора ДО ресайза (пустое
-     * место под курсором — содержимое, см. шаг 4).
+     * Reflows the main buffer to width [nc] / height [nr]. [src] is all physical rows (scrollback +
+     * screen); the bottom [nr] rows of the result go into grid, the rest into scrollback (trimmed to
+     * [maxScrollback]). [cursorAbs]/[cursorCol] is the cursor position in [src] (meaningful when
+     * [trackCursor]); [rowsBelowCursor] is the number of visible screen rows below the cursor before
+     * the resize (blank space under the cursor is content, see step 4).
      */
     fun reflow(
         src: List<TermRow>,
@@ -35,8 +34,8 @@ internal object TerminalReflow {
     ): Result {
         val blank = TermCell(" ")
 
-        // 1-2. Группируем физические строки в логические (цепочки по wrapped) и находим логический
-        //      индекс/колонку курсора.
+        // 1-2. Group physical rows into logical rows (chains by wrapped) and locate the cursor's
+        //      logical index/column.
         val logicals = ArrayList<MutableList<TermCell>>()
         var curLogIndex = 0
         var curLogCol = cursorCol
@@ -60,7 +59,7 @@ internal object TerminalReflow {
             }
         }
 
-        // 3. Каждую логическую тримим по хвостовым дефолтным пробелам и переразбиваем по nc.
+        // 3. Trim each logical row of trailing default blanks and re-split it by nc.
         val out = ArrayList<TermRow>(logicals.size)
         var cursorAbsNew = 0
         var cursorColNew = 0
@@ -68,12 +67,12 @@ internal object TerminalReflow {
             var len = cells.size
             while (len > 0 && cells[len - 1] == blank) len--
             val isCursorLine = trackCursor && idx == curLogIndex
-            // Гарантируем, что колонка курсора достижима после трима (курсор может стоять за текстом).
+            // Ensure the cursor column stays reachable after trimming (cursor can sit past the text).
             if (isCursorLine) len = maxOf(len, curLogCol + 1)
             val logical = if (len == cells.size) cells else cells.subList(0, len.coerceAtMost(cells.size))
             val base = out.size
-            // Позицию курсора берём из реального прохода разбиения (а не из curLogCol/nc): wide-символы
-            // могут давать строки с nc-1 видимыми ячейками, и арифметика бы съезжала.
+            // Cursor position comes from the actual split pass (not curLogCol/nc arithmetic): wide
+            // chars can leave rows with nc-1 visible cells, which would throw off the arithmetic.
             val cursorOut = IntArray(2) { -1 }
             out.addAll(splitLogical(logical, nc, blank, if (isCursorLine) curLogCol else -1, cursorOut))
             if (isCursorLine && cursorOut[0] >= 0) {
@@ -82,11 +81,12 @@ internal object TerminalReflow {
             }
         }
 
-        // 4. Отбрасываем незначимый пустой хвост (неиспользованное место внизу экрана не должно уходить
-        //    в scrollback): держим строки до последней непустой и до строки курсора включительно. Но
-        //    пустое пространство ВИДИМОГО экрана под курсором — это содержимое (после `clear`/`Ctrl+L`
-        //    под prompt'ом лежит пустой экран, а история уже в scrollback): его сохраняем, иначе reflow
-        //    схлопнет хвост и втянет историю обратно на видимый экран. Кап nr-1 — курсор не уедет за низ.
+        // 4. Drop the insignificant blank tail (unused space at the bottom of the screen shouldn't go
+        //    into scrollback): keep rows up to the last non-blank and up to the cursor row inclusive.
+        //    But blank space on the VISIBLE screen below the cursor is content (after `clear`/`Ctrl+L`
+        //    the screen below the prompt is blank while history is already in scrollback): keep it, or
+        //    reflow would collapse the tail and pull history back onto the visible screen. Cap nr-1
+        //    keeps the cursor from running off the bottom.
         var significant = out.size
         while (significant > 0 && out[significant - 1].all { it == blank }) significant--
         if (trackCursor) {
@@ -96,7 +96,7 @@ internal object TerminalReflow {
         significant = significant.coerceAtLeast(1).coerceAtMost(out.size)
         val kept = out.subList(0, significant)
 
-        // 5. Делим на grid (нижние nr) и scrollback (верх), дополняя пустыми при нехватке.
+        // 5. Split into grid (bottom nr rows) and scrollback (rest), padding with blanks if short.
         val gridStart: Int
         val newGrid: MutableList<TermRow>
         if (kept.size >= nr) {
@@ -119,13 +119,14 @@ internal object TerminalReflow {
     }
 
     /**
-     * Разбивает логическую строку [cells] на физические шириной [nc], не разрывая широкие символы
-     * (Wide+Continuation не должны попадать в разные строки). Все, кроме последней, помечаются
-     * `wrapped = true`; каждая дополняется до [nc] нейтральным [pad]. Пустая логическая → одна пустая строка.
+     * Splits logical row [cells] into physical rows of width [nc], without breaking wide characters
+     * (Wide+Continuation must stay on the same row). All but the last row are marked `wrapped = true`;
+     * each is padded to [nc] with neutral [pad]. An empty logical row becomes one blank row.
      *
-     * Если [cursorCol] >= 0, в [cursorOut] кладётся позиция курсора в результате: `[0]` — индекс строки
-     * (внутри возвращённого списка), `[1]` — колонка в ней. Позиция берётся прямым проходом, поэтому
-     * корректна и при early-break на широком символе (когда строка несёт nc-1 видимых ячеек).
+     * If [cursorCol] >= 0, [cursorOut] receives the cursor position in the result: `[0]` is the row
+     * index (within the returned list), `[1]` is the column in it. The position comes from a direct
+     * pass, so it stays correct even on an early break at a wide character (where the row carries
+     * nc-1 visible cells).
      */
     private fun splitLogical(
         cells: List<TermCell>,
@@ -144,7 +145,7 @@ internal object TerminalReflow {
             val chunk = ArrayList<TermCell>(nc)
             while (idx < cells.size && chunk.size < nc) {
                 val cell = cells[idx]
-                // Широкий символ не делим: если пара не влезает в остаток непустого chunk — оборвать раньше.
+                // Don't split a wide character: if the pair doesn't fit the remaining chunk, break early.
                 if (cell.width == CellWidth.Wide && chunk.isNotEmpty() && chunk.size + 2 > nc) break
                 if (idx == cursorCol && cursorOut != null) { cursorOut[0] = out.size; cursorOut[1] = chunk.size }
                 chunk.add(cell); idx++

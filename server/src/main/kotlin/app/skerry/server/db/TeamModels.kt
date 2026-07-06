@@ -1,6 +1,6 @@
 package app.skerry.server.db
 
-/** Команда в том виде, как её видит сервер: только метаданные, имени и ключа у сервера нет. */
+/** A team as the server sees it: metadata only, no name or key. */
 data class TeamRow(
     val id: String,
     val ownerAccountId: String,
@@ -9,8 +9,8 @@ data class TeamRow(
 )
 
 /**
- * Участник команды. [envelope] — sealed-конверт с teamKey для приглашённого (см. [TeamMembers]);
- * очищается при принятии приглашения: дальше teamKey живёт в собственном vault участника.
+ * A team member. [envelope] is the sealed box carrying teamKey for the invitee (see [TeamMembers]);
+ * cleared once the invite is accepted, after which teamKey lives in the member's own vault.
  */
 data class TeamMemberRow(
     val teamId: String,
@@ -41,7 +41,7 @@ data class TeamMemberRow(
     }
 }
 
-/** Членство текущего аккаунта + метаданные команды — строка ответа `GET /teams`. */
+/** Current account's membership plus team metadata; a `GET /teams` response row. */
 data class TeamMembershipView(
     val team: TeamRow,
     val role: String,
@@ -68,10 +68,10 @@ data class TeamMembershipView(
 }
 
 /**
- * Роли и статусы участников — единственные допустимые значения на проводе и в БД, плюс
- * capability-логика ACL (единый источник для маршрутов). Гранулярность гейтит запись/управление,
- * НЕ чтение: у любого активного участника есть teamKey, поэтому «viewer, не видящий секретов»
- * криптографически невозможен без ротации ключа. Иерархия прав: OWNER > ADMIN > EDITOR > VIEWER.
+ * Member roles and statuses — the only valid values on the wire and in the DB, plus ACL
+ * capability logic (single source of truth for routes). Granularity gates write/manage, not read:
+ * any active member has teamKey, so a viewer that can't see secrets is cryptographically
+ * impossible without key rotation. Role hierarchy: OWNER > ADMIN > EDITOR > VIEWER.
  */
 object TeamRoles {
     const val OWNER = "owner"
@@ -79,22 +79,22 @@ object TeamRoles {
     const val EDITOR = "editor"
     const val VIEWER = "viewer"
 
-    /** Legacy до гранулярных ролей: любой активный участник мог писать записи — эквивалент EDITOR. */
+    /** Pre-granular-roles legacy: any active member could write records, equivalent to EDITOR. */
     const val MEMBER = "member"
 
-    /** Роли, которые можно назначить приглашением/сменой (OWNER фиксирован за создателем). */
+    /** Roles assignable via invite/change (OWNER is fixed to the creator). */
     val ASSIGNABLE = setOf(ADMIN, EDITOR, VIEWER)
 
-    /** Управление участниками: приглашать, удалять, менять роли. */
+    /** Manage members: invite, remove, change roles. */
     fun canManageMembers(role: String): Boolean = role == OWNER || role == ADMIN
 
-    /** Запись/шеринг команды: push/share/unshare записей. */
+    /** Write/share on the team: push/share/unshare records. */
     fun canWrite(role: String): Boolean = role == OWNER || role == ADMIN || role == EDITOR || role == MEMBER
 
-    /** Просмотр аудит-лога команды. */
+    /** View the team's audit log. */
     fun canViewAudit(role: String): Boolean = role == OWNER || role == ADMIN
 
-    /** Вправе ли [actorRole] назначить/приглашать роль [targetRole] (анти-эскалация привилегий). */
+    /** Whether [actorRole] may assign/invite role [targetRole] (privilege-escalation guard). */
     fun canAssign(actorRole: String, targetRole: String): Boolean {
         if (targetRole !in ASSIGNABLE) return false
         return when (actorRole) {
@@ -104,7 +104,7 @@ object TeamRoles {
         }
     }
 
-    /** Вправе ли [actorRole] удалить/сменить участника с ролью [targetRole] (анти-эскалация). */
+    /** Whether [actorRole] may remove/change a member with role [targetRole] (escalation guard). */
     fun canModifyMember(actorRole: String, targetRole: String): Boolean = when (actorRole) {
         OWNER -> targetRole != OWNER
         ADMIN -> targetRole == EDITOR || targetRole == VIEWER || targetRole == MEMBER

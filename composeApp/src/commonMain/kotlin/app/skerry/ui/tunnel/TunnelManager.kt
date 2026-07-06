@@ -35,8 +35,8 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 
 /**
- * Редактируемые поля туннеля без [Tunnel.id]: форма создания/правки оперирует черновиком,
- * а идентичность присваивает [TunnelManager]. [id] == null — создаётся новый туннель.
+ * Editable tunnel fields without [Tunnel.id]: the create/edit form operates on a draft, and
+ * [TunnelManager] assigns identity. `null` [id] means a new tunnel.
  */
 data class TunnelDraft(
     val id: String? = null,
@@ -49,39 +49,38 @@ data class TunnelDraft(
     val destPort: Int? = null,
 )
 
-/** Резолв сохранённого туннеля к параметрам подключения: хост найден и секрет доступен — либо нет. */
+/** Resolution of a saved tunnel to connection parameters: either the host and secret are available, or not. */
 sealed interface TunnelResolution {
-    /** Готов к подключению: адрес хоста и развёрнутый из vault способ аутентификации. */
+    /** Ready to connect: host address and auth resolved from the vault. */
     data class Ready(val target: SshTarget, val auth: SshAuth) : TunnelResolution
 
     /**
-     * Подключиться нельзя (хост удалён, секрет не привязан и т.п.). [reason] показывается в строке
-     * как есть — реализация [resolve] обязана давать generic-текст без технических деталей (имён
-     * файлов, id записей, системных сообщений): он минует [TunnelManager.friendlyError].
+     * Cannot connect (host deleted, secret unbound, etc). [reason] is shown to the user as-is,
+     * bypassing [TunnelManager.friendlyError] — [resolve] implementations must keep it generic,
+     * with no file names, record ids, or system messages.
      */
     data class Unavailable(val reason: String) : TunnelResolution
 }
 
-/** Рантайм-состояние сохранённого туннеля (конфиг живёт в [Tunnel], это — статус включения). */
+/** Runtime state of a saved tunnel; config lives in [Tunnel], this is the on/off status. */
 sealed interface TunnelStatus {
-    /** Выключен: соединения нет, проброс не поднят. */
+    /** Off: no connection, no forward. */
     data object Inactive : TunnelStatus
 
-    /** Поднимается: открываем соединение и слушатель. */
+    /** Coming up: opening the connection and listener. */
     data object Connecting : TunnelStatus
 
-    /** Активен; [boundPort] — фактический порт слушателя (для запроса `0` — назначенный). */
+    /** Active; [boundPort] is the listener's actual port (assigned port when `0` was requested). */
     data class Active(val boundPort: Int) : TunnelStatus
 
-    /** Поднять не удалось; [message] для показа пользователю (без сырых деталей транспорта). */
+    /** Failed to come up; [message] is user-facing (no raw transport details). */
     data class Failed(val message: String) : TunnelStatus
 }
 
 /**
- * Одна строка списка туннелей: сохранённый [tunnel] (конфиг, обновляется через [TunnelManager.save])
- * плюс наблюдаемое рантайм-состояние. [handle]/[connection] держат живой проброс и его собственное
- * SSH-соединение для последующего закрытия (наружу не отдаются — у каждого туннеля своё соединение,
- * как в Termius).
+ * One row in the tunnel list: saved [tunnel] config (updated via [TunnelManager.save]) plus
+ * observable runtime state. [handle]/[connection] hold the live forward and its own SSH
+ * connection for later closing; each tunnel owns its own connection, not shared externally.
  */
 @Stable
 class TunnelEntry internal constructor(tunnel: Tunnel) {
@@ -105,8 +104,8 @@ class TunnelEntry internal constructor(tunnel: Tunnel) {
     internal var handle: PortForward? = null
     internal var connection: SshConnection? = null
 
-    // Корутина подъёма (пока статус Connecting): [TunnelManager.deactivate] отменяет её, чтобы
-    // соединение, открывающееся прямо сейчас, не осело орфаном после выключения.
+    // Coroutine bringing the tunnel up (status Connecting); [TunnelManager.deactivate] cancels it
+    // so a connection opening right now doesn't leak after deactivation.
     internal var connectingJob: Job? = null
 
     internal var prevUp: Long = 0
@@ -118,15 +117,15 @@ class TunnelEntry internal constructor(tunnel: Tunnel) {
 }
 
 /**
- * Менеджер сохранённых туннелей (модель Termius): туннель — самостоятельный объект в [TunnelStore],
- * а не часть открытой терминальной сессии. Включение ([activate]) само открывает SSH-соединение к
- * привязанному хосту через [transport] (в проде — транспорт с `ProbeHostKeyVerifier`: только уже
- * доверенные хосты) и поднимает проброс; [deactivate] закрывает проброс и его соединение. Резолв
- * хоста и секрета вынесен в [resolve], чтобы менеджер не зависел от менеджера хостов/vault напрямую
- * и тестировался без них.
+ * Manager for saved tunnels: a tunnel is a standalone object in [TunnelStore], not part of an
+ * open terminal session. [activate] opens its own SSH connection to the bound host via
+ * [transport] (in production, a transport with `ProbeHostKeyVerifier` — only already-trusted
+ * hosts) and raises the forward; [deactivate] closes the forward and its connection. Host/secret
+ * resolution is factored into [resolve] so the manager has no direct dependency on the host
+ * manager or vault, and can be tested without them.
  *
- * Каждый туннель живёт своей строкой [TunnelEntry] и не блокирует другие. Ошибка подъёма переводит
- * строку в [TunnelStatus.Failed], не роняя менеджер.
+ * Each tunnel lives in its own [TunnelEntry] row and doesn't block others; a failed raise sets
+ * the row to [TunnelStatus.Failed] without affecting the manager.
  */
 @Stable
 class TunnelManager(
@@ -141,7 +140,7 @@ class TunnelManager(
         private set
 
     init {
-        // Опрос телеметрии по активным туннелям: снимаем счётчики и считаем скорость по дельте.
+        // Polls telemetry for active tunnels: samples counters and computes rate from the delta.
         scope.launch {
             while (isActive) {
                 delay(pollIntervalMillis)
@@ -151,10 +150,10 @@ class TunnelManager(
     }
 
     /**
-     * Перечитать список из стора. Нужно после записей в обход менеджера и при разблокировке vault:
-     * на старте vault залочен и [store] (поверх vault) отдаёт пусто, после unlock данные появляются.
-     * Существующие строки сохраняем по id, чтобы не потерять рантайм-состояние активных пробросов;
-     * пропавшие отбрасываем, новые добавляем.
+     * Reloads the list from the store. Needed after writes that bypass the manager and after
+     * vault unlock ([store] sits on top of the vault and returns empty while locked). Existing
+     * rows are kept by id to preserve runtime state of active forwards; removed tunnels are
+     * dropped, new ones added.
      */
     fun reload() {
         val byId = tunnels.associateBy { it.id }
@@ -164,9 +163,9 @@ class TunnelManager(
     fun find(id: String): TunnelEntry? = tunnels.firstOrNull { it.id == id }
 
     /**
-     * Создать (если [TunnelDraft.id] == null) или обновить туннель и записать в стор. Возвращает
-     * назначенный id. Правка конфига активного туннеля обновляет строку на месте, но не перезапускает
-     * проброс — новые параметры подхватятся при следующем включении.
+     * Creates (when [TunnelDraft.id] is null) or updates a tunnel and writes it to the store.
+     * Returns the assigned id. Editing an active tunnel's config updates the row in place but
+     * does not restart the forward; new parameters take effect on the next activation.
      */
     fun save(draft: TunnelDraft): String {
         val id = draft.id ?: newId()
@@ -186,20 +185,21 @@ class TunnelManager(
         return id
     }
 
-    /** Удалить туннель: снять, если активен, затем убрать из стора и списка. */
+    /** Deletes a tunnel: deactivates it if active, then removes it from the store and list. */
     fun delete(id: String) {
         deactivate(id)
         store.remove(id)
         tunnels = tunnels.filterNot { it.id == id }
     }
 
-    /** Включить туннель: открыть соединение к хосту и поднять проброс. Идемпотентно для активного. */
+    /** Activates a tunnel: opens the host connection and raises the forward. Idempotent for an active tunnel. */
     fun activate(id: String) {
         val entry = find(id) ?: return
         if (entry.status is TunnelStatus.Active || entry.status is TunnelStatus.Connecting) return
         entry.status = TunnelStatus.Connecting
-        // activate зовётся с UI-потока: чтение статуса и установка Connecting синхронны (без suspend
-        // между ними), поэтому повторный тап не проскочит гард. Job храним для отмены из deactivate.
+        // Called from the UI thread: the status read and Connecting write are synchronous (no
+        // suspend between them), so a repeat tap can't slip past the guard. Job is kept so
+        // deactivate can cancel it.
         entry.connectingJob = scope.launch {
             try {
                 when (val resolution = resolve(entry.tunnel)) {
@@ -215,10 +215,11 @@ class TunnelManager(
     private suspend fun openForward(entry: TunnelEntry, resolution: TunnelResolution.Ready) {
         var conn: SshConnection? = null
         try {
-            // resolution.auth несёт секрет как String (техдолг SshAuth: на JVM не обнуляется); живёт на
-            // стеке корутины до connect. Обнуление отложено до миграции SshAuth на байтовый буфер.
+            // resolution.auth carries the secret as a String (not zeroed on JVM); lives on the
+            // coroutine stack until connect.
             conn = transport.connect(resolution.target, resolution.auth)
-            // Туннель могли выключить, пока шёл connect — не оставляем уже открытое соединение орфаном.
+            // The tunnel may have been deactivated while connect was in flight; ensureActive
+            // avoids leaking the now-open connection.
             coroutineContext.ensureActive()
             val forward = raise(conn, entry.tunnel)
             entry.connection = conn
@@ -235,8 +236,8 @@ class TunnelManager(
     }
 
     private suspend fun raise(conn: SshConnection, tunnel: Tunnel): PortForward = when (tunnel.direction) {
-        // destHost/destPort у `-L`/`-R` обязателен (см. KDoc Tunnel) — requireNotNull, чтобы кривой
-        // туннель упал явно, а не молча пробрасывался на ":0".
+        // destHost/destPort are required for -L/-R (see Tunnel KDoc); requireNotNull fails loudly
+        // instead of silently forwarding to ":0".
         TunnelDirection.Local -> conn.forwardLocal(
             LocalForwardSpec(tunnel.bindHost, tunnel.bindPort, requireDestHost(tunnel), requireDestPort(tunnel)),
         )
@@ -254,10 +255,10 @@ class TunnelManager(
     private fun requireDestPort(tunnel: Tunnel): Int =
         requireNotNull(tunnel.destPort) { "Tunnel ${tunnel.direction} requires a destination port" }
 
-    /** Выключить туннель: закрыть проброс и его соединение, вернуть строку в [TunnelStatus.Inactive]. */
+    /** Deactivates a tunnel: closes the forward and its connection, resets the row to [TunnelStatus.Inactive]. */
     fun deactivate(id: String) {
         val entry = find(id) ?: return
-        // Отменяем подъём, если он ещё идёт: иначе connect завершится после нас и оставит орфан.
+        // Cancels the in-flight raise, if any, so a completing connect doesn't leak afterward.
         entry.connectingJob?.cancel()
         entry.connectingJob = null
         val handle = entry.handle
@@ -274,7 +275,7 @@ class TunnelManager(
         }
     }
 
-    /** Снять все активные туннели (при выходе/локе). */
+    /** Deactivates all tunnels. */
     fun closeAll() {
         tunnels.forEach { deactivate(it.id) }
     }
@@ -298,9 +299,9 @@ class TunnelManager(
         scope.launch { runCatching { conn.disconnect() } }
     }
 
-    // Сырой текст исключения (адрес/внутренности sshj) в UI не выносим — только generic-сообщения,
-    // как в runConnectionTest. Отказ ключа хоста выделен: туннель идёт по probe-верификатору, и это
-    // ожидаемый исход для ещё не доверенного хоста.
+    // Raw exception text (addresses/sshj internals) is never shown in the UI, only generic
+    // messages, as in runConnectionTest. Host key rejection is called out separately: tunnels use
+    // the probe verifier, so this is the expected outcome for a not-yet-trusted host.
     private suspend fun friendlyError(e: Exception): String = when (e) {
         is SshHostKeyRejectedException -> getString(Res.string.ptail_err_host_not_trusted)
         is SshAuthenticationException -> getString(Res.string.ptail_err_auth_failed)

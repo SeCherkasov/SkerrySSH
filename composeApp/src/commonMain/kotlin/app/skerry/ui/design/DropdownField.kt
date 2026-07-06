@@ -23,9 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Готовый селект формы поверх [AnchoredDropdown]: триггер-строка «значение + шеврон» ([SelectTrigger])
- * раскрывает меню опций той же ширины ([DropdownMenuColumn]/[DropdownOption]); выбор закрывает меню.
- * [label] — локализуемая подпись опции (может звать stringResource, потому @Composable).
+ * Form select built on [AnchoredDropdown]: a "value + chevron" trigger row ([SelectTrigger])
+ * opens a menu of equal-width options ([DropdownMenuColumn]/[DropdownOption]); picking closes it.
+ * [label] renders an option's localized text (may call stringResource, hence @Composable).
  */
 @Composable
 fun <T> DropdownField(
@@ -49,7 +49,7 @@ fun <T> DropdownField(
     )
 }
 
-/** Триггер селекта макета: значение слева, шеврон справа (кликабельный: открывает выпадающий список). */
+/** Layout select trigger: value on the left, chevron on the right (clickable, opens the dropdown). */
 @Composable
 fun SelectTrigger(value: String, onClick: () -> Unit) {
     Row(
@@ -62,7 +62,7 @@ fun SelectTrigger(value: String, onClick: () -> Unit) {
     }
 }
 
-/** Колонка-меню выпадающего списка (поверхность + обводка макета). */
+/** Dropdown menu column (layout surface + border). */
 @Composable
 fun DropdownMenuColumn(width: Dp, content: @Composable () -> Unit) {
     Column(
@@ -70,7 +70,7 @@ fun DropdownMenuColumn(width: Dp, content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** Пункт выпадающего списка; выбранный подсвечен cyan. */
+/** Dropdown menu item; the selected one is highlighted cyan. */
 @Composable
 fun DropdownOption(label: String, selected: Boolean, onClick: () -> Unit) {
     Txt(

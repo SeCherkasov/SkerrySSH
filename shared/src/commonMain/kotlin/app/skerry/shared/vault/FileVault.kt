@@ -16,7 +16,7 @@ import kotlinx.serialization.json.jsonObject
 import okio.FileSystem
 import okio.Path
 
-/** Открытая часть файла vault: версия формата и материал для деривации/обёртки dataKey. */
+/** Plaintext part of the vault file: format version and material for dataKey derivation/wrapping. */
 @Serializable
 internal data class VaultMeta(
     val formatVersion: Int,
@@ -24,7 +24,7 @@ internal data class VaultMeta(
     val wrappedDataKey: ByteArray,
 )
 
-/** Корень файла vault: [VaultMeta] + зашифрованные записи. */
+/** Root of the vault file: [VaultMeta] + encrypted records. */
 @Serializable
 internal data class VaultFileBody(
     val meta: VaultMeta,
@@ -32,28 +32,29 @@ internal data class VaultFileBody(
 )
 
 /**
- * Файловый [Vault] на okio — один и тот же код для desktop (JVM) и Android: I/O спрятан за
- * [FileSystem] (десктоп/мобайл подают `FileSystem.SYSTEM`, тесты — `FakeFileSystem`): in-memory
- * кеш записей, файл переписывается целиком атомарно (tmp + [FileSystem.atomicMove]); битый файл
- * при unlock — [UnlockResult.Corrupted].
- * Жизненный цикл добавляет `dataKey` в памяти — он есть только между [unlock]/[create] и [lock] и
- * наружу не выходит. Метку времени записей даёт [now] (инжектится — нет привязки к платформенным
- * часам в commonMain; тесты передают детерминированную заглушку).
+ * File-backed [Vault] over okio (desktop JVM + Android), I/O behind [FileSystem] (desktop/mobile
+ * pass `FileSystem.SYSTEM`, tests pass `FakeFileSystem`): records are cached in memory, the file is
+ * rewritten atomically (tmp + [FileSystem.atomicMove]); an unreadable file on unlock yields
+ * [UnlockResult.Corrupted].
  *
- * Атомарность состояния: мутаторы сначала записывают новый снимок на диск ([writeFile]) и лишь
- * **после** успеха коммитят его в поля. Если запись упала — кеш, `meta` и `dataKey` остаются
- * прежними, файл не рассинхронизируется. Все публичные методы синхронизированы (vault зовут из
- * UI-корутины и потенциально из фонового sync) через мультиплатформенный [SynchronizedObject].
- * Переданные пароли затираются.
+ * `dataKey` lives in memory only between [unlock]/[create] and [lock], never leaving the class.
+ * Record timestamps come from [now] (injected — commonMain has no platform clock; tests pass a
+ * deterministic stub).
+ *
+ * State is atomic: mutators write the new snapshot to disk ([writeFile]) and only commit it to
+ * fields after success. A failed write leaves the cache, `meta`, and `dataKey` unchanged, so the
+ * file never goes out of sync. All public methods are synchronized (the vault is called from UI
+ * coroutines and potentially background sync) via the multiplatform [SynchronizedObject]. Passed-in
+ * passwords are wiped.
  */
 class FileVault(
     private val path: Path,
     private val crypto: VaultCrypto,
     private val deviceId: String,
     private val fileSystem: FileSystem,
-    // Хук ужесточения прав tmp-файла до 0600 перед atomicMove (desktop передаёт PrivateConfig.harden).
-    // По умолчанию no-op: тесты на FakeFileSystem и Android (filesDir приватен для UID) прав не трогают.
-    // Стоит ПЕРЕД [now], чтобы [now] оставался последним параметром (вызовы через trailing-lambda).
+    // Hook to tighten the tmp file to 0600 before atomicMove (desktop passes PrivateConfig.harden).
+    // Defaults to no-op: FakeFileSystem tests and Android (filesDir is UID-private) leave permissions alone.
+    // Kept before [now] so [now] stays the last parameter (trailing-lambda call sites).
     private val harden: (Path) -> Unit = {},
     private val now: () -> String,
 ) : Vault {
@@ -64,18 +65,18 @@ class FileVault(
     private var meta: VaultMeta? = null
     private val records = mutableListOf<VaultRecord>()
 
-    // Записи, которые эта версия приложения не смогла разобрать (незнакомый RecordType/ConnectionType
-    // после апгрейда другого устройства, или иной будущий формат). Храним их сырой JSON verbatim и
-    // дописываем при каждой перезаписи файла — иначе downgrade/старый клиент молча стёр бы синканутые
-    // данными новой версии. Одна такая запись НЕ делает весь vault Corrupted (см. [parseBody]).
+    // Records this app version couldn't parse (unfamiliar RecordType/ConnectionType after another
+    // device upgraded, or some future format). Kept as raw JSON verbatim and re-appended on every file
+    // rewrite — otherwise a downgraded/older client would silently drop data synced by a newer version.
+    // One such record does not make the whole vault Corrupted (see [parseBody]).
     private val unknownRecords = mutableListOf<JsonElement>()
 
     override fun <T> transaction(block: () -> T): T = synchronized(lock) { block() }
 
-    // Сигнал «локальная мутация» для live-sync (см. [Vault.localChanges]). replay=0 + DROP_OLDEST:
-    // сигнал идемпотентен (важен факт изменения, не их число), а tryEmit без подписчика не должен ни
-    // блокировать мутатор, ни падать. Эмитим ПОСЛЕ успешного commit (после writeFile), вне зависимости
-    // от того, подписан ли координатор.
+    // "Local mutation" signal for live-sync (see [Vault.localChanges]). replay=0 + DROP_OLDEST: the
+    // signal is idempotent (only the fact of a change matters, not the count), and tryEmit with no
+    // subscriber must neither block the mutator nor throw. Emitted AFTER a successful commit (after
+    // writeFile), regardless of whether the sync coordinator is subscribed.
     private val _localChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val localChanges: Flow<Unit> = _localChanges
 
@@ -91,14 +92,14 @@ class FileVault(
             val wrapped = crypto.wrapDataKey(masterKey, freshDataKey)
             masterKey.bytes.fill(0)
             val newMeta = VaultMeta(FORMAT_VERSION, salt, wrapped)
-            unknownRecords.clear() // новый vault с нуля — не тащить сюда чужие нераспознанные записи
+            unknownRecords.clear() // fresh vault from scratch — don't carry over unrecognized records from elsewhere
             try {
                 writeFile(newMeta, emptyList())
             } catch (e: Throwable) {
-                freshDataKey.bytes.fill(0) // запись не удалась — ключ никуда не уходит
+                freshDataKey.bytes.fill(0) // write failed — key doesn't go anywhere
                 throw e
             }
-            dataKey?.bytes?.fill(0) // не осиротить старый ключ при повторном create
+            dataKey?.bytes?.fill(0) // don't orphan the old key on repeated create
             dataKey = freshDataKey
             meta = newMeta
             records.clear()
@@ -108,14 +109,14 @@ class FileVault(
     }
 
     override fun createWithDataKey(dataKey: DataKey): Unit = synchronized(lock) {
-        // meta.wrappedDataKey пуст намеренно: ключ этого vault живёт снаружи (запись TEAM в
-        // аккаунтном vault), парольный путь unlock() для таких файлов не используется.
+        // meta.wrappedDataKey is intentionally empty: this vault's key lives elsewhere (a TEAM
+        // record in the account vault); the password-based unlock() path isn't used for these files.
         val newMeta = VaultMeta(FORMAT_VERSION, crypto.newSalt(), ByteArray(0))
         unknownRecords.clear()
         try {
             writeFile(newMeta, emptyList())
         } catch (e: Throwable) {
-            dataKey.bytes.fill(0) // запись не удалась — переданный ключ не оставляем в памяти
+            dataKey.bytes.fill(0) // write failed — don't keep the passed-in key in memory
             throw e
         }
         this.dataKey?.bytes?.fill(0)
@@ -133,7 +134,7 @@ class FileVault(
             val unwrapped = crypto.unwrapDataKey(masterKey, body.meta.wrappedDataKey)
             masterKey.bytes.fill(0)
             if (unwrapped == null) return@synchronized UnlockResult.WrongPassword
-            dataKey?.bytes?.fill(0) // повторный unlock не должен осиротить прежний ключ
+            dataKey?.bytes?.fill(0) // repeated unlock must not orphan the previous key
             dataKey = unwrapped
             adoptBody(body)
             UnlockResult.Success
@@ -146,27 +147,27 @@ class FileVault(
         val body = runCatching {
             parseBody(fileSystem.read(path) { readUtf8() })
         }.getOrElse {
-            dataKey.bytes.fill(0) // присвоить нечего — не оставлять переданный ключ висеть в памяти
+            dataKey.bytes.fill(0) // nothing to assign — don't leave the passed-in key dangling in memory
             return@synchronized UnlockResult.Corrupted
         }
-        this.dataKey?.bytes?.fill(0) // повторный unlock не должен осиротить прежний ключ
-        this.dataKey = dataKey // присваиваем переданный ключ — вызывающий его не затирает (см. контракт)
+        this.dataKey?.bytes?.fill(0) // repeated unlock must not orphan the previous key
+        this.dataKey = dataKey // assign the passed-in key — the caller does not wipe it (see contract)
         adoptBody(body)
         UnlockResult.Success
     }
 
     override fun exportDataKey(): DataKey? = synchronized(lock) {
-        dataKey?.let { DataKey(it.bytes.copyOf()) } // копия: вызывающий затрёт её, не тронув живой ключ
+        dataKey?.let { DataKey(it.bytes.copyOf()) } // copy: the caller can wipe it without touching the live key
     }
 
     override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = synchronized(lock) {
         try {
             val key = dataKey
             check(key != null) { "vault is locked" }
-            // Тот же ключ (основное устройство переподключается своим же) → не переписываем meta, иначе
-            // молча сменили бы пароль vault на переданный. Лишнюю копию ключа не оставляем в памяти.
-            // Сравнение constant-time: contentEquals выходит на первом расхождении и таймингом
-            // позволял бы подбирать ключ побайтово.
+            // Same key (primary device reconnecting with its own) → don't rewrite meta, or the vault
+            // password would be silently changed. Don't keep an extra key copy in memory.
+            // Constant-time comparison: contentEquals bails on the first mismatch, and its timing
+            // would let an attacker brute-force the key byte by byte.
             if (constantTimeEquals(newDataKey.bytes, key.bytes)) {
                 newDataKey.bytes.fill(0)
                 return@synchronized false
@@ -176,10 +177,10 @@ class FileVault(
             val newWrapped = crypto.wrapDataKey(newMaster, newDataKey)
             newMaster.bytes.fill(0)
             val newMeta = VaultMeta(FORMAT_VERSION, newSalt, newWrapped)
-            // Записи остаются как есть: синканутые придут под новым ключом, локальные (под старым)
-            // станут нечитаемы. Коммит после persist — упадёт запись, поля не тронуты.
+            // Records stay as-is: synced ones will arrive under the new key; local ones (under the
+            // old key) become unreadable. Commit happens after persist — a failed write leaves fields untouched.
             writeFile(newMeta, records.toList())
-            key.bytes.fill(0) // старый ключ больше не нужен
+            key.bytes.fill(0) // old key no longer needed
             dataKey = newDataKey
             meta = newMeta
             true
@@ -199,13 +200,13 @@ class FileVault(
     override fun reset(): Unit = synchronized(lock) {
         dataKey?.bytes?.fill(0)
         dataKey = null
-        // wrappedDataKey — обёрнутый под мастер-паролем ключ (ciphertext, бесполезен без пароля); при
-        // безвозвратном сбросе затираем и его, чтобы не оставлять материал ключа в куче после wipe.
+        // wrappedDataKey is the key wrapped under the master password (ciphertext, useless without the
+        // password); on irreversible reset, wipe it too so no key material lingers in the heap.
         meta?.wrappedDataKey?.fill(0)
         meta = null
         records.clear()
         unknownRecords.clear()
-        // mustExist=false: сброс идемпотентен и не должен падать на уже отсутствующем/битом файле.
+        // mustExist=false: reset is idempotent and must not fail on an already-missing/broken file.
         fileSystem.delete(path, mustExist = false)
     }
 
@@ -215,8 +216,8 @@ class FileVault(
     }
 
     override fun syncMeta(): SyncMeta? = synchronized(lock) {
-        val m = meta ?: return@synchronized null // meta есть только на разблокированном vault
-        SyncMeta(m.salt.copyOf(), m.wrappedDataKey.copyOf()) // копии: вызывающий волен затирать
+        val m = meta ?: return@synchronized null // meta exists only on an unlocked vault
+        SyncMeta(m.salt.copyOf(), m.wrappedDataKey.copyOf()) // copies: the caller is free to wipe them
     }
 
     override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = synchronized(lock) {
@@ -227,7 +228,7 @@ class FileVault(
         for (r in remote) {
             val index = working.indexOfFirst { it.id == r.id }
             val local = if (index >= 0) working[index] else null
-            // LWW: бóльшая version, при равенстве — лексикографически больший deviceId.
+            // LWW: higher version wins; on a tie, the lexicographically larger deviceId wins.
             val wins = local == null ||
                 r.version > local.version ||
                 (r.version == local.version && r.deviceId > local.deviceId)
@@ -245,7 +246,7 @@ class FileVault(
     override fun openPayload(id: String): ByteArray? = synchronized(lock) {
         val key = requireUnlocked()
         val record = records.firstOrNull { it.id == id } ?: return@synchronized null
-        // tombstone не отдаёт payload: blob удалённой записи сохранён для sync, но наружу не выходит.
+        // A tombstone doesn't return a payload: the deleted record's blob is kept for sync but never exposed.
         if (record.deleted) return@synchronized null
         crypto.open(key, record.blob, aad(record.id, record.type))
     }
@@ -261,7 +262,7 @@ class FileVault(
             if (index >= 0) it[index] = record else it += record
         }
         commit(currentMeta, updated)
-        _localChanges.tryEmit(Unit) // commit удался → разбудить live-sync push
+        _localChanges.tryEmit(Unit) // commit succeeded → wake live-sync push
     }
 
     override fun remove(id: String): Unit = synchronized(lock) {
@@ -271,12 +272,12 @@ class FileVault(
         if (index < 0) return@synchronized
         val current = records[index]
         if (current.deleted) return@synchronized
-        // blob сохраняется в tombstone намеренно: ciphertext нужен LWW-sync, чтобы донести удаление
-        // до других устройств (открытым он всё равно не выдаётся — см. openPayload). Не очищать.
+        // blob is intentionally kept in the tombstone: LWW sync needs the ciphertext to propagate the
+        // deletion to other devices (it's never exposed in the clear anyway — see openPayload). Don't clear it.
         val tombstone = current.copy(deleted = true, version = current.version + 1, updatedAt = now())
         val updated = records.toMutableList().also { it[index] = tombstone }
         commit(currentMeta, updated)
-        _localChanges.tryEmit(Unit) // локальное удаление → разбудить live-sync push
+        _localChanges.tryEmit(Unit) // local delete → wake live-sync push
     }
 
     override fun compact(ids: List<String>): Unit = synchronized(lock) {
@@ -284,10 +285,10 @@ class FileVault(
         if (ids.isEmpty()) return@synchronized
         val currentMeta = session()
         val drop = ids.toHashSet()
-        // Удаляем только НАДГРОБИЯ из списка: живую (более новую, ещё не запушенную) запись с тем же
-        // id сохраняем — её увезёт следующий push, иначе потеряли бы непротолкнутые данные.
+        // Only removes TOMBSTONES from the list: a live (newer, not-yet-pushed) record with the same
+        // id is kept — the next push will carry it, or unpushed data would be lost.
         val updated = records.filterNot { it.id in drop && it.deleted }
-        if (updated.size == records.size) return@synchronized // нечего компактить — файл не трогаем
+        if (updated.size == records.size) return@synchronized // nothing to compact — leave the file untouched
         commit(currentMeta, updated)
     }
 
@@ -300,13 +301,13 @@ class FileVault(
             val verified = crypto.unwrapDataKey(oldMaster, currentMeta.wrappedDataKey)
             oldMaster.bytes.fill(0)
             if (verified == null) return@synchronized false
-            verified.bytes.fill(0) // нужна была только проверка старого пароля
+            verified.bytes.fill(0) // only needed to verify the old password
             val newSalt = crypto.newSalt()
             val newMaster = crypto.deriveMasterKey(newPassword, newSalt)
             val newWrapped = crypto.wrapDataKey(newMaster, key)
             newMaster.bytes.fill(0)
             val newMeta = currentMeta.copy(salt = newSalt, wrappedDataKey = newWrapped)
-            writeFile(newMeta, records.toList()) // упадёт — meta не подменяется
+            writeFile(newMeta, records.toList()) // on failure meta is not swapped in
             meta = newMeta
             true
         } finally {
@@ -317,17 +318,17 @@ class FileVault(
 
     override fun verifyPassword(password: CharArray): Boolean = synchronized(lock) {
         try {
-            // Сверяем по метаданным открытой сессии (как changePassword сверяет старый пароль): vault
-            // должен быть разблокирован. dataKey/записи не трогаем — это только проверка личности.
-            // dataKey == null дублирует условие meta == null (lock() чистит оба), но делает инвариант
-            // «только на открытом vault» явным и устойчивым к будущему «meta-only»-чтению.
+            // Verified against the metadata of the open session (as changePassword verifies the old
+            // password): the vault must be unlocked. dataKey/records are untouched — this only verifies
+            // identity. dataKey == null duplicates the meta == null condition (lock() clears both), but
+            // makes the "unlocked vault only" invariant explicit and robust to a future meta-only read.
             val currentMeta = meta ?: return@synchronized false
             if (dataKey == null) return@synchronized false
             val master = crypto.deriveMasterKey(password, currentMeta.salt)
             val verified = crypto.unwrapDataKey(master, currentMeta.wrappedDataKey)
             master.bytes.fill(0)
             if (verified == null) return@synchronized false
-            verified.bytes.fill(0) // нужна была только проверка — развёрнутый ключ не оставляем в памяти
+            verified.bytes.fill(0) // only needed for verification — don't keep the unwrapped key in memory
             true
         } finally {
             password.fill(' ')
@@ -337,27 +338,27 @@ class FileVault(
     private fun requireUnlocked(): DataKey =
         dataKey ?: throw IllegalStateException("vault is locked")
 
-    /** [meta] открытой сессии; бросает, если инвариант «unlocked ⇒ meta есть» нарушен. */
+    /** [meta] of the open session; throws if the "unlocked ⇒ meta present" invariant is broken. */
     private fun session(): VaultMeta = meta ?: error("unlocked vault has no metadata")
 
-    /** Persist-then-commit: атомарно записать снимок и лишь после успеха обновить кеш записей. */
+    /** Persist-then-commit: atomically write the snapshot and update the record cache only after success. */
     private fun commit(meta: VaultMeta, updated: List<VaultRecord>) {
-        writeFile(meta, updated) // упадёт — кеш не тронут
+        writeFile(meta, updated) // on failure the cache is untouched
         records.clear()
         records.addAll(updated)
     }
 
     /**
-     * Атомарно записать снимок vault (tmp + move — [atomicWriteUtf8]). Чистая функция от
-     * аргументов — поля не читает и не пишет (кроме [unknownRecords], см. ниже). Если запись/move
-     * упали — исключение всплывает, а поля остаются прежними (коммит идёт после persist): данные
-     * не теряются, ошибка видна выше. [harden] ужесточает права tmp до подмены цели: сам файл
-     * секретов, а не только каталог, приватен.
+     * Atomically writes the vault snapshot (tmp + move — [atomicWriteUtf8]). A pure function of its
+     * arguments — doesn't read or write fields (except [unknownRecords], see below). If the write/move
+     * fails, the exception propagates and fields stay unchanged (commit happens after persist): no
+     * data is lost, the error is visible upstream. [harden] tightens tmp permissions before the target
+     * swap, so the secrets file itself — not just the directory — stays private.
      */
     private fun writeFile(meta: VaultMeta, records: List<VaultRecord>) {
-        // Дописываем нераспознанные записи verbatim, чтобы не потерять данные, которые эта версия
-        // приложения не понимает (см. [unknownRecords]). Форма файла та же, что у VaultFileBody
-        // ({meta, records}), поэтому старые/новые клиенты читают его без изменений формата.
+        // Unrecognized records are re-appended verbatim so this app version doesn't drop data it
+        // doesn't understand (see [unknownRecords]). The file shape matches VaultFileBody
+        // ({meta, records}), so old and new clients read it without a format change.
         val body = buildJsonObject {
             put("meta", json.encodeToJsonElement(VaultMeta.serializer(), meta))
             put("records", buildJsonArray {
@@ -368,7 +369,7 @@ class FileVault(
         atomicWriteUtf8(fileSystem, path, json.encodeToString(JsonObject.serializer(), body), harden)
     }
 
-    /** Присвоить разобранный снимок файла полям сессии (общее для [unlock]/[unlockWithDataKey]). */
+    /** Assigns a parsed file snapshot to the session fields (shared by [unlock]/[unlockWithDataKey]). */
     private fun adoptBody(body: ParsedBody) {
         meta = body.meta
         records.clear()
@@ -378,10 +379,11 @@ class FileVault(
     }
 
     /**
-     * Разобрать файл vault толерантно: `meta` и структура обязательны (иначе файл действительно битый —
-     * исключение всплывёт как [UnlockResult.Corrupted]), но каждая запись декодируется по отдельности.
-     * Запись, которую эта версия не понимает (незнакомый enum-тип и т.п.), не роняет весь файл — она
-     * откладывается сырой в [ParsedBody.unknown] и переживает перезапись (см. [writeFile]).
+     * Parses the vault file tolerantly: `meta` and the overall structure are required (otherwise the
+     * file really is broken — the exception surfaces as [UnlockResult.Corrupted]), but each record is
+     * decoded independently. A record this version doesn't understand (unfamiliar enum value, etc.)
+     * doesn't fail the whole file — it's kept raw in [ParsedBody.unknown] and survives rewrites (see
+     * [writeFile]).
      */
     private fun parseBody(text: String): ParsedBody {
         val root = json.parseToJsonElement(text).jsonObject
@@ -403,9 +405,9 @@ class FileVault(
     )
 
     /**
-     * Стабильный AAD слота записи: `id` + [AAD_SEP] + `type.name`. Привязывает blob к id/типу,
-     * чтобы запись нельзя было подставить в чужой слот (и наоборот). Разделитель вынесен в
-     * константу с явным escape, чтобы он был виден в исходнике и не потерялся при правке.
+     * Stable per-slot AAD: `id` + [AAD_SEP] + `type.name`. Binds the blob to its id/type so a record
+     * can't be substituted into another slot (or vice versa). The separator is a named constant with
+     * an explicit escape so it stays visible in source and isn't lost in an edit.
      */
     private fun aad(id: String, type: RecordType): ByteArray =
         "$id$AAD_SEP${type.name}".encodeToByteArray()
@@ -413,7 +415,7 @@ class FileVault(
     private companion object {
         const val FORMAT_VERSION = 1
 
-        /** Unit Separator (U+001F) между id и типом в AAD. Явный escape — управляющий байт 0x1F. */
+        /** Unit Separator (U+001F) between id and type in the AAD. Explicit escape — control byte 0x1F. */
         const val AAD_SEP = "\u001F"
     }
 }

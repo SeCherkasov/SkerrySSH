@@ -99,11 +99,11 @@ private val MOCK_SNIPPETS = listOf(
 )
 
 /**
- * Snippets — ГЛОБАЛЬНЫЙ раздел: библиотека сохранённых команд (sidebar) + редактор
- * (main). Сниппет самостоятелен (plain-конфиг, секретов не содержит); редактор — чистая форма, а
- * запуск делается из палитры терминала, хоткеем или пунктом «Run snippet…» в контекстном меню хоста.
- * Когда менеджер подан ([LocalSnippets]) — живой список; без него (офскрин-рендер/превью) показывается
- * статичный мок ([MOCK_SNIPPETS]).
+ * Global Snippets section: library of saved commands (sidebar) plus an editor (main). A snippet
+ * is a self-contained plain config, no secrets; the editor only edits it, execution happens from
+ * the terminal palette, a hotkey, or "Run snippet…" in a host's context menu. Shows a live list
+ * when a manager is provided ([LocalSnippets]); otherwise (offscreen render/preview) shows the
+ * static [MOCK_SNIPPETS].
  */
 @Composable
 fun SnippetsView(state: DesktopDesignState) {
@@ -116,7 +116,7 @@ fun SnippetsView(state: DesktopDesignState) {
     LiveSnippetsView(manager, mono)
 }
 
-// Живой путь: библиотека сниппетов + редактор справа.
+// Live path: snippet library plus editor on the right.
 
 @Composable
 private fun LiveSnippetsView(manager: SnippetManager, mono: FontFamily) {
@@ -126,7 +126,7 @@ private fun LiveSnippetsView(manager: SnippetManager, mono: FontFamily) {
 
     val all = manager.snippets
     val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
-    // Выбранный сниппет: явный selectedId, иначе первый в списке (если не в режиме создания).
+    // Selected snippet: explicit selectedId, else the first in the list (unless adding).
     val selected = if (adding) null else (manager.find(selectedId) ?: all.firstOrNull())
 
     Row(Modifier.fillMaxSize()) {
@@ -146,8 +146,8 @@ private fun LiveSnippetsView(manager: SnippetManager, mono: FontFamily) {
                 } else {
                     Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         filtered.forEach { entry ->
-                            // Стабильный onClick на id: иначе клик по любой строке (меняет selectedId
-                            // → рекомпозиция списка) пересоздавал бы лямбды у всех строк и перерисовывал их.
+                            // onClick keyed by id stays stable; otherwise selecting a row would
+                            // recreate lambdas for all rows and redraw them.
                             val onClick = remember(entry.id) { { selectedId = entry.id; adding = false } }
                             LiveSnippetRow(
                                 entry = entry,
@@ -169,8 +169,8 @@ private fun LiveSnippetsView(manager: SnippetManager, mono: FontFamily) {
             if (!adding && selected == null) {
                 EmptyEditorHint()
             } else {
-                // key по идентичности правимого сниппета: при смене выбора/входе в «создать» поля
-                // редактора пересоздаются с нуля, а не тянут значения предыдущего.
+                // Keyed by the edited snippet's identity so the editor's fields reset instead of
+                // carrying over the previous values.
                 key(selected?.id, adding) {
                     SnippetEditor(
                         entry = selected,
@@ -220,12 +220,12 @@ private fun SnippetEditor(
     onSaved: (String) -> Unit,
     onDeleted: () -> Unit,
 ) {
-    // Общее состояние формы (desktop ⇆ mobile): seed из entry, canSave, теги, сборка черновика.
-    // Без ключей remember: редактор пересоздаётся снаружи через key(selected?.id, adding).
+    // Shared form state (desktop and mobile): seeded from entry, tracks canSave/tags, builds the
+    // draft. No remember keys needed; the editor is recreated externally via key(selected?.id, adding).
     val form = remember { SnippetFormState.fromEntry(entry) }
 
-    // Редактор — чистая форма: запуск делается из палитры терминала (активная сессия), хоткеем или
-    // из контекстного меню хоста («Run snippet…»), а не отсюда.
+    // The editor is a pure form; execution happens from the terminal palette, a hotkey, or the
+    // host context menu, not here.
     fun persist(): String = manager.save(form.toDraft())
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -250,8 +250,8 @@ private fun SnippetEditor(
             }
             Column(Modifier.padding(top = 20.dp)) {
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_tags))
-                // Подсказки из других сниппетов (свой исключаем: иначе только что снятый тег вернулся
-                // бы в список). Мемоизация — чтобы правка label/command не пересчитывала скан.
+                // Suggestions from other snippets, excluding this one (else a just-removed tag
+                // would reappear). Memoized so editing label/command doesn't rescan.
                 val tagSugs = remember(manager.snippets, form.tags, form.tagDraft, entry?.id) {
                     snippetTagSuggestions(manager.snippets.filter { it.id != entry?.id }.map { it.snippet }, form.tags, form.tagDraft)
                 }
@@ -267,8 +267,9 @@ private fun SnippetEditor(
             }
             Column(Modifier.padding(top = 20.dp).width(220.dp)) {
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
-                // Коллизию считаем по другим сниппетам (свой хоткей не конфликт): UI не даёт занять
-                // один аккорд дважды, чего [SnippetManager.forShortcut] на чтении не гарантирует.
+                // Conflict is checked against other snippets (this one's own shortcut isn't a
+                // conflict); the UI prevents assigning the same chord twice, which
+                // [SnippetManager.forShortcut] doesn't guarantee on read.
                 val conflict = remember(manager.snippets, form.shortcut, entry?.id) {
                     form.shortcut?.let { manager.shortcutConflict(it, entry?.id) }
                 }
@@ -296,7 +297,7 @@ private fun EmptyEditorHint() {
     }
 }
 
-// --- Теги чипсами (как в New connection) ---
+// --- Tag chips ---
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -314,7 +315,7 @@ private fun SnipTagsField(
     AnchoredDropdown(
         expanded = focused && suggestions.isNotEmpty(),
         onDismiss = { focused = false },
-        focusable = false, // не красть фокус у поля ввода тега
+        focusable = false, // don't steal focus from the tag input field
         trigger = {
             FlowRow(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
@@ -352,7 +353,8 @@ private fun SnipTagsField(
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
             ) {
-                // Тап добавляет тег; фокус остаётся на поле — меню пересчитается без только что добавленного.
+                // Tap adds the tag; focus stays on the field, so the menu recomputes without the
+                // just-added tag.
                 suggestions.forEach { tag ->
                     key(tag) {
                         Box(
@@ -381,7 +383,7 @@ private fun SnipTagPill(tag: String, onRemove: () -> Unit) {
     }
 }
 
-// --- Захват горячей клавиши сниппета ---
+// --- Snippet hotkey capture ---
 
 @Composable
 private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: String?, onCapture: (String?) -> Unit) {
@@ -400,7 +402,7 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: Strin
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {
-                        // Очистка хоткея: Esc/Backspace/Delete снимают назначение.
+                        // Esc/Backspace/Delete clear the assigned shortcut.
                         Key.Escape, Key.Backspace, Key.Delete -> { onCapture(null); true }
                         else -> {
                             val s = SnippetShortcut.format(
@@ -416,8 +418,8 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: Strin
             val text = value ?: if (focused) stringResource(Res.string.lib_snippets_press_keys) else "—"
             Txt(text, color = if (value != null) D.text else D.faint, size = 13.sp, font = mono)
         }
-        // Аккорд уже занят другим сниппетом — назначение остаётся (поле захватывает аккорд), но
-        // предупреждаем явно; на сохранении ничего не блокируем, выбор за пользователем.
+        // The chord may already be assigned to another snippet; the assignment still takes
+        // effect, we just warn — saving is never blocked.
         if (conflictLabel != null) {
             Txt(
                 stringResource(Res.string.lib_snippets_shortcut_conflict, conflictLabel),
@@ -428,7 +430,7 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: Strin
     }
 }
 
-// --- Статичный мок (офскрин-рендер/превью без менеджера) ---
+// --- Static mock (offscreen render/preview without a manager) ---
 
 @Composable
 private fun MockSnippetsView(mono: FontFamily) {
@@ -512,14 +514,14 @@ private fun MockSnippetRow(snippet: MockSnippet, mono: FontFamily) {
     }
 }
 
-// --- Поля редактора ---
+// --- Editor fields ---
 
 @Composable
 private fun FieldLabelSnip(text: String) {
     Txt(text.uppercase(), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
 }
 
-/** Однострочное редактируемое поле (стиль [SnipInput] + плейсхолдер + ввод). */
+/** Single-line editable field ([SnipInput] style plus placeholder and input). */
 @Composable
 private fun SnipEditField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
     val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono) }
@@ -539,7 +541,7 @@ private fun SnipEditField(value: String, onValueChange: (String) -> Unit, placeh
     )
 }
 
-/** Многострочное поле команды (моноширинное, тёмный фон терминала). */
+/** Multiline command field (monospace, terminal-dark background). */
 @Composable
 private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
     val textStyle = remember(mono) { TextStyle(color = D.textBright, fontSize = 13.sp, fontFamily = mono) }
@@ -558,7 +560,7 @@ private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, pla
     )
 }
 
-/** Поле поиска по библиотеке. */
+/** Library search field. */
 @Composable
 private fun SnipSearchField(value: String, onValueChange: (String) -> Unit, mono: FontFamily) {
     val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }

@@ -94,9 +94,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
-// Секция Security: мастер-пароль, биометрия, автоблокировка, журнал событий.
+// Security section: master password, biometrics, auto-lock, event log.
 
-/** Промпт включения биометрии из раздела Безопасность (язык интерфейса — англ., как в остальном UI). */
+/** Prompt for enabling biometrics from the Security section (English, matching the rest of the UI). */
 private val SECURITY_ENABLE_BIOMETRIC_PROMPT = BiometricPrompt(
     title = "Enable biometric unlock",
     cancelLabel = "Cancel",
@@ -104,11 +104,11 @@ private val SECURITY_ENABLE_BIOMETRIC_PROMPT = BiometricPrompt(
 )
 
 /**
- * Живой раздел «Безопасность». Смена мастер-пароля ([VaultGateController.changePassword] через диалог),
- * реальный тумблер разблокировки биометрией (скрыт, когда железа/фактора нет), выбор порога
- * автоблокировки (проводится в idle-таймер гейта), журнал событий и подпись «последняя смена пароля»
- * из реального [SecurityLog]. Двухфакторная аутентификация помечена SOON (ещё не реализована).
- * [controller] == null — мок/превью без vault: показываем нейтральный вид без живых действий.
+ * Live Security section: master password change ([VaultGateController.changePassword] via a
+ * dialog), a real biometric-unlock toggle (hidden when hardware/factor is unavailable), auto-lock
+ * threshold (applied to the gate's idle timer), event log, and "last password change" subtitle
+ * from the real security log. Two-factor auth is marked SOON (not implemented). [controller] ==
+ * null means mock/preview without a vault: a neutral view with no live actions.
  */
 @Composable
 internal fun SecuritySection(
@@ -120,8 +120,8 @@ internal fun SecuritySection(
 ) {
     SectionTitle(stringResource(Res.string.settings_security_title), stringResource(Res.string.settings_security_subtitle))
 
-    // Мастер-пароль: подпись = реальная «последняя смена» из журнала (или нейтральный текст). Чтение
-    // журнала — файловый I/O + JSON-разбор, поэтому уводим его с потока композиции на фоновый диспетчер.
+    // Master password subtitle is the real "last changed" from the log (or a neutral fallback).
+    // Reading the log is file I/O + JSON parsing, so it runs off the composition thread.
     val lastChange by produceState<String?>(null, controller, reload) {
         value = withContext(Dispatchers.Default) { controller?.lastPasswordChangeAt() }
     }
@@ -130,14 +130,14 @@ internal fun SecuritySection(
             Txt(stringResource(Res.string.settings_security_master_password), color = D.text, size = 13.sp, weight = FontWeight.Medium)
             Txt(masterPasswordSubtitle(lastChange), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        // Смена доступна только за живым vault; в мок/превью кнопка неактивна (нечего менять).
+        // Change is only available with a live vault; in mock/preview the button is inert.
         if (controller != null) GhostButton(stringResource(Res.string.settings_change), onClick = onChangeMasterPassword)
         else GhostButton(stringResource(Res.string.settings_change), onClick = {}, fg = D.faint, border = D.line)
     }
     HLine()
 
-    // Разблокировка биометрией: строка только когда на устройстве есть доступная биометрия (desktop
-    // Linux/офскрин — нет, строка скрыта: настраивать нечего).
+    // Biometric unlock row only shown when biometrics are available on the device (e.g. hidden on
+    // headless desktop Linux — nothing to configure).
     val scope = rememberCoroutineScope()
     if (controller != null && controller.canEnableBiometric()) {
         SettingToggleRow(
@@ -156,7 +156,7 @@ internal fun SecuritySection(
         HLine()
     }
 
-    // Автоблокировка: реальный порог простоя, проводится в idle-таймер VaultGate через state.autoLock.
+    // Auto-lock: real idle threshold, applied to VaultGate's idle timer via state.autoLock.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.settings_security_auto_lock), color = D.text, size = 13.sp, weight = FontWeight.Medium)
@@ -166,7 +166,7 @@ internal fun SecuritySection(
     }
     HLine()
 
-    // Двухфакторная аутентификация — ещё не реализована: честная метка SOON вместо фейкового «включена».
+    // Two-factor auth isn't implemented yet: SOON badge instead of a fake "enabled" state.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -175,11 +175,11 @@ internal fun SecuritySection(
             }
             Txt(stringResource(Res.string.settings_security_2fa_desc), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        // Неактивная кнопка (приглушённая) — фича ещё не готова.
+        // Inert (dimmed) button: feature not ready yet.
         GhostButton(stringResource(Res.string.settings_manage), onClick = {}, fg = D.faint, border = D.line)
     }
 
-    // Недавние события безопасности — из реального журнала (или «пока событий нет»).
+    // Recent security events from the real log (or "no events yet").
     Txt(stringResource(Res.string.settings_recent_security_events), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
     val events by produceState(emptyList<SecurityEvent>(), controller, reload) {
         value = withContext(Dispatchers.Default) { controller?.recentSecurityEvents(8) ?: emptyList() }
@@ -196,7 +196,7 @@ internal fun SecuritySection(
     }
 }
 
-/** Подпись под мастер-паролем: реальная «последняя смена» из журнала или нейтральный текст. */
+/** Master password subtitle: real "last changed" from the log, or a neutral fallback. */
 @Composable
 internal fun masterPasswordSubtitle(lastChangeAt: String?): String {
     val moment = lastChangeAt?.let { securityMoment(it) }
@@ -208,7 +208,7 @@ internal fun masterPasswordSubtitle(lastChangeAt: String?): String {
     }
 }
 
-/** Строка события журнала: «Метка[: деталь] · относительное время». */
+/** Log event row: "Label[: detail] · relative time". */
 @Composable
 internal fun securityEventLine(event: SecurityEvent): String {
     val label = event.type.eventLabel()
@@ -216,7 +216,7 @@ internal fun securityEventLine(event: SecurityEvent): String {
     return "$head · ${securityEventTime(event.at)}"
 }
 
-/** Локализованная подпись типа события. */
+/** Localized event type label. */
 @Composable
 private fun SecurityEventType.eventLabel(): String = stringResource(
     when (this) {
@@ -229,7 +229,7 @@ private fun SecurityEventType.eventLabel(): String = stringResource(
     },
 )
 
-/** Относительное время события («сегодня 09:02» / «вчера …» / «N дн. назад»); при непарсе — сырой штамп. */
+/** Relative event time ("today 09:02" / "yesterday …" / "N days ago"); falls back to the raw timestamp. */
 @Composable
 private fun securityEventTime(at: String): String {
     val moment = securityMoment(at) ?: return at
@@ -240,13 +240,13 @@ private fun securityEventTime(at: String): String {
     }
 }
 
-/** Выпадающий список порога автоблокировки ([AutoLockDuration.entries]). */
+/** Auto-lock threshold dropdown ([AutoLockDuration.entries]). */
 @Composable
 private fun AutoLockPicker(current: AutoLockDuration, onPick: (AutoLockDuration) -> Unit) {
     DropdownField(current, AutoLockDuration.entries, label = { it.autoLockLabel() }, onPick = onPick)
 }
 
-/** Локализованная подпись порога автоблокировки. */
+/** Localized auto-lock threshold label. */
 @Composable
 internal fun AutoLockDuration.autoLockLabel(): String = stringResource(
     when (this) {
@@ -259,11 +259,11 @@ internal fun AutoLockDuration.autoLockLabel(): String = stringResource(
 )
 
 /**
- * Диалог смены мастер-пароля: текущий + новый + подтверждение. Кнопка активна лишь при валидном вводе
- * (новый ≥ [MIN_MASTER_PASSWORD_LENGTH] и совпадает с подтверждением). Единственный отказ на сабмите —
- * неверный текущий пароль. Успех закрывает диалог и обновляет журнал ([onChanged]). Известное
- * ограничение: строковые буферы полей живут в slot-table до рекомпозиции (как в форме входа); в vault
- * пароль уходит как [CharArray] и затирается контроллером.
+ * Master password change dialog: current + new + confirm. The submit button is enabled only for
+ * valid input (new password >= [MIN_MASTER_PASSWORD_LENGTH] and matches confirm). The only submit
+ * failure is a wrong current password. Success closes the dialog and refreshes the log
+ * ([onChanged]). Field string buffers persist in the slot table until recomposition (same as the
+ * unlock form); the vault receives the password as a [CharArray] which the controller wipes.
  */
 @Composable
 internal fun ChangeMasterPasswordDialog(
@@ -275,9 +275,9 @@ internal fun ChangeMasterPasswordDialog(
     var fresh by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var wrongCurrent by remember { mutableStateOf(false) }
-    // Argon2id-деривация ключа (дважды) + перезапись vault — намеренно дорогие; гоняем их на фоновом
-    // диспетчере, а не на потоке композиции, иначе UI замирает (на Android — вплоть до ANR). [busy]
-    // держит кнопку неактивной, пока смена идёт, чтобы не запустить её повторно.
+    // Argon2id key derivation (twice) + vault rewrite are intentionally expensive; run them on a
+    // background dispatcher, not the composition thread, or the UI freezes (ANR on Android).
+    // [busy] disables the button while the change is in flight to prevent re-triggering it.
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -289,8 +289,8 @@ internal fun ChangeMasterPasswordDialog(
         if (canSubmit) {
             wrongCurrent = false
             busy = true
-            // Снимаем буферы до запуска корутины (contro­ller их затирает); строки в slot-table живут
-            // до рекомпозиции — их гигиена вне контракта смены, как и в форме входа.
+            // Snapshot the buffers before launching the coroutine (the controller wipes them);
+            // string hygiene in the slot table is out of scope here, same as the unlock form.
             val old = current.toCharArray()
             val next = fresh.toCharArray()
             scope.launch {

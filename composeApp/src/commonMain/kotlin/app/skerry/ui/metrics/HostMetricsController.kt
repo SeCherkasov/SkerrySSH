@@ -13,20 +13,20 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * Периодически опрашивает ресурсы хоста через [exec] (один exec-канал на цикл) и публикует свежий
- * [HostMetrics] в [metrics] для info-панели. Опрос гоняется на [scope] сессии (как
- * [app.skerry.ui.sftp.SftpController]) — переживает переключение вкладок/панелей и останавливается
- * вместе с сессией ([stop] из [app.skerry.ui.connection.ConnectionController.disconnect]).
+ * Periodically polls host resources via [exec] (one exec channel per cycle) and publishes a fresh
+ * [HostMetrics] to [metrics] for the info panel. Polling runs on the session's [scope] (like
+ * [app.skerry.ui.sftp.SftpController]) — survives tab/panel switches and stops with the session
+ * ([stop] from [app.skerry.ui.connection.ConnectionController.disconnect]).
  *
- * Сбой одного опроса (обрыв канала, не-Linux вывод) не роняет цикл и не сбрасывает последний снимок:
- * [metrics] просто не обновляется до следующего удачного цикла.
+ * A single poll failure (dropped channel, non-Linux output) doesn't kill the loop or clear the
+ * last snapshot: [metrics] simply doesn't update until the next successful cycle.
  */
 @Stable
 class HostMetricsController(
     private val exec: suspend (String) -> ExecResult,
     private val scope: CoroutineScope,
-    // Пауза между опросами ПОСЛЕ round-trip (не включает время exec, в котором ещё ~0.4s sleep на
-    // CPU-выборку) — реальный период ≈ intervalMs + длительность exec.
+    // Delay between polls AFTER the round-trip (excludes exec time, which includes a ~0.4s sleep
+    // for the CPU sample) — the real period is approximately intervalMs + exec duration.
     private val intervalMs: Long = 3_000,
 ) {
     var metrics: HostMetrics? by mutableStateOf(null)
@@ -34,13 +34,13 @@ class HostMetricsController(
 
     private var job: Job? = null
 
-    /** Запустить периодический опрос (идемпотентно: повторный вызов не плодит второй цикл). */
+    /** Starts periodic polling (idempotent: a repeat call does not start a second loop). */
     fun start() {
         if (job != null) return
         job = scope.launch {
             while (isActive) {
                 runCatching { exec(METRICS_COMMAND) }
-                    .onFailure { if (it is CancellationException) throw it } // отмену не глотаем
+                    .onFailure { if (it is CancellationException) throw it } // don't swallow cancellation
                     .getOrNull()
                     ?.let { parseHostMetrics(it.stdout) }
                     ?.let { metrics = it }
@@ -49,7 +49,7 @@ class HostMetricsController(
         }
     }
 
-    /** Остановить опрос. */
+    /** Stops polling. */
     fun stop() {
         job?.cancel()
         job = null
@@ -57,13 +57,13 @@ class HostMetricsController(
 
     companion object {
         /**
-         * Одна команда — один round-trip: две выборки /proc/stat для CPU по дельте, затем память,
-         * диск и факты хоста (аптайм, load average, ОС, ядро, число CPU). Маркеры
-         * `@MEM`/`@DISK`/`@UPTIME`/`@LOAD`/`@OS`/`@KERNEL`/`@CPU` разделяют секции для
-         * [parseHostMetrics]. Факты дешёвы (всё из /proc + один файл + uname/nproc), поэтому
-         * опрашиваются тем же циклом; статичные (ОС/ядро/CPU) парсер просто перечитывает.
-         * Рассчитано на POSIX-шелл (`;`-цепочка команд) и Linux (/proc, free -b, df -Pk); на иных
-         * системах отсутствующие секции просто дают `null`-поля (см. [parseHostMetrics]).
+         * One command, one round-trip: two /proc/stat samples for CPU delta, then memory, disk,
+         * and host facts (uptime, load average, OS, kernel, CPU count). Markers
+         * `@MEM`/`@DISK`/`@UPTIME`/`@LOAD`/`@OS`/`@KERNEL`/`@CPU` separate sections for
+         * [parseHostMetrics]. Facts are cheap (all from /proc plus one file and uname/nproc), so
+         * they're polled on the same cycle; the parser just re-reads the static ones (OS/kernel/CPU).
+         * Assumes a POSIX shell (`;`-chained commands) and Linux (/proc, free -b, df -Pk); on other
+         * systems, missing sections simply yield `null` fields (see [parseHostMetrics]).
          */
         const val METRICS_COMMAND: String =
             "grep '^cpu ' /proc/stat; sleep 0.4; grep '^cpu ' /proc/stat; " +

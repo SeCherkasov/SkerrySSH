@@ -13,8 +13,8 @@ class TerminalThemeTest {
     fun catalog_has_seven_distinct_themes() {
         val all = TerminalThemes.all
         assertEquals(7, all.size)
-        assertEquals(all.size, all.map { it.id }.toSet().size, "id тем должны быть уникальны")
-        assertEquals(all.size, all.map { it.displayName }.toSet().size, "имена тем должны быть уникальны")
+        assertEquals(all.size, all.map { it.id }.toSet().size, "theme ids should be unique")
+        assertEquals(all.size, all.map { it.displayName }.toSet().size, "theme names should be unique")
     }
 
     @Test
@@ -26,7 +26,7 @@ class TerminalThemeTest {
     @Test
     fun every_theme_has_exactly_sixteen_ansi_colors() {
         for (theme in TerminalThemes.all) {
-            assertEquals(16, theme.ansi.size, "тема ${theme.id} должна иметь 16 ANSI-цветов")
+            assertEquals(16, theme.ansi.size, "theme ${theme.id} should have 16 ANSI colors")
         }
     }
 
@@ -45,9 +45,9 @@ class TerminalThemeTest {
     }
 
     /**
-     * «Night Sea» обязана в точности воспроизводить исторически захардкоженную палитру рендера
-     * (фон #050E16, текст #E6ECEF, курсор #2BBDEE + прежние ANSI 0..15), иначе смена дефолта тихо
-     * перекрасит существующие сессии.
+     * "Night Sea" must exactly reproduce the renderer's previously hardcoded palette (background
+     * #050E16, foreground #E6ECEF, cursor #2BBDEE, plus the legacy ANSI 0..15), or changing the
+     * default would silently recolor existing sessions.
      */
     @Test
     fun night_sea_matches_legacy_hardcoded_palette() {
@@ -77,6 +77,6 @@ class TerminalThemeTest {
         val ex = runCatching {
             TerminalTheme("x", "X", Color.Black, Color.White, Color.Cyan, ansi = List(3) { Color.Red })
         }.exceptionOrNull()
-        assertNotNull(ex, "конструктор должен отвергать палитру не из 16 цветов")
+        assertNotNull(ex, "the constructor should reject a palette that isn't 16 colors")
     }
 }

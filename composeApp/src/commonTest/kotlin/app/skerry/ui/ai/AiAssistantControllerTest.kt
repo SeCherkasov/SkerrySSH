@@ -73,10 +73,10 @@ class AiAssistantControllerTest {
         c.ask("deploy fails, config has password=hunter2 — why?")
         advanceUntilIdle()
 
-        assertFalse(c.turns[0].text.contains("hunter2"), "секрет не должен остаться в ленте")
-        assertTrue(c.turns[0].text.contains(SecretRedactor.MASK), "лента показывает, что реально ушло")
+        assertFalse(c.turns[0].text.contains("hunter2"), "the secret should not remain in the feed")
+        assertTrue(c.turns[0].text.contains(SecretRedactor.MASK), "the feed shows what actually went out")
         val sent = provider.lastRequest!!.messages
-        assertTrue(sent.none { it.content.contains("hunter2") }, "секрет не должен уйти провайдеру")
+        assertTrue(sent.none { it.content.contains("hunter2") }, "the secret should not go to the provider")
     }
 
     @Test
@@ -90,7 +90,7 @@ class AiAssistantControllerTest {
         advanceUntilIdle()
 
         val sent = provider.lastRequest!!.messages
-        assertTrue(sent.none { it.content.contains("abc123secret") }, "секрет из истории не должен уйти провайдеру")
+        assertTrue(sent.none { it.content.contains("abc123secret") }, "a secret from history should not go to the provider")
     }
 
     @Test
@@ -166,13 +166,13 @@ class AiAssistantControllerTest {
         c.selectProvider(app.skerry.shared.ai.AiProviderKind.OFF)
 
         assertEquals(app.skerry.shared.ai.AiProviderKind.OFF, saved!!.provider)
-        assertEquals("sk-x", saved!!.apiKey, "ключ BYOK не должен пропасть при выключении AI")
+        assertEquals("sk-x", saved!!.apiKey, "the BYOK key should not vanish when AI is disabled")
         assertFalse(c.enabled)
     }
 
     @Test
     fun `save keeps the provider selection intact`() = runTest {
-        // Регрессия: save() BYOK-полей не должен сбрасывать выбор «на устройстве» и модель.
+        // Regression: save() must not reset the device-provider selection or model.
         var saved: AiSettings? = null
         val initial = AiSettings(provider = app.skerry.shared.ai.AiProviderKind.DEVICE, localModelId = "qwen3-4b-q4km")
         val c = AiAssistantController(initial, persist = { saved = it }, providerFactory = { error("unused") }, scope = this)
@@ -191,7 +191,7 @@ class AiAssistantControllerTest {
         c.selectProvider(app.skerry.shared.ai.AiProviderKind.DEVICE)
 
         assertEquals(app.skerry.shared.ai.AiProviderKind.DEVICE, saved!!.provider)
-        assertEquals("sk-x", saved!!.apiKey, "ключ BYOK не должен пропасть при смене провайдера")
+        assertEquals("sk-x", saved!!.apiKey, "the BYOK key should not vanish when switching provider")
     }
 
     @Test
@@ -205,7 +205,7 @@ class AiAssistantControllerTest {
         assertEquals("qwen3-4b-q4km", saved!!.localModelId)
         assertEquals(app.skerry.shared.ai.AiProviderKind.DEVICE, saved!!.provider)
         assertEquals("sk-x", saved!!.apiKey)
-        assertEquals("qwen3-4b-q4km", c.localModel.id, "контроллер сразу отражает выбор")
+        assertEquals("qwen3-4b-q4km", c.localModel.id, "the controller reflects the choice immediately")
     }
 
     @Test

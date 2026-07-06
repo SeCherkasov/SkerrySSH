@@ -6,20 +6,20 @@ import app.skerry.shared.vault.VaultSingletonStore
 import kotlinx.serialization.Serializable
 
 /**
- * Провайдер AI по умолчанию: внешний OpenAI-совместимый (BYOK), локальная модель или [OFF] —
- * AI выключен во всём приложении (глобальный kill-switch, сильнее per-host политик — см. [AiRouter]).
+ * Default AI provider: external OpenAI-compatible (BYOK), local model, or [OFF] — AI disabled
+ * app-wide (global kill switch, overrides per-host policies, see [AiRouter]).
  */
 @Serializable
 enum class AiProviderKind { CLOUD, DEVICE, OFF }
 
 /**
- * Настройки AI-провайдера, хранимые в зашифрованном Vault: выбор провайдера по умолчанию
- * ([provider]) плюс конфиг обеих веток — BYOK ([apiKey]/[model]/[baseUrl]) и локальной модели
- * ([localModelId], id из [app.skerry.shared.ai.local.LocalModelCatalog]). Старые записи без новых
- * полей читаются дефолтами (CLOUD) — поведение BYOK-пользователей не меняется.
+ * AI provider settings stored in the encrypted vault: default provider choice ([provider]) plus
+ * config for both branches — BYOK ([apiKey]/[model]/[baseUrl]) and local model ([localModelId],
+ * an id from [app.skerry.shared.ai.local.LocalModelCatalog]). Old records without the new fields
+ * read as defaults (CLOUD).
  *
- * Настройки синкаются между устройствами, но скачанность локальной модели — свойство устройства:
- * готовность проверяется на месте ([AiRouter] + `LocalModelStore`), не из настроек.
+ * Settings sync across devices, but whether the local model is downloaded is a device property:
+ * readiness is checked on the spot ([AiRouter] + `LocalModelStore`), not from settings.
  */
 @Serializable
 data class AiSettings(
@@ -29,23 +29,23 @@ data class AiSettings(
     val provider: AiProviderKind = AiProviderKind.CLOUD,
     val localModelId: String = "",
 ) {
-    /** Настроен ли внешний (BYOK) провайдер — есть непустой ключ. Про локальную ветку см. [AiRouter]. */
+    /** Whether the external (BYOK) provider is configured — a non-blank key. See [AiRouter] for the local branch. */
     val isConfigured: Boolean get() = apiKey.isNotBlank()
 
     fun toOpenAiConfig(): OpenAiConfig = OpenAiConfig(apiKey = apiKey, model = model, baseUrl = baseUrl)
 
-    // apiKey — секрет: не печатаем его в toString (иначе утечёт в логи/крэш-дампы).
+    // apiKey is a secret: excluded from toString to avoid leaking into logs/crash dumps.
     override fun toString(): String =
         "AiSettings(model=$model, baseUrl=$baseUrl, apiKey=${if (apiKey.isBlank()) "<empty>" else "<redacted>"})"
 }
 
 /**
- * Чтение/запись [AiSettings] как singleton-записи [RecordType.SETTINGS] в [Vault] (фиксированный
- * [SETTINGS_ID], по образцу `SyncSettingsStore`). На залоченном vault [load] отдаёт дефолт
- * (не настроено), [save] требует разблокированного vault. Битый/отсутствующий payload → дефолт.
+ * Reads/writes [AiSettings] as a singleton [RecordType.SETTINGS] record in [Vault] (fixed
+ * [SETTINGS_ID], mirrors `SyncSettingsStore`). On a locked vault, [load] returns the default
+ * (unconfigured); [save] requires an unlocked vault. A corrupt/missing payload falls back to default.
  *
- * Запись типа [RecordType.SETTINGS] синхронизируется всегда — ключ (в шифроблобе E2E) становится
- * доступен на всех устройствах пользователя; сервер видит только шифротекст (zero-knowledge).
+ * [RecordType.SETTINGS] records always sync — the key (inside the E2E ciphertext) becomes
+ * available on all of the user's devices; the server only sees ciphertext (zero-knowledge).
  */
 class AiSettingsStore(private val vault: Vault) {
 
@@ -60,7 +60,7 @@ class AiSettingsStore(private val vault: Vault) {
     }
 
     companion object {
-        /** Стабильный id singleton-записи AI-настроек в vault. */
+        /** Stable id of the AI settings singleton record in the vault. */
         const val SETTINGS_ID = "ai.settings"
     }
 }

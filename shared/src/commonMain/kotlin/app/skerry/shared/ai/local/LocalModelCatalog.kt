@@ -1,19 +1,20 @@
 package app.skerry.shared.ai.local
 
 /**
- * Курируемый каталог локальных GGUF-моделей. Только ungated-репозитории HuggingFace (скачивание
- * без токена) и OSI-лицензии (Apache-2.0/MIT — приложение GPL-3.0). Размеры и sha256 — из
- * LFS-метаданных HF API (`lfs.oid` = sha256 файла); проверены 2026-07-05.
+ * Curated catalog of local GGUF models. Only ungated HuggingFace repos (no-token download) and
+ * OSI licenses (Apache-2.0/MIT — the app is GPL-3.0). Sizes and sha256 come from HF API LFS
+ * metadata (`lfs.oid` = file sha256).
  *
- * Уклон каталога — на код/команды: терминальному ассистенту нужен точный CMD/INFO, а не общая
- * эрудиция. [default] — Qwen2.5-Coder-1.5B: code-специализирована, без reasoning-режима
- * (мгновенный ответ, extraSystem не нужен) и комфортно живёт в RAM телефона (~1.4 ГБ на ctx 4096).
- * Остальные — desktop: Coder-7B (топ по командам), Qwen3-4B и Phi-4 Mini (general-запас).
+ * The catalog skews toward code/commands: the terminal assistant needs precise CMD/INFO, not
+ * general knowledge. [default] is Qwen2.5-Coder-1.5B: code-specialized, no reasoning mode
+ * (instant response, no extraSystem needed), and fits comfortably in phone RAM (~1.4 GB at ctx
+ * 4096). The rest are desktop models: Coder-7B (best at commands), Qwen3-4B and Phi-4 Mini
+ * (general-purpose fallback).
  *
- * `/no_think` в [LocalModel.extraSystem] — только у Qwen3: гасит thinking-режим шаблона (остаточные
- * `<think>`-блоки дополнительно режет провайдер). Qwen2.5-Coder reasoning-режима не имеет; у Qwen3.5
- * soft-switch `/no_think` не работает (нужен `enable_thinking=false`, мост его не пробрасывает) —
- * поэтому 3.5 в каталог не берём.
+ * `/no_think` in [LocalModel.extraSystem] is Qwen3-only: disables the template's thinking mode
+ * (residual `<think>` blocks are additionally stripped by the provider). Qwen2.5-Coder has no
+ * reasoning mode; Qwen3.5's soft-switch `/no_think` doesn't work (needs `enable_thinking=false`,
+ * which the bridge doesn't forward), so 3.5 isn't included in the catalog.
  */
 object LocalModelCatalog {
 
@@ -58,13 +59,13 @@ object LocalModelCatalog {
         license = "Apache-2.0",
     )
 
-    /** Порядок отображения в UI: дефолт первым, затем desktop-модели по размеру. */
+    /** Display order in the UI: default first, then desktop models by size. */
     val models: List<LocalModel> = listOf(qwen25_coder_1_5b, qwen3_4b, phi4mini, qwen25_coder_7b)
 
     val default: LocalModel = qwen25_coder_1_5b
 
     fun byId(id: String): LocalModel? = models.find { it.id == id }
 
-    /** Модель из настроек: пустой/устаревший id → [default] (каталог мог смениться апдейтом). */
+    /** Model from settings: empty/stale id falls back to [default] (an update may have changed the catalog). */
     fun resolve(id: String): LocalModel = byId(id) ?: default
 }

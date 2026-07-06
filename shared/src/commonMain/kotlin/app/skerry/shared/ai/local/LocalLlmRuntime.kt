@@ -6,15 +6,15 @@ import kotlinx.coroutines.flow.Flow
 import okio.Path
 
 /**
- * Движок локального инференса: контракт в ядре, реализация платформенная (`LlamatikRuntime`
- * в jvmShared — llama.cpp за KMP-биндингом). Изолирует конкретный биндинг: смена движка
- * (llama-server, свой NDK-модуль) не трогает провайдер и UI.
+ * Local inference engine: contract lives in the core, implementation is platform-specific
+ * (`LlamatikRuntime` in jvmShared — llama.cpp behind a KMP binding). Isolates the concrete
+ * binding so swapping engines (llama-server, a custom NDK module) doesn't touch the provider or UI.
  *
- * Реализация обязана:
- * - держать модель загруженной между вызовами (загрузка GGUF — секунды и гигабайты RAM,
- *   не грузить на каждый запрос) и переключаться при смене [modelPath];
- * - выполнять блокирующую генерацию вне UI-потока;
- * - сигнализировать сбои [app.skerry.shared.ai.AiException], отмену — пробрасывать.
+ * Implementations must:
+ * - keep the model loaded between calls (GGUF loading takes seconds and gigabytes of RAM, so it
+ *   shouldn't happen per request) and switch when [modelPath] changes;
+ * - run blocking generation off the UI thread;
+ * - signal failures via [app.skerry.shared.ai.AiException] and propagate cancellation.
  */
 interface LocalLlmRuntime {
     fun generate(modelPath: Path, request: AiChatRequest): Flow<AiDelta>

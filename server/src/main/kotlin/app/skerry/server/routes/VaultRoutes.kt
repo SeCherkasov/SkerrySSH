@@ -20,13 +20,13 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.put
 
-/** Допустимые значения открытого поля `type` (зеркалит `RecordType` ядра). */
+/** Allowed values for the plaintext `type` field (mirrors core `RecordType`). */
 private val ALLOWED_TYPES = setOf(
     "HOST", "GROUP", "IDENTITY", "CREDENTIAL", "KNOWN_HOST", "SNIPPET", "TUNNEL", "SETTINGS",
     "TEAM", "TEAM_IDENTITY",
 )
 
-/** Хранилище шифроблобов: обёртка dataKey, дельта-чтение и batch-push с LWW. */
+/** Ciphertext storage: dataKey wrapping, delta reads, and batch push with LWW. */
 fun Route.vaultRoutes(services: Services) {
     get("/vault/keys") {
         val principal = call.jwtPrincipal()
@@ -44,17 +44,17 @@ fun Route.vaultRoutes(services: Services) {
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
         val delta = services.records.delta(principal.accountId, since)
         val cursor = delta.lastOrNull()?.serverSeq ?: since
-        // Фиксируем активность и курсор, до которого устройство дочиталось (для админ-консоли).
+        // Record activity and the cursor the device has read up to (for the admin console).
         services.devices.touch(principal.accountId, principal.deviceId, syncVersion = cursor)
-        // Логируем только содержательные pull'ы — пустые поллинги не засоряют аудит-лог.
+        // Log only non-empty pulls; empty polls shouldn't clutter the audit log.
         if (delta.isNotEmpty()) {
             services.activity.record(
                 principal.accountId, "sync.pull", "delta since $since · ${delta.size} records",
                 deviceId = principal.deviceId,
             )
         }
-        // ПОСЛЕ touch: курсор этого устройства уже учтён в watermark. Список надгробий, которые все
-        // устройства дочитали — клиент по нему компактит локально и перестаёт их пере-пушить.
+        // After touch, so this device's cursor is already reflected in the watermark. Tombstone ids
+        // that all devices have read; the client compacts them locally and stops re-pushing them.
         val compactedIds = services.records.compactedTombstoneIds(principal.accountId)
         call.respond(RecordsResponse(delta.map { it.toDto() }, cursor, compactedIds))
     }
@@ -71,10 +71,10 @@ fun Route.vaultRoutes(services: Services) {
             principal.accountId, "sync.push", "${req.records.size} records · cursor ${result.cursor}",
             deviceId = principal.deviceId,
         )
-        // Уведомляем другие устройства аккаунта: «есть изменения до cursor» (без содержимого). ТОЛЬКО
-        // когда курсор реально продвинулся — no-op push (та же version+deviceId, wins=false) сигнал не
-        // публикует, иначе live-sync уходит в петлю push→WS→push (другое/то же устройство тянет дельту,
-        // пушит всё обратно no-op'ом, что снова разбудило бы WS).
+        // Notify other devices on the account: "changes exist up to cursor" (no payload). Published only
+        // when the cursor actually advanced; a no-op push (same version+deviceId, wins=false) publishes
+        // nothing, otherwise live-sync would loop push -> WS -> push (another/the same device pulls the
+        // delta and pushes it back as a no-op, waking WS again).
         if (result.changed) services.notifier.publish(principal.accountId, result.cursor)
         call.respond(PushResponse(result.records.map { it.toDto() }, result.cursor))
     }

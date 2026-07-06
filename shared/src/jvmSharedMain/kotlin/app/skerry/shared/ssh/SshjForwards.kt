@@ -20,9 +20,9 @@ import net.schmizz.sshj.connection.channel.forwarded.ConnectListener
 import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
 
 /**
- * Перекачать поток до EOF, сбрасывая буфер после каждого чанка (нужно для интерактивного TCP), и
- * прибавить число прокачанных байт к [counter]. Считаем сразу после чтения (до записи), чтобы
- * счётчик был не позади видимых получателю данных — на это опираются тесты телеметрии.
+ * Pumps a stream to EOF, flushing after each chunk (needed for interactive TCP), and adds bytes
+ * pumped to [counter]. Counted right after reading (before writing) so the counter is never
+ * behind data the receiver can already see — telemetry tests rely on this.
  */
 private fun pump(input: InputStream, output: OutputStream, counter: AtomicLong) {
     val buf = ByteArray(8192)
@@ -36,11 +36,11 @@ private fun pump(input: InputStream, output: OutputStream, counter: AtomicLong) 
 }
 
 /**
- * Двунаправленная перекачка между принятым локальным соединением ([near]) и SSH-каналом ([far]):
- * восходящий поток (near→far) крутится на отдельном демоническом потоке, нисходящий (far→near) — на
- * вызывающем. [up] считает байты, ушедшие в канал (к серверу), [down] — пришедшие из канала. По концу
- * ввода near полузакрываем write-сторону канала: сервер увидит EOF и закроет назначение, нисходящий
- * поток завершится. Возврат — после завершения обоих направлений.
+ * Bidirectional pump between an accepted local connection ([near]) and an SSH channel ([far]):
+ * the upstream direction (near->far) runs on a separate daemon thread, downstream (far->near) on
+ * the caller. [up] counts bytes sent into the channel (to the server), [down] counts bytes
+ * received from it. On near's EOF, half-closes the channel's write side so the server sees EOF,
+ * closes the destination, and the downstream direction finishes. Returns once both directions end.
  */
 private fun tunnel(near: Socket, far: Channel, up: AtomicLong, down: AtomicLong, name: String) {
     val upstream = thread(isDaemon = true, name = "$name-up") {
@@ -51,10 +51,10 @@ private fun tunnel(near: Socket, far: Channel, up: AtomicLong, down: AtomicLong,
 }
 
 /**
- * Общий стейт проброса: флаги активности/паузы, счётчики трафика и множество живых ресурсов
- * поднятых туннелей. Выделен, чтобы [AcceptingForward] (`-L`/`-D`, слушатель у нас) и
- * [SshjRemoteForward] (`-R`, слушатель у сервера) не дублировали телеметрию и хореографию
- * pause/close. Все поля потокобезопасны: пишутся из потоков туннелей, читаются из корутин UI.
+ * Shared forward state: activity/pause flags, traffic counters, and the set of live resources of
+ * open tunnels. Extracted so [AcceptingForward] (`-L`/`-D`, listener on our side) and
+ * [SshjRemoteForward] (`-R`, listener on the server) don't duplicate telemetry and pause/close
+ * choreography. All fields are thread-safe: written from tunnel threads, read from UI coroutines.
  */
 internal class ForwardState {
     val active = AtomicBoolean(true)
@@ -63,20 +63,20 @@ internal class ForwardState {
     val down = AtomicLong(0)
     val live: MutableSet<Closeable> = ConcurrentHashMap.newKeySet()
 
-    /** Снять все живые ресурсы (уже поднятые туннели/каналы); ошибки закрытия глотаются. */
+    /** Closes all live resources (already-open tunnels/channels); close errors are swallowed. */
     fun closeAll() {
         live.toList().forEach { runCatching { it.close() } }
     }
 }
 
 /**
- * База для пробросов со слушателем на нашей стороне (`-L`, `-D`). Держит [serverSocket], крутит accept
- * на демоническом потоке, на каждое соединение запускает [handle] в своём потоке. Несёт паузу (на
- * паузе принятое соединение сразу рвём, порт держим) и счётчики трафика в [state], которые наполняет
- * [handle] через [tunnel]. [close] закрывает слушатель и все живые туннели.
+ * Base for forwards with the listener on our side (`-L`, `-D`). Holds [serverSocket], runs accept
+ * on a daemon thread, and starts [handle] on its own thread per connection. Carries pause (paused
+ * connections are dropped immediately, the port stays bound) and traffic counters in [state],
+ * populated by [handle] via [tunnel]. [close] closes the listener and all live tunnels.
  *
- * Поток accept НЕ запускается в конструкторе базы (иначе [handle] мог бы сработать на ещё не
- * достроенном подклассе) — подкласс вызывает [startAccepting] в конце своего init.
+ * The accept thread is NOT started in the base constructor (otherwise [handle] could fire on a
+ * not-yet-constructed subclass) — the subclass calls [startAccepting] at the end of its init.
  */
 internal abstract class AcceptingForward(
     private val serverSocket: ServerSocket,
@@ -96,16 +96,16 @@ internal abstract class AcceptingForward(
     protected fun startAccepting() {
         acceptor = thread(isDaemon = true, name = "$threadName-$boundPort") {
             while (state.active.get() && !serverSocket.isClosed) {
-                // accept роняется IOException при close() — штатное завершение цикла.
+                // accept throws IOException on close() — normal loop termination.
                 val socket = try { serverSocket.accept() } catch (e: IOException) { break }
-                // На паузе порт держим, но соединение сразу рвём — туннель не поднимаем.
+                // Paused: keep the port bound but drop the connection immediately, no tunnel raised.
                 if (state.paused.get()) { runCatching { socket.close() }; continue }
                 thread(isDaemon = true, name = "$threadName-conn-$boundPort") { handle(socket) }
             }
         }
     }
 
-    /** Обслужить принятое соединение: открыть SSH-канал к назначению и прокачать байты через [tunnel]. */
+    /** Serves an accepted connection: opens an SSH channel to the destination and pumps bytes via [tunnel]. */
     protected abstract fun handle(socket: Socket)
 
     final override suspend fun pause() = withContext(Dispatchers.IO) { state.paused.set(true) }
@@ -113,8 +113,8 @@ internal abstract class AcceptingForward(
 
     final override suspend fun close() = withContext(Dispatchers.IO) {
         if (!state.active.compareAndSet(true, false)) return@withContext
-        runCatching { serverSocket.close() } // рвёт accept
-        state.closeAll() // снять уже поднятые туннели
+        runCatching { serverSocket.close() } // breaks accept
+        state.closeAll() // tear down already-open tunnels
         acceptor.join(CLOSE_JOIN_MILLIS)
         Unit
     }
@@ -125,10 +125,10 @@ internal abstract class AcceptingForward(
 }
 
 /**
- * Локальный проброс (`-L`): сами принимаем соединения на слушателе и под каждое открываем
- * direct-tcpip-канал к фиксированному [destHost]:[destPort] (адрес разрешает сервер), затем
- * двунаправленно перекачиваем байты. Собственная перекачка (вместо штатного sshj LocalPortForwarder,
- * прятавшего поток внутри) даёт счётчики трафика и паузу.
+ * Local forward (`-L`): we accept connections on the listener ourselves and open a direct-tcpip
+ * channel per connection to a fixed [destHost]:[destPort] (resolved by the server), then pump
+ * bytes bidirectionally. A custom pump (instead of sshj's stock LocalPortForwarder, which hides
+ * the stream internally) gives us traffic counters and pause support.
  */
 internal class SshjLocalForward(
     private val client: SSHClient,
@@ -149,7 +149,7 @@ internal class SshjLocalForward(
             state.live.add(ch)
             tunnel(socket, ch, state.up, state.down, "skerry-local-$boundPort")
         } catch (e: Exception) {
-            // Обрыв соединения/канала — штатное завершение туннеля.
+            // Connection/channel drop — normal tunnel termination.
         } finally {
             channel?.let { state.live.remove(it); runCatching { it.close() } }
             state.live.remove(socket)
@@ -159,9 +159,9 @@ internal class SshjLocalForward(
 }
 
 /**
- * Динамический проброс (`-D`): на слушателе держим SOCKS5-сервер. Каждое соединение проводит
- * SOCKS5-хэндшейк ([Socks5]) и под запрошенный адрес открывает direct-tcpip-канал, затем
- * двунаправленно перекачивает байты со счётом трафика.
+ * Dynamic forward (`-D`): runs a SOCKS5 server on the listener. Each connection performs the
+ * SOCKS5 handshake ([Socks5]) and opens a direct-tcpip channel to the requested address, then
+ * pumps bytes bidirectionally with traffic counting.
  */
 internal class SshjDynamicForward(
     private val client: SSHClient,
@@ -177,7 +177,7 @@ internal class SshjDynamicForward(
             socket.tcpNoDelay = true
             val input = socket.getInputStream()
             val output = socket.getOutputStream()
-            val target = Socks5.accept(input, output) ?: return // отказ уже отправлен
+            val target = Socks5.accept(input, output) ?: return // rejection already sent
             channel = try {
                 client.newDirectConnection(target.host, target.port)
             } catch (e: IOException) {
@@ -189,7 +189,7 @@ internal class SshjDynamicForward(
             Socks5.replySuccess(output)
             tunnel(socket, ch, state.up, state.down, "skerry-socks-$boundPort")
         } catch (e: Exception) {
-            // Обрыв соединения/канала — штатное завершение туннеля.
+            // Connection/channel drop — normal tunnel termination.
         } finally {
             channel?.let { state.live.remove(it); runCatching { it.close() } }
             state.live.remove(socket)
@@ -199,11 +199,11 @@ internal class SshjDynamicForward(
 }
 
 /**
- * Обратный проброс (`-R`): слушатель держит сервер. Каждое входящее соединение sshj отдаёт нашему
- * ConnectListener каналом [Channel.Forwarded]; под него мы открываем локальный сокет к
- * [destHost]:[destPort] и двунаправленно перекачиваем байты со счётом трафика и поддержкой паузы. На
- * паузе входящий канал сразу закрываем (новые соединения не туннелируем). [close] отменяет привязку на
- * сервере и рвёт живые туннели. Создаётся через [open], которая биндит проброс и узнаёт назначенный порт.
+ * Remote forward (`-R`): the server holds the listener. sshj delivers each incoming connection to
+ * our ConnectListener as a [Channel.Forwarded]; we open a local socket to [destHost]:[destPort]
+ * and pump bytes bidirectionally with traffic counting and pause support. While paused, incoming
+ * channels are closed immediately (no new tunnels). [close] cancels the server-side binding and
+ * tears down live tunnels. Created via [open], which binds the forward and learns the assigned port.
  */
 internal class SshjRemoteForward private constructor(
     private val forwarder: RemotePortForwarder,
@@ -223,7 +223,7 @@ internal class SshjRemoteForward private constructor(
     override val bytesDown: Long get() = state.down.get()
 
     private fun gotConnect(channel: Channel.Forwarded) {
-        // На паузе/после снятия отвергаем входящий канал (сервер увидит отказ), а не молча закрываем.
+        // Paused/torn down: reject the incoming channel (server sees a refusal) instead of silently closing it.
         if (!state.active.get() || state.paused.get()) {
             runCatching { channel.reject(OpenFailException.Reason.ADMINISTRATIVELY_PROHIBITED, "tunnel paused") }
             return
@@ -233,7 +233,7 @@ internal class SshjRemoteForward private constructor(
 
     private fun handle(channel: Channel.Forwarded) {
         state.live.add(channel)
-        // Сначала соединяемся с локальным назначением; не вышло — отвергаем канал и выходим.
+        // Connect to the local destination first; on failure, reject the channel and bail.
         val socket = try {
             Socket(destHost, destPort).apply { tcpNoDelay = true }
         } catch (e: IOException) {
@@ -244,13 +244,14 @@ internal class SshjRemoteForward private constructor(
         }
         state.live.add(socket)
         try {
-            // Подтверждаем открытие forwarded-канала — без этого сервер не начнёт слать данные.
+            // Confirm the forwarded channel open — without this the server won't start sending data.
             channel.confirm()
-            // near = локальный сокет назначения, far = канал от сервера: up — ответ назначения в канал
-            // (к серверу), down — данные удалённого клиента из канала к назначению.
+            // near = local destination socket, far = channel from the server: up = destination's
+            // response into the channel (to the server), down = remote client data from the
+            // channel to the destination.
             tunnel(socket, channel, state.up, state.down, "skerry-remote-$boundPort")
         } catch (e: Exception) {
-            // Обрыв соединения/канала — штатное завершение туннеля.
+            // Connection/channel drop — normal tunnel termination.
         } finally {
             state.live.remove(socket)
             runCatching { socket.close() }
@@ -270,7 +271,7 @@ internal class SshjRemoteForward private constructor(
     }
 
     companion object {
-        /** Забиндить обратный проброс на сервере с нашим ConnectListener и вернуть готовый [PortForward]. */
+        /** Binds the remote forward on the server with our ConnectListener and returns the [PortForward]. */
         fun open(
             forwarder: RemotePortForwarder,
             forwardSpec: RemotePortForwarder.Forward,

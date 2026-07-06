@@ -92,13 +92,13 @@ class HostManagerControllerTest {
 
     @Test
     fun `reload pulls hosts written to the store behind the controller`() {
-        // Миграция при unlock пишет в HostStore напрямую (мимо контроллера); reload синхронизирует
-        // Compose-state со стором, чтобы UI увидел перенаправленные credentialId.
+        // Unlock migration writes to HostStore directly (bypassing the controller); reload
+        // syncs Compose state with the store so the UI sees redirected credentialIds.
         val store = FakeHostStore(Host("1", "a", "a.local", 22, "u"))
         val controller = HostManagerController(store) { "x" }
-        store.put(Host("2", "b", "b.local", 22, "u")) // запись в обход контроллера
+        store.put(Host("2", "b", "b.local", 22, "u")) // written bypassing the controller
 
-        assertEquals(listOf("1"), controller.hosts.map { it.id }) // ещё не видит
+        assertEquals(listOf("1"), controller.hosts.map { it.id }) // not visible yet
         controller.reload()
 
         assertEquals(listOf("1", "2"), controller.hosts.map { it.id })
@@ -184,7 +184,7 @@ class HostManagerControllerTest {
     }
 }
 
-/** In-memory [HostStore] с семантикой upsert/remove по id, как у файловой реализации. */
+/** In-memory [HostStore] with upsert/remove-by-id semantics matching the file-backed implementation. */
 private class FakeHostStore(vararg initial: Host) : HostStore {
     private val entries = initial.toMutableList()
 

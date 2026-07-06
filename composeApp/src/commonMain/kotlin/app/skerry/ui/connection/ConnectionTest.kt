@@ -18,10 +18,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Результат проверки «Test connection»: разовый коннект к хосту без открытия сессии.
- * [Idle] — проверка не запускалась; [Checking] — коннект в полёте; [Success] — связь установлена
- * (с round-trip в мс, если транспорт его сообщил, иначе `null`); [Failure] — с человекочитаемым
- * сообщением о причине (auth/host key/сеть).
+ * Result of a "Test connection" check: a one-shot connect to the host without opening a session.
+ * [Idle] — not run yet; [Checking] — connect in flight; [Success] — connection established (with
+ * round-trip ms if the transport reported it, else `null`); [Failure] — with a human-readable
+ * message describing the cause (auth/host key/network).
  */
 sealed interface ConnectionTestStatus {
     data object Idle : ConnectionTestStatus
@@ -31,14 +31,14 @@ sealed interface ConnectionTestStatus {
 }
 
 /**
- * Разово проверить связь с хостом: подключиться, замерить round-trip (если доступно) и сразу
- * отключиться — соединение временное, сессия не открывается. Исключения транспорта раскладываются в
- * [ConnectionTestStatus.Failure] с дружелюбным сообщением ПО КАТЕГОРИИ (auth/host key/сеть) — сырой
- * текст исключения транспорта в UI НЕ выносим, чтобы не утекли внутренности библиотеки/адрес хоста;
- * сбой самого пинга НЕ роняет тест (связь уже установлена). [CancellationException] пробрасывается
- * (кооперативная отмена не маскируется), а закрытие временного соединения выполняется безусловно
- * ([NonCancellable]), чтобы отмена не оставила сокет открытым. Чистая suspend-функция — зафиксирована
- * [app.skerry.ui.connection.ConnectionTestTest].
+ * One-shot connectivity check: connect, measure round-trip (if available), then disconnect right
+ * away — the connection is temporary, no session is opened. Transport exceptions are mapped to
+ * [ConnectionTestStatus.Failure] with a friendly message by category (auth/host key/network); the
+ * raw transport exception text is never surfaced in the UI (would leak library internals/host
+ * address). A ping failure alone doesn't fail the test (the connection already succeeded).
+ * [CancellationException] is rethrown (cooperative cancellation isn't masked); the temporary
+ * connection is closed unconditionally ([NonCancellable]) so cancellation never leaves a socket
+ * open. Pure suspend function — covered by [app.skerry.ui.connection.ConnectionTestTest].
  */
 suspend fun runConnectionTest(
     transport: SshTransport,
@@ -52,16 +52,16 @@ suspend fun runConnectionTest(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            null // пинг не удался, но коннект состоялся — это успех
+            null // ping failed but the connect succeeded — still a success
         }
         ConnectionTestStatus.Success(rtt)
     } finally {
-        // Закрываем безусловно: даже если корутину уже отменили, временное соединение нельзя бросить открытым.
+        // Close unconditionally: even if the coroutine was already cancelled, the temporary connection must not stay open.
         withContext(NonCancellable) {
             try {
                 conn.disconnect()
             } catch (_: Exception) {
-                // ошибку закрытия временного соединения глушим
+                // swallow the temporary connection's close error
             }
         }
     }
@@ -78,9 +78,9 @@ suspend fun runConnectionTest(
 }
 
 /**
- * Compose-обёртка над [runConnectionTest]: держит [status] как state и гоняет проверку на [scope].
- * Повторный [test] отменяет предыдущую проверку; [reset] возвращает к [ConnectionTestStatus.Idle]
- * (например, при правке полей формы — старый результат больше не релевантен).
+ * Compose wrapper over [runConnectionTest]: holds [status] as state and runs the check on [scope].
+ * A repeat [test] cancels the previous check; [reset] returns to [ConnectionTestStatus.Idle] (e.g.
+ * when form fields are edited — the old result is no longer relevant).
  */
 @Stable
 class ConnectionTestController(

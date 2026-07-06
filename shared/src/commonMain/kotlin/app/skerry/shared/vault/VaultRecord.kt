@@ -2,29 +2,27 @@ package app.skerry.shared.vault
 
 import kotlinx.serialization.Serializable
 
-/** Тип записи vault — совпадает с моделью sync (`docs/skerry-sync-design.md` §2). */
+/** Vault record type — matches the sync model (`docs/skerry-sync-design.md` §2). */
 @Serializable
 enum class RecordType {
     HOST, GROUP, IDENTITY, CREDENTIAL, KNOWN_HOST, SNIPPET, TUNNEL, SETTINGS, TERMINAL_HISTORY,
 
-    /** Ключ и метаданные одной команды (teamKey + имя + роль) — в СОБСТВЕННОМ vault участника. */
+    /** Key and metadata of one team (teamKey + name + role) — in the member's own vault. */
     TEAM,
 
-    /** X25519-пара аккаунта для приёма приглашений Teams (singleton; публичная половина — на сервере). */
+    /** Account X25519 pair for receiving Teams invites (singleton; public half is on the server). */
     TEAM_IDENTITY,
 }
 
 /**
- * Запись локального vault в её зашифрованном виде на диске. Метаданные (`id`, `type`,
- * `version`, `updatedAt`, `deviceId`, `deleted`) хранятся открыто; `blob` —
- * XChaCha20-Poly1305(dataKey, payload) с AAD, привязанным к `id‖type` (защита от
- * перестановки записей между слотами). Та же структура — единица будущей E2E-синхронизации,
- * поэтому `version` — Lamport-счётчик для LWW, а удаление — tombstone (`deleted=true`),
- * а не физическое стирание.
+ * A local vault record in its encrypted on-disk form. Metadata (`id`, `type`, `version`,
+ * `updatedAt`, `deviceId`, `deleted`) is stored in plaintext; `blob` is
+ * XChaCha20-Poly1305(dataKey, payload) with AAD bound to `id‖type` (prevents swapping records
+ * between slots). The same structure is the unit of E2E sync, so `version` is a Lamport counter for
+ * LWW and deletion is a tombstone (`deleted=true`), not physical erasure.
  *
- * `blob` сериализуется kotlinx.serialization (массив байт). `equals`/`hashCode` дефолтные
- * (по ссылке для `ByteArray`) — запись используется как value-контейнер хранения, не как
- * ключ коллекции; сравнивать в тестах по полям, не по записи целиком.
+ * `blob` is serialized by kotlinx.serialization. `equals`/`hashCode` are default (reference-based
+ * for `ByteArray`) — this is a value container, not a collection key; compare by field in tests.
  */
 @Serializable
 data class VaultRecord(

@@ -3,20 +3,19 @@ package app.skerry.ui.terminal
 import android.content.ClipData
 import androidx.compose.ui.platform.ClipEntry
 
-/** Android: текст оборачиваем в [ClipData] (нативный носитель [ClipEntry] на Android). Метка пустая
- *  (`""`, не `null`) — безопаснее для приложений, читающих историю буфера и не ждущих null-label. */
+/** Wraps text in [ClipData] ([ClipEntry]'s native carrier on Android); label is `""`, not `null`. */
 internal actual fun plainTextClipEntry(text: String): ClipEntry =
     ClipEntry(ClipData.newPlainText("", text))
 
-/** Android: берём текст первого элемента [ClipData]; `null`, если буфер пуст или элемент без текста. */
+/** Text of the first [ClipData] item, or `null` if the clipboard is empty or the item has no text. */
 internal actual fun ClipEntry.readPlainText(): String? =
     clipData.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
 
-/** Android: прямого (не-Compose) пути к буферу нет — чтение всегда через штатный Compose-буфер. */
+/** No direct (non-Compose) clipboard read path on Android; reads go through the Compose clipboard. */
 internal actual fun readSystemClipboardDirect(): String? = null
 
-/** Android: прямого (не-Compose) пути к буферу нет — запись всегда через штатный Compose-буфер. */
+/** No direct (non-Compose) clipboard write path on Android; writes go through the Compose clipboard. */
 internal actual fun writeSystemClipboardDirect(text: String): Boolean = false
 
-/** Android: прямого пути нет — чтение всегда через штатный Compose-буфер. */
+/** No direct clipboard path on Android; reads go through the Compose clipboard. */
 internal actual fun systemClipboardDirectHandlesReads(): Boolean = false

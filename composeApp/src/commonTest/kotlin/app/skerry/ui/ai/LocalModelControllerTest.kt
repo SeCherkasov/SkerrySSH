@@ -143,7 +143,7 @@ class LocalModelControllerTest {
         c.delete(model)
         advanceUntilIdle()
 
-        assertTrue(fetchCancelled, "активная закачка должна быть отменена")
+        assertTrue(fetchCancelled, "an active download should be cancelled")
         assertTrue(removed)
         assertEquals(LocalModelStatus.NotInstalled, c.status(model))
     }

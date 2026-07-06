@@ -64,21 +64,18 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
 /**
- * Модалка-онбординг self-hosted sync (в макете её нет — макет показывает только подключённое
- * состояние): адрес сервера + accountId + мастер-пароль, одно действие «Connect» (координатор сам
- * регистрирует новый аккаунт либо входит в существующий — без выбора режима). Zero-knowledge —
- * пароль уходит в [SyncCoordinator] как CharArray и там затирается; здесь держим его строкой ровно
- * до отправки и обнуляем сразу после. Стиль — скрим + карточка, как [DesktopPasswordDialog].
- *
- * Закрывается сама, когда координатор перешёл в [SyncStatus.Online] (успешное подключение).
+ * Self-hosted sync onboarding modal: server URL + accountId + master password, one "Connect" action
+ * (the coordinator registers a new account or logs into an existing one — no mode choice).
+ * Zero-knowledge — the password goes to [SyncCoordinator] as a CharArray and is wiped there; here it's
+ * held as a string only until submit and cleared right after. Scrim + card style, like
+ * [DesktopPasswordDialog]. Closes itself when the coordinator reaches [SyncStatus.Online].
  */
 @Composable
 fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
     val status by sync.status.collectAsState()
 
-    // Предзаполнение из сохранённой привязки (после перезапуска/Reconnect): сервер+аккаунт известны,
-    // нужен только пароль.
+    // Prefill from the saved link (after restart/Reconnect): server+account known, only the password needed.
     val saved = remember { sync.savedConfig }
     var serverUrl by remember { mutableStateOf(saved?.serverUrl ?: "") }
     var account by remember { mutableStateOf(saved?.accountId ?: "") }
@@ -88,8 +85,8 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val form = SyncSetupForm(serverUrl, account)
     val canSubmit = form.canSubmit(password.length) && status != SyncStatus.Busy
 
-    // Закрываемся только если ИМЕННО этот диалог инициировал подключение и оно дошло до Online —
-    // иначе диалог, случайно открытый при уже активной сессии, схлопнулся бы на первой композиции.
+    // Close only if this dialog initiated the connection and it reached Online — otherwise a dialog
+    // opened while a session is already active would collapse on the first composition.
     var connecting by remember { mutableStateOf(false) }
     LaunchedEffect(status) {
         if (connecting && status is SyncStatus.Online) {
@@ -101,12 +98,12 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val submit = submit@{
         if (!canSubmit) return@submit
         connecting = true
-        val pw = password.toCharArray() // координатор затрёт массив
+        val pw = password.toCharArray() // the coordinator wipes the array
         password = ""
         val url = form.normalizedServerUrl
         val acc = form.normalizedAccountId
-        // Запуск держит сам координатор (свой scope) — не привязываем к жизни этого composable.
-        // Один вызов: координатор сам решит регистрировать или входить.
+        // The coordinator owns the launch (its own scope) — not tied to this composable's lifecycle.
+        // One call: the coordinator decides register vs login.
         sync.connect(url, acc, pw, keepConnected)
     }
 
@@ -143,7 +140,7 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
 
             KeepConnectedRow(keepConnected) { keepConnected = it }
 
-            // http:// разрешён (локальный тест/LAN без TLS-прокси), но беззащитен перед MITM — предупреждаем явно.
+            // http:// is allowed (local test/LAN without a TLS proxy) but defenseless against MITM — warn explicitly.
             if (form.isInsecureUrl) {
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Sym("warning", size = 14.sp, color = D.sunset)
@@ -180,7 +177,7 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     }
 }
 
-/** Чекбокс «Keep me connected»: запоминать привязку и восстанавливать сессию без ввода пароля. */
+/** "Keep me connected" checkbox: remember the link and restore the session without re-entering the password. */
 @Composable
 private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(

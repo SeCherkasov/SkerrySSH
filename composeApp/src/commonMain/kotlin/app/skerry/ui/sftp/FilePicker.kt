@@ -1,50 +1,50 @@
 package app.skerry.ui.sftp
 
 /**
- * Выбор локального места для SFTP-передачи нативным платформенным диалогом. Возвращает не «голый»
- * путь, а handle ([DownloadTarget]/[UploadSource]) — потому что на Android выбор даёт `content://`
- * Uri, а не путь файловой системы, который понимает sshj. Поэтому передача всегда идёт через
- * промежуточный (staging) путь, а пост-обработка инкапсулирована в handle:
- * - desktop: staging = реальный путь, финализация/очистка — no-op;
- * - android: staging = временный файл в кэше, финализация копирует его в выбранный Uri.
+ * Picks a local location for an SFTP transfer via the native platform dialog. Returns a handle
+ * ([DownloadTarget]/[UploadSource]) rather than a raw path, because on Android the picker returns a
+ * `content://` Uri, not a filesystem path sshj understands. Transfers always go through a staging
+ * path, with post-processing encapsulated in the handle:
+ * - desktop: staging = the real path, finalize/discard are no-ops;
+ * - android: staging = a temp file in cache, finalize copies it to the chosen Uri.
  *
- * Возвращает `null`, если пользователь отменил выбор или платформа его не поддерживает.
+ * Returns `null` if the user cancelled or the platform doesn't support picking.
  */
 expect suspend fun pickDownloadTarget(suggestedName: String): DownloadTarget?
 
 expect suspend fun pickUploadSource(): UploadSource?
 
 /**
- * Локальная цель скачивания. SFTP-клиент пишет байты в [stagingPath]; по успешном завершении
- * вызывается [finalize] (на Android — копирование staging→Uri), при ошибке/отмене — [discard]
- * (очистка staging). Оркеструет это [app.skerry.ui.files.TransferCoordinator].
+ * Local download target. The SFTP client writes bytes to [stagingPath]; on success [finalize] is
+ * called (on Android, copies staging to the Uri), on error/cancel [discard] is called (cleans up
+ * staging). Orchestrated by [app.skerry.ui.files.TransferCoordinator].
  */
 interface DownloadTarget {
-    /** Имя для UI (баннер передачи). */
+    /** Display name for the UI (transfer banner). */
     val displayName: String
 
-    /** Путь файловой системы, куда SFTP-клиент пишет байты. */
+    /** Filesystem path the SFTP client writes bytes to. */
     val stagingPath: String
 
-    /** Перенести staging в реальную цель. Вызывается ровно один раз при успешной передаче. */
+    /** Moves staging to the real target. Called exactly once on a successful transfer. */
     suspend fun finalize()
 
-    /** Освободить staging без переноса (ошибка/отмена передачи или сбой [finalize]). */
+    /** Releases staging without moving it (transfer error/cancel, or [finalize] failure). */
     suspend fun discard()
 }
 
 /**
- * Локальный источник загрузки. К моменту возврата из [pickUploadSource] байты уже доступны по
- * [stagingPath] (на Android — скопированы из Uri во временный файл). SFTP-клиент читает их оттуда;
- * по завершении (успех или ошибка) [app.skerry.ui.files.TransferCoordinator] вызывает [cleanup].
+ * Local upload source. By the time [pickUploadSource] returns, the bytes are already available at
+ * [stagingPath] (on Android, copied from the Uri to a temp file). The SFTP client reads from there;
+ * on completion (success or error) [app.skerry.ui.files.TransferCoordinator] calls [cleanup].
  */
 interface UploadSource {
-    /** Имя файла на удалённой стороне (без пути). */
+    /** File name on the remote side (no path). */
     val name: String
 
-    /** Путь файловой системы, откуда SFTP-клиент читает байты. */
+    /** Filesystem path the SFTP client reads bytes from. */
     val stagingPath: String
 
-    /** Освободить staging. Вызывается ровно один раз после завершения передачи. */
+    /** Releases staging. Called exactly once after the transfer completes. */
     suspend fun cleanup()
 }

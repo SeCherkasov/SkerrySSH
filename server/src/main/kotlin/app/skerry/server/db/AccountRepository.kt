@@ -8,10 +8,10 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
-/** Аккаунты: регистрация (SRP-верификатор + обёртка dataKey) и чтение. */
+/** Accounts: registration (SRP verifier + wrapped dataKey) and lookup. */
 class AccountRepository(private val db: Database) {
 
-    /** Бросает [IllegalStateException], если аккаунт уже существует. */
+    /** Throws [IllegalStateException] if the account already exists. */
     suspend fun create(
         accountId: String,
         srpSalt: String,
@@ -31,8 +31,8 @@ class AccountRepository(private val db: Database) {
                 it[createdAt] = now
             }
         } catch (e: ExposedSQLException) {
-            // Гонка между exists-проверкой и insert (PostgreSQL, pool>1): PK-нарушение трактуем
-            // как «аккаунт уже есть» — тот же контракт, что у быстрой проверки выше.
+            // Race between the exists check and insert (PostgreSQL, pool>1): treat a PK violation
+            // as "account already exists", same contract as the check above.
             throw IllegalStateException("account already exists", e)
         }
         AccountRow(accountId, srpSalt, srpVerifier, wrappedDataKey, 0)

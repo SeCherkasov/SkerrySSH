@@ -7,12 +7,12 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Файловое хранилище привязки к sync-серверу (desktop): `sync.json` рядом с прочей конфигурацией,
- * права 0600 через [PrivateConfig] (как у остальных конфиг-файлов). Хранит только НЕсекретное —
- * URL сервера, accountId и стабильный deviceId; токены и пароль здесь не лежат (переавторизация по
- * мастер-паролю). Формат — `key=urlencoded` построчно (без внешних зависимостей: composeApp не тянет
- * kotlinx.serialization); URL-кодирование экранирует переносы строк, поэтому разбор построчный
- * безопасен. Чтение best-effort: битый/отсутствующий файл → `null` (sync просто выключен).
+ * File-backed sync-server binding store (desktop): `sync.json` alongside other config, mode 0600
+ * via [PrivateConfig]. Holds only non-secret data — server URL, accountId, and a stable deviceId;
+ * no tokens or password (re-auth uses the master password). Format is line-based `key=urlencoded`
+ * (no extra dependency: composeApp does not pull in kotlinx.serialization); URL-encoding escapes
+ * newlines, so line-based parsing is safe. Reads are best-effort: a missing or corrupt file
+ * yields `null` (sync is simply off).
  */
 class FileSyncConfigStore(private val path: Path) : SyncConfigStore {
 

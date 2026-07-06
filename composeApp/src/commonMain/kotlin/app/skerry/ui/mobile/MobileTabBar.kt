@@ -33,12 +33,11 @@ import app.skerry.ui.generated.resources.nav_tab_snippets
 import app.skerry.ui.generated.resources.nav_tab_vault
 import org.jetbrains.compose.resources.stringResource
 
-// Нижний таб-бар мобильного каркаса (вынос из MobileDesignApp — чистый перенос).
+// Mobile bottom tab bar.
 
 /**
- * Нижний таб-бар (5 табов): полупрозрачный тёмный фон + верхняя cyan-линия,
- * активный таб — cyanBright, остальные — faint. Высота контента ~64dp, ниже — отступ под системную
- * навигацию (home-indicator).
+ * Bottom tab bar: translucent dark background + top cyan line; active tab cyanBright, others faint.
+ * Content height ~64dp, with padding below for the system navigation (home indicator).
  */
 @Composable
 internal fun MobileTabBar(state: MobileDesignState, modifier: Modifier = Modifier) {

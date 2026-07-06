@@ -12,18 +12,17 @@ import app.skerry.ui.known.shortFingerprint
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Чистая логика мобильного экрана Known hosts поверх живого [app.skerry.ui.known.KnownHostsController]:
- * без таблицы и боковой панели сравнения отпечатков — строки-карточки и баннер смены ключа с
- * Accept/Reject прямо в баннере.
+ * Pure logic for the mobile Known hosts screen over the live
+ * [app.skerry.ui.known.KnownHostsController]: no table or side-by-side fingerprint comparison,
+ * just row cards and a key-change banner with Accept/Reject inline.
  */
 
-/** Тип ключа без префикса `ssh-` (ed25519, rsa, …). */
+/** Key type without the `ssh-` prefix (ed25519, rsa, …). */
 internal fun mobileKnownKeyType(keyType: String): String = keyType.removePrefix("ssh-")
 
 /**
- * Подпись строки known-host: `<тип> · <короткий отпечаток>` для доверенного ключа,
- * `<тип> · changed` для строки с незакрытой сменой ключа — точного отпечатка не показываем,
- * он под вопросом.
+ * Known-host row subtitle: `<type> · <short fingerprint>` for a trusted key, `<type> · changed`
+ * for a row with an unresolved key change (the exact fingerprint isn't shown since it's in question).
  */
 @Composable
 internal fun mobileKnownSubtitle(entry: KnownHostEntry): String {
@@ -35,16 +34,16 @@ internal fun mobileKnownSubtitle(entry: KnownHostEntry): String {
     }
 }
 
-/** Иконка статуса строки: `verified` (доверен) / `error` (ключ сменился). */
+/** Row status icon: `verified` (trusted) / `error` (key changed). */
 internal fun mobileKnownStatusIcon(status: KnownHostStatus): String =
     if (status == KnownHostStatus.Changed) "error" else "verified"
 
-/** Заголовок баннера смены ключа: `Key changed: <host>`. */
+/** Key-change banner title: `Key changed: <host>`. */
 @Composable
 internal fun mobileKnownBannerTitle(mismatch: HostKeyMismatch): String =
     stringResource(Res.string.shtail_known_key_changed_title, mismatch.host)
 
-/** Тело баннера: какой ключ сменился + призыв проверить. */
+/** Banner body: which key type changed, prompting verification. */
 @Composable
 internal fun mobileKnownBannerBody(mismatch: HostKeyMismatch): String =
     stringResource(Res.string.shtail_known_mismatch_body, mobileKnownKeyType(mismatch.keyType).uppercase())

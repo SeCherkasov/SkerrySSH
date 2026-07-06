@@ -47,18 +47,18 @@ import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.syncFailureText
 import org.jetbrains.compose.resources.stringResource
 
-// Секция Sync: статус движка синхронизации + тумблеры «что синхронизировать».
+// Sync section: sync engine status plus "what syncs" toggles.
 
 @Composable
 internal fun SyncSection(state: DesktopDesignState) {
     SectionTitle(stringResource(Res.string.settings_sync_title), stringResource(Res.string.settings_sync_subtitle))
-    // Мок-путь и живой путь — разные composable (а не условный remember/collectAsState в одном теле):
-    // rememberCoroutineScope/collectAsState должны вызываться безусловно в своём composable (правило
-    // слотовой таблицы Compose). LocalSync.current стабилен (staticCompositionLocalOf), но строгий
-    // паттерн — ветвление на отдельные функции, каждая со своими remember-вызовами.
+    // Mock path and live path are separate composables (not a conditional remember/collectAsState in
+    // one body): remember/collectAsState must be called unconditionally within their composable
+    // (Compose slot table rule). LocalSync.current is stable (staticCompositionLocalOf), but the
+    // strict pattern branches into separate functions, each with its own remember calls.
     val sync = LocalSync.current
     if (sync == null) {
-        // Мок-путь/превью без бэкенда: статичная карточка макета (подключённое состояние).
+        // Mock/preview path with no backend: static card in the connected state.
         SyncStatusCard("cloud_done", D.moss, stringResource(Res.string.settings_sync_synced_ago), stringResource(Res.string.settings_sync_summary_mock)) {
             GhostButton(stringResource(Res.string.settings_sync_now), onClick = {})
         }
@@ -67,7 +67,7 @@ internal fun SyncSection(state: DesktopDesignState) {
     }
     Txt(stringResource(Res.string.settings_what_syncs), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
     if (sync == null) {
-        // Превью без бэкенда: статичные тумблеры (как в макете).
+        // Preview with no backend: static toggles (as in the mockup).
         SettingToggleRow(stringResource(Res.string.settings_hosts_groups), "", on = true, onToggle = {})
         SettingToggleRow(stringResource(Res.string.settings_snippets), "", on = true, onToggle = {})
     } else {
@@ -76,17 +76,17 @@ internal fun SyncSection(state: DesktopDesignState) {
 }
 
 /**
- * Живые тумблеры «что синхронизировать» (уровень аккаунта): пишут [SyncSettings] в vault через
- * координатор, изменение уезжает тем же live-push. «SSH keys» и «Terminal history» из макета убраны
- * сознательно: ключи нужны для аутентификации хостов и синкаются всегда вместе с «Hosts & groups»
- * (отдельный выключатель сломал бы связки host→credential), а истории терминала как фичи ещё нет.
+ * Live "what syncs" toggles (account level): write [SyncSettings] to the vault through the
+ * coordinator; a change goes out via the same live push. "SSH keys" and "Terminal history" from the
+ * mockup are omitted deliberately: keys authenticate hosts and always sync with "Hosts & groups" (a
+ * separate switch would break the host-credential link), and terminal history isn't a feature yet.
  */
 @Composable
 private fun WhatSyncsToggles(sync: app.skerry.ui.sync.SyncCoordinator) {
     val settings = sync.syncSettings.collectAsState().value
-    LaunchedEffect(Unit) { sync.refreshSyncSettings() } // vault уже открыт на экране настроек
-    // В onToggle читаем АКТУАЛЬНОЕ значение из flow, не снимок композиции: иначе быстрый второй тап
-    // (по другому тумблеру) до перерисовки откатил бы первый (stale-closure write-write).
+    LaunchedEffect(Unit) { sync.refreshSyncSettings() } // vault is already open on the settings screen
+    // onToggle reads the current value from the flow, not the composition snapshot: otherwise a fast
+    // second tap (on the other toggle) before recomposition would revert the first (stale-closure write-write).
     SettingToggleRow(stringResource(Res.string.settings_hosts_groups), "", on = settings.syncHosts, onToggle = {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncHosts = !current.syncHosts))
@@ -97,11 +97,11 @@ private fun WhatSyncsToggles(sync: app.skerry.ui.sync.SyncCoordinator) {
     })
 }
 
-/** Живой статус sync: безусловный collectAsState внутри своего composable (операции — на scope координатора). */
+/** Live sync status: unconditional collectAsState inside its own composable (operations run on the coordinator's scope). */
 @Composable
 private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: DesktopDesignState) {
-    // Sync владеет ДВИЖКОМ синхронизации: статус + «Sync now». Подключение/отвязка/устройства живут
-    // во вкладке Account — здесь их НЕ дублируем; в несоединённых состояниях ведём в Account.
+    // Sync owns the sync engine: status + "Sync now". Connect/unlink/devices live in the Account
+    // tab and are not duplicated here; disconnected states link out to Account.
     val toAccount = { state.showSettingsTab(SettingsTab.Account) }
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> SyncStatusCard(
@@ -124,7 +124,7 @@ private fun LiveSyncStatus(sync: app.skerry.ui.sync.SyncCoordinator, state: Desk
     }
 }
 
-/** Карточка статуса sync: иконка + заголовок/подпись + правый слот (кнопки действий). */
+/** Sync status card: icon, title/subtitle, and a right-side slot for action buttons. */
 @Composable
 private fun SyncStatusCard(icon: String, iconColor: Color, title: String, subtitle: String, action: @Composable () -> Unit) {
     Row(

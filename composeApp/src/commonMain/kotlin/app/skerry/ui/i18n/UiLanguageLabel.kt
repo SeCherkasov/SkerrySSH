@@ -6,9 +6,8 @@ import app.skerry.ui.generated.resources.language_system
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Отображаемое имя языка для пикера (Appearance → Language): конкретные языки — автонимом
- * ([UiLanguage.displayName]: «English», «Русский»), режим «System» локализуется по текущему языку
- * интерфейса.
+ * Display name of a language for the picker (Appearance → Language): concrete languages use
+ * their autonym ([UiLanguage.displayName]), "System" is localized to the current UI language.
  */
 @Composable
 fun UiLanguage.label(): String = when (this) {

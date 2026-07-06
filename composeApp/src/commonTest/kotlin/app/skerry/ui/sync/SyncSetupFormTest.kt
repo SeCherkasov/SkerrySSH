@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Валидация формы настройки sync: http(s)-адрес + accountId + непустой пароль. */
+/** Sync setup form validation: http(s) URL + accountId + non-empty password. */
 class SyncSetupFormTest {
 
     @Test
@@ -38,7 +38,7 @@ class SyncSetupFormTest {
         assertFalse(SyncSetupForm("ssh://host", "maya").canSubmit(8))
         assertFalse(SyncSetupForm("sync.skerry.dev", "maya").canSubmit(8))
         assertFalse(SyncSetupForm("", "maya").canSubmit(8))
-        assertFalse(SyncSetupForm("https://", "maya").canSubmit(8)) // схема без хоста
+        assertFalse(SyncSetupForm("https://", "maya").canSubmit(8)) // scheme without a host
     }
 
     @Test
@@ -49,7 +49,7 @@ class SyncSetupFormTest {
 
     @Test
     fun http_flagged_insecure_but_still_submittable() {
-        // http:// разрешён для локального теста (без TLS-прокси), но помечается небезопасным — UI предупреждает.
+        // http:// is allowed for local testing (no TLS proxy) but flagged insecure; the UI warns.
         val http = SyncSetupForm("http://localhost:8443", "maya")
         assertTrue(http.isInsecureUrl)
         assertTrue(http.canSubmit(8))
@@ -58,7 +58,7 @@ class SyncSetupFormTest {
     @Test
     fun https_not_flagged_insecure() {
         assertFalse(SyncSetupForm("https://sync.skerry.dev", "maya").isInsecureUrl)
-        // Хвостовые пробелы не должны прятать http:// от проверки (нормализуем перед сверкой схемы).
+        // Trailing whitespace must not hide http:// from the check (normalize before comparing scheme).
         assertTrue(SyncSetupForm("  http://box.lan  ", "maya").isInsecureUrl)
     }
 }

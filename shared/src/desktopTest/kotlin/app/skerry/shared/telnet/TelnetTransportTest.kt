@@ -25,9 +25,9 @@ private const val DO = 253
 private const val ECHO = 1
 
 /**
- * Интеграционные тесты Telnet-транспорта против сырого [ServerSocket] в этом же процессе.
- * Проверяют неготиацию опций (сервер шлёт IAC WILL ECHO → клиент отвечает IAC DO ECHO) и
- * прозрачную передачу прикладных данных (эхо-сервер).
+ * Integration tests for the Telnet transport against a raw [ServerSocket] in-process.
+ * Cover option negotiation (server sends IAC WILL ECHO -> client replies IAC DO ECHO) and
+ * transparent passthrough of application data (echo server).
  */
 class TelnetTransportTest {
 
@@ -45,7 +45,7 @@ class TelnetTransportTest {
         runCatching { server.close() }
     }
 
-    /** Принять одно соединение и обработать его в фоне через [handle]. */
+    /** Accept one connection and handle it in the background via [handle]. */
     private fun serve(handle: (Socket) -> Unit) {
         thread(name = "telnet-test-server", isDaemon = true) {
             runCatching {
@@ -66,14 +66,14 @@ class TelnetTransportTest {
             negotiated.complete(buf.copyOf(n.coerceAtLeast(0)))
         }
         val conn = TelnetTransport().connect(SshTarget(host = server.inetAddress.hostAddress, port = server.localPort, username = ""), SshAuth.Password(""))
-        // Сбор вывода запускает цикл чтения канала: кодек обработает входящую неготиацию и отправит
-        // ответ в сокет. Без активного коллектора канал не читается и обмена не будет.
+        // Collecting output drives the channel's read loop: the codec handles the incoming
+        // negotiation and writes the reply to the socket. Without an active collector nothing is read.
         val collector = launch(Dispatchers.IO) {
             runCatching { conn.openShell(PtySize()).output.collect { } }
         }
         try {
-            // Java-Future.get с таймаутом: блокирующий get() не реагирует на отмену корутины, поэтому
-            // ограничиваем его сам (иначе при сбое обмена тест завис бы навсегда).
+            // Java Future.get with a timeout: the blocking get() ignores coroutine cancellation,
+            // so bound it explicitly (otherwise a failed exchange would hang the test forever).
             val reply = withContext(Dispatchers.IO) {
                 negotiated.get(TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
             }
@@ -88,7 +88,7 @@ class TelnetTransportTest {
     @Test
     fun `application bytes flow through to the terminal`() = runBlocking {
         serve { socket ->
-            // Простое эхо: копируем ввод обратно (без неготиации).
+            // Simple echo: copy input back (no negotiation).
             val input = socket.getInputStream()
             val output = socket.getOutputStream()
             val buf = ByteArray(256)

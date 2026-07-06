@@ -10,10 +10,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
- * Асимметричный слой для Teams-шеринга: sealed-конверт (crypto_box_seal, X25519) позволяет
- * запечатать teamKey на публичный ключ участника так, что открыть его может только владелец
- * секретной половины. Как и в [IonspinVaultCryptoTest], инварианты проверяются поведением
- * (открылся/не открылся), а не сравнением байтов ключей.
+ * Asymmetric layer for team sharing: a sealed envelope (crypto_box_seal, X25519) lets a teamKey
+ * be sealed to a member's public key so only the holder of the secret half can open it. As in
+ * [IonspinVaultCryptoTest], invariants are checked by behavior (opens/doesn't), not byte comparison.
  */
 class SealedEnvelopeCryptoTest {
 
@@ -55,7 +54,7 @@ class SealedEnvelopeCryptoTest {
 
     @Test
     fun `openSealedEnvelope returns null on a blob too short for a sealed box`() = cryptoTest {
-        // Конверт приходит с сервера (недоверенный источник): мусор = обычный провал (null), не бросок.
+        // Envelope comes from the server (untrusted source): garbage input yields null, not a throw.
         val recipient = crypto.newSharingKeyPair()
 
         assertNull(crypto.openSealedEnvelope(recipient, ByteArray(0)))
@@ -96,8 +95,8 @@ class SealedEnvelopeCryptoTest {
 
     @Test
     fun `sharing key pair survives serialization of both halves`() = cryptoTest {
-        // Пара хранится записью vault (TEAM_IDENTITY) и восстанавливается на другом устройстве:
-        // восстановленная из байтов пара должна открывать конверты, запечатанные на исходную.
+        // The pair is stored as a vault record (TEAM_IDENTITY) and restored on another device:
+        // the pair rebuilt from bytes must open envelopes sealed to the original.
         val original = crypto.newSharingKeyPair()
         val restored = crypto.sharingKeyPairFromBytes(original.publicKey, original.exportSecretKey())
         val envelope = crypto.sealForRecipient(original.publicKey, "roundtrip".encodeToByteArray())

@@ -70,7 +70,7 @@ class AiRouterTest {
 
     @Test
     fun `permissive with device default still routes on-device`() {
-        // Выбор пользователя «на устройстве» уважается и там, где облако разрешено.
+        // Explicit on-device choice is respected even where cloud is allowed.
         val r = route(AiPolicy.Permissive, deviceSettings, installed = true)
         assertIs<AiEndpoint.Device>(assertIs<AiRoute.Use>(r).endpoint)
     }
@@ -83,7 +83,7 @@ class AiRouterTest {
 
     @Test
     fun `off provider wins over strict local routing`() {
-        // Глобальный «AI выключен» сильнее per-host политики: даже Strict со скачанной моделью не маршрутизирует.
+        // Global AI-off overrides per-host policy: even Strict with a downloaded model does not route.
         val r = route(AiPolicy.Strict, AiSettings(provider = AiProviderKind.OFF), installed = true)
         assertEquals(AiRoute.Blocked(AiRoute.Reason.AI_DISABLED), r)
     }

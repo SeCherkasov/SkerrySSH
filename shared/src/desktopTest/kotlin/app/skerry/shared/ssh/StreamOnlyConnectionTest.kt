@@ -6,21 +6,21 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 /**
- * Тесты базы [StreamOnlyConnection]: все возможности SSH, отсутствующие у потоковых протоколов
- * (exec, SFTP, пробросы), бросают [UnsupportedOperationException] с именем протокола в сообщении.
+ * Base tests for [StreamOnlyConnection]: every SSH capability missing from stream-only protocols
+ * (exec, SFTP, forwarding) throws [UnsupportedOperationException] with the protocol name in the message.
  */
 class StreamOnlyConnectionTest {
 
     private class TestConnection : StreamOnlyConnection("Проток") {
         override val isConnected: Boolean get() = false
         override suspend fun openShell(size: PtySize, term: String): ShellChannel =
-            throw UnsupportedOperationException("не нужен в тесте")
+            throw UnsupportedOperationException("not needed in the test")
         override suspend fun disconnect() = Unit
     }
 
     private fun assertUnsupported(block: suspend () -> Unit) {
         val e = assertFailsWith<UnsupportedOperationException> { runBlocking { block() } }
-        assertTrue(e.message!!.startsWith("Проток не поддерживает"), "сообщение должно нести имя протокола: ${e.message}")
+        assertTrue(e.message!!.startsWith("Проток does not support"), "message should carry the protocol name: ${e.message}")
     }
 
     @Test

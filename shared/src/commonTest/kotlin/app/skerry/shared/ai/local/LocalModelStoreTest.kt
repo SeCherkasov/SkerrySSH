@@ -37,7 +37,7 @@ class LocalModelStoreTest {
     @Test
     fun `model is not installed when file size differs from catalog`() {
         fs.createDirectories(dir)
-        fs.write(store.path(model)) { writeUtf8("short") } // 5 байт вместо 10
+        fs.write(store.path(model)) { writeUtf8("short") } // 5 bytes instead of 10
         assertFalse(store.isInstalled(model))
     }
 
@@ -71,7 +71,7 @@ class LocalModelStoreTest {
 
     @Test
     fun `delete is a no-op when nothing was downloaded`() {
-        store.delete(model) // не должно бросить
+        store.delete(model) // must not throw
         assertFalse(store.isInstalled(model))
     }
 }

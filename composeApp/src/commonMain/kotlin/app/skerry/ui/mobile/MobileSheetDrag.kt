@@ -35,14 +35,14 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * Перетаскивание мобильного нижнего листа за хват. Тянем вниз — лист едет за пальцем; на отпускании
- * решение зависит и от позиции, и от скорости жеста: уносится вниз и закрывается ([onDismiss]) при
- * дотягивании за порог ИЛИ резком flick вниз, а при движении вверх (резкий свайп вверх) — всегда
- * пружинно возвращается к нулю. Вверх лист не уезжает (`coerceAtLeast 0`), жест висит только на зоне
- * хвата ([SheetDrag.handle]), чтобы не конфликтовать со скроллом содержимого.
+ * Drag-to-dismiss for a mobile bottom sheet via its handle. Dragging down follows the finger; on
+ * release, the outcome depends on both position and gesture velocity: it slides down and dismisses
+ * ([onDismiss]) past the threshold or on a sharp downward flick, while a sharp upward move always
+ * springs back to zero. The sheet never moves above zero (`coerceAtLeast 0`); the gesture is scoped
+ * to the handle area ([SheetDrag.handle]) to avoid conflicting with content scroll.
  *
- * Применение: [SheetDrag.sheet] — на контейнер листа (смещение + замер высоты для доезда вниз),
- * [SheetDrag.handle] — на Box с полоской-хватом (ловит жест).
+ * Usage: [SheetDrag.sheet] on the sheet container (offset + height measurement for the dismiss
+ * animation), [SheetDrag.handle] on the handle-bar Box (captures the gesture).
  */
 @Composable
 fun rememberSheetDrag(onDismiss: () -> Unit, dismissThreshold: Dp = 96.dp): SheetDrag {
@@ -50,10 +50,9 @@ fun rememberSheetDrag(onDismiss: () -> Unit, dismissThreshold: Dp = 96.dp): Shee
     val scope = rememberCoroutineScope()
     val dragY = remember { Animatable(0f) }
     val thresholdPx = with(density) { dismissThreshold.toPx() }
-    // Скорость flick вниз (px/с), за которой жест закрывает лист сам, без дотягивания за порог.
+    // Downward flick velocity (px/s) above which the gesture dismisses on its own, without reaching the threshold.
     val flingVelocityPx = with(density) { 450.dp.toPx() }
-    // Скорость движения вверх (px/с), за которой жест ВСЕГДА отменяет закрытие — даже если лист уже
-    // был стянут за порог. Лечит «резкий свайп вверх, а лист всё равно уходит вниз».
+    // Upward velocity (px/s) above which the gesture always cancels dismissal, even past the threshold.
     val cancelVelocityPx = with(density) { 250.dp.toPx() }
     return remember(thresholdPx, flingVelocityPx, cancelVelocityPx, onDismiss) {
         SheetDrag(dragY, scope, thresholdPx, flingVelocityPx, cancelVelocityPx, onDismiss)
@@ -68,22 +67,22 @@ class SheetDrag internal constructor(
     private val cancelVelocityPx: Float,
     private val onDismiss: () -> Unit,
 ) {
-    // Высота листа в px — чтобы при закрытии доехать ровно за нижний край, а не дёрнуться.
+    // Sheet height in px, so the dismiss animation ends exactly past the bottom edge.
     private var heightPx by mutableStateOf(0f)
     private var dismissing = false
 
-    /** Навесить на контейнер листа: вертикальное смещение при перетаскивании + замер высоты. */
+    /** Applied to the sheet container: vertical offset while dragging plus height measurement. */
     val sheet: Modifier = Modifier
         .offset { IntOffset(0, dragY.value.roundToInt()) }
         .onSizeChanged { heightPx = it.height.toFloat() }
 
-    /** Навесить на зону хвата: ловит вертикальный жест перетаскивания. */
+    /** Applied to the handle area: captures the vertical drag gesture. */
     val handle: Modifier = Modifier.pointerInput(Unit) {
         val tracker = VelocityTracker()
         detectVerticalDragGestures(
             onDragStart = {
                 tracker.resetTracking()
-                // Перехватываем палец у летящей spring-back анимации, чтобы новый жест не дрался с ней.
+                // Stop an in-flight spring-back animation so it doesn't fight the new gesture.
                 scope.launch { dragY.stop() }
             },
             onVerticalDrag = { change, dy ->
@@ -94,9 +93,8 @@ class SheetDrag internal constructor(
             },
             onDragEnd = {
                 if (dismissing) return@detectVerticalDragGestures
-                // y > 0 — палец летит вниз, y < 0 — вверх. Любое отчётливое движение вверх ВСЕГДА
-                // отменяет закрытие (даже если лист уже стянут за порог). Иначе закрываем при flick
-                // вниз или дотягивании за порог.
+                // y > 0 is downward, y < 0 is upward. A clear upward move always cancels dismissal
+                // (even past the threshold); otherwise dismiss on a downward flick or past the threshold.
                 val velocityY = tracker.calculateVelocity().y
                 val movingUp = velocityY < -cancelVelocityPx
                 val flungDown = velocityY > flingVelocityPx
@@ -129,9 +127,9 @@ class SheetDrag internal constructor(
 }
 
 /**
- * Единый хват нижнего листа: полноширинная тач-зона (ловит [SheetDrag.handle]) и центрированная
- * полоска одного размера/цвета/скругления на всех мобильных листах. Сам владеет вертикальными
- * отступами (над/под полоской), поэтому колонке листа верхний паддинг для хвата задавать не нужно.
+ * Shared bottom sheet handle: full-width touch zone (captures [SheetDrag.handle]) and a centered
+ * bar of consistent size/color/radius across mobile sheets. Owns its own vertical padding, so the
+ * sheet's column needs no top padding for the handle.
  */
 @Composable
 fun SheetHandle(drag: SheetDrag, modifier: Modifier = Modifier) {

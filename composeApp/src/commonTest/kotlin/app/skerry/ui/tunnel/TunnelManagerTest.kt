@@ -65,7 +65,7 @@ class TunnelManagerTest {
         val entry = manager.tunnels.single()
         assertEquals("web", entry.tunnel.label)
         assertEquals(TunnelStatus.Inactive, entry.status)
-        assertEquals(listOf(id), store.all().map { it.id }) // долетело до стора
+        assertEquals(listOf(id), store.all().map { it.id }) // reached the store
     }
 
     @Test
@@ -134,7 +134,7 @@ class TunnelManagerTest {
 
         val status = assertIs<TunnelStatus.Failed>(manager.tunnels.single().status)
         assertEquals("No saved credential", status.message)
-        assertNull(transport.lastTarget) // транспорт не трогали
+        assertNull(transport.lastTarget) // transport untouched
     }
 
     @Test
@@ -147,10 +147,10 @@ class TunnelManagerTest {
         manager.activate(id)
 
         val status = assertIs<TunnelStatus.Failed>(manager.tunnels.single().status)
-        // Сообщение локализовано (strings_ptail); сверяем с самим ресурсом, чтобы тест не зависел от
-        // локали машины (getString уважает системную локаль — на ru-машине это русский текст).
+        // Message is localized (strings_ptail); compare against the resource itself so the test
+        // doesn't depend on the machine locale.
         assertEquals(getString(Res.string.ptail_err_host_not_trusted), status.message)
-        assertTrue(conn.disconnected) // соединение не утекло
+        assertTrue(conn.disconnected) // connection not leaked
     }
 
     @Test
@@ -189,8 +189,8 @@ class TunnelManagerTest {
 
     @Test
     fun `deactivate while connecting cancels the raise and never leaks the connection`() = runTest {
-        // Гейт в forwardLocal: connect уже вернул живое соединение, проброс ещё поднимается — это и
-        // есть окно утечки (соединение открыто, но в entry.connection ещё не записано).
+        // Gate in forwardLocal: connect already returned a live connection, the forward is still
+        // being raised — this is the leak window (connection open, not yet recorded in entry.connection).
         val gate = CompletableDeferred<Unit>()
         val conn = FakeTunnelConnection(localPort = 50010, raiseGate = gate)
         val transport = FakeTunnelTransport(conn)
@@ -200,12 +200,12 @@ class TunnelManagerTest {
         manager.activate(id)
         assertEquals(TunnelStatus.Connecting, manager.tunnels.single().status)
 
-        // Выключаем, пока проброс висит на гейте, затем отпускаем гейт.
+        // Deactivate while the forward is stuck on the gate, then release the gate.
         manager.deactivate(id)
         gate.complete(Unit)
 
         assertEquals(TunnelStatus.Inactive, manager.tunnels.single().status)
-        assertTrue(conn.disconnected) // открывшееся соединение закрыто, не осело орфаном
+        assertTrue(conn.disconnected) // the opened connection was closed, not left as an orphan
     }
 
     @Test
@@ -224,7 +224,7 @@ class TunnelManagerTest {
 
     @Test
     fun `activate after a failure resets the status to connecting then active`() = runTest {
-        // Первый резолв недоступен, второй готов — статус должен уметь выйти из Failed.
+        // First resolution is unavailable, second is ready — status must be able to leave Failed.
         var available = false
         val transport = FakeTunnelTransport(FakeTunnelConnection(localPort = 50030))
         val manager = managerWith(transport, resolve = {

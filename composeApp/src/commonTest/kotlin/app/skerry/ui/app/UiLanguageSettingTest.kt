@@ -5,8 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Выбор языка интерфейса в [DesktopDesignState]/[MobileDesignState] обновляет состояние и сообщает
- * наружу для персиста; повтор текущего языка — no-op (ни записи), как у выбора шрифта терминала.
+ * Choosing the UI language in [DesktopDesignState]/[MobileDesignState] updates state and reports it
+ * for persistence; choosing the current language again is a no-op (no write), like terminal font choice.
  */
 class UiLanguageSettingTest {
 

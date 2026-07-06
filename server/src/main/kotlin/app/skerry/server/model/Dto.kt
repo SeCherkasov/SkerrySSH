@@ -3,15 +3,15 @@ package app.skerry.server.model
 import kotlinx.serialization.Serializable
 
 /**
- * Серверные DTO: admin-консоль, статистика, ошибки. Wire-контракт клиент⇆сервер (auth/vault/
- * devices/pairing, `docs/skerry-sync-design.md` §3) живёт в модуле `:sync-wire`
- * (`app.skerry.sync.wire`) — единый источник для обеих сторон, ручного зеркала больше нет.
+ * Server-only DTOs: admin console, stats, errors. The client<->server wire contract
+ * (auth/vault/devices/pairing, `docs/skerry-sync-design.md` §3) lives in the `:sync-wire`
+ * module (`app.skerry.sync.wire`), the single source shared by both sides.
  */
 
 /**
- * Устройство в админ-консоли: те же открытые метаданные, что и в [DeviceDto], плюс `accountId`
- * (консоль видит все аккаунты инстанса и отзывает по паре accountId+id — deviceId уникален лишь
- * в пределах аккаунта). Содержимого по-прежнему нет.
+ * Device in the admin console: the same plaintext metadata as [DeviceDto], plus `accountId`
+ * (the console sees all accounts on the instance and revokes by accountId+id, since deviceId is
+ * only unique within an account). No content here either.
  */
 @Serializable
 data class AdminDeviceDto(
@@ -28,7 +28,7 @@ data class AdminDeviceDto(
 @Serializable
 data class AdminDevicesResponse(val devices: List<AdminDeviceDto>, val total: Long)
 
-/** Событие аудит-лога для консоли: только метаданные синхронизации, `createdAt` — epoch millis. */
+/** Audit log event for the console: sync metadata only, `createdAt` is epoch millis. */
 @Serializable
 data class AdminActivityDto(
     val accountId: String,
@@ -42,9 +42,9 @@ data class AdminActivityDto(
 data class AdminActivityResponse(val events: List<AdminActivityDto>, val total: Long)
 
 /**
- * Аккаунт инстанса для консоли: открытые метаданные ([id] — он же email/identity) и агрегаты,
- * посчитанные на стороне БД. Содержимого записей здесь нет — только их число, число tombstone'ов
- * и суммарный размер шифроблобов. [lastSeenAt] — самая свежая активность любого устройства аккаунта.
+ * Instance account for the console: plaintext metadata ([id] doubles as email/identity) and
+ * aggregates computed in the DB. No record content, only counts of records and tombstones and
+ * total ciphertext size. [lastSeenAt] is the most recent activity across the account's devices.
  */
 @Serializable
 data class AdminAccountDto(
@@ -63,9 +63,9 @@ data class AdminAccountDto(
 data class AdminAccountsResponse(val accounts: List<AdminAccountDto>, val total: Long)
 
 /**
- * Envelope записи vault, как её РЕАЛЬНО видит сервер: открытые метаданные синхронизации плюс размер
- * шифроблоба и [previewHex] — первые байты настоящего шифротекста (непрозрачный шум). Содержимого
- * нет по определению: без dataKey блоб нечитаем. Это честная замена прежней нарисованной карточки.
+ * A vault record envelope as the server actually sees it: plaintext sync metadata plus ciphertext
+ * size and [previewHex] (leading bytes of the real ciphertext, opaque noise). No content by
+ * construction: the blob is unreadable without dataKey.
  */
 @Serializable
 data class AdminRecordDto(
@@ -83,7 +83,7 @@ data class AdminRecordDto(
 @Serializable
 data class AdminRecordsResponse(val accountId: String, val records: List<AdminRecordDto>)
 
-/** Результат purge tombstone'ов: сколько надгробий физически удалено (освобождено места). */
+/** Result of a tombstone purge: how many tombstones were physically deleted. */
 @Serializable
 data class AdminPurgeResponse(val purged: Int)
 

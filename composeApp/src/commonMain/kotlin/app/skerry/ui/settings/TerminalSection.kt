@@ -35,12 +35,12 @@ import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.TerminalCursorStyle
 import org.jetbrains.compose.resources.stringResource
 
-// Секция Terminal: scrollback, стиль курсора, живой OSC-заголовок на вкладках.
+// Terminal section: scrollback, cursor style, live OSC title on tabs.
 
 @Composable
 internal fun TerminalSection(state: DesktopDesignState) {
     SectionTitle(stringResource(Res.string.settings_terminal_title), stringResource(Res.string.settings_terminal_subtitle))
-    // Буфер прокрутки: глубина scrollback новой сессии (селект пресетов справа от подписи).
+    // Scrollback depth for new sessions (preset picker to the right of the label).
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.settings_terminal_scrollback), color = D.text, size = 13.sp, weight = FontWeight.Medium)
@@ -49,13 +49,13 @@ internal fun TerminalSection(state: DesktopDesignState) {
         Box(Modifier.width(160.dp)) { ScrollbackPicker(state.terminalScrollback, onPick = state::chooseTerminalScrollback) }
     }
     HLine()
-    // Стиль курсора: форма × мигание по умолчанию для новой сессии.
+    // Cursor style: default shape x blink for new sessions.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_cursor_style), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
         Box(Modifier.width(200.dp)) { CursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle) }
     }
     HLine()
-    // Живой OSC-заголовок терминала на вкладках: включает ветку effectiveTabTitle в Session.tabTitle.
+    // Live terminal OSC title on tabs: enables the effectiveTabTitle branch in Session.tabTitle.
     SettingToggleRow(
         stringResource(Res.string.settings_terminal_show_title),
         stringResource(Res.string.settings_terminal_show_title_desc),
@@ -64,7 +64,7 @@ internal fun TerminalSection(state: DesktopDesignState) {
     )
 }
 
-/** Локализованная подпись стиля курсора (форма + мигание) для дропдауна и триггера. */
+/** Localized cursor style label (shape + blink) for the dropdown and its trigger. */
 @Composable
 private fun TerminalCursorStyle.label(): String = stringResource(
     when (this) {
@@ -77,18 +77,18 @@ private fun TerminalCursorStyle.label(): String = stringResource(
     },
 )
 
-/** Выпадающий список глубины scrollback ([TERMINAL_SCROLLBACK_OPTIONS], строк; формат «10 000»). */
+/** Dropdown for scrollback depth ([TERMINAL_SCROLLBACK_OPTIONS], lines; formatted as "10 000"). */
 @Composable
 private fun ScrollbackPicker(current: Int, onPick: (Int) -> Unit) {
     DropdownField(current, TERMINAL_SCROLLBACK_OPTIONS, label = { formatScrollback(it) }, onPick = onPick)
 }
 
-/** Выпадающий список стиля курсора ([TerminalCursorStyle.entries]). */
+/** Dropdown for cursor style ([TerminalCursorStyle.entries]). */
 @Composable
 private fun CursorStylePicker(current: TerminalCursorStyle, onPick: (TerminalCursorStyle) -> Unit) {
     DropdownField(current, TerminalCursorStyle.entries, label = { it.label() }, onPick = onPick)
 }
 
-/** «10000» → «10 000» (неразрывный пробел между тысячами) для читаемости счётчика строк. */
+/** "10000" -> "10 000" (space between thousands) for readable line counts. */
 private fun formatScrollback(lines: Int): String =
     lines.toString().reversed().chunked(3).joinToString(" ").reversed()

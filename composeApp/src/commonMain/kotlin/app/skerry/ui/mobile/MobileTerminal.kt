@@ -6,50 +6,49 @@ import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
 
 /**
- * Чистая логика мобильного терминал-экрана (`Skerry Mobile.html`, push-экран Terminal) — отделена
- * от Composable-вью ([MobileTerminalScreen]), чтобы покрываться юнит-тестами без Compose (как
- * хелперы [app.skerry.ui.connection.toTarget] и т.п.).
+ * Pure logic for the mobile terminal screen, separated from the Composable view
+ * ([MobileTerminalScreen]) so it can be unit-tested without Compose.
  */
 
 /**
- * Текст статус-строки под именем хоста в шапке терминала по состоянию соединения активной сессии.
- * Цвет берётся отдельно через [sessionDotColor]. Живые метрики (RTT/throughput) рендерятся рядом
- * отдельными элементами ([mobileRttLabel]/[mobileRateLabel]), а не в этой строке.
+ * Status-line text under the host name in the terminal header, from the active session's connection
+ * state. Color comes separately via [sessionDotColor]. Live metrics (RTT/throughput) render alongside
+ * as separate elements ([mobileRttLabel]/[mobileRateLabel]), not in this line.
  */
 fun mobileTerminalStatusText(state: ConnectionUiState?): String = when (state) {
     is ConnectionUiState.Connected -> "connected"
     ConnectionUiState.Connecting -> "connecting…"
     is ConnectionUiState.Error -> "disconnected"
-    // Штатный выход shell (`exit`) — нейтральное «closed»; обрыв транспорта — «disconnected».
+    // Clean shell exit (`exit`) → neutral "closed"; transport drop → "disconnected".
     is ConnectionUiState.Disconnected -> if (state.cleanExit) "closed" else "disconnected"
     else -> "no session"
 }
 
 /**
- * Метка RTT-пинга для метрик шапки терминала: `N ms`, либо «—» до первого замера / при сбое
- * (см. [app.skerry.ui.connection.PingController.rttMs]). Паритет с desktop-статусбаром.
+ * RTT ping label for terminal header metrics: `N ms`, or "—" before the first sample / on failure
+ * (see [app.skerry.ui.connection.PingController.rttMs]). Parity with the desktop status bar.
  */
 fun mobileRttLabel(rttMs: Long?): String = rttMs?.let { "$it ms" } ?: "—"
 
 /**
- * Метка throughput (↑/↓) для метрик шапки терминала: человекочитаемая скорость ([humanRate]),
- * либо «—», пока не снят первый отсчёт. Паритет с desktop-статусбаром.
+ * Throughput label (↑/↓) for terminal header metrics: human-readable rate ([humanRate]), or "—"
+ * until the first sample. Parity with the desktop status bar.
  */
 fun mobileRateLabel(bytesPerSec: Long?): String = bytesPerSec?.let { humanRate(it) } ?: "—"
 
-/** Что делать при тапе Connect, когда у хоста уже есть открытая сессия. */
+/** What to do on Connect when the host already has an open session. */
 enum class MobileConnectAction {
-    /** Сессия живая (подключена/подключается) — просто показать её, не плодя вкладки. */
+    /** Session is alive (connected/connecting) — just show it, don't spawn tabs. */
     Resume,
 
-    /** Сессии нет либо она мёртвая (ошибка/закрыта) — открыть новую (переподключение). */
+    /** No session or it's dead (error/closed) — open a new one (reconnect). */
     OpenFresh,
 }
 
 /**
- * Решение по последней сессии хоста: возобновить живую или открыть свежую. На телефоне (в отличие
- * от desktop-вкладок) показывается одна сессия за раз, поэтому повторный Connect к тому же хосту не
- * должен накапливать сокеты — живую переиспользуем, мёртвую заменяем.
+ * Decision for a host's last session: resume a live one or open fresh. On phone (unlike desktop tabs)
+ * one session shows at a time, so re-Connecting to the same host must not accumulate sockets — reuse
+ * a live one, replace a dead one.
  */
 fun mobileConnectAction(existing: ConnectionUiState?): MobileConnectAction =
     if (existing is ConnectionUiState.Connected || existing == ConnectionUiState.Connecting) {
@@ -58,13 +57,13 @@ fun mobileConnectAction(existing: ConnectionUiState?): MobileConnectAction =
         MobileConnectAction.OpenFresh
     }
 
-/** Куда вести с экрана хоста после открытия/возобновления сессии: Connect → терминал, SFTP → файлы. */
+/** Where to go from the host screen after opening/resuming a session: Connect → terminal, SFTP → files. */
 enum class MobileConnectDest { Terminal, Files }
 
 /**
- * Навигация после того, как сессия хоста открыта или возобновлена. Connect ведёт на push-экран
- * терминала, SFTP — на push-экран Files (Remote-браузер активной сессии) с back-стрелкой, как терминал.
- * Вынесено из вью, чтобы единый путь подключения (включая лист запроса пароля) знал пункт назначения.
+ * Navigation after a host session is opened or resumed. Connect goes to the terminal push-screen,
+ * SFTP to the Files push-screen (the active session's Remote browser). Extracted from the view so the
+ * single connect path (including the password sheet) knows the destination.
  */
 fun navigateAfterConnect(state: MobileDesignState, dest: MobileConnectDest): Unit = when (dest) {
     MobileConnectDest.Terminal -> state.push(MobileRoute.Terminal)
@@ -72,18 +71,17 @@ fun navigateAfterConnect(state: MobileDesignState, dest: MobileConnectDest): Uni
 }
 
 /**
- * Control-последовательность для Ctrl+[c] клавишной панели терминала (sticky-ctrl): C0-код = код
- * символа в верхнем регистре, маскированный 0x1F. Так Ctrl+C → ETX (0x03), Ctrl+[ → ESC (0x1B).
- * Возвращает строку из одного символа для отправки в PTY ([app.skerry.ui.terminal.TerminalScreenState.send]).
+ * Control sequence for the terminal key panel's Ctrl+key (sticky-ctrl): the C0 code = the uppercased
+ * char code masked with 0x1F. So Ctrl+C → ETX (0x03), Ctrl+[ → ESC (0x1B). Returns a one-char string
+ * to send to the PTY ([app.skerry.ui.terminal.TerminalScreenState.send]).
  */
 fun controlByte(c: Char): String = (c.uppercaseChar().code and 0x1F).toChar().toString()
 
 /**
- * Применяет sticky-ctrl к строке, введённой с софт-клавиатуры (IME-путь терминала: текст снимается
- * скрытым полем мимо клавишной панели). Если ctrl армирован и ввод непустой — ПЕРВЫЙ символ кодируется
- * как Ctrl+<символ> ([controlByte]), остаток уходит как есть; модификатор действует на одно нажатие,
- * как на физической клавиатуре (снятие делает вызывающий, увидев тот же предикат). Без армирования
- * или на пустом вводе — строка без изменений.
+ * Applies sticky-ctrl to a string typed on the soft keyboard (terminal IME path: text captured by a
+ * hidden field, bypassing the key panel). If ctrl is armed and input is non-empty, the first char is
+ * encoded as Ctrl+<char> ([controlByte]) and the rest passes through; the modifier applies to one
+ * keystroke (the caller disarms it via the same predicate). No change when unarmed or input is empty.
  */
 fun applyStickyCtrl(armed: Boolean, input: String): String =
     if (armed && input.isNotEmpty()) controlByte(input[0]) + input.substring(1) else input

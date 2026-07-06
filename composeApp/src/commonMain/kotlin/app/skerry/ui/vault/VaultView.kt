@@ -167,12 +167,12 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 
 /**
- * Vault view. С живым keychain ([LocalCredentials]) рисует реальные данные открытого vault:
- * три keychain-категории (SSH keys/Passwords/Certificates) — секреты [Credential] с панелью деталей
- * (публичный ключ, отпечаток, какие хосты используют секрет напрямую через [Host.credentialId]),
- * генерацией пары ([LocalSshKeyGenerator]), добавлением пароля, импортом сертификата
- * ([LocalSshCertificateInspector]), копированием/экспортом/удалением.
- * Без keychain-контроллера (офскрин-рендер/превью) рисуется статичный мок [MockVaultView].
+ * Vault view. With a live keychain ([LocalCredentials]) renders the open vault's real data:
+ * three keychain categories (SSH keys/Passwords/Certificates) — [Credential] secrets with a detail
+ * panel (public key, fingerprint, which hosts use the secret directly via [Host.credentialId]),
+ * key pair generation ([LocalSshKeyGenerator]), password add, certificate import
+ * ([LocalSshCertificateInspector]), copy/export/delete.
+ * Without a keychain controller (offscreen render/preview) renders the static [MockVaultView] mock.
  */
 @Composable
 fun VaultView() {
@@ -182,7 +182,7 @@ fun VaultView() {
     }
 }
 
-// Живой путь: keychain-секреты vault + учётки + генерация/добавление/импорт/удаление.
+// Live path: vault keychain secrets + accounts + generate/add/import/delete.
 
 @Composable
 private fun LiveVaultView(credentials: CredentialManagerController) {
@@ -193,7 +193,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     val inspector = LocalSshCertificateInspector.current
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
-    // Повторная аутентификация перед копированием пароля (на desktop биометрии нет — мастер-пароль).
+    // Re-authentication before copying a password (no biometrics on desktop — master password instead).
     val vault = LocalVault.current
     val biometrics = LocalVaultBiometrics.current
     val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }
@@ -268,8 +268,8 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                 onCreate = { name, type ->
                     showGenerate = false
                     category = VaultCategoryKind.SSH_KEYS
-                    // Генерация (особенно RSA-4096) дорогая — уводим с main-потока, чтобы не фризить UI;
-                    // save трогает Compose-state, поэтому возвращаемся на scope (main) для записи.
+                    // Generation (especially RSA-4096) is expensive — off the main thread to avoid UI jank;
+                    // save touches Compose state, so we hop back to scope (main) to write it.
                     scope.launch {
                         val key = withContext(Dispatchers.Default) { generator.generate(type, comment = name) }
                         selectedId = credentials.save(
@@ -311,17 +311,17 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
             )
         }
         pendingDeleteCred?.let { victim ->
-            // Удаление keychain-секрета: хосты, привязанные к нему напрямую, развязываем
-            // (спросят пароль при коннекте), затем удаляем сам секрет.
+            // Deleting a keychain secret: hosts bound to it directly get unbound
+            // (will prompt for a password on connect), then the secret itself is deleted.
             val bound = VaultPresentation.hostsUsing(victim.id, hosts)
             DeleteSecretDialog(
                 label = victim.label,
                 boundHostCount = bound.size,
                 onDismiss = { pendingDeleteCred = null },
                 onConfirm = {
-                    // Каскад целостен только при живом hostsController: иначе хосты остались бы
-                    // ссылаться на удалённый секрет. За гейтом он всегда есть; гард — защита от
-                    // гонки lock при открытом диалоге (тогда удаление отменяем целиком).
+                    // The cascade is only consistent with a live hostsController; otherwise hosts would keep
+                    // referencing a deleted secret. Always present past the gate; the guard protects against
+                    // a lock race while the dialog is open (in which case the whole delete is aborted).
                     val hc = hostsController
                     if (hc != null) {
                         bound.forEach { host -> hc.save(host.unbindCredential()) }
@@ -346,7 +346,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
 internal fun Host.unbindCredential(): HostDraft =
     HostDraft(id = id, label = label, address = address, port = port, username = username, group = group, credentialId = null)
 
-// Левый sidebar категорий (живые счётчики) + шапка с действием категории.
+// Left category sidebar (live counters) + header with the category action.
 
 @Composable
 private fun VaultSidebar(
@@ -419,7 +419,7 @@ private fun VaultHeader(
     }
 }
 
-// Карточка keychain-секрета (ключ/пароль/сертификат) + карточка учётки + пустые состояния.
+// Keychain secret card (key/password/certificate) + account card + empty states.
 
 @Composable
 private fun LiveSecretCard(
@@ -480,7 +480,7 @@ private fun LiveSecretCard(
     }
 }
 
-/** Квадратная иконка секрета в карточке/деталях (cyan/moss-тон для ключей/сертификатов, нейтральный для пароля). */
+/** Square secret icon in the card/detail panel (cyan/moss tint for keys/certificates, neutral for passwords). */
 @Composable
 internal fun SecretIcon(icon: String, tinted: Boolean, color: Color, size: Int = 38) {
     Box(
@@ -506,11 +506,11 @@ private fun VaultEmptyCategory(category: VaultCategoryKind) {
 }
 
 /**
- * Открытые метаданные приватного ключа (отпечаток/тип/публичная строка); для пароля/сертификата — null.
- * Разбор PEM в sshj (BER/DER + SHA-256 + регистрация BC) недёшев, особенно на Android, поэтому считаем
- * его на [Dispatchers.Default] через [produceState], а не в `remember {}` на потоке композиции (иначе
- * дроп кадров при рендере списка ключей). До готовности значение `null` — UI рисует плейсхолдер.
- * Ключи перевычисления — id+secret: при обновлении записи (тот же id, новый секрет) пересчитываем.
+ * Public metadata of a private key (fingerprint/type/public string); null for password/certificate.
+ * Parsing PEM in sshj (BER/DER + SHA-256 + BC registration) is expensive, especially on Android, so it's
+ * computed on [Dispatchers.Default] via [produceState] rather than in `remember {}` on the composition
+ * thread (which would drop frames rendering the key list). Value is `null` until ready — UI draws a
+ * placeholder. Recompute keys are id+secret: recomputed when the record updates (same id, new secret).
  */
 @Composable
 internal fun rememberKeyInfo(credential: Credential, generator: SshKeyGenerator?): SshPublicKeyInfo? {
@@ -521,8 +521,8 @@ internal fun rememberKeyInfo(credential: Credential, generator: SshKeyGenerator?
 }
 
 /**
- * Открытые метаданные сертификата (principals/срок/serial/CA); null — не сертификат, битый или ещё
- * считается. Разбор — на [Dispatchers.Default] через [produceState] (см. [rememberKeyInfo]).
+ * Public certificate metadata (principals/validity/serial/CA); null if not a certificate, unreadable,
+ * or still computing. Parsed on [Dispatchers.Default] via [produceState] (see [rememberKeyInfo]).
  */
 @Composable
 internal fun rememberCertInfo(credential: Credential, inspector: SshCertificateInspector?): SshCertificateInfo? {
@@ -532,7 +532,7 @@ internal fun rememberCertInfo(credential: Credential, inspector: SshCertificateI
     }.value
 }
 
-// Панель деталей выбранного keychain-секрета и выбранной учётки.
+// Detail panel for the selected keychain secret and the selected account.
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -594,9 +594,9 @@ private fun LiveSecretDetail(
                     }
                 }
                 is CredentialSecret.Password -> {
-                    // Пароль — чувствительный: копирование требует повторной аутентификации
-                    // (биометрия/мастер-пароль, см. onCopyPassword) и идёт платформенным путём
-                    // (Android: sensitive-клип + автоочистка), а не обычным буфером, как cert/публичный ключ.
+                    // Password is sensitive: copying requires re-authentication (biometrics/master password,
+                    // see onCopyPassword) and goes through a platform-specific path (Android: sensitive clip +
+                    // auto-clear) rather than the plain clipboard used for cert/public key.
                     PrimaryButton(stringResource(Res.string.vault_copy_password), onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                     GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
                 }
@@ -605,11 +605,11 @@ private fun LiveSecretDetail(
     }
 }
 
-/** Блок «Used by · N hosts» с pill-ами имён хостов — для панели деталей секрета. */
+/** "Used by · N hosts" block with host-name pills, for the secret detail panel. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
-    // Единственная привязка — единственное число («· 1 host» / «· 1 хостом»), иначе форма мн. числа.
+    // A single binding uses the singular form ("· 1 host"), otherwise the plural.
     DetailLabel(
         if (hosts.size == 1) stringResource(Res.string.vault_used_by_one)
         else stringResource(Res.string.vault_used_by, hosts.size),
@@ -623,7 +623,7 @@ internal fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
     }
 }
 
-/** Тело панели деталей сертификата: сама строка cert, key id, principals, срок, serial, CA. */
+/** Certificate detail panel body: the cert string itself, key id, principals, validity, serial, CA. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun CertificateDetailBody(info: SshCertificateInfo?, mono: FontFamily) {
@@ -654,7 +654,7 @@ internal fun CertificateDetailBody(info: SshCertificateInfo?, mono: FontFamily) 
     Txt(info.caFingerprintSha256, color = D.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
 }
 
-// Диалоги: генерация ключа, добавление пароля, импорт сертификата, подтверждение удаления.
+// Dialogs: generate key, add password, import certificate, confirm delete.
 
 @Composable
 internal fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, type: SshKeyType) -> Unit) {
@@ -697,7 +697,7 @@ internal fun ImportCertificateDialog(
     var pem by remember { mutableStateOf("") }
     var certificate by remember { mutableStateOf("") }
     var passphrase by remember { mutableStateOf("") }
-    // Метаданные считаются из введённой строки cert — заодно это и проверка, что сертификат валиден.
+    // Metadata is computed from the entered cert string — this doubles as validation that it's a valid certificate.
     val info = remember(certificate, inspector) { certificate.trim().takeIf { it.isNotEmpty() }?.let { inspector.inspect(it) } }
     val certInvalid = certificate.isNotBlank() && info == null
     val valid = name.isNotBlank() && pem.isNotBlank() && info != null
@@ -728,9 +728,9 @@ internal fun ImportCertificateDialog(
 }
 
 /**
- * Повторная аутентификация мастер-паролем перед копированием пароля в буфер (общий для desktop и
- * мобильного keychain — путь без биометрии). На неверный ввод [error] показывает ошибку, форма
- * остаётся открытой для повторной попытки. Поле очищается вместе с пересозданием диалога.
+ * Master-password re-authentication before copying a password to the clipboard (shared by desktop and
+ * mobile keychain — the no-biometrics path). On wrong input [error] shows an error and the form stays
+ * open for another attempt. The field clears when the dialog is recreated.
  */
 @Composable
 internal fun PasswordConfirmDialog(error: Boolean, busy: Boolean, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
@@ -738,7 +738,7 @@ internal fun PasswordConfirmDialog(error: Boolean, busy: Boolean, onDismiss: () 
     VaultDialogScaffold(stringResource(Res.string.vault_confirm_master_title), stringResource(Res.string.vault_confirm_master_subtitle), onDismiss) {
         DialogField(stringResource(Res.string.vault_field_master_password), password, { password = it }, placeholder = stringResource(Res.string.vault_placeholder_master_password), password = true)
         if (error) Txt(stringResource(Res.string.vault_password_mismatch_retry), color = D.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
-        // confirmEnabled гаснет на время сверки (Argon2id) — без этого двойной тап запустил бы её дважды.
+        // confirmEnabled is disabled while verifying (Argon2id) — otherwise a double-tap would run it twice.
         DialogButtons(confirmLabel = stringResource(Res.string.vault_copy), confirmEnabled = password.isNotEmpty() && !busy, onDismiss = onDismiss, onConfirm = { onConfirm(password) })
     }
 }
@@ -763,12 +763,12 @@ internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: (
 
 @Composable
 private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    // Системный «назад»/жест закрывает диалог (как тап по затемнению). На Android перехватывает back до
-    // навигации каркаса (LIFO диспетчера); на desktop BackHandler без диспетчера — no-op.
+    // System back/gesture closes the dialog (same as tapping the scrim). Intercepts back before the
+    // shell's navigation on Android (dispatcher LIFO); BackHandler without a dispatcher is a no-op on desktop.
     PlatformBackHandler(onBack = onDismiss)
     Box(
-        // Диалог центрируется в видимой области; над клавиатурой оказывается сам — на мобильном
-        // корневой `safeDrawing` ужимает область над IME, и `Center` центрирует в остатке (desktop — no-op).
+        // The dialog centers in the visible area; it ends up above the keyboard on its own — on mobile the
+        // root `safeDrawing` shrinks the area above the IME, and `Center` centers within what's left (no-op on desktop).
         Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
@@ -780,10 +780,10 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
                 .clip(RoundedCornerShape(12.dp))
                 .background(D.surfaceDeep)
                 .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
-                // Гасим клик по карточке, чтобы он не закрывал диалог (как в DesktopPasswordDialog).
+                // Absorbs the click on the card so it doesn't close the dialog (same as DesktopPasswordDialog).
                 .clickable(onClick = {})
-                // Прокрутка содержимого: высокий диалог (импорт сертификата — 4 поля) под экранной
-                // клавиатурой не помещается; скролл оставляет поля и кнопки доступными. Desktop — не мешает.
+                // Scrolls the content: a tall dialog (certificate import — 4 fields) doesn't fit under the
+                // on-screen keyboard; scrolling keeps the fields and buttons reachable. No-op on desktop.
                 .verticalScroll(rememberScrollState())
                 .padding(26.dp),
         ) {
@@ -804,26 +804,26 @@ private fun DialogField(
     placeholder: String,
     password: Boolean = false,
     singleLine: Boolean = true,
-    // Явный override типа клавиатуры: для видимых, но чувствительных полей (PEM-ключ) ставим
-    // KeyboardType.Password — гасит автокоррект/словарь IME, не маскируя ввод визуально.
+    // Explicit keyboard type override: for visible but sensitive fields (PEM key) set
+    // KeyboardType.Password — disables IME autocorrect/dictionary without visually masking input.
     keyboardType: KeyboardType? = null,
 ) {
     val ui = LocalFonts.current.ui
     val mono = LocalFonts.current.mono
-    // Многострочные поля (PEM/сертификат) — моноширинным, чтобы длинные блобы читались как в файле.
+    // Multi-line fields (PEM/certificate) use monospace so long blobs read like a file.
     val style = remember(ui, mono, singleLine) {
         TextStyle(color = D.text, fontSize = if (singleLine) 13.sp else 11.sp, fontFamily = if (singleLine) ui else mono)
     }
-    // Автоподкрутка к фокусу над клавиатурой. Окно в режиме adjustResize (см. AndroidManifest) само
-    // ужимается при выезде клавиатуры, поэтому WindowInsets.ime тут всегда 0 — наблюдать за инсетом
-    // бесполезно, а единственный bring-into-view сработал бы ДО ресайза окна и промахнулся. Вместо
-    // этого, пока поле в фокусе, переподкручиваем его в видимую область на КАЖДОМ кадре первые ~450 мс
-    // (длительность анимации клавиатуры/ресайза) — поле гарантированно доводится над клавиатурой
-    // независимо от режима окна. На desktop клавиатуры нет: пара кадров bringIntoView безвредны (no-op).
+    // Auto-scroll to focus above the keyboard. The window in adjustResize mode (see AndroidManifest)
+    // shrinks itself when the keyboard appears, so WindowInsets.ime is always 0 here — observing the inset
+    // is useless, and a single bring-into-view would fire BEFORE the window resize and miss. Instead,
+    // while the field is focused, it re-requests bring-into-view on EVERY frame for the first ~450ms
+    // (keyboard/resize animation duration) — the field is guaranteed to end up above the keyboard
+    // regardless of window mode. No keyboard on desktop: a couple of bringIntoView frames are harmless (no-op).
     val requester = remember { BringIntoViewRequester() }
     var focused by remember { mutableStateOf(false) }
     var fieldSize by remember { mutableStateOf(IntSize.Zero) }
-    // Зазор под полем при автоподкрутке — фокус всплывает НАД клавиатурой с воздухом, а не впритык.
+    // Gap below the field during auto-scroll — focus surfaces above the keyboard with breathing room, not flush.
     val marginPx = with(LocalDensity.current) { 16.dp.toPx() }
     LaunchedEffect(focused) {
         if (!focused) return@LaunchedEffect
@@ -877,9 +877,9 @@ private fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDismi
     }
 }
 
-// Мок-путь (офскрин-рендер/превью): статичные категории/ключи/детали.
+// Mock path (offscreen render/preview): static categories/keys/details.
 
-/** Vault view (мок): категории секретов (sidebar) + список SSH-ключей + панель деталей ключа. */
+/** Vault view (mock): secret categories (sidebar) + SSH key list + key detail panel. */
 @Composable
 private fun MockVaultView() {
     val mono = LocalFonts.current.mono

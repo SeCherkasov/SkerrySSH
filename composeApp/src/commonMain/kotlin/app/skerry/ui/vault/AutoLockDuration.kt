@@ -1,10 +1,10 @@
 package app.skerry.ui.vault
 
 /**
- * Порог автоблокировки по простою (Настройки → Безопасность → Автоблокировка). Управляет idle-таймером
- * в [app.skerry.ui.vault.VaultGate]: бездействие дольше [idleMs] запирает vault. [idleMs] == `null`
- * ([Never]) выключает таймер простоя (блокировка при уходе в фон остаётся — это отдельная политика
- * платформы, см. `deviceMandatesAutoLock`). Стабильный [id] переживает перезапуск (персист в файле).
+ * Idle-timeout auto-lock threshold (Settings -> Security -> Auto-lock). Drives the idle timer in
+ * [app.skerry.ui.vault.VaultGate]: inactivity longer than [idleMs] locks the vault. `null` [idleMs]
+ * ([Never]) disables the idle timer (background auto-lock is a separate policy, see
+ * `deviceMandatesAutoLock`). Stable [id] survives restarts (persisted to file).
  */
 enum class AutoLockDuration(val id: String, val idleMs: Long?) {
     OneMinute("1m", 60_000L),
@@ -14,10 +14,10 @@ enum class AutoLockDuration(val id: String, val idleMs: Long?) {
     Never("never", null);
 
     companion object {
-        /** Значение по умолчанию — 5 минут (как прежний зашитый порог idle-таймера). */
+        /** Default value: 5 minutes. */
         val DEFAULT: AutoLockDuration = FiveMinutes
 
-        /** Разбор стабильного [id] из персиста; неизвестный/пустой → [DEFAULT]. */
+        /** Parses a stable [id] from storage; unknown/blank falls back to [DEFAULT]. */
         fun fromId(id: String?): AutoLockDuration = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
 }

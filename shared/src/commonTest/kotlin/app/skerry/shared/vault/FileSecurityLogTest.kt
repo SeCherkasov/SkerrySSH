@@ -9,15 +9,15 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * [FileSecurityLog] — локальный (не синкаемый) журнал событий безопасности поверх [FakeFileSystem]
- * (как [FileVaultTest]). Проверяем порядок (новые первыми), кап, дериватив «последняя смена пароля»
- * и переживание перезапуска (перечитывание файла новым инстансом).
+ * [FileSecurityLog] is a local (non-syncing) security event log over [FakeFileSystem] (like
+ * [FileVaultTest]). Covers ordering (newest first), the cap, the "last password change" derived
+ * value, and survival across restart (re-reading the file with a new instance).
  */
 class FileSecurityLogTest {
     private val fs = FakeFileSystem()
     private val path = "/cfg/security_events.json".toPath()
 
-    // Управляемые часы: тест сам задаёт штампы, чтобы порядок/дериватив были детерминированы.
+    // Controlled clock: the test sets timestamps itself so ordering/derived values are deterministic.
     private var clock = 0L
     private fun log(max: Int = 50) = FileSecurityLog(path, fs, max = max) { "2026-01-01T00:00:${clock.toString().padStart(2, '0')}Z" }
 
@@ -50,7 +50,7 @@ class FileSecurityLogTest {
         repeat(5) { clock = it.toLong(); l.record(SecurityEventType.UnlockedBiometric, detail = it.toString()) }
         val all = l.recent(limit = 100)
         assertEquals(3, all.size)
-        // Новейшее (clock=4) первым, самое старое из сохранённых — clock=2 (0 и 1 вытеснены капом).
+        // Newest (clock=4) first, oldest retained is clock=2 (0 and 1 evicted by the cap).
         assertEquals("4", all.first().detail)
         assertEquals("2", all.last().detail)
     }
@@ -61,7 +61,7 @@ class FileSecurityLogTest {
         assertNull(l.lastPasswordChangeAt())
         clock = 1; l.record(SecurityEventType.VaultCreated)
         assertTrue(l.lastPasswordChangeAt()!!.endsWith(":01Z"))
-        // Событие, не относящееся к паролю, метку не двигает.
+        // A non-password-related event does not move the timestamp.
         clock = 2; l.record(SecurityEventType.BiometricEnabled)
         assertTrue(l.lastPasswordChangeAt()!!.endsWith(":01Z"))
         clock = 5; l.record(SecurityEventType.MasterPasswordChanged)
@@ -71,7 +71,7 @@ class FileSecurityLogTest {
     @Test
     fun persistsAcrossInstances() {
         clock = 7; log().record(SecurityEventType.DevicePaired, detail = "iPhone 16 Pro")
-        // Свежий инстанс читает тот же файл.
+        // A fresh instance reads the same file.
         val reopened = log().recent()
         assertEquals(1, reopened.size)
         assertEquals("iPhone 16 Pro", reopened[0].detail)
@@ -88,8 +88,8 @@ class FileSecurityLogTest {
 
     @Test
     fun hardensFileBeforeMove() {
-        // Хук приватных прав зовётся на временном файле (до atomicMove), а не на цели — у готового
-        // файла не должно быть окна с правами по umask.
+        // The private-permissions hook is called on the temp file (before atomicMove), not the
+        // target — the final file must not have a window with umask-default permissions.
         val hardened = mutableListOf<String>()
         val l = FileSecurityLog(path, fs, harden = { hardened += it.name }) { "2026-01-01T00:00:00Z" }
         l.record(SecurityEventType.VaultCreated)
@@ -102,7 +102,7 @@ class FileSecurityLogTest {
         fs.write(path) { writeUtf8("{ not json") }
         val l = log()
         assertTrue(l.recent().isEmpty())
-        // Запись поверх битого файла восстанавливает валидное состояние.
+        // Writing over a corrupt file restores a valid state.
         clock = 1; l.record(SecurityEventType.VaultCreated)
         assertEquals(1, l.recent().size)
     }

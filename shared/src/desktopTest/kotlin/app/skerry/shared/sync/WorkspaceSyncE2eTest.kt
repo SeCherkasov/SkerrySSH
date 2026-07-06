@@ -27,10 +27,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Phase A «как у Termius»: всё рабочее пространство (хосты + их порядок, сниппеты, туннели) живёт
- * записями vault и E2E-синкается, а не только секреты. Доказывает ключевой результат фазы — новое
- * устройство B, имея лишь мастер-пароль и accountId, видит хосты/сниппеты/туннели устройства A
- * в правильном порядке, расшифровав их из одной обёртки dataKey (сервер видит только шифротекст).
+ * The whole workspace (hosts + their order, snippets, tunnels) lives as vault records and is
+ * E2E-synced, not just secrets. Proves a new device B, given only the master password and
+ * accountId, sees device A's hosts/snippets/tunnels in the right order, decrypted from a single
+ * dataKey wrapper (the server sees only ciphertext).
  */
 class WorkspaceSyncE2eTest {
 
@@ -55,20 +55,20 @@ class WorkspaceSyncE2eTest {
         val dirA = Files.createTempDirectory("skerry-ws-a")
         val dirB = Files.createTempDirectory("skerry-ws-b")
         try {
-            // --- Устройство A: наполняем рабочее пространство через vault-сторы ---
+            // --- Device A: populate the workspace via vault stores ---
             val vaultA = FileVault(dirA.resolve("vault.json").toString().toPath(), crypto, "devA", FileSystem.SYSTEM) { "2026-06-29T00:00:00Z" }
             vaultA.create(masterPassword.toCharArray())
             val hostsA = VaultHostStore(vaultA)
             hostsA.put(Host("h1", "Web", "web.example.com", 22, "root", group = "prod"))
             hostsA.put(Host("h2", "Db", "db.example.com", 22, "root", group = "prod"))
             hostsA.put(Host("h3", "Bastion", "bastion.example.com", 22, "ubuntu"))
-            hostsA.reorder { it.reversed() } // порядок дерева: h3, h2, h1
+            hostsA.reorder { it.reversed() } // tree order: h3, h2, h1
             VaultSnippetStore(vaultA).put(Snippet("s1", "Disk", "df -h", tags = listOf("ops")))
             VaultTunnelStore(vaultA).put(
                 Tunnel("t1", "DB tunnel", hostId = "h2", direction = TunnelDirection.Local, bindPort = 5432, destHost = "127.0.0.1", destPort = 5432),
             )
             VaultKnownHostsStore(vaultA).add(KnownHost("web.example.com", 22, "ssh-ed25519", "SHA256:AAA", "2026-06-29T00:00:00Z"))
-            // Пустая папка (нет хостов) живёт в записи-макете — она тоже синкается (как в Termius).
+            // An empty folder (no hosts) lives in the layout record — it syncs too.
             WorkspaceLayoutStore(vaultA).apply { write(read().copy(groups = listOf("staging"))) }
 
             val syncSalt = crypto.deriveSyncSalt(accountId)
@@ -76,17 +76,17 @@ class WorkspaceSyncE2eTest {
             val sessionA = client.register(accountId, crypto.deriveAuthKey(masterA), crypto.wrapDataKey(masterA, vaultA.exportDataKey()!!), DeviceInfo("devA", "Laptop A"))
             SyncEngine(client, vaultA).sync(sessionA)
 
-            // --- Устройство B: пустой локальный vault, бутстрап только из пароля + accountId ---
+            // --- Device B: empty local vault, bootstrapped from just the password + accountId ---
             val masterB = crypto.deriveMasterKey(masterPassword.toCharArray(), crypto.deriveSyncSalt(accountId))
             val sessionB = client.login(accountId, crypto.deriveAuthKey(masterB), DeviceInfo("devB", "Phone B"))
             val dataKeyB = crypto.unwrapDataKey(masterB, client.fetchWrappedDataKey(sessionB))
                 ?: error("device B failed to unwrap dataKey")
             val vaultB = FileVault(dirB.resolve("vault.json").toString().toPath(), crypto, "devB", FileSystem.SYSTEM) { "2026-06-29T00:00:00Z" }
             vaultB.create(masterPassword.toCharArray())
-            vaultB.unlockWithDataKey(dataKeyB) // тот же dataKey, что у A (как делает SyncCoordinator)
+            vaultB.unlockWithDataKey(dataKeyB) // same dataKey as A (as SyncCoordinator does)
             SyncEngine(client, vaultB).sync(sessionB)
 
-            // Устройство B видит то же рабочее пространство, что у A — расшифрованное и в порядке дерева.
+            // Device B sees the same workspace as A — decrypted and in tree order.
             val hostsB = VaultHostStore(vaultB)
             assertEquals(listOf("h3", "h2", "h1"), hostsB.all().map { it.id })
             assertEquals("Web", hostsB.all().first { it.id == "h1" }.label)

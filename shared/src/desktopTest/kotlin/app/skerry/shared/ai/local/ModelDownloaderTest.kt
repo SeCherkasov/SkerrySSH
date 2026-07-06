@@ -38,7 +38,7 @@ class ModelDownloaderTest {
 
     private var lastRangeHeader: String? = null
 
-    /** Мок-сервер модели: полный ответ 200 либо (при Range и [supportRange]) хвост 206. */
+    /** Mock model server: full 200 response, or (with Range and [supportRange]) a 206 tail. */
     private fun http(bytes: ByteArray = payload, supportRange: Boolean = true, status: HttpStatusCode? = null): HttpClient =
         HttpClient(MockEngine { req ->
             lastRangeHeader = req.headers[HttpHeaders.Range]
@@ -111,7 +111,7 @@ class ModelDownloaderTest {
 
     @Test
     fun `checksum mismatch fails with INTEGRITY and discards the file`() = runTest {
-        val m = model(sha256 = "deadbeef".repeat(8)) // заведомо неверный дайджест
+        val m = model(sha256 = "deadbeef".repeat(8)) // deliberately wrong digest
         val downloader = ModelDownloader(http(), fs, store)
 
         val ex = assertFailsWith<ModelDownloadException> { downloader.download(m).toList() }

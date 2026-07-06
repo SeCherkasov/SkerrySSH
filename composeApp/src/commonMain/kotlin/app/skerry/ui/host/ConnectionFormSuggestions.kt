@@ -4,11 +4,9 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.host.normalizeTag
 
 /**
- * Уникальные непустые группы существующих [hosts] в порядке первого появления — выпадающие подсказки
- * для поля «Group» формы коннекта (рядом со свободным вводом своей группы). Значения отдаются как
- * хранятся в [Host.group] (trim, регистр сохраняется — группа отображается «как введена»). [query]
- * сужает список подстрокой без учёта регистра под уже набранный текст; пустой/пробельный — все.
- * Чистая функция, зафиксирована [ConnectionFormSuggestionsTest].
+ * Unique non-empty groups from [hosts] in first-seen order, for the connection form's Group field
+ * suggestions. Values are as stored in [Host.group] (trimmed, case preserved). [query] narrows the
+ * list by case-insensitive substring; empty/blank returns all. Pure function.
  */
 fun groupSuggestions(hosts: List<Host>, query: String = ""): List<String> {
     val needle = query.trim().lowercase()
@@ -24,9 +22,9 @@ fun groupSuggestions(hosts: List<Host>, query: String = ""): List<String> {
 }
 
 /**
- * Подсказки тегов для инлайн-ввода блока «Tags»: уникальные теги всех [hosts] (каноническая форма,
- * см. [normalizeTag]), исключая уже добавленные [selected], сужённые набранным [query] (тоже
- * канонизируется и матчится подстрокой). Порядок первого появления. Чистая функция.
+ * Tag suggestions for the Tags inline input: unique tags from all [hosts] (canonical form, see
+ * [normalizeTag]), excluding already-[selected] tags, narrowed by [query] (also canonicalized,
+ * substring match). First-seen order. Pure function.
  */
 fun tagSuggestions(hosts: List<Host>, selected: List<String>, query: String = ""): List<String> {
     val taken = selected.toHashSet()

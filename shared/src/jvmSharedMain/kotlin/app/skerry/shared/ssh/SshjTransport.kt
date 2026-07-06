@@ -18,7 +18,7 @@ import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.password.PasswordUtils
 
-/** Desktop-реализация [SshTransport] поверх sshj (JVM). */
+/** Desktop implementation of [SshTransport] over sshj (JVM). */
 class SshjTransport(
     private val hostKeyVerifier: HostKeyVerifier,
 ) : SshTransport {
@@ -27,15 +27,17 @@ class SshjTransport(
         withContext(Dispatchers.IO) {
             ensureCryptoProvider()
             val client = SSHClient()
-            // TCP connect-timeout: у sshj дефолт 0 = ждать бесконечно. Без него «Test connection» к
-            // несуществующему/закрытому файрволом адресу висит без возможности отмены через UI.
-            // (Протокольный таймаут KEX/I/O — отдельно, дефолт sshj ~30 c; пинг round-trip — свой.)
+            // TCP connect timeout: sshj's default is 0 = wait forever. Without this, "Test
+            // connection" to a nonexistent/firewalled address hangs with no way to cancel from the
+            // UI. (Protocol-level KEX/I-O timeout is separate, sshj default ~30s; round-trip ping
+            // is its own thing.)
             client.connectTimeout = CONNECT_TIMEOUT_MILLIS
-            // Согласованный при KEX шифр (client→server) перехватываем верификатором алгоритмов:
-            // в sshj 0.40 он вызывается синхронно на IO-потоке внутри connect() (после NEWKEYS, до
-            // возврата), а читаем после connect() — нужна потокобезопасная публикация, поэтому
-            // AtomicReference. Верификатор всегда пропускает (true): проверкой шифров не занимаемся,
-            // только снимаем имя для info-панели; host-key проверка — отдельная цепочка (addHostKeyVerifier).
+            // Capture the cipher negotiated at KEX (client->server) via an algorithms verifier: in
+            // sshj 0.40 it's called synchronously on the IO thread inside connect() (after
+            // NEWKEYS, before return), while we read it after connect() — needs a thread-safe
+            // publication, hence AtomicReference. The verifier always passes (true): we don't vet
+            // ciphers here, only capture the name for the info panel; host-key checking is a
+            // separate chain (addHostKeyVerifier).
             val negotiatedCipher = AtomicReference<String?>(null)
             client.transport.addAlgorithmsVerifier { negotiated ->
                 negotiatedCipher.set(negotiated.client2ServerCipherAlgorithm)
@@ -47,29 +49,31 @@ class SshjTransport(
                 client.connect(target.host, target.port)
             } catch (e: IOException) {
                 client.close()
-                // Адрес хоста в текст сообщения не выносим (логи/краш-репортеры): метаданные коннекта
-                // чувствительны в zero-knowledge клиенте. Диагностический детайл остаётся в cause (e).
+                // Don't put the host address in the message text (logs/crash reporters): connect
+                // metadata is sensitive in a zero-knowledge client. Diagnostic detail stays in the
+                // cause (e).
                 if (hostKeyRejected.get()) {
-                    throw SshHostKeyRejectedException("Ключ хоста отвергнут верификатором")
+                    throw SshHostKeyRejectedException("Host key rejected by verifier")
                 }
-                throw SshConnectionException("Не удалось установить соединение", e)
+                throw SshConnectionException("Failed to establish connection", e)
             }
 
             authenticate(client, target, auth)
 
-            // Ident сервера sshj отдаёт без префикса (`getServerVersion()` = serverID.substring(8)),
-            // восстанавливаем полную форму `SSH-2.0-<software>` как в статус-баре. Читаем синхронно
-            // на этом же IO-потоке после connect() — identification exchange уже завершён, гонки нет.
-            // (Вымерший `SSH-1.99-` сервер отобразился бы как `SSH-2.0-` — substring(8) одинаков; косметика.)
+            // sshj returns the server ident without the prefix (`getServerVersion()` =
+            // serverID.substring(8)); we restore the full `SSH-2.0-<software>` form for the status
+            // bar. Read synchronously on the same IO thread after connect() — identification
+            // exchange has already finished, no race. (A defunct `SSH-1.99-` server would show as
+            // `SSH-2.0-` too — substring(8) is the same either way; cosmetic only.)
             val serverVersion = runCatching { client.transport.serverVersion }
                 .getOrNull()?.takeIf { it.isNotBlank() }?.let { "SSH-2.0-$it" }
             SshjConnection(client, negotiatedCipher.get(), serverVersion)
         }
 
     /**
-     * Повесить на [client] адаптер нашего [hostKeyVerifier]. Возвращённый флаг взводится при отказе:
-     * verify() вызывается из IO-потока sshj, а флаг читается из корутины после connect() —
-     * нужна потокобезопасная видимость, поэтому AtomicBoolean.
+     * Attach an adapter for our [hostKeyVerifier] to [client]. The returned flag is set on
+     * rejection: verify() is called from sshj's IO thread, while the flag is read from the
+     * coroutine after connect() — needs thread-safe visibility, hence AtomicBoolean.
      */
     private fun installHostKeyVerifier(client: SSHClient): AtomicBoolean {
         val hostKeyRejected = AtomicBoolean(false)
@@ -90,23 +94,24 @@ class SshjTransport(
         return hostKeyRejected
     }
 
-    /** Аутентифицировать уже соединённый [client] по [auth]; при неудаче закрывает клиент и бросает. */
+    /** Authenticate an already-connected [client] per [auth]; on failure closes the client and throws. */
     private fun authenticate(client: SSHClient, target: SshTarget, auth: SshAuth) {
         try {
             when (auth) {
                 is SshAuth.Password -> client.authPassword(target.username, auth.secret)
                 is SshAuth.PublicKey -> {
-                    // loadKeys трактует строки как содержимое ключа (не путь); passphrase —
-                    // одноразовый PasswordFinder. Формат (OpenSSH/PKCS) sshj определяет сам.
+                    // loadKeys treats the strings as key content (not a path); passphrase is a
+                    // one-off PasswordFinder. sshj detects the format (OpenSSH/PKCS) itself.
                     val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
                     val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
                     client.authPublickey(target.username, keys)
                 }
                 is SshAuth.Certificate -> {
-                    // Cert-auth: владение доказываем приватным ключом из PEM, а серверу предъявляем
-                    // сам сертификат (публичная часть = распарсенный *-cert.pub). sshj не склеивает
-                    // их из строк сам (только из файлов по соседству), поэтому собираем KeyProvider
-                    // вручную: private — из PEM, public — Certificate, type — *_CERT.
+                    // Cert auth: possession is proven by the private key from PEM, while the
+                    // server is shown the certificate itself (public part = parsed *-cert.pub).
+                    // sshj doesn't stitch these together from strings on its own (only from
+                    // sibling files), so we build the KeyProvider by hand: private from PEM,
+                    // public as Certificate, type as *_CERT.
                     val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
                     val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
                     client.authPublickey(target.username, certificateKeyProvider(keys, auth.certificate))
@@ -114,11 +119,11 @@ class SshjTransport(
             }
         } catch (e: UserAuthException) {
             client.close()
-            // Без имени пользователя в тексте: сообщение не должно нести идентификатор (логи/отчёты).
-            throw SshAuthenticationException("Сервер не принял учётные данные", e)
+            // No username in the text: the message must not carry an identifier (logs/reports).
+            throw SshAuthenticationException("Server rejected the credentials", e)
         } catch (e: IOException) {
             client.close()
-            throw SshConnectionException("Обрыв соединения при аутентификации", e)
+            throw SshConnectionException("Connection dropped during authentication", e)
         }
     }
 
@@ -127,41 +132,44 @@ class SshjTransport(
     }
 }
 
-/** Один раз на процесс: регистрация полного BouncyCastle (см. [ensureCryptoProvider]). */
+/** Once per process: registration of the full BouncyCastle provider (see [ensureCryptoProvider]). */
 private val cryptoProviderLock = Any()
 
 @Volatile
 private var cryptoProviderReady = false
 
 /**
- * sshj полагается на полный BouncyCastle. На Android в провайдере «BC» по умолчанию сидит урезанный
- * системный BouncyCastle (класс `com.android.org.bouncycastle…`), которому не хватает шифров и
- * обмена ключами, нужных sshj, — из-за этого `connect()` падает на этапе KEX с обычным `IOException`
- * («Не удалось подключиться к host:port»). Подменяем «BC» на полноценный провайдер из bcprov,
- * который бандлится с sshj. На desktop JVM проблемы нет — guard по наличию `android.os.Build`
- * делает функцию no-op, так что рабочее поведение desktop не меняется. Идемпотентно.
+ * sshj relies on full BouncyCastle. On Android, the default "BC" provider is the stripped-down
+ * system BouncyCastle (class `com.android.org.bouncycastle…`), which lacks the ciphers and key
+ * exchanges sshj needs — as a result `connect()` fails during KEX with a plain `IOException`
+ * ("Failed to connect to host:port"). We swap "BC" for the full provider from bcprov, which is
+ * bundled with sshj. No issue on desktop JVM — a guard on the presence of `android.os.Build` makes
+ * the function a no-op there, so desktop behavior is unchanged. Idempotent.
  *
- * `internal` (а не `private`): тот же урезанный системный BouncyCastle ломает не только KEX при
- * коннекте, но и разбор приватного ключа (`SSHClient.loadKeys` в [app.skerry.shared.vault.BouncyCastleSshKeyGenerator.inspect]),
- * поэтому генератор/инспектор ключей раздела Vault регистрирует полный провайдер этим же вызовом.
+ * `internal` (not `private`): the same stripped-down system BouncyCastle breaks not only KEX on
+ * connect but also private-key parsing (`SSHClient.loadKeys` in
+ * [app.skerry.shared.vault.BouncyCastleSshKeyGenerator.inspect]), so the Vault section's key
+ * generator/inspector registers the full provider via this same call.
  *
- * Под [synchronized] (а не lock-free `compareAndSet`): флаг `cryptoProviderReady` поднимаем ТОЛЬКО
- * после фактической регистрации провайдера. Иначе второй поток (например, `inspect` из таба Vault и
- * `connect()` одновременно) увидел бы поднятый флаг и начал использовать ещё урезанный «BC» в окне
- * между взведением флага и `insertProviderAt`. Двойная проверка флага оставляет общий путь без лока.
+ * Under [synchronized] (not a lock-free `compareAndSet`): the `cryptoProviderReady` flag is raised
+ * ONLY after the provider is actually registered. Otherwise a second thread (e.g. `inspect` from
+ * the Vault tab racing `connect()`) could see the flag already set and start using the still
+ * stripped-down "BC" in the window between setting the flag and `insertProviderAt`. Double-checking
+ * the flag keeps the common path lock-free.
  */
 internal fun ensureCryptoProvider() {
     if (cryptoProviderReady) return
     synchronized(cryptoProviderLock) {
         if (cryptoProviderReady) return
-        // Явно ставим полный bcprov-провайдер «BC» первым на ОБЕИХ платформах — единообразно,
-        // не полагаясь на ленивую саморегистрацию sshj:
-        // - Android: системный «BC» урезан (com.android.org.bouncycastle) — не хватает шифров/KEX,
-        //   его обязательно нужно заместить полным bcprov.
-        // - Desktop: подстраховка — если «BC» отсутствует или это не наш bcprov, sshj.DefaultConfig
-        //   .initCipherFactories запросит шифр через несуществующий «BC» → NoSuchProviderException
-        //   (cause=null) → NPE рушит SSHClient(); ставим провайдер заранее, чтобы этого не случилось.
-        // В обоих случаях ставим полный провайдер первым, если текущий «BC» — не наш bcprov.
+        // Explicitly install the full bcprov "BC" provider first on BOTH platforms — uniformly,
+        // without relying on sshj's lazy self-registration:
+        // - Android: the system "BC" is stripped down (com.android.org.bouncycastle) — missing
+        //   ciphers/KEX, it must be replaced with the full bcprov.
+        // - Desktop: a safety net — if "BC" is absent or isn't our bcprov, sshj.DefaultConfig
+        //   .initCipherFactories would request a cipher through a nonexistent "BC" ->
+        //   NoSuchProviderException (cause=null) -> NPE crashes SSHClient(); we install the
+        //   provider ahead of time so this can't happen.
+        // In both cases, install the full provider first if the current "BC" isn't our bcprov.
         val existing = Security.getProvider(BouncyCastleProvider.PROVIDER_NAME)
         if (existing == null || existing.javaClass != BouncyCastleProvider::class.java) {
             Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
@@ -172,20 +180,21 @@ internal fun ensureCryptoProvider() {
 }
 
 /**
- * [KeyProvider] для аутентификации по сертификату: приватный ключ берётся из уже загруженного
- * [privateKeys] (PEM), а публичная часть — распарсенный из строки [certificate] объект `Certificate`
- * (sshj-декодер `Buffer.readPublicKey` для cert-типа возвращает именно его). Тип берём из первого
- * поля строки (`ssh-…-cert-v01@openssh.com`) — это `*_CERT`, по нему sshj и шлёт серверу cert-blob.
+ * [KeyProvider] for certificate authentication: the private key comes from the already-loaded
+ * [privateKeys] (PEM), while the public part is a `Certificate` object parsed from the
+ * [certificate] string (sshj's `Buffer.readPublicKey` decoder returns exactly that for the cert
+ * type). The type is taken from the string's first field (`ssh-…-cert-v01@openssh.com`) — that's
+ * `*_CERT`, and sshj uses it to send the server the cert blob.
  */
 private fun certificateKeyProvider(privateKeys: KeyProvider, certificate: String): KeyProvider {
     val fields = certificate.trim().split(Regex("\\s+"))
-    // Битая/обрезанная строка cert (нет второго поля, невалидный base64, мусор в wire-данных) не
-    // должна вылетать необработанным IndexOutOfBounds/IllegalArgument мимо обработчиков auth —
-    // конвертируем в SshAuthenticationException (предъявить учётные данные не удалось).
+    // A malformed/truncated cert string (missing second field, invalid base64, garbage wire data)
+    // must not escape as an unhandled IndexOutOfBounds/IllegalArgument past the auth handlers —
+    // convert it to SshAuthenticationException (credentials could not be presented).
     val (certType, certKey) = runCatching {
-        require(fields.size >= 2) { "ожидался формат '<type> <base64> [comment]'" }
+        require(fields.size >= 2) { "expected format '<type> <base64> [comment]'" }
         KeyType.fromString(fields[0]) to Buffer.PlainBuffer(Base64.getDecoder().decode(fields[1])).readPublicKey()
-    }.getOrElse { throw SshAuthenticationException("Сохранённый SSH-сертификат не удалось разобрать", it) }
+    }.getOrElse { throw SshAuthenticationException("Failed to parse the stored SSH certificate", it) }
     return object : KeyProvider {
         override fun getPrivate(): PrivateKey = privateKeys.private
         override fun getPublic(): PublicKey = certKey
@@ -193,7 +202,7 @@ private fun certificateKeyProvider(privateKeys: KeyProvider, certificate: String
     }
 }
 
-/** Fingerprint в формате OpenSSH: `SHA256:` + base64 без паддинга от wire-кодировки ключа. */
+/** Fingerprint in OpenSSH format: `SHA256:` + unpadded base64 of the key's wire encoding. */
 private fun opensshFingerprint(key: PublicKey): String {
     val encoded = Buffer.PlainBuffer().putPublicKey(key).compactData
     val digest = MessageDigest.getInstance("SHA-256").digest(encoded)

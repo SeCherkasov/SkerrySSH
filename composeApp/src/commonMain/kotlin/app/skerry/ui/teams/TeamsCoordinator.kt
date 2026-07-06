@@ -31,13 +31,13 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.skerry.shared.team.stripShareFields
 
-/** Типизированная причина сбоя операции Teams (текст — в syncFailureText-стиле, слой UI). */
+/** Typed cause of a Teams operation failure (text in the UI layer, syncFailureText style). */
 enum class TeamsFailure {
     NotConnected, VaultLocked, NoRecipientKey, AlreadyInvited, NoSuchAccount,
     KeyMissing, Network, Protocol, Forbidden,
 }
 
-/** Команда глазами UI: серверные метаданные + локальный ключ (имя живёт в своём vault / конверте). */
+/** A team as the UI sees it: server metadata + local key (the name lives in its vault / envelope). */
 data class TeamUi(
     val id: String,
     val name: String,
@@ -45,18 +45,18 @@ data class TeamUi(
     val role: TeamRole,
     val status: TeamMemberStatus,
     val memberCount: Int,
-    /** false у активной команды = ключ не доехал (или конверт не открылся) — записи недоступны. */
+    /** false for an active team = the key didn't arrive (or the envelope didn't open) — records inaccessible. */
     val hasKey: Boolean,
 )
 
-/** Данные для подтверждения приглашения: фингерпринт ключа приглашаемого сверяют голосом/чатом. */
+/** Invite confirmation data: the invitee's key fingerprint is verified over voice/chat. */
 data class InvitePreview(val accountId: String, val fingerprint: String)
 
 /**
- * Координатор Teams: связывает [TeamClient] (сеть), аккаунтный vault (ключи команд и identity),
- * per-team vault'ы и [SyncEngine] team-scope. Все операции — с [TeamsFailure] в [lastError] вместо
- * бросков (кроме CancellationException). Конвенции конкурентности — как в SyncCoordinator:
- * один [opMutex] на мутации, [syncMutex] на циклы синка.
+ * Teams coordinator: ties [TeamClient] (network), the account vault (team keys and identity), per-team
+ * vaults, and a team-scoped [SyncEngine]. All operations report [TeamsFailure] in [lastError] instead
+ * of throwing (except CancellationException). Concurrency conventions as in SyncCoordinator: one
+ * [opMutex] for mutations, [syncMutex] for sync cycles.
  */
 class TeamsCoordinator(
     private val session: () -> SyncSession?,
@@ -81,17 +81,16 @@ class TeamsCoordinator(
     val teams: StateFlow<List<TeamUi>> = _teams
 
     /**
-     * Монотонный счётчик, меняющийся при каждом РЕАЛЬНОМ изменении содержимого team-vault'ов:
-     * pull притянул чужие записи ([syncTeam] при `pulled > 0`) либо мы сами расшарили/сняли запись
-     * ([shareRecord]/[unshareRecord]). UI-секции общих хостов читают team-vault императивно (не через
-     * StateFlow записей), поэтому без этого сигнала live-синк, притянувший новые записи в team-vault,
-     * не перерисовывал бы список: [_teams] при этом не меняется, а список личного каталога (на который
-     * секции были завязаны косвенно) остаётся прежним — Compose пропускал бы рекомпозицию. Секции
-     * держат этот счётчик в ключе `remember`.
+     * Monotonic counter bumped on every actual change to team-vault contents: a pull brought remote
+     * records ([syncTeam] with `pulled > 0`) or we shared/unshared a record
+     * ([shareRecord]/[unshareRecord]). The shared-host UI sections read the team vault imperatively (not
+     * via a records StateFlow), so without this signal a live-sync that pulled new records wouldn't
+     * repaint the list: [_teams] doesn't change and the personal catalog (which the sections were tied
+     * to indirectly) stays the same — Compose would skip recomposition. Sections key `remember` on this.
      *
-     * Бампаем только на фактических изменениях (не на каждом [syncTeam]): [syncAll] на каждом
-     * Online-переходе прогоняет все команды, и безусловный ++ инвалидировал бы `remember` секций
-     * (→ пересчёт `VaultHostStore.all()` по всем командам) даже при пустой дельте.
+     * Bump only on actual changes (not every [syncTeam]): [syncAll] on each Online transition runs all
+     * teams, and an unconditional ++ would invalidate the sections' `remember` (→ recompute
+     * `VaultHostStore.all()` for all teams) even on an empty delta.
      */
     private val _revision = MutableStateFlow(0)
     val revision: StateFlow<Int> = _revision
@@ -107,35 +106,34 @@ class TeamsCoordinator(
     }
 
     /**
-     * Просьба к АККАУНТНОМУ синку сделать восстановительный полный re-pull
-     * ([SyncCoordinator.recoverFullPull]): активная команда без ключа означает, что запись TEAM
-     * потеряна для дельта-синка (старый клиент без Teams пропустил незнакомый тип, продвинув курсор,
-     * — повторно она уже не приедет). Поздняя привязка, как teamsForSync: sync создаётся раньше teams.
+     * Ask the account sync for a recovery full re-pull ([SyncCoordinator.recoverFullPull]): an active
+     * team without a key means the TEAM record is lost to delta sync (an old client without Teams
+     * skipped the unknown type while advancing the cursor — it won't come again). Late-bound like
+     * teamsForSync: sync is created before teams.
      */
     var onKeyMissing: (() -> Unit)? = null
 
-    // Ключ восстанавливаем ОДИН раз на команду за процесс: если его нет и на сервере, каждый refresh
-    // иначе гонял бы полный re-pull впустую.
+    // Recover a key once per team per process: if it's also missing on the server, every refresh would
+    // otherwise run a full re-pull for nothing.
     private val recoveryRequested = mutableSetOf<String>()
 
-    /** Подключить к WS-сигналам SyncCoordinator (`sync.onTeamSignal = teams::onSignal`). */
+    /** Wire to SyncCoordinator's WS signals (`sync.onTeamSignal = teams::onSignal`). */
     fun onSignal(signal: SyncSignal) {
         when (signal) {
             is SyncSignal.Team -> scope.launch {
-                // Курсор-guard, как в аккаунтном watch: своё же эхо не гоняет лишний цикл.
+                // Cursor guard, like the account watch: our own echo doesn't run a redundant cycle.
                 if (signal.cursor > teamState.cursor(cursorKey(signal.teamId))) syncTeam(signal.teamId)
             }
             SyncSignal.Membership -> scope.launch { refresh() }
-            is SyncSignal.Account -> Unit // аккаунтный канал обрабатывает SyncCoordinator
+            is SyncSignal.Account -> Unit // the account channel is handled by SyncCoordinator
         }
     }
 
     /**
-     * Дёрнуть после цикла АККАУНТНОГО синка ([SyncCoordinator.onSynced]): записи TEAM могли только
-     * что доехать в личный vault (команда создана/принята на другом устройстве этого аккаунта).
-     * Без этого «ключ команды ещё не доехал» висит до перезахода на экран, даже когда ключ уже
-     * лежит в vault'е. No-op, пока UI не показывает команду без ключа, — не гоняем сеть на каждый
-     * цикл live-синка.
+     * Call after an account sync cycle ([SyncCoordinator.onSynced]): TEAM records may have just arrived
+     * in the personal vault (a team created/accepted on another device of this account). Without this,
+     * "team key hasn't arrived" lingers until the screen is reopened, even when the key is already in
+     * the vault. No-op while the UI shows no keyless team — don't hit the network on every live-sync cycle.
      */
     fun onAccountSynced() {
         if (!vault.isUnlocked) return
@@ -145,23 +143,23 @@ class TeamsCoordinator(
         if (keyless.none { keys.containsKey(it.id) }) return
         scope.launch {
             refresh()
-            syncAll() // у свежеоткрытых команд надо сразу подтянуть общие записи
+            syncAll() // freshly opened teams need their shared records pulled right away
         }
     }
 
-    /** Фингерпринт СВОЕЙ публичной половины — показывается в UI для сверки при приглашении. */
+    /** Fingerprint of the own public half — shown in the UI for verification when inviting. */
     fun ownFingerprint(): String? {
         if (!vault.isUnlocked) return null
         return runCatching { sharingKeyFingerprint(identityStore.ensure().publicKey) }.getOrNull()
     }
 
-    /** Перечитать команды с сервера, открыть vault'ы активных, опубликовать identity при первом входе. */
+    /** Reread teams from the server, open active teams' vaults, publish identity on first login. */
     suspend fun refresh() {
         val s = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
-            // Identity публикуем идемпотентно: без неё нас нельзя пригласить в команду.
+            // Publish identity idempotently: without it we can't be invited to a team.
             c.publishKey(s, identityStore.ensure().publicKey)
             val remote = c.listTeams(s)
             val keys = keyStore.list()
@@ -172,7 +170,7 @@ class TeamsCoordinator(
                 } ?: t.id
                 TeamUi(t.id, name, t.ownerAccountId, t.role, t.status, t.memberCount, entry != null)
             }
-            // Ключи команд, из которых нас удалили (или команда удалена), больше не нужны.
+            // Keys of teams we were removed from (or that were deleted) are no longer needed.
             val liveIds = remote.map { it.id }.toSet()
             keys.keys.filter { it !in liveIds }.forEach { gone ->
                 keyStore.remove(gone)
@@ -196,7 +194,7 @@ class TeamsCoordinator(
         }
     }
 
-    /** Создать команду: id клиентский, teamKey локальный; сервер узнаёт только id. */
+    /** Create a team: id is client-side, teamKey is local; the server learns only the id. */
     suspend fun createTeam(name: String) {
         val s = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
@@ -210,7 +208,7 @@ class TeamsCoordinator(
         }
     }
 
-    /** Шаг 1 приглашения: ключ приглашаемого + фингерпринт для сверки по доверенному каналу. */
+    /** Invite step 1: the invitee's key + fingerprint for verification over a trusted channel. */
     suspend fun previewInvite(accountId: String): InvitePreview? {
         val s = session() ?: run { markError(TeamsFailure.NotConnected); return null }
         val c = client() ?: run { markError(TeamsFailure.NotConnected); return null }
@@ -230,7 +228,7 @@ class TeamsCoordinator(
         }
     }
 
-    /** Шаг 2: запечатать teamKey+имя на ключ приглашаемого и создать членство-приглашение с ролью [role]. */
+    /** Invite step 2: seal teamKey+name to the invitee's key and create an invite membership with role [role]. */
     suspend fun invite(teamId: String, accountId: String, role: TeamRole) {
         val s = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
@@ -244,7 +242,7 @@ class TeamsCoordinator(
         }
     }
 
-    /** Сменить роль участника (owner/admin; сервер применяет анти-эскалацию). */
+    /** Change a member's role (owner/admin; the server enforces anti-escalation). */
     suspend fun changeRole(teamId: String, accountId: String, role: TeamRole) {
         val s = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
@@ -254,7 +252,7 @@ class TeamsCoordinator(
         }
     }
 
-    /** Аудит-лог команды (доступен owner/admin); при ошибке — [lastError] и пустой список. */
+    /** Team audit log (owner/admin); on error — [lastError] and an empty list. */
     suspend fun teamActivity(teamId: String): List<TeamActivityEntry> {
         val s = session() ?: return emptyList()
         val c = client() ?: return emptyList()
@@ -268,7 +266,7 @@ class TeamsCoordinator(
         }
     }
 
-    /** Принять приглашение: открыть конверт своей identity, сохранить ключ, подтянуть записи. */
+    /** Accept an invite: open the envelope with own identity, save the key, pull records. */
     suspend fun accept(teamId: String) {
         val s = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
@@ -280,7 +278,7 @@ class TeamsCoordinator(
             val identity = identityStore.load() ?: return@op markError(TeamsFailure.KeyMissing)
             val invite = inviteCodec.open(identity, envelope)
                 ?: return@op markError(TeamsFailure.KeyMissing)
-            // Роль-плейсхолдер: фактическую роль вернёт сервер при refreshUnlocked (listTeams).
+            // Placeholder role: the server returns the actual role at refreshUnlocked (listTeams).
             keyStore.put(teamId, invite.teamName, TeamRole.VIEWER, invite.teamKey)
             c.accept(s, teamId)
             refreshUnlocked(s, c)
@@ -288,7 +286,7 @@ class TeamsCoordinator(
         syncTeam(teamId)
     }
 
-    /** Отклонить приглашение = удалить своё членство (конверт на сервере пропадает вместе с ним). */
+    /** Decline an invite = remove own membership (the server envelope vanishes with it). */
     suspend fun decline(teamId: String) = leave(teamId)
 
     suspend fun leave(teamId: String) {
@@ -316,7 +314,7 @@ class TeamsCoordinator(
         }
     }
 
-    /** Vault команды (для сторов общих записей в UI); null — нет ключа/не активны/vault залочен. */
+    /** Team vault (for shared-record stores in the UI); null — no key/not active/vault locked. */
     fun teamVault(teamId: String): Vault? {
         if (!vault.isUnlocked) return null
         val key = keyStore.get(teamId)?.dataKey() ?: return null
@@ -324,9 +322,9 @@ class TeamsCoordinator(
     }
 
     /**
-     * Поделиться записью аккаунтного vault с командой: копия расшифрованного payload'а кладётся в
-     * team-vault под тем же id. [stripFields] — поля, теряющие смысл вне личного workspace
-     * (например `groupId` хоста). Возвращает false при недоступном vault/записи.
+     * Share an account-vault record with a team: a copy of the decrypted payload is placed in the team
+     * vault under the same id. [stripFields] are fields meaningless outside the personal workspace
+     * (e.g. a host's `groupId`). Returns false if the vault/record is inaccessible.
      */
     suspend fun shareRecord(
         teamId: String,
@@ -338,19 +336,19 @@ class TeamsCoordinator(
         val payload = runCatching { vault.openPayload(recordId) }.getOrNull() ?: return false
         val cleaned = stripShareFields(payload, stripFields)
         target.put(recordId, type, cleaned)
-        _revision.value++ // локальная мутация: syncTeam ниже даст pulled==0 на нашу же запись
+        _revision.value++ // local mutation: syncTeam below yields pulled==0 on our own record
         syncTeam(teamId)
         return true
     }
 
-    /** Убрать запись из команды (tombstone доедет до всех участников). */
+    /** Remove a record from a team (the tombstone reaches all members). */
     suspend fun unshareRecord(teamId: String, recordId: String) {
         teamVault(teamId)?.remove(recordId) ?: return
-        _revision.value++ // локальная мутация: syncTeam ниже даст pulled==0 на наш же tombstone
+        _revision.value++ // local mutation: syncTeam below yields pulled==0 on our own tombstone
         syncTeam(teamId)
     }
 
-    /** Синкнуть одну команду (pull+push team-scope через общий SyncEngine). */
+    /** Sync one team (team-scoped pull+push via the shared SyncEngine). */
     suspend fun syncTeam(teamId: String) {
         val s = session() ?: return
         val c = client() ?: return
@@ -364,9 +362,10 @@ class TeamsCoordinator(
                     settings = { SyncSettings() },
                 )
                 val outcome = engine.sync(s)
-                // Будим UI-секции общих хостов (читают vault императивно, см. [revision]) лишь когда
-                // pull реально притянул чужие записи. Свой push сюда не считаем: локальные share/unshare
-                // бампают revision явно, а push-all без входящей дельты содержимое секций не меняет.
+                // Wake the shared-host UI sections (which read the vault imperatively, see [revision])
+                // only when a pull actually brought remote records. Our own push doesn't count here:
+                // local share/unshare bump revision explicitly, and a push-all with no incoming delta
+                // doesn't change section contents.
                 if (outcome.pulled > 0) _revision.value++
                 onTeamsChanged()
             } catch (e: CancellationException) {
@@ -382,13 +381,13 @@ class TeamsCoordinator(
             .forEach { syncTeam(it.id) }
     }
 
-    /** Залочить team-vault'ы (зовётся при локе аккаунтного vault — ключи команд больше недоступны). */
+    /** Lock team vaults (called when the account vault locks — team keys become inaccessible). */
     fun lock() {
         teamVaults.lockAll()
         _teams.value = emptyList()
     }
 
-    // --- внутренности ---
+    // --- internals ---
 
     private fun forgetTeamLocally(teamId: String) {
         keyStore.remove(teamId)
@@ -396,7 +395,7 @@ class TeamsCoordinator(
         teamState.setCursor(cursorKey(teamId), 0)
     }
 
-    /** refresh() без повторного захвата [opMutex] — для вызова из op{}-блоков. */
+    /** refresh() without re-acquiring [opMutex] — for calls from inside op{} blocks. */
     private suspend fun refreshUnlocked(s: SyncSession, c: TeamClient) {
         val remote = c.listTeams(s)
         val keys = keyStore.list()
@@ -412,9 +411,9 @@ class TeamsCoordinator(
     }
 
     /**
-     * Активная команда без ключа → одноразово (на команду за процесс) попросить аккаунтный синк о
-     * полном re-pull: ключ мог быть потерян дельта-синком навсегда (см. [onKeyMissing]). После pull
-     * [onAccountSynced] сам заметит доехавший ключ и перечитает команды.
+     * Active team without a key → ask the account sync for a full re-pull once (per team per process):
+     * the key may have been lost to delta sync permanently (see [onKeyMissing]). After the pull
+     * [onAccountSynced] notices the arrived key and rereads teams.
      */
     private fun maybeRecoverKeys() {
         val lost = _teams.value.filter {
@@ -456,7 +455,7 @@ class TeamsCoordinator(
     }
 }
 
-/** [SyncStateStore] с фиксированным ключом — чтобы SyncEngine хранил per-team курсор. */
+/** [SyncStateStore] with a fixed key — so SyncEngine keeps a per-team cursor. */
 private class KeyedStateStore(
     private val backing: SyncStateStore,
     private val key: String,

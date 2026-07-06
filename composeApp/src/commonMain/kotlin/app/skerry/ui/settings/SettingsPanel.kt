@@ -54,12 +54,13 @@ import app.skerry.ui.generated.resources.shtail_nav_terminal
 import app.skerry.ui.vault.VaultGateController
 import org.jetbrains.compose.resources.stringResource
 
-/** Панель настроек (модалка 760×560): nav 200dp + контент с 8 секциями (AI/Appearance/…/About). */
+/** Settings panel (760x560 modal): 200dp nav + content with 8 sections (AI/Appearance/.../About). */
 @Composable
 fun SettingsPanel(state: DesktopDesignState) {
-    // Живой контроллер безопасности (поверх общих vault/биометрии/журнала): смена пароля, тумблер
-    // биометрии, чтение событий. null — мок/превью без vault. reload перечитывает журнал/метку после
-    // действий. changePwOpen поднят на уровень оверлея: диалог рисуется поверх всей карточки настроек.
+    // Live security controller over shared vault/biometrics/log: password change, biometrics
+    // toggle, event reading. null when there is no vault (mock/preview). reload re-reads the
+    // log/label after actions. changePwOpen is lifted to overlay level: the dialog is drawn over
+    // the whole settings card.
     val securityController = rememberSecurityController()
     var securityReload by remember { mutableStateOf(0) }
     var changePwOpen by remember { mutableStateOf(false) }
@@ -74,9 +75,9 @@ fun SettingsPanel(state: DesktopDesignState) {
                 .consumeClicks(),
         ) {
         Row(Modifier.fillMaxSize()) {
-            // AI-таб виден, когда либо включён флаг незавершённых AI-поверхностей, либо подключён
-            // живой контроллер ассистента (реальный BYOK-провайдер за гейтом vault). Иначе таб скрыт,
-            // а дефолтный выбор (state.settingsTab = AI, как в прототипе) проецируется на Account.
+            // AI tab is visible when the AI feature flag is on or a live assistant controller is
+            // connected (a real BYOK provider behind the vault gate). Otherwise the tab is hidden and
+            // the default selection (state.settingsTab = AI) falls back to Account.
             val features = LocalFeatures.current
             val aiVisible = features.ai || LocalAi.current != null
             val effectiveTab = if (state.settingsTab == SettingsTab.AI && !aiVisible) SettingsTab.Account else state.settingsTab
@@ -106,7 +107,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                 }
             }
         }
-        // Крестик закрытия — оверлей в правом верхнем углу карточки (дублирует клик по скриму/Esc).
+        // Close button: overlay in the top-right corner of the card (duplicates scrim click/Esc).
         Box(
             Modifier
                 .align(Alignment.TopEnd)
@@ -117,7 +118,7 @@ fun SettingsPanel(state: DesktopDesignState) {
         ) {
             Sym(name = "close", size = 18.sp, color = D.dim)
         }
-        // Диалог смены мастер-пароля — оверлей поверх всей карточки настроек (не внутри скролла).
+        // Change master password dialog: overlay over the whole settings card (outside the scroll).
         if (changePwOpen && securityController != null) {
             ChangeMasterPasswordDialog(
                 controller = securityController,
@@ -130,10 +131,10 @@ fun SettingsPanel(state: DesktopDesignState) {
 }
 
 /**
- * Построить живой [VaultGateController] поверх общих vault/биометрии/журнала (из CompositionLocal) —
- * для раздела Безопасность (смена пароля, тумблер биометрии, чтение журнала). Отдельный инстанс от
- * гейта: события пишутся в ОБЩИЙ [SecurityLog] (консистентны на уровне файла), навигация гейта здесь
- * не нужна. `null` — мок/превью без vault: секция рисует нейтральный вид.
+ * Builds a live [VaultGateController] over the shared vault/biometrics/log (from CompositionLocal)
+ * for the Security section (password change, biometrics toggle, log reading). A separate instance
+ * from the gate: events are written to the shared [SecurityLog], gate navigation is not needed here.
+ * `null` when there is no vault (mock/preview): the section renders a neutral view.
  */
 @Composable
 private fun rememberSecurityController(): VaultGateController? {
@@ -157,7 +158,7 @@ private fun NavRow(item: SettingsNavItem, active: Boolean, onClick: () -> Unit) 
     }
 }
 
-/** Локализованная подпись пункта навигации настроек. */
+/** Localized label for a settings navigation item. */
 @Composable
 private fun SettingsTab.navLabel(): String = when (this) {
     SettingsTab.Account -> stringResource(Res.string.shtail_nav_account)

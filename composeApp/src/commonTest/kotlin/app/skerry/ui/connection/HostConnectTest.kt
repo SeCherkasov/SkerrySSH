@@ -9,10 +9,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Чистые хелперы проводки хоста к сессии (host → адрес/ярлык, keychain-секрет → способ
- * аутентификации), общие для desktop-дизайн-слоя и мобильного UI. Color/Compose тут не участвуют —
- * только модели. Хост ссылается на keychain-секрет по `credentialId`: вызывающий резолвит его в
- * [Credential] и зовёт [toSshAuth].
+ * Pure helpers wiring a host to a session (host → address/label, keychain secret → auth
+ * method), shared by the desktop design layer and mobile UI. No color/Compose involved here —
+ * models only. A host references its keychain secret by `credentialId`: the caller resolves it into
+ * a [Credential] and calls [toSshAuth].
  */
 class HostConnectTest {
 

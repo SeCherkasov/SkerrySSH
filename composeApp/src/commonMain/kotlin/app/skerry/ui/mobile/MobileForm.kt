@@ -30,11 +30,11 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 
 /**
- * Общие примитивы мобильных форм (шиты/диалоги/настройки): подпись поля и текстовое поле в стиле
- * макета. Единственный источник вместо копий (new-connection sheet, снипеты, порты, AI-настройки).
+ * Shared mobile form primitives (sheets/dialogs/settings): a field label and a text field. Single
+ * source of truth instead of per-screen copies (new-connection sheet, snippets, ports, AI settings).
  */
 
-/** Подпись поля (капс) + содержимое. */
+/** Field label (uppercase) + content. */
 @Composable
 internal fun MobileFormField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier) {
@@ -51,11 +51,10 @@ internal fun MobileFormField(label: String, modifier: Modifier = Modifier, conte
 }
 
 /**
- * Текстовое поле листа в стиле макета (тёмный фон + cyan-рамка, радиус 11).
- * [masked] — скрывать ввод (пароль/passphrase); [singleLine] = false + [mono] + [minHeightDp] —
- * многострочная моноширинная область (вставка PEM-ключа, команда сниппета), как desktop
- * `ModalTextField`. [background] — фон рамки: сниппетная команда использует [D.terminalBg].
- * [onSubmit] — действие Done/Send/Go клавиатуры (отправка quick-chat и т.п.).
+ * Sheet text field (dark background + cyan border, radius 11). [masked] hides input (password/
+ * passphrase); [singleLine] = false + [mono] + [minHeightDp] gives a multiline monospace area
+ * (pasting a PEM key, a snippet command), like desktop `ModalTextField`. [background] is the
+ * field's fill color (snippet command uses [D.terminalBg]). [onSubmit] fires on Done/Send/Go.
  */
 @Composable
 internal fun MobileFormInput(
@@ -77,7 +76,7 @@ internal fun MobileFormInput(
     val textStyle = remember(family, fontSize) {
         TextStyle(color = D.text, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 17.sp else 20.sp)
     }
-    // Рамка/паддинг — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    // Border/padding live in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,

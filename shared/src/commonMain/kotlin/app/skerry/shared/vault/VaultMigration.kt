@@ -6,28 +6,29 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * Разовая миграция схлопывания модели Vault с двух уровней (хост → учётка → секрет) до одного
- * (хост → секрет). До схлопывания запись [RecordType.IDENTITY] хранила либо сырой секрет
- * (`{id, label, auth}`), либо учётку-обёртку (`{id, label, username, credentialId}`), а
- * [app.skerry.shared.host.Host.identityId] ссылался на одно из них. После — секреты живут в keychain
- * ([RecordType.CREDENTIAL], [Credential]), а хост ссылается на них напрямую через `credentialId`.
+ * One-time migration collapsing the Vault model from two levels (host → account → secret) to one
+ * (host → secret). Before the collapse, an [RecordType.IDENTITY] record stored either a raw secret
+ * (`{id, label, auth}`) or an account wrapper (`{id, label, username, credentialId}`), and
+ * [app.skerry.shared.host.Host.identityId] pointed to one of them. After: secrets live in the
+ * keychain ([RecordType.CREDENTIAL], [Credential]), and the host references them directly via
+ * `credentialId`.
  *
- * Миграция самоопределяющаяся и идемпотентная (без отдельного флага). Безопасно вызывать при каждом
- * unlock. Требует разблокированного [Vault]; хосты живут в отдельном [HostStore], поэтому миграция
- * кросс-сторовая: секреты IDENTITY→CREDENTIAL (с сохранением id), учётки-обёртки схлопываются в
- * ссылку хоста на сам секрет, затем записи-обёртки удаляются.
+ * The migration is self-detecting and idempotent (no separate flag). Safe to call on every unlock.
+ * Requires an unlocked [Vault]; hosts live in a separate [HostStore], so the migration is
+ * cross-store: secrets go IDENTITY→CREDENTIAL (keeping the id), account wrappers collapse into the
+ * host referencing the secret directly, then the wrapper records are removed.
  */
 class VaultMigration(
     private val vault: Vault,
     private val hostStore: HostStore,
 ) {
 
-    /** Выполнить миграцию; возвращает `true`, если что-то изменилось (для логов/тестов). */
+    /** Runs the migration; returns `true` if anything changed (for logs/tests). */
     fun migrate(): Boolean {
         var changed = false
 
-        // a) Старые сырые секреты IDENTITY → CREDENTIAL (тот же id: на него ещё ссылаются хосты).
-        //    Учётки-обёртки (поля username/credentialId, без auth) сюда не пройдут → пропуск.
+        // a) Old raw IDENTITY secrets → CREDENTIAL (same id: hosts still reference it). Account
+        //    wrappers (username/credentialId fields, no auth) don't decode as this and are skipped.
         for (record in vault.records()) {
             if (record.type != RecordType.IDENTITY || record.deleted) continue
             val legacy = decodeSecret(vault.openPayload(record.id)) ?: continue
@@ -35,14 +36,14 @@ class VaultMigration(
             changed = true
         }
 
-        // Живые keychain-секреты после шага (a) — только на такой id допустимо перепривязать хост.
+        // Live keychain secrets after step (a) — only these ids are valid rebind targets for a host.
         val liveCredentials = vault.records()
             .filter { it.type == RecordType.CREDENTIAL && !it.deleted }
             .mapTo(mutableSetOf()) { it.id }
 
-        // b) Учётки-обёртки → их credentialId, НО только если target-секрет реально жив. Обёртку с
-        //    пропавшим секретом (повреждение/частичный прогон) не схлопываем: не плодим висячую
-        //    ссылку и не сносим единственного свидетеля связи.
+        // b) Account wrappers → their credentialId, but only if the target secret is actually live.
+        //    A wrapper whose secret is missing (corruption/partial run) is not collapsed: avoids
+        //    creating a dangling reference and destroying the only witness of the link.
         val wrapper = mutableMapOf<String, String>()
         for (record in vault.records()) {
             if (record.type != RecordType.IDENTITY || record.deleted) continue
@@ -50,9 +51,10 @@ class VaultMigration(
             if (account.credentialId in liveCredentials) wrapper[record.id] = account.credentialId
         }
 
-        // c) Перепривязываем хосты на ЖИВОЙ секрет: legacy → обёртка.credentialId, либо сам legacy,
-        //    если он уже id живого секрета (прерванный прогон/прямая ссылка). Не резолвится в живой
-        //    секрет → развязываем (credentialId=null, спросит пароль) — fail-safe вместо висячей ссылки.
+        // c) Rebind hosts onto the LIVE secret: legacy → wrapper.credentialId, or legacy itself if
+        //    it's already a live secret's id (interrupted run/direct reference). If it doesn't
+        //    resolve to a live secret, unlink it (credentialId=null, will prompt for password) —
+        //    fail-safe instead of a dangling reference.
         for (host in hostStore.all()) {
             val legacy = host.identityId ?: continue
             val credId = (wrapper[legacy] ?: legacy).takeIf { it in liveCredentials }
@@ -60,7 +62,7 @@ class VaultMigration(
             changed = true
         }
 
-        // d) Сносим только схлопнутые обёртки (их target жив, хосты перепривязаны).
+        // d) Remove only the collapsed wrappers (their target is live, hosts are rebound).
         for (id in wrapper.keys) {
             vault.remove(id)
             changed = true
@@ -72,21 +74,21 @@ class VaultMigration(
     private fun encodeCredential(c: Credential): ByteArray =
         json.encodeToString(Credential.serializer(), c).encodeToByteArray()
 
-    // Старый формат секрета: {id,label,auth} → подлежит миграции в CREDENTIAL. Обёртка (без auth)
-    // сюда не пройдёт благодаря обязательному полю auth. Доп. дискриминатор: запись с credentialId —
-    // это учётка, а не секрет (даже если у неё нашёлся бы auth), её НЕ конвертируем в CREDENTIAL.
+    // Old secret format: {id,label,auth} → migrates to CREDENTIAL. A wrapper (no auth) won't decode
+    // as this thanks to the required auth field. Extra discriminator: a record with credentialId is
+    // an account, not a secret (even if it happened to have auth), and is NOT converted to CREDENTIAL.
     private fun decodeSecret(payload: ByteArray?): LegacySecret? =
         payload?.let { runCatching { json.decodeFromString(LegacySecret.serializer(), it.decodeToString()) }.getOrNull() }
             ?.takeIf { it.credentialId == null }
 
-    // Учётка-обёртка: {id,label,username,credentialId}. Сырой секрет (без credentialId) сюда не пройдёт.
+    // Account wrapper: {id,label,username,credentialId}. A raw secret (no credentialId) won't decode as this.
     private fun decodeAccount(payload: ByteArray?): LegacyAccount? =
         payload?.let { runCatching { json.decodeFromString(LegacyAccount.serializer(), it.decodeToString()) }.getOrNull() }
 
     /**
-     * Прежняя форма записи IDENTITY (сырой секрет). [auth] делит wire-имена с [CredentialSecret].
-     * [credentialId] — дискриминатор: у настоящего секрета его нет; присутствие означает учётку-
-     * обёртку (её разбирает [LegacyAccount]), такую запись [decodeSecret] отвергает.
+     * Former shape of an IDENTITY record (raw secret). [auth] shares wire names with
+     * [CredentialSecret]. [credentialId] is a discriminator: a real secret doesn't have one;
+     * its presence means an account wrapper (parsed by [LegacyAccount]) — [decodeSecret] rejects such a record.
      */
     @Serializable
     private data class LegacySecret(
@@ -96,7 +98,7 @@ class VaultMigration(
         val credentialId: String? = null,
     )
 
-    /** Прежняя форма записи IDENTITY (учётка-обёртка): username + ссылка на keychain-секрет. */
+    /** Former shape of an IDENTITY record (account wrapper): username + reference to a keychain secret. */
     @Serializable
     private data class LegacyAccount(
         val id: String,

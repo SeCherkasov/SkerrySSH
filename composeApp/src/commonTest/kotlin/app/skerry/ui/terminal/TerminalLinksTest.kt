@@ -36,7 +36,7 @@ class TerminalLinksTest {
 
     @Test
     fun `rejects uris carrying control characters`() {
-        // Сервер мог бы вшить \n/\r для порчи диспетча URI на платформе.
+        // A server could embed \n/\r to corrupt platform URI dispatch.
         val nl = 10.toChar()
         val cr = 13.toChar()
         assertFalse(isSafeLinkUri("https://ok.test${nl}https://evil.test"))

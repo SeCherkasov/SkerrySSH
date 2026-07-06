@@ -20,19 +20,18 @@ import app.skerry.shared.ai.local.LocalModelCatalog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 
-/** Реплика диалога с ассистентом (для отрисовки ленты чата). */
+/** A single turn in the assistant conversation (for rendering the chat feed). */
 data class AiTurn(val role: AiRole, val text: String)
 
 /**
- * UI-контроллер AI-ассистента: держит [AiSettings] (выбор провайдера + BYOK + локальная модель),
- * сохраняет их и гоняет чат через [AiProvider]. Намеренно НЕ зависит от Vault напрямую —
- * настройки подаются лямбдами [persist]/[reload], поэтому контроллер тестируется без крипты.
- * [providerFactory] создаёт платформенный провайдер по [AiEndpoint] (облако —
- * [app.skerry.shared.ai.OpenAiProvider], устройство — `LocalAiProvider`); [localInstalled]
- * отвечает, скачана ли локальная модель на ЭТОМ устройстве (настройки синкаются, файл — нет).
+ * UI controller for the AI assistant: holds [AiSettings] (provider choice + BYOK + local model),
+ * persists them, and runs chat through [AiProvider]. Does not depend on Vault directly; settings
+ * are supplied via [persist]/[reload] lambdas. [providerFactory] creates the platform provider for
+ * an [AiEndpoint] (cloud - [app.skerry.shared.ai.OpenAiProvider], device - `LocalAiProvider`);
+ * [localInstalled] reports whether the local model is downloaded on this device (settings sync,
+ * the model file does not).
  *
- * Вывод модели — недоверенный источник: этот слой лишь показывает ответ, но НЕ исполняет команды
- * (исполнение с подтверждением — отдельная фича, слайс политик).
+ * Model output is an untrusted source: this layer only displays the reply, it does not execute commands.
  */
 class AiAssistantController(
     initialSettings: AiSettings,
@@ -41,43 +40,43 @@ class AiAssistantController(
     private val scope: CoroutineScope,
     private val reload: () -> AiSettings = { initialSettings },
     private val localInstalled: (LocalModel) -> Boolean = { false },
-    /** Контроллер закачек локальных моделей для настроек AI; `null` — платформа без локального AI. */
+    /** Controller for local model downloads in AI settings; `null` on platforms without local AI. */
     val models: LocalModelController? = null,
 ) {
     var settings by mutableStateOf(initialSettings); private set
 
     private val runner = AiStreamRunner(providerFactory, scope)
 
-    /** Лента диалога (user/assistant реплики). */
+    /** Conversation feed (user/assistant turns). */
     val turns = mutableStateListOf<AiTurn>()
 
-    /** Частичный ответ во время генерации; `null` — генерации нет. */
+    /** Partial reply while streaming; `null` when not generating. */
     var streaming by mutableStateOf<String?>(null); private set
     var error by mutableStateOf<String?>(null); private set
     var busy by mutableStateOf(false); private set
 
     private var job: Job? = null
-    // См. TerminalAiController: поколение защищает состояние нового запроса от finally отменённого старого.
+    // See TerminalAiController: generation guards new-request state from a cancelled old request's finally.
     private var generation = 0
 
-    /** Настроен ли внешний (BYOK) провайдер — для строки статуса возле полей ключа. */
+    /** Whether an external (BYOK) provider is configured, for the status line near the key fields. */
     val isConfigured: Boolean get() = settings.isConfigured
 
     /**
-     * Включён ли AI вообще ([AiProviderKind.OFF] — глобальный kill-switch из настроек).
-     * false → терминальный AI-бар не создаётся, BYOK/quick-chat в настройках скрыты.
+     * Whether AI is enabled at all ([AiProviderKind.OFF] is the global kill switch). False hides
+     * the terminal AI bar and the BYOK/quick-chat settings.
      */
     val enabled: Boolean get() = settings.provider != AiProviderKind.OFF
 
-    /** Готов ли ассистент отвечать выбранным провайдером (ключ есть / модель скачана). */
+    /** Whether the assistant can respond with the selected provider (key set / model downloaded). */
     val ready: Boolean get() = route() is AiRoute.Use
 
-    /** Локальная модель из настроек (для карточки провайдера в UI). */
+    /** Local model from settings (for the provider card in the UI). */
     val localModel: LocalModel get() = LocalModelCatalog.resolve(settings.localModelId)
 
     /**
-     * Quick-chat глобален (host-контекста нет), политика к нему не применяется — маршрутизируем
-     * как Balanced: облако разрешено, секреты вычищаются всегда (см. [ask]).
+     * Quick-chat is global (no host context) so no policy applies; routed as Balanced: cloud
+     * allowed, secrets always stripped (see [ask]).
      */
     private fun route(): AiRoute {
         val device = localModel
@@ -85,25 +84,22 @@ class AiAssistantController(
     }
 
     /**
-     * Язык (англоязычное имя: «English»/«Russian»), на котором терминальный AI-бар должен писать
-     * INFO/ASK — = язык интерфейса. Выставляется из корня UI по [app.skerry.ui.i18n.LocalAppLocale];
-     * читается лениво при каждом запросе (см. [TerminalAiController.responseLanguage]), поэтому смена
-     * языка в настройках подхватывается без пересоздания контроллеров.
+     * Language (English name: "English"/"Russian") the terminal AI bar should use for INFO/ASK
+     * output, matching the UI locale. Set from the UI root via [app.skerry.ui.i18n.LocalAppLocale]
+     * and read lazily per request (see [TerminalAiController.responseLanguage]), so a locale change
+     * is picked up without recreating controllers.
      *
-     * Намеренно публичный мутабельный `var`, а не параметр конструктора: контроллер создаётся при
-     * старте приложения (до композиции), а актуальная локаль живёт в Compose-состоянии платформенных
-     * корней UI (`ui/desktop/DesktopDesignApp.kt`, `ui/mobile/MobileDesignApp.kt`) — они и присваивают
-     * лямбду уже из композиции. Перенос в конструктор потребовал бы пересоздавать контроллер на смену
-     * языка (потеряли бы ленту диалога).
+     * A mutable `var` rather than a constructor parameter because the controller is created before
+     * composition, while the locale lives in Compose state of the platform UI roots.
      */
     var uiLanguageProvider: () -> String = { "English" }
 
-    /** Перечитать настройки из хранилища (после разблокировки vault). */
+    /** Reloads settings from storage (after vault unlock). */
     fun refresh() { settings = reload() }
 
     /**
-     * Построить контроллер терминального AI-бара под per-host [policy], разделяя провайдер/scope/настройки
-     * с этим ассистентом (BYOK-ключ один на приложение). Настройки читаются лениво — свежие после [refresh].
+     * Builds a terminal AI bar controller for a per-host [policy], sharing provider/scope/settings
+     * with this assistant (one BYOK key per app). Settings are read lazily, fresh after [refresh].
      */
     fun terminalController(policy: AiPolicy): TerminalAiController =
         TerminalAiController(
@@ -115,7 +111,7 @@ class AiAssistantController(
             localInstalled = localInstalled,
         )
 
-    /** Сохранить BYOK-поля (ключ шифруется в vault на стороне [persist]); выбор провайдера не трогаем. */
+    /** Saves BYOK fields (the key is encrypted in the vault by [persist]); provider choice is untouched. */
     fun save(apiKey: String, model: String, baseUrl: String) {
         persistSettings(
             settings.copy(
@@ -126,12 +122,12 @@ class AiAssistantController(
         )
     }
 
-    /** Выбрать провайдера по умолчанию (карточки в настройках AI); сохраняется сразу. */
+    /** Selects the default provider (AI settings cards); persisted immediately. */
     fun selectProvider(kind: AiProviderKind) {
         persistSettings(settings.copy(provider = kind))
     }
 
-    /** Выбрать локальную модель из каталога; сохраняется сразу. */
+    /** Selects a local model from the catalog; persisted immediately. */
     fun selectLocalModel(id: String) {
         persistSettings(settings.copy(localModelId = id))
     }
@@ -142,13 +138,12 @@ class AiAssistantController(
     }
 
     /**
-     * Отправить запрос ассистенту. No-op, если занят/пусто/провайдер не готов ([ready]).
+     * Sends a prompt to the assistant. No-op if busy, empty, or the provider isn't ready ([ready]).
      *
-     * Quick-chat глобален — host-контекста нет, поэтому per-host [AiPolicy] не применить; секреты
-     * вычищаются ВСЕГДА (эквивалент [AiPolicy.Balanced], см. [SecretRedactor]) — даже для
-     * локальной модели: лента и переиспользуемая история едины для обоих провайдеров.
-     * Редактируем до записи в [turns]: пользователь видит ровно то, что ушло провайдеру,
-     * и история для последующих запросов уже чистая.
+     * Quick-chat is global (no host context), so no per-host [AiPolicy] applies; secrets are always
+     * stripped (equivalent to [AiPolicy.Balanced], see [SecretRedactor]), even for the local model,
+     * since the feed and history are shared across providers. Redaction happens before writing to
+     * [turns], so the user sees exactly what was sent and later requests reuse clean history.
      */
     fun ask(prompt: String) {
         val text = SecretRedactor.redact(prompt.trim())
@@ -176,7 +171,7 @@ class AiAssistantController(
         )
     }
 
-    /** Отменить текущий запрос (если идёт) и очистить ленту. */
+    /** Cancels the current request (if any) and clears the feed. */
     fun clearConversation() {
         generation++
         job?.cancel()
@@ -187,7 +182,7 @@ class AiAssistantController(
     }
 
     private companion object {
-        /** Разрешения quick-chat: как Balanced — облако можно, секреты вычищаются. */
+        /** Quick-chat permissions: same as Balanced — cloud allowed, secrets stripped. */
         val QUICK_CHAT_DECISION = AiPolicyDecision.of(AiPolicy.Balanced)
 
         const val SYSTEM_PROMPT =

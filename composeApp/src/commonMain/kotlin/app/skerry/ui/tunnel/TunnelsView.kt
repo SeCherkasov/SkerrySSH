@@ -103,10 +103,10 @@ private val TUNNELS = listOf(
 )
 
 /**
- * Port forwarding (Tunnels) — ГЛОБАЛЬНЫЙ раздел: список сохранённых туннелей с
- * тумблерами on/off + редактор справа. Туннель самостоятелен (ссылается на хост по id) и при включении
- * сам открывает SSH-соединение через [TunnelManager]. Когда менеджер подан ([LocalTunnels]) — живой
- * список; без него (офскрин-рендер/превью) показывается статичный мок ([TUNNELS]).
+ * Port forwarding (Tunnels) — global section: list of saved tunnels with on/off toggles plus an
+ * editor on the right. A tunnel is standalone (references a host by id) and opens its own SSH
+ * connection via [TunnelManager] on activation. When a manager is supplied ([LocalTunnels]) shows
+ * the live list; otherwise (offscreen render/preview) shows a static mock ([TUNNELS]).
  */
 @Composable
 fun TunnelsView() {
@@ -114,7 +114,7 @@ fun TunnelsView() {
     val manager = LocalTunnels.current
     val hosts = LocalHosts.current
 
-    // Состояние правой панели: выбранный туннель и режим «создать новый» (кнопка New tunnel).
+    // Right-panel state: selected tunnel and "create new" mode (New tunnel button).
     var selectedId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
 
@@ -145,9 +145,9 @@ fun TunnelsView() {
                     adding = adding,
                     selectedId = selectedId,
                     onSelect = { selectedId = it; adding = false },
-                    // После удаления возвращаемся в режим «New tunnel», а не прыгаем на случайный
-                    // оставшийся туннель: selectedId ещё держит снесённый id, и без сброса selected
-                    // резолвился бы в firstOrNull().
+                    // After deletion, returns to "New tunnel" mode instead of jumping to an
+                    // arbitrary remaining tunnel: selectedId still holds the removed id, and
+                    // without resetting it, selected would resolve via firstOrNull().
                     onNew = { selectedId = null; adding = true },
                 )
             }
@@ -155,7 +155,7 @@ fun TunnelsView() {
     }
 }
 
-// Живой путь: глобальный список сохранённых туннелей + редактор справа.
+// Live path: global list of saved tunnels plus an editor on the right.
 
 @Composable
 private fun GlobalTunnelsBody(
@@ -170,13 +170,13 @@ private fun GlobalTunnelsBody(
     val tunnels = manager.tunnels
     val activeCount = tunnels.count { it.status is TunnelStatus.Active }
     val selected = tunnels.firstOrNull { it.id == selectedId } ?: tunnels.firstOrNull()
-    // Правая панель: редактор нового туннеля (New tunnel или пока список пуст), иначе правка выбранного.
+    // Right panel: new-tunnel editor (New tunnel or while the list is empty), otherwise editing the selected one.
     val showNew = adding || selected == null
 
     fun hostLabel(hostId: String): String = hosts?.find(hostId)?.label ?: hostId
 
-    // Туннель, для которого показан диалог подтверждения удаления (null — диалога нет). Локально: удаление
-    // самодостаточно (manager.delete), глобальное состояние не нужно — в отличие от close сессий.
+    // Tunnel for which the delete-confirmation dialog is shown (null — no dialog). Local state
+    // suffices since deletion (manager.delete) is self-contained, unlike session close.
     var pendingRemove by remember { mutableStateOf<TunnelEntry?>(null) }
 
     Box(Modifier.fillMaxSize()) {
@@ -189,8 +189,9 @@ private fun GlobalTunnelsBody(
                         TunnelHeaderRow()
                         tunnels.forEach { entry ->
                             HLine()
-                            // Лямбды стабилизируем по id: телеметрия активных туннелей тикает раз в секунду и
-                            // без remember пересоздавала бы onSelect/onToggle, перерисовывая весь список.
+                            // Lambdas stabilized by id: active-tunnel telemetry ticks every
+                            // second, and without remember would recreate onSelect/onToggle,
+                            // recomposing the whole list.
                             val onRowSelect = remember(entry.id, onSelect) { { onSelect(entry.id) } }
                             val onRowToggle = remember(entry.id, manager) {
                                 {
@@ -290,13 +291,13 @@ private fun TunnelRowGlobal(
     }
 }
 
-/** Источник: bind-адрес и порт слушателя (для активного — фактический boundPort, иначе запрошенный). */
+/** Source: bind address and listener port (actual boundPort when active, otherwise the requested one). */
 private fun sourceText(entry: TunnelEntry): String {
     val port = (entry.status as? TunnelStatus.Active)?.boundPort ?: entry.tunnel.bindPort
     return "${entry.tunnel.bindHost}:$port"
 }
 
-/** Ячейка ACTIVE: активный — тумблер вкл, подъём — песочные часы, иначе — тумблер выкл (включить/повторить). */
+/** ACTIVE cell: on toggle when active, hourglass while connecting, otherwise off toggle (activate/retry). */
 @Composable
 private fun ActiveCellGlobal(entry: TunnelEntry, onToggle: () -> Unit) {
     when (entry.status) {
@@ -307,9 +308,9 @@ private fun ActiveCellGlobal(entry: TunnelEntry, onToggle: () -> Unit) {
 }
 
 /**
- * Редактор туннеля (создание/правка): имя, тип, via-host (выпадающий список хостов), bind и dest.
- * Save собирает [TunnelFormState.draft] и пишет через [TunnelManager]; для существующего показаны
- * Remove и live-throughput (когда активен). Поля сбрасываются при смене [existing] (через `key`).
+ * Tunnel editor (create/edit): name, type, via-host (host dropdown), bind and dest. Save builds
+ * [TunnelFormState.draft] and writes it via [TunnelManager]; for an existing tunnel, shows Remove
+ * and live throughput (when active). Fields reset when [existing] changes (via `key`).
  */
 @Composable
 private fun TunnelEditor(
@@ -321,9 +322,9 @@ private fun TunnelEditor(
     onRequestRemove: () -> Unit,
 ) {
     val editingId = existing?.id
-    // Ключ = editingId: форма — изолированный буфер правки, заполняется один раз на выбранный туннель.
-    // Мутации entry.tunnel в обход (save из другого места для того же id) сюда намеренно НЕ долетают —
-    // приоритет у незавершённых правок пользователя.
+    // Keyed by editingId: the form is an isolated edit buffer, populated once per selected
+    // tunnel. Mutations to entry.tunnel from elsewhere (save for the same id) intentionally
+    // don't propagate here — unfinished user edits take priority.
     val form = remember(editingId) { TunnelFormState.fromEntry(existing) }
 
     val draft = form.draft
@@ -368,8 +369,8 @@ private fun TunnelEditor(
             Box(Modifier.padding(bottom = 8.dp))
             ThroughputRow("arrow_downward", D.moss, rateFraction(existing.downRate), humanRate(existing.downRate), mono)
             Box(Modifier.padding(bottom = 10.dp))
-            // Правка активного туннеля сохраняется, но проброс уже поднят — новые параметры подхватятся
-            // при следующем включении (save не перезапускает соединение).
+            // Editing an active tunnel saves fine, but the forward is already up — new
+            // parameters take effect on the next activation (save doesn't restart the connection).
             Txt(stringResource(Res.string.ports_changes_apply_after_restart), color = D.faint, size = 11.sp, lineHeight = 15.sp)
         }
         Box(Modifier.padding(bottom = 18.dp))
@@ -388,7 +389,7 @@ private fun TunnelEditor(
     }
 }
 
-/** Выпадающий список типа туннеля (-L/-R/-D) поверх формы (через [AnchoredDropdown]). */
+/** Tunnel-type dropdown (-L/-R/-D) over the form (via [AnchoredDropdown]). */
 @Composable
 private fun TypePicker(current: TunnelDirection, onPick: (TunnelDirection) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -422,7 +423,7 @@ private fun TypePicker(current: TunnelDirection, onPick: (TunnelDirection) -> Un
     )
 }
 
-/** Выпадающий список хостов поверх формы (через [AnchoredDropdown]); пустой — подсказка добавить хост. */
+/** Host dropdown over the form (via [AnchoredDropdown]); empty shows a hint to add a host. */
 @Composable
 private fun HostPicker(current: String, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -458,7 +459,7 @@ private fun HostPicker(current: String, options: List<Pair<String, String>>, onP
     )
 }
 
-// Мок-путь (офскрин-рендер/превью): статичная таблица + форма деталей.
+// Mock path (offscreen render/preview): static table plus detail form.
 
 @Composable
 private fun MockTunnelsBody() {
@@ -589,7 +590,7 @@ private fun InputField(value: String, mono: FontFamily) {
     }
 }
 
-/** Редактируемое поле формы туннеля (стиль [InputField] + плейсхолдер + ввод). */
+/** Editable tunnel form field ([InputField] style plus placeholder and input). */
 @Composable
 private fun EditField(
     value: String,

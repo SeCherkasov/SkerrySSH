@@ -65,11 +65,12 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /**
- * JVM-реализация [SyncClient] (desktop + Android): Ktor CIO client + Nimbus SRP-6a. Zero-knowledge:
- * на сервер уходят только SRP-верификатор (из [authKey]) и шифроблобы; пароль/masterKey/dataKey
- * остаются на устройстве. SRP-параметры — 2048-битная группа RFC 5054, SHA-256 (как на сервере).
+ * JVM implementation of [SyncClient] (desktop + Android): Ktor CIO client + Nimbus SRP-6a.
+ * Zero-knowledge: only the SRP verifier (derived from [authKey]) and encrypted blobs go to the
+ * server; password/masterKey/dataKey stay on the device. SRP parameters: the 2048-bit RFC 5054
+ * group, SHA-256 (matching the server).
  *
- * [serverUrl] — базовый HTTP(S) URL без хвостового слэша, напр. `https://sync.example.com`.
+ * [serverUrl] — base HTTP(S) URL with no trailing slash, e.g. `https://sync.example.com`.
  */
 class KtorSyncClient(
     private val serverUrl: String,
@@ -85,7 +86,7 @@ class KtorSyncClient(
         wrappedDataKey: ByteArray,
         device: DeviceInfo,
     ): SyncSession {
-        // Клиент сам считает соль и верификатор из authKey — сервер пароля не видит.
+        // The client itself computes the salt and verifier from authKey — the server never sees the password.
         val salt = BigInteger(256, random)
         val verifier = SRP6VerifierGenerator(params).generateVerifier(salt, accountId, authKey.toHex())
         val resp: TokenResponse = post("/auth/register") {
@@ -129,7 +130,7 @@ class KtorSyncClient(
             )
         }.bodyChecked()
 
-        // Проверяем встречное доказательство сервера M2: защита от поддельного сервера/MITM.
+        // Verify the server's counter-proof M2: protection against a spoofed server / MITM.
         try {
             srp.step3(BigInteger(verify.m2, 16))
         } catch (e: SRP6Exception) {
@@ -318,11 +319,11 @@ class KtorSyncClient(
     }
 
     override suspend fun ping(): Boolean = try {
-        // Открытый liveness-эндпоинт (см. server Plugins.kt `/healthz`). Без bearer-токена — пинг
-        // должен проходить и без сессии (vault залочен). Любой сбой = недоступен (не бросаем).
+        // Open liveness endpoint (see server Plugins.kt `/healthz`). No bearer token — the ping
+        // must succeed even without a session (vault locked). Any failure means unreachable (don't throw).
         http.get("$serverUrl/healthz").status.isSuccess()
     } catch (e: CancellationException) {
-        throw e // отмена корутины — не «сервер недоступен», сигнал должен дойти до вызывающего
+        throw e // coroutine cancellation isn't "server unreachable" — the signal must reach the caller
     } catch (e: Exception) {
         false
     }
@@ -340,25 +341,25 @@ class KtorSyncClient(
     private suspend fun put(path: String, block: io.ktor.client.request.HttpRequestBuilder.() -> Unit): HttpResponse =
         request { http.put("$serverUrl$path", block) }
 
-    /** Оборачивает сетевые сбои в [SyncException] NETWORK (вместо «голого» IOException наружу). */
+    /** Wraps network failures in [SyncException] NETWORK (instead of a bare IOException escaping). */
     private suspend fun request(call: suspend () -> HttpResponse): HttpResponse = try {
         call()
     } catch (e: CancellationException) {
-        throw e // отмена корутины — не сетевой сбой, глотать её нельзя (сломало бы structured concurrency)
+        throw e // coroutine cancellation isn't a network failure, must not be swallowed (would break structured concurrency)
     } catch (e: SyncException) {
         throw e
     } catch (e: Exception) {
         throw SyncException(SyncException.Kind.NETWORK, "network error: ${e.message}", e)
     }
 
-    /** 2xx — ок (тело не нужно), иначе [SyncException] по статусу. */
+    /** 2xx — ok (body not needed), otherwise [SyncException] by status. */
     private suspend fun HttpResponse.expectSuccess() {
         if (!status.isSuccess()) throw toException()
     }
 
     /**
-     * Кадр WS `/sync` → [SyncSignal]; незнакомый формат — null (forward-совместимость:
-     * новые типы кадров не роняют старые клиенты).
+     * WS `/sync` frame -> [SyncSignal]; an unrecognized format yields null (forward
+     * compatibility: new frame types don't crash old clients).
      */
     private fun parseSignal(text: String): SyncSignal? {
         text.toLongOrNull()?.let { return SyncSignal.Account(it) }
@@ -372,7 +373,7 @@ class KtorSyncClient(
         return null
     }
 
-    /** Парсит тело при 2xx, иначе бросает [SyncException] по статусу. */
+    /** Parses the body on 2xx, otherwise throws [SyncException] by status. */
     private suspend inline fun <reified T> HttpResponse.bodyChecked(): T {
         if (!status.isSuccess()) throw toException()
         return body()
@@ -391,10 +392,11 @@ class KtorSyncClient(
 
     private fun HttpStatusCode.isSuccess() = value in 200..299
 
-    // Ограничение zero-knowledge (как String-пароль в IonspinVaultCrypto.deriveMasterKey): Nimbus SRP
-    // принимает пароль только как String, поэтому hex authKey неизбежно живёт immutable-строкой до GC —
-    // затереть её нельзя. Время жизни сведено к вызову step1/generateVerifier; сам authKey (ByteArray)
-    // затирает вызывающий. authKey — производный субключ (Kdf от masterKey), не мастер-материал.
+    // Zero-knowledge limitation (like the String password in IonspinVaultCrypto.deriveMasterKey):
+    // Nimbus SRP accepts the password only as a String, so the hex authKey inevitably lives as an
+    // immutable string until GC — it can't be wiped. Lifetime is confined to the
+    // step1/generateVerifier call; the caller wipes the authKey (ByteArray) itself. authKey is a
+    // derived subkey (KDF from masterKey), not master key material.
     private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
     private fun ByteArray.b64(): String = Base64.getEncoder().encodeToString(this)
     private fun String.unb64(): ByteArray = Base64.getDecoder().decode(this)

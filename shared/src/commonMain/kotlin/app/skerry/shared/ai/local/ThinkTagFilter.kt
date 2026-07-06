@@ -1,12 +1,12 @@
 package app.skerry.shared.ai.local
 
 /**
- * Вырезает из стриминга локальной модели ЛИДИРУЮЩИЙ блок рассуждений `<think>…</think>`
- * (Qwen3 эмитит его даже с `/no_think` — пустым). Работает по дельтам: тег может прийти
- * разрезанным на куски. Всё после закрывающего тега (без ведущих переводов строк) отдаётся
- * как есть; `<think>` в середине ответа — контент, не режем.
+ * Strips a leading `<think>…</think>` reasoning block from a local model's streamed output
+ * (Qwen3 emits it even with `/no_think`, empty). Operates on deltas: the tag may arrive split
+ * across chunks. Everything after the closing tag (minus leading newlines) passes through as-is;
+ * a `<think>` mid-response is treated as content and left alone.
  *
- * Один экземпляр — на одну генерацию (состояние не переиспользуется между стримами).
+ * One instance per generation; state is not reused across streams.
  */
 class ThinkTagFilter {
 
@@ -15,14 +15,14 @@ class ThinkTagFilter {
     private var state = State.LEADING
     private val buffer = StringBuilder()
 
-    /** Пропустить очередную дельту через фильтр; возвращает текст к эмиту (может быть пустым). */
+    /** Feeds the next delta through the filter; returns the text to emit (may be empty). */
     fun feed(text: String): String {
         if (state == State.PASS) return text
         buffer.append(text)
         return drain()
     }
 
-    /** Хвост по завершении стрима: буфер, так и не оказавшийся `<think>`-блоком. */
+    /** Tail at stream end: buffer contents that never turned out to be a `<think>` block. */
     fun tail(): String = when (state) {
         State.LEADING -> buffer.toString()
         else -> ""
@@ -38,7 +38,7 @@ class ThinkTagFilter {
                     buffer.clear()
                     buffer.append(inside)
                 }
-                // Всё ещё может оказаться началом "<think>" (учитывая ведущие пробелы) — копим.
+                // May still turn into the start of "<think>" (leading whitespace) — keep buffering.
                 OPEN.startsWith(lead) -> return ""
                 else -> {
                     state = State.PASS
@@ -51,7 +51,7 @@ class ThinkTagFilter {
         if (state == State.INSIDE) {
             val closeAt = buffer.indexOf(CLOSE)
             if (closeAt < 0) {
-                // Держим только хвост, способный быть началом "</think>" — рассуждения не копим.
+                // Keep only the tail that could start "</think>" — don't accumulate reasoning text.
                 val keep = buffer.takeLast(CLOSE.length - 1).toString()
                 buffer.clear()
                 buffer.append(keep)
@@ -62,7 +62,7 @@ class ThinkTagFilter {
             state = State.AFTER
             buffer.append(rest)
         }
-        // AFTER: срезаем переводы строк сразу за </think>, дальше — чистый passthrough.
+        // AFTER: trim newlines right after </think>, then pure passthrough.
         val out = buffer.toString().trimStart()
         return if (out.isEmpty()) {
             buffer.clear()

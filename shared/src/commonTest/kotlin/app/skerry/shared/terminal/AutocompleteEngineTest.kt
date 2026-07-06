@@ -13,7 +13,7 @@ class CommandHistoryTest {
         val h = CommandHistory()
         h.record("ls")
         h.record("cd /tmp")
-        h.record("ls") // повтор поднимается наверх, без дубля
+        h.record("ls") // repeat moves to the top, no duplicate
         assertEquals(listOf("ls", "cd /tmp"), h.commands)
     }
 
@@ -39,8 +39,8 @@ class CommandHistoryTest {
         h.record("git push origin main")
         assertEquals("git push origin main", h.suggestion("git p"))
         assertEquals("git status", h.suggestion("git s"))
-        assertNull(h.suggestion("git status")) // равно префиксу — не подсказываем
-        assertNull(h.suggestion("")) // пустой префикс
+        assertNull(h.suggestion("git status")) // equals the prefix: no suggestion
+        assertNull(h.suggestion("")) // empty prefix
     }
 
     @Test
@@ -59,7 +59,7 @@ class CommandHistoryTest {
         h.record("git status")
         assertTrue(h.forget("gti status"))
         assertEquals(listOf("git status"), h.commands)
-        assertFalse(h.forget("nope")) // отсутствующая — false
+        assertFalse(h.forget("nope")) // not present: false
     }
 
     @Test
@@ -69,7 +69,7 @@ class CommandHistoryTest {
         h.record("docker ps")
         h.record("git push")
         assertEquals(listOf("git push", "git status"), h.search("git"))
-        assertEquals(listOf("docker ps"), h.search("ps")) // substring, не префикс
+        assertEquals(listOf("docker ps"), h.search("ps")) // substring, not prefix
         assertTrue(h.search("").isEmpty())
     }
 }
@@ -100,7 +100,7 @@ class AutocompleteEngineTest {
         val committed = e.onUserInput("uptime\r".encodeToByteArray())
         assertEquals("uptime", committed)
         assertEquals("", e.currentLine)
-        // повторный набор префикса подсказывает закоммиченную команду
+        // retyping the prefix suggests the committed command
         e.onUserInput("up".encodeToByteArray())
         assertEquals("uptime", e.suggestion())
     }
@@ -124,9 +124,9 @@ class AutocompleteEngineTest {
     @Test
     fun `builtins complete when history is empty`() {
         val e = AutocompleteEngine()
-        e.onUserInput("gti".encodeToByteArray()) // нет совпадений
+        e.onUserInput("gti".encodeToByteArray()) // no matches
         assertNull(e.suggestion())
-        e.onUserInput(byteArrayOf(127, 127, 127)) // стереть
+        e.onUserInput(byteArrayOf(127, 127, 127)) // erase
         e.onUserInput("git st".encodeToByteArray())
         assertEquals("git status", e.suggestion())
     }
@@ -135,7 +135,7 @@ class AutocompleteEngineTest {
     fun `arrow-key escape sequence clears the line without corrupting it`() {
         val e = AutocompleteEngine()
         e.onUserInput("ls".encodeToByteArray())
-        e.onUserInput(byteArrayOf(27, '['.code.toByte(), 'A'.code.toByte())) // ESC [ A (стрелка вверх)
+        e.onUserInput(byteArrayOf(27, '['.code.toByte(), 'A'.code.toByte())) // ESC [ A (up arrow)
         assertEquals("", e.currentLine)
     }
 
@@ -143,10 +143,10 @@ class AutocompleteEngineTest {
     fun `reset clears the tracked line without recording to history`() {
         val e = AutocompleteEngine()
         e.onUserInput("secretpass".encodeToByteArray())
-        e.reset() // напр. вход в режим без эха (ввод пароля) — не коммитим
+        e.reset() // e.g. entering no-echo mode (password input): do not commit
         assertEquals("", e.currentLine)
-        // После сброса и «ввода Enter» ничего не должно было попасть в историю: набор того же
-        // префикса не даёт подсказки (её источник — только история/типовые, а "secretpass" там нет).
+        // After reset, nothing should have entered history: retyping the same prefix gives no
+        // suggestion (its source is only history/builtins, and "secretpass" is in neither).
         e.onUserInput("secret".encodeToByteArray())
         assertNull(e.suggestion())
     }
@@ -175,8 +175,8 @@ class AutocompleteEngineTest {
         e.onUserInput("back".encodeToByteArray())
         e.cycleSuggestion()
         assertEquals("backupfiles", e.suggestion())
-        e.onUserInput("u".encodeToByteArray()) // "backu" — строка изменилась
-        assertEquals("backupdb", e.suggestion()) // курсор цикла сброшен на первый кандидат
+        e.onUserInput("u".encodeToByteArray()) // "backu": the line changed
+        assertEquals("backupdb", e.suggestion()) // cycle position reset to the first candidate
     }
 
     @Test
@@ -184,7 +184,7 @@ class AutocompleteEngineTest {
         val e = AutocompleteEngine()
         e.onUserInput("git pus".encodeToByteArray())
         assertEquals("git push", e.suggestion())
-        e.onUserInput(byteArrayOf(127, 127, 127, 127, 127, 127, 127)) // стереть
+        e.onUserInput(byteArrayOf(127, 127, 127, 127, 127, 127, 127)) // erase
         e.onUserInput("docker ru".encodeToByteArray())
         assertEquals("docker run", e.suggestion())
     }
@@ -192,8 +192,8 @@ class AutocompleteEngineTest {
     @Test
     fun `four-byte utf-8 characters keep both surrogates in the tracked line`() {
         val e = AutocompleteEngine()
-        // Эмодзи вне BMP кодируется 4 байтами UTF-8 → суррогатной парой в UTF-16: строка должна
-        // получить оба суррогата, а не только старший (иначе currentLine битый и длина «плывёт»).
+        // A non-BMP emoji encodes as 4 UTF-8 bytes -> a UTF-16 surrogate pair: the tracked line must
+        // get both surrogates, not just the high one (otherwise currentLine is corrupt and its length drifts).
         e.onUserInput("echo 😀 ok".encodeToByteArray())
         assertEquals("echo 😀 ok", e.currentLine)
     }

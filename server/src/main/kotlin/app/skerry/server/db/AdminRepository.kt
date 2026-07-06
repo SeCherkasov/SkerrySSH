@@ -11,10 +11,9 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
 /**
- * Read- и destructive-операции, нужные только админ-консоли (`docs/skerry-sync-design.md` §3):
- * агрегаты по аккаунтам, реальные envelope'ы записей, безопасный purge tombstone'ов и каскадное
- * удаление аккаунта. Zero-knowledge сохраняется: наружу идут только метаданные и размеры
- * шифроблобов, к содержимому доступа нет по определению.
+ * Read and destructive operations needed only by the admin console: account aggregates, real
+ * record envelopes, safe tombstone purge, and cascading account deletion. Zero-knowledge is
+ * preserved — only metadata and ciphertext sizes are exposed, never content.
  */
 class AdminRepository(private val db: Database) {
 
@@ -46,9 +45,9 @@ class AdminRepository(private val db: Database) {
     private class RecAgg(var total: Int = 0, var tombstones: Int = 0, var bytes: Long = 0)
 
     /**
-     * Сводка по всем аккаунтам инстанса. Агрегаты считаются на стороне БД (три групповых запроса,
-     * не N+1): устройства (всего/активных/последняя активность) и записи (всего/tombstone'ов/байт).
-     * `NOT revoked` / `CASE WHEN deleted` переносимы между SQLite (0/1) и PostgreSQL (boolean).
+     * Summary for all accounts on the instance. Aggregates are computed in the database (three
+     * grouped queries, not N+1): devices (total/active/last seen) and records (total/tombstones/bytes).
+     * `NOT revoked` / `CASE WHEN deleted` are portable between SQLite (0/1) and PostgreSQL (boolean).
      */
     suspend fun accountSummaries(limit: Int = 100): List<AccountSummary> = newSuspendedTransaction(Dispatchers.IO, db) {
         val devAgg = HashMap<String, DevAgg>()
@@ -101,15 +100,15 @@ class AdminRepository(private val db: Database) {
             }
     }
 
-    /** Всего аккаунтов на инстансе — чтобы консоль честно показывала «N из M» при подгрузке. */
+    /** Total accounts on the instance, for an accurate "N of M" in the console. */
     suspend fun accountCount(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
         Accounts.selectAll().count()
     }
 
     /**
-     * Реальные envelope'ы записей аккаунта (свежие по серверному курсору первыми, с верхней
-     * границей [limit]). [RecordEnvelope.previewHex] — первые 16 байт настоящего шифротекста: это
-     * непрозрачный шум, который наглядно доказывает, что без dataKey содержимое нечитаемо.
+     * Real record envelopes for an account (most recent by server cursor first, capped at
+     * [limit]). [RecordEnvelope.previewHex] is the first 16 bytes of the actual ciphertext —
+     * opaque noise demonstrating content is unreadable without the dataKey.
      */
     suspend fun recordEnvelopes(accountId: String, limit: Int = 100): List<RecordEnvelope> = newSuspendedTransaction(Dispatchers.IO, db) {
         Records.selectAll()
@@ -133,9 +132,9 @@ class AdminRepository(private val db: Database) {
     }
 
     /**
-     * Физически удаляет tombstone'ы аккаунта, БЕЗОПАСНО: только уже распространённые на все
-     * устройства — общий критерий [propagatedTombstones] по [tombstoneWatermark] (тот же, что у
-     * [RecordRepository.compactedTombstoneIds]). Возвращает число удалённых надгробий.
+     * Physically deletes account tombstones already propagated to all devices — same criterion,
+     * [propagatedTombstones] over [tombstoneWatermark], as [RecordRepository.compactedTombstoneIds].
+     * Returns the number of tombstones deleted.
      */
     suspend fun purgeTombstones(accountId: String): Int = newSuspendedTransaction(Dispatchers.IO, db) {
         val watermark = tombstoneWatermark(accountId)
@@ -143,9 +142,9 @@ class AdminRepository(private val db: Database) {
     }
 
     /**
-     * Каскадно удаляет аккаунт со всеми его записями, устройствами и pairing-сессиями в одной
-     * транзакции. Аудит-лог НЕ трогаем — он живёт без FK на [Accounts] и должен пережить удаление
-     * (см. [ActivityLog]). Возвращает false, если аккаунта нет.
+     * Cascade-deletes an account with all its records, devices, and pairing sessions in one
+     * transaction. The audit log is left untouched — it has no FK on [Accounts] and must survive
+     * deletion (see [ActivityLog]). Returns false if the account doesn't exist.
      */
     suspend fun deleteAccount(accountId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         val exists = Accounts.selectAll().where { Accounts.id eq accountId }.any()

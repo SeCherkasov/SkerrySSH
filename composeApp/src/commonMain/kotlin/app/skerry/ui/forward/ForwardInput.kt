@@ -1,8 +1,8 @@
 package app.skerry.ui.forward
 
 /**
- * Разобранные и проверенные параметры формы проброса (без направления — оно выбирается отдельно).
- * Получается только через [parseForwardInput], поэтому всегда содержит валидные значения.
+ * Parsed and validated forward form parameters (direction excluded, chosen separately). Only
+ * constructed via [parseForwardInput], so values are always valid.
  */
 data class ForwardRequest(
     val bindPort: Int,
@@ -11,14 +11,13 @@ data class ForwardRequest(
 )
 
 /**
- * Разобрать и проверить сырой ввод формы проброса. Возвращает [ForwardRequest] при корректных
- * данных или `null`, если поля неполны/некорректны (кнопку «Поднять» в этом случае держим неактивной).
+ * Parses and validates raw forward form input. Returns [ForwardRequest] on valid data or `null`
+ * if fields are incomplete/invalid.
  *
- * Правила: порт слушателя `0..65535` (`0` = «выберет ОС/сервер»), хост назначения непуст,
- * порт назначения `1..65535` (`0` бессмыслен — туда некуда подключаться).
+ * Rules: listener port `0..65535` (`0` = OS/server picks), destination host non-empty,
+ * destination port `1..65535`.
  *
- * Общий источник правды для desktop-формы туннелей (`TunnelsView`) и мобильной формы — чтобы
- * валидация не разъезжалась между платформами.
+ * Shared source of truth for the desktop and mobile forward forms.
  */
 fun parseForwardInput(bindPort: String, destHost: String, destPort: String): ForwardRequest? {
     val bind = parseBindPort(bindPort) ?: return null
@@ -28,9 +27,8 @@ fun parseForwardInput(bindPort: String, destHost: String, destPort: String): For
 }
 
 /**
- * Проверить порт слушателя в отрыве от адреса назначения — для динамического проброса (`-D`),
- * где назначения нет. `0..65535` (`0` = «выберет ОС»); `null`, если значение некорректно (кнопку
- * «Поднять» держим неактивной). Общий источник правды для desktop и мобильной формы.
+ * Validates a listener port on its own, for a dynamic (`-D`) forward with no destination.
+ * `0..65535` (`0` = OS picks); `null` if invalid.
  */
 fun parseBindPort(bindPort: String): Int? =
     bindPort.trim().toIntOrNull()?.takeIf { it in 0..65535 }

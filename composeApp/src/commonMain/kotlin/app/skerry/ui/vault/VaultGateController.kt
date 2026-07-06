@@ -22,99 +22,99 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Минимальная длина мастер-пароля. Выше типичного «8» (NIST для серверных паролей со счётчиком
- * попыток): vault-файл атакуют offline без ограничения попыток, единственный барьер — Argon2id.
- * Единственный источник правды и для валидации, и для текста ошибки в UI.
+ * Minimum master-password length. Higher than the typical "8" (NIST for server passwords with an
+ * attempt counter): the vault file is attacked offline with no attempt limit, the only barrier is
+ * Argon2id. Single source of truth for both validation and the UI error text.
  */
 const val MIN_MASTER_PASSWORD_LENGTH: Int = 12
 
 /**
- * Слово, которое пользователь должен вписать на экране сброса (type-to-confirm), чтобы подтвердить
- * безвозвратное стирание vault. Единый источник и для UI-поля, и для проверки — как удаление репозитория
- * в GitHub: барьер от случайного клика по деструктивному действию.
+ * Word the user must type on the reset screen (type-to-confirm) to confirm irreversible vault erasure.
+ * Single source for both the UI field and the check — like deleting a GitHub repo: a barrier against
+ * an accidental click on a destructive action.
  */
 const val RESET_CONFIRM_WORD: String = "RESET"
 
-/** Экран гейта мастер-пароля поверх [Vault]. */
+/** Master-password gate screen over [Vault]. */
 enum class VaultGateState {
-    /** Файла vault ещё нет — показываем форму создания мастер-пароля. */
+    /** No vault file yet — show the master-password creation form. */
     NeedsCreate,
 
-    /** Vault существует, но заблокирован — показываем форму разблокировки. */
+    /** Vault exists but is locked — show the unlock form. */
     NeedsUnlock,
 
-    /** Файл vault не читается — тупик: вводить пароль бессмысленно, показываем экран сброса. */
+    /** Vault file can't be read — dead end: entering a password is pointless, show the reset screen. */
     Corrupted,
 
-    /** Пользователь подтверждает безвозвратный сброс (забыл пароль / битый файл). */
+    /** User confirms an irreversible reset (forgot password / corrupt file). */
     Resetting,
 
     /**
-     * Vault только что создан и уже открыт — разовое предложение подключить self-hosted sync прямо
-     * в онбординге. Делается ДО [OfferBiometric] намеренно: вход в существующий аккаунт принимает
-     * его dataKey ([Vault.adoptDataKey]), и если бы биометрия уже была обёрнута под локальным ключом,
-     * принятие ключа аккаунта её обнулило бы. Подключив (или пропустив) sync здесь, к моменту enroll
-     * биометрии dataKey уже финальный. Показывается лишь когда платформа дала форму sync
-     * ([offersSyncOnboarding]); любой исход (подключил/пропустил) ведёт в [OfferBiometric]/[Unlocked].
+     * Vault just created and already open — a one-time offer to connect self-hosted sync in onboarding.
+     * Done before [OfferBiometric] on purpose: logging into an existing account adopts its dataKey
+     * ([Vault.adoptDataKey]), and if biometrics were already wrapped under the local key, adopting the
+     * account key would invalidate it. Connecting (or skipping) sync here means the dataKey is final by
+     * the time biometrics enroll. Shown only when the platform provided a sync form
+     * ([offersSyncOnboarding]); any outcome leads to [OfferBiometric]/[Unlocked].
      */
     OfferSync,
 
     /**
-     * Vault только что создан и уже открыт, но прежде чем пустить в приложение — разовое предложение
-     * включить разблокировку биометрией. Показывается лишь когда биометрия доступна на устройстве;
-     * любой исход (включил/отказался) ведёт в [Unlocked].
+     * Vault just created and already open, but before entering the app — a one-time offer to enable
+     * biometric unlock. Shown only when biometrics are available on the device; any outcome leads to
+     * [Unlocked].
      */
     OfferBiometric,
 
-    /** Vault разблокирован — пропускаем к остальному UI. */
+    /** Vault unlocked — pass through to the rest of the UI. */
     Unlocked,
 }
 
 /**
- * Что стирать при сбросе vault. Сам vault удаляется всегда (контракт [Vault.reset]); этот выбор
- * управляет только внешними данными, не входящими в файл vault. Решение принимает пользователь на
- * экране сброса, исполнение внешней чистки — инжектируемый колбэк `onReset` (контроллер про хосты
- * не знает: гейт остаётся над одним [Vault]).
+ * What to erase on a vault reset. The vault itself is always deleted (the [Vault.reset] contract); this
+ * choice controls only external data not part of the vault file. The user decides on the reset screen;
+ * the external cleanup is an injected `onReset` callback (the controller doesn't know about hosts: the
+ * gate stays over a single [Vault]).
  */
 enum class ResetScope {
-    /** Стереть только секреты (файл vault). Профили хостов и known_hosts остаются. */
+    /** Erase only secrets (the vault file). Host profiles and known_hosts remain. */
     SecretsOnly,
 
-    /** Заводской сброс: vault + профили хостов + known_hosts + локальные настройки. */
+    /** Factory reset: vault + host profiles + known_hosts + local settings. */
     Everything,
 }
 
 /**
- * Причина неуспеха последней попытки. Структурированный тип (не строка), чтобы текст
- * локализовался в UI, а тесты не зависели от формулировок.
+ * Cause of the last attempt's failure. A structured type (not a string) so the text is localized in the
+ * UI and tests don't depend on wording.
  */
 enum class VaultGateError {
-    /** Пароль короче [VaultGateController.minPasswordLength]. */
+    /** Password shorter than [VaultGateController.minPasswordLength]. */
     PasswordTooShort,
 
-    /** Пароль и подтверждение не совпали. */
+    /** Password and confirmation didn't match. */
     PasswordMismatch,
 
-    /** Неверный мастер-пароль при разблокировке. */
+    /** Wrong master password on unlock. */
     WrongPassword,
 
-    /** Файл vault не читается/повреждён. */
+    /** Vault file unreadable/corrupt. */
     Corrupted,
 
-    /** Биометрия сброшена (новый отпечаток/лицо) — она снята, нужен мастер-пароль. */
+    /** Biometrics reset (new fingerprint/face) — it's disabled, the master password is needed. */
     BiometricReset,
 }
 
 /**
- * Гейт мастер-пароля: блокирует доступ к остальному UI, пока [Vault] не разблокирован.
- * Стартовое состояние выбирается по [Vault.exists] — создать против разблокировать.
+ * Master-password gate: blocks access to the rest of the UI until [Vault] is unlocked. The start state
+ * is chosen by [Vault.exists] — create vs unlock.
  *
- * [Vault] синхронный (Argon2id-деривация идёт в его реализации), но деривация ТЯЖЁЛАЯ (m=64 MiB) —
- * [create]/[unlock] уводят её с UI-потока на [kdfDispatcher] через [scope] (иначе ANR-риск на
- * Android; по образцу [SecretCopyAuthorizer]); на время сверки взводится [verifying]. Пароли
- * приходят как [CharArray] и затираются здесь же: [Vault.create]/[Vault.unlock] затирают
- * переданный буфер по контракту, а подтверждение и не дошедшие до vault буферы гасит сам
- * контроллер (finally покрывает и путь с исключением/отменой).
+ * [Vault] is synchronous (Argon2id derivation is in its impl), but derivation is heavy (m=64 MiB) —
+ * [create]/[unlock] move it off the UI thread onto [kdfDispatcher] via [scope] (else ANR risk on
+ * Android; modeled on [SecretCopyAuthorizer]); [verifying] is set during the check. Passwords arrive as
+ * [CharArray] and are wiped here: [Vault.create]/[Vault.unlock] wipe the passed buffer per contract,
+ * and the controller wipes the confirmation and buffers that never reached the vault (finally covers
+ * the exception/cancellation path too).
  */
 @Stable
 class VaultGateController(
@@ -122,32 +122,31 @@ class VaultGateController(
     private val biometrics: VaultBiometrics? = null,
     private val minPasswordLength: Int = MIN_MASTER_PASSWORD_LENGTH,
     /**
-     * Внешняя чистка при сбросе (хосты/known_hosts/настройки по [ResetScope]). Вызывается ПОСЛЕ
-     * [Vault.reset], когда vault уже стёрт. Контроллер про эти данные не знает — их предоставляет
-     * платформенная проводка (desktop `main`). По умолчанию no-op (мок/превью).
+     * External cleanup on reset (hosts/known_hosts/settings per [ResetScope]). Called after
+     * [Vault.reset], when the vault is already erased. The controller doesn't know about this data — the
+     * platform wiring (desktop `main`) provides it. Defaults to no-op (mock/preview).
      */
     private val onReset: (ResetScope) -> Unit = {},
     /**
-     * Предлагать ли подключение sync шагом онбординга ([VaultGateState.OfferSync]) сразу после
-     * создания vault. Платформа выставляет `true`, когда у неё есть готовая форма sync (есть
-     * `SyncCoordinator`). Контроллер про sync ничего не знает — лишь решает, показать ли шаг.
+     * Whether to offer sync as an onboarding step ([VaultGateState.OfferSync]) right after vault
+     * creation. The platform sets `true` when it has a ready sync form (a `SyncCoordinator`). The
+     * controller knows nothing about sync — it only decides whether to show the step.
      */
     private val offersSyncOnboarding: Boolean = false,
     /**
-     * Локальный журнал событий безопасности (раздел Настройки → Безопасность). `null` — журнал не
-     * ведётся (мок/превью). Контроллер пишет в него события, которыми владеет: создание/смена
-     * мастер-пароля, включение/выключение биометрии, разблокировка биометрией. Читает его же для
-     * подписи «последняя смена пароля» и списка недавних событий.
+     * Local security event log (Settings → Security). `null` — not logging (mock/preview). The
+     * controller writes events it owns: master-password create/change, biometrics enable/disable,
+     * biometric unlock. It reads the same for the "last password change" caption and recent events.
      */
     private val securityLog: SecurityLog? = null,
     /**
-     * Скоуп асинхронных [create]/[unlock] (Argon2id вне UI-потока). По умолчанию — собственный на
-     * Main.immediate (результат — Compose snapshot-state, контроллер живёт с композицией; диспетчер
-     * трогается только при первом create/unlock, так что конструирование безопасно и без Main).
-     * [app.skerry.ui.vault.VaultGate] передаёт свой `rememberCoroutineScope`; тесты — TestScope.
+     * Scope for async [create]/[unlock] (Argon2id off the UI thread). Defaults to its own on
+     * Main.immediate (the result is Compose snapshot-state, the controller lives with the composition;
+     * the dispatcher is touched only on the first create/unlock, so construction is safe without Main).
+     * [app.skerry.ui.vault.VaultGate] passes its `rememberCoroutineScope`; tests pass a TestScope.
      */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
-    /** Диспетчер тяжёлой деривации Argon2id (m=64 MiB); тест подменяет виртуальным. */
+    /** Dispatcher for heavy Argon2id derivation (m=64 MiB); tests substitute a virtual one. */
     private val kdfDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     var state: VaultGateState by mutableStateOf(
@@ -159,36 +158,36 @@ class VaultGateController(
         private set
 
     /**
-     * Идёт тяжёлая деривация/сверка пароля (Argon2id) в [create]/[unlock] — повторные сабмиты
-     * на это время игнорируются (guard), UI может гасить кнопку.
+     * Heavy password derivation/check (Argon2id) in [create]/[unlock] is in progress — repeat submits
+     * are ignored meanwhile (guard), the UI may disable the button.
      */
     var verifying: Boolean by mutableStateOf(false)
         private set
 
-    /** Куда вернуться, если пользователь отменил экран сброса (на форму входа или экран Corrupted). */
+    /** Where to return if the user cancels the reset screen (unlock form or Corrupted screen). */
     private var resetReturnState: VaultGateState = VaultGateState.NeedsUnlock
 
-    /** Включена ли биометрия для этого vault (реактивно — тумблер обновляет интерфейс). */
+    /** Whether biometrics is enabled for this vault (reactive — the toggle updates the UI). */
     var biometricEnabled: Boolean by mutableStateOf(biometrics?.isEnabled() == true)
         private set
 
-    /** Счётчик активности пользователя — авто-лок по простою перезапускается при его изменении. */
+    /** User activity counter — idle auto-lock restarts when it changes. */
     var activityTick: Int by mutableStateOf(0)
         private set
 
     /**
-     * Идёт ли сейчас биометрический промпт. Авто-лок при уходе в фон должен его пропускать: системный
-     * промпт может слать `ON_STOP`, и блокировка посреди аутентификации привела бы к тому, что
-     * пользователь успешно приложил палец, а vault остался заперт (результат уже некому принять).
+     * Whether a biometric prompt is currently in flight. Background auto-lock must skip it: the system
+     * prompt may send `ON_STOP`, and locking mid-authentication would leave the user having successfully
+     * touched the sensor while the vault stayed locked (nothing left to accept the result).
      */
     var biometricInFlight: Boolean by mutableStateOf(false)
         private set
 
     /**
-     * Создать vault, если пароль проходит валидацию и совпадает с [confirm]. Оба буфера
-     * затираются в любом исходе. При ошибке валидации vault не трогается, состояние остаётся
-     * [VaultGateState.NeedsCreate]. Валидация — синхронно (ошибка видна сразу); сама деривация
-     * (Argon2id) — асинхронно на [kdfDispatcher] под [verifying] (повторный сабмит игнорируется).
+     * Create the vault if the password passes validation and matches [confirm]. Both buffers are wiped
+     * in any outcome. On a validation error the vault is untouched and the state stays
+     * [VaultGateState.NeedsCreate]. Validation is synchronous (error shows immediately); the derivation
+     * (Argon2id) is async on [kdfDispatcher] under [verifying] (repeat submit ignored).
      */
     fun create(password: CharArray, confirm: CharArray) {
         if (verifying) {
@@ -213,19 +212,19 @@ class VaultGateController(
                 scope.launch {
                     try {
                         withContext(kdfDispatcher) { vault.create(password) }
-                        // Базовая точка для подписи «последняя смена пароля» в разделе Безопасность.
+                        // Baseline for the "last password change" caption in the Security section.
                         securityLog?.record(SecurityEventType.VaultCreated)
-                        // Новый vault открыт. Сначала (если платформа дала форму) предлагаем подключить
-                        // sync — он может принять dataKey аккаунта, и биометрию надо оборачивать уже под
-                        // финальным ключом. Иначе сразу к биометрии / в приложение.
+                        // New vault is open. First (if the platform provided a form) offer to connect
+                        // sync — it may adopt the account dataKey, and biometrics must be wrapped under
+                        // the final key. Otherwise go straight to biometrics / into the app.
                         state = when {
                             offersSyncOnboarding -> VaultGateState.OfferSync
                             canEnableBiometric() -> VaultGateState.OfferBiometric
                             else -> VaultGateState.Unlocked
                         }
                     } finally {
-                        // finally покрывает исключение vault.create И отмену корутины: verifying не
-                        // должен залипнуть взведённым, буферы — остаться незатёртыми.
+                        // finally covers a vault.create exception and coroutine cancellation: verifying
+                        // must not stay stuck set, and buffers must not stay un-wiped.
                         verifying = false
                         password.fill(' ')
                         confirm.fill(' ')
@@ -236,10 +235,10 @@ class VaultGateController(
     }
 
     /**
-     * Разблокировать существующий vault; на ошибке остаёмся на форме с [error]. Деривация Argon2id —
-     * асинхронно на [kdfDispatcher] под [verifying] (повторный сабмит игнорируется). Буфер пароля
-     * затирается в любом исходе: [Vault.unlock] гасит его по контракту лишь на нормальном возврате,
-     * поэтому контроллер страхует и путь с исключением/отменой (finally).
+     * Unlock an existing vault; on error stay on the form with [error]. Argon2id derivation is async on
+     * [kdfDispatcher] under [verifying] (repeat submit ignored). The password buffer is wiped in any
+     * outcome: [Vault.unlock] wipes it per contract only on a normal return, so the controller also
+     * covers the exception/cancellation path (finally).
      */
     fun unlock(password: CharArray) {
         if (verifying) {
@@ -253,7 +252,7 @@ class VaultGateController(
                 when (withContext(kdfDispatcher) { vault.unlock(password) }) {
                     UnlockResult.Success -> state = VaultGateState.Unlocked
                     UnlockResult.WrongPassword -> error = VaultGateError.WrongPassword
-                    // Битый файл — не ошибка формы, а тупик: уводим на отдельный экран сброса.
+                    // A corrupt file isn't a form error but a dead end: go to the separate reset screen.
                     UnlockResult.Corrupted -> state = VaultGateState.Corrupted
                 }
             } finally {
@@ -263,7 +262,7 @@ class VaultGateController(
         }
     }
 
-    /** Заблокировать vault и вернуться к форме разблокировки. */
+    /** Lock the vault and return to the unlock form. */
     fun lock() {
         vault.lock()
         error = null
@@ -271,15 +270,15 @@ class VaultGateController(
     }
 
     /**
-     * Сменить мастер-пароль (vault уже разблокирован). Возвращает `true`, если старый пароль верен и
-     * пароль сменён; при верном исходе пишет событие [SecurityEventType.MasterPasswordChanged] в
-     * журнал. Оба буфера затираются в любом исходе (как в [create]/[unlock]). Проверку минимальной
-     * длины/совпадения нового пароля делает вызывающий UI (кнопка активна лишь при валидном вводе);
-     * единственный отказ на этом уровне — неверный текущий пароль.
+     * Change the master password (vault already unlocked). Returns `true` if the old password is correct
+     * and the password was changed; on success it records [SecurityEventType.MasterPasswordChanged].
+     * Both buffers are wiped in any outcome (as in [create]/[unlock]). Min-length/match validation of
+     * the new password is done by the calling UI (button enabled only on valid input); the only rejection
+     * at this level is a wrong current password.
      *
-     * Остаётся СИНХРОННЫМ (в отличие от [create]/[unlock]): единственный вызывающий — диалог смены
-     * пароля в настройках — сам уводит его с UI-потока (`withContext(Dispatchers.Default)` в
-     * SettingsPanel) и ему нужен прямой Boolean-результат.
+     * Stays synchronous (unlike [create]/[unlock]): the sole caller — the settings change-password dialog
+     * — moves it off the UI thread itself (`withContext(Dispatchers.Default)` in SettingsPanel) and needs
+     * a direct Boolean result.
      */
     fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean {
         try {
@@ -292,15 +291,15 @@ class VaultGateController(
         }
     }
 
-    /** Недавние события безопасности (новейшие первыми) для раздела Настройки → Безопасность. */
+    /** Recent security events (newest first) for the Settings → Security section. */
     fun recentSecurityEvents(limit: Int = 20): List<SecurityEvent> = securityLog?.recent(limit) ?: emptyList()
 
-    /** Время последней смены мастер-пароля (или `null`, если журнал не знает — показать нейтральный текст). */
+    /** Time of the last master-password change (or `null` if unknown — show neutral text). */
     fun lastPasswordChangeAt(): String? = securityLog?.lastPasswordChangeAt()
 
     /**
-     * Открыть экран подтверждения сброса (из формы входа — «забыл пароль», или с экрана [Corrupted]).
-     * Запоминает текущее состояние, чтобы [cancelReset] вернул ровно на него.
+     * Open the reset confirmation screen (from the unlock form — "forgot password" — or from [Corrupted]).
+     * Remembers the current state so [cancelReset] returns exactly to it.
      */
     fun beginReset() {
         resetReturnState = state
@@ -308,28 +307,28 @@ class VaultGateController(
         state = VaultGateState.Resetting
     }
 
-    /** Отменить сброс — вернуться на форму входа или экран Corrupted, откуда пришли. */
+    /** Cancel the reset — return to the unlock form or Corrupted screen we came from. */
     fun cancelReset() {
         error = null
         state = resetReturnState
     }
 
     /**
-     * Безвозвратно сбросить vault и начать заново. Стирает файл vault ([Vault.reset]), снимает
-     * биометрию (`vault.bio` бесполезен без vault), затем чистит внешние данные по [scope] через
-     * [onReset]. Итог — форма создания нового мастер-пароля ([VaultGateState.NeedsCreate]).
+     * Irreversibly reset the vault and start over. Erases the vault file ([Vault.reset]), disables
+     * biometrics (`vault.bio` is useless without the vault), then cleans external data on [scope] via
+     * [onReset]. Ends at the new-master-password creation form ([VaultGateState.NeedsCreate]).
      */
     fun confirmReset(scope: ResetScope) {
-        // vault.reset() уже удалил файл — что бы дальше ни упало, в Resetting застрять нельзя:
-        // переход на форму создания гарантируем в finally (на холодном старте vault.exists()==false
-        // и так дал бы NeedsCreate, но в этой сессии экран не должен зависнуть).
+        // vault.reset() already deleted the file — whatever fails next, we must not get stuck in
+        // Resetting: the transition to the creation form is guaranteed in finally (on a cold start
+        // vault.exists()==false would give NeedsCreate anyway, but this session's screen mustn't hang).
         try {
             vault.reset()
-            // disable() идемпотентен; его сбой не должен срывать чистку внешних данных и переход.
+            // disable() is idempotent; its failure must not derail external cleanup and the transition.
             runCatching { biometrics?.disable() }
-            // Чистка внешних данных — best-effort: её сбой (I/O при записи hosts.json и т.п.) не должен
-            // ронять UI-обработчик клика. vault уже стёрт; в худшем случае у хостов останутся висячие
-            // ссылки на секреты (коннект просто спросит пароль), но приложение не падает и не зависает.
+            // External cleanup is best-effort: its failure (I/O writing hosts.json etc.) must not crash
+            // the click handler. The vault is already erased; worst case hosts keep dangling references
+            // to secrets (connect just asks for a password), but the app neither crashes nor hangs.
             runCatching { onReset(scope) }
         } finally {
             biometricEnabled = false
@@ -338,23 +337,23 @@ class VaultGateController(
         }
     }
 
-    /** Зафиксировать активность пользователя — перезапускает таймер авто-лока по простою. */
+    /** Record user activity — restarts the idle auto-lock timer. */
     fun touch() {
         activityTick++
     }
 
-    /** Можно ли предложить разблокировку биометрией на форме входа (доступна и включена). */
+    /** Whether biometric unlock can be offered on the unlock form (available and enabled). */
     fun canUnlockWithBiometric(): Boolean =
         biometrics?.let { it.availability() == BiometricAvailability.Available && it.isEnabled() } == true
 
-    /** Можно ли предложить включение биометрии (есть железо и зачислен фактор). */
+    /** Whether enabling biometrics can be offered (hardware present and a factor enrolled). */
     fun canEnableBiometric(): Boolean =
         biometrics?.let { it.availability() == BiometricAvailability.Available } == true
 
     /**
-     * Разблокировать биометрией. Успех → [VaultGateState.Unlocked]. Инвалидация ключа снимает
-     * биометрию и просит пароль ([VaultGateError.BiometricReset]). Отмена/сбой — тихо остаёмся на
-     * форме пароля без ошибки. [prompt] (локализованные строки) приходит из UI.
+     * Unlock with biometrics. Success → [VaultGateState.Unlocked]. Key invalidation disables biometrics
+     * and asks for the password ([VaultGateError.BiometricReset]). Cancel/failure — stay silently on the
+     * password form with no error. [prompt] (localized strings) comes from the UI.
      */
     suspend fun unlockWithBiometric(prompt: BiometricPrompt) {
         val bio = biometrics ?: return
@@ -371,7 +370,7 @@ class VaultGateController(
                     error = VaultGateError.BiometricReset
                 }
                 BiometricUnlockResult.Corrupted -> state = VaultGateState.Corrupted
-                // Cancelled / Failed / Unavailable / NotEnabled — остаёмся на форме пароля молча.
+                // Cancelled / Failed / Unavailable / NotEnabled — stay on the password form silently.
                 else -> Unit
             }
         } finally {
@@ -379,7 +378,7 @@ class VaultGateController(
         }
     }
 
-    /** Включить биометрию (vault уже разблокирован). `true`, если включилась. */
+    /** Enable biometrics (vault already unlocked). `true` if enabled. */
     suspend fun enableBiometric(prompt: BiometricPrompt): Boolean {
         val bio = biometrics ?: return false
         biometricInFlight = true
@@ -393,20 +392,20 @@ class VaultGateController(
         }
     }
 
-    /** Выключить биометрию (удалить ключ и `vault.bio`). */
+    /** Disable biometrics (remove the key and `vault.bio`). */
     fun disableBiometric() {
         val bio = biometrics ?: return
         val wasEnabled = bio.isEnabled()
         bio.disable()
         biometricEnabled = bio.isEnabled()
-        // Пишем событие только если биометрия действительно была включена (disable идемпотентен).
+        // Record the event only if biometrics was actually enabled (disable is idempotent).
         if (wasEnabled && !biometricEnabled) securityLog?.record(SecurityEventType.BiometricDisabled)
     }
 
     /**
-     * Завершить шаг подключения sync ([VaultGateState.OfferSync]) — вызывается формой sync и когда
-     * пользователь подключился, и когда пропустил. dataKey теперь финальный, поэтому переходим к
-     * предложению биометрии (если устройство умеет) либо сразу пускаем в приложение.
+     * Finish the sync connect step ([VaultGateState.OfferSync]) — called by the sync form both when the
+     * user connected and when they skipped. The dataKey is now final, so move to the biometrics offer
+     * (if the device supports it) or straight into the app.
      */
     fun completeSyncOnboarding() {
         if (state != VaultGateState.OfferSync) return
@@ -414,27 +413,27 @@ class VaultGateController(
     }
 
     /**
-     * Завершить связывание устройства по коду, начатое прямо на экране создания vault
-     * ([VaultGateState.NeedsCreate]). К этому моменту координатор паринга
-     * ([app.skerry.ui.sync.SyncCoordinator.claimPairing]) уже создал и разблокировал локальный vault
-     * под выбранным паролем и принял ключ аккаунта, поэтому dataKey финальный — биометрию можно
-     * оборачивать сразу. Ведём через предложение биометрии (если устройство умеет) либо сразу в
-     * приложение. Сознательно НЕ напрямую в [VaultGateState.Unlocked] — иначе потерялось бы разовое
-     * предложение биометрии под финальным ключом. No-op вне [VaultGateState.NeedsCreate].
+     * Finish device pairing by code, started right on the vault creation screen
+     * ([VaultGateState.NeedsCreate]). By now the pairing coordinator
+     * ([app.skerry.ui.sync.SyncCoordinator.claimPairing]) has created and unlocked the local vault under
+     * the chosen password and adopted the account key, so the dataKey is final — biometrics can be
+     * wrapped right away. Route through the biometrics offer (if the device supports it) or straight into
+     * the app. Deliberately not directly to [VaultGateState.Unlocked] — else the one-time biometrics
+     * offer under the final key would be lost. No-op outside [VaultGateState.NeedsCreate].
      */
     fun completePairing() {
         if (state != VaultGateState.NeedsCreate) return
-        // Единственный момент, когда гейт достоверно знает, что устройство привязано к аккаунту по коду
-        // (координатор паринга уже создал/разблокировал vault и принял ключ аккаунта, а форма дождалась
-        // перехода в Online). Пишем событие здесь, а не в координаторе: сюда сходятся все пути join'а
-        // (desktop и mobile, через общий гейт), и это ровно та точка, где паринг завершился успехом.
+        // The only moment the gate reliably knows the device is linked to an account by code (the pairing
+        // coordinator already created/unlocked the vault and adopted the account key, and the form waited
+        // for the Online transition). Record the event here, not in the coordinator: all join paths
+        // (desktop and mobile, via the shared gate) converge here, exactly where pairing succeeded.
         securityLog?.record(SecurityEventType.DevicePaired)
         state = if (canEnableBiometric()) VaultGateState.OfferBiometric else VaultGateState.Unlocked
     }
 
     /**
-     * Закрыть разовое предложение биометрии после создания vault ([VaultGateState.OfferBiometric]) —
-     * пустить в приложение независимо от того, включил пользователь биометрию или отказался.
+     * Dismiss the one-time biometrics offer after vault creation ([VaultGateState.OfferBiometric]) — let
+     * the user into the app whether they enabled biometrics or declined.
      */
     fun dismissBiometricOffer() {
         if (state == VaultGateState.OfferBiometric) state = VaultGateState.Unlocked

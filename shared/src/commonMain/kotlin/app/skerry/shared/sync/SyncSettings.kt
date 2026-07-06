@@ -6,30 +6,30 @@ import app.skerry.shared.vault.VaultSingletonStore
 import kotlinx.serialization.Serializable
 
 /**
- * Что синхронизировать между устройствами — настройка УРОВНЯ АККАУНТА (одна на весь аккаунт, не на
- * устройство): хранится зашифрованной записью [RecordType.SETTINGS] в самом vault, поэтому едет тем
- * же E2E-синком и применяется одинаково везде (выключил на одном устройстве — выключилось на всех).
+ * What syncs between devices — an account-level setting (one for the whole account, not per
+ * device): stored as an encrypted [RecordType.SETTINGS] record in the vault, so it travels over
+ * the same E2E sync and applies uniformly everywhere.
  *
- * Семантика OFF — «тип не участвует в синке», БЕЗ удаления (логика Termius): отключённый тип ни
- * пушится, ни принимается, но локальные записи на каждом устройстве остаются как есть, а уже залитые
- * на сервер шифроблобы просто висят (zero-knowledge — сервер их не видит). Никаких tombstone'ов по
- * выключению — иначе отключение синка стёрло бы данные на других устройствах (потеря данных).
+ * OFF semantics: "type doesn't participate in sync", without deletion. A disabled type is neither
+ * pushed nor pulled, but local records on each device stay as-is, and blobs already uploaded to
+ * the server just sit there (zero-knowledge, so the server can't read them anyway). No tombstones
+ * are created on disable — that would erase data on other devices.
  *
- * Группировка как в UI (секция WHAT SYNCS): «Snippets» — отдельный тумблер ([syncSnippets]); всё, что
- * образует рабочее подключение (хосты/группы/учётки/ключи/known-hosts/туннели), — под «Hosts & groups»
- * ([syncHosts]). Сама запись настроек ([RecordType.SETTINGS]) синкается ВСЕГДА — иначе выключение не
- * долетело бы до других устройств.
+ * Grouped as in the UI (WHAT SYNCS section): "Snippets" is its own toggle ([syncSnippets]);
+ * everything forming a working connection (hosts/groups/credentials/keys/known-hosts/tunnels) is
+ * under "Hosts & groups" ([syncHosts]). The settings record itself ([RecordType.SETTINGS]) always
+ * syncs, otherwise a disable would never reach other devices.
  */
 @Serializable
 data class SyncSettings(
     val syncHosts: Boolean = true,
     val syncSnippets: Boolean = true,
 ) {
-    /** Участвует ли тип в синхронизации при текущих флагах. [RecordType.SETTINGS] — всегда. */
+    /** Whether [type] syncs under the current flags. [RecordType.SETTINGS] always does. */
     fun shouldSync(type: RecordType): Boolean = when (type) {
         RecordType.SETTINGS -> true
-        // Ключи команд и identity-пара — носители доступа к Teams: всегда едут между своими
-        // устройствами (иначе команда не открылась бы на втором устройстве аккаунта).
+        // Team keys and the identity pair carry access to Teams: always synced between a user's
+        // devices, otherwise a team wouldn't open on a second device.
         RecordType.TEAM, RecordType.TEAM_IDENTITY -> true
         RecordType.SNIPPET -> syncSnippets
         RecordType.HOST,
@@ -38,23 +38,23 @@ data class SyncSettings(
         RecordType.CREDENTIAL,
         RecordType.KNOWN_HOST,
         RecordType.TUNNEL -> syncHosts
-        // История команд терминала — локальная (per-host, зашифрована в vault), но НЕ синкается:
-        // объёмна, чувствительна и завязана на устройство. Сознательно исключена из WHAT SYNCS.
+        // Terminal command history is local (per-host, encrypted in the vault) but never synced:
+        // large, sensitive, and device-specific. Deliberately excluded from WHAT SYNCS.
         RecordType.TERMINAL_HISTORY -> false
     }
 }
 
 /**
- * Чтение/запись [SyncSettings] как единственной записи [RecordType.SETTINGS] в [Vault] (singleton с
- * фиксированным [SETTINGS_ID], по образцу [app.skerry.shared.vault.WorkspaceLayoutStore]). На
- * залоченном vault [load] отдаёт дефолт (всё включено), [save] требует разблокированного vault
- * ([Vault.put]). Битый/отсутствующий payload → дефолт: новый или старый vault без записи настроек
- * синкает всё, как и было до фичи (обратная совместимость).
+ * Reads/writes [SyncSettings] as the single [RecordType.SETTINGS] record in [Vault] (a singleton
+ * with fixed [SETTINGS_ID], following [app.skerry.shared.vault.WorkspaceLayoutStore]). On a locked
+ * vault [load] returns the default (everything on), [save] requires an unlocked vault
+ * ([Vault.put]). A corrupt/missing payload falls back to the default: a new or older vault without
+ * a settings record syncs everything, matching pre-feature behavior.
  */
 class SyncSettingsStore(private val vault: Vault) {
 
-    // Битый payload/бросок openPayload → дефолт «синкать всё» (см. VaultSingletonStore): цикл sync
-    // не должен падать из-за нечитаемой записи настроек (drainPull это бы прервало).
+    // Corrupt payload / openPayload throw -> default to "sync everything" (see VaultSingletonStore):
+    // the sync loop must not fail on an unreadable settings record (that would abort drainPull).
     private val store = VaultSingletonStore(vault, SETTINGS_ID, RecordType.SETTINGS, SyncSettings.serializer()) {
         SyncSettings()
     }
@@ -66,7 +66,7 @@ class SyncSettingsStore(private val vault: Vault) {
     }
 
     companion object {
-        /** Стабильный id singleton-записи настроек синка в vault. */
+        /** Stable id of the sync settings singleton record in the vault. */
         const val SETTINGS_ID = "sync.settings"
     }
 }

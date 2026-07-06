@@ -20,14 +20,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Сквозной цикл шеринга: участники A и B держат per-team vault'ы с ОБЩИМ teamKey (полученным по
- * приглашению) и гоняют записи через team-scope сервера тем же [SyncEngine], что и аккаунтный vault.
- * Сервер (здесь — in-memory LWW-заглушка) видит только шифроблобы; расшифровка происходит локально
- * при merge в team-vault.
+ * End-to-end sharing round trip: members A and B hold per-team vaults with a shared teamKey
+ * (obtained via invitation) and sync records through the team-scope server using the same
+ * [SyncEngine] as the account vault. The server (an in-memory LWW stub here) only sees
+ * ciphertext; decryption happens locally on merge into the team vault.
  */
 class TeamSyncRoundTripTest {
 
-    /** Mini-LWW сервер team-scope: та же семантика, что TeamRecordRepository. */
+    /** Mini team-scope LWW server with the same semantics as TeamRecordRepository. */
     private class FakeTeamServer : TeamClient {
         private val records = linkedMapOf<String, Pair<RemoteRecord, Long>>() // id -> (record, seq)
         private var seq = 0L
@@ -91,20 +91,20 @@ class TeamSyncRoundTripTest {
         val teamKey = crypto.newDataKey()
         val session = SyncSession("acct", "access", "refresh")
 
-        // A: кладёт хост в team-vault и синкает
+        // A: puts a host into the team vault and syncs
         val aliceVault = vaultsFor("alice").open(teamId, teamKey)!!
         aliceVault.put("h1", RecordType.HOST, """{"name":"prod"}""".encodeToByteArray())
         val aliceEngine = engineFor(aliceVault, server)
         aliceEngine.sync(session)
 
-        // B: получил teamKey из приглашения, открывает свой team-vault и синкает
+        // B: got teamKey from the invitation, opens its team vault and syncs
         val bobVault = vaultsFor("bob").open(teamId, teamKey)!!
         val bobEngine = engineFor(bobVault, server)
         bobEngine.sync(session)
 
         assertContentEquals("""{"name":"prod"}""".encodeToByteArray(), bobVault.openPayload("h1"))
 
-        // B удаляет хост → tombstone доезжает до A
+        // B removes the host -> tombstone propagates to A
         bobVault.remove("h1")
         bobEngine.sync(session)
         aliceEngine.sync(session)
@@ -136,7 +136,7 @@ class TeamSyncRoundTripTest {
 
         vaults.reset(teamId)
 
-        // файл удалён — открытие создаёт пустой vault заново
+        // file removed -> opening recreates an empty vault
         val fresh = vaults.open(teamId, key)!!
         assertEquals(0, fresh.records().size)
     }

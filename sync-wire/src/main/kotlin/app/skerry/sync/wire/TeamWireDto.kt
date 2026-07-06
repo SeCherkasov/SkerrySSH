@@ -3,17 +3,18 @@ package app.skerry.sync.wire
 import kotlinx.serialization.Serializable
 
 /**
- * Wire-контракт Teams (шеринг записей между аккаунтами, zero-knowledge).
+ * Wire contract for Teams (record sharing between accounts, zero-knowledge).
  *
- * Сервер видит только метаданные (id команд, состав, роли) и шифроблобы:
- * - `publicKey` — публичная половина X25519-пары аккаунта (для запечатывания приглашений);
- * - `envelope` — sealed-конверт crypto_box_seal с teamKey+именем команды, открыть может
- *   только приглашённый; сервер и админ содержимое не читают;
- * - `blob` в командных записях — XChaCha20-Poly1305 под teamKey (сервер ключа не имеет).
- * Имя команды на сервере не хранится вовсе — оно едет в конверте и в командной записи метаданных.
+ * The server sees only metadata (team ids, membership, roles) and encrypted blobs:
+ * - `publicKey` — public half of the account's X25519 pair (for sealing invitations);
+ * - `envelope` — a crypto_box_seal sealed envelope with teamKey + team name, openable only by
+ *   the invitee; server and admin cannot read the contents;
+ * - `blob` in team records — XChaCha20-Poly1305 under teamKey (the server has no key).
+ * The team name is never stored on the server at all — it travels in the envelope and in the
+ * team record metadata.
  */
 
-// --- ключи аккаунтов ---
+// --- account keys ---
 
 @Serializable
 data class PublishKeyRequest(val publicKey: String)
@@ -21,12 +22,12 @@ data class PublishKeyRequest(val publicKey: String)
 @Serializable
 data class AccountKeyResponse(val accountId: String, val publicKey: String)
 
-// --- команды и участники ---
+// --- teams and members ---
 
 @Serializable
 data class TeamCreateRequest(val teamId: String)
 
-/** Роли: `owner` управляет составом и удаляет команду; записи читают/пишут оба. */
+/** Roles: `owner` manages membership and deletes the team; both roles read/write records. */
 @Serializable
 data class TeamDto(
     val id: String,
@@ -35,7 +36,7 @@ data class TeamDto(
     val status: String,
     val createdAt: Long,
     val memberCount: Int,
-    /** Sealed-конверт приглашения для текущего аккаунта; null после принятия. */
+    /** Sealed invitation envelope for the current account; null after acceptance. */
     val envelope: String? = null,
 )
 
@@ -54,19 +55,19 @@ data class TeamMemberDto(
 data class TeamMembersResponse(val members: List<TeamMemberDto>)
 
 /**
- * Приглашение участника. [role] — целевая роль (`admin`/`editor`/`viewer`); сервер отвергает
- * `owner` и повышение выше прав приглашающего. Пустая/неизвестная роль трактуется как `viewer`.
+ * Member invitation. [role] is the target role (`admin`/`editor`/`viewer`); the server rejects
+ * `owner` and any role above the inviter's own. An empty/unknown role is treated as `viewer`.
  */
 @Serializable
 data class TeamInviteRequest(val accountId: String, val envelope: String, val role: String = "viewer")
 
-/** Смена роли участника владельцем/админом (`admin`/`editor`/`viewer`; `owner` недопустим). */
+/** Role change by owner/admin (`admin`/`editor`/`viewer`; `owner` not allowed). */
 @Serializable
 data class TeamRoleChangeRequest(val role: String)
 
 /**
- * Строка аудита команды (`GET /teams/{id}/activity`). Zero-knowledge: только метаданные —
- * актор, событие и человекочитаемая сводка ([detail], без содержимого записей).
+ * Team audit entry (`GET /teams/{id}/activity`). Zero-knowledge: metadata only — actor, event,
+ * and a human-readable summary ([detail], no record contents).
  */
 @Serializable
 data class TeamActivityDto(
@@ -79,5 +80,5 @@ data class TeamActivityDto(
 @Serializable
 data class TeamActivityResponse(val entries: List<TeamActivityDto>)
 
-// Командные записи переиспользуют RecordDto/RecordsResponse/PushRequest/PushResponse:
-// формат идентичен, меняется только scope (`/teams/{id}/records` вместо `/vault/records`).
+// Team records reuse RecordDto/RecordsResponse/PushRequest/PushResponse: format is identical,
+// only the scope changes (`/teams/{id}/records` instead of `/vault/records`).

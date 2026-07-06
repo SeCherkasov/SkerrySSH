@@ -5,7 +5,7 @@ import app.skerry.shared.files.LocalFileBrowser
 import kotlinx.coroutines.Dispatchers
 import okio.FileSystem
 
-/** Desktop: реальная локальная ФС через okio со стартом в домашнем каталоге пользователя. */
+/** Desktop: real local filesystem via okio, starting in the user's home directory. */
 actual fun platformLocalBrowser(): FileBrowser =
     LocalFileBrowser(
         fileSystem = FileSystem.SYSTEM,

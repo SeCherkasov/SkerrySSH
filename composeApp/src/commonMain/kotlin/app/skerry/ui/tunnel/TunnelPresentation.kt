@@ -14,12 +14,11 @@ import app.skerry.ui.generated.resources.ports_type_socks_display
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Представление типа туннеля (бейдж/подпись/цвета) — одна точка правды для desktop
- * ([TunnelsView]) и mobile (`MobilePortsView`), по образцу
- * [app.skerry.ui.forward.forwardTypeLabel].
+ * Tunnel direction presentation (badge/label/colors) — single source of truth for desktop
+ * ([TunnelsView]) and mobile (`MobilePortsView`), following [app.skerry.ui.forward.forwardTypeLabel].
  */
 
-/** Метка бейджа типа туннеля: `-L`→LOCAL, `-R`→REMOTE, `-D`→SOCKS. */
+/** Badge label for the tunnel direction: `-L`→LOCAL, `-R`→REMOTE, `-D`→SOCKS. */
 @Composable
 fun TunnelDirection.badgeLabel(): String = when (this) {
     TunnelDirection.Local -> stringResource(Res.string.ports_type_local)
@@ -27,7 +26,7 @@ fun TunnelDirection.badgeLabel(): String = when (this) {
     TunnelDirection.Dynamic -> stringResource(Res.string.ports_type_socks)
 }
 
-/** Полная подпись типа для селекта: «Local forward (-L)» и т.д. */
+/** Full type label for the select: "Local forward (-L)", etc. */
 @Composable
 fun TunnelDirection.displayLabel(): String = when (this) {
     TunnelDirection.Local -> stringResource(Res.string.ports_type_local_display)
@@ -35,7 +34,7 @@ fun TunnelDirection.displayLabel(): String = when (this) {
     TunnelDirection.Dynamic -> stringResource(Res.string.ports_type_socks_display)
 }
 
-/** Цвета бейджа типа: фон (полупрозрачный акцент) + текст. */
+/** Badge colors for the direction: background (translucent accent) plus text. */
 fun TunnelDirection.badgeColors(): Pair<Color, Color> = when (this) {
     TunnelDirection.Local -> D.cyan.copy(alpha = 0.12f) to D.cyanBright
     TunnelDirection.Remote -> D.amber.copy(alpha = 0.14f) to D.amber

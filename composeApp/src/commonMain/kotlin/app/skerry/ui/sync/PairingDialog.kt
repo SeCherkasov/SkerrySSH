@@ -57,9 +57,8 @@ import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.vault.copyPasswordToClipboard
 
 /**
- * Desktop-диалог «Link a device» (вошедшее устройство): скрим + карточка, как [SyncSetupDialog].
- * Содержимое — общий [PairingOfferContent] (QR + текстовый код + обратный отсчёт). Быстрого паринга
- * нет в макете (макет показывает лишь тост «New device paired»), стиль выдержан под существующие диалоги.
+ * Desktop "Link a device" dialog (already signed-in device): scrim plus card, like
+ * [SyncSetupDialog]. Content is the shared [PairingOfferContent] (QR, text code, expiry countdown).
  */
 @Composable
 fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
@@ -102,19 +101,21 @@ fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
 }
 
 /**
- * Общий контент показа кода связывания (desktop-диалог и mobile-секция): запускает [SyncCoordinator.startPairing]
- * один раз, показывает QR-код, текстовый код (выделяемый + кнопка Copy) и обратный отсчёт до протухания.
- * transferKey уезжает в QR/код — на сервере без него только бесполезный конверт (zero-knowledge).
+ * Shared pairing-code display content (desktop dialog and mobile section): calls
+ * [SyncCoordinator.startPairing] once, shows the QR code, a selectable text code with a Copy
+ * button, and an expiry countdown. transferKey travels only in the QR/code — the server holds
+ * only a useless envelope without it (zero-knowledge).
  */
 @Composable
 fun PairingOfferContent(sync: SyncCoordinator) {
-    // QR/код несут transferKey (им клеймится аккаунт в обход сервера) — защищаем экран показа от
-    // снимков и превью в «Недавних» на Android, как экран ВВОДА пароля (PairingJoinScreen). Desktop — no-op.
+    // QR/code carry transferKey (claims the account bypassing the server); this screen is
+    // protected from screenshots and Android's Recents preview, like the password-entry screen
+    // (PairingJoinScreen). No-op on desktop.
     SecureScreen()
     var offer by remember { mutableStateOf<PairingOffer?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var copied by remember { mutableStateOf(false) }
-    var remaining by remember { mutableStateOf<Long?>(null) } // секунд до протухания
+    var remaining by remember { mutableStateOf<Long?>(null) } // seconds until expiry
     val genFailedMessage = stringResource(Res.string.sync_pairing_gen_failed)
 
     LaunchedEffect(Unit) {
@@ -157,7 +158,7 @@ fun PairingOfferContent(sync: SyncCoordinator) {
             ) {
                 QrImage(offer!!.payload, Modifier.size(200.dp).clip(RoundedCornerShape(8.dp)))
             }
-            // Текстовый код для устройств без камеры / desktop→desktop: выделяемый, моноширинный.
+            // Text code for cameraless devices / desktop-to-desktop: selectable, monospace.
             SelectionContainer {
                 Box(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg)
@@ -185,8 +186,9 @@ fun PairingOfferContent(sync: SyncCoordinator) {
                 )
                 GhostButton(
                     if (copied) stringResource(Res.string.sync_copied) else stringResource(Res.string.sync_copy),
-                    // Sensitive-путь (Android: скрыт из истории буфера + автоочистка), а не обычный
-                    // setText: код связывания секретен ровно как мастер-пароль (несёт transferKey).
+                    // Sensitive clipboard path (Android: hidden from clipboard history,
+                    // auto-cleared) rather than plain setText: the pairing code is as secret as
+                    // the master password (carries transferKey).
                     onClick = { copyPasswordToClipboard(offer!!.payload); copied = true },
                     icon = if (copied) "check" else "content_copy",
                 )

@@ -2,7 +2,7 @@ package app.skerry.ui.settings
 
 import app.skerry.ui.app.SettingsTab
 
-/** Пункт навигации панели Settings (подпись локализуется в [app.skerry.ui.settings]-navLabel). */
+/** Settings panel navigation item (label localized in [app.skerry.ui.settings]-navLabel). */
 data class SettingsNavItem(val tab: SettingsTab, val icon: String)
 
 val SETTINGS_NAV = listOf(

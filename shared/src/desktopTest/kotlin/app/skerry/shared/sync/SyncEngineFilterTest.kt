@@ -16,16 +16,16 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Фильтрация «что синхронизировать» ([SyncSettings]) в [SyncEngine]: отключённый тип не пушится и не
- * принимается, а запись настроек ([RecordType.SETTINGS]) синкается всегда и применяется первой (её
- * выключение должно действовать в том же цикле, до записей подчинённых типов). Семантика OFF — без
- * удаления: локальные записи остаются, надгробий не рассылается.
+ * "What to sync" filtering ([SyncSettings]) in [SyncEngine]: a disabled type is neither pushed nor
+ * accepted, while the settings record ([RecordType.SETTINGS]) always syncs and applies first (its
+ * disable must take effect in the same cycle, before dependent-type records). OFF semantics don't
+ * delete: local records stay, no tombstones are sent.
  */
 class SyncEngineFilterTest {
 
     private val password = "correct horse battery staple"
 
-    /** In-memory заглушка сервера: pull отдаёт [serverRecords] один раз (курсор 0→1), push копит. */
+    /** In-memory server stub: pull returns [serverRecords] once (cursor 0->1), push accumulates. */
     private class FakeSyncClient(var serverRecords: List<RemoteRecord> = emptyList()) : SyncClient {
         val pushed = mutableListOf<RemoteRecord>()
         override suspend fun pull(session: SyncSession, since: Long): RecordPage =
@@ -83,7 +83,7 @@ class SyncEngineFilterTest {
         val vault = newVault("devB")
         vault.create(password.toCharArray())
 
-        // Сервер отдаёт чужой сниппет; локально snippets выключены — он не должен осесть в vault.
+        // Server returns another device's snippet; snippets are disabled locally — it must not land in the vault.
         val client = FakeSyncClient(
             serverRecords = listOf(RemoteRecord("s9", RecordType.SNIPPET.name, 5, "2026-06-30T00:00:00Z", "devX", false, byteArrayOf(1, 2, 3))),
         )
@@ -95,7 +95,7 @@ class SyncEngineFilterTest {
     @Test
     fun `incoming settings apply first and gate same-page records`() = runBlocking {
         initializeVaultCrypto()
-        // Источник A готовит валидные шифроблобы под общим dataKey; приёмник B разворачивает тем же ключом.
+        // Source A prepares valid ciphertext blobs under the shared dataKey; receiver B unwraps with the same key.
         val source = newVault("devA")
         source.create(password.toCharArray())
         SyncSettingsStore(source).save(SyncSettings(syncSnippets = false))
@@ -107,8 +107,8 @@ class SyncEngineFilterTest {
         receiver.create(password.toCharArray())
         receiver.unlockWithDataKey(source.exportDataKey()!!)
 
-        // Порядок страницы: сниппет ПЕРЕД настройками — движок обязан применить SETTINGS первыми и по
-        // ним отфильтровать сниппет из этой же страницы (иначе он бы осел до того, как выключение учлось).
+        // Page order: snippet BEFORE settings — the engine must apply SETTINGS first and use it to
+        // filter the snippet from the same page (otherwise it would land before the disable took effect).
         val client = FakeSyncClient(serverRecords = listOf(snippetRec, settingsRec))
         SyncEngine(client, receiver, InMemorySyncStateStore(), settings = { SyncSettingsStore(receiver).load() }).sync(session)
 

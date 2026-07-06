@@ -18,7 +18,7 @@ class HostDropTargetingTest {
 
     @Test
     fun drop_between_two_hosts_of_a_folder_picks_the_index_after_those_above() {
-        // pointerY=25 → выше центра 10, ниже 30/50 → index 1 в Prod.
+        // pointerY=25: above center 10, below 30/50, index 1 in Prod.
         assertEquals(HostDrop("Prod", 1), hostDropTarget(listOf(prod, lab), pointerY = 25f))
     }
 
@@ -29,7 +29,7 @@ class HostDropTargetingTest {
 
     @Test
     fun drop_at_the_bottom_of_a_folder_is_index_size() {
-        // pointerY=58 → ниже всех центров Prod (10/30/50) → index 3.
+        // pointerY=58: below all Prod centers (10/30/50), index 3.
         assertEquals(HostDrop("Prod", 3), hostDropTarget(listOf(prod, lab), pointerY = 58f))
     }
 
@@ -50,7 +50,7 @@ class HostDropTargetingTest {
 
     @Test
     fun folder_with_no_other_hosts_drops_at_index_zero() {
-        // Та же папка, где единственный хост сейчас перетаскивается (otherHostCentersY пуст).
+        // Same folder where the only host is currently being dragged (otherHostCentersY empty).
         val empty = FolderBounds("Solo", top = 0f, bottom = 40f, otherHostCentersY = emptyList())
         assertEquals(HostDrop("Solo", 0), hostDropTarget(listOf(empty), pointerY = 20f))
     }

@@ -3,15 +3,15 @@ package app.skerry.shared.ssh
 import kotlinx.serialization.Serializable
 
 /**
- * Запись об известном ключе хоста. Идентичность ключа — тройка (host, port, keyType):
- * один хост может предъявлять ключи разных типов. [fingerprint] — формат OpenSSH
- * (`SHA256:` + base64 без паддинга), как и в [HostKeyVerifier].
+ * A known host key record. Key identity is the triple (host, port, keyType): one host can present
+ * keys of different types. [fingerprint] uses OpenSSH format (`SHA256:` + unpadded base64), same as
+ * [HostKeyVerifier].
  *
- * [firstSeen] — отметка времени первого доверия ключу (ISO-8601, как её отдают инъектированные
- * часы [TofuHostKeyVerifier]); пусто для записей, импортированных из старого формата без даты.
+ * [firstSeen] is the timestamp of first trust (ISO-8601, from the injected clock in
+ * [TofuHostKeyVerifier]); empty for records imported from an older dateless format.
  *
- * `@Serializable` — запись синкается в vault ([app.skerry.shared.ssh.VaultKnownHostsStore],
- * Phase A): доверие к ключам хостов переезжает на другие устройства, как в Termius.
+ * `@Serializable` — the record syncs into the vault ([app.skerry.shared.ssh.VaultKnownHostsStore]):
+ * host key trust travels to other devices.
  */
 @Serializable
 data class KnownHost(
@@ -22,29 +22,29 @@ data class KnownHost(
     val firstSeen: String = "",
 )
 
-/** Персистентное хранилище известных ключей хостов. Платформенная реализация — файловая. */
+/** Persistent store of known host keys. Platform implementation is file-backed. */
 interface KnownHostsStore {
     fun all(): List<KnownHost>
 
-    /** Добавить новую запись. Вызывается только для ранее неизвестной тройки (host, port, keyType). */
+    /** Add a new record. Called only for a previously unknown (host, port, keyType) triple. */
     fun add(host: KnownHost)
 
     /**
-     * Атомарно заменить доверенный ключ той же идентичности (host, port, keyType) на [host]
-     * (новый отпечаток/время) — для принятия сменившегося ключа без окна, в котором запись
-     * отсутствует и [TofuHostKeyVerifier] мог бы пере-TOFU'ить произвольный ключ.
+     * Atomically replace the trusted key of the same identity (host, port, keyType) with [host]
+     * (new fingerprint/timestamp) — accepts a changed key without a window where the record is
+     * absent and [TofuHostKeyVerifier] could TOFU an arbitrary key.
      */
     fun replace(host: KnownHost)
 
-    /** Забыть доверенный ключ по идентичности (host, port, keyType). Нет записи — no-op. */
+    /** Forget a trusted key by identity (host, port, keyType). No-op if absent. */
     fun remove(host: String, port: Int, keyType: String)
 }
 
 /**
- * Зафиксированное событие смены ключа хоста: при подключении предъявлен [offeredFingerprint],
- * отличный от доверенного [recordedFingerprint] для тройки (host, port, keyType). Persisted, чтобы
- * менеджер known-hosts мог показать предупреждение и дать пользователю принять/отклонить новый ключ
- * уже после того, как соединение было отклонено [TofuHostKeyVerifier].
+ * A recorded host key change event: on connect, [offeredFingerprint] was presented but differs from
+ * the trusted [recordedFingerprint] for (host, port, keyType). Persisted so the known-hosts manager
+ * can warn and let the user accept/reject the new key after [TofuHostKeyVerifier] rejected the
+ * connection.
  */
 data class HostKeyMismatch(
     val host: String,
@@ -55,21 +55,21 @@ data class HostKeyMismatch(
     val observedAt: String = "",
 )
 
-/** Персистентное хранилище незакрытых событий смены ключа. Платформенная реализация — файловая. */
+/** Persistent store of unresolved key change events. Platform implementation is file-backed. */
 interface HostKeyMismatchStore {
     fun all(): List<HostKeyMismatch>
 
     /**
-     * Зафиксировать смену ключа. На тройку (host, port, keyType) хранится не более одной записи —
-     * повторное событие перезаписывает предыдущее (актуален последний предъявленный ключ).
+     * Record a key change. At most one record per (host, port, keyType) triple — a repeat event
+     * overwrites the previous one (the latest offered key wins).
      */
     fun record(mismatch: HostKeyMismatch)
 
-    /** Снять событие по идентичности (host, port, keyType) — после принятия/отклонения. Нет записи — no-op. */
+    /** Clear the event for an identity (host, port, keyType), after accept/reject. No-op if absent. */
     fun clear(host: String, port: Int, keyType: String)
 }
 
-/** Стор смены ключей, выключенный в no-op: TOFU без журналирования (тесты, минимальный граф). */
+/** No-op mismatch store: TOFU without logging (tests, minimal graphs). */
 object NoopHostKeyMismatchStore : HostKeyMismatchStore {
     override fun all(): List<HostKeyMismatch> = emptyList()
     override fun record(mismatch: HostKeyMismatch) {}
@@ -77,17 +77,14 @@ object NoopHostKeyMismatchStore : HostKeyMismatchStore {
 }
 
 /**
- * Trust-on-first-use поверх [KnownHostsStore]: первый ключ для тройки (host, port, keyType)
- * принимается и запоминается; при последующих подключениях принимается только совпадающий
- * fingerprint. Несовпадение → отказ (смена ключа / возможный MITM); доверенная запись при
- * этом не перезаписывается, а само событие фиксируется в [mismatches] для последующего разбора
- * в менеджере known-hosts. Новый тип ключа для известного хоста трактуется как новый ключ.
+ * Trust-on-first-use over [KnownHostsStore]: the first key for a (host, port, keyType) triple is
+ * accepted and remembered; later connections require a matching fingerprint. A mismatch is rejected
+ * (key change / possible MITM); the trusted record is left unchanged and the event is recorded in
+ * [mismatches] for the known-hosts manager to resolve. A new key type for a known host is treated as
+ * a new key.
  *
- * [now] штампует [KnownHost.firstSeen]/[HostKeyMismatch.observedAt] (ISO-8601); по умолчанию пусто —
- * для тестов и графов без часов.
- *
- * Интерактивного подтверждения отпечатка при первом подключении пока нет — придёт вместе с
- * интерактивным TOFU; принятие/отклонение уже зафиксированной смены ключа — в менеджере known-hosts.
+ * [now] stamps [KnownHost.firstSeen]/[HostKeyMismatch.observedAt] (ISO-8601); defaults to empty for
+ * tests and graphs without a clock.
  */
 class TofuHostKeyVerifier(
     private val store: KnownHostsStore,
@@ -118,12 +115,11 @@ class TofuHostKeyVerifier(
 }
 
 /**
- * Верификатор ключа хоста для разовой проверки связи («Test connection»): read-only по отношению к
- * [store]. Доверенный совпадающий ключ принимается; несовпадение у уже известного хоста отвергается
- * (защита от MITM на сохранённом хосте); ранее неизвестный хост принимается, но в [store] НЕ
- * записывается — проба не должна оставлять следов в known_hosts и фиксировать постоянное доверие.
- * Постоянное доверие ключу закрепляется только при реальном подключении ([TofuHostKeyVerifier]).
- * Зафиксирован [app.skerry.shared.ssh.ProbeHostKeyVerifierTest].
+ * Host key verifier for a one-off "test connection" check: read-only with respect to [store]. A
+ * matching trusted key is accepted; a mismatch for an already-known host is rejected (MITM
+ * protection); a previously unknown host is accepted but not written to [store] — a probe must not
+ * leave traces in known_hosts or establish permanent trust. Permanent trust is only established on a
+ * real connection ([TofuHostKeyVerifier]).
  */
 class ProbeHostKeyVerifier(
     private val store: KnownHostsStore,

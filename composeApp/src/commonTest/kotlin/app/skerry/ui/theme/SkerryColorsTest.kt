@@ -5,12 +5,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Токены сверяются с `:root` HTML-прототипов в docs/ (палитра «night sea»).
- * Прототипы — источник правды; при их изменении сначала обновляется этот тест.
+ * Verifies tokens against `:root` in the docs/ HTML prototypes ("night sea" palette).
+ * The prototypes are the source of truth; update this test first when they change.
  */
 class SkerryColorsTest {
 
-    // Поверхности
+    // Surfaces
 
     @Test
     fun `surface tokens match prototype root`() {
@@ -31,14 +31,14 @@ class SkerryColorsTest {
 
     @Test
     fun `translucent cyan tokens are cyan with prototype alpha`() {
-        // rgba(43,189,238,…) в CSS — те же RGB, отличается только альфа
+        // rgba(43,189,238,…) in CSS — same RGB, only alpha differs
         assertEquals(SkerryColors.cyan.copy(alpha = 0.10f), SkerryColors.cyanSoft)
         assertEquals(SkerryColors.cyan.copy(alpha = 0.20f), SkerryColors.cyanDim)
         assertEquals(SkerryColors.cyan.copy(alpha = 0.06f), SkerryColors.line)
         assertEquals(SkerryColors.cyan.copy(alpha = 0.14f), SkerryColors.lineStrong)
     }
 
-    // Secondary: amber (только AI/lighthouse-моменты)
+    // Secondary: amber (AI/lighthouse moments only)
 
     @Test
     fun `amber tokens match prototype root`() {
@@ -47,7 +47,7 @@ class SkerryColorsTest {
         assertEquals(SkerryColors.amber.copy(alpha = 0.14f), SkerryColors.amberSoft)
     }
 
-    // Семантические
+    // Semantic
 
     @Test
     fun `semantic tokens match prototype root`() {
@@ -56,7 +56,7 @@ class SkerryColorsTest {
         assertEquals(Color(0xFFE94B4B), SkerryColors.storm)
     }
 
-    // Текст
+    // Text
 
     @Test
     fun `text tokens match prototype root`() {
@@ -65,7 +65,7 @@ class SkerryColorsTest {
         assertEquals(Color(0xFF5A7080), SkerryColors.textFaint)
     }
 
-    // Маппинг в Material ColorScheme
+    // Mapping to Material ColorScheme
 
     @Test
     fun `dark color scheme maps tokens to material roles`() {
@@ -74,7 +74,7 @@ class SkerryColorsTest {
         assertEquals(SkerryColors.cyan, scheme.primary)
         assertEquals(SkerryColors.nightSea, scheme.onPrimary)
         assertEquals(SkerryColors.cyanBright, scheme.secondary)
-        // amber — узкий акцент AI/lighthouse, в Material-роли — tertiary
+        // amber is a narrow AI/lighthouse accent, mapped to the tertiary Material role
         assertEquals(SkerryColors.amber, scheme.tertiary)
 
         assertEquals(SkerryColors.nightSea, scheme.background)

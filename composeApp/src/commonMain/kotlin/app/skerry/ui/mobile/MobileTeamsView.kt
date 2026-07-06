@@ -107,7 +107,7 @@ import app.skerry.ui.teams.teamsFailureText
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-/** Деструктивные действия Teams на mobile — те же подтверждения, что на desktop. */
+/** Destructive Teams actions on mobile — same confirmations as desktop. */
 private sealed interface MobileTeamsConfirm {
     data class Leave(val teamId: String) : MobileTeamsConfirm
     data class Delete(val teamId: String) : MobileTeamsConfirm
@@ -115,9 +115,9 @@ private sealed interface MobileTeamsConfirm {
 }
 
 /**
- * Push-экран More → «Team»: паритет с desktop TeamsView в мобильном идиоме — вместо sidebar
- * горизонтальные чипы команд, детали выбранной стеком вниз. Диалоги (создание/приглашение/пикер
- * шеринга) общие с desktop ([CreateTeamDialog] и др.).
+ * More → "Team" push-screen: parity with desktop TeamsView in a mobile idiom — horizontal team chips
+ * instead of a sidebar, selected team's details stacked below. Dialogs (create/invite/share picker)
+ * are shared with desktop ([CreateTeamDialog] etc.).
  */
 @Composable
 fun MobileTeamsScreen(state: MobileDesignState) {
@@ -465,10 +465,10 @@ private fun MobileMemberRow(
 }
 
 /**
- * Секции общих хостов команд для списка Hosts (mobile) — паритет desktop-сайдбара: по секции на
- * активную команду с ключом и непустым набором хостов в team-vault. Перечитка привязана к
- * [hostsSnapshot] (reloadManagers после team-синка выдаёт новый список личного каталога).
- * Тап — подключение через [LocalConnectHost].
+ * Team shared-host sections for the mobile Hosts list — parity with the desktop sidebar: one section
+ * per active team with a key and a non-empty host set in its team vault. Reread is keyed to
+ * [hostsSnapshot] (reloadManagers after a team sync yields a new personal-catalog list). Tap connects
+ * via [LocalConnectHost].
  */
 @Composable
 internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>) {
@@ -476,8 +476,8 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>) {
     val mono = LocalFonts.current.mono
     val connect = LocalConnectHost.current
     val teamList by teams.teams.collectAsState()
-    // revision меняется при каждом team-синке — иначе live-притянутые в team-vault хосты не появятся
-    // до ручного sync (личный каталог не меняется, а секции читают vault императивно).
+    // revision changes on every team sync — otherwise hosts live-pulled into the team vault wouldn't
+    // appear until a manual sync (the personal catalog is unchanged and sections read the vault imperatively).
     val revision by teams.revision.collectAsState()
     val sections = remember(teamList, hostsSnapshot, revision) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.mapNotNull { team ->
@@ -487,9 +487,9 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>) {
         }
     }
     if (sections.isEmpty()) return
-    // Супер-заголовок «КОМАНДЫ» отделяет общие хосты от личного каталога; ниже каждая команда —
-    // секция уровня папки (заголовок как MobileFolderHeader), а хосты — карточки как в личном
-    // каталоге (MobileHostRow), чтобы Teams не выбивались из общего визуала списка.
+    // The "TEAMS" super-header separates shared hosts from the personal catalog; below it, each team
+    // is a folder-level section (header like MobileFolderHeader) with hosts as cards like the personal
+    // catalog (MobileHostRow), so Teams match the list's visual language.
     Txt(
         stringResource(Res.string.lib_teams_sidebar),
         color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
@@ -518,9 +518,9 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>) {
 }
 
 /**
- * Строка общего хоста команды — карточка по образцу личного [MobileHostRow] (плашка, рамка,
- * `user@address` моноширинно, точка статуса), но с иконкой `group` вместо `dns`, отмечающей
- * происхождение из team-vault. Тап — подключение через [LocalConnectHost].
+ * A team shared-host row — a card modeled on the personal [MobileHostRow] (panel, border,
+ * `user@address` monospaced, status dot) but with a `group` icon instead of `dns` to mark its
+ * team-vault origin. Tap connects via [LocalConnectHost].
  */
 @Composable
 private fun MobileTeamHostRow(host: Host, mono: androidx.compose.ui.text.font.FontFamily, onClick: () -> Unit) {

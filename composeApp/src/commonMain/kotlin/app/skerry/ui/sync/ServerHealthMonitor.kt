@@ -12,21 +12,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Период health-пинга сервера для индикатора доступности: достаточно часто, чтобы статус был «живым»
- * (падение/возврат сервера видно в пределах ~15 с), и достаточно редко, чтобы не нагружать сервер.
+ * Poll period for the server health ping used by the reachability indicator: frequent enough for
+ * the status to feel live (server down/up detected within ~15s), infrequent enough to not load
+ * the server.
  */
 internal const val HEALTH_POLL_MS = 15_000L
 
 /**
- * Периодический health-пробник sync-сервера ([SyncClient.ping] → `GET /healthz`), питающий
- * [reachable] НЕЗАВИСИМО от состояния vault и наличия сессии — индикатор «сервер работает и
- * доступен» честен и при заблокированном хранилище. Цель задаётся [setTarget]; смена цели
- * перезапускает цикл (старый пинг-луп отменяется на точке [delay] через [collectLatest]),
- * `null` = sync не настроен → клиент закрывается, статус [ServerReachable.UNKNOWN].
+ * Periodic health probe of the sync server ([SyncClient.ping] → `GET /healthz`), feeding
+ * [reachable] independently of vault state and session presence — the "server is up and
+ * reachable" indicator stays honest even with a locked vault. Target is set via [setTarget];
+ * changing it restarts the loop (the old ping loop is cancelled at the [delay] point via
+ * [collectLatest]); `null` means sync isn't configured, so the client closes and status becomes
+ * [ServerReachable.UNKNOWN].
  *
- * Держит СОБСТВЕННЫЙ выделенный клиент (переиспользуется между тиками, пересоздаётся при смене URL):
- * пинг должен идти и без рабочей сессии координатора. Отмена [scope] (см. [SyncCoordinator.close])
- * закрывает клиент в finally под [NonCancellable] — поллер не течёт в тестах/teardown.
+ * Holds its own dedicated client (reused across ticks, recreated on URL change): pinging must
+ * work without a working coordinator session. Cancelling [scope] (see [SyncCoordinator.close])
+ * closes the client in a finally block under [NonCancellable] so the poller doesn't leak across
+ * tests/teardown.
  */
 internal class ServerHealthMonitor(
     private val clientFactory: (serverUrl: String) -> SyncClient,
@@ -39,7 +42,7 @@ internal class ServerHealthMonitor(
     private val _reachable = MutableStateFlow(ServerReachable.UNKNOWN)
     val reachable: StateFlow<ServerReachable> = _reachable.asStateFlow()
 
-    // Клиент только для пинга; доступ строго из цикла ниже (collectLatest сериализует), гонок нет.
+    // Client is only for pinging; accessed solely from the loop below (collectLatest serializes it), no races.
     private var client: SyncClient? = null
     private var clientUrl: String? = null
 
@@ -60,19 +63,19 @@ internal class ServerHealthMonitor(
                     }
                 }
             } finally {
-                // Отмена scope не должна оставить живой Ktor-клиент (пул/сокеты) на весь процесс.
+                // Cancelling scope must not leave a live Ktor client (pool/sockets) for the rest of the process.
                 withContext(NonCancellable) { closeClient() }
             }
         }
     }
 
-    /** Сменить цель пинга (connect/disconnect координатора); `null` гасит поллер в UNKNOWN. */
+    /** Changes the ping target (coordinator connect/disconnect); null stops the poller at UNKNOWN. */
     fun setTarget(serverUrl: String?) {
         target.value = serverUrl
     }
 
-    // suspend не лишний: [SyncClient.close] — suspend, а закрытие старого клиента при смене URL
-    // идёт внутри пинг-цикла.
+    // suspend isn't superfluous: [SyncClient.close] is suspend, and closing the old client on URL
+    // change happens inside the ping loop.
     private suspend fun clientFor(url: String): SyncClient {
         if (clientUrl != url) {
             closeClient()

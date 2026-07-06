@@ -8,16 +8,15 @@ import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.sync.SyncStatus
 
 /**
- * Тянет общие хосты/сниппеты команд, КОГДА sync переходит в [SyncStatus.Online].
+ * Pulls shared team hosts/snippets on the transition into [SyncStatus.Online].
  *
- * Общие записи команд ходят team-каналом, а не аккаунтным: их шеринг на другом устройстве НЕ
- * будит аккаунтный WS-сигнал, поэтому без явного pull секции КОМАНДЫ оставались бы пустыми до
- * ручного захода на вкладку Teams. Триггерим по ПЕРЕХОДУ в Online, а не на mount: сразу после
- * мастер-пароля сессия ещё восстанавливается, и ранний `refresh()` вышел бы по NotConnected без
- * повтора. Ошибки синка гасит сам координатор ([TeamsCoordinator.markError]).
+ * Team records travel a team channel, not the account channel: a share on another device does not
+ * wake the account WS signal, so without an explicit pull the TEAMS sections stay empty until the
+ * Teams tab is opened. Triggered on the transition into Online (not on mount): right after the
+ * master password the session is still restoring, and an early `refresh()` would fail NotConnected
+ * without retry. Sync errors are handled by the coordinator ([TeamsCoordinator.markError]).
  *
- * Один вызов на экран, где показаны team-секции (мобильный список хостов, desktop-сайдбар) —
- * держит один паттерн в одном месте.
+ * One call per screen showing team sections (mobile host list, desktop sidebar).
  */
 @Composable
 fun AutoPullTeamsOnOnline() {

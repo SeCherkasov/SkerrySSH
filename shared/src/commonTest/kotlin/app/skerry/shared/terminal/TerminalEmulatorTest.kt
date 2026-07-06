@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 
 class TerminalEmulatorTest {
 
-    // ESC/BEL задаём числом — никаких невидимых управляющих байтов в исходнике.
+    // ESC/BEL by number — no invisible control bytes in the source.
     private val esc = 27.toChar().toString()
     private val bel = 7.toChar().toString()
 
@@ -17,11 +17,11 @@ class TerminalEmulatorTest {
         return emu
     }
 
-    /** Видимый текст экрана: строки через \n, хвостовые пробелы и пустые строки обрезаны. */
+    /** Visible screen text: rows joined by \n, trailing spaces and empty rows trimmed. */
     private fun TerminalEmulator.asText(): String =
         lines.joinToString("\n") { row -> row.joinToString("") { it.text }.trimEnd() }.trimEnd('\n')
 
-    // Базовая печать
+    // Basic printing
 
     @Test
     fun `plain text fills one line`() {
@@ -30,8 +30,8 @@ class TerminalEmulatorTest {
 
     @Test
     fun `CHT and CBT with an enormous count clamp instead of hanging`() {
-        // ESC[2147483647I / ...Z без капа = ~2 млрд итераций в некооперативном цикле (зависание
-        // сессии/UI с недоверенного сервера). С капом курсор за конечное время упирается в границу.
+        // ESC[2147483647I / ...Z without a cap = ~2 billion iterations in a non-cooperative loop
+        // (session/UI hang from an untrusted server). With a cap the cursor stops at the boundary in finite time.
         val fwd = emulate(cols = 80, rows = 24, chunks = arrayOf("${esc}[2147483647I"))
         assertTrue(fwd.cursorCol in 0..79)
         val back = emulate(cols = 80, rows = 24, chunks = arrayOf("col$esc[2147483647Z"))
@@ -70,11 +70,11 @@ class TerminalEmulatorTest {
         assertEquals("a       b", emulate(chunks = arrayOf("a\tb")).asText())
     }
 
-    // Автоперенос (DECAWM)
+    // Autowrap (DECAWM)
 
     @Test
     fun `printing past the last column wraps to the next line`() {
-        // cols=3: "abc" заполняет строку, "d" переносится на следующую (pending-wrap).
+        // cols=3: "abc" fills the row, "d" wraps to the next (pending-wrap).
         assertEquals("abc\nd", emulate(cols = 3, rows = 4, chunks = arrayOf("abcd")).asText())
     }
 
@@ -126,18 +126,18 @@ class TerminalEmulatorTest {
         assertTrue(s.italic && s.underline && s.inverse && s.strikethrough)
     }
 
-    // Modern SGR: стили и цвет подчёркивания (4:x, 21, 58, 59)
+    // Modern SGR: underline styles and color (4:x, 21, 58, 59)
 
     @Test
     fun `plain sgr 4 is a single underline`() {
         val s = emulate(chunks = arrayOf("$esc[4mX")).lines[0][0].style
         assertEquals(UnderlineStyle.Single, s.underlineStyle)
-        assertTrue(s.underline, "одиночное подчёркивание видно через булев флаг совместимости")
+        assertTrue(s.underline, "single underline is visible via the compatibility boolean flag")
     }
 
     @Test
     fun `sgr 4 colon 3 is a curly underline`() {
-        // 4:3 — curly/squiggly underline (диагностика компиляторов, ls --hyperlink и т.п.).
+        // 4:3 — curly/squiggly underline (compiler diagnostics, ls --hyperlink, etc.).
         val s = emulate(chunks = arrayOf("$esc[4:3mX")).lines[0][0].style
         assertEquals(UnderlineStyle.Curly, s.underlineStyle)
         assertTrue(s.underline)
@@ -176,7 +176,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `sgr 58 colon truecolor underline color with empty colorspace`() {
-        // 58:2::r:g:b — ITU-форма с пустым полем colorspace (двойное двоеточие).
+        // 58:2::r:g:b — ITU form with an empty colorspace field (double colon).
         val s = emulate(chunks = arrayOf("$esc[58:2::1:2:3mX")).lines[0][0].style
         assertEquals(TermColor.Rgb(1, 2, 3), s.underlineColor)
     }
@@ -189,29 +189,29 @@ class TerminalEmulatorTest {
 
     @Test
     fun `underline color survives independently of foreground`() {
-        // Цвет подчёркивания не должен меняться при смене fg и наоборот.
+        // Underline color must not change when fg changes and vice versa.
         val s = emulate(chunks = arrayOf("$esc[4;58;5;9;31mX")).lines[0][0].style
         assertEquals(TermColor.Red, s.fg)
         assertEquals(TermColor.BrightRed, s.underlineColor)
     }
 
-    // OSC 8 гиперссылки
+    // OSC 8 hyperlinks
 
     @Test
     fun `osc 8 attaches a hyperlink to printed cells`() {
-        // OSC 8 ; params ; URI ST  ... текст ...  OSC 8 ; ; ST (закрытие).
+        // OSC 8 ; params ; URI ST  ... text ...  OSC 8 ; ; ST (close).
         val emu = emulate(chunks = arrayOf("$esc]8;;https://skerry.app${esc}\\link$esc]8;;${esc}\\x"))
         assertEquals("https://skerry.app", emu.lines[0][0].hyperlink)
         assertEquals("https://skerry.app", emu.lines[0][3].hyperlink) // 'k'
-        assertEquals(null, emu.lines[0][4].hyperlink, "после закрытия ссылки нет")
+        assertEquals(null, emu.lines[0][4].hyperlink, "no link after close")
     }
 
     @Test
     fun `osc 8 caps an oversized uri`() {
-        // Недоверённый сервер не должен мочь повесить мегабайтный URI на каждую клетку.
+        // An untrusted server must not be able to attach a megabyte URI to every cell.
         val emu = emulate(chunks = arrayOf("$esc]8;;https://x.test/${"a".repeat(5000)}${esc}\\Z"))
         val link = emu.lines[0][0].hyperlink
-        assertEquals(2048, link?.length, "URI должен капаться до 2048 символов")
+        assertEquals(2048, link?.length, "URI should be capped to 2048 characters")
     }
 
     @Test
@@ -239,7 +239,7 @@ class TerminalEmulatorTest {
         assertEquals(null, emu.lines[0][0].hyperlink)
     }
 
-    // OSC 52 буфер обмена
+    // OSC 52 clipboard
 
     @Test
     fun `osc 52 write decodes base64 and reports a clipboard copy`() {
@@ -260,7 +260,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `osc 52 read request is ignored to avoid leaking the clipboard`() {
-        // Pd == '?' — запрос чтения буфера сервером. Никогда не отдаём (модель угроз): колбэк молчит.
+        // Pd == '?' — a server request to read the clipboard. Never granted (threat model): callback stays silent.
         val copied = mutableListOf<String>()
         val emu = TerminalEmulator(onClipboardCopy = { copied += it })
         emu.feed("$esc]52;c;?$esc\\".encodeToByteArray())
@@ -269,7 +269,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `osc 52 read query with trailing data is still denied`() {
-        // Защита в глубину: любой Pd, начинающийся с '?', трактуем как запрос чтения и не отдаём буфер.
+        // Defense in depth: any Pd starting with '?' is treated as a read request and the clipboard isn't returned.
         val copied = mutableListOf<String>()
         val emu = TerminalEmulator(onClipboardCopy = { copied += it })
         emu.feed("$esc]52;c;?aGVsbG8=$esc\\".encodeToByteArray())
@@ -286,24 +286,24 @@ class TerminalEmulatorTest {
 
     @Test
     fun `osc 52 oversized clipboard write is dropped`() {
-        // Модель угроз: сервер не должен мочь заливать в системный буфер мегабайты. base64 "YWFh"
-        // декодируется в "aaa" (3 байта) — 25000 повторов = 75000 байт > лимита 64 KiB → молчим.
+        // Threat model: a server must not be able to push megabytes into the system clipboard. base64
+        // "YWFh" decodes to "aaa" (3 bytes) — 25000 repeats = 75000 bytes > the 64 KiB limit → stay silent.
         val copied = mutableListOf<String>()
         val emu = TerminalEmulator(onClipboardCopy = { copied += it })
         emu.feed("$esc]52;c;${"YWFh".repeat(25000)}$esc\\".encodeToByteArray())
-        assertTrue(copied.isEmpty(), "переразмерная запись буфера должна отбрасываться")
+        assertTrue(copied.isEmpty(), "an oversized clipboard write should be dropped")
     }
 
     @Test
     fun `osc 52 clipboard write at a sane size still works`() {
-        // 1000×"aaa" = 3000 байт — в пределах лимита, запись проходит.
+        // 1000×"aaa" = 3000 bytes — within the limit, the write goes through.
         val copied = mutableListOf<String>()
         val emu = TerminalEmulator(onClipboardCopy = { copied += it })
         emu.feed("$esc]52;c;${"YWFh".repeat(1000)}$esc\\".encodeToByteArray())
         assertEquals(listOf("aaa".repeat(1000)), copied)
     }
 
-    // OSC 4/104 динамическая палитра
+    // OSC 4/104 dynamic palette
 
     @Test
     fun `osc 4 overrides a palette color with rgb spec`() {
@@ -319,16 +319,16 @@ class TerminalEmulatorTest {
 
     @Test
     fun `osc 4 scales 4-digit rgb channels to 8-bit`() {
-        // rgb:ffff/0000/8080 — каждая компонента 4 hex-цифры (X11), масштабируется в 0..255.
+        // rgb:ffff/0000/8080 — each component is 4 hex digits (X11), scaled to 0..255.
         val emu = emulate(chunks = arrayOf("$esc]4;5;rgb:ffff/0000/8080${esc}\\"))
         assertEquals(TermColor.Rgb(255, 0, 128), emu.paletteSnapshot()[5])
     }
 
     @Test
     fun `osc 4 short and long hash forms scale per channel`() {
-        // #abc → каждая цифра дублируется в байт (как CSS): a→0xaa, b→0xbb, c→0xcc.
+        // #abc → each digit is doubled into a byte (like CSS): a→0xaa, b→0xbb, c→0xcc.
         assertEquals(TermColor.Rgb(0xAA, 0xBB, 0xCC), emulate(chunks = arrayOf("$esc]4;7;#abc${esc}\\")).paletteSnapshot()[7])
-        // 12-значная #RRRRGGGGBBBB масштабируется в 8-бит: ffff→255, 0000→0, ffff→255.
+        // 12-digit #RRRRGGGGBBBB scaled to 8-bit: ffff→255, 0000→0, ffff→255.
         assertEquals(TermColor.Rgb(255, 0, 255), emulate(chunks = arrayOf("$esc]4;8;#ffff0000ffff${esc}\\")).paletteSnapshot()[8])
     }
 
@@ -364,27 +364,27 @@ class TerminalEmulatorTest {
         assertEquals(null, emu.paletteSnapshot()[1])
     }
 
-    // Адресация курсора
+    // Cursor addressing
 
     @Test
     fun `cup positions cursor absolutely`() {
-        // ESC[2;3H ставит курсор в строку 2, колонку 3 (1-based); печать туда.
+        // ESC[2;3H puts the cursor at row 2, column 3 (1-based); print there.
         assertEquals("\n  X", emulate(chunks = arrayOf("$esc[2;3HX")).asText())
     }
 
     @Test
     fun `resize clamps pathological dimensions to a sane maximum`() {
-        // Защита от переполнения Int в cols*rows (REP) и от безумного объёма работы на ресайз.
+        // Guards against Int overflow in cols*rows (REP) and against an insane amount of resize work.
         val emu = emulate()
         emu.resize(100_000, 100_000)
-        assertTrue(emu.cols <= 2000, "cols должен капаться, было ${emu.cols}")
-        assertTrue(emu.rows <= 2000, "rows должен капаться, было ${emu.rows}")
+        assertTrue(emu.cols <= 2000, "cols should be capped, was ${emu.cols}")
+        assertTrue(emu.rows <= 2000, "rows should be capped, was ${emu.rows}")
     }
 
     @Test
     fun `overlong CSI parameter run does not break the parser`() {
-        // Недоверенный сервер льёт бесконечный поток цифр без финального байта (защита от OOM —
-        // буфер params капается). Парсер обязан выйти из CSI на финальном байте и продолжить печать.
+        // An untrusted server pours an endless digit stream with no final byte (OOM guard — the params
+        // buffer is capped). The parser must exit CSI on the final byte and keep printing.
         val emu = emulate(chunks = arrayOf("$esc[${"9".repeat(5000)}mhi"))
         assertEquals("hi", emu.asText())
     }
@@ -399,11 +399,11 @@ class TerminalEmulatorTest {
         assertEquals("\n\nX", emulate(chunks = arrayOf("$esc[3dX")).asText())
     }
 
-    // REP (повтор предыдущего символа)
+    // REP (repeat preceding character)
 
     @Test
     fun `rep repeats the preceding character`() {
-        // CSI Ps b — повторить последний печатный символ Ps раз (nano 9.0 так заполняет полосы).
+        // CSI Ps b — repeat the last printed character Ps times (nano 9.0 fills bars this way).
         assertEquals("Xaaaa", emulate(chunks = arrayOf("Xa", "$esc[3b")).asText())
     }
 
@@ -414,13 +414,13 @@ class TerminalEmulatorTest {
 
     @Test
     fun `rep carries the current style including reverse`() {
-        // nano-кейс: reverse on, печать пробела, REP — хвост полосы должен остаться инверсным.
+        // nano case: reverse on, print a space, REP — the bar tail must stay inverse.
         val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("$esc[7m ", "$esc[5b"))
         assertTrue(emu.lines[0][0].style.inverse)
-        assertTrue(emu.lines[0][5].style.inverse, "повторённые пробелы тоже инверсны")
+        assertTrue(emu.lines[0][5].style.inverse, "repeated spaces are inverse too")
     }
 
-    // Стирание
+    // Erasing
 
     @Test
     fun `erase to end of line clears from cursor`() {
@@ -429,12 +429,12 @@ class TerminalEmulatorTest {
 
     @Test
     fun `erase to end of line under reverse video fills cells with inverse`() {
-        // BCE (background-color-erase): EL/ED заливают current SGR-фоном ВКЛЮЧАЯ reverse-video.
-        // ncurses (nano) так дозаполняет reverse title-бар после ресайза — без этого хвост рисуется
-        // обычным фоном и инверсия обрывается на краю старого экрана.
+        // BCE (background-color-erase): EL/ED fill with the current SGR background, including reverse-video.
+        // ncurses (nano) refills the reverse title bar this way after a resize — without it the tail is
+        // drawn with the normal background and the inversion breaks at the old screen's edge.
         val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("$esc[7mX", "$esc[0K"))
-        assertTrue(emu.lines[0][0].style.inverse, "написанная ячейка под reverse")
-        assertTrue(emu.lines[0][5].style.inverse, "стёртый хвост строки тоже инверсный")
+        assertTrue(emu.lines[0][0].style.inverse, "written cell under reverse")
+        assertTrue(emu.lines[0][5].style.inverse, "erased row tail is inverse too")
     }
 
     @Test
@@ -446,19 +446,19 @@ class TerminalEmulatorTest {
     @Test
     fun `erase display 2J moves the screen into scrollback and clears the grid`() {
         val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2", "$esc[2J"))
-        // Видимая сетка (нижние rows строк) очищена, но прежний вывод ушёл в scrollback — его
-        // можно прокрутить вверх (поведение gnome-terminal/VTE), а не потерян.
-        assertEquals(6, emu.lines.size) // 2 в scrollback + 4 пустых экранных
+        // The visible grid (bottom rows) is cleared, but prior output went to scrollback — it can be
+        // scrolled up (gnome-terminal/VTE behavior), not lost.
+        assertEquals(6, emu.lines.size) // 2 in scrollback + 4 blank on-screen
         assertEquals("line1", emu.lines[0].joinToString("") { it.text }.trimEnd())
         assertEquals("line2", emu.lines[1].joinToString("") { it.text }.trimEnd())
-        assertTrue(emu.lines.takeLast(4).all { row -> row.all { it.text == " " } }, "экран очищен")
-        // ED 2 курсор не двигает: cy остаётся на 1 → абсолютно scrollback.size(2) + 1.
+        assertTrue(emu.lines.takeLast(4).all { row -> row.all { it.text == " " } }, "screen cleared")
+        // ED 2 doesn't move the cursor: cy stays at 1 → absolute scrollback.size(2) + 1.
         assertEquals(3, emu.cursorRow)
     }
 
     @Test
     fun `erase display 2J blanks in place on the alternate screen`() {
-        // На альт-экране scrollback'а нет — полноэкранные TUI очищают на месте, без переноса в историю.
+        // The alt screen has no scrollback — full-screen TUIs clear in place, no transfer to history.
         val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("$esc[?1049h", "line1\r\nline2", "$esc[2J"))
         assertEquals("", emu.asText())
         assertEquals(4, emu.lines.size)
@@ -468,32 +468,32 @@ class TerminalEmulatorTest {
     fun `erase display 3 keeps scrollback so clear preserves history`() {
         val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("a\r\nb\r\nc\r\nd"))
         val before = emu.lines.size
-        assertTrue(before > 2) // накопился scrollback
+        assertTrue(before > 2) // scrollback accumulated
         emu.feed("$esc[3J".encodeToByteArray())
-        // ED 3 («erase saved lines») историю НЕ вытирает — она остаётся прокручиваемой.
-        assertTrue(emu.lines.size >= before, "scrollback сохранён")
+        // ED 3 ("erase saved lines") does not wipe history — it stays scrollable.
+        assertTrue(emu.lines.size >= before, "scrollback preserved")
     }
 
     @Test
     fun `clear sequence blanks the screen yet keeps prior output scrollable`() {
-        // Ровно то, что шлёт команда `clear`: домой, очистить экран, очистить saved lines.
+        // Exactly what the `clear` command sends: home, erase screen, erase saved lines.
         val emu = emulate(cols = 10, rows = 3, chunks = arrayOf("alpha\r\nbeta\r\ngamma", "$esc[H$esc[2J$esc[3J"))
-        // Прежний вывод доступен в истории...
+        // Prior output is available in history...
         val text = emu.lines.joinToString("\n") { row -> row.joinToString("") { it.text }.trimEnd() }
-        assertTrue("alpha" in text && "beta" in text && "gamma" in text, "история сохранена")
-        // ...а видимая сетка (нижние 3 строки) пуста, курсор — в её начале (домой).
-        assertTrue(emu.lines.takeLast(3).all { row -> row.all { it.text == " " } }, "экран очищен")
+        assertTrue("alpha" in text && "beta" in text && "gamma" in text, "history preserved")
+        // ...while the visible grid (bottom 3 rows) is blank and the cursor is at its start (home).
+        assertTrue(emu.lines.takeLast(3).all { row -> row.all { it.text == " " } }, "screen cleared")
         assertEquals(3, emu.cursorRow)
         assertEquals(0, emu.cursorCol)
     }
 
     @Test
     fun `clear keeps a background-colored blank row in history`() {
-        // Строка из пробелов с цветным фоном (BCE) — это содержимое, не пустота: при clear она
-        // должна уйти в scrollback, а не обрезаться как хвостовая пустая.
+        // A row of spaces with a colored background (BCE) is content, not emptiness: on clear it must go
+        // to scrollback, not be trimmed as a trailing blank.
         val emu = emulate(cols = 4, rows = 3, chunks = arrayOf("ab\r\n", "$esc[41m    $esc[m"))
         emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray())
-        assertEquals(5, emu.lines.size) // "ab" + цветная строка в scrollback + 3 пустых экранных
+        assertEquals(5, emu.lines.size) // "ab" + the colored row in scrollback + 3 blank on-screen
         assertEquals(TermColor.Red, emu.lines[1][0].style.bg)
     }
 
@@ -502,51 +502,51 @@ class TerminalEmulatorTest {
         val emu = emulate(cols = 10, rows = 3, chunks = arrayOf("x\r\ny"))
         emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray())
         val afterFirst = emu.lines.size
-        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // очистка уже пустого экрана
-        assertEquals(afterFirst, emu.lines.size, "повторный clear не плодит пустые строки в истории")
+        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clearing an already-empty screen
+        assertEquals(afterFirst, emu.lines.size, "a repeated clear doesn't spawn empty rows in history")
     }
 
     @Test
     fun `resize after clear keeps the screen empty and history scrolled back`() {
-        // После `clear` прежний вывод лежит в scrollback, а видимый экран пуст (один свежий prompt
-        // вверху). Ресайз — например при открытии split, сужающего терминал — не должен втягивать
-        // историю обратно на видимый экран: пустое пространство под курсором это содержимое экрана,
-        // а не «незначимый хвост», и reflow обязан его сохранить.
+        // After `clear`, prior output sits in scrollback and the visible screen is empty (a single fresh
+        // prompt at the top). A resize — e.g. opening a split that narrows the terminal — must not pull
+        // history back onto the visible screen: the empty space below the cursor is screen content, not
+        // an "insignificant tail", and reflow must preserve it.
         val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2\r\nline3"))
-        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clear: история → scrollback, экран пуст
-        emu.feed("$ ".encodeToByteArray())                   // свежий prompt в верхней строке экрана
-        emu.resize(6, 4)                                     // сужаем терминал (как открытие split)
+        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clear: history → scrollback, screen empty
+        emu.feed("$ ".encodeToByteArray())                   // fresh prompt in the top screen row
+        emu.resize(6, 4)                                     // narrow the terminal (like opening a split)
 
         val visible = emu.lines.takeLast(4)
-        assertEquals("$", visible[0].joinToString("") { it.text }.trimEnd(), "prompt остаётся вверху экрана")
+        assertEquals("$", visible[0].joinToString("") { it.text }.trimEnd(), "prompt stays at the top of the screen")
         assertTrue(
             visible.drop(1).all { row -> row.all { it.text == " " } },
-            "под prompt'ом экран пуст — история не всплыла обратно",
+            "the screen below the prompt is empty — history didn't resurface",
         )
         val visibleText = visible.joinToString("\n") { row -> row.joinToString("") { it.text } }
-        assertFalse("line1" in visibleText, "история не вернулась на видимый экран после ресайза")
-        // История по-прежнему доступна прокруткой.
+        assertFalse("line1" in visibleText, "history didn't return to the visible screen after resize")
+        // History is still available by scrolling.
         val allText = emu.lines.joinToString("\n") { row -> row.joinToString("") { it.text } }
-        assertTrue("line1" in allText, "история сохранена в scrollback")
+        assertTrue("line1" in allText, "history preserved in scrollback")
     }
 
     @Test
     fun `resize after clear with height reduction pins the cursor on screen`() {
-        // Когда ресайз заодно уменьшает высоту, кап nr-1 на сохранённом пространстве под курсором
-        // обязан удержать курсор в пределах нового экрана (а не увести его за верхнюю границу).
+        // When a resize also reduces height, the nr-1 cap on the preserved space below the cursor must
+        // keep the cursor within the new screen (not push it past the top boundary).
         val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2\r\nline3"))
         emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clear
-        emu.feed("$ ".encodeToByteArray())                   // prompt вверху экрана
+        emu.feed("$ ".encodeToByteArray())                   // prompt at the top of the screen
         emu.resize(6, 2)                                     // уже и НИЖЕ
 
-        assertTrue(emu.cursorRow < emu.lines.size, "курсор в пределах буфера")
+        assertTrue(emu.cursorRow < emu.lines.size, "cursor within the buffer")
         val visible = emu.lines.takeLast(2)
-        assertEquals("$", visible[0].joinToString("") { it.text }.trimEnd(), "prompt остаётся на видимом экране")
+        assertEquals("$", visible[0].joinToString("") { it.text }.trimEnd(), "prompt stays on the visible screen")
         val visibleText = visible.joinToString("\n") { row -> row.joinToString("") { it.text } }
-        assertFalse("line1" in visibleText, "история не всплыла на укоротившийся экран")
+        assertFalse("line1" in visibleText, "history didn't resurface onto the shortened screen")
     }
 
-    // Вставка / удаление
+    // Insert / delete
 
     @Test
     fun `insert chars shifts the rest right`() {
@@ -573,7 +573,7 @@ class TerminalEmulatorTest {
         assertEquals("A\nC\nD", emulate(cols = 4, rows = 4, chunks = arrayOf("A\r\nB\r\nC\r\nD", "$esc[2;1H", "$esc[M")).asText())
     }
 
-    // Прокрутка / регион
+    // Scrolling / region
 
     @Test
     fun `scrolling off the top feeds scrollback`() {
@@ -588,7 +588,7 @@ class TerminalEmulatorTest {
             cols = 4, rows = 4,
             chunks = arrayOf("L0\r\nL1\r\nL2\r\nL3", "$esc[1;3r", "$esc[3;1H", "\n"),
         )
-        // Регион строк 0..2 прокрутился (L0 ушла в scrollback), L3 вне региона остался.
+        // The row region 0..2 scrolled (L0 went to scrollback); L3 outside the region stayed.
         assertEquals("L0\nL1\nL2\n\nL3", emu.asText())
     }
 
@@ -598,27 +598,27 @@ class TerminalEmulatorTest {
             cols = 4, rows = 4,
             chunks = arrayOf("L0\r\nL1\r\nL2\r\nL3", "$esc[1;3r", "${esc}M"),
         )
-        // Регион 0..2 прокручен вниз: пустая строка сверху, L2 вытеснена, L3 (вне региона) на месте.
+        // Region 0..2 scrolled down: blank row on top, L2 pushed out, L3 (outside the region) stays.
         assertEquals("\nL0\nL1\nL3", emu.asText())
     }
 
     @Test
     fun `absolute cursor move cancels pending wrap`() {
-        // cols=3: "abc" взводит pending-wrap; CUP в (2,2) должен его снять, иначе X переедет.
+        // cols=3: "abc" arms pending-wrap; CUP to (2,2) must clear it, else X would move.
         assertEquals("abc\n X", emulate(cols = 3, rows = 4, chunks = arrayOf("abc", "$esc[2;2H", "X")).asText())
     }
 
     @Test
     fun `clearing all tab stops sends tab to the last column`() {
-        // ESC[3g снимает все табстопы → следующий TAB прыгает в последнюю колонку.
+        // ESC[3g clears all tab stops → the next TAB jumps to the last column.
         assertEquals("a        b", emulate(cols = 10, rows = 2, chunks = arrayOf("a", "$esc[3g", "\t", "b")).asText())
     }
 
-    // Курсор save/restore
+    // Cursor save/restore
 
     @Test
     fun `save and restore cursor with esc 7 and esc 8`() {
-        // ESC7 сохраняет позицию после "AB"; затем уходим вниз и возвращаемся ESC8.
+        // ESC7 saves the position after "AB"; then go down and return with ESC8.
         assertEquals("ABX\n\nCD", emulate(chunks = arrayOf("AB", "${esc}7", "\r\n\r\nCD", "${esc}8", "X")).asText())
     }
 
@@ -637,14 +637,14 @@ class TerminalEmulatorTest {
         assertEquals("main", emu.asText())
     }
 
-    // Ответы DSR/DA
+    // DSR/DA responses
 
     @Test
     fun `device status report returns cursor position`() {
         val replies = mutableListOf<String>()
         val emu = TerminalEmulator(respond = { replies += it })
-        emu.feed("$esc[2;3H".encodeToByteArray()) // курсор в (2,3)
-        emu.feed("$esc[6n".encodeToByteArray())   // запрос позиции
+        emu.feed("$esc[2;3H".encodeToByteArray()) // cursor at (2,3)
+        emu.feed("$esc[6n".encodeToByteArray())   // position query
         assertEquals("$esc[2;3R", replies.single())
     }
 
@@ -660,10 +660,10 @@ class TerminalEmulatorTest {
     fun `DECRQM reports private mode state`() {
         val replies = mutableListOf<String>()
         val emu = TerminalEmulator(respond = { replies += it })
-        // bracketed-paste выключен по умолчанию → reset (2).
+        // bracketed-paste is off by default → reset (2).
         emu.feed("$esc[?2004\$p".encodeToByteArray())
         assertEquals("$esc[?2004;2\$y", replies.last())
-        // Включаем → set (1).
+        // Enable → set (1).
         emu.feed("$esc[?2004h".encodeToByteArray())
         emu.feed("$esc[?2004\$p".encodeToByteArray())
         assertEquals("$esc[?2004;1\$y", replies.last())
@@ -691,7 +691,7 @@ class TerminalEmulatorTest {
         val replies = mutableListOf<String>()
         val emu = TerminalEmulator(respond = { replies += it })
         emu.feed("$esc[>q".encodeToByteArray())
-        // Ответ DCS: ESC P > | <name> ESC \
+        // DCS response: ESC P > | <name> ESC \
         assertEquals("${esc}P>|Skerry(0.1)$esc\\", replies.single())
     }
 
@@ -714,7 +714,7 @@ class TerminalEmulatorTest {
     fun `osc title decodes UTF-8 split across feeds`() {
         val emu = TerminalEmulator(cols = 80, rows = 24)
         val bytes = "$esc]0;Ярус$bel".encodeToByteArray()
-        // Разрез внутри двухбайтового «Я» — байты OSC копятся до терминатора, декод не должен ломаться.
+        // Split inside a two-byte character — OSC bytes accumulate until the terminator, decode must not break.
         emu.feed(bytes.copyOfRange(0, 5))
         emu.feed(bytes.copyOfRange(5, bytes.size))
         assertEquals("Ярус", emu.title)
@@ -728,7 +728,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `osc title strips embedded control characters`() {
-        // Сервер не должен мочь протащить C0/DEL в заголовок (искажение UI вкладки, риск лог-инъекции).
+        // A server must not be able to slip C0/DEL into the title (tab UI corruption, log injection risk).
         val c1 = 1.toChar(); val c31 = 31.toChar(); val del = 127.toChar()
         val emu = emulate(chunks = arrayOf("$esc]0;a${c1}b${c31}c$del$bel"))
         assertEquals("abc", emu.title)
@@ -736,8 +736,8 @@ class TerminalEmulatorTest {
 
     @Test
     fun `CSI 22 t pushes and CSI 23 t pops the window title`() {
-        // XTWINOPS title stack: vim/tmux сохраняют заголовок при входе (22;2 t) и восстанавливают
-        // при выходе (23;2 t). Ставим A, push, меняем на B, pop -> снова A.
+        // XTWINOPS title stack: vim/tmux save the title on entry (22;2 t) and restore it on exit
+        // (23;2 t). Set A, push, change to B, pop -> A again.
         val emu = emulate(chunks = arrayOf("$esc]2;A$bel", "$esc[22;2t", "$esc]2;B$bel"))
         assertEquals("B", emu.title)
         emu.feed("$esc[23;2t".encodeToByteArray())
@@ -746,7 +746,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `title stack nests and second-param 0 also targets the title`() {
-        // Ps=0 (icon+window) тоже толкает/снимает заголовок; стек вложенный (LIFO).
+        // Ps=0 (icon+window) also pushes/pops the title; the stack is nested (LIFO).
         val emu = emulate(chunks = arrayOf("$esc]2;A$bel", "$esc[22;0t", "$esc]2;B$bel", "$esc[22t", "$esc]2;C$bel"))
         assertEquals("C", emu.title)
         emu.feed("$esc[23t".encodeToByteArray())   // pop -> B
@@ -763,39 +763,39 @@ class TerminalEmulatorTest {
 
     @Test
     fun `icon-only title ops are ignored and do not unbalance the stack`() {
-        // Ps=1 — только icon name, заголовок окна не моделируем: 22;1/23;1 не трогают стек.
+        // Ps=1 — icon name only, we don't model the window title: 22;1/23;1 don't touch the stack.
         val emu = emulate(
             chunks = arrayOf("$esc]2;A$bel", "$esc[22;1t", "$esc]2;B$bel", "$esc[23;1t"),
         )
-        assertEquals("B", emu.title) // icon-pop не вернул A
+        assertEquals("B", emu.title) // icon-pop didn't restore A
     }
 
     @Test
     fun `RIS clears the title and its stack`() {
-        // ESC c (RIS) возвращает заголовок к дефолту и очищает стек: последующий pop — no-op.
+        // ESC c (RIS) resets the title to default and clears the stack: a subsequent pop is a no-op.
         val emu = emulate(chunks = arrayOf("$esc]2;A$bel", "$esc[22;2t", "${esc}c"))
         assertEquals("", emu.title)
         emu.feed("$esc[23;2t".encodeToByteArray())
         assertEquals("", emu.title)
     }
 
-    // Комбинируемые знаки (grapheme-кластеры)
+    // Combining marks (grapheme clusters)
 
-    private val acute = "́" // combining acute accent (нулевая ширина)
+    private val acute = "́" // combining acute accent (zero width)
     private val zwj = "‍"   // zero-width joiner
 
     @Test
     fun `combining accent attaches to the base cell without advancing`() {
-        // "e" + U+0301 -> одна клетка, курсор сдвинулся лишь на 1.
+        // "e" + U+0301 -> one cell, the cursor advanced by only 1.
         val emu = emulate(chunks = arrayOf("e$acute"))
         assertEquals("e$acute", emu.lines[0][0].text)
-        assertEquals(" ", emu.lines[0][1].text) // следующая клетка пуста — знак её не занял
+        assertEquals(" ", emu.lines[0][1].text) // the next cell is empty — the mark didn't take it
         assertEquals(1, emu.cursorCol)
     }
 
     @Test
     fun `ZWJ joins into the previous cell`() {
-        // ZWJ — нулевой ширины, должен прицепиться к базе, а не стать своей клеткой.
+        // ZWJ — zero width, must attach to the base rather than become its own cell.
         val emu = emulate(chunks = arrayOf("a$zwj"))
         assertEquals("a$zwj", emu.lines[0][0].text)
         assertEquals(1, emu.cursorCol)
@@ -803,7 +803,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `combining mark attaches to a wide base not its continuation`() {
-        // "中" (Wide) + U+0301: знак идёт в саму Wide-клетку, континуация не трогается; курсор на 2.
+        // "中" (Wide) + U+0301: the mark goes into the Wide cell itself, the continuation is untouched; cursor at 2.
         val emu = emulate(chunks = arrayOf("中$acute"))
         assertEquals("中$acute", emu.lines[0][0].text)
         assertEquals(CellWidth.Wide, emu.lines[0][0].width)
@@ -813,26 +813,26 @@ class TerminalEmulatorTest {
 
     @Test
     fun `leading combining mark on empty line does not crash`() {
-        // База слева отсутствует — знак печатается как обычная клетка (фолбэк), курсор едет на 1.
+        // No base to the left — the mark prints as a normal cell (fallback), the cursor advances by 1.
         val emu = emulate(chunks = arrayOf(acute))
         assertEquals(1, emu.cursorCol)
         emu.feed("X".encodeToByteArray())
         assertEquals("X", emu.lines[0][1].text)
     }
 
-    // Строковые последовательности: DCS / APC / PM / SOS + XTGETTCAP
+    // String sequences: DCS / APC / PM / SOS + XTGETTCAP
 
     @Test
     fun `DCS body is swallowed and does not leak to the screen`() {
-        // Раньше ESC P падал в Ground и тело DCS (sixel/DECRQSS) текло как мусорный текст.
-        // DCS q ... ST (типичный sixel-конверт) должен поглотиться целиком; печать после — норм.
+        // Previously ESC P fell into Ground and the DCS body (sixel/DECRQSS) leaked as garbage text.
+        // DCS q ... ST (a typical sixel envelope) must be swallowed whole; printing after is fine.
         val emu = emulate(chunks = arrayOf("A", "${esc}Pq#0;2;0;0;0~~$esc\\", "B"))
         assertEquals("AB", emu.asText())
     }
 
     @Test
     fun `APC kitty graphics envelope is swallowed`() {
-        // Kitty graphics: APC G ... ST (ESC _ ... ESC \). Не должно протечь на экран.
+        // Kitty graphics: APC G ... ST (ESC _ ... ESC \). Must not leak to the screen.
         val emu = emulate(chunks = arrayOf("X", "${esc}_Ga=T,f=24;payload$esc\\", "Y"))
         assertEquals("XY", emu.asText())
     }
@@ -845,27 +845,27 @@ class TerminalEmulatorTest {
 
     @Test
     fun `XTGETTCAP replies with known capabilities and rejects unknown`() {
-        // DCS + q <hex(name)> ; ... ST. Co=colors(256), TN=имя терминала; неизвестное -> 0+r.
+        // DCS + q <hex(name)> ; ... ST. Co=colors(256), TN=terminal name; unknown -> 0+r.
         val responses = mutableListOf<String>()
         val emu = TerminalEmulator(cols = 80, rows = 24, respond = { responses.add(it) })
-        // "Co" = 436F, "ZZ" = 5A5A (неизвестная).
+        // "Co" = 436F, "ZZ" = 5A5A (unknown).
         emu.feed("${esc}P+q436F;5A5A$esc\\".encodeToByteArray())
         val joined = responses.joinToString("")
-        // Валидный ответ на Co: DCS 1 + r 436F = <hex("256")> ST ; hex("256") = 323536.
-        assertTrue(joined.contains("1+r436F=323536"), "ожидался валидный Co=256, было: $joined")
-        // Неизвестная ZZ -> DCS 0 + r 5A5A ST.
-        assertTrue(joined.contains("0+r5A5A"), "ожидался отказ по ZZ, было: $joined")
+        // Valid Co reply: DCS 1 + r 436F = <hex("256")> ST ; hex("256") = 323536.
+        assertTrue(joined.contains("1+r436F=323536"), "expected a valid Co=256, was: $joined")
+        // Unknown ZZ -> DCS 0 + r 5A5A ST.
+        assertTrue(joined.contains("0+r5A5A"), "expected a ZZ rejection, was: $joined")
     }
 
     @Test
     fun `XTGETTCAP caps the number of replied capabilities`() {
-        // Амплификация: один DCS с тысячами имён не должен порождать тысячи ответов в PTY.
-        // 500 валидных запросов "Co" → ответов не больше предела (64).
+        // Amplification: one DCS with thousands of names must not spawn thousands of PTY responses.
+        // 500 valid "Co" requests → no more responses than the limit (64).
         val responses = mutableListOf<String>()
         val emu = TerminalEmulator(cols = 80, rows = 24, respond = { responses.add(it) })
         val names = List(500) { "436F" }.joinToString(";")
         emu.feed("${esc}P+q$names$esc\\".encodeToByteArray())
-        assertTrue(responses.size <= 64, "ответов XTGETTCAP должно быть не больше 64, было ${responses.size}")
+        assertTrue(responses.size <= 64, "XTGETTCAP responses should be at most 64, was ${responses.size}")
     }
 
     @Test
@@ -875,7 +875,7 @@ class TerminalEmulatorTest {
         assertTrue(rang)
     }
 
-    // Приватные режимы
+    // Private modes
 
     @Test
     fun `application cursor keys mode off by default`() {
@@ -914,9 +914,9 @@ class TerminalEmulatorTest {
 
     @Test
     fun `RIS restores configured cursor default not hardcoded block`() {
-        // Настройка = стабильная черта; приложение переключает на мигающий блок, затем RIS (ESC c).
+        // Setting = a steady bar; the app switches to a blinking block, then RIS (ESC c).
         val emu = TerminalEmulator(initialCursorShape = CursorShape.Bar, initialCursorBlink = false)
-        emu.feed("$esc[1 q".encodeToByteArray()) // мигающий блок из приложения
+        emu.feed("$esc[1 q".encodeToByteArray()) // blinking block from the app
         assertEquals(CursorShape.Block, emu.cursorShape)
         emu.feed("${esc}c".encodeToByteArray())  // RIS
         assertEquals(CursorShape.Bar, emu.cursorShape)
@@ -925,11 +925,11 @@ class TerminalEmulatorTest {
 
     @Test
     fun `applyCursorDefault changes cursor live and survives RIS`() {
-        val emu = TerminalEmulator() // старт: мигающий блок
+        val emu = TerminalEmulator() // start: blinking block
         emu.applyCursorDefault(CursorShape.Bar, blink = false)
         assertEquals(CursorShape.Bar, emu.cursorShape)
         assertFalse(emu.cursorBlink)
-        // Приложение перебивает своим DECSCUSR, затем RIS возвращает к НОВОМУ дефолту, не к блоку.
+        // The app overrides with its own DECSCUSR, then RIS returns to the new default, not the block.
         emu.feed("$esc[1 q".encodeToByteArray())
         assertEquals(CursorShape.Block, emu.cursorShape)
         emu.feed("${esc}c".encodeToByteArray())
@@ -939,14 +939,14 @@ class TerminalEmulatorTest {
 
     @Test
     fun `applyMaxScrollback shrinks history of an open session immediately`() {
-        // Экран 2 строки, буфер 100; печатаем 30 строк — большая часть уходит в scrollback.
+        // Screen 2 rows, buffer 100; print 30 rows — most goes to scrollback.
         val emu = TerminalEmulator(cols = 10, rows = 2, maxScrollback = 100)
         val sb = StringBuilder()
         for (i in 0 until 30) sb.append("line$i\r\n")
         emu.feed(sb.toString().encodeToByteArray())
-        assertTrue(emu.lines.size > 20, "история должна накопиться в scrollback")
+        assertTrue(emu.lines.size > 20, "history should accumulate in scrollback")
 
-        // Уменьшаем буфер на лету — лишние старые строки обрезаются сразу (scrollback=5 + 2 экрана).
+        // Shrink the buffer on the fly — excess old rows are trimmed immediately (scrollback=5 + 2 screen).
         emu.applyMaxScrollback(5)
         assertEquals(7, emu.lines.size)
     }
@@ -958,13 +958,13 @@ class TerminalEmulatorTest {
         val sb = StringBuilder()
         for (i in 0 until 20) sb.append("x$i\r\n")
         emu.feed(sb.toString().encodeToByteArray())
-        // Новая глубина держится и для последующего вывода: 3 scrollback + 2 экрана.
+        // The new depth holds for subsequent output too: 3 scrollback + 2 screen.
         assertEquals(5, emu.lines.size)
     }
 
     @Test
     fun `decscusr selects steady block`() {
-        // CSI 2 SP q — пробел перед 'q' это intermediate-байт DECSCUSR.
+        // CSI 2 SP q — the space before 'q' is the DECSCUSR intermediate byte.
         val emu = emulate(chunks = arrayOf("$esc[2 q"))
         assertEquals(CursorShape.Block, emu.cursorShape)
         assertFalse(emu.cursorBlink)
@@ -1021,7 +1021,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `mouse pixel mode 1016 is tracked`() {
-        // DECSET 1016: приложение просит SGR-Pixels (координаты в пикселях вместо клеток).
+        // DECSET 1016: the app requests SGR-Pixels (pixel coordinates instead of cells).
         val emu = emulate(chunks = arrayOf("$esc[?1016h"))
         assertTrue(emu.mousePixels)
         emu.feed("$esc[?1016l".encodeToByteArray())
@@ -1032,7 +1032,7 @@ class TerminalEmulatorTest {
     fun `DECRQM reports mouse pixel mode state`() {
         val replies = mutableListOf<String>()
         val emu = TerminalEmulator(respond = { replies += it })
-        emu.feed("$esc[?1016\$p".encodeToByteArray())          // выключен по умолчанию → reset (2)
+        emu.feed("$esc[?1016\$p".encodeToByteArray())          // off by default → reset (2)
         assertEquals("$esc[?1016;2\$y", replies.last())
         emu.feed("$esc[?1016h".encodeToByteArray())
         emu.feed("$esc[?1016\$p".encodeToByteArray())
@@ -1054,7 +1054,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `focus reporting mode is tracked`() {
-        // DECSET 1004: vim/tmux просят уведомления о фокусе окна.
+        // DECSET 1004: vim/tmux request window focus notifications.
         assertTrue(emulate(chunks = arrayOf("$esc[?1004h")).focusReporting)
         val emu = emulate(chunks = arrayOf("$esc[?1004h"))
         emu.feed("$esc[?1004l".encodeToByteArray())
@@ -1081,11 +1081,11 @@ class TerminalEmulatorTest {
 
     @Test
     fun `widening rejoins a soft-wrapped line`() {
-        // cols=4: "ABCDEF" автопереносится на "ABCD"+"EF" (мягкий перенос).
+        // cols=4: "ABCDEF" autowraps to "ABCD"+"EF" (soft wrap).
         val emu = emulate(cols = 4, rows = 6, chunks = arrayOf("ABCDEF"))
         assertEquals("ABCD\nEF", emu.asText())
         emu.resize(10, 6)
-        // На ширине 10 обе части склеиваются обратно в одну логическую строку.
+        // At width 10 both parts rejoin into one logical row.
         assertEquals("ABCDEF", emu.asText())
         assertTrue(emu.lines.all { it.size == 10 })
     }
@@ -1094,13 +1094,13 @@ class TerminalEmulatorTest {
     fun `widening does not merge across a hard newline`() {
         val emu = emulate(cols = 10, rows = 6, chunks = arrayOf("AB\r\nCD"))
         emu.resize(40, 6)
-        // Явный перевод строки — граница логических строк, склейки нет.
+        // An explicit newline is a logical-row boundary — no rejoin.
         assertEquals("AB\nCD", emu.asText())
     }
 
     @Test
     fun `narrowing reflows a long line onto the new width`() {
-        // Honest-строка длиной 8 без переноса (cols=10) при сужении до 4 переразбивается.
+        // An 8-char line with no wrap (cols=10) is re-split when narrowed to 4.
         val emu = emulate(cols = 10, rows = 6, chunks = arrayOf("ABCDEFGH"))
         emu.resize(4, 6)
         assertEquals("ABCD\nEFGH", emu.asText())
@@ -1118,12 +1118,12 @@ class TerminalEmulatorTest {
 
     @Test
     fun `narrowing reflows wide chars and tracks the cursor correctly`() {
-        // "AB中C" на ширине 6: A B 中(wide,2кл) C, курсор за C (колонка 5).
+        // "AB中C" at width 6: A B 中(wide, 2 cells) C, cursor past C (column 5).
         val emu = emulate(cols = 6, rows = 6, chunks = arrayOf("AB中C"))
         assertEquals(0, emu.cursorRow)
         assertEquals(5, emu.cursorCol)
         emu.resize(3, 6)
-        // На ширине 3 широкий 中 не влезает после "AB" → переносится; курсор едет на строку за "中C".
+        // At width 3 the wide 中 doesn't fit after "AB" → wraps; cursor moves to the row after "中C".
         assertEquals("AB\n中C", emu.asText())
         assertEquals(2, emu.cursorRow)
         assertEquals(0, emu.cursorCol)
@@ -1131,22 +1131,22 @@ class TerminalEmulatorTest {
 
     @Test
     fun `widening keeps the cursor with its text`() {
-        // cols=4 "ABCDEF": курсор после F — абсолютно строка 1, колонка 2.
+        // cols=4 "ABCDEF": cursor after F — absolute row 1, column 2.
         val emu = emulate(cols = 4, rows = 6, chunks = arrayOf("ABCDEF"))
         assertEquals(1, emu.cursorRow)
         assertEquals(2, emu.cursorCol)
         emu.resize(10, 6)
-        // После склейки курсор переезжает на одну строку, колонка 6 (после "ABCDEF").
+        // After rejoin the cursor moves up one row, column 6 (after "ABCDEF").
         assertEquals(0, emu.cursorRow)
         assertEquals(6, emu.cursorCol)
     }
 
-    // Курсор: абсолютные индексы
+    // Cursor: absolute indices
 
     @Test
     fun `cursor row is absolute including scrollback`() {
         val emu = emulate(cols = 4, rows = 2, chunks = arrayOf("a\r\nb\r\nc"))
-        // 1 строка ушла в scrollback, курсор на нижней экранной строке => абсолютно row 2.
+        // 1 row went to scrollback, cursor on the bottom screen row => absolute row 2.
         assertEquals(2, emu.cursorRow)
         assertEquals(1, emu.cursorCol)
     }
@@ -1166,21 +1166,21 @@ class TerminalEmulatorTest {
 
     @Test
     fun `ESC paren 0 maps ascii qxlk to box-drawing glyphs`() {
-        // ESC ( 0 переводит G0 в DEC Special Graphics: q=─ x=│ l=┌ k=┐ j=┘ m=└ n=┼
+        // ESC ( 0 switches G0 to DEC Special Graphics: q=─ x=│ l=┌ k=┐ j=┘ m=└ n=┼
         val emu = emulate(chunks = arrayOf("$esc(0lqk"))
         assertEquals("┌─┐", emu.asText())
     }
 
     @Test
     fun `ESC paren B restores ascii after line-drawing`() {
-        // Рисуем уголок, затем возвращаем US-ASCII и печатаем буквы — они не транслируются.
+        // Draw a corner, then restore US-ASCII and print letters — they aren't translated.
         val emu = emulate(chunks = arrayOf("$esc(0qq", "${esc}(Bqq"))
         assertEquals("──qq", emu.asText())
     }
 
     @Test
     fun `shift-out invokes G1 line-drawing then shift-in restores G0`() {
-        // ESC ) 0 кладёт line-drawing в G1; SO (0x0e) активирует G1, SI (0x0f) возвращает G0(ASCII).
+        // ESC ) 0 puts line-drawing into G1; SO (0x0e) activates G1, SI (0x0f) restores G0(ASCII).
         val so = 14.toChar().toString()
         val si = 15.toChar().toString()
         val emu = emulate(chunks = arrayOf("$esc)0a${so}qx${si}b"))
@@ -1202,13 +1202,13 @@ class TerminalEmulatorTest {
 
     @Test
     fun `DECSC and DECRC save and restore the active charset`() {
-        // ESC 7 (DECSC) в ASCII; включаем line-drawing и рисуем ─; ESC 8 (DECRC) должен вернуть
-        // ASCII, поэтому следующий q печатается буквой, а не глифом. \r возвращает курсор в колонку 0.
+        // ESC 7 (DECSC) in ASCII; enable line-drawing and draw ─; ESC 8 (DECRC) must restore ASCII, so
+        // the next q prints as a letter, not a glyph. \r returns the cursor to column 0.
         val emu = emulate(chunks = arrayOf("${esc}7$esc(0q", "${esc}8\rq"))
         assertEquals("q", emu.asText())
     }
 
-    // Unicode-ширина (CJK/emoji двойной ширины + астральные)
+    // Unicode width (double-width CJK/emoji + astral)
 
     @Test
     fun `cjk char occupies two cells and advances cursor by two`() {
@@ -1229,7 +1229,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `astral emoji decodes to one wide cell not replacement char`() {
-        // U+1F600 GRINNING FACE — астральный (суррогатная пара), раньше превращался в '�'.
+        // U+1F600 GRINNING FACE — astral (surrogate pair), previously turned into '�'.
         val emu = emulate(chunks = arrayOf("😀"))
         assertEquals("😀", emu.lines[0][0].text)
         assertEquals(CellWidth.Wide, emu.lines[0][0].width)
@@ -1238,7 +1238,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `wide char that does not fit the last column wraps to next line`() {
-        // cols=2: первый 中 заполняет обе колонки (pending-wrap), второй переносится на строку ниже.
+        // cols=2: the first 中 fills both columns (pending-wrap), the second wraps to the row below.
         val emu = emulate(cols = 2, rows = 3, chunks = arrayOf("中中"))
         assertEquals("中\n中", emu.asText())
         assertEquals("中", emu.lines[1][0].text)
@@ -1246,7 +1246,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun `wide char does not start in the last column with content after a narrow`() {
-        // cols=3: a в col0, b в col1, 中 не влезает в col2 -> перенос на следующую строку.
+        // cols=3: a in col0, b in col1, 中 doesn't fit in col2 -> wraps to the next row.
         val emu = emulate(cols = 3, rows = 3, chunks = arrayOf("ab中"))
         assertEquals("ab\n中", emu.asText())
     }

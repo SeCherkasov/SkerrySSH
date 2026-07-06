@@ -57,18 +57,18 @@ class RoutesTest {
         val wrapped = byteArrayOf(7, 7, 7)
         val tokens = client.registerAccount(accountId, password, wrappedDataKey = wrapped)
 
-        // wrappedDataKey возвращается как есть
+        // wrappedDataKey is returned unchanged
         val keys: KeysResponse = client.get("/vault/keys") { bearerAuth(tokens.accessToken) }.body()
         assertEquals(wrapped.b64(), keys.wrappedDataKey)
 
-        // push шифроблоба
+        // push a ciphertext blob
         val blob = byteArrayOf(1, 2, 3, 4)
         val push: PushResponse = client
             .pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, blob.b64()))
             .body()
         assertEquals(1L, push.cursor)
 
-        // дельта since=0 отдаёт ту же запись
+        // delta since=0 returns the same record
         val delta: RecordsResponse = client.get("/vault/records?since=0") { bearerAuth(tokens.accessToken) }.body()
         assertEquals(1, delta.records.size)
         assertEquals(blob.b64(), delta.records.single().blob)
@@ -77,10 +77,8 @@ class RoutesTest {
 
     @Test
     fun `no-op push does not publish a change notification`() = testApplication {
-        // Корень live-sync петли: PUT публиковал WS-сигнал БЕЗУСЛОВНО, даже когда upsert ничего не
-        // изменил (та же version+deviceId ⇒ wins=false, курсор не двигается). Сигнал будил подписчиков
-        // → дельта-pull → push-all → снова PUT → бесконечный цикл ~30мс. Публиковать только при реальном
-        // продвижении курсора.
+        // Publish a WS change signal only when the cursor actually advances, not on every PUT
+        // (a same version+deviceId upsert is a no-op with wins=false).
         val services = testServices()
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
@@ -89,17 +87,17 @@ class RoutesTest {
 
         val record = RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64())
         kotlinx.coroutines.coroutineScope {
-            // UNDISPATCHED: collect регистрируется синхронно ДО первого push (replay=0, иначе гонка подписки).
+            // UNDISPATCHED so collect registers synchronously before the first push (avoids a subscription race).
             val published = kotlinx.coroutines.channels.Channel<Long>(kotlinx.coroutines.channels.Channel.UNLIMITED)
             val watch = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
                 services.notifier.forAccount(accountId).collect { published.send(it) }
             }
 
-            // Первый push — реальное изменение: курсор 0→1, сигнал ДОЛЖЕН прийти.
+            // First push is a real change (cursor 0->1): a signal must arrive.
             client.pushRecord(tokens.accessToken, record)
             assertEquals(1L, withTimeout(2_000) { published.receive() })
 
-            // Повторный push той же записи — no-op (wins=false, курсор остаётся 1): сигнала быть НЕ должно.
+            // Repeat push of the same record is a no-op (wins=false, cursor stays 1): no signal.
             client.pushRecord(tokens.accessToken, record)
             delay(300)
             assertEquals(null, published.tryReceive().getOrNull())
@@ -115,23 +113,22 @@ class RoutesTest {
 
         val tokens = client.registerAccount(accountId, password)
 
-        // TUNNEL — новый тип рабочего пространства (Phase A). Сервер хранит type как строку, но
-        // фильтрует по белому списку — TUNNEL должен в нём быть, иначе синк туннелей невозможен.
+        // TUNNEL must be in the server's type whitelist, or tunnel records can't sync.
         val ok = client.pushRecord(
             tokens.accessToken,
             RecordDto("t1", "TUNNEL", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()),
         )
         assertEquals(HttpStatusCode.OK, ok.status)
 
-        // SETTINGS — запись «что синхронизировать» (account-level), клиент пушит её ВСЕГДА. Без неё в
-        // белом списке любой push с настройками отклоняется 400 и весь синк встаёт (selective-sync баг).
+        // SETTINGS (account-level "what to sync" record) must also be whitelisted, or the client
+        // can't push it and selective sync breaks.
         val settings = client.pushRecord(
             tokens.accessToken,
             RecordDto("sync.settings", "SETTINGS", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()),
         )
         assertEquals(HttpStatusCode.OK, settings.status)
 
-        // Произвольный тип по-прежнему отвергается (защита от мусора/несовместимых клиентов).
+        // An arbitrary type is still rejected.
         val bad = client.pushRecord(
             tokens.accessToken,
             RecordDto("x1", "BOGUS", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()),
@@ -155,7 +152,7 @@ class RoutesTest {
 
         client.registerAccount(accountId, password, deviceName = "A")
 
-        // правильный пароль
+        // correct password
         val sc = srpClient(accountId, password)
         val challenge: ChallengeResponse = client.post("/auth/srp/challenge") {
             contentType(ContentType.Application.Json)
@@ -168,9 +165,9 @@ class RoutesTest {
         }
         assertEquals(HttpStatusCode.OK, verify.status)
         val vr: VerifyResponse = verify.body()
-        sc.step3(BigInteger(vr.m2, 16)) // не бросает = сервер аутентичен
+        sc.step3(BigInteger(vr.m2, 16)) // not throwing means the server is authentic
 
-        // неверный пароль
+        // wrong password
         val bad = srpClient(accountId, "nope")
         val ch2: ChallengeResponse = client.post("/auth/srp/challenge") {
             contentType(ContentType.Application.Json)
@@ -199,29 +196,28 @@ class RoutesTest {
             HttpStatusCode.NoContent,
             client.delete("/devices/devA") { bearerAuth(tokens.accessToken) }.status,
         )
-        // отозванное устройство больше не аутентифицируется
+        // a revoked device no longer authenticates
         assertEquals(HttpStatusCode.Unauthorized, client.get("/vault/keys") { bearerAuth(tokens.accessToken) }.status)
     }
 
     @Test
     fun `revoked device re-logs in with master password and regains access`() = testApplication {
-        // Точный сценарий пользователя: отозвал устройство → register=409, sync=401. С верным
-        // мастер-паролем повторный вход (SRP) должен ПЕРЕАКТИВИРОВАТЬ устройство и вернуть доступ —
-        // иначе аккаунт заперт навсегда. Revoke гасит текущие токены, но не банит устройство.
+        // Re-login with the correct master password (SRP) must reactivate a revoked device and
+        // restore access; revoke kills current tokens but does not ban the device.
         val services = testServices()
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
 
         val tokens = client.registerAccount(accountId, password)
 
-        // отзыв → старый токен мёртв
+        // revoke -> old token is dead
         client.delete("/devices/devA") { bearerAuth(tokens.accessToken) }
         assertEquals(HttpStatusCode.Unauthorized, client.get("/vault/keys") { bearerAuth(tokens.accessToken) }.status)
-        // повторная регистрация невозможна (аккаунт уже есть) — клиент обязан войти
+        // re-registering is impossible (account already exists); the client must log in instead
         val reReg = client.registerAccountResponse(accountId, password)
         assertEquals(HttpStatusCode.Conflict, reReg.status)
 
-        // повторный вход тем же устройством верным паролем → register снимает отзыв, выдаёт новые токены
+        // logging back in with the same device and correct password clears the revoke and issues fresh tokens
         val sc = srpClient(accountId, password)
         val challenge: ChallengeResponse = client.post("/auth/srp/challenge") {
             contentType(ContentType.Application.Json)
@@ -233,7 +229,7 @@ class RoutesTest {
             setBody(VerifyRequest(challenge.challengeId, creds.A.toString(16), creds.M1.toString(16), "devA", "Laptop A"))
         }.body()
 
-        // доступ восстановлен: новый токен снова работает, устройство больше не отозвано
+        // access restored: the new token works again, device no longer revoked
         assertEquals(HttpStatusCode.OK, client.get("/vault/keys") { bearerAuth(fresh.accessToken) }.status)
         val after: DevicesResponse = client.get("/devices") { bearerAuth(fresh.accessToken) }.body()
         assertEquals(false, after.devices.single { it.id == "devA" }.revoked)
@@ -246,14 +242,14 @@ class RoutesTest {
         val client = createClient { install(ContentNegotiation) { json() } }
         val tokens = client.registerAccount(accountId, password, deviceName = "A")
 
-        val transferred = byteArrayOf(9, 9, 9) // dataKey, зашифрованный transferKey (сервер не видит ключ)
+        val transferred = byteArrayOf(9, 9, 9) // dataKey encrypted with transferKey; the server never sees the key
         val start: PairingStartResponse = client.post("/pairing/start") {
             bearerAuth(tokens.accessToken)
             contentType(ContentType.Application.Json)
             setBody(PairingStartRequest(transferred.b64()))
         }.body()
 
-        // новое устройство claim'ит по коду без входа
+        // new device claims by code without logging in
         val claim: PairingClaimResponse = client.post("/pairing/claim") {
             contentType(ContentType.Application.Json)
             setBody(PairingClaimRequest(start.code, "devB", "Phone B"))
@@ -261,10 +257,10 @@ class RoutesTest {
         assertEquals(accountId, claim.accountId)
         assertEquals(transferred.b64(), claim.encryptedDataKey)
 
-        // выданным токеном устройство B уже работает
+        // the issued token already works for device B
         assertEquals(HttpStatusCode.OK, client.get("/vault/keys") { bearerAuth(claim.accessToken) }.status)
 
-        // код одноразовый
+        // the code is single-use
         assertEquals(
             HttpStatusCode.Gone,
             client.post("/pairing/claim") {
@@ -276,8 +272,8 @@ class RoutesTest {
 
     @Test
     fun `pairing claim rejects overlong identifiers with 400 without burning the code`() = testApplication {
-        // На PostgreSQL insert сверхдлинного deviceId в varchar(64) валился бы 500-й уже после
-        // consume — код сгорал бы впустую. Валидация обязана идти ДО consume и отвечать 400.
+        // Validation must run before consuming the code and return 400, or an oversized deviceId
+        // would fail the insert after the code is already burned.
         val services = testServices()
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
@@ -301,7 +297,7 @@ class RoutesTest {
         }
         assertEquals(HttpStatusCode.BadRequest, longCode.status)
 
-        // Код не сожжён невалидными попытками: нормальный claim всё ещё проходит.
+        // The code is not burned by invalid attempts: a normal claim still succeeds.
         val claim: PairingClaimResponse = client.post("/pairing/claim") {
             contentType(ContentType.Application.Json)
             setBody(PairingClaimRequest(start.code, "devB", "Phone B"))
@@ -315,10 +311,10 @@ class RoutesTest {
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
         val tokens = client.registerAccount(accountId, password, platform = "Linux")
-        // push фиксирует курсор устройства (syncVersion) — открытые метаданные для консоли
+        // push advances the device cursor (syncVersion), exposed as console metadata
         client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))
 
-        // список закрыт admin-токеном
+        // the list is gated by the admin token
         assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/devices").status)
 
         val listed: AdminDevicesResponse = client.get("/admin/devices") {
@@ -333,7 +329,7 @@ class RoutesTest {
         assertEquals(1L, d.syncVersion)
         assertEquals(false, d.revoked)
 
-        // отзыв тоже под токеном
+        // revoke is also token-gated
         assertEquals(
             HttpStatusCode.Unauthorized,
             client.delete("/admin/devices/devA?accountId=$accountId").status,
@@ -343,13 +339,13 @@ class RoutesTest {
             client.delete("/admin/devices/devA?accountId=$accountId") { header("X-Admin-Token", "s3cret") }.status,
         )
 
-        // после отзыва устройство видно как revoked и не аутентифицируется
+        // after revoke the device shows as revoked and no longer authenticates
         val after: AdminDevicesResponse = client.get("/admin/devices") {
             header("X-Admin-Token", "s3cret")
         }.body()
         assertTrue(after.devices.single().revoked)
 
-        // неизвестное устройство → 404
+        // unknown device -> 404
         assertEquals(
             HttpStatusCode.NotFound,
             client.delete("/admin/devices/nope?accountId=$accountId") { header("X-Admin-Token", "s3cret") }.status,
@@ -364,13 +360,13 @@ class RoutesTest {
         val tokens = client.registerAccount(accountId, password)
         client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))
 
-        // закрыто токеном
+        // gated by the token
         assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/activity").status)
 
         val activity: AdminActivityResponse = client.get("/admin/activity") {
             header("X-Admin-Token", "s3cret")
         }.body()
-        // свежее первым: push после register
+        // newest first: push after register
         assertEquals(listOf("sync.push", "auth.register"), activity.events.map { it.event })
         val push = activity.events.first()
         assertEquals("devA", push.deviceId)
@@ -400,7 +396,7 @@ class RoutesTest {
         assertEquals(0, a.tombstones)
         assertEquals(2L, a.storageBytes)
 
-        // реальный envelope: настоящие байты шифротекста в hex-превью, без содержимого
+        // a real envelope: actual ciphertext bytes in the hex preview, no plaintext content
         val records: AdminRecordsResponse = client.get("/admin/accounts/$accountId/records") {
             header("X-Admin-Token", "s3cret")
         }.body()
@@ -416,10 +412,10 @@ class RoutesTest {
         application { configureServer(services) }
         val client = createClient { install(ContentNegotiation) { json() } }
         val tokens = client.registerAccount(accountId, password)
-        // создать запись и удалить её (tombstone); курсор устройства догоняет удаление
+        // create a record and delete it (tombstone); the device cursor catches up to the deletion
         client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1).b64()))
         client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 2, "2026-06-29T00:00:01Z", "devA", true, byteArrayOf(1).b64()))
-        // pull двигает курсор устройства до tip (serverSeq 2) — теперь purge безопасен
+        // pull advances the device cursor to tip (serverSeq 2), so purge is now safe
         client.get("/vault/records?since=0") { bearerAuth(tokens.accessToken) }
 
         assertEquals(HttpStatusCode.Unauthorized, client.delete("/admin/accounts/$accountId/tombstones").status)
@@ -428,7 +424,7 @@ class RoutesTest {
         }.body()
         assertEquals(1, purge.purged)
 
-        // удаление аккаунта — под токеном, каскадом
+        // account deletion is token-gated and cascades
         assertEquals(HttpStatusCode.Unauthorized, client.delete("/admin/accounts/$accountId").status)
         assertEquals(
             HttpStatusCode.NoContent,
@@ -436,7 +432,7 @@ class RoutesTest {
         )
         val after: AdminAccountsResponse = client.get("/admin/accounts") { header("X-Admin-Token", "s3cret") }.body()
         assertTrue(after.accounts.isEmpty())
-        // повторное удаление → 404
+        // deleting again -> 404
         assertEquals(
             HttpStatusCode.NotFound,
             client.delete("/admin/accounts/$accountId") { header("X-Admin-Token", "s3cret") }.status,
@@ -452,7 +448,7 @@ class RoutesTest {
         assertEquals(HttpStatusCode.OK, client.get("/admin/health").status)
         assertEquals(HttpStatusCode.Unauthorized, client.get("/admin/stats").status)
 
-        // storageBytes = суммарный размер шифроблобов (LENGTH(blob)), считается на стороне БД
+        // storageBytes is the total ciphertext blob size (LENGTH(blob)), computed in the DB
         val tokens = client.registerAccount(accountId, password)
         client.pushRecord(tokens.accessToken, RecordDto("r1", "HOST", 1, "2026-06-29T00:00:00Z", "devA", false, byteArrayOf(1, 2, 3).b64()))
         val stats: StatsResponse = client.get("/admin/stats") { header("X-Admin-Token", "s3cret") }.body()

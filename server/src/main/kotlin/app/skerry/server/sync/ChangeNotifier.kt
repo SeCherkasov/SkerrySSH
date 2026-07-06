@@ -8,59 +8,59 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
 /**
- * In-memory шина «в аккаунте появились изменения» для WS-push (`docs/skerry-sync-design.md` §3:
- * push без содержимого). Несёт лишь accountId и новый курсор — никаких данных. Модель одиночного
- * self-hosted инстанса; горизонтальное масштабирование потребовало бы внешнего брокера.
+ * In-memory bus for "account has changes" WS push (`docs/skerry-sync-design.md` §3: push with no
+ * payload). Carries only accountId and the new cursor, no data. Single self-hosted instance model;
+ * horizontal scaling would need an external broker.
  */
 class ChangeNotifier {
     /**
-     * [channel]: `acc:{accountId}` — курсор аккаунтного vault; `team:{teamId}` — курсор записей
-     * команды; `member:{accountId}` — изменился состав/приглашения (курсор не несёт смысла, 0).
+     * [channel]: `acc:{accountId}` — account vault cursor; `team:{teamId}` — team record cursor;
+     * `member:{accountId}` — membership/invites changed (cursor is meaningless, 0).
      */
     data class Change(val channel: String, val cursor: Long)
 
     data class TeamChange(val teamId: String, val cursor: Long)
 
-    // replay=0 + DROP_OLDEST: уведомление о курсоре идемпотентно, поэтому при медленном
-    // подписчике сбрасываем старые события вместо блокировки издателя (publish зовётся прямо
-    // в обработчике PUT /vault/records — он не должен ждать WS-клиента; kotlin-ревью HIGH-2).
+    // replay=0 + DROP_OLDEST: cursor notifications are idempotent, so a slow subscriber drops old
+    // events instead of blocking the publisher (publish is called directly from the PUT
+    // /vault/records handler, which must not wait on a WS client; kotlin-review HIGH-2).
     private val flow = MutableSharedFlow<Change>(
         replay = 0,
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    /** Не-suspend: tryEmit никогда не подвешивает издателя (буфер с DROP_OLDEST). */
+    /** Non-suspend: tryEmit never blocks the publisher (buffer with DROP_OLDEST). */
     fun publish(accountId: String, cursor: Long) {
         flow.tryEmit(Change("acc:$accountId", cursor))
     }
 
-    /** Сигнал «в команде появились записи до cursor» — для WS-сессий активных участников. */
+    /** Signals "team has records up to cursor" for active members' WS sessions. */
     fun publishTeam(teamId: String, cursor: Long) {
         flow.tryEmit(Change("team:$teamId", cursor))
     }
 
-    /** Сигнал «состав команд/приглашения аккаунта изменились» — клиент перечитывает список команд. */
+    /** Signals "account's team membership/invites changed"; client re-reads the team list. */
     fun publishMembership(accountId: String) {
         flow.tryEmit(Change("member:$accountId", 0))
     }
 
-    /** Поток курсоров для конкретного аккаунта (для одной WS-сессии). */
+    /** Cursor stream for a specific account (one WS session). */
     fun forAccount(accountId: String): Flow<Long> =
         flow.filter { it.channel == "acc:$accountId" }.map { it.cursor }
 
-    /** Все командные сигналы; фильтрация по членству — на стороне WS-сессии (состав меняется). */
+    /** All team signals; filtering by membership happens on the WS session side (membership changes). */
     fun teamChanges(): Flow<TeamChange> =
         flow.filter { it.channel.startsWith("team:") }
             .map { TeamChange(it.channel.removePrefix("team:"), it.cursor) }
 
-    /** Сигналы об изменении членства для конкретного аккаунта. */
+    /** Membership-change signals for a specific account. */
     fun forMembership(accountId: String): Flow<Unit> =
         flow.filter { it.channel == "member:$accountId" }.map { }
 
     /**
-     * Число активных подписчиков шины (все аккаунты). Наблюдаемость для тестов WS-сессий:
-     * закрытие сокета клиентом должно освобождать подписку, а не держать collect до следующего publish.
+     * Number of active bus subscribers (all accounts). Observability for WS session tests: closing
+     * the socket client-side should release the subscription rather than hold collect until the next publish.
      */
     val subscriptions: StateFlow<Int> get() = flow.subscriptionCount
 }

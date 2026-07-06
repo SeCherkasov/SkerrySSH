@@ -27,7 +27,7 @@ class MobileDesignStateTest {
         assertTrue(s.showTabs)
     }
 
-    // Шрифт и кегль терминала (More → Appearance → Font / Font size)
+    // Terminal font and size (More → Appearance → Font / Font size)
 
     @Test
     fun terminal_font_defaults_to_hack_13px() {
@@ -48,7 +48,7 @@ class MobileDesignStateTest {
         val seen = mutableListOf<TerminalFont>()
         val s = MobileDesignState(onTerminalFontChange = { seen += it })
         s.chooseTerminalFont(TerminalFont.JetBrainsMono)
-        s.chooseTerminalFont(TerminalFont.JetBrainsMono) // повтор — no-op
+        s.chooseTerminalFont(TerminalFont.JetBrainsMono) // repeat — no-op
         assertEquals(TerminalFont.JetBrainsMono, s.terminalFont)
         assertEquals(listOf(TerminalFont.JetBrainsMono), seen)
     }
@@ -58,8 +58,8 @@ class MobileDesignStateTest {
         val seen = mutableListOf<Int>()
         val s = MobileDesignState(onTerminalFontSizeChange = { seen += it })
         s.chooseTerminalFontSize(16)
-        s.chooseTerminalFontSize(16) // повтор — no-op
-        s.chooseTerminalFontSize(99) // вне диапазона — no-op
+        s.chooseTerminalFontSize(16) // repeat — no-op
+        s.chooseTerminalFontSize(99) // out of range — no-op
         s.chooseTerminalFontSize(11)
         assertEquals(11, s.terminalFontSize)
         assertEquals(listOf(16, 11), seen)
@@ -71,8 +71,8 @@ class MobileDesignStateTest {
         val s = MobileDesignState(onTerminalLineHeightChange = { seen += it })
         assertEquals(DEFAULT_TERMINAL_LINE_HEIGHT, s.terminalLineHeight)
         s.chooseTerminalLineHeight(1.5f)
-        s.chooseTerminalLineHeight(1.5f) // повтор — no-op
-        s.chooseTerminalLineHeight(5f)   // вне диапазона → clamp до MAX
+        s.chooseTerminalLineHeight(1.5f) // repeat — no-op
+        s.chooseTerminalLineHeight(5f)   // out of range → clamp to MAX
         assertEquals(TERMINAL_LINE_HEIGHT_MAX, s.terminalLineHeight)
         assertEquals(listOf(1.5f, TERMINAL_LINE_HEIGHT_MAX), seen)
     }
@@ -83,16 +83,16 @@ class MobileDesignStateTest {
         val s = MobileDesignState(onTerminalLetterSpacingChange = { seen += it })
         assertEquals(DEFAULT_TERMINAL_LETTER_SPACING, s.terminalLetterSpacing)
         s.chooseTerminalLetterSpacing(1f)
-        s.chooseTerminalLetterSpacing(1f)  // повтор — no-op
-        s.chooseTerminalLetterSpacing(-9f) // вне диапазона → clamp до MIN
+        s.chooseTerminalLetterSpacing(1f)  // repeat — no-op
+        s.chooseTerminalLetterSpacing(-9f) // out of range → clamp to MIN
         assertEquals(TERMINAL_LETTER_SPACING_MIN, s.terminalLetterSpacing)
         assertEquals(listOf(1f, TERMINAL_LETTER_SPACING_MIN), seen)
     }
 
     @Test
     fun four_tabs_in_template_order() {
-        // Нижняя навигация: 4 корневых таба в этом порядке. Files в баре нет — SFTP открывается
-        // push-экраном ([MobileRoute.Files]) с карточки хоста, как терминал.
+        // Bottom navigation: 4 root tabs in this order. Files isn't in the bar — SFTP opens as a
+        // push screen ([MobileRoute.Files]) from the host card, like the terminal.
         assertEquals(
             listOf(
                 MobileTab.Hosts,
@@ -116,7 +116,7 @@ class MobileDesignStateTest {
         val s = MobileDesignState()
         s.push(MobileRoute.Terminal)
         assertEquals(MobileRoute.Terminal, s.route)
-        assertFalse(s.showTabs) // push-экраны полноэкранные, без таб-бара
+        assertFalse(s.showTabs) // push screens are full-screen, no tab bar
         s.pop()
         assertNull(s.route)
         assertTrue(s.showTabs)
@@ -124,7 +124,7 @@ class MobileDesignStateTest {
 
     @Test
     fun pop_returns_to_current_tab_not_hosts() {
-        // Из таба More открыли под-экран (Ports) → pop возвращает на More, а не на Hosts.
+        // A sub-screen (Ports) opened from the More tab → pop returns to More, not Hosts.
         val s = MobileDesignState()
         s.select(MobileTab.More)
         s.push(MobileRoute.Ports)
@@ -156,7 +156,7 @@ class MobileDesignStateTest {
         val s = MobileDesignState()
         s.openHost("host-42")
         s.pop()
-        assertNull(s.selectedHostId) // иначе 2B прочёл бы устаревший id
+        assertNull(s.selectedHostId) // otherwise 2B would read a stale id
 
         s.openHost("host-7")
         s.select(MobileTab.Snippets)
@@ -165,7 +165,7 @@ class MobileDesignStateTest {
 
     @Test
     fun navigate_after_connect_terminal_pushes_terminal_route() {
-        // Connect с экрана хоста ведёт на push-экран терминала.
+        // Connect from the host screen leads to the terminal push screen.
         val s = MobileDesignState()
         navigateAfterConnect(s, MobileConnectDest.Terminal)
         assertEquals(MobileRoute.Terminal, s.route)
@@ -173,13 +173,13 @@ class MobileDesignStateTest {
 
     @Test
     fun navigate_after_connect_files_pushes_files_route() {
-        // SFTP с экрана хоста ведёт на push-экран Files (Remote-браузер активной сессии) с back-стрелкой,
-        // как терминал; push поверх детали хоста заменяет её маршрут.
+        // SFTP from the host screen leads to the Files push screen (remote browser of the active
+        // session) with a back arrow, like the terminal; pushing over host detail replaces its route.
         val s = MobileDesignState()
         s.push(MobileRoute.HostDetail)
         navigateAfterConnect(s, MobileConnectDest.Files)
         assertEquals(MobileRoute.Files, s.route)
-        assertFalse(s.showTabs) // push-экран полноэкранный, без таб-бара
+        assertFalse(s.showTabs) // push screen is full-screen, no tab bar
     }
 
     @Test
@@ -193,7 +193,7 @@ class MobileDesignStateTest {
 
     @Test
     fun open_new_conn_starts_in_create_mode() {
-        // Создание нового хоста: лист открыт без редактируемого профиля (форма пустая).
+        // Creating a new host: the sheet opens with no editing profile (empty form).
         val s = MobileDesignState()
         s.openNewConn()
         assertTrue(s.sheetNewConn)
@@ -202,7 +202,7 @@ class MobileDesignStateTest {
 
     @Test
     fun open_edit_conn_opens_sheet_with_editing_host() {
-        // Edit с экрана детали: тот же лист, но в режиме правки конкретного профиля.
+        // Edit from the detail screen: the same sheet, but in edit mode for a specific profile.
         val s = MobileDesignState()
         val host = sampleHost()
         s.openEditConn(host)
@@ -212,7 +212,7 @@ class MobileDesignStateTest {
 
     @Test
     fun open_new_conn_clears_editing_host_after_edit() {
-        // После правки повторный «+ New» открывает чистую форму, а не залипает на прежнем хосте.
+        // After an edit, hitting "+ New" again opens a clean form instead of sticking to the previous host.
         val s = MobileDesignState()
         s.openEditConn(sampleHost())
         s.openNewConn()
@@ -222,7 +222,7 @@ class MobileDesignStateTest {
 
     @Test
     fun close_sheet_clears_editing_host() {
-        // Закрытие листа сбрасывает режим правки — иначе следующий «+ New» унаследовал бы id.
+        // Closing the sheet resets edit mode — otherwise the next "+ New" would inherit the id.
         val s = MobileDesignState()
         s.openEditConn(sampleHost())
         s.closeSheet()
@@ -230,7 +230,7 @@ class MobileDesignStateTest {
         assertNull(s.editingHost)
     }
 
-    // Схлопывание папок хостов + персист (паритет desktop)
+    // Collapsing host groups + persistence (desktop parity)
 
     @Test
     fun collapsed_groups_default_empty() {
@@ -250,16 +250,16 @@ class MobileDesignStateTest {
     fun toggle_group_collapsed_flips_membership_and_reports_to_callback() {
         val seen = mutableListOf<Set<String>>()
         val s = MobileDesignState(onCollapsedGroupsChange = { seen += it })
-        s.toggleGroupCollapsed("A") // свернули
+        s.toggleGroupCollapsed("A") // collapsed
         assertTrue(s.isGroupCollapsed("A"))
-        s.toggleGroupCollapsed("B") // свернули вторую
-        s.toggleGroupCollapsed("A") // развернули первую
+        s.toggleGroupCollapsed("B") // collapsed the second one
+        s.toggleGroupCollapsed("A") // expanded the first one
         assertFalse(s.isGroupCollapsed("A"))
         assertTrue(s.isGroupCollapsed("B"))
         assertEquals(listOf(setOf("A"), setOf("A", "B"), setOf("B")), seen)
     }
 
-    // Переименование/удаление групп хостов (карандаш у заголовка папки; паритет desktop)
+    // Renaming/deleting host groups (pencil icon on the folder header; desktop parity)
 
     @Test
     fun rename_group_dialog_opens_and_dismisses() {
@@ -273,7 +273,7 @@ class MobileDesignStateTest {
 
     @Test
     fun on_group_renamed_moves_collapsed_membership_and_reports() {
-        // Свёрнутая папка остаётся свёрнутой под новым именем; персист получает обновлённый набор.
+        // A collapsed folder stays collapsed under the new name; persistence gets the updated set.
         val seen = mutableListOf<Set<String>>()
         val s = MobileDesignState(initialCollapsedGroups = setOf("Production"), onCollapsedGroupsChange = { seen += it })
         s.onGroupRenamed("Production", "Prod")
@@ -284,7 +284,7 @@ class MobileDesignStateTest {
 
     @Test
     fun on_group_renamed_no_collapse_entry_is_silent() {
-        // Группа не была свёрнута → синхронить нечего, колбэк персиста молчит.
+        // The group wasn't collapsed → nothing to sync, the persist callback stays silent.
         val seen = mutableListOf<Set<String>>()
         val s = MobileDesignState(onCollapsedGroupsChange = { seen += it })
         s.onGroupRenamed("Production", "Prod")
@@ -295,15 +295,15 @@ class MobileDesignStateTest {
     fun on_group_renamed_blank_or_unchanged_is_noop() {
         val seen = mutableListOf<Set<String>>()
         val s = MobileDesignState(initialCollapsedGroups = setOf("Production"), onCollapsedGroupsChange = { seen += it })
-        s.onGroupRenamed("Production", "Production") // то же имя
-        s.onGroupRenamed("Production", "   ")        // пустое после trim
+        s.onGroupRenamed("Production", "Production") // same name
+        s.onGroupRenamed("Production", "   ")        // empty after trim
         assertTrue(s.isGroupCollapsed("Production"))
         assertTrue(seen.isEmpty())
     }
 
     @Test
     fun on_group_renamed_trims_surrounding_whitespace() {
-        // Хвостовые пробелы режутся → ключ свёрнутости совпадает с тем, что контроллер запишет в Host.group.
+        // Trailing whitespace is trimmed → the collapse key matches what the controller writes to Host.group.
         val seen = mutableListOf<Set<String>>()
         val s = MobileDesignState(initialCollapsedGroups = setOf("Production"), onCollapsedGroupsChange = { seen += it })
         s.onGroupRenamed("Production", "  Prod  ")
@@ -330,25 +330,25 @@ class MobileDesignStateTest {
         assertTrue(seen.isEmpty())
     }
 
-    // Системный «назад»: куда ведёт по состоянию навигации (mobileBackAction)
+    // System back: where it leads based on navigation state (mobileBackAction)
 
     @Test
     fun back_on_hosts_root_yields_null_so_system_exits() {
-        // Корневой таб Hosts без открытого push-экрана: перехватывать нечего — событие уходит системе
-        // (штатное закрытие приложения), это единственная точка выхода.
+        // Root Hosts tab with no open push screen: nothing to intercept — the event goes to the
+        // system (normal app exit), the only exit point.
         assertNull(mobileBackAction(route = null, tab = MobileTab.Hosts))
     }
 
     @Test
     fun back_with_open_route_pops_it() {
-        // Любой полноэкранный push-экран (терминал/детали/файлы/…) закрывается «назад», возвращая на таб.
+        // Any full-screen push screen (terminal/detail/files/…) closes on back, returning to the tab.
         assertEquals(MobileBackAction.PopRoute, mobileBackAction(MobileRoute.Terminal, MobileTab.Hosts))
         assertEquals(MobileBackAction.PopRoute, mobileBackAction(MobileRoute.Files, MobileTab.More))
     }
 
     @Test
     fun back_on_non_hosts_tab_goes_home() {
-        // С не-корневого таба (Snippets/Vault/More) «назад» возвращает на Hosts, а не закрывает приложение.
+        // From a non-root tab (Snippets/Vault/More), back returns to Hosts instead of exiting the app.
         assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Snippets))
         assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Vault))
         assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.More))
@@ -356,7 +356,7 @@ class MobileDesignStateTest {
 
     @Test
     fun back_prefers_popping_route_over_tab() {
-        // Открытый push-экран важнее таба: даже на не-Hosts «назад» сперва закрывает экран, не прыгая на Hosts.
+        // An open push screen takes priority over the tab: even on non-Hosts, back closes the screen first instead of jumping to Hosts.
         assertEquals(MobileBackAction.PopRoute, mobileBackAction(MobileRoute.Ports, MobileTab.More))
     }
 

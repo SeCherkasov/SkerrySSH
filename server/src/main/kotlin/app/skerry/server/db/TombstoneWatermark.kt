@@ -7,13 +7,13 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.selectAll
 
 /**
- * Watermark распространения tombstone'ов: минимум курсоров всех устройств аккаунта. Записи с
- * `serverSeq ≤ watermark` дочитаны КАЖДЫМ устройством, и только их безопасно компактить/чистить —
- * иначе отставшее устройство воскресило бы запись на следующем pull. Устройство без курсора
- * (null/никогда не синкалось) тянет watermark к 0 → ничего не трогаем; аккаунт без устройств →
- * watermark = MAX → можно всё (воскрешать некому). Общее ядро для
- * [RecordRepository.compactedTombstoneIds] и [AdminRepository.purgeTombstones].
- * Вызывать только внутри открытой транзакции.
+ * Tombstone propagation watermark: the minimum cursor across all of an account's devices.
+ * Records with `serverSeq <= watermark` have been read by every device, so only those are safe
+ * to compact/purge; otherwise a lagging device would resurrect the record on its next pull. A
+ * device with no cursor (null/never synced) pins the watermark to 0, blocking compaction; an
+ * account with no devices gets watermark = MAX (nothing left to resurrect). Shared by
+ * [RecordRepository.compactedTombstoneIds] and [AdminRepository.purgeTombstones].
+ * Call only inside an open transaction.
  */
 internal fun tombstoneWatermark(accountId: String): Long {
     val cursors = Devices.selectAll()
@@ -22,6 +22,6 @@ internal fun tombstoneWatermark(accountId: String): Long {
     return if (cursors.isEmpty()) Long.MAX_VALUE else cursors.min()
 }
 
-/** Предикат «надгробие аккаунта, уже распространённое на все устройства» (deleted ∧ serverSeq ≤ watermark). */
+/** Predicate for "account tombstone already propagated to all devices" (deleted && serverSeq <= watermark). */
 internal fun propagatedTombstones(accountId: String, watermark: Long): Op<Boolean> =
     (Records.accountId eq accountId) and (Records.deleted eq true) and (Records.serverSeq lessEq watermark)

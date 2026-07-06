@@ -8,33 +8,33 @@ import okio.FileSystem
 import okio.Path
 
 /**
- * Тип события безопасности. Фиксированный набор того, что приложение реально контролирует и может
- * записать честно (без выдуманных данных): жизненный цикл мастер-пароля, биометрии и привязки
- * устройств. Подпись для UI локализуется отдельно — здесь только стабильные идентификаторы.
+ * Type of security event. Fixed set of what the app can honestly track: master password,
+ * biometrics, and device-pairing lifecycle. UI labels are localized separately; only stable
+ * identifiers live here.
  */
 enum class SecurityEventType {
-    /** Vault создан (первичная установка мастер-пароля) — базовая точка для «последней смены пароля». */
+    /** Vault created (initial master password setup) — baseline for "last password change". */
     VaultCreated,
 
-    /** Мастер-пароль сменён ([Vault.changePassword]). */
+    /** Master password changed ([Vault.changePassword]). */
     MasterPasswordChanged,
 
-    /** Включена разблокировка биометрией. */
+    /** Biometric unlock enabled. */
     BiometricEnabled,
 
-    /** Выключена разблокировка биометрией. */
+    /** Biometric unlock disabled. */
     BiometricDisabled,
 
-    /** Успешная разблокировка биометрией. */
+    /** Successful biometric unlock. */
     UnlockedBiometric,
 
-    /** Привязано новое устройство (быстрый паринг) — [detail] несёт имя устройства. */
+    /** New device paired (quick pairing) — [detail] carries the device name. */
     DevicePaired,
 }
 
 /**
- * Одно событие журнала: тип, ISO-8601 штамп времени ([at], как в [Vault] — строкой из инъектируемых
- * часов) и необязательная деталь ([detail], например имя привязанного устройства).
+ * One log entry: type, ISO-8601 timestamp ([at], as in [Vault] — a string from injectable clock)
+ * and an optional detail ([detail], e.g. the paired device name).
  */
 @Serializable
 data class SecurityEvent(
@@ -44,42 +44,43 @@ data class SecurityEvent(
 )
 
 /**
- * Локальный журнал событий безопасности. Сознательно **не** синкается между устройствами: это
- * аудит действий на конкретном устройстве (как системный лог входов), а не общие данные аккаунта.
+ * Local security event log. Deliberately not synced across devices — it's a per-device audit
+ * trail (like a system login log), not shared account data.
  */
 interface SecurityLog {
-    /** Записать событие с текущим временем (часы внутри реализации). */
+    /** Record an event at the current time (clock is internal to the implementation). */
     fun record(type: SecurityEventType, detail: String? = null)
 
-    /** Последние события, новейшие первыми, не больше [limit]. */
+    /** Most recent events, newest first, at most [limit]. */
     fun recent(limit: Int = 20): List<SecurityEvent>
 
     /**
-     * Время последней смены мастер-пароля: штамп новейшего события [SecurityEventType.VaultCreated]
-     * или [SecurityEventType.MasterPasswordChanged]. `null`, если таких событий ещё нет (например
-     * vault создан до появления журнала) — UI показывает нейтральный текст, а не выдуманную дату.
+     * Timestamp of the last master password change: the newest [SecurityEventType.VaultCreated]
+     * or [SecurityEventType.MasterPasswordChanged] event. `null` if no such event exists yet
+     * (e.g. vault created before the log existed).
      */
     fun lastPasswordChangeAt(): String?
 
-    /** Очистить журнал (сброс vault / заводской сброс). */
+    /** Clear the log (vault reset / factory reset). */
     fun clear()
 }
 
 /**
- * Реализация [SecurityLog] поверх okio-[FileSystem]: JSON-массив событий в одном файле (кроссплатформенно
- * — desktop и Android одним кодом, как [FileVault]). Хранится в хронологическом порядке; при превышении
- * [max] вытесняются самые старые. Чтение битого/отсутствующего файла даёт пустой журнал (журнал —
- * вспомогательный, его порча не должна ничего ронять). Запись атомарна через временный файл.
+ * [SecurityLog] over okio [FileSystem]: a JSON array of events in one file, shared code for
+ * desktop and Android (like [FileVault]). Stored in chronological order; oldest entries are
+ * evicted once [max] is exceeded. A corrupt or missing file reads as an empty log. Writes are
+ * atomic via a temp file.
  *
- * Мутации ([record]/[clear]) — read-modify-write, поэтому сериализуются мультиплатформенным
- * [SynchronizedObject] (как [FileVault]): журнал зовут с UI-корутины и потенциально из фонового
- * паринга/sync, две гонящиеся записи без блокировки потеряли бы событие (lost update).
+ * Mutations ([record]/[clear]) are read-modify-write, so they're serialized with a
+ * multiplatform [SynchronizedObject] (like [FileVault]): the log is called from the UI coroutine
+ * and potentially from background pairing/sync, so unsynchronized concurrent writes could lose
+ * an event.
  *
- * [harden] — платформенный хук, выставляющий готовому файлу приватные права (0600 на POSIX), чтобы
- * аудит-метаданные (имена привязанных устройств, штампы смены пароля) не были мир-читаемыми под общим
- * домашним каталогом. По умолчанию no-op (тесты на [okio.fakefilesystem]); JVM-сайты передают
- * `PrivateConfig.harden`. Хук зовётся на временном файле до [FileSystem.atomicMove], чтобы у цели не
- * было окна с правами по umask.
+ * [harden] is a platform hook that sets private permissions (0600 on POSIX) on the finished
+ * file, since audit metadata (paired device names, password-change timestamps) shouldn't be
+ * world-readable under a shared home directory. No-op by default (tests on
+ * [okio.fakefilesystem]); JVM call sites pass `PrivateConfig.harden`. Called on the temp file
+ * before [FileSystem.atomicMove] so the target never has a window with umask permissions.
  */
 class FileSecurityLog(
     private val path: Path,
@@ -110,14 +111,14 @@ class FileSecurityLog(
         if (fileSystem.exists(path)) fileSystem.delete(path)
     }
 
-    /** Прочитать журнал в хронологическом порядке; любая ошибка (нет файла/битый JSON) → пусто. */
+    /** Read the log in chronological order; any error (missing file/corrupt JSON) → empty. */
     private fun read(): List<SecurityEvent> = runCatching {
         if (!fileSystem.exists(path)) return emptyList()
         val text = fileSystem.read(path) { readUtf8() }
         json.decodeFromString<List<SecurityEvent>>(text)
     }.getOrDefault(emptyList())
 
-    // Атомарная запись + harden на tmp до move (у цели не будет окна с 0644) — см. [atomicWriteUtf8].
+    // Atomic write + harden on tmp before move — see [atomicWriteUtf8].
     private fun write(events: List<SecurityEvent>) {
         atomicWriteUtf8(fileSystem, path, json.encodeToString(events), harden)
     }

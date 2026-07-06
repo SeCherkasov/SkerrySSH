@@ -51,21 +51,21 @@ import app.skerry.ui.session.sessionDotColor
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 
-// Info-панель терминального view: параметры соединения, live-метрики и SYSTEM-блок активной сессии.
+// Terminal view info panel: connection parameters, live metrics, and the active session's SYSTEM block.
 
 @Composable
 internal fun InfoPanel() {
     val mono = LocalFonts.current.mono
-    // Живой контекст активной сессии (если есть): профиль хоста из каталога + состояние соединения.
+    // Live context of the active session (if any): host profile from the catalog + connection state.
     val sessions = LocalSessions.current
     val hosts = LocalHosts.current
     val active = sessions?.active
     val host = active?.hostId?.let { id -> hosts?.find(id) }
     val live = sessions != null
     val connected = active?.controller?.uiState is ConnectionUiState.Connected
-    // Контроллер live-метрик активной сессии (когда подключена). remember безусловный — ключи
-    // (id сессии + флаг connected) пересоздают его при смене сессии/подключения, без условного
-    // вызова remember. openMetrics идемпотентен (кэш в ConnectionController).
+    // Live-metrics controller of the active session (when connected). remember is unconditional —
+    // its keys (session id + connected flag) recreate it on session/connection change, avoiding a
+    // conditional remember call. openMetrics is idempotent (cached in ConnectionController).
     val liveMetrics = remember(active, connected) {
         if (connected) active.controller.openMetrics() else null
     }?.metrics
@@ -86,8 +86,8 @@ internal fun InfoPanel() {
         }
         HLine()
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            // Host/Address/User — из живого профиля активной сессии; cipher — из транспорта,
-            // uptime — из live-метрик (до первого опроса «…»); в мок-режиме — статичные значения.
+            // Host/Address/User come from the active session's live profile; cipher from the transport,
+            // uptime from live metrics ("…" until the first poll); mock mode uses static values.
             val authIdentity = stringResource(Res.string.term_auth_identity)
             val authPassword = stringResource(Res.string.term_auth_password)
             InfoRow(stringResource(Res.string.term_info_host), if (live) (host?.label ?: active?.title ?: "—") else "prod-web-01", mono)
@@ -103,13 +103,13 @@ internal fun InfoPanel() {
             val memoryLabel = stringResource(Res.string.term_metric_memory)
             val diskLabel = stringResource(Res.string.term_metric_disk)
             if (!live) {
-                // Мок-путь (превью/офскрин): статичные значения.
+                // Mock path (preview/offscreen): static values.
                 Meter(cpuLabel, "34%", 0.34f, D.cyan, D.textBright, mono)
                 Meter(memoryLabel, "2.1 / 4 GB", 0.52f, D.moss, D.textBright, mono)
                 Meter(diskLabel, "87%", 0.87f, D.sunset, D.sunset, mono)
             } else {
-                // Живой опрос ресурсов сессии (контроллер поднят выше). До первого удачного
-                // опроса (или на не-Linux хосте) — «…».
+                // Live polling of session resources (controller created above). "…" until the first
+                // successful poll (or on a non-Linux host).
                 val m = liveMetrics
                 val cpu = m?.cpuPercent
                 Meter(cpuLabel, cpu?.let { "$it%" } ?: "…", m?.cpuFraction ?: 0f, D.cyan, if ((cpu ?: 0) > 85) D.sunset else D.textBright, mono)
@@ -120,8 +120,8 @@ internal fun InfoPanel() {
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             Txt(stringResource(Res.string.term_info_system), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
-            // Живой блок собирается из фактов хоста (ОС / ядро / CPU+load); до первого опроса — «…».
-            // В мок-режиме (превью/офскрин) — статичный текст.
+            // The live block is built from host facts (OS / kernel / CPU+load); "…" until the first poll.
+            // Mock mode (preview/offscreen) uses static text.
             val systemText = if (live) liveSystemSummary(liveMetrics) else MOCK_SYSTEM
             Txt(systemText, color = D.dim, size = 10.5.sp, font = mono, lineHeight = 18.sp)
         }
@@ -147,18 +147,18 @@ private fun Meter(label: String, value: String, fraction: Float, bar: Color, val
     }
 }
 
-/** Байты → строка гигабайт с одним знаком после запятой (десятичные ГБ, как в free -h). */
+/** Bytes → gigabyte string with one decimal place (decimal GB, like `free -h`). */
 private fun gb(bytes: Long): String {
     val rounded = (bytes / 1_000_000_000.0 * 10).roundToInt() / 10.0
     return rounded.toString()
 }
 
-/** Статичный SYSTEM-блок для мок/офскрин-режима (нет живой сессии). */
+/** Static SYSTEM block for mock/offscreen mode (no live session). */
 private const val MOCK_SYSTEM = "Ubuntu 22.04.4 LTS\nLinux 5.15.0-105 x86_64\n4 vCPU · load 0.42 0.51 0.48"
 
 /**
- * Собирает SYSTEM-блок info-панели из живых фактов хоста: ОС, ядро, строка «N vCPU · load …».
- * Пропускает поля, которых ещё нет (опрос не дошёл / не-Linux). Пусто всё — «…».
+ * Builds the info panel's SYSTEM block from live host facts: OS, kernel, "N vCPU · load …" line.
+ * Skips fields not yet available (poll pending / non-Linux). If all are empty, returns "…".
  */
 private fun liveSystemSummary(m: HostMetrics?): String {
     val cpuLoad = buildString {

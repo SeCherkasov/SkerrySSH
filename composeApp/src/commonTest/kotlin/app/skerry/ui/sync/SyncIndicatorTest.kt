@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Индикатор sync ведёт по статусу сессии, доступность лишь различает online/offline. */
+/** Sync indicator follows session status; reachability only distinguishes online/offline. */
 class SyncIndicatorTest {
 
     @Test
@@ -24,7 +24,7 @@ class SyncIndicatorTest {
 
     @Test
     fun configured_is_paused_not_online_even_when_server_reachable() {
-        // Корень бага: устройство привязано, но сессии нет (отозвано/после рестарта) — не «online».
+        // Device is bound but has no session (revoked/after restart); must not read as "online".
         val i = syncIndicator(SyncStatus.Configured("https://box.lan", "me"), ServerReachable.REACHABLE)!!
         assertEquals("Sync paused", i.label)
         assertEquals(SyncIndicatorLevel.WARN, i.level)

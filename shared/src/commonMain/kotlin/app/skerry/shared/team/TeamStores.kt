@@ -11,9 +11,9 @@ import okio.ByteString.Companion.decodeBase64
 import okio.ByteString.Companion.toByteString
 
 /**
- * Ключ и метаданные команды в СОБСТВЕННОМ vault участника (запись [RecordType.TEAM], id = teamId).
- * teamKey хранится base64 внутри payload — payload целиком зашифрован dataKey'ем аккаунта и едет
- * на свои устройства обычным синком.
+ * Team key and metadata in the member's own vault (record [RecordType.TEAM], id = teamId).
+ * teamKey is stored base64 inside the payload, which is encrypted with the account dataKey and
+ * synced to the account's own devices normally.
  */
 @Serializable
 data class TeamKeyEntry(
@@ -27,7 +27,7 @@ data class TeamKeyEntry(
     }
 }
 
-/** Стор записей [RecordType.TEAM]: по одной на команду, id записи = teamId. */
+/** Store of [RecordType.TEAM] records: one per team, record id = teamId. */
 class TeamKeyStore(private val vault: Vault) {
 
     private val codec = VaultRecordCodec(vault, RecordType.TEAM, TeamKeyEntry.serializer())
@@ -63,7 +63,7 @@ class TeamKeyStore(private val vault: Vault) {
     }
 }
 
-/** Payload singleton-записи [RecordType.TEAM_IDENTITY]: X25519-пара для приёма приглашений. */
+/** Payload of the singleton [RecordType.TEAM_IDENTITY] record: X25519 keypair for receiving invites. */
 @Serializable
 data class TeamIdentityEntry(
     val publicKey: String,
@@ -71,9 +71,9 @@ data class TeamIdentityEntry(
 )
 
 /**
- * Identity-пара аккаунта для Teams. Создаётся лениво при первом использовании ([ensure]) и едет
- * на другие устройства аккаунта обычным синком (тип всегда в shouldSync). Публичную половину
- * публикует на сервере координатор — стор о сети не знает.
+ * Account identity keypair for Teams. Created lazily on first use ([ensure]) and synced to the
+ * account's other devices normally (the type is always in shouldSync). The public half is
+ * published to the server by the coordinator; this store knows nothing about the network.
  */
 class TeamIdentityStore(private val vault: Vault, private val crypto: VaultCrypto) {
 
@@ -87,13 +87,13 @@ class TeamIdentityStore(private val vault: Vault, private val crypto: VaultCrypt
         return try {
             crypto.sharingKeyPairFromBytes(publicKey, secretKey)
         } catch (e: IllegalArgumentException) {
-            null // повреждённая запись — считаем, что identity нет; ensure() создаст новую
+            null // corrupt record: treat as no identity; ensure() will create a new one
         } finally {
             secretKey.fill(0)
         }
     }
 
-    /** Пара аккаунта; создаёт и сохраняет новую, если записи ещё нет (или она нечитаема). */
+    /** Account keypair; creates and stores a new one if none exists yet (or it's unreadable). */
     fun ensure(): SharingKeyPair = vault.transaction {
         load() ?: run {
             val pair = crypto.newSharingKeyPair()

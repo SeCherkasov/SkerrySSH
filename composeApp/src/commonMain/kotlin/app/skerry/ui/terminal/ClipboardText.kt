@@ -3,39 +3,40 @@ package app.skerry.ui.terminal
 import androidx.compose.ui.platform.ClipEntry
 
 /**
- * Платформенные обёртки CLIPBOARD ↔ простой текст поверх нового suspend-буфера Compose
- * ([androidx.compose.ui.platform.Clipboard]). Заменяют устаревший `ClipboardManager.getText/setText`.
+ * Platform wrappers for CLIPBOARD <-> plain text over the Compose suspend clipboard
+ * ([androidx.compose.ui.platform.Clipboard]), replacing the deprecated `ClipboardManager.getText/setText`.
  *
- * Создать [ClipEntry] из простого текста для записи в системный буфер (копирование выделения, OSC 52).
+ * Builds a [ClipEntry] from plain text for writing to the system clipboard (selection copy, OSC 52).
  */
 internal expect fun plainTextClipEntry(text: String): ClipEntry
 
 /**
- * Извлечь простой текст из [ClipEntry] системного буфера (для вставки) или `null`, если текста нет.
- * На desktop запрашиваем у AWT только `stringFlavor` (не перебирая прочие форматы), на Android берём
- * текст первого элемента ClipData.
+ * Extracts plain text from a system-clipboard [ClipEntry] (for paste), or `null` if there is none.
+ * On desktop, only AWT's `stringFlavor` is requested (no scanning other formats); on Android, the
+ * text of the first ClipData item is used.
  */
 internal expect fun ClipEntry.readPlainText(): String?
 
 /**
- * Прямой путь чтения CLIPBOARD в обход Compose/AWT — нужен на Wayland: чтение буфера через AWT при
- * чужом сериализованном flavor'е (скопировано из IntelliJ) безусловно печатает стек JDK в System.err.
- * Здесь читаем через `wl-paste`, AWT не трогаем — лога нет. Возвращает `null`, когда прямого пути нет
- * (X11/Windows/macOS/Android) — вызывающий тогда читает штатным Compose-буфером.
+ * Direct CLIPBOARD read path bypassing Compose/AWT, needed on Wayland: reading via AWT with a foreign
+ * serialized flavor (per IntelliJ) unconditionally prints a JDK stack trace to System.err. Reads via
+ * `wl-paste` instead, touching no AWT, so nothing is logged. Returns `null` when no direct path exists
+ * (X11/Windows/macOS/Android), so the caller falls back to the regular Compose clipboard.
  */
 internal expect fun readSystemClipboardDirect(): String?
 
 /**
- * Прямой путь записи CLIPBOARD в обход Compose/AWT (Wayland, `wl-copy`). Парный к [readSystemClipboardDirect]:
- * чтобы на Wayland чтение и запись шли через один буфер (`wl-clipboard`), а не смешивались с XWayland-AWT.
- * `true` — записали прямым путём; `false` — прямого пути нет, вызывающий пишет через Compose-буфер.
+ * Direct CLIPBOARD write path bypassing Compose/AWT (Wayland, `wl-copy`), paired with
+ * [readSystemClipboardDirect] so Wayland reads and writes go through the same buffer (`wl-clipboard`)
+ * instead of mixing with XWayland-AWT. Returns `true` if written via the direct path; `false` means no
+ * direct path exists and the caller should write via the Compose clipboard.
  */
 internal expect fun writeSystemClipboardDirect(text: String): Boolean
 
 /**
- * Берёт ли прямой путь ([readSystemClipboardDirect]) чтение CLIPBOARD на себя ЦЕЛИКОМ. Когда `true`
- * (Wayland с `wl-clipboard`), вызывающий НЕ должен откатываться на Compose/AWT даже при пустом
- * результате — иначе при не-текстовом буфере снова всплывёт шумная JDK-трасса (AWT `getContents`).
- * Первый вызов может быть блокирующим (резолв утилит) — звать вне UI-потока.
+ * Whether the direct path ([readSystemClipboardDirect]) owns CLIPBOARD reads entirely. When `true`
+ * (Wayland with `wl-clipboard`), the caller must not fall back to Compose/AWT even on an empty result,
+ * or a non-text clipboard would trigger the noisy JDK trace again (AWT `getContents`). The first call
+ * may block (resolving utilities) — call off the UI thread.
  */
 internal expect fun systemClipboardDirectHandlesReads(): Boolean

@@ -59,11 +59,11 @@ import app.skerry.ui.settings.AiProviderCards
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Мобильный экран настроек AI (More → «AI & privacy») — паритет с desktop `LiveAiSection`:
- * карточки провайдера (локальная модель / BYOK / выключен), BYOK-поля + Save в vault и quick chat.
- * Поля/подписи/кнопки — общие примитивы ([MobileFormField]/[MobileFormInput]/[ChipButton]),
- * чтобы экран не расходился по ширине/высоте с остальными мобильными формами. Без живого
- * контроллера ([LocalAi] == null) не открывается (строка More инертна), поэтому здесь `ai` не-null.
+ * Mobile AI settings screen (More -> "AI & privacy"), parity with desktop `LiveAiSection`:
+ * provider cards (local model / BYOK / off), BYOK fields + Save to vault, quick chat. Fields/
+ * labels/buttons use shared primitives ([MobileFormField]/[MobileFormInput]/[ChipButton]) so the
+ * screen doesn't drift in width/height from the other mobile forms. Doesn't open without a live
+ * controller ([LocalAi] == null); the More row is inert then, so `ai` is non-null here.
  */
 @Composable
 fun MobileAiScreen(state: MobileDesignState) {
@@ -77,11 +77,11 @@ fun MobileAiScreen(state: MobileDesignState) {
                 color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(bottom = 12.dp),
             )
 
-            // Выбор провайдера — общий блок с desktop-настройками (AiProviderCards): состояние и
-            // логика едины; BYOK-поля раскрываются внутри своей карточки (мобильный layout — ниже).
+            // Provider selection is shared with desktop settings (AiProviderCards): same state and
+            // logic; BYOK fields expand inside their card (mobile layout below).
             AiProviderCards(ai, byokContent = { MobileByokFields(ai) })
 
-            // AI выключен: quick-chat скрыт, конфиг сохранён и вернётся с провайдером.
+            // AI off: quick chat hidden, config stays saved and comes back with the provider.
             if (!ai.enabled) {
                 Txt(
                     stringResource(Res.string.settings_ai_off_note),
@@ -103,7 +103,7 @@ fun MobileAiScreen(state: MobileDesignState) {
                 Spacer(Modifier.height(8.dp))
                 ai.turns.forEach { turn -> AiChatBubble(turn.role, turn.text) }
                 ai.streaming?.let { AiChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
-                // Ошибка запроса — error-токен (D.storm), как на desktop; D.sunset оставлен предупреждениям.
+                // Request error uses the error token (D.storm), as on desktop; D.sunset is reserved for warnings.
                 ai.error?.let { Txt(it, color = D.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
 
                 var prompt by remember { mutableStateOf("") }
@@ -131,8 +131,8 @@ fun MobileAiScreen(state: MobileDesignState) {
 }
 
 /**
- * BYOK-поля внутри карточки «Мой ключ API» (мобильный layout — [MobileFormField]/[MobileFormInput]);
- * раскрываются вместе с выбором карточки, состояние и Save — общие с desktop.
+ * BYOK fields inside the "My API key" card (mobile layout via [MobileFormField]/[MobileFormInput]);
+ * expand together with the card selection, state and Save shared with desktop.
  */
 @Composable
 private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
@@ -152,7 +152,7 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
         MobileFormField(stringResource(Res.string.settings_ai_field_endpoint)) {
             MobileFormInput(baseUrl, { baseUrl = it }, stringResource(Res.string.settings_ai_placeholder_endpoint), keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done)
         }
-        // http:// шлёт ключ/промпт открытым текстом (см. SettingsPanel) — предупреждаем, кроме localhost.
+        // http:// sends the key/prompt in plaintext (see SettingsPanel) — warn, except for localhost.
         if (isInsecureAiEndpoint(baseUrl)) {
             Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
         }
@@ -166,7 +166,7 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
     }
 }
 
-/** Разделитель блоков экрана: единый воздух сверху/снизу (18/14), как у desktop-секции. */
+/** Screen section divider: consistent spacing above/below (18/14), matching the desktop section. */
 @Composable
 private fun MobileAiDivider() {
     Spacer(Modifier.height(18.dp))

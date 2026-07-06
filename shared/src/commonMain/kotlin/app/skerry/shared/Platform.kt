@@ -1,4 +1,4 @@
 package app.skerry.shared
 
-/** Имя платформы для диагностики; заодно проверяет проводку expect/actual по всем таргетам. */
+/** Platform name for diagnostics; also exercises expect/actual wiring across all targets. */
 expect val platformName: String

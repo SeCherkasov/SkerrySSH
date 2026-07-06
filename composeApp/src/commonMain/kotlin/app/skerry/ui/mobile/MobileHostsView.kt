@@ -71,7 +71,7 @@ import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.host.draggableFolderHeader
 import app.skerry.ui.host.draggableHostRow
 
-/** Превью-каталог для пути без живого [LocalHosts] (офскрин/превью). */
+/** Preview catalog for the path without a live [LocalHosts] (offscreen/preview). */
 internal val MOBILE_PREVIEW_HOSTS = listOf(
     Host("p1", "prod-web-01", "192.168.1.45", 22, "root", "Production"),
     Host("p2", "db-master", "192.168.1.50", 22, "root", "Production"),
@@ -80,26 +80,26 @@ internal val MOBILE_PREVIEW_HOSTS = listOf(
 )
 
 /**
- * Корневой экран таба Hosts: шапка с заголовком и аватаром (→ More), строка поиска, лента
- * фильтр-чипсов по тегам, секции хостов и FAB «новое подключение». Каталог — живой [LocalHosts]
- * (за гейтом vault), либо [MOBILE_PREVIEW_HOSTS] на пути превью. Тап по хосту открывает
+ * Root screen of the Hosts tab: header with title and avatar (→ More), search field, tag
+ * filter-chip row, host sections, and "new connection" FAB. Catalog is the live [LocalHosts]
+ * (behind the vault gate) or [MOBILE_PREVIEW_HOSTS] on the preview path. Tapping a host opens
  * [MobileRoute.HostDetail].
  */
 @Composable
 fun MobileHostsScreen(state: MobileDesignState) {
     val controller = LocalHosts.current
     val hosts = controller?.hosts ?: MOBILE_PREVIEW_HOSTS
-    // Подтягиваем общие хосты команд при переходе sync в Online (см. AutoPullTeamsOnOnline):
-    // экран пересоздаётся при выборе таба (MobileDesignApp `when(tab)`), так что эффект отработает
-    // на каждый вход, а его ключ по Online — единожды на подключение.
+    // Pulls shared team hosts when sync goes Online (see AutoPullTeamsOnOnline): the screen is
+    // recreated on tab selection (MobileDesignApp `when(tab)`), so the effect runs on every entry,
+    // keyed on Online so it fires once per connection.
     AutoPullTeamsOnOnline()
     var query by remember { mutableStateOf("") }
     var chip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
     val list = remember(hosts, query, chip) { buildMobileHostList(hosts, query, chip) }
-    // Состояние ручной сортировки (тач-DnD): жест отдаёт цель, перестановку фиксирует контроллер.
-    // Общее ядро с desktop ([HostDragState] + чистая геометрия [hostDropTarget]/[folderDropTarget]).
+    // Manual reorder state (touch DnD): the gesture reports the target, the controller commits the move.
+    // Shared core with desktop ([HostDragState] + pure geometry [hostDropTarget]/[folderDropTarget]).
     val dragState = remember { HostDragState() }
-    // Свежий список папок для drag-целей: жест читает его на момент отпускания (а не на старте).
+    // Fresh folder list for drag targets: the gesture reads it at drop time, not at gesture start.
     val foldersUpdated = rememberUpdatedState(list.sections)
 
     Box(Modifier.fillMaxSize()) {
@@ -108,7 +108,7 @@ fun MobileHostsScreen(state: MobileDesignState) {
             HostsSearch(query, onChange = { query = it })
             HostsChips(list.chips, active = chip, onSelect = { chip = it })
             Spacer(Modifier.height(2.dp))
-            // Линия вставки при перетаскивании папки: перед папкой на целевом индексе (или в конце).
+            // Insertion line while dragging a folder: before the folder at the target index (or at the end).
             val otherFolders = list.sections.filter { it.name != dragState.draggingFolderName }
             val folderLineIndex = dragState.draggingFolderName?.let { dragState.activeFolderDropIndex }
             val folderLineBefore = folderLineIndex?.takeIf { it < otherFolders.size }?.let { otherFolders[it].name }
@@ -119,12 +119,12 @@ fun MobileHostsScreen(state: MobileDesignState) {
                 }
             }
             if (folderLineIndex != null && folderLineIndex == otherFolders.size) MobileDropLine()
-            // Общие хосты команд (Teams) — секции под личным каталогом, вне поиска/фильтра
-            // (паритет desktop-сайдбара). Тап — сразу подключение (LocalConnectHost).
+            // Shared team hosts (Teams): sections below the personal catalog, outside search/filter
+            // (parity with the desktop sidebar). Tap connects directly (LocalConnectHost).
             if (query.isBlank() && chip == ALL_HOSTS_CHIP) {
                 MobileTeamHostsSections(hosts)
             }
-            Spacer(Modifier.height(96.dp)) // место под таб-бар и FAB
+            Spacer(Modifier.height(96.dp)) // room for the tab bar and FAB
         }
         MobileFabButton(
             onClick = state::openNewConn,
@@ -134,10 +134,9 @@ fun MobileHostsScreen(state: MobileDesignState) {
 }
 
 /**
- * Папка хостов: заголовок со схлопыванием (шеврон) + список строк, оба с drag-перетаскиванием для
- * ручной сортировки. Drag и линии-вставки активны только в живом каталоге ([controller] != null) —
- * в превью (мок-хосты) сортировать нечего и нечем (стор отсутствует). Свёрнутая папка скрывает
- * список хостов (и их drag-цели).
+ * Host folder: collapsible header (chevron) + row list, both draggable for manual reordering.
+ * Drag and insertion lines are active only in the live catalog ([controller] != null) — nothing
+ * to sort/persist in preview (mock hosts). A collapsed folder hides its host list (and drag targets).
  */
 @Composable
 private fun MobileHostFolder(
@@ -147,20 +146,20 @@ private fun MobileHostFolder(
     dragState: HostDragState,
     foldersProvider: () -> List<HostFolder>,
 ) {
-    // Ключ группы папки: у пустой берём её имя (как FolderBounds), иначе группу первого хоста.
-    // Синтетический «Ungrouped» — это null-группа.
+    // Folder group key: for an empty folder use its name (like FolderBounds), otherwise the first
+    // host's group. The synthetic "Ungrouped" folder is the null group.
     val group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL }
     val collapsed = state.isGroupCollapsed(folder.name)
     val onToggle = remember(state, folder.name) { { state.toggleGroupCollapsed(folder.name) } }
-    // Карандаш правки в заголовке — только в живом каталоге и кроме синтетической корзины «Ungrouped»
-    // (её не переименовать). Паритет desktop-`LiveHostFolder`. remember безусловный (стабильная
-    // позиция в слот-таблице), видимость карандаша даёт takeIf.
+    // Edit pencil in the header: only in the live catalog and not for the synthetic "Ungrouped"
+    // bucket (can't be renamed). Parity with desktop `LiveHostFolder`. remember is unconditional
+    // (stable slot-table position); takeIf controls pencil visibility.
     val onEdit = remember(state, folder.name) { { state.openRenameGroup(folder.name) } }
         .takeIf { controller != null && folder.name != UNGROUPED_LABEL }
-    // Подсветка целевой папки, пока над ней тащат хост.
+    // Highlights the target folder while a host is dragged over it.
     val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
     val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
-    // Линия вставки внутри папки: индекс — без перетаскиваемого хоста (как moveHostToGroup).
+    // Insertion line index within the folder, excluding the dragged host (like moveHostToGroup).
     val others = folder.hosts.filter { it.id != dragState.draggingHostId }
     val dropIndex = if (isDropTarget) dragState.activeHostDrop?.index?.coerceIn(0, others.size) else null
     val lineBeforeId = dropIndex?.takeIf { it < others.size }?.let { others[it].id }
@@ -179,22 +178,22 @@ private fun MobileHostFolder(
             Modifier
         }
         Box(headerMod) {
-            // folder.name — стабильный ключ (drag/collapse); для корзины без группы показываем
-            // локализованную подпись, оставляя ключ техническим ([UNGROUPED_LABEL]).
+            // folder.name is a stable key (drag/collapse); the ungrouped bucket shows a localized
+            // label while keeping the key technical ([UNGROUPED_LABEL]).
             val folderTitle = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folder.name
             MobileFolderHeader(folderTitle, folder.hosts.size, collapsed, isDropTarget, onToggle, onEdit)
         }
-        // Свёрнутая папка показывает только заголовок; список хостов (и его drag-цели) скрыт.
+        // A collapsed folder shows only its header; the host list (and its drag targets) is hidden.
         if (!collapsed) {
             Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 folder.hosts.forEach { host ->
                     key(host.id) {
                         if (host.id == lineBeforeId) MobileDropLine(horizontal = 0.dp)
-                        // Забываем геометрию строки, когда хост уходит из списка (перенос/фильтр).
-                        // clearHostBounds безопасен и без drag (map.remove) → эффект безусловный, как desktop.
+                        // Drops row geometry when the host leaves the list (move/filter).
+                        // clearHostBounds is a no-op safe map.remove even without drag, so the effect is unconditional, as on desktop.
                         DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
-                        // Лямбду открытия стабилизируем: каждый кадр drag меняет draggingHostId/activeHostDrop
-                        // и перерисовывает папку — без remember лямбда пересоздавалась бы и дёргала строку.
+                        // The open lambda is stabilized: every drag frame changes draggingHostId/activeHostDrop
+                        // and recomposes the folder — without remember the lambda would be recreated and jitter the row.
                         val onOpen = remember(host.id, state) { { state.openHost(host.id) } }
                         val rowMod = if (controller != null) {
                             Modifier
@@ -211,7 +210,7 @@ private fun MobileHostFolder(
                         }
                     }
                 }
-                // Сброс в конец папки — линия после последней строки.
+                // Drop at folder end: line after the last row.
                 if (dropIndex != null && dropIndex == others.size) MobileDropLine(horizontal = 0.dp)
             }
         }
@@ -219,9 +218,10 @@ private fun MobileHostFolder(
 }
 
 /**
- * Cyan-линия-индикатор позиции, куда вставится перетаскиваемый хост/папка (паритет desktop).
- * [horizontal] — боковой отступ: 18dp на уровне папок (внешняя колонка без отступа), 0dp внутри
- * колонки хостов (она уже даёт `padding(horizontal = 18.dp)`, иначе линия была бы вдвое у́же строк).
+ * Cyan line marking where a dragged host/folder will be inserted (parity with desktop).
+ * [horizontal] is the side inset: 18dp at the folder level (outer column has no padding), 0dp
+ * inside the host column (which already applies `padding(horizontal = 18.dp)`, otherwise the line
+ * would be half the width of the rows).
  */
 @Composable
 private fun MobileDropLine(horizontal: Dp = 18.dp) {
@@ -235,7 +235,7 @@ private fun MobileDropLine(horizontal: Dp = 18.dp) {
     )
 }
 
-/** Шапка: «Hosts» (28sp) + круглый аватар-аккаунт справа (ведёт на таб More). */
+/** Header: "Hosts" (28sp) + round account avatar on the right (opens the More tab). */
 @Composable
 private fun HostsHeader(onAvatar: () -> Unit) {
     Row(
@@ -245,8 +245,8 @@ private fun HostsHeader(onAvatar: () -> Unit) {
     ) {
         MobileScreenTitle(stringResource(Res.string.shell_hosts))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Индикатор sync по статусу сессии (см. syncIndicator), не только по доступности сервера:
-            // «paused/error» при отсутствии рабочей сессии, а не ложно-зелёный online.
+            // Sync indicator driven by session status (see syncIndicator), not just server
+            // reachability: shows "paused/error" without a working session instead of a false green online.
             val syncC = LocalSync.current
             val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
             if (ind != null) {
@@ -266,10 +266,10 @@ private fun HostsHeader(onAvatar: () -> Unit) {
     }
 }
 
-/** Строка поиска по имени/адресу/пользователю/группе хоста. */
+/** Search field over host name/address/username/group. */
 @Composable
 private fun HostsSearch(query: String, onChange: (String) -> Unit) {
-    // Внешний отступ — на обёртке; рамка — в decorationBox, чтобы клик по всей площади ставил каретку.
+    // Outer padding is on the wrapper; the border lives in decorationBox so a click anywhere places the caret.
     BasicTextField(
         value = query,
         onValueChange = onChange,
@@ -300,7 +300,7 @@ private fun HostsSearch(query: String, onChange: (String) -> Unit) {
     )
 }
 
-/** Лента фильтр-чипсов: «All» + теги (с префиксом `#`); активный подсвечен cyan. Горизонтальный скролл. */
+/** Filter-chip row: "All" + tags (prefixed with `#`); active chip highlighted cyan, horizontally scrollable. */
 @Composable
 private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -> Unit) {
     Row(
@@ -338,11 +338,11 @@ private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -
 }
 
 /**
- * Заголовок секции-папки: шеврон свёртки + капс-имя + (карандаш правки) + счётчик хостов. Клик по
- * шеврону переключает свёрнутость, клик по карандашу открывает диалог Rename/Delete группы — хит-зоны
- * строго на иконках ([onToggle]/[onEdit]), чтобы тапы не конфликтовали с drag-перетаскиванием
- * заголовка (reorder папок), как на desktop. [dropTarget] подсвечивает капс-имя при сбросе хоста сюда.
- * [onEdit] == null для синтетического «Ungrouped» и пути превью (карандаш скрыт).
+ * Folder section header: collapse chevron + uppercase name + (edit pencil) + host count. Chevron
+ * click toggles collapsed state, pencil click opens the Rename/Delete group dialog — hit zones are
+ * strictly on the icons ([onToggle]/[onEdit]) so taps don't conflict with header drag (folder
+ * reorder), as on desktop. [dropTarget] highlights the uppercase name when a host is dropped here.
+ * [onEdit] == null for the synthetic "Ungrouped" bucket and the preview path (pencil hidden).
  */
 @Composable
 private fun MobileFolderHeader(
@@ -399,11 +399,11 @@ private fun MobileFolderHeader(
 }
 
 /**
- * Строка хоста: иконка-плашка + имя + `user@address` моноширинно + точка статуса. Плашка `dns`
- * общая (нет per-host иконки/AI-политики), а цвет точки — живой: берётся из состояния самой свежей
- * сессии хоста ([SessionsController.statusFor]) через общий с desktop [sessionDotColor] (подключено —
- * зелёный, connect — янтарный, ошибка/обрыв — закатный, нет сессии — приглушённый). Чтение uiState
- * внутри композиции подписывает строку на смену статуса — точка обновляется по факту коннекта.
+ * Host row: icon tile + name + monospace `user@address` + status dot. The `dns` tile is generic
+ * (no per-host icon/AI policy); the dot color is live, taken from the host's latest session status
+ * ([SessionsController.statusFor]) via the desktop-shared [sessionDotColor] (connected → green,
+ * connecting → amber, error/dropped → sunset, no session → dim). Reading uiState inside the
+ * composition subscribes the row to status changes so the dot updates on connect.
  */
 @Composable
 private fun MobileHostRow(host: Host, onClick: () -> Unit) {

@@ -20,14 +20,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Android-реализация serial через USB-OTG (USB Host API + usb-serial-for-android): CDC-ACM/FTDI/
- * CP210x/CH34x переходники. Устройства перечисляются без разрешения ([listPorts] для пикера), а
- * открытие ([open]) запрашивает runtime-разрешение USB (системный диалог) и блокирует до ответа —
- * это допустимо, т.к. вызывается из [SerialTransport.connect] на `Dispatchers.IO`.
+ * Android serial implementation over USB-OTG (USB Host API + usb-serial-for-android): CDC-ACM/FTDI/
+ * CP210x/CH34x adapters. Devices are listed without permission ([listPorts] for the picker); opening
+ * ([open]) requests the runtime USB permission (system dialog) and blocks until answered — safe
+ * since it's called from [SerialTransport.connect] on `Dispatchers.IO`.
  *
- * Контекст берётся из [SerialUsbBridge] (ставится в `MainActivity`). Если он не установлен или на
- * устройстве нет USB Host — [listPorts] пуст, [open] бросает [SerialUnavailableException]. Идентификатор
- * порта ([SerialConfig.portName]) — `UsbDevice.getDeviceName()` (+`#index` при нескольких портах).
+ * Context comes from [SerialUsbBridge] (installed in `MainActivity`). If unset or the device has no
+ * USB Host, [listPorts] is empty and [open] throws [SerialUnavailableException]. Port identifier
+ * ([SerialConfig.portName]) is `UsbDevice.getDeviceName()` (+`#index` for multiple ports).
  */
 actual object SerialSystem {
 
@@ -48,24 +48,24 @@ actual object SerialSystem {
 
     actual fun open(config: SerialConfig): SerialPortHandle {
         val context = SerialUsbBridge.context()
-            ?: throw SerialUnavailableException("USB-контекст недоступен (приложение не инициализировано)")
+            ?: throw SerialUnavailableException("USB context unavailable (app not initialized)")
         val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
-            ?: throw SerialUnavailableException("USB Host API недоступен на этом устройстве")
+            ?: throw SerialUnavailableException("USB Host API unavailable on this device")
 
         val (driver, portIndex) = locate(usbManager, config.portName)
-            ?: throw SerialUnavailableException("USB-устройство ${config.portName} не найдено")
+            ?: throw SerialUnavailableException("USB device ${config.portName} not found")
 
         if (!ensurePermission(context, usbManager, driver.device)) {
-            throw SerialUnavailableException("Нет разрешения на доступ к USB-устройству ${config.portName}")
+            throw SerialUnavailableException("No permission to access USB device ${config.portName}")
         }
 
         val connection: UsbDeviceConnection = usbManager.openDevice(driver.device)
-            ?: throw SerialUnavailableException("Не удалось открыть USB-устройство ${config.portName}")
+            ?: throw SerialUnavailableException("Failed to open USB device ${config.portName}")
 
         val port = driver.ports.getOrNull(portIndex)
             ?: run {
                 runCatching { connection.close() }
-                throw SerialUnavailableException("Порт #$portIndex отсутствует на ${config.portName}")
+                throw SerialUnavailableException("Port #$portIndex missing on ${config.portName}")
             }
         return try {
             port.open(connection)
@@ -79,14 +79,14 @@ actual object SerialSystem {
         } catch (e: Exception) {
             runCatching { port.close() }
             runCatching { connection.close() }
-            throw SerialUnavailableException("Не удалось настроить USB-порт ${config.portName}", e)
+            throw SerialUnavailableException("Failed to configure USB port ${config.portName}", e)
         }
     }
 
     private fun drivers(usbManager: UsbManager): List<UsbSerialDriver> =
         UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
 
-    /** Найти драйвер и индекс порта по идентификатору `deviceName[#index]`. */
+    /** Find the driver and port index for a `deviceName[#index]` identifier. */
     private fun locate(usbManager: UsbManager, portName: String): Pair<UsbSerialDriver, Int>? {
         val hashIndex = portName.lastIndexOf('#')
         val deviceName = if (hashIndex >= 0) portName.substring(0, hashIndex) else portName
@@ -105,8 +105,8 @@ actual object SerialSystem {
     }
 
     /**
-     * Гарантировать runtime-разрешение на [device]: если уже есть — сразу true; иначе запросить и
-     * блокирующе дождаться ответа пользователя (системный диалог). Вызывается на IO-потоке.
+     * Ensure a runtime permission on [device]: true immediately if already granted; otherwise
+     * request it and block for the user's answer (system dialog). Called on the IO thread.
      */
     private fun ensurePermission(context: Context, usbManager: UsbManager, device: UsbDevice): Boolean {
         if (usbManager.hasPermission(device)) return true
@@ -122,9 +122,9 @@ actual object SerialSystem {
             }
         }
         val filter = IntentFilter(action)
-        // Доставляем broadcast на выделенный фоновый looper, а не на главный поток: тогда ожидание
-        // на latch (мы на IO) не зависит от свободы main-потока — нет риска взаимоблокировки, даже
-        // если open() однажды позовут не с Dispatchers.IO.
+        // Deliver the broadcast on a dedicated background looper rather than the main thread, so
+        // awaiting the latch (we're on IO) doesn't depend on the main thread being free — avoids
+        // deadlock even if open() is ever called off Dispatchers.IO.
         val handlerThread = HandlerThread("skerry-usb-permission").apply { start() }
         val handler = Handler(handlerThread.looper)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -133,8 +133,8 @@ actual object SerialSystem {
             context.registerReceiver(receiver, filter, null, handler)
         }
         return try {
-            // FLAG_MUTABLE (API31+) — система дописывает в intent результат/устройство. Explicit-пакет,
-            // чтобы broadcast не утёк наружу.
+            // FLAG_MUTABLE (API31+): the system appends the result/device to the intent. Explicit
+            // package so the broadcast doesn't leak outside the app.
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
             val pending = PendingIntent.getBroadcast(
                 context, 0, Intent(action).setPackage(context.packageName), flags,
@@ -165,9 +165,9 @@ actual object SerialSystem {
 }
 
 /**
- * Обёртка над открытым [UsbSerialPort] под контракт [SerialPortHandle]. [read] с timeout 0 блокирует
- * до появления байтов; при закрытии порта/отключении устройства нижний слой бросает [IOException] —
- * отдаём `-1`, как ждёт [SerialShellChannel]. [close] закрывает и порт, и [UsbDeviceConnection].
+ * Wraps an open [UsbSerialPort] under the [SerialPortHandle] contract. [read] with timeout 0 blocks
+ * until bytes arrive; on port close/device disconnect the lower layer throws [IOException], which
+ * we turn into `-1` as [SerialShellChannel] expects. [close] closes both the port and [UsbDeviceConnection].
  */
 private class UsbSerialPortHandle(
     private val port: UsbSerialPort,
@@ -181,14 +181,14 @@ private class UsbSerialPortHandle(
     override fun read(buffer: ByteArray): Int {
         if (!open.get()) return -1
         return try {
-            port.read(buffer, READ_TIMEOUT_MS) // 0 → блокирует до данных
+            port.read(buffer, READ_TIMEOUT_MS) // 0 -> blocks until data arrives
         } catch (_: IOException) {
-            -1 // порт закрыт/устройство отключено
+            -1 // port closed / device disconnected
         }
     }
 
     override fun write(data: ByteArray) {
-        if (!open.get()) return // порт закрыт/устройство отключено — не пишем в мёртвый порт
+        if (!open.get()) return // port closed / device disconnected — don't write to a dead port
         port.write(data, WRITE_TIMEOUT_MS)
     }
 
@@ -199,7 +199,7 @@ private class UsbSerialPortHandle(
     }
 
     private companion object {
-        const val READ_TIMEOUT_MS = 0 // блокирующее чтение до первого байта
+        const val READ_TIMEOUT_MS = 0 // blocking read until the first byte
         const val WRITE_TIMEOUT_MS = 2000
     }
 }

@@ -11,10 +11,10 @@ import app.skerry.shared.ai.local.ModelDownloader
 import kotlinx.coroutines.CoroutineScope
 
 /**
- * Подсистема локального AI, собираемая платформенной точкой входа (desktop `main` /
- * Android `MainActivity`): дисковый стор моделей, загрузчик и рантайм инференса.
- * `null` в [app.skerry.ui.AppDependencies.localAi] — платформа без локального AI
- * (превью/моки) — UI показывает карточку «на устройстве» неактивной.
+ * Local AI subsystem assembled by the platform entry point (desktop `main` / Android
+ * `MainActivity`): model store, downloader, and inference runtime. `null` in
+ * [app.skerry.ui.AppDependencies.localAi] means the platform has no local AI (previews/mocks);
+ * the UI shows the on-device card as inactive.
  */
 class LocalAiDeps(
     val store: LocalModelStore,
@@ -23,15 +23,15 @@ class LocalAiDeps(
 ) {
     fun installed(model: LocalModel): Boolean = store.isInstalled(model)
 
-    /** Контроллер закачек для настроек AI (живёт в том же scope, что и AI-контроллеры). */
+    /** Download controller for AI settings (lives in the same scope as the AI controllers). */
     fun modelsController(scope: CoroutineScope): LocalModelController =
         LocalModelController(::installed, downloader::download, store::delete, scope)
 }
 
 /**
- * Фабрика провайдера по эндпоинту [AiRouter]-а: облако — pooled BYOK-клиент, устройство —
- * локальный рантайм. Device-эндпоинт без [local] невозможен: роутер не выдаёт его, когда
- * `localInstalled` вернул false (а без графа он всегда false) — поэтому требование не мягкое.
+ * Provider factory for an [AiRouter] endpoint: cloud uses a pooled BYOK client, device uses the
+ * local runtime. A device endpoint without [local] should never occur, since the router only
+ * routes to it once a local model is installed.
  */
 fun aiProviderFactory(local: LocalAiDeps?): (AiEndpoint) -> AiProvider = { endpoint ->
     when (endpoint) {

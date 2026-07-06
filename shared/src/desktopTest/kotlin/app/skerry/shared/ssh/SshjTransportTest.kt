@@ -21,19 +21,19 @@ private const val PASSWORD = "correct horse battery staple"
 
 private val acceptAllKeys = HostKeyVerifier { _, _, _, _ -> true }
 
-/** Интеграционные тесты SshjTransport против встроенного Apache MINA SSHD. */
+/** Integration tests for SshjTransport against an embedded Apache MINA SSHD. */
 class SshjTransportTest {
 
     private lateinit var server: SshServer
 
-    // Ключ, который сервер считает авторизованным; приватная часть подаётся клиенту как PEM.
+    // Key the server treats as authorized; the private part is fed to the client as PEM.
     private val authorizedKey: KeyPair = generateRsaKeyPair()
 
     @BeforeTest
     fun startServer() {
         server = SshServer.setUpDefaultServer().apply {
             host = "127.0.0.1"
-            port = 0 // свободный порт выбирает ОС
+            port = 0 // OS picks a free port
             keyPairProvider = SimpleGeneratorHostKeyProvider()
             setPasswordAuthenticator { user, password, _ -> user == USER && password == PASSWORD }
             publickeyAuthenticator = PublickeyAuthenticator { user, key, _ ->
@@ -69,7 +69,7 @@ class SshjTransportTest {
             val cipher = connection.cipher
             assertTrue(
                 !cipher.isNullOrBlank(),
-                "соединение должно сообщить согласованный шифр, получено: $cipher",
+                "connection should report the negotiated cipher, got: $cipher",
             )
         } finally {
             connection.disconnect()
@@ -83,7 +83,7 @@ class SshjTransportTest {
             val version = connection.serverVersion
             assertTrue(
                 version != null && version.startsWith("SSH-2.0-"),
-                "соединение должно сообщить ident сервера с префиксом SSH-2.0-, получено: $version",
+                "connection should report the server ident with the SSH-2.0- prefix, got: $version",
             )
         } finally {
             connection.disconnect()
@@ -94,12 +94,12 @@ class SshjTransportTest {
     fun `measures round-trip after connect`() = runTest {
         val connection = connect()
         try {
-            // MINA SSHD не знает keepalive@openssh.com и отвечает REQUEST_FAILURE — это всё равно
-            // состоявшийся round-trip, замер должен вернуть неотрицательное время (< таймаута).
+            // MINA SSHD doesn't know keepalive@openssh.com and replies REQUEST_FAILURE — that's still
+            // a completed round-trip, so the measurement should return a non-negative time (< timeout).
             val rtt = connection.measureRoundTrip()
             assertTrue(
                 rtt != null && rtt >= 0 && rtt < 5_000,
-                "round-trip должен дать неотрицательное время меньше таймаута, получено: $rtt",
+                "round-trip should give a non-negative time under the timeout, got: $rtt",
             )
         } finally {
             connection.disconnect()
@@ -173,10 +173,10 @@ class SshjTransportTest {
         assertFailsWith<SshHostKeyRejectedException> {
             SshjTransport(rejecting).connect(target(), SshAuth.Password(PASSWORD))
         }
-        assertTrue(!seenKeyType.isNullOrBlank(), "verifier должен получить тип ключа")
+        assertTrue(!seenKeyType.isNullOrBlank(), "verifier should receive the key type")
         assertTrue(
             seenFingerprint.orEmpty().startsWith("SHA256:"),
-            "fingerprint в формате OpenSSH, получено: $seenFingerprint",
+            "fingerprint in OpenSSH format, got: $seenFingerprint",
         )
     }
 }
@@ -184,7 +184,7 @@ class SshjTransportTest {
 private fun generateRsaKeyPair(): KeyPair =
     KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
 
-/** Приватный ключ в неэшифрованном PKCS#8 PEM — формат, который sshj распознаёт из содержимого. */
+/** Private key as unencrypted PKCS#8 PEM — the format sshj recognizes from content. */
 private fun pkcs8Pem(keyPair: KeyPair): String {
     val body = Base64.getMimeEncoder(64, "\n".encodeToByteArray()).encodeToString(keyPair.private.encoded)
     return "-----BEGIN PRIVATE KEY-----\n$body\n-----END PRIVATE KEY-----\n"

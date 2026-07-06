@@ -5,8 +5,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Контракт [UiLanguage]: стабильные [UiLanguage.id] для персиста, BCP-47 [UiLanguage.localeTag] для
- * переопределения локали и безопасный разбор сохранённого значения.
+ * [UiLanguage] contract: stable [UiLanguage.id] for persistence, BCP-47 [UiLanguage.localeTag] for
+ * locale override, and safe parsing of a stored value.
  */
 class UiLanguageTest {
 

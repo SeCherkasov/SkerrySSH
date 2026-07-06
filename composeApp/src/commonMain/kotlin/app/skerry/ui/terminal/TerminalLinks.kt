@@ -1,14 +1,10 @@
 package app.skerry.ui.terminal
 
 /**
- * Безопасна ли OSC 8-гиперссылка для открытия по Ctrl+клику. URI задаёт НЕДОВЕРЕННЫЙ ssh-сервер,
- * поэтому гейт жёсткий:
- *  - отклоняем любые управляющие байты (C0/DEL): `\r`/`\n` и пр. могли бы испортить диспетч URI
- *    на платформе (Intent/Desktop.browse);
- *  - пускаем лишь веб-схемы с authority (`http(s)://`, `ftp://`) либо `mailto:`. file:, javascript:,
- *    data: и degenerate-формы вроде `http:` (без `://`) не проходят.
- *
- * Чистая функция (вынесена из Composable ради юнит-тестов модели угроз).
+ * Whether an OSC 8 hyperlink is safe to open on Ctrl+click. The URI comes from an untrusted ssh
+ * server, so the gate is strict: rejects any control bytes (C0/DEL), and allows only web schemes with
+ * authority (`http(s)://`, `ftp://`) or `mailto:` — file:, javascript:, data:, and degenerate forms
+ * like `http:` (no `://`) are rejected. Pure function, kept out of the Composable for unit testing.
  */
 internal fun isSafeLinkUri(uri: String): Boolean {
     if (uri.any { it.code < 0x20 || it.code == 0x7F }) return false

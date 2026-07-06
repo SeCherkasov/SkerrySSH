@@ -44,18 +44,18 @@ import app.skerry.ui.generated.resources.settings_keyboard_subtitle
 import app.skerry.ui.generated.resources.settings_keyboard_title
 import org.jetbrains.compose.resources.stringResource
 
-// Секция Keyboard: справочник хоткеев (глобальных и терминальных).
+// Keyboard section: hotkey reference (global and terminal).
 
 @Composable
 internal fun KeyboardSection() {
     SectionTitle(stringResource(Res.string.settings_keyboard_title), stringResource(Res.string.settings_keyboard_subtitle))
-    // Подпись под платформу: ⌘/⌥ на macOS, Ctrl+Shift/Alt на Linux/Windows — ровно то, что распознаёт
-    // matchDesktopShortcut. На Ctrl-пути требуется Shift, поэтому чистый Ctrl+буква (Ctrl+L очистка,
-    // Ctrl+D EOF, Ctrl+C сигнал) остаётся терминалу.
+    // Platform-specific labels: ⌘/⌥ on macOS, Ctrl+Shift/Alt on Linux/Windows — matching what
+    // matchDesktopShortcut recognizes. The Ctrl path requires Shift, so plain Ctrl+letter (Ctrl+L
+    // clear, Ctrl+D EOF, Ctrl+C signal) stays reserved for the terminal.
     val mac = isApplePlatform()
     val mod: (String) -> String = { k -> if (mac) "⌘$k" else "Ctrl+Shift+$k" }
-    // Терминальные аккорды — литеральные Ctrl/Shift/Tab (не app-модификатор): на macOS показываем
-    // символами ⌃/⇧, иначе словами.
+    // Terminal chords use literal Ctrl/Shift/Tab (not the app modifier): shown as ⌃/⇧ symbols on
+    // macOS, as words elsewhere.
     val ctrl: (String) -> String = { k -> if (mac) "⌃$k" else "Ctrl+$k" }
     val ctrlShift: (String) -> String = { k -> if (mac) "⌃⇧$k" else "Ctrl+Shift+$k" }
     val shift: (String) -> String = { k -> if (mac) "⇧$k" else "Shift+$k" }
@@ -70,8 +70,8 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_open_sftp), mod("F"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_lock), mod("L"), live = true),
     )
-    // Хоткеи внутри терминала (обрабатывает TerminalScreen): автодополнение fish-стиля и reverse-search
-    // истории (Ctrl-R) + копипаст. Работают, пока сфокусирован терминал сессии.
+    // Terminal-internal hotkeys (handled by TerminalScreen): fish-style autocomplete, history
+    // reverse-search (Ctrl-R), copy/paste. Active while a terminal session is focused.
     val terminal = listOf(
         KeyboardBinding(stringResource(Res.string.settings_kb_accept_autocomplete), "Tab", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_cycle_suggestions), shift("Tab"), live = true),
@@ -97,8 +97,8 @@ private fun KeyboardRow(b: KeyboardBinding, mono: FontFamily) {
     Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Txt(b.label, color = if (b.live) D.textBright else D.dim, size = 12.5.sp)
-            // «Command palette» ещё нет как фичи — честно помечаем биндинг как будущий, а не молча
-            // показываем нерабочий аккорд наравне с живыми.
+            // Command palette isn't implemented yet; mark the binding SOON instead of showing a
+            // dead shortcut next to working ones.
             if (!b.live) Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
         }
         Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x0AFFFFFF)).border(1.dp, D.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
@@ -108,5 +108,5 @@ private fun KeyboardRow(b: KeyboardBinding, mono: FontFamily) {
     HLine()
 }
 
-/** Строка страницы Keyboard: подпись, аккорд и признак «уже работает» (иначе — метка SOON). */
+/** A row on the Keyboard page: label, shortcut, and whether it's live (otherwise a SOON badge). */
 private data class KeyboardBinding(val label: String, val binding: String, val live: Boolean)

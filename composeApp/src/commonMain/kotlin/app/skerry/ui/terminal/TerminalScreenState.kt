@@ -34,67 +34,67 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Состояние терминального экрана поверх [TerminalSession]. Сырые байты PTY проходят через
- * [TerminalEmulator] (парсер ANSI/VT + модель экрана), результат публикуется как [screen] —
- * сетка ячеек с цветом/жирностью — плюс позиция курсора. Ввод и ресайз проксируются в сессию.
+ * Terminal screen state over [TerminalSession]. Raw PTY bytes go through [TerminalEmulator]
+ * (ANSI/VT parser + screen model); the result is published as [screen] — a grid of cells with
+ * color/weight — plus cursor position. Input and resize are proxied to the session.
  *
- * Эмулятор держит scrollback и парсер-состояние сам, поэтому здесь нет ни сырого байтового буфера,
- * ни ручного декода UTF-8: каждый чанк просто скармливается, а снимок экрана кладётся в Compose-
- * state ([screen]/[cursorRow]/[cursorCol]) для перерисовки.
+ * The emulator owns scrollback and parser state, so there is no raw byte buffer or manual UTF-8
+ * decode here: each chunk is fed as-is, and the screen snapshot is written into Compose state
+ * ([screen]/[cursorRow]/[cursorCol]) for redraw.
  */
 @Stable
 class TerminalScreenState(
     private val session: TerminalSession,
     private val scope: CoroutineScope,
-    // История команд для автодополнения, предзагруженная для этого хоста (от новой к старой), и колбэк
-    // персиста при каждой закоммиченной команде. По умолчанию пусто/без персиста — сессия учится
-    // только на себе (поведение до Phase 3.1). Персист идёт только с эхом (пароли отсекаются выше).
+    // Autocomplete command history preloaded for this host (newest to oldest), plus a persist
+    // callback invoked on each committed command. Persisted only with echo (passwords filtered above).
     initialHistory: List<String> = emptyList(),
     private val onHistoryChanged: ((List<String>) -> Unit)? = null,
-    // Настройки терминала (Settings → Терминал), применяемые к НОВОЙ сессии: глубина scrollback и
-    // форма/мигание курсора по умолчанию. Дефолты сохраняют прежнее поведение (5000 строк, блок+мигание).
+    // Terminal settings (Settings -> Terminal) applied to a new session: scrollback depth and
+    // default cursor shape/blink.
     scrollback: Int = DEFAULT_MAX_SCROLLBACK,
     cursorShape: CursorShape = CursorShape.Block,
     cursorBlink: Boolean = true,
 ) {
-    // Запросы OSC 52 на запись в системный буфер. extraBufferCapacity — чтобы tryEmit с
-    // корутины-владельца не терялся без подписчика в момент эмита; DROP_OLDEST при всплеске
-    // оставляет последнюю запись (last-writer-wins, верная семантика буфера), а не старую.
+    // OSC 52 requests to write to the system clipboard. extraBufferCapacity keeps tryEmit from the
+    // owner coroutine from dropping when there's no subscriber yet; DROP_OLDEST on burst keeps the
+    // latest entry (last-writer-wins), not a stale one.
     private val _clipboardCopies = MutableSharedFlow<String>(
         extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    /** Текст, который приложение просит положить в системный буфер (OSC 52). UI собирает и кладёт. */
+    /** Text the application asks to place on the system clipboard (OSC 52). UI collects and writes it. */
     val clipboardCopies: SharedFlow<String> = _clipboardCopies
 
     private val emulator = TerminalEmulator(
         maxScrollback = scrollback,
         initialCursorShape = cursorShape,
         initialCursorBlink = cursorBlink,
-        // respond: ответы терминала (DSR/DA) уходят обратно в PTY, иначе приложения, опрашивающие
-        // курсор/атрибуты, подвисают. Колбэк зовётся синхронно из feed() (корутина-владелец), поэтому
-        // обязан лишь писать в PTY (send → session.send) и НЕ заводить новый feed/resize — иначе
-        // ломается однопоточный контракт эмулятора. session.send в PTY-сток, в commands не возвращается.
+        // Terminal responses (DSR/DA) go back to the PTY, otherwise apps polling cursor/attributes
+        // hang. Called synchronously from feed() (owner coroutine): must only write to the PTY
+        // (send -> session.send) and never start a new feed/resize, or the emulator's single-thread
+        // contract breaks.
         respond = { reply -> send(reply) },
-        // OSC 52-запись зовётся так же синхронно из feed() — буфер здесь не трогаем, публикуем во flow,
-        // а композбл кладёт в системный буфер на UI-потоке.
+        // OSC 52 write is also called synchronously from feed(); publish to the flow, UI thread
+        // writes to the system clipboard.
         onClipboardCopy = { text -> _clipboardCopies.tryEmit(text) },
     )
 
-    /** Снимок экрана (строки сверху вниз) для отрисовки. */
+    /** Screen snapshot (rows top to bottom) for rendering. */
     var screen: List<List<TermCell>> by mutableStateOf(emptyList())
         private set
 
     /**
-     * Монотонный счётчик публикаций снимка — растёт на каждый feed/resize, даже если содержимое [screen]
-     * структурно совпало с прежним. Авто-скролл к низу должен запускаться по нему, а НЕ по [screen]:
-     * Compose сравнивает список структурно ([equals]), и два подряд одинаковых снимка не дёрнут эффект.
+     * Monotonic snapshot publish counter, incremented on every feed/resize even if [screen] is
+     * structurally unchanged. Auto-scroll-to-bottom must key off this, not [screen]: Compose
+     * compares the list structurally ([equals]), so two identical snapshots in a row would not
+     * retrigger the effect.
      */
     var snapshotVersion: Int by mutableStateOf(0)
         private set
 
-    /** Текущий размер сетки (живой `cols × rows` эмулятора) — статус-бар показывает его вместо мока. */
+    /** Current grid size (live `cols x rows` from the emulator). */
     var cols: Int by mutableStateOf(emulator.cols)
         private set
 
@@ -107,80 +107,79 @@ class TerminalScreenState(
     var cursorCol: Int by mutableStateOf(0)
         private set
 
-    /** Виден ли курсор (DEC ?25): TUI прячут его на время перерисовки. Рендер не рисует скрытый. */
+    /** Whether the cursor is visible (DEC ?25): TUIs hide it while redrawing. Render skips a hidden cursor. */
     var cursorVisible: Boolean by mutableStateOf(true)
         private set
 
-    /** Форма курсора (DECSCUSR): блок/подчёркивание/черта. Рендер выбирает геометрию по ней. Стартует с настройки. */
+    /** Cursor shape (DECSCUSR): block/underline/bar. Render picks geometry from it. Starts from settings. */
     var cursorShape: CursorShape by mutableStateOf(cursorShape)
         private set
 
-    /** Должен ли курсор мигать (DECSCUSR steady/blink). Рендер гоняет таймер мигания по флагу. Стартует с настройки. */
+    /** Whether the cursor should blink (DECSCUSR steady/blink). Render drives the blink timer from this. */
     var cursorBlink: Boolean by mutableStateOf(cursorBlink)
         private set
 
-    /** Текущее выделение мышью (или `null`, если ничего не выделено). Рендер подсвечивает его. */
+    /** Current mouse selection (or `null` if nothing is selected). Render highlights it. */
     var selection: TerminalSelection? by mutableStateOf(null)
         private set
 
     /**
-     * DECCKM-режим (application-cursor-keys), снятый с эмулятора: vim/less/htop включают его, и тогда
-     * клавиши-стрелки клавишной панели должны слаться как SS3 (`ESC O A`), а не CSI. UI читает флаг
-     * при кодировании стрелок ([app.skerry.ui.terminal.arrowSequence]).
+     * DECCKM (application-cursor-keys) mode from the emulator: apps like vim/less/htop enable it,
+     * and arrow keys must then be sent as SS3 (`ESC O A`) instead of CSI. Read by the UI when
+     * encoding arrows ([app.skerry.ui.terminal.arrowSequence]).
      */
     var applicationCursorKeys: Boolean by mutableStateOf(false)
         private set
 
     /**
-     * Application-keypad-режим (DECKPAM/DECKPNM), снятый с эмулятора: когда включён, numpad-клавиши
-     * шлются как SS3 (`ESC O p`..`ESC O y` и т.п.), а не как цифры. UI читает флаг при кодировании клавиш.
+     * Application-keypad mode (DECKPAM/DECKPNM) from the emulator: when enabled, numpad keys are
+     * sent as SS3 (`ESC O p`..`ESC O y` etc.) instead of digits.
      */
     var applicationKeypad: Boolean by mutableStateOf(false)
         private set
 
     /**
-     * Режим репортинга мыши, снятый с эмулятора (DEC 1000/1002/1003 + X10). Когда не [MouseTracking.Off],
-     * приложение само обрабатывает мышь: UI шлёт ему события вместо локального выделения (если не
-     * зажат Shift, который форсит локальное выделение по xterm-конвенции).
+     * Mouse reporting mode from the emulator (DEC 1000/1002/1003 + X10). When not
+     * [MouseTracking.Off], the application handles the mouse itself: the UI sends it events
+     * instead of local selection (unless Shift is held, which forces local selection per xterm convention).
      */
     var mouseTracking: MouseTracking by mutableStateOf(MouseTracking.Off)
         private set
 
-    /** SGR-кодировка мыши (DEC 1006) — выбирает формат отчётов в [reportMouse]. */
+    /** SGR mouse encoding (DEC 1006) — selects the report format in [reportMouse]. */
     var mouseSgr: Boolean by mutableStateOf(false)
         private set
 
-    /** SGR-Pixels (DEC 1016): координаты в пикселях вместо клеток — см. [reportMouse]. */
+    /** SGR-Pixels (DEC 1016): pixel coordinates instead of cells, see [reportMouse]. */
     var mousePixels: Boolean by mutableStateOf(false)
         private set
 
-    /** Bracketed-paste (DEC 2004): когда включён, [paste] оборачивает вставку маркерами. */
+    /** Bracketed paste (DEC 2004): when enabled, [paste] wraps the pasted text in markers. */
     var bracketedPaste: Boolean by mutableStateOf(false)
         private set
 
-    /** Focus reporting (DEC 1004): когда включён, [notifyFocus] шлёт ESC[I/ESC[O при смене фокуса. */
+    /** Focus reporting (DEC 1004): when enabled, [notifyFocus] sends ESC[I/ESC[O on focus change. */
     var focusReporting: Boolean by mutableStateOf(false)
         private set
 
-    /** Активен альтернативный буфер (полноэкранные TUI): без своего scrollback, колесо ≠ прокрутке. */
+    /** Whether the alternate screen buffer is active (fullscreen TUIs): no own scrollback, wheel != scroll. */
     var altScreen: Boolean by mutableStateOf(false)
         private set
 
-    /** Заголовок окна из OSC 0/1/2 (пустой, пока приложение его не задало). UI кладёт его на вкладку. */
+    /** Window title from OSC 0/1/2 (empty until the application sets it). UI shows it on the tab. */
     var title: String by mutableStateOf("")
         private set
 
     /**
-     * Переопределения палитры (OSC 4/104): index 0..255 → Rgb. Пусто, пока приложение их не задавало.
-     * Рендер консультируется при разрешении [TermColor.Indexed] перед дефолтами темы.
+     * Palette overrides (OSC 4/104): index 0..255 -> Rgb. Empty until the application sets any.
+     * Consulted by render when resolving [TermColor.Indexed] before falling back to theme defaults.
      */
     var palette: Map<Int, TermColor.Rgb> by mutableStateOf(emptyMap())
         private set
 
     /**
-     * Плоский текст экрана — для тестов и простых проверок (рендер использует [screen]).
-     * Сетка всегда `rows` строк фиксированной ширины, поэтому хвостовые пробелы и пустые строки
-     * обрезаются, чтобы текст читался как видимое содержимое.
+     * Flat screen text for tests and simple checks (render uses [screen]). The grid is always
+     * `rows` fixed-width rows, so trailing spaces and empty lines are trimmed to read as visible content.
      */
     val output: String
         get() = screen
@@ -189,25 +188,25 @@ class TerminalScreenState(
 
     val state: StateFlow<TerminalState> get() = session.state
 
-    // Эмулятор однопоточный: feed и resize нельзя дёргать из разных корутин (гонка). Все
-    // воздействия на него проходят командной очередью, которую разбирает единственный сборщик ниже,
-    // — так вывод PTY и ресайз сериализованы относительно друг друга.
+    // The emulator is single-threaded: feed and resize must not be called from different coroutines.
+    // All interactions go through this command queue, drained by the single collector below, so
+    // PTY output and resize stay serialized relative to each other.
     private val commands = Channel<TerminalCommand>(Channel.UNLIMITED)
 
-    // Очередь исходящих байтов в PTY (ввод, отчёты мыши, ответы DSR/DA). Единственный потребитель в
-    // init сериализует запись, сохраняя порядок при отправке из разных корутин. UNLIMITED → trySend
-    // никогда не блокирует и не теряет (fire-and-forget, как и было у send/sendBytes).
+    // Outbound byte queue to the PTY (input, mouse reports, DSR/DA responses). The single consumer
+    // in init serializes writes, preserving order across sends from different coroutines. UNLIMITED
+    // means trySend never blocks or drops (fire-and-forget).
     private val outbound = Channel<ByteArray>(Channel.UNLIMITED)
 
-    // Последний размер, отданный в PTY: дубликаты гасим, чтобы не спамить resize при перелэйауте.
-    // @Volatile — resize() может зваться из разных корутин (LaunchedEffect/жесты), нужна видимость.
+    // Last size sent to the PTY: duplicates are suppressed to avoid spamming resize on relayout.
+    // @Volatile because resize() can be called from different coroutines (LaunchedEffect/gestures).
     @Volatile
     private var lastRequestedSize: PtySize? = null
 
     init {
-        // Единственный разрешённый сборщик вывода перекладывает чанки в командную очередь.
-        // По завершении вывода (EOF/закрытие сессии) закрываем очередь, иначе сборщик-владелец
-        // ниже навсегда повиснет в `for (cmd in commands)`.
+        // Sole collector of PTY output; forwards chunks into the command queue. Closes the queue
+        // when output ends (EOF/session close), otherwise the owner loop below would hang forever
+        // in `for (cmd in commands)`.
         scope.launch {
             try {
                 session.output.collect { chunk -> commands.send(TerminalCommand.Feed(chunk)) }
@@ -215,11 +214,11 @@ class TerminalScreenState(
                 commands.close()
             }
         }
-        // Единственный владелец эмулятора: feed и resize выполняются строго по очереди. Снимок
-        // публикуем ОДИН раз на пачку немедленно доступных команд: при активном выводе (сборка, cat)
-        // PTY отдаёт много чанков подряд, а publishSnapshot копирует весь scrollback целиком — делать
-        // это на каждый чанк дорого (фризы/GC, особенно на Android). Когда очередь пуста, ведёт себя
-        // как прежде (снимок сразу), поэтому задержка отклика в интерактиве не растёт.
+        // Sole owner of the emulator: feed and resize run strictly in order. Publishes one snapshot
+        // per batch of immediately-available commands: under heavy output (build, cat) the PTY
+        // delivers many chunks in a row, and publishSnapshot copies the whole scrollback, so doing
+        // it per chunk is expensive (freezes/GC, especially on Android). When the queue is empty,
+        // behavior is unchanged (snapshot right away), so interactive latency does not grow.
         scope.launch {
             for (cmd in commands) {
                 applyCommand(cmd)
@@ -230,39 +229,39 @@ class TerminalScreenState(
                 publishSnapshot()
             }
         }
-        // Единственный потребитель исходящих байтов: гарантирует FIFO-порядок записи в PTY независимо
-        // от того, из скольких корутин звали send/sendBytes (иначе порядок держался лишь на внутренней
-        // синхронизации транспорта). Все отправки проходят через [outbound].
+        // Sole consumer of outbound bytes: guarantees FIFO write order to the PTY regardless of how
+        // many coroutines call send/sendBytes. All sends go through [outbound].
         scope.launch {
             for (bytes in outbound) session.send(bytes)
         }
     }
 
-    /** Применить одну команду к эмулятору (без публикации снимка — её делает вызывающий пакетно). */
+    /** Apply one command to the emulator (does not publish a snapshot; the caller batches that). */
     private suspend fun applyCommand(cmd: TerminalCommand) {
         when (cmd) {
             is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
             is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
             is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
             is TerminalCommand.Resize -> {
-                // PTY ресайзим ПЕРВЫМ, эмулятор — только при успехе: иначе сетка станет шире, чем знает
-                // приложение, и хвост строк зависнет нестёртым. Сбой PTY-ресайза НЕ должен убивать
-                // корутину-обработчик (иначе feed перестанет обрабатываться и терминал замёрзнет).
+                // PTY is resized first, the emulator only on success: otherwise the grid would be
+                // wider than the application knows and the tail of rows would stay undrawn. A PTY
+                // resize failure must not kill this coroutine, or feed stops being processed and
+                // the terminal freezes.
                 try {
                     session.resize(cmd.size)
                     emulator.resize(cmd.size.cols, cmd.size.rows)
                 } catch (e: CancellationException) {
-                    throw e // отмену скоупа не глушим — structured concurrency должна свалить обработчик
+                    throw e // do not swallow scope cancellation
                 } catch (_: Exception) {
-                    // только восстановимые сбои (например, обрыв PTY); Error пробрасываем
+                    // only recoverable failures (e.g. PTY dropped); Error propagates
                 }
             }
         }
     }
 
-    /** Опубликовать снимок эмулятора в Compose-state (после feed/resize). */
+    /** Publish the emulator snapshot into Compose state (after feed/resize). */
     private fun publishSnapshot() {
-        screen = emulator.lines // строки уже скопированы в неизменяемые внутри геттера
+        screen = emulator.lines // rows are already copied into immutable form inside the getter
         cols = emulator.cols
         rows = emulator.rows
         cursorRow = emulator.cursorRow
@@ -278,74 +277,74 @@ class TerminalScreenState(
         bracketedPaste = emulator.bracketedPaste
         focusReporting = emulator.focusReporting
         altScreen = emulator.altScreen
-        // Вход в полноэкранный TUI (vim/htop) гасит подсказку автодополнения — «строки» там нет.
+        // Entering a fullscreen TUI (vim/htop) clears the autocomplete suggestion — no "line" there.
         if (altScreen && suggestionTail != null) suggestionTail = null
         title = emulator.title
         palette = emulator.paletteSnapshot()
         snapshotVersion++
     }
 
-    /** Начать выделение в позиции [pos] (нажатие мыши): якорь и фокус совпадают — пока пусто. */
+    /** Start a selection at [pos] (mouse down): anchor and focus coincide, empty for now. */
     fun beginSelection(pos: TerminalPos) {
         selection = TerminalSelection(anchor = pos, focus = pos)
     }
 
-    /** Протянуть выделение до [pos] (перетаскивание): двигаем фокус, якорь на месте. */
+    /** Extend the selection to [pos] (drag): moves focus, anchor stays put. */
     fun extendSelection(pos: TerminalPos) {
         selection = selection?.copy(focus = pos)
     }
 
     /**
-     * Выделить целое слово под [pos] — для long-press: непрерывный пробег непробельных (или
-     * пробельных) ячеек на строке ([wordSelectionAt]). Пустой пробег выделения не ставит.
+     * Select the whole word under [pos] (long-press): the contiguous run of non-space (or space)
+     * cells on the row ([wordSelectionAt]). An empty run does not set a selection.
      */
     fun selectWordAt(pos: TerminalPos) {
         selection = wordSelectionAt(screen, pos).takeIf { !it.isEmpty }
     }
 
-    /** Выделить целую строку под [pos] — для тройного клика мышью ([lineSelectionAt]). */
+    /** Select the whole row under [pos] (mouse triple-click, [lineSelectionAt]). */
     fun selectLineAt(pos: TerminalPos) {
         selection = lineSelectionAt(screen, pos).takeIf { !it.isEmpty }
     }
 
     /**
-     * Сдвинуть верхнюю-левую границу выделения в [pos] (перетаскивание start-маркера): держим
-     * нижнюю-правую границу как якорь, новая позиция становится фокусом. No-op без выделения.
+     * Move the selection's top-left bound to [pos] (dragging the start marker): the bottom-right
+     * bound stays as anchor, the new position becomes focus. No-op without a selection.
      */
     fun moveSelectionStart(pos: TerminalPos) {
         selection = selection?.let { TerminalSelection(anchor = it.end, focus = pos) }
     }
 
     /**
-     * Сдвинуть нижнюю-правую границу выделения в [pos] (перетаскивание end-маркера): держим
-     * верхнюю-левую границу как якорь, новая позиция становится фокусом. No-op без выделения.
+     * Move the selection's bottom-right bound to [pos] (dragging the end marker): the top-left
+     * bound stays as anchor, the new position becomes focus. No-op without a selection.
      */
     fun moveSelectionEnd(pos: TerminalPos) {
         selection = selection?.let { TerminalSelection(anchor = it.start, focus = pos) }
     }
 
-    /** Снять выделение (клик/новый ввод). */
+    /** Clear the selection (click / new input). */
     fun clearSelection() {
         selection = null
     }
 
-    /** Текст текущего выделения для копирования или `null`, если выделять нечего. */
+    /** Text of the current selection to copy, or `null` if there is nothing to select. */
     fun selectedText(): String? = selection
         ?.takeIf { !it.isEmpty }
         ?.extract(screen)
         ?.takeIf { it.isNotEmpty() }
 
     /**
-     * In-app PRIMARY-буфер: текст последнего выделения мышью. Нужен для среднего клика-вставки там,
-     * где системный PRIMARY недоступен (Wayland: AWT `getSystemSelection()`==null) — тогда вставка
-     * берёт его вместо CLIPBOARD, чтобы средний клик вставлял именно выделенное, а не устаревший буфер.
+     * In-app PRIMARY buffer: text of the last mouse selection. Used for middle-click paste where
+     * the system PRIMARY selection is unavailable (Wayland: AWT `getSystemSelection()`==null) —
+     * paste then falls back to this instead of CLIPBOARD.
      */
     var primarySelection: String? = null
         private set
 
     /**
-     * Зафиксировать текущее выделение как PRIMARY (вызывается по завершении выделения мышью). Возвращает
-     * сохранённый текст или `null`, если выделять нечего (буфер тогда не трогаем — прежний PRIMARY живёт).
+     * Capture the current selection as PRIMARY (called when a mouse selection completes). Returns
+     * the saved text, or `null` if there is nothing to select (buffer is then left untouched).
      */
     fun capturePrimarySelection(): String? {
         val text = selectedText() ?: return null
@@ -353,29 +352,28 @@ class TerminalScreenState(
         return text
     }
 
-    // --- Автодополнение (Phase 3) ---
-    // Движок отслеживает набираемую пользователем строку и предлагает продолжение из истории команд
-    // этой сессии + типовых команд. Живёт на сессию (учится на её же командах). Подсказки работают
-    // только в обычном (не alt-screen) режиме: в полноэкранных TUI (vim/htop) «строки» нет.
+    // --- Autocomplete ---
+    // The engine tracks the line the user is typing and suggests a completion from this session's
+    // command history plus common commands. Scoped to the session. Suggestions only apply in
+    // normal (non-alt-screen) mode: fullscreen TUIs (vim/htop) have no "line".
     private val autocomplete = AutocompleteEngine(
         CommandHistory().apply { if (initialHistory.isNotEmpty()) preload(initialHistory) },
     )
 
-    /** «Хвост» текущей подсказки автодополнения (серым после набранного) или `null`. Читает UI. */
+    /** Tail of the current autocomplete suggestion (shown grayed after typed text) or `null`. */
     var suggestionTail: String? by mutableStateOf(null)
         private set
 
     /**
-     * Ввод пользователя с клавиатуры/IME: скармливает движку автодополнения (для отслеживания строки
-     * и истории) и отправляет в PTY. Отдельно от [send]/[sendBytes], которыми идут отчёты мыши/фокуса,
-     * paste и вывод сниппетов — их движок видеть не должен, иначе строка исказится.
+     * Keyboard/IME user input: feeds the autocomplete engine (line and history tracking) and sends
+     * to the PTY. Separate from [send]/[sendBytes], used for mouse/focus reports, paste, and
+     * snippet output, which must not reach the engine or the tracked line would be corrupted.
      */
     fun typeInput(text: String) {
-        // Сервер не эхоит ввод (ввод пароля / line-mode, сигнал от транспорта) — НЕ отслеживаем строку
-        // и НЕ пишем её в историю: секрет не должен оседать в памяти и всплывать подсказкой. Для SSH
-        // эхо-статус недоступен (всегда false), поэтому дополнительно распознаём парольный промпт по
-        // тексту текущей строки экрана ([atPasswordPrompt]) — иначе пароль из sudo/ssh/passwd попал бы
-        // в историю автодополнения и позже показался бы ghost-подсказкой прямо на экране.
+        // Server not echoing input (password entry / line-mode signaled by the transport): do not
+        // track the line or write it to history, so a secret does not persist and surface as a
+        // suggestion. SSH echo status is unavailable (always false), so a password prompt is also
+        // detected heuristically from the current screen line ([atPasswordPrompt]).
         if (session.echoSuppressed || atPasswordPrompt()) {
             autocomplete.reset()
             if (suggestionTail != null) suggestionTail = null
@@ -385,17 +383,17 @@ class TerminalScreenState(
         val committed = autocomplete.onUserInput(text.encodeToByteArray())
         refreshSuggestion()
         send(text)
-        // Команда подтверждена Enter (и была с эхом) — персистим снимок истории для этого хоста.
+        // Command was committed with Enter (and was echoed): persist the history snapshot for this host.
         if (committed != null) onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
     }
 
     /**
-     * Похожа ли текущая строка курсора на парольный промпт (echo обычно выключен именно тут). Читаем
-     * ОПУБЛИКОВАННЫЙ снимок [screen] (UI-поток, без гонки с эмулятором): видимая сетка — последние
-     * [rows] строк, строка курсора внутри неё — [cursorRow]. Считаем промптом строку, которая
-     * заканчивается на «:» и содержит одно из ключевых слов — чтобы не глушить историю на обычном
-     * тексте вроде `cat passwords.txt`. Эвристика: цель — не пропустить пароль, лёгкое переусердствование
-     * (иногда не сохранить команду) безопаснее утечки секрета.
+     * Whether the current cursor row looks like a password prompt (echo is usually off there).
+     * Reads the published [screen] snapshot (UI thread, no race with the emulator): the visible
+     * grid is the last [rows] rows, cursor row is [cursorRow] within it. A row is treated as a
+     * prompt if it ends with ":" and contains one of the keyword hints, to avoid suppressing
+     * history on plain text like `cat passwords.txt`. Heuristic: erring toward not saving a
+     * command is safer than leaking a secret.
      */
     private fun atPasswordPrompt(): Boolean {
         val grid = screen
@@ -407,8 +405,8 @@ class TerminalScreenState(
     }
 
     /**
-     * Принять текущую подсказку автодополнения: дослать её «хвост» в PTY (shell сам его отобразит эхом).
-     * Возвращает `true`, если было что принять (UI тогда гасит своё событие, напр. Tab), иначе `false`.
+     * Accept the current autocomplete suggestion: sends its tail to the PTY (the shell echoes it).
+     * Returns `true` if there was something to accept, else `false`.
      */
     fun acceptSuggestion(): Boolean {
         if (altScreen) return false
@@ -419,8 +417,8 @@ class TerminalScreenState(
     }
 
     /**
-     * Переключить «призрак» подсказки на следующую альтернативу (Shift+Tab). В alt-screen подсказок
-     * нет — no-op. Строку в PTY не трогает: меняется лишь предлагаемый хвост до его принятия.
+     * Cycle the ghost suggestion to the next alternative (Shift+Tab). No-op in alt-screen. Does not
+     * touch the PTY line; only the proposed tail changes until accepted.
      */
     fun cycleSuggestion() {
         if (altScreen) return
@@ -428,77 +426,76 @@ class TerminalScreenState(
         suggestionTail = autocomplete.suggestionTail()
     }
 
-    // --- Reverse-search истории (Ctrl-R): состояние оверлея живёт здесь, чтобы им одинаково управляли
-    // и desktop-клавиши, и мобильная панель/IME, а рендер-оверлей читал единый источник. ---
+    // --- Reverse search (Ctrl-R): overlay state lives here so desktop keys and the mobile
+    // panel/IME drive it uniformly, and the render overlay reads a single source. ---
 
-    /** Текущий запрос reverse-search или `null`, если оверлей закрыт. Читает UI. */
+    /** Current reverse-search query, or `null` if the overlay is closed. */
     var reverseSearchQuery: String? by mutableStateOf(null)
         private set
 
-    /** Индекс выбранного совпадения в [reverseSearchResults]. */
+    /** Index of the selected match in [reverseSearchResults]. */
     var reverseSearchIndex: Int by mutableStateOf(0)
         private set
 
-    /** Совпадения текущего запроса (от новой к старой) или пусто, если оверлей закрыт. */
+    /** Matches for the current query (newest to oldest), or empty if the overlay is closed. */
     val reverseSearchResults: List<String>
         get() = reverseSearchQuery?.let { autocomplete.commandHistory.search(it) } ?: emptyList()
 
-    /** Выбранное совпадение (под [reverseSearchIndex]) или `null`. */
+    /** Selected match (at [reverseSearchIndex]) or `null`. */
     val reverseSearchSelection: String?
         get() {
             val r = reverseSearchResults
             return if (r.isEmpty()) null else r[reverseSearchIndex.mod(r.size)]
         }
 
-    /** Открыть reverse-search (пустой запрос). В alt-screen — no-op (истории строк там нет). */
+    /** Open reverse search (empty query). No-op in alt-screen (no line history there). */
     fun openReverseSearch() {
         if (altScreen) return
         reverseSearchQuery = ""
         reverseSearchIndex = 0
     }
 
-    /** Закрыть оверлей reverse-search без вставки. */
+    /** Close the reverse-search overlay without inserting anything. */
     fun closeReverseSearch() {
         reverseSearchQuery = null
         reverseSearchIndex = 0
     }
 
-    /** Дописать [text] к запросу reverse-search (сброс выбора на первое совпадение). */
+    /** Append [text] to the reverse-search query (resets selection to the first match). */
     fun reverseSearchAppend(text: String) {
         val q = reverseSearchQuery ?: return
         reverseSearchQuery = q + text
         reverseSearchIndex = 0
     }
 
-    /** Удалить последний символ запроса reverse-search. */
+    /** Remove the last character of the reverse-search query. */
     fun reverseSearchBackspace() {
         val q = reverseSearchQuery ?: return
         reverseSearchQuery = q.dropLast(1)
         reverseSearchIndex = 0
     }
 
-    /** К следующему (более старому) совпадению. */
+    /** Move to the next (older) match. */
     fun reverseSearchNext() {
         val n = reverseSearchResults.size
         if (n > 0) reverseSearchIndex = (reverseSearchIndex + 1) % n
     }
 
-    /** К предыдущему (более новому) совпадению. */
+    /** Move to the previous (newer) match. */
     fun reverseSearchPrev() {
         val n = reverseSearchResults.size
         if (n > 0) reverseSearchIndex = (reverseSearchIndex - 1 + n) % n
     }
 
-    /** Принять выбранное совпадение (вставить в строку через [applyHistoryCommand]) и закрыть оверлей. */
+    /** Accept the selected match (insert via [applyHistoryCommand]) and close the overlay. */
     fun reverseSearchAccept() {
         reverseSearchSelection?.let { applyHistoryCommand(it) }
         closeReverseSearch()
     }
 
     /**
-     * Удалить [command] из истории автодополнения (ручная чистка опечаток/ненужных команд) и обновить
-     * персист. Как в bash/zsh, история пишет всё подряд — это способ убрать конкретную запись из
-     * подсказок. Индекс reverse-search подравнивается, чтобы выбор остался в границах.
+     * Remove [command] from the autocomplete history (manual cleanup of typos/unwanted commands)
+     * and persist the update. Adjusts the reverse-search index to stay in bounds.
      */
     fun forgetHistoryCommand(command: String) {
         if (!autocomplete.forget(command)) return
@@ -508,18 +505,18 @@ class TerminalScreenState(
         refreshSuggestion()
     }
 
-    /** Удалить выбранное в reverse-search совпадение из истории; оверлей остаётся открыт. */
+    /** Remove the currently selected reverse-search match from history; overlay stays open. */
     fun reverseSearchDeleteSelected() {
         reverseSearchSelection?.let { forgetHistoryCommand(it) }
     }
 
     /**
-     * Вставить выбранную из истории команду: очистить текущую строку shell (Ctrl-U) и «набрать» её,
-     * чтобы пользователь мог отредактировать/запустить. Идёт через [typeInput] — движок снова видит
-     * строку, а гейт echoSuppressed сохраняется (в редком режиме без эха просто уйдёт как ввод).
+     * Insert a command picked from history: clears the current shell line (Ctrl-U) and types it in
+     * so the user can edit/run it. Goes through [typeInput] so the engine sees the line and the
+     * echoSuppressed gate still applies.
      */
     fun applyHistoryCommand(command: String) {
-        sendBytes(byteArrayOf(0x15)) // Ctrl-U — стереть текущую строку ввода (readline kill-line)
+        sendBytes(byteArrayOf(0x15)) // Ctrl-U: kill current input line (readline kill-line)
         autocomplete.reset()
         typeInput(command)
     }
@@ -528,23 +525,23 @@ class TerminalScreenState(
         suggestionTail = if (altScreen) null else autocomplete.suggestionTail()
     }
 
-    /** Отправить введённый текст в PTY (fire-and-forget через очередь [outbound], FIFO-порядок). */
+    /** Send typed text to the PTY (fire-and-forget via the [outbound] queue, FIFO order). */
     fun send(text: String) {
         outbound.trySend(text.encodeToByteArray())
     }
 
     /**
-     * Отправить сырые байты в PTY (fire-and-forget). Нужен для отчётов мыши: в legacy-кодировке
-     * байты могут выходить за 0x7f и не должны прогоняться через UTF-8, как делает [send].
+     * Send raw bytes to the PTY (fire-and-forget). Used for mouse reports: legacy encoding bytes
+     * can exceed 0x7f and must not be run through UTF-8 like [send] does.
      */
     fun sendBytes(bytes: ByteArray) {
         outbound.trySend(bytes)
     }
 
     /**
-     * Закодировать событие мыши под текущий режим/кодировку эмулятора и отправить в PTY. Возвращает
-     * `true`, если отчёт был отправлен (событие репортится в активном режиме), иначе `false` —
-     * вызывающий тогда может обработать событие локально. No-op без репортинга мыши.
+     * Encode a mouse event per the emulator's current mode/encoding and send it to the PTY. Returns
+     * `true` if a report was sent (event is reported in the active mode), else `false` so the
+     * caller can handle it locally. No-op without mouse reporting.
      */
     fun reportMouse(
         button: MouseButton,
@@ -565,22 +562,22 @@ class TerminalScreenState(
     }
 
     /**
-     * Уведомить приложение о смене фокуса окна терминала: при включённом focus-reporting (DEC 1004)
-     * шлёт ESC[I (фокус) или ESC[O (потеря). No-op, если приложение режим не запрашивало.
+     * Notify the application of a terminal window focus change: sends ESC[I (focus) or ESC[O
+     * (blur) when focus reporting (DEC 1004) is enabled. No-op if the application never requested it.
      */
     fun notifyFocus(focused: Boolean) {
         if (focusReporting) send(focusReportSequence(focused))
     }
 
-    /** Вставить текст из буфера: при включённом bracketed-paste оборачивает маркерами (DEC 2004). */
+    /** Paste clipboard text: wraps it in markers when bracketed paste is enabled (DEC 2004). */
     fun paste(text: String) {
         if (text.isEmpty()) return
         send(bracketedPasteWrap(text, bracketedPaste))
     }
 
     /**
-     * Сообщить новый размер сетки. Применяется и к эмулятору, и к PTY через ту же командную очередь,
-     * что и [feed][TerminalEmulator.feed] (без гонки). Повтор того же размера игнорируется.
+     * Report a new grid size. Applied to both the emulator and the PTY through the same command
+     * queue as [feed][TerminalEmulator.feed] (no race). Repeats of the same size are ignored.
      */
     fun resize(size: PtySize) {
         if (size.cols == lastRequestedSize?.cols && size.rows == lastRequestedSize?.rows) return
@@ -589,42 +586,42 @@ class TerminalScreenState(
     }
 
     /**
-     * Сменить стиль курсора по умолчанию у уже открытой сессии (настройка изменилась на лету). Идёт
-     * через ту же командную очередь, что feed/resize — без гонки с однопоточным эмулятором; снимок
-     * публикуется автоматически после обработки, так что курсор перерисуется сразу.
+     * Change the default cursor style on an already-open session (setting changed live). Goes
+     * through the same command queue as feed/resize, avoiding a race with the single-threaded
+     * emulator; a snapshot is published automatically afterward so the cursor redraws immediately.
      */
     fun applyCursorStyle(shape: CursorShape, blink: Boolean) {
         commands.trySend(TerminalCommand.SetCursorDefault(shape, blink))
     }
 
     /**
-     * Сменить глубину scrollback у уже открытой сессии (настройка «Буфер прокрутки» изменилась на
-     * лету). Идёт через ту же командную очередь — при уменьшении лишние старые строки сразу
-     * обрезаются, снимок публикуется автоматически.
+     * Change scrollback depth on an already-open session (setting changed live). Goes through the
+     * same command queue; on decrease, excess old rows are trimmed immediately and a snapshot is
+     * published automatically.
      */
     fun applyScrollback(lines: Int) {
         commands.trySend(TerminalCommand.SetMaxScrollback(lines))
     }
 }
 
-/** Команда единственному владельцу эмулятора — порядок feed/resize сохраняется очередью. */
+/** Command to the sole emulator owner; the queue preserves feed/resize ordering. */
 private sealed interface TerminalCommand {
-    /** Сырой чанк вывода PTY на скармливание парсеру. */
+    /** Raw PTY output chunk to feed to the parser. */
     class Feed(val chunk: ByteArray) : TerminalCommand
 
-    /** Новый размер сетки: применяется к эмулятору и пробрасывается в PTY. */
+    /** New grid size: applied to the emulator and forwarded to the PTY. */
     class Resize(val size: PtySize) : TerminalCommand
 
-    /** Новый пользовательский дефолт курсора (настройка сменилась при открытой сессии). */
+    /** New user default cursor (setting changed while the session is open). */
     class SetCursorDefault(val shape: CursorShape, val blink: Boolean) : TerminalCommand
 
-    /** Новая глубина scrollback (настройка «Буфер прокрутки» сменилась при открытой сессии). */
+    /** New scrollback depth (setting changed while the session is open). */
     class SetMaxScrollback(val lines: Int) : TerminalCommand
 }
 
 /**
- * Ключевые слова строки-промпта, при которых ввод считаем секретным и не пишем в историю (см.
- * [TerminalScreenState.atPasswordPrompt]). Покрывают типичные приглашения sudo/ssh/passwd/su и т.п.
+ * Prompt-line keywords that mark input as secret and exempt it from history (see
+ * [TerminalScreenState.atPasswordPrompt]). Covers typical sudo/ssh/passwd/su prompts.
  */
 private val PASSWORD_PROMPT_HINTS = listOf(
     "password", "passphrase", "passcode", "verification code", "pin",

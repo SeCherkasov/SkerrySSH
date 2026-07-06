@@ -11,9 +11,9 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
 /**
- * Аудит-лог метаданных для админ-консоли. Append-only с удержанием последних [maxRows] событий,
- * чтобы лог не рос безгранично на долгоживущем self-hosted инстансе. Содержимого записей здесь
- * нет по определению — только событие, устройство и человекочитаемая сводка ([detail]).
+ * Metadata audit log for the admin console. Append-only, retains the last [maxRows] events so
+ * the log doesn't grow unbounded on a long-lived self-hosted instance. Contains no record
+ * content — only event, device, and a human-readable summary ([detail]).
  */
 class ActivityRepository(private val db: Database, private val maxRows: Int = 2_000) {
 
@@ -36,7 +36,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
         prune()
     }
 
-    /** Свежие события первыми (по убыванию монотонного `seq`). */
+    /** Most recent events first (descending monotonic `seq`). */
     suspend fun recent(limit: Int = 50): List<ActivityRow> = newSuspendedTransaction(Dispatchers.IO, db) {
         ActivityLog.selectAll()
             .orderBy(ActivityLog.seq to SortOrder.DESC)
@@ -44,7 +44,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
             .map { it.toRow() }
     }
 
-    /** Свежие события одной команды (для team-scoped истории участникам owner/admin). */
+    /** Most recent events for one team (team-scoped history for owner/admin members). */
     suspend fun recentForTeam(teamId: String, limit: Int = 100): List<ActivityRow> =
         newSuspendedTransaction(Dispatchers.IO, db) {
             ActivityLog.selectAll()
@@ -54,15 +54,15 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
                 .map { it.toRow() }
         }
 
-    /** Всего удержанных событий (≤ maxRows) — для честного «N из M» в консоли. */
+    /** Total retained events (≤ maxRows), for an accurate "N of M" in the console. */
     suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
         ActivityLog.selectAll().count()
     }
 
-    /** Удаляет всё старше последних [maxRows] событий (gap-устойчиво: по реальному seq границы). */
+    /** Deletes everything older than the last [maxRows] events (gap-safe: bounded by actual seq). */
     private fun prune() {
-        // Дешёвый счётчик-гейт: дорогой OFFSET-скан только когда реально переросли кап, а не на
-        // каждый записанный event (kotlin-ревью L).
+        // Cheap count-gate: only run the expensive OFFSET scan once the cap is actually
+        // exceeded, not on every recorded event.
         if (ActivityLog.selectAll().count() <= maxRows) return
         val keepFrom = ActivityLog.selectAll()
             .orderBy(ActivityLog.seq to SortOrder.DESC)

@@ -4,10 +4,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * IME-ввод на тач-платформах: скрытое поле всегда сбрасывается к якорю [ANCHOR], поэтому
- * новое значение поля = якорь ± правки пользователя. [imeDeltaToPty] диффит их и отдаёт байты
- * в PTY. Управляющие коды (CR/DEL) проверяются по числам — иначе были бы невидимы (как ESC/DEL
- * в [TerminalInputTest]).
+ * IME input on touch platforms: the hidden field always resets to the anchor [ANCHOR], so the
+ * field's new value = anchor plus the user's edits. [imeDeltaToPty] diffs them and emits the
+ * bytes sent to the PTY. Control codes (CR/DEL) are checked by numeric code, as in
+ * [TerminalInputTest].
  */
 class TerminalImeInputTest {
 
@@ -33,19 +33,19 @@ class TerminalImeInputTest {
     @Test
     fun `newline from the keyboard becomes carriage return`() {
         assertEquals(listOf(0x0d), codes(delta(anchor + "\n")))
-        // Команда + Enter одним изменением: текст, затем CR.
+        // Command + Enter as a single change: text, then CR.
         assertEquals(listOf('l'.code, 's'.code, 0x0d), codes(delta(anchor + "ls\n")))
     }
 
     @Test
     fun `deleting the anchor tail sends DEL`() {
-        // Backspace на пустом терминале «съедает» якорь — это Backspace для shell.
+        // Backspace on an empty terminal eats the anchor, becoming Backspace for the shell.
         assertEquals(listOf(0x7f), codes(delta("")))
     }
 
     @Test
     fun `replacement past common prefix deletes then inserts`() {
-        // Автокоррекция/замена: якорь, дальше вставка X — общий префикс якорь, остаток вставляется.
+        // Autocorrect/replacement: common prefix is the anchor, so X is just inserted after it.
         assertEquals("X", delta(anchor + "X"))
     }
 

@@ -13,7 +13,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 
-/** Список устройств аккаунта и отзыв доступа (`docs/skerry-sync-design.md` §3). */
+/** Account device listing and access revocation (`docs/skerry-sync-design.md` §3). */
 fun Route.deviceRoutes(services: Services) {
     get("/devices") {
         val principal = call.jwtPrincipal()
@@ -28,7 +28,7 @@ fun Route.deviceRoutes(services: Services) {
         val principal = call.jwtPrincipal()
         val target = call.parameters["id"]
         if (target.isNullOrBlank()) {
-            // ErrorResponse-тело, как у остальных маршрутов: клиент всегда парсит {"error": …}.
+            // ErrorResponse body, like every other route: the client always parses {"error": ...}.
             call.respond(HttpStatusCode.BadRequest, ErrorResponse("device id is required"))
             return@delete
         }

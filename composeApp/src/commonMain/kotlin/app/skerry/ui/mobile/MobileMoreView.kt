@@ -125,14 +125,14 @@ import app.skerry.ui.settings.masterPasswordSubtitle
 import app.skerry.ui.settings.securityEventLine
 
 /**
- * Корневой таб More: заголовок + карточка профиля + список разделов-ссылок. Хаб навигации к
- * push-экранам Port forwarding / Known hosts / Team и к действию «Lock Skerry».
+ * Root More tab: title + profile card + list of section links. Navigation hub to the
+ * Port forwarding / Known hosts / Team push screens and to the "Lock Skerry" action.
  *
- * Живой путь ([onLock] != null, за гейтом vault): карточка профиля — локальный vault,
- * подзаголовки Port forwarding/Known hosts — живые счётчики
- * ([mobileMorePortsSubtitle]/[mobileMoreKnownSubtitle]) из [LocalSessions]/[LocalKnownHosts], строки
- * AI/Appearance/Security инертны (заглушки), «Lock Skerry» реально запирает vault. Превью/
- * офскрин ([onLock] == null) — статичная карточка мок-профиля.
+ * Live path ([onLock] != null, behind the vault gate): profile card shows the local vault,
+ * Port forwarding/Known hosts subtitles are live counts
+ * ([mobileMorePortsSubtitle]/[mobileMoreKnownSubtitle]) from [LocalSessions]/[LocalKnownHosts];
+ * AI/Appearance/Security rows are inert placeholders, "Lock Skerry" actually locks the vault.
+ * Preview/offscreen ([onLock] == null) shows a static mock profile card.
  */
 @Composable
 fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
@@ -144,7 +144,7 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
         if (preview) MockProfileCard() else LocalVaultCard()
 
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-            // Превью: те же локализованные подзаголовки, что и живой путь, только с фиксированным счётом.
+            // Preview: same localized subtitles as the live path, just with a fixed count.
             val ports = if (preview) mobileMorePortsSubtitle(2) else portsSubtitle()
             val known = if (preview) mobileMoreKnownSubtitle(1) else knownSubtitle()
             val knownWarn = if (preview) true else knownChanged() > 0
@@ -152,8 +152,8 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             MoreRow("lan", D.cyanBright, stringResource(Res.string.more_port_forwarding), ports, D.moss, onClick = { state.push(MobileRoute.Ports) })
             MoreRow("fingerprint", D.cyanBright, stringResource(Res.string.more_known_hosts), known, if (knownWarn) D.sunset else D.moss, onClick = { state.push(MobileRoute.Known) })
             MoreRow("groups", D.cyanBright, stringResource(Res.string.more_team), if (preview) "Platform crew" else null, D.dim, onClick = { state.push(MobileRoute.Team) })
-            // AI: живой путь (есть контроллер) → push экрана настроек AI; иначе инертная заглушка (превью).
-            // Подпись — выбранный провайдер по умолчанию (Local / BYOK / Off), не статичный текст.
+            // AI: live path (controller present) pushes the AI settings screen; otherwise an inert
+            // placeholder (preview). Subtitle is the currently selected provider (Local / BYOK / Off).
             val liveAi = LocalAi.current
             val aiSubtitle = when (liveAi?.settings?.provider) {
                 AiProviderKind.DEVICE, null -> stringResource(Res.string.more_ai_subtitle_local)
@@ -161,11 +161,11 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
                 AiProviderKind.OFF -> stringResource(Res.string.more_ai_subtitle_off)
             }
             MoreRow("auto_awesome", D.amber, stringResource(Res.string.more_ai_privacy), aiSubtitle, D.dim, onClick = if (liveAi != null) { -> state.push(MobileRoute.Ai) } else null)
-            // Подпись Appearance — реальная выбранная тема терминала, не статичный текст макета.
+            // Appearance subtitle is the actual selected terminal theme, not static layout text.
             MoreRow("palette", D.cyanBright, stringResource(Res.string.appearance_title), state.terminalTheme.displayName, D.dim, onClick = { state.push(MobileRoute.Appearance) })
             MoreRow("sync", D.cyanBright, stringResource(Res.string.more_sync), if (preview) stringResource(Res.string.more_sync_synced) else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
-            // Раздел «Безопасность»: мастер-пароль, биометрия, автоблокировка, журнал событий. Живой путь
-            // за гейтом (есть vault); в превью строка инертна (нечего настраивать без vault).
+            // "Security" section: master password, biometrics, auto-lock, event log. Live path is
+            // behind the gate (vault present); in preview the row is inert (nothing to configure without a vault).
             MoreRow("shield_lock", D.cyanBright, stringResource(Res.string.settings_security_title), null, D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
             MoreRow("lock", D.sunset, stringResource(Res.string.more_lock), null, D.dim, labelColor = D.sunset, divider = false, onClick = onLock)
         }
@@ -175,13 +175,13 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
 
 @Composable
 private fun portsSubtitle(): String {
-    // Туннели — глобальный раздел: счёт активных берём из менеджера, без привязки к открытой
-    // сессии. null (нет менеджера: превью/офскрин) → пустой подзаголовок.
+    // Tunnels are a global section: the active count comes from the manager, not tied to the
+    // open session. null (no manager: preview/offscreen) gives an empty subtitle.
     val manager = LocalTunnels.current ?: return mobileMorePortsSubtitle(null)
     return mobileMorePortsSubtitle(mobileActiveTunnelCount(manager.tunnels))
 }
 
-/** Подзаголовок строки «Синхронизация»: статус координатора sync (нет/локально/подключено). */
+/** "Sync" row subtitle: sync coordinator status (none/local-only/connected). */
 @Composable
 private fun syncSubtitle(): String {
     val sync = LocalSync.current ?: return stringResource(Res.string.more_sync_local_only)
@@ -201,9 +201,8 @@ private fun knownChanged(): Int = LocalKnownHosts.current?.mismatches?.size ?: 0
 private fun knownSubtitle(): String = mobileMoreKnownSubtitle(knownChanged())
 
 /**
- * Строка раздела хаба: ведущая иконка + название + подпись справа + chevron. [onClick] == null —
- * инертная строка (раздел вне MVP, без действия). [divider] — нижняя
- * линия (нет у последней строки).
+ * Hub section row: leading icon + name + subtitle on the right + chevron. [onClick] == null
+ * makes the row inert (no action). [divider] is the bottom line (absent on the last row).
  */
 @Composable
 private fun MoreRow(
@@ -235,16 +234,16 @@ private fun MoreRow(
     if (divider) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
 }
 
-// Security (push-экран More → Безопасность).
+// Security (More -> Security push screen).
 
 /**
- * Push-экран More → Безопасность (паритет desktop-раздела [SecuritySection]). Смена мастер-пароля
- * (диалог → [VaultGateController.changePassword]), реальный тумблер разблокировки биометрией (скрыт,
- * когда фактора/железа нет), выбор порога автоблокировки (проводится в idle-таймер гейта через
- * `state.autoLock`), журнал событий и подпись «последняя смена пароля» из реального [SecurityLog].
- * Двухфакторная — метка SOON (ещё не реализована). Собственный контроллер поверх ОБЩИХ
- * vault/биометрии/журнала (из composition-local): события пишутся в тот же файл, что и desktop.
- * Без vault (превью) — нейтральный вид без живых действий.
+ * More -> Security push screen (parity with the desktop [SecuritySection]). Master password
+ * change (dialog -> [VaultGateController.changePassword]), a real biometric-unlock toggle (hidden
+ * when the factor/hardware is unavailable), auto-lock threshold picker (wired into the gate's idle
+ * timer via `state.autoLock`), event log, and a "last password change" subtitle from the real
+ * [SecurityLog]. Two-factor shows a SOON badge (not implemented). Its own controller sits over the
+ * shared vault/biometrics/log composition-locals: events go to the same file as desktop.
+ * Without a vault (preview) it renders a neutral view with no live actions.
  */
 @Composable
 fun MobileSecurityScreen(state: MobileDesignState) {
@@ -264,8 +263,8 @@ fun MobileSecurityScreen(state: MobileDesignState) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
                 Txt(stringResource(Res.string.settings_security_subtitle), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
 
-                // Мастер-пароль: подпись = реальная «последняя смена» из журнала (или нейтральный текст).
-                // Чтение журнала — файловый I/O + JSON-разбор, уводим его с потока композиции.
+                // Master password: subtitle is the real "last changed" from the log (or neutral text).
+                // Reading the log is file I/O + JSON parsing, moved off the composition thread.
                 val lastChange by produceState<String?>(null, controller, reload) {
                     value = withContext(Dispatchers.Default) { controller?.lastPasswordChangeAt() }
                 }
@@ -274,7 +273,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                         Txt(stringResource(Res.string.settings_security_master_password), color = D.text, size = 14.5.sp)
                         Txt(masterPasswordSubtitle(lastChange), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                     }
-                    // Смена доступна только за живым vault; без него — приглушённо/инертно.
+                    // Changing the password requires a live vault; without one it's dimmed/inert.
                     Txt(
                         stringResource(Res.string.settings_change),
                         color = if (controller != null) D.cyanBright else D.faint,
@@ -285,9 +284,9 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 }
                 MobileSecurityDivider()
 
-                // Разблокировка биометрией: строка только когда фактор доступен (иначе настраивать нечего).
+                // Biometric unlock: row shows only when the factor is available (nothing to configure otherwise).
                 if (controller != null && controller.canEnableBiometric()) {
-                    // Строки промпта резолвим в composable-scope (stringResource нельзя в onToggle-лямбде).
+                    // Prompt strings resolved in composable scope (stringResource can't be called in the onToggle lambda).
                     val enablePrompt = BiometricPrompt(
                         title = stringResource(Res.string.more_biometric_prompt_title),
                         cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
@@ -313,7 +312,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     MobileSecurityDivider()
                 }
 
-                // Автоблокировка: реальный порог простоя, проводится в idle-таймер VaultGate через state.autoLock.
+                // Auto-lock: real idle threshold, wired into the VaultGate idle timer via state.autoLock.
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Txt(stringResource(Res.string.settings_security_auto_lock), color = D.text, size = 14.5.sp)
@@ -323,11 +322,11 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 }
                 MobileSecurityDivider()
 
-                // Двухфакторная — ещё не реализована: честная метка SOON вместо фейкового «включена».
+                // Two-factor is not implemented yet: an honest SOON badge instead of a fake "enabled".
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // weight(fill=false): длинная подпись переносится сама, а бейдж не сжимается.
+                            // weight(fill=false): the long label wraps on its own without shrinking the badge.
                             Txt(stringResource(Res.string.settings_security_2fa), color = D.dim, size = 14.5.sp, modifier = Modifier.weight(1f, fill = false))
                             Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
                         }
@@ -336,7 +335,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     Txt(stringResource(Res.string.settings_manage), color = D.faint, size = 13.sp)
                 }
 
-                // Недавние события безопасности — из реального журнала (или «пока событий нет»).
+                // Recent security events from the real log (or "no events yet").
                 Txt(stringResource(Res.string.settings_recent_security_events), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
                 val events by produceState(emptyList<SecurityEvent>(), controller, reload) {
                     value = withContext(Dispatchers.Default) { controller?.recentSecurityEvents(8) ?: emptyList() }
@@ -354,7 +353,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 Spacer(Modifier.height(40.dp))
             }
         }
-        // Диалог смены мастер-пароля — модальный оверлей поверх экрана; back закрывает сперва его.
+        // Change-master-password dialog is a modal overlay over the screen; back closes it first.
         if (changePwOpen && controller != null) {
             PlatformBackHandler(enabled = true) { changePwOpen = false }
             ChangeMasterPasswordDialog(
@@ -366,13 +365,13 @@ fun MobileSecurityScreen(state: MobileDesignState) {
     }
 }
 
-/** Разделительная линия между строками раздела Безопасность (тон макета). */
+/** Divider line between Security section rows (layout tone). */
 @Composable
 private fun MobileSecurityDivider() {
     Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
 }
 
-/** Выпадающий список порога автоблокировки (мобильный) — переиспользует триггер/меню Appearance. */
+/** Auto-lock threshold dropdown (mobile) — reuses the Appearance trigger/menu. */
 @Composable
 private fun MobileAutoLockPicker(current: AutoLockDuration, onPick: (AutoLockDuration) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -390,11 +389,11 @@ private fun MobileAutoLockPicker(current: AutoLockDuration, onPick: (AutoLockDur
     )
 }
 
-// Appearance (push-экран More → Appearance).
+// Appearance (More -> Appearance push screen).
 
 /**
- * Push-экран More → Appearance: выбор темы терминала (карточки), шрифта и кегля. Оба шрифта
- * рендерятся без лигатур (см. [app.skerry.ui.terminal.TerminalAppearance]).
+ * More -> Appearance push screen: terminal theme picker (cards), font, and size. Both fonts
+ * render without ligatures (see [app.skerry.ui.terminal.TerminalAppearance]).
  */
 @Composable
 fun MobileAppearanceScreen(state: MobileDesignState) {
@@ -402,7 +401,7 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
         MobilePushHeader(stringResource(Res.string.appearance_title), onBack = state::pop)
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Txt(stringResource(Res.string.appearance_section_terminal), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp))
-            // Карточки тем сеткой 2×N из каталога [TerminalThemes]; выбор проводится в терминал на лету.
+            // Theme cards in a 2xN grid from the [TerminalThemes] catalog; selection applies to the terminal live.
             TerminalThemes.all.chunked(2).forEach { rowThemes ->
                 Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (theme in rowThemes) {
@@ -475,8 +474,8 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
 }
 
 /**
- * Мобильная карточка выбора темы терминала: мини-превью `ls -la` в реальных цветах [theme]; клик
- * выбирает, активная — cyan-рамка + бейдж ACTIVE. Зеркалит desktop-карточку из SettingsPanel.
+ * Mobile terminal theme picker card: a mini `ls -la` preview in [theme]'s real colors; click
+ * selects, active shows a cyan border + ACTIVE badge. Mirrors the desktop card from SettingsPanel.
  */
 @Composable
 private fun MobileThemeCard(
@@ -508,7 +507,7 @@ private fun MobileThemeCard(
     }
 }
 
-/** Выпадающий список языка интерфейса (System / English / Русский). */
+/** UI language dropdown (System / English / Russian). */
 @Composable
 private fun MobileLanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -526,7 +525,7 @@ private fun MobileLanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Un
     )
 }
 
-/** Строка настройки: подпись слева + контрол (дропдаун) справа фиксированной ширины. */
+/** Setting row: label on the left + a fixed-width control (dropdown) on the right. */
 @Composable
 private fun FontSettingRow(label: String, control: @Composable () -> Unit) {
     Row(
@@ -539,7 +538,7 @@ private fun FontSettingRow(label: String, control: @Composable () -> Unit) {
     }
 }
 
-/** Выпадающий список шрифта терминала (Hack / JetBrains Mono) — оба без лигатур. */
+/** Terminal font dropdown (Hack / JetBrains Mono) — both without ligatures. */
 @Composable
 private fun MobileFontPicker(current: TerminalFont, onPick: (TerminalFont) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -557,7 +556,7 @@ private fun MobileFontPicker(current: TerminalFont, onPick: (TerminalFont) -> Un
     )
 }
 
-/** Строка настройки со степпером (мобильная): слева подпись + подсказка дефолта, справа [NumberStepper]. */
+/** Setting row with a stepper (mobile): label + default-value hint on the left, [NumberStepper] on the right. */
 @Composable
 private fun MobileStepperRow(
     label: String,
@@ -579,7 +578,7 @@ private fun MobileStepperRow(
     }
 }
 
-/** Подсказка дефолта (мобильная): серый текст когда значение дефолтное, cyan-кликабельный сброс когда изменено. */
+/** Default-value hint (mobile): gray text when at default, cyan clickable reset when changed. */
 @Composable
 private fun MobileDefaultValueHint(isDefault: Boolean, defaultText: String, onReset: () -> Unit) {
     val text = stringResource(Res.string.appearance_default_value, defaultText)
@@ -597,7 +596,7 @@ private fun MobileDefaultValueHint(isDefault: Boolean, defaultText: String, onRe
     }
 }
 
-/** Триггер селекта: значение слева, шеврон справа. */
+/** Select trigger: value on the left, chevron on the right. */
 @Composable
 private fun MobileSelectTrigger(value: String, onClick: () -> Unit) {
     Row(
@@ -610,7 +609,7 @@ private fun MobileSelectTrigger(value: String, onClick: () -> Unit) {
     }
 }
 
-/** Колонка-меню выпадающего списка (поверхность + обводка макета). */
+/** Dropdown menu column (surface + border per layout). */
 @Composable
 private fun MobileDropdownMenu(width: Dp, content: @Composable () -> Unit) {
     Column(
@@ -618,7 +617,7 @@ private fun MobileDropdownMenu(width: Dp, content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** Пункт выпадающего списка; выбранный подсвечен cyan. */
+/** Dropdown option; the selected one is highlighted cyan. */
 @Composable
 private fun MobileDropdownOption(label: String, selected: Boolean, onClick: () -> Unit) {
     Txt(
@@ -629,16 +628,16 @@ private fun MobileDropdownOption(label: String, selected: Boolean, onClick: () -
     )
 }
 
-// Профиль.
+// Profile.
 
 /**
- * Живая карточка профиля: отражает реальное состояние sync — не настроен → локальный vault
- * («Encrypted on this device»), подключён → accountId + хост сервера. Управление синхронизацией
- * (set up / reconnect / disconnect / устройства) живёт на экране «Синхронизация».
+ * Live profile card: reflects the real sync state — not configured shows a local vault
+ * ("Encrypted on this device"), connected shows accountId + server host. Sync management
+ * (set up / reconnect / disconnect / devices) lives on the "Sync" screen.
  *
- * Ветвление на отдельный [LiveLocalVaultCard] (а не условный `collectAsState` в одном теле) держит
- * composable-вызовы безусловными — правило слотовой таблицы Compose, как и на desktop ([LocalSync]
- * стабилен, но строгий паттерн надёжнее при будущих рефакторингах).
+ * Branching into a separate [LiveLocalVaultCard] (instead of a conditional `collectAsState` in one
+ * body) keeps composable calls unconditional — the Compose slot-table rule, same as on desktop
+ * ([LocalSync] is stable, but the strict pattern is safer for future refactors).
  */
 @Composable
 private fun LocalVaultCard() {
@@ -658,7 +657,7 @@ private fun AccountProfileCard(model: app.skerry.ui.sync.AccountCardModel) {
     ProfileCard(initials = model.initials, avatarBg = D.cyan, title = model.title, subtitle = model.subtitle, badge = null)
 }
 
-/** Статичная карточка профиля (превью/офскрин). */
+/** Static profile card (preview/offscreen). */
 @Composable
 private fun MockProfileCard() {
     ProfileCard(initials = "MK", avatarBg = D.cyan, title = "Maya Kovac", subtitle = "maya@skerry.dev", badge = "PRO")

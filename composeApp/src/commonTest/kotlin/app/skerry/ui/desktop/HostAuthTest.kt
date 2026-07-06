@@ -17,8 +17,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Резолв аутентификации хоста перед подключением ([resolveHostAuth]) — общий путь для новой
- * вкладки, split-панели и «Run snippet on host» desktop-оболочки.
+ * Resolves host auth before connecting ([resolveHostAuth]); shared path for new tabs, split
+ * panes, and the desktop "Run snippet on host" shell.
  */
 class HostAuthTest {
 
@@ -64,7 +64,7 @@ class HostAuthTest {
     }
 }
 
-/** Минимальный in-memory [Vault] для [CredentialStore] (как FakeCredVault в тестах identity). */
+/** Minimal in-memory [Vault] for [CredentialStore] (mirrors FakeCredVault in identity tests). */
 private class FakeAuthVault : Vault {
     private val payloads = mutableMapOf<String, ByteArray>()
     private val records = mutableMapOf<String, VaultRecord>()

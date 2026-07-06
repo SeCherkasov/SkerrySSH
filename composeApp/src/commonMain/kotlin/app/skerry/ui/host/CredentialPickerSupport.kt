@@ -10,9 +10,9 @@ import app.skerry.ui.vault.VaultPresentation
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Подписи/иконки типа keychain-секрета для строки выбора в пикерах аутентификации. Общие для
- * desktop ([NewConnectionModal]) и mobile ([MobileNewConnectionSheet]) — одна точка правки при
- * добавлении нового вида [CredentialSecret], чтобы оба пикера не разъезжались.
+ * Labels/icons for keychain secret types in auth picker rows. Shared between desktop
+ * ([NewConnectionModal]) and mobile ([MobileNewConnectionSheet]) so both pickers stay in sync when
+ * a new [CredentialSecret] kind is added.
  */
 @Composable
 internal fun CredentialSecret.pickerTypeLabel(): String = when (this) {
@@ -21,5 +21,5 @@ internal fun CredentialSecret.pickerTypeLabel(): String = when (this) {
     is CredentialSecret.Certificate -> stringResource(Res.string.vtail_picker_type_certificate)
 }
 
-/** Иконка типа секрета — из общего [VaultPresentation.secretStyle], чтобы пикеры не разъезжались с Vault. */
+/** Secret type icon, from the shared [VaultPresentation.secretStyle] so pickers stay in sync with Vault. */
 internal fun CredentialSecret.pickerIcon(): String = VaultPresentation.secretStyle(this).icon

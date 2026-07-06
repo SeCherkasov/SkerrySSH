@@ -50,9 +50,8 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 
 /**
- * Базовый текст на UI-шрифте (Space Grotesk по умолчанию). Тонкая обёртка над
- * [BasicText], чтобы по всему UI не дублировать [TextStyle]; для моноширинных
- * мест передаётся `font = LocalFonts.current.mono`.
+ * Base text on the UI font (Space Grotesk by default). Thin wrapper over [BasicText] so
+ * [TextStyle] isn't duplicated across the UI; monospace call sites pass `font = LocalFonts.current.mono`.
  */
 @Composable
 fun Txt(
@@ -84,7 +83,7 @@ fun Txt(
     )
 }
 
-/** Бейдж-пилюля (STRICT/DEV/OWNER/…): фон + цвет текста + скругление 3dp. */
+/** Badge pill (STRICT/DEV/OWNER/…): background + text color + 3dp corner radius. */
 @Composable
 fun Badge(
     text: String,
@@ -100,12 +99,12 @@ fun Badge(
             .background(bg)
             .padding(horizontal = 4.dp, vertical = 1.dp),
     ) {
-        // Однострочно всегда: перенос текста («СКО/РО») ломает форму пилюли в тесных строках.
+        // Always single-line: wrapped text breaks the pill shape in tight rows.
         Txt(text, color = fg, size = size, weight = FontWeight.SemiBold, letterSpacing = 0.3.sp, maxLines = 1)
     }
 }
 
-/** Тег-чип (#prod, #docker): закруглённая пилюля 20dp. [active] — cyan-подсветка; [onClick] — кликабельность. */
+/** Tag chip (#prod, #docker): rounded 20dp pill. [active] applies cyan highlight; [onClick] makes it clickable. */
 @Composable
 fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     Box(
@@ -131,29 +130,29 @@ fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier, o
 }
 
 /**
- * Настоящий выпадающий список: [trigger] остаётся в потоке формы, а [menu] всплывает НАД контентом
- * через [Popup] (не раздвигает форму). Меню позиционируется прямо под триггером ([gap] — зазор) и
- * получает измеренную ширину триггера, чтобы совпадать с ним по краям. Тап мимо/Back закрывают
- * ([onDismiss]). Применяется в пикерах аутентификации (desktop/mobile) и прочих селектах макета.
+ * Dropdown: [trigger] stays in the form's layout flow while [menu] floats above content via
+ * [Popup] (doesn't push the form). The menu positions directly below the trigger ([gap] is the
+ * offset) and receives the trigger's measured width to align edges. Tap-outside/Back call
+ * [onDismiss]. Used by auth pickers (desktop/mobile) and other layout selects.
  */
 @Composable
 fun AnchoredDropdown(
     expanded: Boolean,
     onDismiss: () -> Unit,
     gap: Dp = 6.dp,
-    // focusable = false — для type-ahead-пикеров (group/tags): меню не должно красть фокус у поля
-    // ввода, иначе набор текста прерывается. Закрытие у таких пикеров завязано на потерю фокуса поля.
+    // focusable = false for type-ahead pickers (group/tags): the menu must not steal focus from the
+    // input field, or typing breaks. Those pickers close on field focus loss instead.
     focusable: Boolean = true,
     trigger: @Composable () -> Unit,
     menu: @Composable (anchorWidth: Dp) -> Unit,
 ) {
     var anchor by remember { mutableStateOf(IntSize.Zero) }
     val density = LocalDensity.current
-    // Box оборачивает только триггер (Popup в поток разметки не попадает) → размер Box = размер триггера.
+    // Box wraps only the trigger (Popup doesn't participate in layout) so Box size equals trigger size.
     Box(Modifier.onGloballyPositioned { anchor = it.size }) {
         trigger()
-        // Гейт по anchor != Zero: до первого замера размер триггера неизвестен и Popup мигнул бы один
-        // кадр в (0,0). Дожидаемся первого onGloballyPositioned, затем показываем под триггером.
+        // Gated on anchor != Zero: before the first measurement the trigger size is unknown and the
+        // Popup would flash one frame at (0,0). Wait for the first onGloballyPositioned.
         if (expanded && anchor != IntSize.Zero) {
             Popup(
                 alignment = Alignment.TopStart,
@@ -167,7 +166,7 @@ fun AnchoredDropdown(
     }
 }
 
-/** Переключатель 36×20 (как `tog`/`knob` прототипа): cyan при [on], белый кружок-кноб. */
+/** 36×20 toggle switch (prototype's `tog`/`knob`): cyan when [on], white knob circle. */
 @Composable
 fun Toggle(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
@@ -189,28 +188,25 @@ fun Toggle(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** Горизонтальная линия-разделитель (1dp, cyan 6%). */
+/** Horizontal divider line (1dp, cyan 6%). */
 @Composable
 fun HLine(color: Color = D.line, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(1.dp).background(color))
 }
 
-/** Вертикальная линия-разделитель (1dp). */
+/** Vertical divider line (1dp). */
 @Composable
 fun VLine(color: Color = D.lineStrong, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxHeight().width(1.dp).background(color))
 }
 
-/** Маленькая статус-точка-кружок. */
+/** Small status dot. */
 @Composable
 fun Dot(color: Color, size: Int = 6, modifier: Modifier = Modifier) {
     Box(modifier.size(size.dp).clip(CircleShape).background(color))
 }
 
-/**
- * Кнопка-иконка titlebar/toolbar: квадрат [box]dp, скруглённый. Иконка Material Symbols
- * размером [icon], цвет [tint].
- */
+/** Titlebar/toolbar icon button: rounded [box]dp square. Material Symbols icon sized [icon], tinted [tint]. */
 @Composable
 fun IconBtn(
     name: String,
@@ -221,8 +217,8 @@ fun IconBtn(
     tint: Color = D.dim,
     hoverBg: Color = Color(0x1FFFFFFF),
 ) {
-    // Своя светлая hover-подложка (тёмная тема): дефолтная indication у clickable даёт тёмный
-    // ripple, который на тёмном фоне «затемняет» и почти не виден — вместо неё подсвечиваем светлым.
+    // Custom light hover background (dark theme): clickable's default indication gives a dark
+    // ripple that's barely visible on a dark background, so we highlight with a light overlay instead.
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     Box(
@@ -237,7 +233,7 @@ fun IconBtn(
     }
 }
 
-/** Горизонтальный прогресс-бар (CPU/Memory/Disk/throughput): трек + цветная заливка [fraction]. */
+/** Horizontal progress bar (CPU/Memory/Disk/throughput): track + colored fill for [fraction]. */
 @Composable
 fun MeterBar(fraction: Float, color: Color, modifier: Modifier = Modifier, trackHeight: Int = 5) {
     Box(
@@ -256,7 +252,7 @@ fun MeterBar(fraction: Float, color: Color, modifier: Modifier = Modifier, track
     }
 }
 
-/** Заполненная primary-кнопка (cyan-фон, тёмный текст) с опциональной иконкой слева. */
+/** Filled primary button (cyan background, dark text) with an optional leading icon. */
 @Composable
 fun PrimaryButton(
     label: String,
@@ -281,7 +277,7 @@ fun PrimaryButton(
     }
 }
 
-/** Контурная (ghost) кнопка: прозрачный фон + cyan-граница. */
+/** Ghost button: transparent background + cyan border. */
 @Composable
 fun GhostButton(
     label: String,
@@ -306,10 +302,10 @@ fun GhostButton(
 }
 
 /**
- * Компактный числовой ввод в стиле дизайн-системы: капсула «−  [поле]  +» с точным вводом с клавиатуры
- * и шагом по кнопкам. Клампинг/квантование делает вызывающий — в [onValueChange] приходит значение,
- * которое он сам приводит к диапазону (примитив лишь редактирует строку и коммитит по Enter/blur/кнопке).
- * [format] рисует число вне фокуса, [parse] разбирает ручной ввод. Общий для desktop и mobile.
+ * Compact numeric input: a "−  [field]  +" capsule with precise keyboard entry and button stepping.
+ * Clamping/quantization is the caller's job — [onValueChange] receives a raw value it must range-clamp
+ * itself (this primitive only edits the string and commits on Enter/blur/button). [format] renders the
+ * number when unfocused, [parse] parses manual entry. Shared by desktop and mobile.
  */
 @Composable
 fun NumberStepper(
@@ -323,7 +319,7 @@ fun NumberStepper(
     fieldWidth: Dp = 46.dp,
 ) {
     val fonts = LocalFonts.current
-    // Пока поле в фокусе — показываем и редактируем сырую строку [editing]; вне фокуса — format(value).
+    // While focused, show and edit the raw string [editing]; unfocused shows format(value).
     var editing by remember { mutableStateOf<String?>(null) }
     val shown = editing ?: format(value)
     val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = fonts.ui, textAlign = TextAlign.Center) }
@@ -351,7 +347,7 @@ fun NumberStepper(
     }
 }
 
-/** Кнопка шага (−/+) степпера: квадратная зона клика с символом Material Symbols. */
+/** Stepper's step button (−/+): a square tap target with a Material Symbols glyph. */
 @Composable
 private fun StepButton(icon: String, onClick: () -> Unit) {
     Box(Modifier.size(32.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {

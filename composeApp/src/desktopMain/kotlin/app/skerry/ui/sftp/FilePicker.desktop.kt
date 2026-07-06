@@ -12,12 +12,12 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.getString
 
 /**
- * Desktop-реализация выбора файла нативным AWT [FileDialog]. На desktop выбранный путь и есть
- * реальная цель/источник передачи, поэтому handle тривиален: `stagingPath` = выбранный путь, а
- * `finalize`/`discard`/`cleanup` — no-op (промежуточный файл не нужен, в отличие от Android SAF).
+ * File picker backed by native AWT [FileDialog]. The selected path is the actual transfer
+ * target/source, so the handle is trivial: `stagingPath` is the selected path and
+ * `finalize`/`discard`/`cleanup` are no-ops (no staging file needed, unlike Android SAF).
  *
- * Диалог модальный: `isVisible = true` запускает вложенный цикл событий EDT и возвращается по
- * закрытию — поэтому показываем его на [Dispatchers.Swing] (поток EDT), а не блокируем произвольный.
+ * The dialog is modal: `isVisible = true` runs a nested EDT event loop and returns on close, so
+ * it must run on [Dispatchers.Swing] (the EDT thread) rather than an arbitrary one.
  */
 actual suspend fun pickDownloadTarget(suggestedName: String): DownloadTarget? {
     val path = showFileDialog(FileDialog.SAVE, title = getString(Res.string.sftp_dialog_save_as), presetName = suggestedName)

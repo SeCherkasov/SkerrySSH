@@ -11,23 +11,21 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.terminal.TerminalScreenState
 
 /**
- * Подвью сессии (привязана к вкладке): что показано в её рабочей области. Туннели сюда НЕ входят —
- * это глобальный раздел (модель Termius), см. [app.skerry.ui.app.DesktopView.isAppLevel].
+ * Sub-view of a session (tab-scoped): what's shown in its work area. Tunnels are not included here;
+ * they're a global section, see [app.skerry.ui.app.DesktopView.isAppLevel].
  */
 enum class SessionView { Terminal, Sftp }
 
 /**
- * Одна открытая сессия — вкладка в titlebar. Владеет собственным [ConnectionController]
- * (один shell на сессию). [hostId] связывает вкладку с профилем из каталога хостов, чтобы
- * сайдбар мог подсветить статус-точкой хосты, у которых есть живая сессия; для ad-hoc
- * подключений без сохранённого хоста он `null`. [title]/[subtitle] — ярлык вкладки и
- * строка `user@host:port` для session-bar.
+ * One open session — a titlebar tab. Owns its own [ConnectionController] (one shell per session).
+ * [hostId] links the tab to a host-catalog profile so the sidebar can mark hosts with a live
+ * session via a status dot; `null` for ad-hoc connections without a saved host. [title]/[subtitle]
+ * are the tab label and the `user@host:port` string for the session bar.
  *
- * Поля коннекта ([hostId]/[title]/[subtitle]) мутируемы (snapshot-стейт): пустая вкладка
- * ([isBlank]) создаётся незаполненной и «обживается» первым подключением через
- * [SessionsController.connect] (заполнить можно один раз — соединение этой вкладки уже
- * стартовало). [view] — выбранная подвью, своя у каждой вкладки (паттерн «таб1=Terminal,
- * таб2=SFTP сохраняются на протяжении сессии»).
+ * The connection fields ([hostId]/[title]/[subtitle]) are mutable (snapshot state): a blank tab
+ * ([isBlank]) is created unfilled and gets bound by the first connection via
+ * [SessionsController.connect] (can only be bound once — after that the connection has started).
+ * [view] is the selected sub-view, tracked per tab.
  */
 @Stable
 class Session(
@@ -44,16 +42,16 @@ class Session(
     var subtitle: String by mutableStateOf(subtitle)
         private set
 
-    /** Выбранная подвью этой вкладки (Terminal/SFTP), переживает переключение вкладок. */
+    /** Selected sub-view of this tab (Terminal/SFTP), persists across tab switches. */
     var view: SessionView by mutableStateOf(SessionView.Terminal)
         private set
 
     /**
-     * Split (модель Termius): вкладка может держать рядом ВТОРУЮ независимую сессию. [splitOpen] —
-     * показана ли split-область (включается кнопкой split на тулбаре); [splitSession] — вторичная
-     * панель со своим [ConnectionController] (своё соединение/терминал/выделение), `null` пока хост
-     * не выбран (тогда панель показывает пикер хостов). [focusedSplit] — какая панель в фокусе
-     * (false=основная, true=split): определяет, какой хост показывает чип вкладки.
+     * Split: a tab can hold a second, independent session alongside the first. [splitOpen] is
+     * whether the split pane is shown (toggled by the toolbar split button); [splitSession] is the
+     * secondary pane with its own [ConnectionController] (own connection/terminal/selection), `null`
+     * until a host is picked (the pane then shows the host picker). [focusedSplit] is which pane has
+     * focus (false = primary, true = split), which determines what host the tab chip shows.
      */
     var splitOpen: Boolean by mutableStateOf(false)
         private set
@@ -63,9 +61,9 @@ class Session(
         private set
 
     /**
-     * Пустая вкладка без сессии: хост не выбран и соединение ещё не запускалось (контроллер в
-     * [ConnectionUiState.Form]). Именно такую создаёт кнопка «+»; первое подключение её заполняет.
-     * После [ConnectionController.disconnect] вкладка с уже выбранным хостом пустой не становится.
+     * A blank tab with no session: no host selected and no connection started yet (controller in
+     * [ConnectionUiState.Form]). Created by the "+" button; the first connection fills it. A tab
+     * with a host already bound does not become blank again after [ConnectionController.disconnect].
      */
     val isBlank: Boolean get() = hostId == null && controller.uiState is ConnectionUiState.Form
 
@@ -76,33 +74,31 @@ class Session(
     internal fun setFocusedSplit(focused: Boolean) { focusedSplit = focused }
 
     /**
-     * Заполнить пустую вкладку профилем перед первым подключением (см. [SessionsController.connect]).
-     * Только пока вкладка пуста ([isBlank]): «обжить» её можно один раз — после старта соединения
-     * перезапись hostId/title сорвала бы соответствие вкладки её живой сессии.
+     * Fill a blank tab with a profile before its first connection (see [SessionsController.connect]).
+     * Only valid while the tab is blank ([isBlank]): can be bound once — after the connection starts,
+     * rewriting hostId/title would break the tab's correspondence with its live session.
      */
     internal fun bind(hostId: String?, title: String, subtitle: String) {
-        check(isBlank) { "bind() на непустой вкладке: соединение уже стартовало" }
+        check(isBlank) { "bind() on a non-blank tab: connection already started" }
         this.hostId = hostId
         this.title = title
         this.subtitle = subtitle
     }
 
     /**
-     * Заголовок для вкладки: имя хоста из каталога ([title]) — поведение SSH-менеджеров
-     * (Termius/Tabby/Royal TSX) и нашего шаблона (короткие имена хостов на вкладках).
+     * Tab title: the host's catalog name ([title]).
      *
-     * Живой OSC 0/1/2-title терминала НАМЕРЕННО не подставляется: на серверах с обычным bash он
-     * сводится к шумному `root@<hostname>` и перекрывал бы понятный лейбл, причём непоследовательно
-     * (роутеры на busybox OSC не шлют → у них оставался лейбл). ТЕХДОЛГ: вынести «показывать живой
-     * OSC-заголовок» в настройки приложения (выкл по умолчанию) — хелпер [effectiveTabTitle] уже
-     * готов под это. До этого вкладка всегда = лейбл хоста.
+     * The terminal's live OSC 0/1/2 title is intentionally not used here: on plain-bash servers it
+     * reduces to a noisy `root@<hostname>` and would override a clear label inconsistently (busybox
+     * routers don't send OSC titles at all). [effectiveTabTitle] exists for a future setting that
+     * opts into it; until then the tab always shows the host label.
      */
     val displayTitle: String get() = title
 
     /**
-     * Живой заголовок окна из OSC 0/1/2 подключённого терминала этой вкладки (`vim ~/app`,
-     * `root@host`…) или `null`, если сессия не открыта либо приложение заголовок не задавало.
-     * Читается из snapshot-стейта терминала, поэтому геттер реактивен в Compose.
+     * Live window title from OSC 0/1/2 of this tab's connected terminal (`vim ~/app`, `root@host`…),
+     * or `null` if no session is open or no title was ever set. Read from terminal snapshot state,
+     * so the getter is reactive in Compose.
      */
     val liveTitle: String?
         get() = when (val s = controller.uiState) {
@@ -111,7 +107,7 @@ class Session(
             else -> null
         }
 
-    /** Живой терминал этой вкладки (Connected/Disconnected) или `null`, пока сессия не открыта. */
+    /** This tab's live terminal (Connected/Disconnected), or `null` while no session is open. */
     val liveTerminal: TerminalScreenState?
         get() = when (val s = controller.uiState) {
             is ConnectionUiState.Connected -> s.terminal
@@ -120,35 +116,34 @@ class Session(
         }
 
     /**
-     * Заголовок для вкладки с учётом настройки «показывать заголовок терминала на вкладках»
-     * (Settings → Терминал). Выключено — всегда лейбл хоста ([displayTitle]); включено — живой
-     * OSC-заголовок ([liveTitle]) перекрывает лейбл, а на его отсутствие откатываемся к лейблу
-     * (см. [effectiveTabTitle]).
+     * Tab title honoring the "show terminal title on tabs" setting (Settings → Terminal). Off:
+     * always the host label ([displayTitle]); on: the live OSC title ([liveTitle]) overrides the
+     * label, falling back to it when absent (see [effectiveTabTitle]).
      */
     fun tabTitle(showLiveTitle: Boolean): String =
         if (showLiveTitle) effectiveTabTitle(liveTitle, displayTitle) else displayTitle
 }
 
 /**
- * Эффективный заголовок вкладки: непустой живой [liveTitle] перекрывает [fallback]. Используется
- * [Session.tabTitle], когда включена настройка «показывать заголовок терминала на вкладках»
- * (Settings → Терминал); выключено — вкладка всегда = лейбл хоста ([Session.displayTitle]).
+ * Effective tab title: a non-blank live [liveTitle] overrides [fallback]. Used by
+ * [Session.tabTitle] when the "show terminal title on tabs" setting (Settings → Terminal) is on;
+ * off, the tab always shows the host label ([Session.displayTitle]).
  */
 fun effectiveTabTitle(liveTitle: String?, fallback: String): String =
     liveTitle?.takeIf { it.isNotBlank() } ?: fallback
 
 /**
- * Менеджер открытых сессий поверх [ConnectionController] — модель вкладок desktop-каркаса.
- * Каждая вкладка изолирована своим контроллером (одна сессия = один shell), [activeId]
- * указывает на видимую в основной области.
+ * Manager for open sessions over [ConnectionController] — the desktop tab model. Each tab is
+ * isolated with its own controller (one session = one shell); [activeId] points at the one shown
+ * in the main area.
  *
- * Контроллеры создаёт [controllerFactory] (в проде — `ConnectionController(transport, scope)`;
- * в тестах — с тестовым диспетчером), id вкладок выдаёт [newId] — тем же приёмом, что и
- * [app.skerry.ui.host.HostManagerController], платформенная точка входа инжектит UUID.
+ * Controllers are created by [controllerFactory] (prod: `ConnectionController(transport, scope)`;
+ * tests: with a test dispatcher); tab ids come from [newId], injected by the platform entry point
+ * (UUID), same approach as [app.skerry.ui.host.HostManagerController].
  *
- * [close] повторяет поведение вкладок прототипа: после удаления активной выбирается соседняя
- * справа, иначе слева, иначе активной не остаётся. Соединение закрытой вкладки рвётся явно
- * ([ConnectionController.disconnect] идемпотентен), иначе сокет утечёт.
+ * [close] picks the neighbor to the right after removing the active tab, else the one to the left,
+ * else none. The closed tab's connection is torn down explicitly ([ConnectionController.disconnect]
+ * is idempotent), otherwise the socket would leak.
  */
 @Stable
 class SessionsController(
@@ -163,10 +158,7 @@ class SessionsController(
 
     val active: Session? get() = sessions.firstOrNull { it.id == activeId }
 
-    /**
-     * Открыть новую сессию к [target] и сделать её активной; подключение стартует сразу.
-     * Возвращает id созданной вкладки.
-     */
+    /** Open a new session to [target] and make it active; connects immediately. Returns the new tab's id. */
     fun open(
         hostId: String?,
         title: String,
@@ -184,11 +176,11 @@ class SessionsController(
     }
 
     /**
-     * Открыть пустую вкладку без сессии (кнопка «+»): соединение НЕ стартует, контроллер остаётся
-     * в [ConnectionUiState.Form]. Становится активной; заполнится первым [connect]. Возвращает id.
+     * Open a blank tab with no session (the "+" button): no connection starts, controller stays in
+     * [ConnectionUiState.Form]. Becomes active; gets filled by the first [connect]. Returns its id.
      *
-     * [title] — подпись вкладки-заглушки; локализованный лейбл резолвит вызывающая composable-сторона
-     * (в контроллере stringResource недоступен). `null` → пустая подпись (для тестов/ad-hoc).
+     * [title] is the placeholder tab label; the calling composable resolves the localized label
+     * (stringResource is unavailable in the controller). `null` gives an empty label (tests/ad-hoc).
      */
     fun openBlank(title: String? = null): String {
         val controller = controllerFactory()
@@ -199,10 +191,9 @@ class SessionsController(
     }
 
     /**
-     * Подключиться к [target]: если активная вкладка пустая ([Session.isBlank]) — заполнить и
-     * подключить её на месте (без новой вкладки); иначе открыть новую через [open]. Возвращает id
-     * вкладки, в которой стартовало соединение. Поведение «+→пустой таб, затем выбор хоста коннектит
-     * в него же».
+     * Connect to [target]: if the active tab is blank ([Session.isBlank]), fill and connect it in
+     * place (no new tab); otherwise open a new one via [open]. Returns the id of the tab the
+     * connection started in.
      */
     fun connect(
         hostId: String?,
@@ -221,20 +212,20 @@ class SessionsController(
         return open(hostId, title, subtitle, target, auth, onConnected)
     }
 
-    /** Сменить подвью активной вкладки (Terminal/SFTP); без активной — no-op. */
+    /** Switch the active tab's sub-view (Terminal/SFTP); no-op if there's no active tab. */
     fun setActiveView(view: SessionView) {
         active?.setView(view)
     }
 
-    /** Сделать сессию [id] активной; неизвестный id игнорируется. */
+    /** Make session [id] active; an unknown id is ignored. */
     fun activate(id: String) {
         if (sessions.any { it.id == id }) activeId = id
     }
 
     /**
-     * Переставить вкладку с [fromIndex] на позицию [toIndex] (drag-reorder в titlebar, модель Termius).
-     * Оба индекса должны быть валидны; перенос «на место» — no-op. [activeId] адресует вкладку по id,
-     * поэтому активная при переносе не меняется.
+     * Move the tab at [fromIndex] to [toIndex] (titlebar drag-reorder). Both indices must be valid;
+     * moving to the same position is a no-op. [activeId] addresses a tab by id, so the active tab
+     * doesn't change when reordering.
      */
     fun moveTab(fromIndex: Int, toIndex: Int) {
         val indices = sessions.indices
@@ -243,8 +234,8 @@ class SessionsController(
     }
 
     /**
-     * Переключить split-область вкладки [id] (по умолчанию активной): нет split → открыть пустую
-     * (покажет пикер хостов); есть → закрыть через [closeSplit] (порвав вторичное соединение).
+     * Toggle the split pane of tab [id] (active tab by default): no split open -> open an empty one
+     * (shows the host picker); open -> close it via [closeSplit] (tearing down the secondary connection).
      */
     fun toggleSplit(id: String? = activeId) {
         val tab = sessions.firstOrNull { it.id == id } ?: return
@@ -252,13 +243,13 @@ class SessionsController(
     }
 
     /**
-     * Подключить НОВУЮ независимую вторичную сессию в split-панель вкладки [parentId]: своя
-     * [ConnectionController] (своё соединение/терминал), кладётся в [Session.splitSession] и
-     * получает фокус. Вторичная сессия НЕ попадает в [sessions] — ею владеет родительская вкладка.
+     * Connect a new, independent secondary session into the split pane of tab [parentId]: its own
+     * [ConnectionController] (own connection/terminal), stored in [Session.splitSession] and given
+     * focus. The secondary session is not added to [sessions] — it's owned by the parent tab.
      */
     fun connectSplit(parentId: String, hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth) {
         val parent = sessions.firstOrNull { it.id == parentId } ?: return
-        parent.splitSession?.controller?.disconnect() // заменяем прежнюю вторичную, если была
+        parent.splitSession?.controller?.disconnect() // replace the previous secondary session, if any
         val secondary = Session(newId(), hostId, title, subtitle, controllerFactory())
         parent.setSplitOpen(true)
         parent.setSplitSession(secondary)
@@ -266,7 +257,7 @@ class SessionsController(
         secondary.controller.connect(target, auth)
     }
 
-    /** Закрыть split вкладки [id]: порвать вторичное соединение и сбросить split-флаги. */
+    /** Close the split pane of tab [id]: tear down the secondary connection and reset split flags. */
     fun closeSplit(id: String) {
         val tab = sessions.firstOrNull { it.id == id } ?: return
         tab.splitSession?.controller?.disconnect()
@@ -275,12 +266,12 @@ class SessionsController(
         tab.setFocusedSplit(false)
     }
 
-    /** Сфокусировать панель вкладки [id]: false — основная, true — split. Определяет заголовок чипа. */
+    /** Focus a pane of tab [id]: false = primary, true = split. Determines the tab chip's title. */
     fun focusPane(id: String, split: Boolean) {
         sessions.firstOrNull { it.id == id }?.setFocusedSplit(split)
     }
 
-    /** Закрыть сессию [id]: разорвать соединение (вместе с её split), убрать вкладку, выбрать соседа. */
+    /** Close session [id]: disconnect it (and its split), remove the tab, select a neighbor. */
     fun close(id: String) {
         val index = sessions.indexOfFirst { it.id == id }
         if (index < 0) return
@@ -288,17 +279,17 @@ class SessionsController(
         sessions[index].splitSession?.controller?.disconnect()
         val remaining = sessions.toMutableList().apply { removeAt(index) }
         if (activeId == id) {
-            // Сосед справа сместился на освободившийся индекс; иначе берём слева, иначе пусто.
+            // The right neighbor shifted into the freed index; else take the left one, else none.
             activeId = remaining.getOrNull(index)?.id ?: remaining.getOrNull(index - 1)?.id
         }
         sessions = remaining
     }
 
-    /** Состояние самой свежей сессии для хоста [hostId] (для статус-точки в сайдбаре), либо null. */
+    /** State of the most recent session for host [hostId] (for the sidebar status dot), or null. */
     fun statusFor(hostId: String): ConnectionUiState? =
         sessions.lastOrNull { it.hostId == hostId }?.controller?.uiState
 
-    /** Закрыть все сессии (вместе с их split) — вызывать при teardown экрана, чтобы не утекли сокеты. */
+    /** Close all sessions (and their splits) — call on screen teardown to avoid leaking sockets. */
     fun disconnectAll() {
         sessions.forEach {
             it.controller.disconnect()

@@ -5,30 +5,30 @@ import app.skerry.shared.sync.RemoteRecord
 import app.skerry.shared.sync.SyncSession
 
 /**
- * Роль в команде (иерархия OWNER > ADMIN > EDITOR > VIEWER). Гейтит запись/управление, НЕ чтение —
- * у любого активного участника есть teamKey. Незнакомая строка деградирует в [VIEWER] (least
- * privilege); legacy `member` (до гранулярных ролей мог писать записи) читается как [EDITOR].
+ * Team role (hierarchy OWNER > ADMIN > EDITOR > VIEWER). Gates write/manage, not read — any active
+ * member has the teamKey. Unknown string degrades to [VIEWER] (least privilege); legacy `member`
+ * (could write records before granular roles) reads as [EDITOR].
  */
 enum class TeamRole {
     OWNER, ADMIN, EDITOR, VIEWER;
 
-    /** Управление составом: приглашать, удалять, менять роли. */
+    /** Manage membership: invite, remove, change roles. */
     val canManageMembers: Boolean get() = this == OWNER || this == ADMIN
 
-    /** Запись/шеринг общих записей команды. */
+    /** Write/share the team's shared records. */
     val canWrite: Boolean get() = this == OWNER || this == ADMIN || this == EDITOR
 
-    /** Просмотр аудит-лога команды. */
+    /** View the team audit log. */
     val canViewAudit: Boolean get() = this == OWNER || this == ADMIN
 
-    /** Роли, которые эта роль вправе назначать при приглашении/смене (анти-эскалация). */
+    /** Roles this role may assign when inviting/changing (anti-escalation). */
     fun assignableRoles(): List<TeamRole> = when (this) {
         OWNER -> listOf(ADMIN, EDITOR, VIEWER)
         ADMIN -> listOf(EDITOR, VIEWER)
         else -> emptyList()
     }
 
-    /** Проводное/хранимое представление роли. */
+    /** Wire/stored representation of the role. */
     val wire: String get() = name.lowercase()
 
     companion object {
@@ -41,7 +41,7 @@ enum class TeamRole {
     }
 }
 
-/** Строка аудит-лога команды: актор, событие, человекочитаемая сводка (без содержимого записей). */
+/** Team audit log entry: actor, event, human-readable summary (no record contents). */
 class TeamActivityEntry(
     val actorAccountId: String,
     val event: String,
@@ -49,14 +49,14 @@ class TeamActivityEntry(
     val createdAt: Long,
 )
 
-/** Статус членства. Незнакомая строка деградирует в [INVITED] (доступа к записям не даёт). */
+/** Membership status. Unknown string degrades to [INVITED] (no record access). */
 enum class TeamMemberStatus { INVITED, ACTIVE;
     companion object {
         fun fromWire(value: String): TeamMemberStatus = if (value == "active") ACTIVE else INVITED
     }
 }
 
-/** Команда глазами текущего аккаунта: метаданные + membership + конверт приглашения (пока invited). */
+/** Team as seen by the current account: metadata + membership + invite envelope (while invited). */
 class TeamSummary(
     val id: String,
     val ownerAccountId: String,
@@ -75,15 +75,15 @@ class TeamMember(
 )
 
 /**
- * Сетевой контракт Teams (`/account/key*`, `/teams*`) — стейтлесс, все методы принимают
- * [SyncSession]. Ошибки — [app.skerry.shared.sync.SyncException] с теми же Kind, что у SyncClient.
- * Реализуется тем же [app.skerry.shared.sync.SyncClient]-транспортом (KtorSyncClient).
+ * Teams network contract (`/account/key*`, `/teams*`) — stateless, all methods take [SyncSession].
+ * Errors are [app.skerry.shared.sync.SyncException] with the same Kind as SyncClient.
+ * Implemented by the same [app.skerry.shared.sync.SyncClient] transport (KtorSyncClient).
  */
 interface TeamClient {
-    /** Публикует публичную X25519-половину identity-пары аккаунта. */
+    /** Publishes the account identity pair's public X25519 half. */
     suspend fun publishKey(session: SyncSession, publicKey: ByteArray)
 
-    /** Публичный ключ другого аккаунта; null — аккаунт ещё не включал Teams (ключ не опубликован). */
+    /** Another account's public key; null if it hasn't enabled Teams yet (key not published). */
     suspend fun fetchPublicKey(session: SyncSession, accountId: String): ByteArray?
 
     suspend fun createTeam(session: SyncSession, teamId: String)
@@ -92,18 +92,18 @@ interface TeamClient {
 
     suspend fun members(session: SyncSession, teamId: String): List<TeamMember>
 
-    /** Приглашает [accountId] с ролью [role] (сервер отвергает эскалацию выше прав приглашающего). */
+    /** Invites [accountId] with role [role] (server rejects escalation above the inviter's rights). */
     suspend fun invite(session: SyncSession, teamId: String, accountId: String, role: TeamRole, envelope: ByteArray)
 
     suspend fun accept(session: SyncSession, teamId: String)
 
-    /** Меняет роль участника (owner/admin; сервер применяет анти-эскалацию, owner неизменяем). */
+    /** Changes a member's role (owner/admin; server enforces anti-escalation, owner is immutable). */
     suspend fun changeRole(session: SyncSession, teamId: String, accountId: String, role: TeamRole)
 
-    /** Аудит-лог команды (owner/admin); свежие события первыми. */
+    /** Team audit log (owner/admin); newest events first. */
     suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry>
 
-    /** Удаление участника владельцем, выход из команды или отклонение приглашения (target = сам). */
+    /** Removes a member as owner, leaves the team, or declines an invite (target = self). */
     suspend fun removeMember(session: SyncSession, teamId: String, accountId: String)
 
     suspend fun deleteTeam(session: SyncSession, teamId: String)

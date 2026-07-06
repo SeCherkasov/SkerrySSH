@@ -14,14 +14,14 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 import org.jetbrains.exposed.sql.update
 
 /**
- * Зашифрованные записи команд — то же LWW-ядро, что [RecordRepository], но в team-scope:
- * курсор дельты — [Teams.teamSeq]. Тромбстоуны watermark'ом не компактятся (состав команды
- * нестабилен) — их чистит [purgeTombstones] по возрасту `updatedAt` (ISO-8601 UTC сравнима
- * лексикографически); клиент повторную доставку тромбстоуна применяет идемпотентно.
+ * Encrypted team records — the same LWW core as [RecordRepository], but team-scoped: the delta
+ * cursor is [Teams.teamSeq]. Tombstones aren't watermark-compacted (team membership is unstable);
+ * [purgeTombstones] cleans them up by `updatedAt` age (ISO-8601 UTC, comparable lexicographically).
+ * Clients apply a redelivered tombstone idempotently.
  */
 class TeamRecordRepository(private val db: Database, private val lockTeamRow: Boolean = false) {
 
-    /** Batch upsert с LWW по (`version`, `deviceId`) — семантика 1:1 с [RecordRepository.upsert]. */
+    /** Batch upsert with LWW by (`version`, `deviceId`) — same semantics as [RecordRepository.upsert]. */
     suspend fun upsert(teamId: String, incoming: List<IncomingRecord>): UpsertResult = newSuspendedTransaction(Dispatchers.IO, db) {
         val teamQuery = Teams.selectAll().where { Teams.id eq teamId }
         val seqBefore = (if (lockTeamRow) teamQuery.forUpdate() else teamQuery).single()[Teams.teamSeq]
@@ -75,7 +75,7 @@ class TeamRecordRepository(private val db: Database, private val lockTeamRow: Bo
         UpsertResult(result, seq, changed)
     }
 
-    /** Дельта команды: записи с `teamSeq > since`, по возрастанию курсора. */
+    /** Team delta: records with `teamSeq > since`, ordered by ascending cursor. */
     suspend fun delta(teamId: String, since: Long): List<StoredRecord> = newSuspendedTransaction(Dispatchers.IO, db) {
         TeamRecords.selectAll()
             .where { (TeamRecords.teamId eq teamId) and (TeamRecords.teamSeq greater since) }
@@ -83,7 +83,7 @@ class TeamRecordRepository(private val db: Database, private val lockTeamRow: Bo
             .map { it.toStoredRecord() }
     }
 
-    /** Удаляет тромбстоуны старше [beforeIso] (ISO-8601 UTC) во всех командах. Возвращает число строк. */
+    /** Deletes tombstones older than [beforeIso] (ISO-8601 UTC) across all teams. Returns row count. */
     suspend fun purgeTombstones(beforeIso: String): Int = newSuspendedTransaction(Dispatchers.IO, db) {
         TeamRecords.deleteWhere { (deleted eq true) and (updatedAt less beforeIso) }
     }

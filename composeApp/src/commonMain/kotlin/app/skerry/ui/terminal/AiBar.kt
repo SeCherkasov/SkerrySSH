@@ -56,25 +56,25 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import org.jetbrains.compose.resources.stringResource
 
-// AI-бар терминального view: живой ввод под per-host политикой или декоративный мок-превью.
+// Terminal AI bar: live input under per-host policy, or a decorative mock preview.
 
 /**
- * Решает, показывать ли терминальный AI-бар и в каком режиме. Живой контроллер ([LocalAi]) → бар
- * работает под per-host политикой ([Host.aiPolicy]): [app.skerry.shared.ai.AiPolicy.Off] прячет бар
- * целиком. Без контроллера, но с фича-флагом → прежний декоративный мок (для дизайн-превью).
+ * Decides whether to show the terminal AI bar and in what mode. With a live controller ([LocalAi]),
+ * the bar runs under the per-host policy ([Host.aiPolicy]); [app.skerry.shared.ai.AiPolicy.Off] hides
+ * it entirely. Without a controller but with the feature flag, falls back to the decorative mock.
  */
 @Composable
 internal fun TerminalAiBarSlot() {
-    // Достигается только вне живого пути (нет контроллера): декоративный AI-бар для дизайн-превью.
+    // Reached only outside the live path (no controller): decorative AI bar for design preview.
     if (LocalAi.current == null && LocalFeatures.current.ai) AiBarMock()
 }
 
 /**
- * Единственная форма AI-бара — постоянная высота, терминал над ней не ресайзится (нет «дёрга») и ничего
- * не перекрывается. В одной строке ВСЁ: ввод, «Thinking…», blocked/error, а для предложения — команда
- * + инлайн-пояснение (None: что делает; Warn/Danger: причина риска цветом) + кнопки. Деструктивная
- * команда красная с запрещающим знаком «block». Автозапуска нет (вывод недоверенный): «Run» =
- * подтверждение (команда + CR → в шелл); для [CommandRisk.Danger] нужен второй тап («Run anyway» → «Confirm run»).
+ * Single fixed-height AI bar: input, "Thinking…", blocked/error, or — for a suggestion — the command
+ * plus an inline explanation (what it does, or the risk reason colored by [CommandRisk]) plus action
+ * buttons. A destructive command is red with a block icon. No auto-run (output is untrusted): "Run"
+ * sends the command plus CR to the shell; [CommandRisk.Danger] requires a second tap ("Run anyway" ->
+ * "Confirm run").
  */
 @Composable
 internal fun AiBarInput(
@@ -88,15 +88,16 @@ internal fun AiBarInput(
         val text = prompt.trim()
         if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
     }
-    // Хоткей ⌘/ / Ctrl+Shift+/ фокусирует строку ввода. requestFocus обёрнут в runCatching: если бар
-    // сейчас показывает pending/thinking (поля ввода нет в композиции), FocusRequester не привязан —
-    // запрос просто игнорируется, а не падает. SharedFlow не реплеится → переунтаж бара фокус не крадёт.
+    // Cmd+/ or Ctrl+Shift+/ focuses the input. requestFocus is wrapped in runCatching: while the bar
+    // shows pending/thinking (no text field in composition) the FocusRequester isn't attached, so the
+    // request is ignored rather than crashing. SharedFlow doesn't replay, so remounting the bar can't
+    // steal focus.
     val promptFocus = remember { FocusRequester() }
     LaunchedEffect(focusRequests) {
         focusRequests.collect {
-            // «/» из аккорда роняет KEY_TYPED в только что сфокусированное поле (typed-события идут мимо
-            // onPreviewKeyEvent, который мы погасили лишь на KeyDown). Фокус = чистый слейт: чистим до и
-            // после короткого окна, чтобы стереть утёкший символ раньше, чем человек начнёт печатать.
+            // The "/" from the chord leaks a KEY_TYPED into the freshly focused field (typed events
+            // bypass onPreviewKeyEvent, which is only suppressed on KeyDown). Clear before and after a
+            // short window to erase the leaked character before the user starts typing.
             prompt = ""
             runCatching { promptFocus.requestFocus() }
             delay(50)
@@ -106,7 +107,7 @@ internal fun AiBarInput(
     val pending = controller.pending
     val risk = controller.pendingRisk?.risk ?: CommandRisk.None
     val danger = risk == CommandRisk.Danger
-    // Красным красим ЛЮБУЮ деструктивную команду (удаление/перезапись), даже на уровне Warn.
+    // Any destructive command (delete/overwrite) is colored red, even at Warn level.
     val severe = danger || controller.pendingRisk?.destructive == true
     val accent = if (severe) D.sunset else D.moss
     var armed by remember(pending) { mutableStateOf(false) }
@@ -120,7 +121,7 @@ internal fun AiBarInput(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             val leadColor = if (pending != null) accent else D.amber
-            // Для деструктивной команды — запрещающий знак «block» вместо иконки терминала.
+            // A destructive command shows a block icon instead of the terminal icon.
             val leadIcon = if (pending != null) (if (severe) "block" else "terminal") else "auto_awesome"
             Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(leadColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                 Sym(leadIcon, size = 16.sp, color = leadColor)
@@ -128,17 +129,17 @@ internal fun AiBarInput(
             Box(Modifier.weight(1f)) {
                 when {
                     pending != null -> {
-                        // Одна строка: команда + инлайн-пояснение/причина риска (без отдельной плашки).
+                        // Single line: command plus inline explanation or risk reason, no separate panel.
                         val infoColor = if (severe) D.sunset else if (risk == CommandRisk.Warn) D.amber else D.dim
                         val info = when (risk) {
                             CommandRisk.None -> controller.pendingInfo
                             else -> controller.pendingRisk?.reason
                         }
-                        // Команда и пояснение — по общей базовой линии (разный кегль не «плавает»).
+                        // Command and explanation share a baseline so differing font sizes don't drift.
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // Деструктивную команду подсвечиваем красным. Команда переносится (до 6 строк),
-                            // а не обрезается многоточием: пользователь должен видеть ЦЕЛИКОМ то, что
-                            // подтверждает и исполнит — иначе за «…» мог бы скрыться опасный хвост.
+                            // Destructive commands are highlighted red. The command wraps (up to 6 lines)
+                            // instead of being ellipsized, so the user sees the full command before
+                            // confirming and running it.
                             Txt(pending, color = if (severe) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
                             if (info != null) Txt(info, color = infoColor, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
@@ -191,13 +192,13 @@ internal fun AiBarInput(
     }
 }
 
-/** Компактная кнопка-чип в карточке предложения (Run/Dismiss) — залитая форма [ChipButton]. */
+/** Compact filled chip button (Run/Dismiss) in the suggestion card, a filled variant of [ChipButton]. */
 @Composable
 private fun AiActionChip(label: String, color: Color, enabled: Boolean = true, onClick: () -> Unit) {
     ChipButton(label, color = color, onClick = onClick, enabled = enabled, filled = true, size = 12.sp, weight = FontWeight.Medium, verticalPadding = 5.dp)
 }
 
-/** Прежний декоративный AI-бар для чистого дизайн-превью (без живого контроллера). */
+/** Decorative AI bar for design preview only (no live controller). */
 @Composable
 private fun AiBarMock() {
     val mono = LocalFonts.current.mono

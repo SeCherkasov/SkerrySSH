@@ -15,16 +15,15 @@ import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * Android-реализация выбора файла через Storage Access Framework. SAF отдаёт `content://` Uri, а sshj
- * умеет работать только с путём файловой системы, поэтому передача идёт через временный файл в
- * приватном кэше (staging), а копирование staging↔Uri инкапсулировано в handle:
- * - download: создаём документ (`CreateDocument`), sshj пишет в staging, [DownloadTarget.finalize]
- *   копирует staging→Uri; при ошибке [DownloadTarget.discard] чистит staging и пустой документ;
- * - upload: открываем документ (`OpenDocument`), сразу копируем Uri→staging (Uri может стать
- *   недоступен позже), sshj читает staging, [UploadSource.cleanup] удаляет его.
+ * Android file picking via the Storage Access Framework. SAF returns a `content://` Uri, but sshj
+ * only works with filesystem paths, so transfers go through a temp file in the private cache
+ * (staging), with staging↔Uri copying encapsulated in the handle:
+ * - download: create a document (`CreateDocument`), sshj writes to staging, [DownloadTarget.finalize]
+ *   copies staging→Uri; on error [DownloadTarget.discard] cleans up staging and the empty document;
+ * - upload: open a document (`OpenDocument`), copy Uri→staging immediately (the Uri may become
+ *   unavailable later), sshj reads staging, [UploadSource.cleanup] deletes it.
  *
- * Запуск самих SAF-диалогов делегирован [SafBridge], который Activity заполняет в `onCreate`
- * (`ActivityResultLauncher` требует Activity-контекста и регистрации до STARTED).
+ * Launching the SAF dialogs is delegated to [SafBridge], populated by the Activity in `onCreate`.
  */
 actual suspend fun pickDownloadTarget(suggestedName: String): DownloadTarget? {
     val ctx = SafBridge.context() ?: return null
@@ -38,11 +37,10 @@ actual suspend fun pickUploadSource(): UploadSource? {
     val uri = SafBridge.openDocument() ?: return null
     val name = queryDisplayName(ctx, uri) ?: "upload.bin"
     val staging = File(stagingDir(ctx), "ul-${stagingStamp()}.tmp")
-    // Копируем содержимое выбранного документа в staging сразу: разрешение на Uri живёт недолго, а
-    // передача может начаться позже. Ловим широкий [Exception] (а не только IOException) — у SAF Uri
-    // помимо IO бывают SecurityException/IllegalState (отозванный доступ); трактуем как «выбор не
-    // удался» (null) и удаляем staging. [CancellationException] пробрасываем (с очисткой), чтобы не
-    // глушить отмену scope.
+    // Copy the selected document's content to staging immediately: Uri access grants are short-lived
+    // and the transfer may start later. Catches [Exception] broadly (SAF Uris can throw
+    // SecurityException/IllegalState on revoked access, not just IOException); treated as a failed
+    // pick (null), staging removed. [CancellationException] is rethrown after cleanup.
     return try {
         withContext(Dispatchers.IO) {
             ctx.contentResolver.openInputStream(uri)?.use { input ->
@@ -59,7 +57,7 @@ actual suspend fun pickUploadSource(): UploadSource? {
     }
 }
 
-/** Цель скачивания поверх SAF-документа: sshj пишет в [staging], [finalize] копирует его в [uri]. */
+/** Download target over a SAF document: sshj writes to [staging], [finalize] copies it into [uri]. */
 private class SafDownloadTarget(
     private val ctx: Context,
     private val uri: Uri,
@@ -69,8 +67,8 @@ private class SafDownloadTarget(
     override val stagingPath: String = staging.absolutePath
 
     override suspend fun finalize(): Unit = withContext(Dispatchers.IO) {
-        // staging удаляем в finally: даже при сбое openOutputStream/copyTo временный файл не осиротеет
-        // (пустой/частичный документ в SAF добьёт discard, который контроллер зовёт при ошибке finalize).
+        // staging is removed in finally so it never leaks even if openOutputStream/copyTo fails
+        // (the controller calls discard on finalize failure to clean up the empty/partial SAF document).
         try {
             ctx.contentResolver.openOutputStream(uri)?.use { output ->
                 staging.inputStream().use { input -> input.copyTo(output) }
@@ -82,13 +80,13 @@ private class SafDownloadTarget(
 
     override suspend fun discard(): Unit = withContext(Dispatchers.IO) {
         staging.delete()
-        // CreateDocument уже создал пустой документ в выбранном месте — удалим, чтобы не плодить мусор.
+        // CreateDocument already created an empty document at the chosen location; remove it.
         runCatching { DocumentsContract.deleteDocument(ctx.contentResolver, uri) }
         Unit
     }
 }
 
-/** Источник загрузки: содержимое Uri уже скопировано в [staging], sshj читает оттуда. */
+/** Upload source: the Uri's content is already copied to [staging], sshj reads from there. */
 private class SafUploadSource(
     override val name: String,
     private val staging: File,
@@ -101,16 +99,15 @@ private class SafUploadSource(
     }
 }
 
-/** Приватный каталог под временные файлы передач (вне видимости пользователя). */
+/** Private directory for transfer staging files, hidden from the user. */
 private fun stagingDir(ctx: Context): File = File(ctx.cacheDir, "sftp").apply { mkdirs() }
 
-/** Уникальный суффикс имени staging-файла — UUID без риска коллизий при параллельных передачах. */
+/** Unique staging filename suffix, avoids collisions across concurrent transfers. */
 private fun stagingStamp(): String = UUID.randomUUID().toString()
 
 /**
- * Человекочитаемое имя выбранного документа из `OpenableColumns.DISPLAY_NAME`. Любой сбой запроса
- * (SecurityException на отозванном Uri, кривой провайдер) гасим в null — имя не критично, выше есть
- * запасное «upload.bin».
+ * Human-readable name of the selected document from `OpenableColumns.DISPLAY_NAME`. Any query
+ * failure (revoked Uri, misbehaving provider) is swallowed to null; callers fall back to "upload.bin".
  */
 private fun queryDisplayName(ctx: Context, uri: Uri): String? = runCatching {
     ctx.contentResolver
@@ -123,16 +120,15 @@ private fun queryDisplayName(ctx: Context, uri: Uri): String? = runCatching {
 }.getOrNull()
 
 /**
- * Мост между top-level suspend-пикерами и Activity-уровневым SAF. Activity регистрирует
- * `ActivityResultLauncher` для Create/Open Document в `onCreate` и передаёт сюда лямбды запуска через
- * [install]; пикеры дёргают их и ждут результат через [CompletableDeferred].
+ * Bridge between top-level suspend pickers and Activity-level SAF. The Activity registers
+ * `ActivityResultLauncher`s for Create/Open Document in `onCreate` and hands launch lambdas to
+ * [install]; pickers invoke them and await the result via [CompletableDeferred].
  *
- * Потокобезопасность: выборы сериализованы [lock] (SAF-диалог модален, параллельно держать два смысла
- * нет), поэтому хватает одного [pending]. Поля `@Volatile` — пишутся из корутины пикера, читаются из
- * `ActivityResultCallback` (Main) и из `onCreate`. При пересоздании Activity [install] завершает
- * «зависший» pending значением null, иначе ожидающая его корутина повисла бы навсегда. Держит только
- * `applicationContext` (без утечки Activity). Лямбды запуска должны вызываться на главном потоке —
- * вызывающий код (Compose `rememberCoroutineScope`) уже работает на Main.
+ * Picks are serialized by [lock] (a SAF dialog is modal, so a single [pending] suffices). Fields are
+ * `@Volatile`: written from the picker's coroutine, read from `ActivityResultCallback` (Main) and
+ * `onCreate`. On Activity recreation, [install] completes a stale pending with null so its awaiting
+ * coroutine doesn't hang forever. Holds only `applicationContext` (no Activity leak). Launch lambdas
+ * must be invoked on the main thread.
  */
 object SafBridge {
     private val lock = Mutex()
@@ -153,13 +149,13 @@ object SafBridge {
     private var pending: CompletableDeferred<Uri?>? = null
 
     /**
-     * Вызывается из `MainActivity.onCreate`: [launchCreate] (octet-stream — бинарный SFTP-download) и
-     * [launchCreateText] (text/plain — экспорт ключа/сертификата .pub) получают имя файла, [launchOpen] —
-     * без аргументов. Два create-лаунчера различаются только MIME (он фиксируется при регистрации
-     * контракта, не на запуске), что даёт файловому менеджеру верную иконку/обработчик для текстовых .pub.
+     * Called from `MainActivity.onCreate`: [launchCreate] (octet-stream, binary SFTP download) and
+     * [launchCreateText] (text/plain, key/certificate .pub export) take a filename; [launchOpen] takes
+     * none. The two create launchers differ only by MIME (fixed at contract registration), giving the
+     * file manager the right icon/handler for text .pub exports.
      */
     fun install(context: Context, launchCreate: (String) -> Unit, launchCreateText: (String) -> Unit, launchOpen: () -> Unit) {
-        // Освободить выбор, начатый прошлой (уничтоженной) Activity — иначе его await зависнет навсегда.
+        // Release a pick started by the previous (destroyed) Activity, or its await would hang forever.
         pending?.complete(null)
         pending = null
         appContext = context.applicationContext
@@ -170,10 +166,10 @@ object SafBridge {
 
     fun context(): Context? = appContext
 
-    /** Запустить CreateDocument (octet-stream) с [suggestedName] и дождаться выбранного Uri (или null при отмене). */
+    /** Launch CreateDocument (octet-stream) with [suggestedName], await the chosen Uri (null on cancel). */
     suspend fun createDocument(suggestedName: String): Uri? = createVia(launchCreate, suggestedName)
 
-    /** Запустить CreateDocument (text/plain) с [suggestedName] — для текстового экспорта ключа/сертификата. */
+    /** Launch CreateDocument (text/plain) with [suggestedName], for key/certificate text export. */
     suspend fun createTextDocument(suggestedName: String): Uri? = createVia(launchCreateText, suggestedName)
 
     private suspend fun createVia(launch: ((String) -> Unit)?, suggestedName: String): Uri? = lock.withLock {
@@ -184,7 +180,7 @@ object SafBridge {
         deferred.await()
     }
 
-    /** Запустить OpenDocument и дождаться выбранного Uri (или null при отмене). */
+    /** Launch OpenDocument, await the chosen Uri (null on cancel). */
     suspend fun openDocument(): Uri? = lock.withLock {
         val launch = launchOpen ?: return null
         val deferred = CompletableDeferred<Uri?>()
@@ -193,10 +189,10 @@ object SafBridge {
         deferred.await()
     }
 
-    /** Колбэк результата CreateDocument (вызывается Activity на главном потоке). */
+    /** CreateDocument result callback (invoked by the Activity on the main thread). */
     fun onCreateResult(uri: Uri?) = completePending(uri)
 
-    /** Колбэк результата OpenDocument (вызывается Activity на главном потоке). */
+    /** OpenDocument result callback (invoked by the Activity on the main thread). */
     fun onOpenResult(uri: Uri?) = completePending(uri)
 
     private fun completePending(uri: Uri?) {

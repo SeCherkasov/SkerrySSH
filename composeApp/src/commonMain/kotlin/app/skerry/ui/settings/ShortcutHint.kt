@@ -1,8 +1,8 @@
 package app.skerry.ui.settings
 
 /**
- * macOS ли текущая платформа. Определяет символику подписей хоткеев на странице Keyboard: на Apple
- * модификатор приложения — `⌘`/`⌥`, на Linux/Windows — `Ctrl+Shift`/`Alt` (ровно как распознаёт
- * [matchDesktopShortcut]). Android-actual возвращает `false` (десктопная страница там не показывается).
+ * Whether the current platform is macOS. Determines shortcut-label symbols on the Keyboard page: on
+ * Apple the app modifier is `⌘`/`⌥`, on Linux/Windows it's `Ctrl+Shift`/`Alt` (matches
+ * [matchDesktopShortcut]). The Android actual returns `false` (the desktop page isn't shown there).
  */
 internal expect fun isApplePlatform(): Boolean

@@ -6,10 +6,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import java.util.Locale
 
 /**
- * Desktop: окружение строковых ресурсов Compose читает [Locale.getDefault]. [provides] выставляет её
- * в выбранную локаль (или восстанавливает исходную системную при `null`) и обновляет
- * composition-local тегом, что форсит рекомпозицию `stringResource`. Исходная системная локаль
- * запоминается при первом вызове, чтобы режим [UiLanguage.System] точно к ней возвращался.
+ * Compose's string resources read [Locale.getDefault]. [provides] sets it to the chosen locale
+ * (or restores the original system locale on `null`) and updates a composition-local tag to force
+ * `stringResource` recomposition. The original system locale is captured on first call so
+ * [UiLanguage.System] can return to it exactly.
  */
 actual object LocalAppLocale {
     private var systemDefault: Locale? = null

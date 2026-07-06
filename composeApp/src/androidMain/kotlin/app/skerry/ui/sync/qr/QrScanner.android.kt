@@ -49,14 +49,14 @@ import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-/** Android: сканер QR камерой доступен (CameraX + ML Kit on-device). */
+/** Android: camera QR scanner is available (CameraX + on-device ML Kit). */
 actual val qrScannerAvailable: Boolean = true
 
 /**
- * Полноэкранный сканер QR камерой на Android: запрашивает разрешение, показывает превью CameraX и
- * прогоняет кадры через ML Kit barcode-scanning (on-device, без сети). Первый распознанный QR уходит
- * в [onResult] (ровно один раз — [AtomicBoolean]-гард против шквала кадров); отказ в доступе или
- * кнопка Cancel — [onCancel]. Сырой текст QR декодирует уже вызывающий ([PairingPayload.decode]).
+ * Full-screen camera QR scanner: requests permission, shows a CameraX preview, and runs frames
+ * through ML Kit barcode scanning (on-device). The first decoded QR is delivered to [onResult] exactly
+ * once ([AtomicBoolean] guard against a burst of frames); denied permission or Cancel calls [onCancel].
+ * Raw QR text is decoded by the caller ([PairingPayload.decode]).
  */
 @Composable
 actual fun QrScannerScreen(onResult: (String) -> Unit, onCancel: () -> Unit) {
@@ -68,7 +68,7 @@ actual fun QrScannerScreen(onResult: (String) -> Unit, onCancel: () -> Unit) {
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasPermission = granted
-        if (!granted) onCancel() // без камеры сканировать нечем — возвращаемся к ручному вводу
+        if (!granted) onCancel() // no camera access; fall back to manual entry
     }
     LaunchedEffect(Unit) {
         if (!hasPermission) launcher.launch(Manifest.permission.CAMERA)
@@ -102,12 +102,12 @@ actual fun QrScannerScreen(onResult: (String) -> Unit, onCancel: () -> Unit) {
 @Composable
 private fun CameraScanPreview(onDetected: (String) -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    // Гард: анализатор гонит кадры пачкой — без него один QR вызвал бы onDetected десятки раз,
-    // открыв десятки claimPairing. Первый успех «закрывает» сканер, остальные кадры игнорируются.
+    // Guard: the analyzer delivers frames in a burst, so without this a single QR would trigger
+    // onDetected dozens of times. The first success closes the scanner; later frames are ignored.
     val handled = remember { AtomicBoolean(false) }
-    // scanner и provider держим, чтобы освободить их в onDispose: камера привязана к ЖИЗНИ Activity
-    // (LocalLifecycleOwner), а не этого composable — без явной отвязки она крутилась бы (превью/анализ/
-    // питание) после ухода со сканера, пока пользователь не покинет Activity (kotlin-ревью HIGH).
+    // scanner and provider are held to release them in onDispose: the camera is bound to the
+    // Activity's lifecycle (LocalLifecycleOwner), not this composable, so without explicit unbinding
+    // it would keep running after leaving the scanner screen.
     val scanner = remember {
         BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build())
     }
@@ -115,7 +115,7 @@ private fun CameraScanPreview(onDetected: (String) -> Unit) {
     DisposableEffect(Unit) {
         onDispose {
             providerHolder.get()?.unbindAll()
-            scanner.close() // ML Kit нативные модели (JNI) — освобождаем явно, иначе живут весь процесс
+            scanner.close() // ML Kit's native models (JNI) must be released explicitly or they outlive the process lifetime
         }
     }
     AndroidView(
@@ -153,17 +153,16 @@ private fun scanFrame(
         proxy.close()
         return
     }
-    // Если fromMediaImage/process бросят синхронно, process() не запустится и addOnCompleteListener не
-    // закроет proxy — STRATEGY_KEEP_ONLY_LATEST застопорится на нём, кадры перестанут идти. try/catch
-    // гарантирует закрытие proxy и в этом случае (kotlin-ревью MEDIUM). При успешном process закрытие —
-    // в addOnCompleteListener (асинхронно, после распознавания), поэтому в catch закрываем только при throw.
+    // If fromMediaImage/process throws synchronously, addOnCompleteListener never runs to close proxy,
+    // and STRATEGY_KEEP_ONLY_LATEST stalls on it. try/catch ensures proxy is closed in that case too;
+    // on success, closing happens in addOnCompleteListener instead.
     try {
         val input = InputImage.fromMediaImage(media, proxy.imageInfo.rotationDegrees)
         scanner.process(input)
             .addOnSuccessListener { barcodes ->
                 val raw = barcodes.firstOrNull { it.rawValue != null }?.rawValue
-                // compareAndSet — только первый распознанный код доходит до onDetected (на main-потоке: ML Kit
-                // success-listener по умолчанию там же, что безопасно для смены Compose-состояния вызывающим).
+                // compareAndSet ensures only the first decoded code reaches onDetected (on the main
+                // thread, where ML Kit's success listener runs by default).
                 if (raw != null && handled.compareAndSet(false, true)) onDetected(raw)
             }
             .addOnCompleteListener { proxy.close() }

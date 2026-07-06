@@ -3,19 +3,17 @@ package app.skerry.shared.snippet
 import kotlinx.serialization.Serializable
 
 /**
- * Сохранённый сниппет (модель Termius): именованная команда/скрипт для повторного запуска в терминале.
- * Самостоятельный объект, а не часть открытой сессии — идентичность это стабильный [id] (назначается
- * при создании, не меняется при правках). [label] — отображаемое имя, [command] — текст, который
- * вставляется в активный терминал и исполняется (с переводом строки). [tags] — пользовательские
- * метки для группировки/поиска (#monitoring, #disk).
+ * A saved snippet: a named command/script for repeated execution in the terminal. A standalone
+ * object rather than part of an open session; identity is the stable [id] (assigned at creation,
+ * unchanged by edits). [label] is the display name, [command] is the text inserted into the
+ * active terminal and executed (with a newline). [tags] are user labels for grouping/search
+ * (#monitoring, #disk).
  *
- * [shortcut] — глобальная горячая клавиша запуска в каноничном виде (`Ctrl+Shift+D`), `null` — без
- * хоткея. Поле с дефолтом, старый `snippets.json` без него читается как есть (backward-compat).
- * Цель запуска (активный терминал или конкретный хост) не хранится в сниппете — она выбирается в
- * момент запуска: палитра терминала бьёт в активную сессию, а пункт «Run snippet…» в контекстном
- * меню хоста запускает на выбранном хосте.
- *
- * Секретов сниппет не содержит и в vault не хранится — это plain-конфиг рядом с хостами/туннелями.
+ * [shortcut] is the global launch hotkey in canonical form (`Ctrl+Shift+D`), `null` for none.
+ * Defaulted field; older `snippets.json` without it reads as-is (backward-compat). The launch
+ * target (active terminal or a specific host) isn't stored on the snippet — it's chosen at launch
+ * time: the terminal palette targets the active session, while "Run snippet…" in a host's context
+ * menu runs it on that host.
  */
 @Serializable
 data class Snippet(

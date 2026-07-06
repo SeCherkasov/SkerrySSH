@@ -31,7 +31,7 @@ import app.skerry.ui.generated.resources.settings_about_version
 import app.skerry.ui.generated.resources.settings_about_whats_new
 import org.jetbrains.compose.resources.stringResource
 
-// Секция About: логотип, версия ([AppVersion]), ссылки.
+// About section: logo, version ([AppVersion]), links.
 
 @Composable
 internal fun AboutSection() {

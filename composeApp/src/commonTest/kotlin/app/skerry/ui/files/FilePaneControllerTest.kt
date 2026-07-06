@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 
 private const val HOME = "/home/skerry"
 
-/** Фейк-источник со стартовым каталогом HOME, засеянным каталогами и файлами вперемешку. */
+/** Fake source rooted at HOME, seeded with a mix of directories and files. */
 private fun seededBrowser(): SftpFileBrowser {
     val fake = FakeSftpClient(startDir = HOME).apply {
         seedDir("$HOME/zeta")
@@ -31,7 +31,7 @@ private fun seededBrowser(): SftpFileBrowser {
     return SftpFileBrowser(fake, label = "prod-web-01")
 }
 
-/** Тот же посев плюс вложенный файл в alpha — для теста навигации внутрь каталога. */
+/** Same seed plus a nested file under alpha, for testing navigation into a directory. */
 private fun seededBrowserWithNested(): SftpFileBrowser {
     val fake = FakeSftpClient(startDir = HOME).apply {
         seedDir("$HOME/zeta")
@@ -44,9 +44,9 @@ private fun seededBrowserWithNested(): SftpFileBrowser {
 }
 
 /**
- * Тесты обобщённой панели идут поверх адаптера [SftpFileBrowser] над in-memory [FakeSftpClient] —
- * заодно покрывают интеграцию адаптера. [UnconfinedTestDispatcher] выполняет launch контроллера
- * немедленно, так что после [advanceUntilIdle] состояние готово.
+ * Generic pane tests run over the [SftpFileBrowser] adapter atop an in-memory [FakeSftpClient],
+ * which also covers the adapter's integration. [UnconfinedTestDispatcher] runs the controller's
+ * launch immediately, so state is ready after [advanceUntilIdle].
  */
 class FilePaneControllerTest {
 
@@ -86,11 +86,8 @@ class FilePaneControllerTest {
 
     @Test
     fun `open keeps the old path and entries until the new listing is ready`() = runTest {
-        // Регресс: path менялся синхронно, а entries приезжали асинхронно — старый список «висел»
-        // под новым путём (и строка «..», зависящая от path, мигала), давая видимый подскок при
-        // каждом переходе на desktop и mobile. Навигация обязана быть атомарной: грузим листинг,
-        // затем одним снимком меняем path+entries. «Ворота» держат листинг alpha, чтобы поймать
-        // промежуточное состояние.
+        // Navigation must be atomic: load the listing, then update path+entries in one snapshot.
+        // The gate holds the alpha listing to catch the intermediate state.
         val base = seededBrowserWithNested()
         val gate = CompletableDeferred<Unit>()
         val gated = object : FileBrowser {
@@ -109,7 +106,7 @@ class FilePaneControllerTest {
         val alpha = c.entry("alpha")
 
         c.open(alpha)
-        advanceUntilIdle() // дошли до ожидания на воротах: листинг alpha ещё не вернулся
+        advanceUntilIdle() // blocked on the gate: alpha listing hasn't returned yet
 
         assertEquals(HOME, c.path)
         assertEquals(listOf("alpha", "zeta", "build.log", "readme.txt"), c.loaded().entries.map { it.name })
@@ -140,13 +137,13 @@ class FilePaneControllerTest {
 
     @Test
     fun `goUp does not ask the server to canonicalize a dotdot path`() = runTest {
-        // Сервер, который не умеет REALPATH с ".." (как в баге «Не удалось разрешить путь /root/..»):
-        // realpath любого пути с ".." бросает. goUp обязан вычислить родителя лексически и не упасть.
+        // Server that rejects REALPATH on "..": realpath throws for any path containing "..".
+        // goUp must compute the parent lexically instead of relying on realpath.
         val base = seededBrowserWithNested()
         val noDotDot = object : FileBrowser {
             override val label: String get() = base.label
             override suspend fun realpath(path: String): String {
-                if (path.contains("..")) throw FileBrowserException("REALPATH с .. не поддержан")
+                if (path.contains("..")) throw FileBrowserException("REALPATH with .. not supported")
                 return base.realpath(path)
             }
             override suspend fun list(path: String): List<FileItem> = base.list(path)
@@ -202,12 +199,12 @@ class FilePaneControllerTest {
     @Test
     fun `a failing operation surfaces as Error without crashing`() = runTest {
         val c = started()
-        c.mkdir("alpha") // уже существует — обязан упасть
+        c.mkdir("alpha") // already exists, must fail
         advanceUntilIdle()
         assertIs<FilePaneState.Error>(c.state)
     }
 
-    // Мультивыделение
+    // Multi-selection
 
     @Test
     fun `selectOnly selects a single item`() = runTest {
@@ -230,7 +227,7 @@ class FilePaneControllerTest {
     @Test
     fun `selectTo selects the range from the anchor`() = runTest {
         val c = started()
-        // порядок: alpha, zeta, build.log, readme.txt
+        // order: alpha, zeta, build.log, readme.txt
         c.selectOnly(c.entry("alpha"))
         c.selectTo(c.entry("build.log"))
         assertEquals(setOf("$HOME/alpha", "$HOME/zeta", "$HOME/build.log"), c.selection)
@@ -239,7 +236,7 @@ class FilePaneControllerTest {
     @Test
     fun `selectTo with reversed anchor selects the range upward`() = runTest {
         val c = started()
-        // порядок: alpha(0), zeta(1), build.log(2), readme.txt(3)
+        // order: alpha(0), zeta(1), build.log(2), readme.txt(3)
         c.selectOnly(c.entry("build.log"))
         c.selectTo(c.entry("alpha"))
         assertEquals(setOf("$HOME/alpha", "$HOME/zeta", "$HOME/build.log"), c.selection)
@@ -257,7 +254,7 @@ class FilePaneControllerTest {
         val c = started()
         c.toggle(c.entry("build.log"))
         c.toggle(c.entry("alpha"))
-        // порядок отображения: alpha, zeta, build.log, readme.txt — selectedItems следует ему
+        // display order: alpha, zeta, build.log, readme.txt; selectedItems follows it
         assertEquals(listOf("alpha", "build.log"), c.selectedItems().map { it.name })
     }
 
@@ -279,7 +276,7 @@ class FilePaneControllerTest {
         assertTrue("$HOME/readme.txt" !in c.selection)
     }
 
-    // Курсор и клавиатурная навигация (mc-режим)
+    // Cursor and keyboard navigation (mc-style)
 
     @Test
     fun `start places the cursor on the first entry`() = runTest {
@@ -290,7 +287,7 @@ class FilePaneControllerTest {
     @Test
     fun `moveCursor steps down and up the listing`() = runTest {
         val c = started()
-        // порядок: alpha(0), zeta(1), build.log(2), readme.txt(3)
+        // order: alpha(0), zeta(1), build.log(2), readme.txt(3)
         c.moveCursor(1)
         assertEquals("$HOME/zeta", c.cursor)
         c.moveCursor(2)
@@ -302,7 +299,7 @@ class FilePaneControllerTest {
     @Test
     fun `moveCursor clamps at the bottom and stops on the parent row at the top`() = runTest {
         val c = started()
-        c.moveCursor(-5) // вверх за первый файл — попадаем на «..»
+        c.moveCursor(-5) // up past the first entry lands on ".."
         assertTrue(c.cursorOnParent)
         assertEquals(null, c.cursor)
         c.moveCursor(99)
@@ -315,13 +312,13 @@ class FilePaneControllerTest {
         val c = started()
         c.cursorToLast()
         assertEquals("$HOME/readme.txt", c.cursor)
-        c.cursorToFirst() // самый верх — строка «..»
+        c.cursorToFirst() // top of the list is the ".." row
         assertTrue(c.cursorOnParent)
     }
 
     @Test
     fun `moveCursor up from the first entry lands on the parent row`() = runTest {
-        val c = started() // курсор на alpha
+        val c = started() // cursor on alpha
         c.moveCursor(-1)
         assertTrue(c.cursorOnParent)
     }
@@ -400,7 +397,7 @@ class FilePaneControllerTest {
     @Test
     fun `markCursoredAndAdvance marks the row and moves the cursor down`() = runTest {
         val c = started()
-        // курсор на alpha
+        // cursor on alpha
         c.markCursoredAndAdvance()
         assertEquals(setOf("$HOME/alpha"), c.selection)
         assertEquals("$HOME/zeta", c.cursor)
@@ -432,7 +429,7 @@ class FilePaneControllerTest {
         c.open(c.entry("empty"))
         advanceUntilIdle()
         assertEquals(null, c.cursor)
-        c.moveCursor(1) // не должно падать на пустом листинге
+        c.moveCursor(1) // must not crash on an empty listing
         assertEquals(null, c.cursor)
     }
 
@@ -466,7 +463,7 @@ class FilePaneControllerTest {
         c.deleteSelected()
         advanceUntilIdle()
         val names = c.loaded().entries.map { it.name }
-        assertTrue("readme.txt" !in names && "build.log" !in names, "ожидали удаления обоих, есть: $names")
+        assertTrue("readme.txt" !in names && "build.log" !in names, "expected both deleted, have: $names")
         assertTrue(c.selection.isEmpty())
     }
 
@@ -488,12 +485,12 @@ class FilePaneControllerTest {
         assertEquals(listOf("alpha", "zeta", "build.log", "readme.txt"), c.loaded().entries.map { it.name })
     }
 
-    // Rubber-band (mc-выделение зажатой ПКМ): протяжка красит диапазон в один знак.
+    // Rubber-band (mc right-click drag select): dragging paints the range with one sign.
 
     @Test
     fun `rubberBandTo with select paints the range from anchor to current`() = runTest {
         val c = started()
-        // порядок: alpha(0), zeta(1), build.log(2), readme.txt(3)
+        // order: alpha(0), zeta(1), build.log(2), readme.txt(3)
         c.rubberBandTo(c.entry("alpha"), c.entry("build.log"), select = true)
         assertEquals(setOf("$HOME/alpha", "$HOME/zeta", "$HOME/build.log"), c.selection)
     }
@@ -507,7 +504,7 @@ class FilePaneControllerTest {
 
     @Test
     fun `rubberBandTo with select accumulates onto an existing selection`() = runTest {
-        // В отличие от selectTo (диапазон ЗАМЕНЯЕТ), rubber-band красит поверх уже помеченного.
+        // Unlike selectTo (which replaces the range), rubber-band paints on top of the existing selection.
         val c = started()
         c.selectOnly(c.entry("readme.txt"))
         c.rubberBandTo(c.entry("alpha"), c.entry("zeta"), select = true)
@@ -517,7 +514,7 @@ class FilePaneControllerTest {
     @Test
     fun `rubberBandTo without select erases the range and keeps the rest`() = runTest {
         val c = started()
-        c.rubberBandTo(c.entry("alpha"), c.entry("readme.txt"), select = true) // всё помечено
+        c.rubberBandTo(c.entry("alpha"), c.entry("readme.txt"), select = true) // everything selected
         c.rubberBandTo(c.entry("zeta"), c.entry("build.log"), select = false)
         assertEquals(setOf("$HOME/alpha", "$HOME/readme.txt"), c.selection)
     }
@@ -529,7 +526,7 @@ class FilePaneControllerTest {
         assertEquals(setOf("$HOME/zeta"), c.selection)
     }
 
-    // Скрытие скрытых файлов/каталогов (dotfiles), как в mc.
+    // Hiding hidden files/directories (dotfiles), as in mc.
 
     @Test
     fun `setShowHidden false hides dotfiles and true brings them back`() = runTest {
@@ -582,7 +579,7 @@ class FilePaneControllerTest {
 
     @Test
     fun `entering an empty directory puts the cursor on the parent row`() = runTest {
-        val c = started() // alpha засеян как каталог без содержимого
+        val c = started() // alpha is seeded as an empty directory
         c.open(c.entry("alpha"))
         advanceUntilIdle()
 
@@ -595,7 +592,7 @@ class FilePaneControllerTest {
     @Test
     fun `deleting the last entry moves the cursor to the parent row`() = runTest {
         val c = started(seededBrowserWithNested())
-        c.open(c.entry("alpha")) // содержит единственный inside.txt
+        c.open(c.entry("alpha")) // contains a single inside.txt
         advanceUntilIdle()
 
         c.selectOnly(c.entry("inside.txt"))

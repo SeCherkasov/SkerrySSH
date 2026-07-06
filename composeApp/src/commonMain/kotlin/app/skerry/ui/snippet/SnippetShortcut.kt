@@ -3,12 +3,12 @@ package app.skerry.ui.snippet
 import androidx.compose.ui.input.key.Key
 
 /**
- * Каноничная сериализация горячей клавиши сниппета в строку (`Ctrl+Shift+D`) — единый формат и для
- * захвата в редакторе, и для матча в глобальном обработчике, и для хранения в [app.skerry.shared.snippet.Snippet.shortcut].
+ * Canonical string serialization of a snippet hotkey (`Ctrl+Shift+D`), used for editor capture,
+ * global-handler matching, and storage in [app.skerry.shared.snippet.Snippet.shortcut].
  *
- * Требуем хотя бы один модификатор: одиночная буква перехватила бы обычный ввод. Поддержанные клавиши
- * — буквы, цифры и F1–F12 (остальные → `null`, хоткей не назначается). Порядок модификаторов
- * фиксирован (Ctrl, Shift, Alt, Meta), чтобы один и тот же аккорд всегда давал одну строку.
+ * Requires at least one modifier (a bare letter would intercept normal input). Supported keys:
+ * letters, digits, F1–F12 (others return `null`). Modifier order is fixed (Ctrl, Shift, Alt, Meta)
+ * so the same chord always yields the same string.
  */
 object SnippetShortcut {
 

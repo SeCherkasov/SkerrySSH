@@ -3,13 +3,12 @@ package app.skerry.shared.ai
 import app.skerry.shared.ai.local.LocalModel
 
 /**
- * Куда идёт AI-запрос: внешний OpenAI-совместимый endpoint (BYOK) или локальная модель на
- * устройстве. Выбирается [AiRouter] из настроек и per-host политики; платформенная фабрика
- * провайдера строит по нему [AiProvider] ([app.skerry.shared.ai.OpenAiProvider] /
- * `LocalAiProvider`).
+ * Where an AI request goes: an external OpenAI-compatible endpoint (BYOK) or an on-device local
+ * model. Chosen by [AiRouter] from settings and per-host policy; the platform provider factory
+ * builds an [AiProvider] from it ([app.skerry.shared.ai.OpenAiProvider] / `LocalAiProvider`).
  */
 sealed interface AiEndpoint {
-    /** Идентификатор модели для [AiChatRequest.model]. */
+    /** Model identifier for [AiChatRequest.model]. */
     val requestModel: String
 
     data class Cloud(val config: OpenAiConfig) : AiEndpoint {

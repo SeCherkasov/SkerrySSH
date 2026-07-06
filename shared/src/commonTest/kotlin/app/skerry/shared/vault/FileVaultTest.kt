@@ -24,13 +24,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Тесты файлового vault используют настоящий [IonspinVaultCrypto] (Argon2id), а не фейк —
- * это честная интеграция стора и крипто. I/O идёт через in-memory [FakeFileSystem], поэтому
- * тесты общие для всех таргетов (commonTest) и не трогают реальную ФС. Деривация дорогая,
- * поэтому пароли короткие, а число unlock/create в каждом тесте минимально. libsodium требует
- * асинхронной инициализации до первого вызова — каждый тест обёрнут в [vaultTest].
+ * File vault tests use the real [IonspinVaultCrypto] (Argon2id), not a fake — an honest
+ * integration of store and crypto. I/O goes through in-memory [FakeFileSystem], so the tests are
+ * shared across all targets (commonTest) and never touch the real filesystem. Derivation is
+ * expensive, so passwords are short and unlock/create calls per test are kept minimal. libsodium
+ * needs async init before first use — each test is wrapped in [vaultTest].
  */
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class) // runCurrent() в тестах localChanges
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class) // runCurrent() in localChanges tests
 class FileVaultTest {
 
     private val crypto: VaultCrypto = IonspinVaultCrypto()
@@ -40,7 +40,7 @@ class FileVaultTest {
 
     private fun vault() = FileVault(file, crypto, deviceId = "device-1", fileSystem = fs, now = { TS })
 
-    /** Гарантирует инициализацию libsodium перед телом теста; init идемпотентен. */
+    /** Ensures libsodium is initialized before the test body; init is idempotent. */
     private fun vaultTest(block: suspend () -> Unit): TestResult = runTest {
         initializeVaultCrypto()
         block()
@@ -146,7 +146,7 @@ class FileVaultTest {
 
         v.remove("host-1")
 
-        // tombstone сохраняет зашифрованный blob для sync, но открытым его не выдаёт.
+        // The tombstone keeps the encrypted blob for sync but never opens it.
         assertNull(v.openPayload("host-1"))
     }
 
@@ -171,10 +171,10 @@ class FileVaultTest {
             put("dead", RecordType.HOST, "x".encodeToByteArray())
             put("alive", RecordType.HOST, "y".encodeToByteArray())
         }
-        v.remove("dead") // надгробие
+        v.remove("dead") // tombstone
 
-        // Компактим оба id: тромбстоун исчезает НАСОВСЕМ (не остаётся в records — больше не пушится),
-        // живая запись с тем же запросом не трогается (защита от потери непротолкнутой версии).
+        // Compact both ids: the tombstone disappears for good (no longer in records — no longer
+        // pushed), the live record in the same call is left untouched (protects an unpushed version).
         v.compact(listOf("dead", "alive"))
 
         assertNull(v.records().firstOrNull { it.id == "dead" })
@@ -189,9 +189,9 @@ class FileVaultTest {
             create("master".toCharArray())
             put("dead", RecordType.HOST, "x".encodeToByteArray())
             remove("dead")
-            compact(listOf("dead", "never-existed")) // неизвестный id — no-op, не падаем
+            compact(listOf("dead", "never-existed")) // unknown id is a no-op, does not throw
         }
-        // Перечитываем файл новым стором: компакция дошла до диска, а не только в кеш.
+        // Re-read the file with a new store: compaction reached disk, not just the cache.
         val reloaded = FileVault(file2, crypto, deviceId = "device-1", fileSystem = fs, now = { TS })
         assertEquals(UnlockResult.Success, reloaded.unlock("master".toCharArray()))
         assertTrue(reloaded.records().none { it.id == "dead" })
@@ -241,8 +241,8 @@ class FileVaultTest {
             put("known", RecordType.HOST, "payload".encodeToByteArray())
             lock()
         }
-        // Вставляем запись с типом, которого эта версия не знает (будущий RecordType), прямо в JSON —
-        // имитируем запись, синканутую с более новой версии на другом устройстве.
+        // Insert a record with a type this version doesn't know (a future RecordType) directly
+        // into JSON — simulates a record synced from a newer version on another device.
         val root = json.parseToJsonElement(fs.read(file) { readUtf8() }).jsonObject
         val future = buildJsonObject {
             put("id", "future"); put("type", "FUTURE_TYPE"); put("version", 1L)
@@ -256,10 +256,10 @@ class FileVaultTest {
         fs.write(file) { writeUtf8(json.encodeToString(JsonObject.serializer(), patched)) }
 
         val v = vault()
-        // Одна нераспознанная запись НЕ делает весь vault Corrupted (иначе единственный выход — reset).
+        // One unrecognized record does not make the whole vault Corrupted (else reset is the only way out).
         assertEquals(UnlockResult.Success, v.unlock("master".toCharArray()))
         assertContentEquals("payload".encodeToByteArray(), v.openPayload("known"))
-        // Перезапись файла (put) сохраняет неизвестную запись verbatim — downgrade не теряет данные.
+        // Rewriting the file (put) preserves the unknown record verbatim — a downgrade loses no data.
         v.put("known2", RecordType.HOST, "p2".encodeToByteArray())
         val after = json.parseToJsonElement(fs.read(file) { readUtf8() }).jsonObject.getValue("records").jsonArray
         assertTrue(after.any { it.jsonObject["id"].toString().contains("future") })
@@ -269,8 +269,8 @@ class FileVaultTest {
     fun `a record with a too-short blob reads as null instead of throwing`() = vaultTest {
         val v = vault()
         v.create("master".toCharArray())
-        // Недоверенный sync-сервер мог бы прислать запись с blob короче nonce+tag — mergeRemote кладёт
-        // её как есть; чтение не должно бросать (иначе DoS: падение при каждой разблокировке).
+        // An untrusted sync server could send a record with a blob shorter than nonce+tag —
+        // mergeRemote stores it as-is; reading must not throw (else DoS: crash on every unlock).
         v.mergeRemote(
             listOf(
                 VaultRecord("evil", RecordType.HOST, version = 99, updatedAt = TS, deviceId = "z", deleted = false, blob = ByteArray(4)),
@@ -296,15 +296,15 @@ class FileVaultTest {
 
         val v = vault()
         assertEquals(UnlockResult.Success, v.unlock("master".toCharArray()))
-        // blob записи b под AAD слота a (и наоборот) — тег не проходит, payload не выдаётся
+        // Record b's blob under slot a's AAD (and vice versa) — tag check fails, no payload returned
         assertNull(v.openPayload("a"))
         assertNull(v.openPayload("b"))
     }
 
     @Test
     fun `aad binds id and type with a separator so adjacent slots cannot collide`() = vaultTest {
-        // Без разделителя слоты ("aKNOWN_", HOST) и ("a", KNOWN_HOST) дают одинаковый AAD
-        // ("aKNOWN_HOST"), и blob одного слота прошёл бы AEAD в другом.
+        // Without a separator, slots ("aKNOWN_", HOST) and ("a", KNOWN_HOST) yield the same AAD
+        // ("aKNOWN_HOST"), so one slot's blob would pass AEAD under the other.
         vault().apply {
             create("master".toCharArray())
             put("aKNOWN_", RecordType.HOST, "host-payload".encodeToByteArray())
@@ -318,9 +318,9 @@ class FileVaultTest {
 
         val v = vault()
         assertEquals(UnlockResult.Success, v.unlock("master".toCharArray()))
-        // Подлинный слот по-прежнему расшифровывается...
+        // The genuine slot still decrypts...
         assertContentEquals("host-payload".encodeToByteArray(), v.openPayload("aKNOWN_"))
-        // ...а blob того же слота под AAD соседнего ("a", KNOWN_HOST) — тег не проходит.
+        // ...but the same blob under the neighboring slot's AAD ("a", KNOWN_HOST) fails the tag check.
         assertNull(v.openPayload("a"))
     }
 
@@ -351,7 +351,7 @@ class FileVaultTest {
 
         assertFalse(v.exists())
         assertFalse(v.isUnlocked)
-        // После сброса CRUD недоступен (vault заблокирован), а файла на диске больше нет.
+        // After reset, CRUD is unavailable (vault locked) and the file no longer exists on disk.
         assertFailsWith<IllegalStateException> { v.records() }
         assertFalse(fs.exists(file))
     }
@@ -360,13 +360,13 @@ class FileVaultTest {
     fun `reset removes a corrupted file and lets a fresh vault be created`() = vaultTest {
         fs.write(file) { writeUtf8("{ this is not valid vault json") }
         val v = vault()
-        // Битый файл нельзя разблокировать — единственный выход через сброс.
+        // A corrupt file cannot be unlocked — reset is the only way out.
         assertEquals(UnlockResult.Corrupted, v.unlock("master".toCharArray()))
 
         v.reset()
         assertFalse(v.exists())
 
-        // Сразу после сброса можно создать новый vault с нуля — тупик расшит.
+        // Right after reset, a new vault can be created from scratch — the deadlock is resolved.
         v.create("fresh-pass".toCharArray())
         assertTrue(v.exists())
         assertTrue(v.isUnlocked)
@@ -377,7 +377,7 @@ class FileVaultTest {
         val v = vault()
         assertFalse(v.exists())
 
-        v.reset() // не должно бросать на отсутствующем файле
+        v.reset() // must not throw when the file doesn't exist
 
         assertFalse(v.exists())
         assertFalse(v.isUnlocked)
@@ -413,7 +413,7 @@ class FileVaultTest {
 
         assertTrue(v.verifyPassword("master".toCharArray()))
 
-        // Проверка личности не перевыдаёт ключ и не перечитывает записи: vault остаётся открыт.
+        // Identity check does not re-derive the key or reread records: the vault stays unlocked.
         assertTrue(v.isUnlocked)
         assertContentEquals("data".encodeToByteArray(), v.openPayload("host-1"))
     }
@@ -430,14 +430,14 @@ class FileVaultTest {
         val v = vault()
         v.create("local".toCharArray())
 
-        // Имитируем ключ аккаунта, пришедший с другого устройства (отличается от локального).
+        // Simulate an account key received from another device (differs from the local key).
         val accountKey = crypto.newDataKey()
         assertTrue(v.adoptDataKey(accountKey, "account".toCharArray()))
-        // Запись, запечатанная уже под принятым ключом, должна читаться после перезапуска.
+        // A record sealed under the adopted key must read back after restart.
         v.put("r1", RecordType.HOST, "secret".encodeToByteArray())
         v.lock()
 
-        // Старый локальный пароль больше не подходит — vault переобёрнут под паролем аккаунта.
+        // The old local password no longer works — the vault is rewrapped under the account password.
         assertEquals(UnlockResult.WrongPassword, vault().unlock("local".toCharArray()))
         val reopened = vault()
         assertEquals(UnlockResult.Success, reopened.unlock("account".toCharArray()))
@@ -449,12 +449,12 @@ class FileVaultTest {
         val v = vault()
         v.create("local".toCharArray())
 
-        // Тот же ключ (основное устройство переподключается своим же) → ничего не переписываем.
+        // Same key (primary device reconnecting with its own) => nothing is rewritten.
         val sameKey = v.exportDataKey()!!
         assertFalse(v.adoptDataKey(sameKey, "account".toCharArray()))
         v.lock()
 
-        // Пароль vault не сменился: открывается исходным, а не переданным в adoptDataKey.
+        // The vault password did not change: unlocks with the original, not the one passed to adoptDataKey.
         assertEquals(UnlockResult.Success, vault().unlock("local".toCharArray()))
         assertEquals(UnlockResult.WrongPassword, vault().unlock("account".toCharArray()))
     }
@@ -466,7 +466,7 @@ class FileVaultTest {
         v.create("m".toCharArray())
         val seen = mutableListOf<Unit>()
         val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
-        runCurrent() // дать подписчику зарегистрироваться до мутации (SharedFlow replay=0)
+        runCurrent() // let the subscriber register before the mutation (SharedFlow replay=0)
 
         v.put("h", RecordType.HOST, "x".encodeToByteArray())
         runCurrent()
@@ -514,12 +514,12 @@ class FileVaultTest {
         val v = vault()
         v.create("m".toCharArray())
         v.put("h", RecordType.HOST, "x".encodeToByteArray())
-        v.remove("h") // первое удаление → надгробие (эмит уже был, до подписки)
+        v.remove("h") // first removal => tombstone (already emitted, before subscription)
         val seen = mutableListOf<Unit>()
         val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
         runCurrent()
 
-        v.remove("h") // повторное удаление надгробия — no-op, не должно будить push
+        v.remove("h") // removing an already-tombstoned record is a no-op, must not trigger a push
         runCurrent()
 
         assertTrue(seen.isEmpty())
@@ -535,8 +535,8 @@ class FileVaultTest {
         val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
         runCurrent()
 
-        // Входящая запись с sync: merge кладёт её verbatim, но push обратно не нужен (LWW отверг бы),
-        // поэтому localChanges не эмитится — иначе pull→merge зациклил бы push.
+        // An incoming record from sync: merge stores it verbatim, but no push-back is needed (LWW
+        // would reject it), so localChanges is not emitted — otherwise pull->merge would loop into a push.
         val incoming = VaultRecord("r", RecordType.HOST, version = 5, updatedAt = TS, deviceId = "other", deleted = false, blob = ByteArray(8))
         v.mergeRemote(listOf(incoming))
         runCurrent()
@@ -551,7 +551,7 @@ class FileVaultTest {
         val v = vault()
         v.create("m".toCharArray())
         v.put("h", RecordType.HOST, "x".encodeToByteArray())
-        v.remove("h") // надгробие, которое компакция физически удалит
+        v.remove("h") // tombstone that compaction will physically delete
         val seen = mutableListOf<Unit>()
         val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
         runCurrent()
@@ -565,13 +565,13 @@ class FileVaultTest {
 
     @Test
     fun `failed atomic write cleans up the tmp file`() = vaultTest {
-        // Цель записи — существующий каталог: atomicMove в него падает, и atomicWriteUtf8 обязан
-        // подчистить tmp-файл (не оставлять на диске осиротевшую копию секретов).
+        // Write target is an existing directory: atomicMove into it fails, and atomicWriteUtf8 must
+        // clean up the tmp file (not leave an orphaned copy of secrets on disk).
         fs.createDirectories(file)
 
         assertFailsWith<Exception> { vault().create("m".toCharArray()) }
 
-        assertFalse(fs.exists("/vault.json.tmp".toPath()), "tmp-файл должен быть удалён при провале записи")
+        assertFalse(fs.exists("/vault.json.tmp".toPath()), "tmp file must be removed when the write fails")
     }
 
     private companion object {

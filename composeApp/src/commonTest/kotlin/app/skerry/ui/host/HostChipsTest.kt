@@ -5,9 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Чистая логика фильтр-чипсов по тегам и поиска, общая для desktop-сайдбара и мобильного списка
- * (макеты показывают чипсы `#prod/#docker` и поиск «Search hosts, tags…»). Папки остаются по
- * [Host.group]; чипсы и фильтрация — по [Host.tags].
+ * Tag filter-chip and search logic shared by the desktop sidebar and the mobile list. Folders are
+ * grouped by [Host.group]; chips and filtering are by [Host.tags].
  */
 class HostChipsTest {
 
@@ -24,8 +23,8 @@ class HostChipsTest {
     fun chips_are_all_plus_distinct_tags_in_first_appearance_order() {
         val hosts = listOf(
             host("1", tags = listOf("prod", "web")),
-            host("2", tags = listOf("docker", "prod")), // дубль "prod" не повторяется
-            host("3", tags = emptyList()), // без тегов — чипов не даёт
+            host("2", tags = listOf("docker", "prod")), // duplicate "prod" is not repeated
+            host("3", tags = emptyList()), // no tags: yields no chips
         )
         assertEquals(listOf(ALL_HOSTS_CHIP, "prod", "web", "docker"), hostTagChips(hosts))
     }
@@ -65,7 +64,7 @@ class HostChipsTest {
         )
         assertEquals(listOf("prod-web-01"), filterHosts(hosts, query = "WEB").map { it.label })
         assertEquals(listOf("db-master"), filterHosts(hosts, query = "1.50").map { it.label })
-        assertEquals(listOf("prod-web-01"), filterHosts(hosts, query = "EDGE").map { it.label }) // по тегу
+        assertEquals(listOf("prod-web-01"), filterHosts(hosts, query = "EDGE").map { it.label }) // matched by tag
         assertEquals(listOf("db-master"), filterHosts(hosts, query = "postgres").map { it.label })
     }
 

@@ -76,8 +76,8 @@ class DesktopDesignStateTest {
     @Test
     fun showView_session_level_sets_view_and_clears_overlay() {
         val s = DesktopDesignState()
-        s.showView(DesktopView.Vault)        // сначала откроем app-overlay
-        s.showView(DesktopView.Sftp)         // session-level — должен сбросить overlay
+        s.showView(DesktopView.Vault)        // open an app-overlay first
+        s.showView(DesktopView.Sftp)         // session-level view must clear the overlay
         assertEquals(DesktopView.Sftp, s.view)
         assertNull(s.appOverlay)
     }
@@ -85,10 +85,10 @@ class DesktopDesignStateTest {
     @Test
     fun showView_app_level_sets_overlay_keeping_session_view() {
         val s = DesktopDesignState()
-        s.showView(DesktopView.Sftp)         // session-вью = Sftp
+        s.showView(DesktopView.Sftp)         // session view = Sftp
         s.showView(DesktopView.Vault)        // app-level → overlay
         assertEquals(DesktopView.Vault, s.appOverlay)
-        assertEquals(DesktopView.Sftp, s.view) // session-вью сохранилась под оверлеем
+        assertEquals(DesktopView.Sftp, s.view) // session view is preserved under the overlay
     }
 
     @Test
@@ -100,7 +100,7 @@ class DesktopDesignStateTest {
     fun desktopView_isAppLevel_split() {
         assertFalse(DesktopView.Terminal.isAppLevel)
         assertFalse(DesktopView.Sftp.isAppLevel)
-        assertTrue(DesktopView.Ports.isAppLevel) // Tunnels — глобальный раздел (модель Termius)
+        assertTrue(DesktopView.Ports.isAppLevel) // Tunnels is a global section
         assertTrue(DesktopView.Snippets.isAppLevel)
         assertTrue(DesktopView.Vault.isAppLevel)
         assertTrue(DesktopView.Known.isAppLevel)
@@ -109,9 +109,9 @@ class DesktopDesignStateTest {
 
     @Test
     fun closeTab_active_picks_right_neighbor_then_clamps() {
-        val s = DesktopDesignState() // 4 вкладки, активна 0
-        s.setTab(3)                  // активна последняя
-        s.closeTab(3)                // удалили последнюю — активная зажимается на новую последнюю (2)
+        val s = DesktopDesignState() // 4 tabs, tab 0 active
+        s.setTab(3)                  // last tab active
+        s.closeTab(3)                // closing the last tab clamps active to the new last tab (2)
         assertEquals(3, s.tabs.size)
         assertEquals(2, s.activeTab)
     }
@@ -122,7 +122,7 @@ class DesktopDesignStateTest {
         s.setTab(1)
         s.closeTab(0)
         assertEquals(3, s.tabs.size)
-        // activeTab=1 всё ещё в диапазоне [0..2]
+        // activeTab=1 is still within [0..2]
         assertEquals(1, s.activeTab)
     }
 
@@ -190,7 +190,7 @@ class DesktopDesignStateTest {
         s.closeModal(); assertFalse(s.modalOpen)
     }
 
-    // Правка / удаление существующего хоста
+    // Editing/deleting an existing host
 
     private val sampleHost = Host(id = "h1", label = "box", address = "a", port = 22, username = "u")
 
@@ -209,7 +209,7 @@ class DesktopDesignStateTest {
     fun openModal_resets_edit_target_for_new_connection() {
         val s = DesktopDesignState()
         s.openEditModal(sampleHost)
-        s.openModal() // «New connection» поверх правки — должен сбросить цель
+        s.openModal() // "New connection" over an edit must reset the edit target
         assertTrue(s.modalOpen)
         assertNull(s.editingHost)
     }
@@ -223,7 +223,7 @@ class DesktopDesignStateTest {
         assertNull(s.pendingDeleteHost)
     }
 
-    // Персист видимости info-панели
+    // Persisting info-panel visibility
 
     @Test
     fun info_panel_honours_initial_value() {
@@ -241,7 +241,7 @@ class DesktopDesignStateTest {
         assertTrue(s.infoPanel)
     }
 
-    // Персист схлопнутых групп хостов
+    // Persisting collapsed host groups
 
     @Test
     fun collapsed_groups_default_empty() {
@@ -261,16 +261,16 @@ class DesktopDesignStateTest {
     fun toggleGroupCollapsed_flips_membership_and_reports_to_callback() {
         val seen = mutableListOf<Set<String>>()
         val s = DesktopDesignState(onCollapsedGroupsChange = { seen += it })
-        s.toggleGroupCollapsed("A") // добавили
+        s.toggleGroupCollapsed("A") // added
         assertTrue(s.isGroupCollapsed("A"))
-        s.toggleGroupCollapsed("B") // добавили вторую
-        s.toggleGroupCollapsed("A") // убрали первую
+        s.toggleGroupCollapsed("B") // added a second
+        s.toggleGroupCollapsed("A") // removed the first
         assertFalse(s.isGroupCollapsed("A"))
         assertTrue(s.isGroupCollapsed("B"))
         assertEquals(listOf(setOf("A"), setOf("A", "B"), setOf("B")), seen)
     }
 
-    // Персист недавних подключений (секция RECENT в сайдбаре)
+    // Persisting recent connections (RECENT section in the sidebar)
 
     @Test
     fun recent_hosts_default_empty() {
@@ -290,7 +290,7 @@ class DesktopDesignStateTest {
         val s = DesktopDesignState(onRecentHostIdsChange = { seen += it })
         s.recordRecentHost("a")
         s.recordRecentHost("b")
-        s.recordRecentHost("a") // повторный коннект двигает «a» в начало, без дубля
+        s.recordRecentHost("a") // reconnecting moves "a" to the front without duplicating it
         assertEquals(listOf("a", "b"), s.recentHostIds)
         assertEquals(listOf(listOf("a"), listOf("b", "a"), listOf("a", "b")), seen)
     }
@@ -301,7 +301,7 @@ class DesktopDesignStateTest {
         (1..9).forEach { s.recordRecentHost("h$it") }
         assertEquals(8, s.recentHostIds.size)
         assertEquals("h9", s.recentHostIds.first())
-        assertFalse("h1" in s.recentHostIds) // самый старый вытеснен
+        assertFalse("h1" in s.recentHostIds) // oldest entry evicted
     }
 
     @Test
@@ -309,7 +309,7 @@ class DesktopDesignStateTest {
         val seen = mutableListOf<List<String>>()
         val s = DesktopDesignState(onRecentHostIdsChange = { seen += it })
         s.recordRecentHost("a")
-        s.recordRecentHost("a") // уже первый — ни записи, ни колбэка
+        s.recordRecentHost("a") // already first — no write, no callback
         assertEquals(listOf("a"), s.recentHostIds)
         assertEquals(listOf(listOf("a")), seen)
     }
@@ -323,7 +323,7 @@ class DesktopDesignStateTest {
         assertTrue(seen.isEmpty())
     }
 
-    // Видимость и размер секции RECENT (Settings → Appearance → Interface)
+    // RECENT section visibility and size (Settings → Appearance → Interface)
 
     @Test
     fun recent_visibility_defaults_shown_full_cap() {
@@ -337,7 +337,7 @@ class DesktopDesignStateTest {
         val seen = mutableListOf<Boolean>()
         val s = DesktopDesignState(onShowRecentChange = { seen += it })
         s.setRecentVisible(false)
-        s.setRecentVisible(false) // повтор — ни мутации, ни колбэка
+        s.setRecentVisible(false) // repeat call — no mutation, no callback
         assertFalse(s.showRecent)
         assertEquals(listOf(false), seen)
     }
@@ -347,9 +347,9 @@ class DesktopDesignStateTest {
         val seen = mutableListOf<Int>()
         val s = DesktopDesignState(onRecentLimitChange = { seen += it })
         s.chooseRecentLimit(3)
-        s.chooseRecentLimit(99) // выше капа → капнуто
-        s.chooseRecentLimit(0)  // ниже 1 → 1
-        s.chooseRecentLimit(1)  // уже 1 — no-op
+        s.chooseRecentLimit(99) // above the cap → clamped
+        s.chooseRecentLimit(0)  // below 1 → 1
+        s.chooseRecentLimit(1)  // already 1 — no-op
         assertEquals(1, s.recentLimit)
         assertEquals(listOf(3, DesktopDesignState.MAX_RECENT_HOSTS, 1), seen)
     }
@@ -366,7 +366,7 @@ class DesktopDesignStateTest {
         assertFalse(DesktopDesignState(initialShowRecent = false).showRecent)
     }
 
-    // Пользовательские (пустые) группы хостов
+    // Custom (empty) host groups
 
     @Test
     fun custom_groups_default_empty() {
@@ -389,8 +389,8 @@ class DesktopDesignStateTest {
         val s = DesktopDesignState(onCustomGroupsChange = { seen += it })
         s.addCustomGroup("Prod")
         s.addCustomGroup("   ")
-        s.addCustomGroup("Prod") // точный дубль — игнор
-        // Иной регистр — это иная группа (Host.group/папки сопоставляются по регистру), поэтому добавляется.
+        s.addCustomGroup("Prod") // exact duplicate — ignored
+        // Different case is a different group (Host.group/folders match case-sensitively), so it's added.
         s.addCustomGroup("prod")
         assertEquals(listOf("Prod", "prod"), s.customGroups)
         assertEquals(listOf(listOf("Prod"), listOf("Prod", "prod")), seen)
@@ -418,14 +418,14 @@ class DesktopDesignStateTest {
     fun renameGroupName_ignores_blank_or_unchanged() {
         val s = DesktopDesignState(initialCustomGroups = listOf("Prod"))
         s.renameGroupName("Prod", "  ")
-        s.renameGroupName("Prod", "Prod") // точно то же имя — no-op
+        s.renameGroupName("Prod", "Prod") // exact same name — no-op
         assertEquals(listOf("Prod"), s.customGroups)
     }
 
     @Test
     fun renameGroupName_applies_case_only_change() {
         val s = DesktopDesignState(initialCustomGroups = listOf("Prod"))
-        s.renameGroupName("Prod", "prod") // правка только регистра — реальное переименование
+        s.renameGroupName("Prod", "prod") // case-only edit is a real rename
         assertEquals(listOf("prod"), s.customGroups)
     }
 
@@ -440,7 +440,7 @@ class DesktopDesignStateTest {
         assertFalse(s.isGroupCollapsed("Prod"))
     }
 
-    // Шрифт и кегль терминала (Appearance → Font / Font size)
+    // Terminal font and size (Appearance → Font / Font size)
 
     @Test
     fun terminal_font_defaults_to_hack_13px() {
@@ -461,7 +461,7 @@ class DesktopDesignStateTest {
         val seen = mutableListOf<TerminalFont>()
         val s = DesktopDesignState(onTerminalFontChange = { seen += it })
         s.chooseTerminalFont(TerminalFont.JetBrainsMono)
-        s.chooseTerminalFont(TerminalFont.JetBrainsMono) // повтор того же — no-op
+        s.chooseTerminalFont(TerminalFont.JetBrainsMono) // repeat of the same value — no-op
         assertEquals(TerminalFont.JetBrainsMono, s.terminalFont)
         assertEquals(listOf(TerminalFont.JetBrainsMono), seen)
     }
@@ -470,9 +470,9 @@ class DesktopDesignStateTest {
     fun setTerminalTheme_updates_and_reports_once_skipping_repeat() {
         val seen = mutableListOf<TerminalTheme>()
         val s = DesktopDesignState(onTerminalThemeChange = { seen += it })
-        assertEquals(TerminalThemes.DEFAULT, s.terminalTheme) // дефолт — Night Sea
+        assertEquals(TerminalThemes.DEFAULT, s.terminalTheme) // default is Night Sea
         s.chooseTerminalTheme(TerminalThemes.GruvboxDark)
-        s.chooseTerminalTheme(TerminalThemes.GruvboxDark) // повтор той же — no-op
+        s.chooseTerminalTheme(TerminalThemes.GruvboxDark) // repeat of the same theme — no-op
         assertEquals(TerminalThemes.GruvboxDark, s.terminalTheme)
         assertEquals(listOf(TerminalThemes.GruvboxDark), seen)
     }
@@ -482,8 +482,8 @@ class DesktopDesignStateTest {
         val seen = mutableListOf<Int>()
         val s = DesktopDesignState(onTerminalFontSizeChange = { seen += it })
         s.chooseTerminalFontSize(16)
-        s.chooseTerminalFontSize(16)   // повтор — no-op
-        s.chooseTerminalFontSize(99)   // вне TERMINAL_FONT_SIZE_RANGE — no-op
+        s.chooseTerminalFontSize(16)   // repeat — no-op
+        s.chooseTerminalFontSize(99)   // outside TERMINAL_FONT_SIZE_RANGE — no-op
         s.chooseTerminalFontSize(11)
         assertEquals(11, s.terminalFontSize)
         assertEquals(listOf(16, 11), seen)
@@ -504,8 +504,8 @@ class DesktopDesignStateTest {
         val s = DesktopDesignState(onTerminalLineHeightChange = { seen += it })
         assertEquals(DEFAULT_TERMINAL_LINE_HEIGHT, s.terminalLineHeight)
         s.chooseTerminalLineHeight(1.5f)
-        s.chooseTerminalLineHeight(1.5f)   // повтор — no-op
-        s.chooseTerminalLineHeight(5f)     // вне диапазона → clamp до MAX
+        s.chooseTerminalLineHeight(1.5f)   // repeat — no-op
+        s.chooseTerminalLineHeight(5f)     // out of range → clamp to MAX
         assertEquals(TERMINAL_LINE_HEIGHT_MAX, s.terminalLineHeight)
         assertEquals(listOf(1.5f, TERMINAL_LINE_HEIGHT_MAX), seen)
     }
@@ -516,8 +516,8 @@ class DesktopDesignStateTest {
         val s = DesktopDesignState(onTerminalLetterSpacingChange = { seen += it })
         assertEquals(DEFAULT_TERMINAL_LETTER_SPACING, s.terminalLetterSpacing)
         s.chooseTerminalLetterSpacing(1f)
-        s.chooseTerminalLetterSpacing(1f)  // повтор — no-op
-        s.chooseTerminalLetterSpacing(-9f) // вне диапазона → clamp до MIN
+        s.chooseTerminalLetterSpacing(1f)  // repeat — no-op
+        s.chooseTerminalLetterSpacing(-9f) // out of range → clamp to MIN
         assertEquals(TERMINAL_LETTER_SPACING_MIN, s.terminalLetterSpacing)
         assertEquals(listOf(1f, TERMINAL_LETTER_SPACING_MIN), seen)
     }
@@ -539,8 +539,8 @@ class DesktopDesignStateTest {
         val seen = mutableListOf<Int>()
         val s = DesktopDesignState(onTerminalScrollbackChange = { seen += it })
         s.chooseTerminalScrollback(5_000)
-        s.chooseTerminalScrollback(5_000)   // повтор — no-op
-        s.chooseTerminalScrollback(1_234)   // вне TERMINAL_SCROLLBACK_OPTIONS — no-op
+        s.chooseTerminalScrollback(5_000)   // repeat — no-op
+        s.chooseTerminalScrollback(1_234)   // outside TERMINAL_SCROLLBACK_OPTIONS — no-op
         s.chooseTerminalScrollback(1_000)
         assertEquals(1_000, s.terminalScrollback)
         assertEquals(listOf(5_000, 1_000), seen)
@@ -551,7 +551,7 @@ class DesktopDesignStateTest {
         val seen = mutableListOf<TerminalCursorStyle>()
         val s = DesktopDesignState(onTerminalCursorStyleChange = { seen += it })
         s.chooseTerminalCursorStyle(TerminalCursorStyle.UnderlineBlink)
-        s.chooseTerminalCursorStyle(TerminalCursorStyle.UnderlineBlink) // повтор — no-op
+        s.chooseTerminalCursorStyle(TerminalCursorStyle.UnderlineBlink) // repeat — no-op
         assertEquals(TerminalCursorStyle.UnderlineBlink, s.terminalCursorStyle)
         assertEquals(listOf(TerminalCursorStyle.UnderlineBlink), seen)
     }

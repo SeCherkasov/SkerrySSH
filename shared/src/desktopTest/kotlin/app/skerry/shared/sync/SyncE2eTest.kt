@@ -20,18 +20,17 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Сквозной zero-knowledge round-trip: реальный self-hosted сервер (embedded) + настоящий
- * [KtorSyncClient] по HTTP. Доказывает ключевой инвариант Phase 2 — новое устройство B,
- * имея лишь мастер-пароль и accountId, восстанавливает dataKey из серверной обёртки и
- * расшифровывает запись, созданную устройством A, при этом сервер видит только шифротекст
- * (`docs/skerry-sync-design.md` §1, §4).
+ * End-to-end zero-knowledge round-trip: a real self-hosted server (embedded) plus a real
+ * [KtorSyncClient] over HTTP. Proves that a new device B, given only the master password and
+ * accountId, reconstructs the dataKey from the server-side wrapper and decrypts a record
+ * created by device A, while the server sees only ciphertext (`docs/skerry-sync-design.md` §1, §4).
  */
 class SyncE2eTest {
 
     private val accountId = "alice@example.com"
     private val masterPassword = "correct horse battery staple"
 
-    /** AAD слота записи как в FileVault: `id` + U+001F + `type.name`. */
+    /** Record slot AAD as in FileVault: `id` + U+001F + `type.name`. */
     private fun aad(id: String, type: RecordType) = "$id${type.name}".encodeToByteArray()
 
     @Test
@@ -51,7 +50,7 @@ class SyncE2eTest {
         val client = KtorSyncClient("http://localhost:$port")
         val vaultDir = Files.createTempDirectory("skerry-e2e-vault")
         try {
-            // --- Устройство A: локальный vault + запись ---
+            // --- Device A: local vault + record ---
             val vaultA = FileVault(
                 path = vaultDir.resolve("vault.json").toString().toPath(),
                 crypto = crypto,
@@ -63,7 +62,7 @@ class SyncE2eTest {
             val payload = "192.168.1.45 root prod-web".encodeToByteArray()
             vaultA.put("h1", RecordType.HOST, payload)
 
-            // Материал sync-аутентификации: соль = accountId (design §1), отдельная обёртка под неё.
+            // Sync auth material: salt = accountId (design §1), a separate wrapper keyed to it.
             val syncSalt = crypto.deriveSyncSalt(accountId)
             val masterA = crypto.deriveMasterKey(masterPassword.toCharArray(), syncSalt)
             val authKeyA = crypto.deriveAuthKey(masterA)
@@ -74,7 +73,7 @@ class SyncE2eTest {
             val outcome = SyncEngine(client, vaultA).sync(sessionA)
             assertTrue(outcome.pushed >= 1, "device A should push its record")
 
-            // --- Устройство B: только мастер-пароль и accountId, без локального vault ---
+            // --- Device B: only the master password and accountId, no local vault ---
             val masterB = crypto.deriveMasterKey(masterPassword.toCharArray(), crypto.deriveSyncSalt(accountId))
             val authKeyB = crypto.deriveAuthKey(masterB)
             val sessionB = client.login(accountId, authKeyB, DeviceInfo("devB", "Phone B"))
@@ -86,14 +85,14 @@ class SyncE2eTest {
             val page = client.pull(sessionB, 0)
             val hostRecord = page.records.single { it.id == "h1" }
 
-            // Сервер хранил только шифротекст: blob не содержит открытый payload дословно.
+            // Server only ever stored ciphertext: the blob doesn't contain the plaintext payload verbatim.
             assertFalse(hostRecord.blob.toList().windowed(payload.size).any { it == payload.toList() })
 
-            // Устройство B расшифровывает запись A ключом, выведенным ТОЛЬКО из пароля + accountId.
+            // Device B decrypts device A's record with a key derived only from the password + accountId.
             val decrypted = crypto.open(dataKeyB, hostRecord.blob, aad("h1", RecordType.HOST))
             assertContentEquals(payload, decrypted)
 
-            // Устройства аккаунта видны обоим.
+            // Both devices see the account's device list.
             assertEquals(setOf("devA", "devB"), client.listDevices(sessionB).map { it.id }.toSet())
         } finally {
             client.close()
@@ -136,17 +135,17 @@ class SyncE2eTest {
 
             val state = InMemorySyncStateStore()
             val engine = SyncEngine(client, vault, state)
-            engine.sync(session)   // push живой r1
-            vault.remove("r1")     // надгробие
-            engine.sync(session)   // push надгробия; курсор единственного устройства догоняет его serverSeq
+            engine.sync(session)   // push live r1
+            vault.remove("r1")     // tombstone
+            engine.sync(session)   // push tombstone; the sole device's cursor catches up to its serverSeq
 
-            // Единственное устройство дочитало надгробие → watermark его накрыл → сервер вернул его в
-            // compactedIds → клиент физически забыл его. Больше не в records ⇒ больше не пушится.
+            // The sole device read past the tombstone → watermark covers it → server returned it in
+            // compactedIds → client physically forgot it. No longer in records => no longer pushed.
             assertFalse(vault.records().any { it.id == "r1" }, "fully-propagated tombstone must be compacted away")
 
-            // Ре-энролл/полный re-pull: курсор в 0. Сервер ещё держит надгробие и отдаст его в дельте —
-            // но компакция в ТОМ ЖЕ ответе (merge → compact) не даёт ему воскреснуть. Это и есть фикс
-            // «крота»: purge на сервере теперь не отменяется обратным push'ем клиента.
+            // Re-enroll/full re-pull: cursor at 0. The server still holds the tombstone and returns it
+            // in the delta — but compaction in the SAME response (merge -> compact) prevents it from
+            // resurrecting. This is the fix: a server-side purge is no longer undone by a client push.
             state.setCursor(accountId, 0)
             engine.sync(session)
             assertFalse(vault.records().any { it.id == "r1" }, "tombstone must not resurrect on a full re-pull")

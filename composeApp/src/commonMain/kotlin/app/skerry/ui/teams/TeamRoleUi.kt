@@ -43,7 +43,7 @@ import app.skerry.ui.generated.resources.lib_teams_role_picker_title
 import app.skerry.ui.generated.resources.lib_teams_role_viewer
 import org.jetbrains.compose.resources.stringResource
 
-/** Локализованная метка роли для бейджей и пикеров. */
+/** Localized role label for badges and pickers. */
 @Composable
 internal fun teamRoleLabel(role: TeamRole): String = when (role) {
     TeamRole.OWNER -> stringResource(Res.string.lib_teams_role_owner)
@@ -53,8 +53,8 @@ internal fun teamRoleLabel(role: TeamRole): String = when (role) {
 }
 
 /**
- * Вправе ли [actor] менять/удалять участника с ролью [target] (зеркалит серверный ACL для UX;
- * итоговое решение всё равно за сервером). Owner — любого кроме владельца; admin — editor/viewer.
+ * Whether [actor] may modify/remove a member with role [target] (mirrors the server ACL for UX; the
+ * server is authoritative). Owner: anyone but an owner; admin: editor/viewer.
  */
 internal fun canModifyMember(actor: TeamRole, target: TeamRole): Boolean = when (actor) {
     TeamRole.OWNER -> target != TeamRole.OWNER
@@ -62,7 +62,7 @@ internal fun canModifyMember(actor: TeamRole, target: TeamRole): Boolean = when 
     else -> false
 }
 
-/** Цвета бейджа роли (текст, фон) — только токены [D]. */
+/** Role badge colors (text, background), [D] tokens only. */
 internal fun roleBadgeColors(role: TeamRole): Pair<Color, Color> = when (role) {
     TeamRole.OWNER -> D.amber to D.amber.copy(alpha = 0.14f)
     TeamRole.ADMIN -> D.cyanBright to D.cyan.copy(alpha = 0.12f)
@@ -70,7 +70,7 @@ internal fun roleBadgeColors(role: TeamRole): Pair<Color, Color> = when (role) {
     TeamRole.VIEWER -> D.dim to Color(0x0DFFFFFF)
 }
 
-/** Локализованная сводка события аудита; неизвестное событие показываем как есть. */
+/** Localized audit event summary; unknown events shown verbatim. */
 @Composable
 internal fun teamEventLabel(event: String): String = when (event) {
     "team.create" -> stringResource(Res.string.lib_teams_event_create)
@@ -83,7 +83,7 @@ internal fun teamEventLabel(event: String): String = when (event) {
     else -> event
 }
 
-/** Бейдж роли/статуса участника (фиксированный визуальный язык desktop и mobile). */
+/** Member role/status badge (shared visual language for desktop and mobile). */
 @Composable
 internal fun RoleBadge(text: String, fg: Color, bg: Color, modifier: Modifier = Modifier) {
     Box(modifier.clip(RoundedCornerShape(20.dp)).background(bg).padding(horizontal = 9.dp, vertical = 2.dp)) {
@@ -91,7 +91,7 @@ internal fun RoleBadge(text: String, fg: Color, bg: Color, modifier: Modifier = 
     }
 }
 
-/** Горизонтальный сегмент-выбор роли (для диалога приглашения). [options] — что вправе назначить актор. */
+/** Horizontal role segment picker (invite dialog). [options] are the roles the actor may assign. */
 @Composable
 internal fun RoleChips(options: List<TeamRole>, selected: TeamRole, onSelect: (TeamRole) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -111,7 +111,7 @@ internal fun RoleChips(options: List<TeamRole>, selected: TeamRole, onSelect: (T
     }
 }
 
-/** Диалог смены роли участника: список назначаемых ролей, текущая подсвечена. */
+/** Member role-change dialog: list of assignable roles, current one highlighted. */
 @Composable
 internal fun RolePickerDialog(
     accountId: String,
@@ -153,7 +153,7 @@ internal fun RolePickerDialog(
     }
 }
 
-/** Диалог аудит-лога команды (owner/admin): свежие события первыми, только метаданные. */
+/** Team audit-log dialog (owner/admin): newest events first, metadata only. */
 @Composable
 internal fun AuditLogDialog(entries: List<TeamActivityEntry>, onDismiss: () -> Unit) {
     val mono = LocalFonts.current.mono
@@ -193,8 +193,8 @@ internal fun AuditLogDialog(entries: List<TeamActivityEntry>, onDismiss: () -> U
 }
 
 /**
- * Форматирует epoch-millis в `YYYY-MM-DD HH:MM` UTC чистой арифметикой (без kotlinx-datetime,
- * которого нет в UI-модуле). Алгоритм civil-from-days Говарда Хиннанта; серверные метки ≥ 0.
+ * Formats epoch-millis as `YYYY-MM-DD HH:MM` UTC with plain arithmetic (no kotlinx-datetime in the
+ * UI module). Howard Hinnant's civil-from-days algorithm; server timestamps are >= 0.
  */
 internal fun formatEpochUtc(millis: Long): String {
     val totalSec = millis / 1000

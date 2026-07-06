@@ -12,29 +12,27 @@ import app.skerry.ui.generated.resources.stail_sync_error
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Чистая (тестируемая) проекция состояния sync на карточку профиля/аккаунта — desktop Settings →
- * Account и mobile More. Заменяет статический мок «Local vault / Maya Kovac»: реальная модель —
- * self-hosted zero-knowledge sync, аккаунт без биллинга. Не настроен → локальный vault с приглашением
- * настроить синхронизацию; есть привязка, но заперто → «linked, locked» (предложить переподключение);
- * активная сессия → accountId + хост сервера (и список устройств показывает уже UI).
+ * Testable projection of sync state onto the profile/account card (desktop Settings → Account,
+ * mobile More). Not configured → local vault with a "set up sync" prompt; linked but locked →
+ * "linked, locked" (offer reconnect); active session → accountId + server host.
  */
 data class AccountCardModel(
-    /** До двух символов для аватара. */
+    /** Up to two characters for the avatar. */
     val initials: String,
     val title: String,
     val subtitle: String,
-    /** [SyncStatus.Online] — есть активная сессия: показываем устройства и «Disconnect». */
+    /** [SyncStatus.Online]: active session — show devices and "Disconnect". */
     val connected: Boolean,
-    /** [SyncStatus.Configured] — привязка есть, но сессии нет (vault заперт): предлагаем «Reconnect». */
+    /** [SyncStatus.Configured]: linked but no session (vault locked) — offer "Reconnect". */
     val linked: Boolean,
 ) {
-    /** Sync не настроен (или превью/ошибка) — карточка показывает локальный vault и «Set up sync». */
+    /** Sync not configured (or preview/error) — card shows local vault and "Set up sync". */
     val localOnly: Boolean get() = !connected && !linked
 }
 
 /**
- * Свести [SyncStatus] (и, для подзаголовка, URL сервера из сохранённой привязки) к [AccountCardModel].
- * [status] == null — sync-бэкенда нет (превью/офскрин): трактуем как локальный vault.
+ * Reduces [SyncStatus] (plus the server URL from the saved link, for the subtitle) to [AccountCardModel].
+ * [status] == null means no sync backend (preview/offscreen): treated as local vault.
  */
 fun accountCardModel(status: SyncStatus?, serverUrl: String? = null): AccountCardModel = when (status) {
     null, SyncStatus.Disabled -> localVaultCard("Encrypted on this device")
@@ -53,7 +51,7 @@ fun accountCardModel(status: SyncStatus?, serverUrl: String? = null): AccountCar
         connected = false,
         linked = true,
     )
-    // Ошибка синка показывается отдельной секцией Sync; карточка откатывается к локальному vault.
+    // Sync error is shown by a separate Sync section; the card falls back to local vault.
     is SyncStatus.Failed -> localVaultCard("Sync error")
 }
 
@@ -61,9 +59,8 @@ private fun localVaultCard(subtitle: String) =
     AccountCardModel(initials = "S", title = "Local vault", subtitle = subtitle, connected = false, linked = false)
 
 /**
- * UI-версия [accountCardModel] с локализованными title/subtitle. Чистая версия оставлена для тестов и
- * не-composable кода; здесь строки резолвятся через [stringResource]. accountId/host — данные, не мок,
- * поэтому не переводятся; переводятся статические подписи и «Local vault».
+ * UI variant of [accountCardModel] with localized title/subtitle (strings resolved via
+ * [stringResource]). accountId/host are data and stay verbatim; only static labels are localized.
  */
 @Composable
 fun accountCardModelLocalized(status: SyncStatus?, serverUrl: String? = null): AccountCardModel = when (status) {
@@ -96,20 +93,20 @@ private fun localizedLocalVaultCard(subtitle: String) = AccountCardModel(
     linked = false,
 )
 
-/** Инициалы аватара: до двух ведущих букв/цифр локальной части accountId, в верхнем регистре. */
+/** Avatar initials: up to two leading letters/digits of the accountId local part, uppercased. */
 fun accountInitials(accountId: String): String {
     val local = accountId.substringBefore('@')
     val letters = local.filter { it.isLetterOrDigit() }
     return if (letters.isEmpty()) "S" else letters.take(2).uppercase()
 }
 
-/** Хост из URL сервера для подзаголовка (без схемы/порта/пути). null, если разобрать не вышло. */
+/** Host from the server URL for the subtitle (no scheme/port/path). null if it can't be parsed. */
 fun serverHost(url: String?): String? {
     if (url.isNullOrBlank()) return null
     val trimmed = url.trim()
     val authority = trimmed.substringAfter("://", trimmed).substringBefore('/').substringBefore('?').trim()
-    // IPv6-литерал записывается в скобках (http://[::1]:8080) — наивный substringBefore(':') оставил бы
-    // от него одну «[». Берём содержимое скобок как хост, порт после «]» игнорируем.
+    // IPv6 literals are bracketed (http://[::1]:8080); a naive substringBefore(':') would keep only
+    // "[". Take the bracket contents as the host, ignore the port after "]".
     if (authority.startsWith("[")) {
         val close = authority.indexOf(']')
         return if (close > 1) authority.substring(1, close) else null

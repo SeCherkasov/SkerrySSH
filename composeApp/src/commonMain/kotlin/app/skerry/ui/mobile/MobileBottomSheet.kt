@@ -19,23 +19,26 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** Канонические токены мобильного нижнего листа («New connection»): панель и затемнение. */
+/** Canonical mobile bottom-sheet tokens ("New connection"): panel and scrim. */
 internal val SheetPanel = Color(0xFF0E1B26)
 private val SheetScrim = Color(0x8C04080C)
 
 /**
- * Единая обвязка мобильного нижнего листа: затемнение на весь экран ([SheetScrim], тап мимо — закрыть),
- * панель снизу со скруглением 26dp ([SheetPanel]), хват-полоской и drag-to-dismiss ([rememberSheetDrag]
- * / [SheetHandle]). Контейнер владеет ТОЛЬКО хромом — высоту, прокрутку и паддинги конкретный лист
- * задаёт через [panelModifier], поэтому форма/детали/меню переиспользуют один скелет, не теряя своих
- * нюансов вёрстки. Подъём над клавиатурой лист не делает сам: корневой `safeDrawing` (см. MobileDesignApp)
- * ужимает область над IME, и лист (прижат к низу) едет над клавиатурой вместе со всем содержимым.
+ * Shared mobile bottom-sheet chrome: full-screen scrim ([SheetScrim], tap outside to dismiss),
+ * bottom panel with 26dp corner rounding ([SheetPanel]), grab handle, and drag-to-dismiss
+ * ([rememberSheetDrag]/[SheetHandle]). The container owns ONLY the chrome — height, scrolling, and
+ * padding are set by each sheet via [panelModifier], so forms/details/menus reuse one skeleton
+ * without losing their own layout details. The sheet doesn't lift itself above the keyboard: the
+ * root `safeDrawing` (see MobileDesignApp) shrinks the area above the IME, and the sheet (pinned
+ * to the bottom) rides above the keyboard along with all its content.
  *
- * Тап по самой панели гасится (лист не закрывается), [content] идёт сразу под хватом в [ColumnScope]
- * панели — внутри доступен `Modifier.weight`/`verticalScroll` и пр.
+ * Taps on the panel itself are absorbed (the sheet doesn't dismiss); [content] goes right below
+ * the handle inside the panel's [ColumnScope] — `Modifier.weight`/`verticalScroll` etc. are
+ * available there.
  *
- * @param maxHeightFraction если задан — высота панели ограничена долей экрана (детальный лист, чтобы
- *   длинный контент скроллился, а не вылезал за верх); null — высота определяется содержимым/панель-модификатором.
+ * @param maxHeightFraction if set, caps the panel height to a screen fraction (detail sheet, so
+ *   long content scrolls instead of overflowing the top); null means the height comes from the
+ *   content/panelModifier.
  */
 @Composable
 fun MobileBottomSheet(
@@ -44,8 +47,9 @@ fun MobileBottomSheet(
     maxHeightFraction: Float? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // Системный «назад»/жест закрывает лист (как тап мимо/свайп вниз). Композится глубже навигационного
-    // перехвата каркаса → по LIFO диспетчера срабатывает первым, не давая back увести с экрана под листом.
+    // System back/gesture dismisses the sheet (like a tap outside/swipe down). Composed deeper than
+    // the chrome's navigation interceptor, so by the dispatcher's LIFO order it fires first,
+    // keeping back from navigating away from the screen underneath the sheet.
     PlatformBackHandler(onBack = onDismiss)
     BoxWithConstraints(
         Modifier
@@ -63,7 +67,7 @@ fun MobileBottomSheet(
                 .then(drag.sheet)
                 .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .background(SheetPanel)
-                // Гасим клик по панели, чтобы тап по листу не закрывал его (закрытие — только скрим/свайп).
+                // Absorb clicks on the panel so tapping the sheet doesn't dismiss it (dismiss is scrim/swipe only).
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .then(panelModifier),
         ) {

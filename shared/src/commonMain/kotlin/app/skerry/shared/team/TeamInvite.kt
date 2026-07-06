@@ -9,16 +9,16 @@ import kotlinx.serialization.json.Json
 import okio.ByteString.Companion.decodeBase64
 import okio.ByteString.Companion.toByteString
 
-/** Что расшифровывает приглашённый: ключ команды и её имя (сервер не видит ни того, ни другого). */
+/** What the invitee decrypts: the team key and its name (the server sees neither). */
 class TeamInvitePayload(
     val teamKey: DataKey,
     val teamName: String,
 )
 
 /**
- * Конверт приглашения: JSON `{v, teamKey, name}` → sealed-конверт (crypto_box_seal) на публичный
- * ключ приглашённого. Версия внутри payload — доменная привязка: конверт от чужого контекста
- * (не-приглашение) отбрасывается декодером.
+ * Invite envelope: JSON `{v, teamKey, name}` sealed (crypto_box_seal) to the invitee's public key.
+ * The version inside the payload is a domain binding — an envelope from a different context
+ * (not an invite) is rejected by the decoder.
  */
 class TeamInviteCodec(private val crypto: VaultCrypto) {
 
@@ -35,7 +35,7 @@ class TeamInviteCodec(private val crypto: VaultCrypto) {
         return crypto.sealForRecipient(recipientPublicKey, plain).also { plain.fill(0) }
     }
 
-    /** null — конверт не наш, повреждён или неожиданной версии (недоверенный вход с сервера). */
+    /** null if the envelope isn't ours, is corrupted, or has an unexpected version (untrusted input). */
     fun open(keyPair: SharingKeyPair, envelope: ByteArray): TeamInvitePayload? {
         val plain = crypto.openSealedEnvelope(keyPair, envelope) ?: return null
         return try {
@@ -57,8 +57,8 @@ class TeamInviteCodec(private val crypto: VaultCrypto) {
 }
 
 /**
- * Короткий фингерпринт публичного ключа (BLAKE2b-8), формат `ab12-cd34-ef56-7890`.
- * Стороны сверяют его по доверенному каналу (голос/чат) — защита от подмены ключа сервером.
+ * Short fingerprint of a public key (BLAKE2b-8), format `ab12-cd34-ef56-7890`. Parties compare it
+ * over a trusted channel (voice/chat) to guard against key substitution by the server.
  */
 fun sharingKeyFingerprint(publicKey: ByteArray): String {
     @OptIn(ExperimentalUnsignedTypes::class)

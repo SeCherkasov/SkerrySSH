@@ -10,14 +10,14 @@ class FileNamesTest {
     @Test
     fun `ordinary names are safe`() {
         listOf("a.txt", "sub", ".hidden", "file with spaces", "весёлое-имя", "..twodots").forEach {
-            assertFalse(isUnsafeListingName(it), "ожидали безопасное имя: $it")
+            assertFalse(isUnsafeListingName(it), "expected a safe name: $it")
         }
     }
 
     @Test
     fun `empty separators and dot names are unsafe`() {
         listOf("", "a/b", "/abs", "a\\b", "..\\evil.txt", ".", "..").forEach {
-            assertTrue(isUnsafeListingName(it), "ожидали небезопасное имя: $it")
+            assertTrue(isUnsafeListingName(it), "expected an unsafe name: $it")
         }
     }
 

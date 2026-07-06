@@ -47,7 +47,7 @@ class TerminalScreenStateTest {
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
 
-        // "П" (U+041F) в UTF-8 = 0xD0 0x9F, разрезанная между двумя чанками
+        // "П" (U+041F) in UTF-8 = 0xD0 0x9F, split across two chunks.
         session.emit(byteArrayOf(0xD0.toByte()))
         session.emit(byteArrayOf(0x9F.toByte()))
 
@@ -118,7 +118,7 @@ class TerminalScreenStateTest {
         state.reverseSearchAppend("git")
         assertEquals("git status", state.reverseSearchSelection)
         state.reverseSearchAccept()
-        assertEquals(null, state.reverseSearchQuery) // оверлей закрыт после вставки
+        assertEquals(null, state.reverseSearchQuery) // overlay closed after accepting
         scope.cancel()
     }
 
@@ -132,11 +132,11 @@ class TerminalScreenStateTest {
             onHistoryChanged = { snapshots += it },
         )
         state.openReverseSearch()
-        state.reverseSearchAppend("gti") // выбираем опечатку
+        state.reverseSearchAppend("gti") // pick the typo entry
         assertEquals("gti status", state.reverseSearchSelection)
         state.reverseSearchDeleteSelected()
-        assertEquals(emptyList(), state.reverseSearchResults) // "gti" больше не находится
-        assertEquals(listOf("git status"), snapshots.last()) // персист без опечатки
+        assertEquals(emptyList(), state.reverseSearchResults) // "gti" is no longer found
+        assertEquals(listOf("git status"), snapshots.last()) // persisted without the typo
         scope.cancel()
     }
 
@@ -160,12 +160,12 @@ class TerminalScreenStateTest {
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
 
-        // Узкая сетка 5×3: автоперенос рвёт строку на ширине 5.
+        // Narrow 5x3 grid: autowrap breaks the line at width 5.
         state.resize(PtySize(cols = 5, rows = 3))
         session.emit("abcdefgh".encodeToByteArray())
 
         assertEquals("abcde\nfgh", state.output)
-        assertEquals(3, state.screen.size) // сетка теперь ровно 3 строки
+        assertEquals(3, state.screen.size) // grid is now exactly 3 rows
         scope.cancel()
     }
 
@@ -176,7 +176,7 @@ class TerminalScreenStateTest {
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
 
-        // Дефолт 80×24 до первого лэйаута, затем живой размер из эмулятора.
+        // Default 80x24 before the first layout, then the emulator's live size.
         assertEquals(80, state.cols)
         assertEquals(24, state.rows)
         state.resize(PtySize(cols = 132, rows = 43))
@@ -193,7 +193,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         state.resize(PtySize(cols = 90, rows = 25))
-        state.resize(PtySize(cols = 90, rows = 25)) // тот же размер — дубль гасим, PTY не дёргаем
+        state.resize(PtySize(cols = 90, rows = 25)) // same size — dedup, don't nudge the PTY
 
         assertEquals(listOf(PtySize(cols = 90, rows = 25)), session.resizes)
         scope.cancel()
@@ -234,12 +234,12 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
         val esc = 27.toChar().toString()
 
-        // Дефолты: курсор виден, блок, мигает.
+        // Defaults: cursor visible, block, blinking.
         assertEquals(true, state.cursorVisible)
         assertEquals(CursorShape.Block, state.cursorShape)
         assertEquals(true, state.cursorBlink)
 
-        session.emit("$esc[?25l".encodeToByteArray())   // скрыть курсор
+        session.emit("$esc[?25l".encodeToByteArray())   // hide cursor
         assertEquals(false, state.cursorVisible)
 
         session.emit("$esc[6 q".encodeToByteArray())     // DECSCUSR: steady bar
@@ -288,7 +288,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("hello world".encodeToByteArray())
-        state.selectWordAt(TerminalPos(0, 8)) // палец на "world"
+        state.selectWordAt(TerminalPos(0, 8)) // tap lands on "world"
 
         assertEquals("world", state.selectedText())
         scope.cancel()
@@ -302,7 +302,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("hello world".encodeToByteArray())
-        state.selectWordAt(TerminalPos(0, 0)) // палец на "h"
+        state.selectWordAt(TerminalPos(0, 0)) // tap lands on "h"
 
         assertEquals("hello", state.selectedText())
         scope.cancel()
@@ -462,7 +462,7 @@ class TerminalScreenStateTest {
         )
 
         assertEquals(true, handled)
-        // Координаты — пиксельные (49+1 / 99+1), а не клеточные.
+        // Coordinates are pixels (49+1 / 99+1), not cells.
         assertContentEquals("$esc[<0;50;100M".encodeToByteArray(), session.sent.single())
         scope.cancel()
     }
@@ -516,7 +516,7 @@ class TerminalScreenStateTest {
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
 
-        // Обрыв PTY-ресайза (восстановимый): обработчик не должен умереть — feed после него идёт.
+        // A recoverable PTY resize failure: the handler must not die — feed still works after it.
         session.resizeError = { IllegalStateException("pty broke") }
         state.resize(PtySize(cols = 10, rows = 4))
         session.resizeError = null
@@ -533,13 +533,13 @@ class TerminalScreenStateTest {
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
 
-        // CancellationException не должна гаситься как «восстановимый сбой»: она обязана свалить
-        // корутину-обработчик (structured concurrency), иначе feed продолжит идти после отмены.
+        // CancellationException must not be swallowed as a "recoverable failure": it must tear
+        // down the handler coroutine (structured concurrency), or feed would keep working after cancellation.
         session.resizeError = { CancellationException("scope cancelled") }
         state.resize(PtySize(cols = 10, rows = 4))
         session.emit("ignored".encodeToByteArray())
 
-        assertEquals("", state.output) // обработчик отменён — feed не применён
+        assertEquals("", state.output) // handler torn down — feed never applied
         scope.cancel()
     }
 
@@ -581,14 +581,14 @@ class TerminalScreenStateTest {
 
         session.emit("hello".encodeToByteArray())
         state.beginSelection(TerminalPos(0, 2))
-        // фокус не сдвигали — выделять нечего
+        // Focus was never moved — nothing to select.
 
         assertEquals(null, state.selectedText())
         scope.cancel()
     }
 }
 
-/** Фейк-сессия: ручная эмиссия вывода, перехват send/resize. */
+/** Fake session: manual output emission, captures send/resize calls. */
 private class FakeTerminalSession : TerminalSession {
     private val _state = MutableStateFlow<TerminalState>(TerminalState.Open)
     override val state: StateFlow<TerminalState> = _state
@@ -601,7 +601,7 @@ private class FakeTerminalSession : TerminalSession {
     val sent = mutableListOf<ByteArray>()
     val resizes = mutableListOf<PtySize>()
 
-    /** Если задан — `resize` бросает это перед записью (имитация обрыва PTY/отмены). */
+    /** When set, `resize` throws this before recording the call (simulates a PTY error/cancellation). */
     var resizeError: (() -> Throwable)? = null
 
     suspend fun emit(chunk: ByteArray) {

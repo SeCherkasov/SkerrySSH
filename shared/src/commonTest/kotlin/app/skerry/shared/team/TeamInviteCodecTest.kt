@@ -33,7 +33,7 @@ class TeamInviteCodecTest {
 
         assertNotNull(opened)
         assertEquals("Platform crew", opened.teamName)
-        // расшифрованный teamKey функционально равен исходному: читает запись команды
+        // decrypted teamKey is functionally equal to the original: it reads the team record
         assertContentEquals(
             "shared-host".encodeToByteArray(),
             crypto.open(opened.teamKey, record, VaultCrypto.EMPTY_AAD),
@@ -53,7 +53,7 @@ class TeamInviteCodecTest {
 
     @Test
     fun `garbage sealed for the right key is rejected by the codec`() = cryptoTest {
-        // Конверт валиден криптографически, но внутри не приглашение — доменная проверка отбрасывает.
+        // The envelope is cryptographically valid but not an invite; the domain check rejects it.
         val bob = crypto.newSharingKeyPair()
         val alien = crypto.sealForRecipient(bob.publicKey, "not-json".encodeToByteArray())
 

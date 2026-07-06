@@ -1,17 +1,17 @@
 package app.skerry.ui.host
 
 /**
- * Чистая геометрия сброса для drag-and-drop сайдбара: по вертикальной позиции указателя считает,
- * в какую папку и на какой индекс уронить хост ([hostDropTarget]) или куда переставить папку
- * ([folderDropTarget]). Вынесено из жестов Compose, чтобы покрыть тестами без UI
- * ([app.skerry.ui.host.HostDropTargetingTest]); жесты лишь поставляют координаты в пикселях окна.
+ * Pure drop geometry for sidebar drag-and-drop: given the pointer's vertical position, computes
+ * which folder and index a host drops into ([hostDropTarget]) or where a folder gets reordered to
+ * ([folderDropTarget]). Kept separate from Compose gesture handling so it can be unit-tested
+ * ([app.skerry.ui.host.HostDropTargetingTest]); gestures only supply window-pixel coordinates.
  */
 
 /**
- * Геометрия одной папки сайдбара в координатах окна. [top]/[bottom] — вертикальный диапазон блока
- * папки (для выбора целевой папки). [otherHostCentersY] — центры строк хостов этой папки, БЕЗ
- * перетаскиваемого: индекс среди них совпадает с контрактом [moveHostToGroup], который удаляет
- * перетаскиваемый хост перед вставкой.
+ * Geometry of one sidebar folder in window coordinates. [top]/[bottom] is the folder block's
+ * vertical range (used to pick the target folder). [otherHostCentersY] holds the row centers of
+ * this folder's hosts excluding the dragged one, so the index matches [moveHostToGroup]'s contract
+ * of removing the dragged host before inserting.
  */
 data class FolderBounds(
     val group: String?,
@@ -20,12 +20,13 @@ data class FolderBounds(
     val otherHostCentersY: List<Float>,
 )
 
-/** Куда уронить хост: группа целевой папки + индекс среди её хостов (без перетаскиваемого). */
+/** Where to drop a host: target folder's group plus index among its hosts (excluding the dragged one). */
 data class HostDrop(val group: String?, val index: Int)
 
 /**
- * Целевая папка — та, чей диапазон содержит [pointerY]; выше первой/ниже последней — зажимается к
- * краю. Индекс внутри — число хостов папки, чей центр выше указателя. `null`, если папок нет.
+ * Target folder is the one whose range contains [pointerY]; above the first / below the last
+ * clamps to that edge. Index within it is the count of the folder's hosts whose center is above
+ * the pointer. `null` if there are no folders.
  */
 fun hostDropTarget(folders: List<FolderBounds>, pointerY: Float): HostDrop? {
     if (folders.isEmpty()) return null
@@ -35,8 +36,8 @@ fun hostDropTarget(folders: List<FolderBounds>, pointerY: Float): HostDrop? {
 }
 
 /**
- * Индекс вставки папки среди прочих папок — число их заголовков выше [pointerY]. [headerCentersY]
- * передаётся БЕЗ перетаскиваемой папки, чтобы индекс совпал с контрактом [moveGroup].
+ * Insertion index for a folder among the others: count of headers above [pointerY]. [headerCentersY]
+ * excludes the dragged folder, so the index matches [moveGroup]'s contract.
  */
 fun folderDropTarget(headerCentersY: List<Float>, pointerY: Float): Int =
     headerCentersY.count { it < pointerY }

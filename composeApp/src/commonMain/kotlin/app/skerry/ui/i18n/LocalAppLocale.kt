@@ -5,26 +5,26 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ProvidedValue
 
 /**
- * Переопределение локали приложения для строковых ресурсов Compose. Окружение ресурсов CMP
- * (`LocalComposeEnvironment`) `internal`, поэтому язык меняется через системную локаль, которую это
- * окружение читает: на desktop — `Locale.getDefault()`, на Android — `Configuration`. `actual`
- * держит `staticCompositionLocalOf` с текущим language-tag; смена значения форсит рекомпозицию
- * потребителей `stringResource`. [provides] с `null` восстанавливает исходную системную локаль
- * (режим [UiLanguage.System] — автоопределение).
+ * App locale override for Compose string resources. CMP's resource environment
+ * (`LocalComposeEnvironment`) is `internal`, so the language is changed via the system locale it
+ * reads: `Locale.getDefault()` on desktop, `Configuration` on Android. `actual` holds a
+ * `staticCompositionLocalOf` with the current language tag; changing the value forces
+ * recomposition of `stringResource` consumers. [provides] with `null` restores the original
+ * system locale ([UiLanguage.System] mode, auto-detect).
  */
 expect object LocalAppLocale {
-    /** Текущий применённый language-tag (BCP-47) — для потребителей/диагностики. */
+    /** Currently applied language tag (BCP-47), for consumers/diagnostics. */
     val current: String @Composable get
 
-    /** Применить [languageTag] (BCP-47) как локаль приложения; `null` — вернуть системную. */
+    /** Apply [languageTag] (BCP-47) as the app locale; `null` reverts to the system locale. */
     @Composable
     infix fun provides(languageTag: String?): ProvidedValue<*>
 }
 
 /**
- * Обернуть [content] в выбранный язык интерфейса. [UiLanguage.System] ([UiLanguage.localeTag] == null)
- * оставляет системную локаль (автоопределение). Ставится в корне приложения над темой, чтобы весь
- * `stringResource` перечитывался при смене языка без перезапуска.
+ * Wrap [content] in the selected UI language. [UiLanguage.System] ([UiLanguage.localeTag] == null)
+ * keeps the system locale (auto-detect). Placed at the app root above the theme, so every
+ * `stringResource` re-reads on language change without a restart.
  */
 @Composable
 fun AppLocaleProvider(language: UiLanguage, content: @Composable () -> Unit) {

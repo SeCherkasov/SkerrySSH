@@ -6,7 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import app.skerry.ui.app.DesktopDesignState
 
-/** Мок-путь табов (sessions=null): DesktopDesignState держит 4 демо-вкладки, activeTab стартует с 0. */
+/** Mock tab path (sessions=null): DesktopDesignState holds 4 demo tabs, activeTab starts at 0. */
 class DesktopTabShortcutTest {
 
     @Test
@@ -26,7 +26,7 @@ class DesktopTabShortcutTest {
     @Test
     fun `next tab wraps past the last tab`() {
         val state = DesktopDesignState()
-        // 4 вкладки: 0→1→2→3→0.
+        // 4 tabs: 0→1→2→3→0.
         repeat(3) { cycleTab(+1, state, sessions = null) }
         assertEquals(3, state.activeTab)
         assertTrue(cycleTab(+1, state, sessions = null))

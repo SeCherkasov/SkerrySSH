@@ -3,7 +3,7 @@ package app.skerry.shared.terminal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Точечные тесты чистого API [SgrParser]; полный SGR-контракт покрыт через TerminalEmulatorTest. */
+/** Focused tests of the pure [SgrParser] API; the full SGR contract is covered via TerminalEmulatorTest. */
 class SgrParserTest {
 
     private fun apply(raw: String, start: TermStyle = TermStyle()): TermStyle =

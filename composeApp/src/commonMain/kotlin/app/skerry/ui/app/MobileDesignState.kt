@@ -18,10 +18,10 @@ import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
 
 /**
- * Нижняя навигация — ровно 4 корневых таба ([showTabs]=true). [icon] — лигатура Material Symbols
- * (см. [Sym]), согласована с desktop-rail ([RAIL]) там, где раздел совпадает (Snippets/Vault). Files
- * в баре нет: SFTP открывается push-экраном ([MobileRoute.Files]) с карточки хоста (кнопка SFTP), как
- * терминал — отдельный корневой таб дублировал бы его.
+ * Bottom navigation — exactly 4 root tabs ([showTabs]=true). [icon] is a Material Symbols ligature
+ * (see [Sym]), aligned with the desktop rail ([RAIL]) where the section matches (Snippets/Vault).
+ * No Files tab: SFTP opens as a push screen ([MobileRoute.Files]) from a host card's SFTP button —
+ * a separate root tab would duplicate the terminal.
  */
 enum class MobileTab(val icon: String, val label: String) {
     Hosts("dns", "Hosts"),
@@ -31,25 +31,26 @@ enum class MobileTab(val icon: String, val label: String) {
 }
 
 /**
- * Полноэкранные push-экраны поверх таб-навигации (таб-бар скрыт): терминал и деталь хоста
- * открываются из Hosts, SFTP (Files) — кнопкой SFTP на карточке хоста, а Ports/Known/Team — из таба More.
+ * Full-screen push screens over the tab navigation (tab bar hidden): terminal and host detail open
+ * from Hosts, SFTP (Files) via the host card's SFTP button, and Ports/Known/Team from the More tab.
  */
 enum class MobileRoute { Terminal, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai, Security }
 
-/** Что должен сделать системный «назад» на мобильном каркасе. */
+/** What the system back gesture should do in the mobile shell. */
 enum class MobileBackAction {
-    /** Закрыть открытый полноэкранный push-экран (вернуться на подлежащий таб). */
+    /** Close the open full-screen push screen (return to the underlying tab). */
     PopRoute,
 
-    /** Уйти с не-корневого таба на корневой Hosts. */
+    /** Leave a non-root tab for the root Hosts tab. */
     GoHome,
 }
 
 /**
- * Решает, что делает системный «назад» по состоянию навигации каркаса. `null` — перехватывать нечего
- * (корневой таб Hosts без открытого push-экрана): событие отдаётся системе, которая закрывает Activity
- * (штатный выход из приложения). Открытые листы/диалоги здесь НЕ учитываются — они перехватывают свой
- * back сами (собственными `BackHandler` поверх этого), поэтому до навигации событие при них не доходит.
+ * Decides what the system back gesture does based on shell navigation state. `null` means there is
+ * nothing to intercept (root Hosts tab, no push screen open): the event is left to the system, which
+ * closes the Activity (normal app exit). Open sheets/dialogs are not considered here — they intercept
+ * their own back press (their own `BackHandler` layered above this one), so the event never reaches
+ * navigation while they're open.
  */
 fun mobileBackAction(route: MobileRoute?, tab: MobileTab): MobileBackAction? = when {
     route != null -> MobileBackAction.PopRoute
@@ -58,41 +59,41 @@ fun mobileBackAction(route: MobileRoute?, tab: MobileTab): MobileBackAction? = w
 }
 
 /**
- * Состояние мобильного макета — навигация (текущий таб + открытый push-экран) и оверлей листа
- * New connection. Чисто UI-состояние, мутаторы инкапсулированы (`private set`), как в
- * [app.skerry.ui.session.SessionsController]. Блокировка vault живёт в `VaultGate`, а не здесь.
+ * Mobile layout state — navigation (current tab + open push screen) and the New connection sheet
+ * overlay. Pure UI state, mutators encapsulated (`private set`), as in
+ * [app.skerry.ui.session.SessionsController]. Vault locking lives in `VaultGate`, not here.
  */
 @Stable
 class MobileDesignState(
-    // Свёрнутые папки хостов в списке (имена групп). Стартовое значение читается из персиста при
-    // запуске, колбэк пишет его обратно — состояние папок переживает перезапуск. Дефолты (всё
-    // развёрнуто, no-op) сохраняют прежнее поведение для превью/тестов.
+    // Collapsed host-list folders (group names). Initial value is read from persistence at startup,
+    // the callback writes it back — folder state survives restart. Defaults (all expanded, no-op)
+    // preserve prior behavior for previews/tests.
     initialCollapsedGroups: Set<String> = emptySet(),
     private val onCollapsedGroupsChange: (Set<String>) -> Unit = {},
-    // Шрифт терминала (More → Appearance → Font) и его кегль. Стартовые значения читаются из персиста
-    // при запуске, колбэки пишут обратно — выбор переживает перезапуск. Дефолты (Hack 13px, no-op) —
-    // для превью/тестов.
+    // Terminal font (More -> Appearance -> Font) and its size. Initial values are read from
+    // persistence at startup, callbacks write back — the choice survives restart. Defaults
+    // (Hack 13px, no-op) are for previews/tests.
     initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     private val onTerminalFontSizeChange: (Int) -> Unit = {},
-    // Высота строки и межбуквенный интервал терминала (More → Appearance). На мобильном пока не
-    // персистятся (в памяти) — колбэки no-op по умолчанию, как и у остальных настроек Appearance.
+    // Terminal line height and letter spacing (More -> Appearance). Not yet persisted on mobile
+    // (in-memory only) — callbacks default to no-op, like the other Appearance settings.
     initialTerminalLineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
     private val onTerminalLineHeightChange: (Float) -> Unit = {},
     initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
     private val onTerminalLetterSpacingChange: (Float) -> Unit = {},
-    // Цветовая тема терминала (More → Appearance → карточки тем). Проводится в терминал через
-    // [app.skerry.ui.terminal.LocalTerminalTheme]; на мобильном пока не персистится (в памяти).
+    // Terminal color theme (More -> Appearance -> theme cards). Threaded to the terminal via
+    // [app.skerry.ui.terminal.LocalTerminalTheme]; not yet persisted on mobile (in-memory only).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
-    // Язык интерфейса (More → Appearance → Language). Стартовое значение читается из персиста при
-    // запуске, колбэк пишет его обратно — выбор переживает перезапуск. Дефолты (System, no-op) —
-    // автоопределение по локали ОС для превью/тестов.
+    // UI language (More -> Appearance -> Language). Initial value is read from persistence at
+    // startup, the callback writes it back — the choice survives restart. Defaults (System, no-op)
+    // auto-detect from the OS locale for previews/tests.
     initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
     private val onUiLanguageChange: (UiLanguage) -> Unit = {},
-    // Порог автоблокировки по простою (More → Security). Стартовое значение из персиста, колбэк пишет
-    // обратно; проводится в [app.skerry.ui.vault.VaultGate] как idleMs таймера.
+    // Idle auto-lock threshold (More -> Security). Initial value from persistence, callback writes
+    // back; threaded into [app.skerry.ui.vault.VaultGate] as the timer's idleMs.
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
 ) {
@@ -101,79 +102,79 @@ class MobileDesignState(
     var sheetNewConn: Boolean by mutableStateOf(false); private set
 
     /**
-     * Профиль, открытый листом New connection в режиме правки (Edit с экрана детали), либо `null` —
-     * лист в режиме создания. Лист предзаполняет форму из него ([NewConnectionFormState.fromHost]) и
-     * удерживает [Host.id] при сохранении (паритет desktop-модалки с её параметром `editHost`).
+     * Host open in the New connection sheet in edit mode (Edit from the detail screen), or `null`
+     * for create mode. The sheet prefills the form from it ([NewConnectionFormState.fromHost]) and
+     * keeps [Host.id] on save (parity with the desktop modal's `editHost` parameter).
      */
     var editingHost: Host? by mutableStateOf(null); private set
 
-    /** Идентификатор хоста, открытого на [MobileRoute.HostDetail] — экран читает его из стора по id. */
+    /** Id of the host open on [MobileRoute.HostDetail] — the screen reads it from the store by id. */
     var selectedHostId: String? by mutableStateOf(null); private set
 
     /**
-     * Открыт ли модальный оверлей таба (например, vault-диалог Generate/Import) — таб-бар при этом
-     * прячется, иначе он плавает поверх диалога и перекрывает нижние поля ввода над клавиатурой.
-     * Мутируется только через [modalOverlay] (инкапсуляция, как у остальных полей).
+     * Whether a tab's modal overlay is open (e.g. a vault Generate/Import dialog) — hides the tab
+     * bar, otherwise it floats over the dialog and covers input fields above the keyboard. Mutated
+     * only via [modalOverlay] (encapsulation, like the other fields).
      */
     var modalOpen: Boolean by mutableStateOf(false); private set
 
-    /** Пометить, открыт ли модальный оверлей текущего таба (vault-диалоги/лист деталей) — прячет таб-бар. */
+    /** Mark whether the current tab's modal overlay is open (vault dialogs/detail sheet) — hides the tab bar. */
     fun modalOverlay(open: Boolean) { modalOpen = open }
 
-    /** Таб-бар виден только на корневых экранах без открытой модалки: push-экраны полноэкранные. */
+    /** Tab bar is visible only on root screens with no modal open: push screens are full-screen. */
     val showTabs: Boolean get() = route == null && !modalOpen
 
-    /** Переключить корневой таб — закрывает любой открытый push-экран и сбрасывает выбранный хост. */
+    /** Switch the root tab — closes any open push screen and clears the selected host. */
     fun select(t: MobileTab) {
         tab = t
         route = null
         selectedHostId = null
     }
 
-    /** Открыть полноэкранный под-экран поверх текущего таба. */
+    /** Open a full-screen sub-screen over the current tab. */
     fun push(r: MobileRoute) { route = r }
 
-    /** Открыть деталь конкретного хоста (тап по строке списка): запоминает id и пушит экран. */
+    /** Open a specific host's detail (tap on a list row): remembers the id and pushes the screen. */
     fun openHost(id: String) {
         selectedHostId = id
         route = MobileRoute.HostDetail
     }
 
-    /** Вернуться с push-экрана на текущий таб (back-стрелка макета); снимает выбор хоста. */
+    /** Return from a push screen to the current tab (shell back arrow); clears the selected host. */
     fun pop() {
         route = null
         selectedHostId = null
     }
 
-    /** Имена свёрнутых папок хостов (их список хостов скрыт). */
+    /** Names of collapsed host-list folders (their host list is hidden). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
 
-    /** Свёрнута ли папка [name] (её список хостов скрыт). */
+    /** Whether folder [name] is collapsed (its host list is hidden). */
     fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
 
-    /** Свернуть/развернуть папку [name] и сообщить новый набор наружу (для персиста). */
+    /** Collapse/expand folder [name] and report the new set outward (for persistence). */
     fun toggleGroupCollapsed(name: String) {
         collapsedGroups = if (name in collapsedGroups) collapsedGroups - name else collapsedGroups + name
         onCollapsedGroupsChange(collapsedGroups)
     }
 
     /**
-     * Имя группы, открытой диалогом «Rename group» (карандаш у заголовка папки), либо `null` — диалог
-     * закрыт. Переименование/удаление профилей делает [app.skerry.ui.host.HostManagerController]; этот
-     * стор синхронизирует только side-channel свёрнутости ([onGroupRenamed]/[onGroupDeleted]).
+     * Name of the group open in the "Rename group" dialog (pencil next to the folder header), or
+     * `null` if closed. [app.skerry.ui.host.HostManagerController] renames/deletes profiles; this
+     * store only syncs the collapsed-state side channel ([onGroupRenamed]/[onGroupDeleted]).
      */
     var renamingGroup: String? by mutableStateOf(null); private set
 
-    /** Открыть диалог правки группы [name] (карандаш у заголовка папки). */
+    /** Open the rename dialog for group [name] (pencil next to the folder header). */
     fun openRenameGroup(name: String) { renamingGroup = name }
 
-    /** Закрыть диалог правки группы. */
+    /** Close the group rename dialog. */
     fun dismissRenameGroup() { renamingGroup = null }
 
     /**
-     * Синхронизировать свёрнутость при переименовании группы [old]→[new] (профили правит контроллер):
-     * свёрнутая папка остаётся свёрнутой под новым именем. Имя триммится; пустое/неизменное — no-op.
-     * Колбэк персиста вызывается только при реальной правке.
+     * Sync collapsed state when a group is renamed [old]->[new] (the controller renames profiles):
+     * a collapsed folder stays collapsed under the new name. Name is trimmed; empty/unchanged is a
+     * no-op. The persistence callback fires only on an actual change.
      */
     fun onGroupRenamed(old: String, new: String) {
         val n = new.trim().filterNot { it == '\n' || it == '\r' }
@@ -184,7 +185,7 @@ class MobileDesignState(
         }
     }
 
-    /** Синхронизировать свёрнутость при удалении группы [name] (профили разгруппировывает контроллер). */
+    /** Sync collapsed state when group [name] is deleted (the controller ungroups its profiles). */
     fun onGroupDeleted(name: String) {
         if (name in collapsedGroups) {
             collapsedGroups = collapsedGroups - name
@@ -192,50 +193,50 @@ class MobileDesignState(
         }
     }
 
-    /** Открыть лист в режиме создания нового хоста (форма пустая). */
+    /** Open the sheet in create-new-host mode (empty form). */
     fun openNewConn() { editingHost = null; sheetNewConn = true }
 
-    /** Открыть лист в режиме правки [host] (форма предзаполняется, сохранение удерживает его id). */
+    /** Open the sheet in edit mode for [host] (form prefilled, save keeps its id). */
     fun openEditConn(host: Host) { editingHost = host; sheetNewConn = true }
 
     fun closeSheet() { sheetNewConn = false; editingHost = null }
 
-    /** Выбранный шрифт терминала (More → Appearance → Font). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalAppearance]. */
+    /** Selected terminal font (More -> Appearance -> Font). Threaded to the terminal via [app.skerry.ui.terminal.LocalTerminalAppearance]. */
     var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
 
-    /** Кегль шрифта терминала, px (More → Appearance → Font size). */
+    /** Terminal font size, px (More -> Appearance -> Font size). */
     var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
 
-    /** Множитель высоты строки терминала (More → Appearance → Line height). */
+    /** Terminal line-height multiplier (More -> Appearance -> Line height). */
     var terminalLineHeight: Float by mutableStateOf(initialTerminalLineHeight); private set
 
-    /** Межбуквенный интервал терминала, sp (More → Appearance → Letter spacing). */
+    /** Terminal letter spacing, sp (More -> Appearance -> Letter spacing). */
     var terminalLetterSpacing: Float by mutableStateOf(initialTerminalLetterSpacing); private set
 
-    /** Тема терминала (More → Appearance → карточки). Проводится через [app.skerry.ui.terminal.LocalTerminalTheme]. */
+    /** Terminal theme (More -> Appearance -> cards). Threaded via [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
-    /** Язык интерфейса (More → Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
+    /** UI language (More -> Appearance -> Language). Threaded to the root via [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
 
-    /** Порог автоблокировки по простою (More → Security). Проводится в [app.skerry.ui.vault.VaultGate]. */
+    /** Idle auto-lock threshold (More -> Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
     var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
 
-    /** Выбрать порог автоблокировки и сообщить наружу (для персиста). Повтор того же — no-op. */
+    /** Choose the auto-lock threshold and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseAutoLock(duration: AutoLockDuration) {
         if (duration == autoLock) return
         autoLock = duration
         onAutoLockChange(duration)
     }
 
-    /** Выбрать шрифт терминала и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    /** Choose the terminal font and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseTerminalFont(font: TerminalFont) {
         if (font == terminalFont) return
         terminalFont = font
         onTerminalFontChange(font)
     }
 
-    /** Выбрать тему терминала и сообщить наружу. Повтор той же — no-op. */
+    /** Choose the terminal theme and report outward. Repeating the same value is a no-op. */
     fun chooseTerminalTheme(theme: TerminalTheme) {
         if (theme == terminalTheme) return
         terminalTheme = theme
@@ -243,8 +244,8 @@ class MobileDesignState(
     }
 
     /**
-     * Задать кегль шрифта терминала и сообщить наружу (для персиста). Значение вне [TERMINAL_FONT_SIZE_RANGE]
-     * и повтор текущего — no-op (ни записи, ни колбэка).
+     * Set the terminal font size and report outward (for persistence). A value outside
+     * [TERMINAL_FONT_SIZE_RANGE] or equal to the current one is a no-op (no write, no callback).
      */
     fun chooseTerminalFontSize(px: Int) {
         if (px == terminalFontSize || px !in TERMINAL_FONT_SIZE_RANGE) return
@@ -252,7 +253,7 @@ class MobileDesignState(
         onTerminalFontSizeChange(px)
     }
 
-    /** Задать множитель высоты строки (clamp через [clampTerminalLineHeight]); совпадение — no-op. */
+    /** Set the line-height multiplier (clamped via [clampTerminalLineHeight]); equal value is a no-op. */
     fun chooseTerminalLineHeight(ratio: Float) {
         val v = clampTerminalLineHeight(ratio)
         if (v == terminalLineHeight) return
@@ -260,7 +261,7 @@ class MobileDesignState(
         onTerminalLineHeightChange(v)
     }
 
-    /** Задать межбуквенный интервал (clamp через [clampTerminalLetterSpacing]); совпадение — no-op. */
+    /** Set the letter spacing (clamped via [clampTerminalLetterSpacing]); equal value is a no-op. */
     fun chooseTerminalLetterSpacing(sp: Float) {
         val v = clampTerminalLetterSpacing(sp)
         if (v == terminalLetterSpacing) return
@@ -268,7 +269,7 @@ class MobileDesignState(
         onTerminalLetterSpacingChange(v)
     }
 
-    /** Выбрать язык интерфейса и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    /** Choose the UI language and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseUiLanguage(language: UiLanguage) {
         if (language == uiLanguage) return
         uiLanguage = language

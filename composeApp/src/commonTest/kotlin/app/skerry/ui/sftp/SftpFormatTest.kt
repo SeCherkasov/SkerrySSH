@@ -3,7 +3,7 @@ package app.skerry.ui.sftp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Чистое форматирование SFTP-листинга: человекочитаемый размер файла. */
+/** Pure formatting for the SFTP listing: human-readable file size. */
 class SftpFormatTest {
 
     @Test
@@ -24,7 +24,7 @@ class SftpFormatTest {
 
     @Test
     fun rounding_at_a_unit_boundary_carries_into_the_next_unit() {
-        // 1048575 B = 1024 МиБ − 1 B: округление дотягивает до 1024.0 KB → показываем 1.0 MB.
+        // 1048575 B = 1024 MiB - 1 B: rounding pushes it to 1024.0 KB, so we show 1.0 MB.
         assertEquals("1.0 MB", humanSize(1024L * 1024 - 1))
     }
 }

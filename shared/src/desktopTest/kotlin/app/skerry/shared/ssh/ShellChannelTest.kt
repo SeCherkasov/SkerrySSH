@@ -23,9 +23,9 @@ private const val PASSWORD = "correct horse battery staple"
 private const val TIMEOUT_MS = 15_000L
 
 /**
- * Интеграционные тесты shell-канала с PTY против встроенного Apache MINA SSHD.
- * Серверный shell — in-process эхо ([EchoShellFactory]): копирует stdin в stdout,
- * что даёт детерминированную проверку без внешних процессов и зависимости от ОС.
+ * Integration tests for the PTY shell channel against an embedded Apache MINA SSHD server.
+ * The server shell is an in-process echo ([EchoShellFactory]) that copies stdin to stdout,
+ * giving deterministic checks without external processes or OS dependence.
  */
 class ShellChannelTest {
 
@@ -81,7 +81,7 @@ class ShellChannelTest {
             assertTrue(shell.isOpen)
             withTimeout(TIMEOUT_MS) {
                 shell.close()
-                // EOF канала должен завершить flow, а не подвесить его
+                // channel EOF should complete the flow, not hang it
                 shell.output.collect { }
             }
             assertFalse(shell.isOpen)
@@ -124,8 +124,8 @@ class ShellChannelTest {
         val connection = connect()
         try {
             val shell = connection.openShell(PtySize())
-            // Закрываем заранее: первый collect доходит до EOF и завершается,
-            // захватив поток; повтор обязан упасть — без гонки сборщиков.
+            // Closed upfront: the first collect reaches EOF and completes, claiming the flow;
+            // a second collect must fail, without a race between collectors.
             shell.close()
             withTimeout(TIMEOUT_MS) {
                 shell.output.collect { }
@@ -137,7 +137,7 @@ class ShellChannelTest {
     }
 }
 
-/** Серверный shell для тестов: эхо stdin → stdout в отдельном потоке. */
+/** Test server shell: echoes stdin to stdout on a separate thread. */
 private object EchoShellFactory : ShellFactory {
     override fun createShell(channel: ChannelSession): Command = EchoCommand()
 }
@@ -150,7 +150,7 @@ private class EchoCommand : Command {
 
     override fun setInputStream(value: InputStream) { input = value }
     override fun setOutputStream(value: OutputStream) { output = value }
-    override fun setErrorStream(value: OutputStream) { /* эхо пишет только в stdout */ }
+    override fun setErrorStream(value: OutputStream) { /* echo writes only to stdout */ }
     override fun setExitCallback(callback: org.apache.sshd.server.ExitCallback) { exit = callback }
 
     override fun start(channel: ChannelSession, env: org.apache.sshd.server.Environment) {
@@ -164,7 +164,7 @@ private class EchoCommand : Command {
                     output.flush()
                 }
             } catch (_: Exception) {
-                // канал закрыт — завершаем поток
+                // channel closed — end the thread
             } finally {
                 exit?.onExit(0)
             }

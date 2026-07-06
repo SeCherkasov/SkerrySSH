@@ -97,14 +97,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-/** Teams (Phase 2+): E2E-шеринг хостов/сниппетов. Живые данные из [LocalTeams]; null — мок-превью. */
+/** Teams: E2E sharing of hosts/snippets. Live data from [LocalTeams]; null — mock preview. */
 @Composable
 fun TeamsView() {
     val coordinator = LocalTeams.current
     if (coordinator == null) TeamsMockView() else TeamsLiveView(coordinator)
 }
 
-/** Деструктивные действия Teams, требующие [ConfirmActionDialog]. */
+/** Destructive Teams actions requiring [ConfirmActionDialog]. */
 private sealed interface TeamsConfirm {
     data class Leave(val teamId: String) : TeamsConfirm
     data class Delete(val teamId: String) : TeamsConfirm
@@ -118,7 +118,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     val busy by tc.busy.collectAsState()
     val error by tc.lastError.collectAsState()
     var selectedId by remember { mutableStateOf<String?>(null) }
-    // Счётчик перечиток team-vault-сторов: инкремент после каждой операции/синка.
+    // Reread counter for team-vault stores: incremented after each operation/sync.
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { tc.refresh(); tc.syncAll(); tick++ }
 
@@ -237,7 +237,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     }
 }
 
-/** Пикер «поделиться записью»: свои хосты/сниппеты минус уже общие в команде. */
+/** "Share a record" picker: own hosts/snippets minus those already shared with the team. */
 @Composable
 private fun SharePicker(
     tc: TeamsCoordinator,
@@ -444,7 +444,7 @@ private fun LiveMemberRow(
         if (invited) {
             RoleBadge(stringResource(Res.string.lib_teams_status_invited), D.cyanBright, D.cyan.copy(alpha = 0.12f))
         }
-        // Клик по бейджу роли меняет её (owner/admin в пределах анти-эскалации).
+        // Clicking the role badge changes it (owner/admin within anti-escalation limits).
         val badgeModifier = if (canManageMember) Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onChangeRole) else Modifier
         RoleBadge(teamRoleLabel(m.role), roleFg, roleBg, modifier = badgeModifier)
         if (canManageMember) {
@@ -472,7 +472,7 @@ private fun SharedRecordRow(label: String, detail: String, mono: androidx.compos
     }
 }
 
-/** Текст типизированной ошибки Teams (аналог syncFailureText). */
+/** Text for a typed Teams error (analogous to syncFailureText). */
 @Composable
 internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.NotConnected -> stringResource(Res.string.lib_teams_err_not_connected)
@@ -486,7 +486,7 @@ internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.Forbidden -> stringResource(Res.string.lib_teams_err_forbidden)
 }
 
-/** launch из обработчиков кликов: suspend-блок без параметров, короче лямбды с CoroutineScope. */
+/** launch from click handlers: a param-less suspend block, shorter than a lambda with CoroutineScope. */
 private fun CoroutineScope.launch2(block: suspend () -> Unit) {
     launch { block() }
 }

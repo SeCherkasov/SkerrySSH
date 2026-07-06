@@ -5,17 +5,17 @@ import okio.FileSystem
 import okio.Path
 
 /**
- * Файловый [BioArtifactStore] на okio — один код для desktop/Android (как [FileVault]): I/O за
- * [FileSystem] (`FileSystem.SYSTEM` в проде, `FakeFileSystem` в тестах). Файл переписывается целиком
- * атомарно (tmp + [FileSystem.atomicMove]); битый/отсутствующий файл при [read] — `null`, не throw
- * (включённость биометрии не должна валить запуск). Кладётся рядом с `vault.json` под именем
- * `vault.bio`; ключевой материал в нём — только обёртка `wrap_bioKey(dataKey)`, бесполезная без
- * `bioKey` устройства.
+ * File-backed [BioArtifactStore] over okio — one implementation for desktop/Android (like
+ * [FileVault]): I/O behind [FileSystem] (`FileSystem.SYSTEM` in prod, `FakeFileSystem` in tests).
+ * The file is rewritten atomically (tmp + [FileSystem.atomicMove]); a corrupt/missing file on
+ * [read] returns `null`, not a throw (biometrics being enabled must not break startup). Stored
+ * next to `vault.json` as `vault.bio`; the only key material in it is the `wrap_bioKey(dataKey)`
+ * wrapper, useless without the device's `bioKey`.
  *
- * [harden] — платформенный хук приватных прав (0600 на POSIX), зовётся на tmp до подмены цели
- * (см. [atomicWriteUtf8]): обёртка ключа не должна быть мир-читаемой под общим домашним каталогом.
- * По умолчанию no-op (тесты; Android — filesDir приватен для UID); desktop передаёт
- * `PrivateConfig.harden`.
+ * [harden] is the platform hook for private permissions (0600 on POSIX), called on the tmp file
+ * before it replaces the target (see [atomicWriteUtf8]): the key wrapper must not be world-readable
+ * under a shared home directory. Defaults to no-op (tests; Android's filesDir is private to the
+ * UID); desktop passes `PrivateConfig.harden`.
  */
 class FileBioArtifactStore(
     private val path: Path,
@@ -31,7 +31,7 @@ class FileBioArtifactStore(
         runCatching { json.decodeFromString<BioArtifact>(fileSystem.read(path) { readUtf8() }) }.getOrNull()
 
     override fun write(artifact: BioArtifact) {
-        // Атомарно, с подчисткой tmp при провале (не оставлять осиротевшую обёртку) и harden на tmp.
+        // Atomic, with tmp cleanup on failure (no orphaned wrapper) and harden applied to tmp.
         atomicWriteUtf8(fileSystem, path, json.encodeToString(artifact), harden)
     }
 

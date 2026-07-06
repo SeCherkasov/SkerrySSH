@@ -180,7 +180,7 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
-    // Split: независимая вторичная сессия внутри вкладки (модель Termius)
+    // Split: independent secondary session within a tab
 
     private fun SessionsController.connectSplit(parentId: String, hostId: String?) =
         connectSplit(parentId = parentId, hostId = hostId, title = hostId ?: "", subtitle = "u@h:22", target = target, auth = auth)
@@ -202,7 +202,7 @@ class SessionsControllerTest {
 
         sessions.toggleSplit()
         assertTrue(sessions.active!!.splitOpen)
-        assertNull(sessions.active!!.splitSession) // пусто — покажет пикер
+        assertNull(sessions.active!!.splitSession) // empty: shows the picker
 
         sessions.toggleSplit()
         assertFalse(sessions.active!!.splitOpen)
@@ -222,7 +222,7 @@ class SessionsControllerTest {
         val secondary = parent.splitSession!!
         assertTrue(parent.focusedSplit)
         assertEquals("host-b", secondary.hostId)
-        // независимый контроллер, отдельный от основной сессии
+        // independent controller, separate from the main session
         assertTrue(secondary.controller !== parent.controller)
         assertIs<ConnectionUiState.Connected>(secondary.controller.uiState)
         scope.cancel()
@@ -236,7 +236,7 @@ class SessionsControllerTest {
 
         sessions.connectSplit(parentId = a, hostId = "host-b")
 
-        assertEquals(listOf(a), sessions.sessions.map { it.id }) // вторичная не в баре
+        assertEquals(listOf(a), sessions.sessions.map { it.id }) // secondary is not in the tab bar
         scope.cancel()
     }
 
@@ -286,7 +286,7 @@ class SessionsControllerTest {
         sessions.disconnectAll()
 
         assertTrue(sessions.sessions.isEmpty())
-        assertTrue(transport.connections.all { it.disconnected }) // и основная, и вторичная
+        assertTrue(transport.connections.all { it.disconnected }) // both main and secondary
         scope.cancel()
     }
 
@@ -320,7 +320,7 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
-    // Пустой таб без сессии + per-tab view + connect-reuse
+    // Blank tab with no session + per-tab view + connect-reuse
 
     @Test
     fun `openBlank adds an active tab with no connection`() = runTest {
@@ -333,7 +333,7 @@ class SessionsControllerTest {
         val tab = sessions.active!!
         assertTrue(tab.isBlank)
         assertNull(tab.hostId)
-        assertIs<ConnectionUiState.Form>(tab.controller.uiState) // соединение не стартует
+        assertIs<ConnectionUiState.Form>(tab.controller.uiState) // no connection is started
         scope.cancel()
     }
 
@@ -357,12 +357,12 @@ class SessionsControllerTest {
     fun `setActiveView changes only the active session view`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
-        val b = sessions.open(hostId = "host-b") // активна b
+        val b = sessions.open(hostId = "host-b") // b is active
 
         sessions.setActiveView(SessionView.Sftp)
 
         assertEquals(SessionView.Sftp, sessions.sessions.first { it.id == b }.view)
-        assertEquals(SessionView.Terminal, sessions.sessions.first { it.id == a }.view) // соседа не трогает
+        assertEquals(SessionView.Terminal, sessions.sessions.first { it.id == a }.view) // leaves the sibling untouched
         scope.cancel()
     }
 
@@ -373,7 +373,7 @@ class SessionsControllerTest {
 
         val id = sessions.connect(hostId = "host-a", title = "host-a", subtitle = "u@h:22", target = target, auth = auth)
 
-        assertEquals(blank, id) // та же вкладка, новой не создалось
+        assertEquals(blank, id) // same tab, no new one created
         assertEquals(1, sessions.sessions.size)
         val tab = sessions.active!!
         assertEquals("host-a", tab.hostId)
@@ -386,7 +386,7 @@ class SessionsControllerTest {
     @Test
     fun `connect opens a new tab when the active one is not blank`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
-        val a = sessions.open(hostId = "host-a") // подключена, не пустая
+        val a = sessions.open(hostId = "host-a") // connected, not blank
 
         val id = sessions.connect(hostId = "host-b", title = "host-b", subtitle = "u@h:22", target = target, auth = auth)
 
@@ -407,7 +407,7 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
-    // Drag-reorder вкладок (модель Termius: вкладки можно перетаскивать местами)
+    // Drag-reorder tabs
 
     @Test
     fun `moveTab reorders tabs and keeps the active one`() = runTest {
@@ -417,10 +417,10 @@ class SessionsControllerTest {
         val c = sessions.open(hostId = "host-c")
         sessions.activate(a)
 
-        sessions.moveTab(fromIndex = 0, toIndex = 2) // a уезжает в конец
+        sessions.moveTab(fromIndex = 0, toIndex = 2) // a moves to the end
 
         assertEquals(listOf(b, c, a), sessions.sessions.map { it.id })
-        assertEquals(a, sessions.activeId) // активная вкладка не меняется при переносе
+        assertEquals(a, sessions.activeId) // active tab does not change on move
         scope.cancel()
     }
 
@@ -431,7 +431,7 @@ class SessionsControllerTest {
         val b = sessions.open(hostId = "host-b")
         val c = sessions.open(hostId = "host-c")
 
-        sessions.moveTab(fromIndex = 2, toIndex = 0) // c в начало
+        sessions.moveTab(fromIndex = 2, toIndex = 0) // c moves to front
 
         assertEquals(listOf(c, a, b), sessions.sessions.map { it.id })
         scope.cancel()
@@ -443,9 +443,9 @@ class SessionsControllerTest {
         val a = sessions.open(hostId = "host-a")
         val b = sessions.open(hostId = "host-b")
 
-        sessions.moveTab(fromIndex = 0, toIndex = 0) // на месте
-        sessions.moveTab(fromIndex = 5, toIndex = 0) // мимо
-        sessions.moveTab(fromIndex = 0, toIndex = 9) // за край
+        sessions.moveTab(fromIndex = 0, toIndex = 0) // no-op
+        sessions.moveTab(fromIndex = 5, toIndex = 0) // out of range
+        sessions.moveTab(fromIndex = 0, toIndex = 9) // out of range
 
         assertEquals(listOf(a, b), sessions.sessions.map { it.id })
         scope.cancel()
@@ -464,7 +464,7 @@ class SessionsControllerTest {
     }
 }
 
-/** Транспорт, отдающий свежее соединение на каждый connect; список — для проверки disconnect. */
+/** Transport that returns a fresh connection on each connect; list is used to verify disconnects. */
 private class FakeTransport : SshTransport {
     val connections = mutableListOf<FakeConnection>()
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection =

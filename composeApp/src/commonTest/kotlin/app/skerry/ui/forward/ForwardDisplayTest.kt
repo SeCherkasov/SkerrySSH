@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Чистые хелперы колонок таблицы туннелей: тип, порт слушателя, source/destination. */
+/** Pure helpers for the tunnel table columns: type, listen port, source/destination. */
 class ForwardDisplayTest {
 
     private fun entry(
@@ -16,9 +16,9 @@ class ForwardDisplayTest {
         status: ForwardStatus = ForwardStatus.Starting,
     ) = ForwardEntry(0, direction, bindHost, requestedPort, destHost, destPort).also { it.status = status }
 
-    // Прим.: forwardTypeLabel теперь @Composable (метки LOCAL/REMOTE/SOCKS — строковые ресурсы,
-    // technical-бейджи идентичны в обоих языках), поэтому юнит-тест маппинга снят: это простой
-    // ресурс-лукап, проверяемый только в composition. Ниже — чистые хелперы форматирования.
+    // Note: forwardTypeLabel is now @Composable (LOCAL/REMOTE/SOCKS labels are string resources,
+    // the technical badges are identical in both languages), so the mapping unit test was dropped: it's
+    // a plain resource lookup, only verifiable in composition. Below are pure formatting helpers.
 
     @Test
     fun `listen port is the bound port once active`() {
@@ -30,7 +30,7 @@ class ForwardDisplayTest {
     fun `listen port falls back to the requested port before active`() {
         val starting = entry(ForwardDirection.Local, requestedPort = 8080)
         assertEquals(8080, forwardListenPort(starting))
-        val failed = entry(ForwardDirection.Local, requestedPort = 8080, status = ForwardStatus.Failed("занят"))
+        val failed = entry(ForwardDirection.Local, requestedPort = 8080, status = ForwardStatus.Failed("busy"))
         assertEquals(8080, forwardListenPort(failed))
     }
 
@@ -59,7 +59,7 @@ class ForwardDisplayTest {
     fun `human rate scales bytes per second across units`() {
         assertEquals("512 B/s", humanRate(512))
         assertEquals("42 KB/s", humanRate(42L * 1024))
-        assertEquals("1.1 MB/s", humanRate(1_200_000)) // ~1.14 MiB/с округляется вниз до 1.1
+        assertEquals("1.1 MB/s", humanRate(1_200_000)) // ~1.14 MiB/s rounds down to 1.1
         assertEquals("0 B/s", humanRate(0))
     }
 
@@ -67,6 +67,6 @@ class ForwardDisplayTest {
     fun `rate fraction saturates at one mebibyte per second`() {
         assertEquals(0f, rateFraction(0))
         assertEquals(1f, rateFraction(1024L * 1024))
-        assertEquals(1f, rateFraction(5L * 1024 * 1024)) // насыщение
+        assertEquals(1f, rateFraction(5L * 1024 * 1024)) // saturation
     }
 }

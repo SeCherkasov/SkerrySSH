@@ -52,10 +52,10 @@ class TeamRepositoryTest {
         repo.create("team-1", alice, now = 10)
 
         assertTrue(repo.invite("team-1", bob, TeamRoles.EDITOR, envelope = byteArrayOf(7, 7), invitedBy = alice, now = 20))
-        // повторное приглашение того же аккаунта — отказ
+        // re-inviting the same account is rejected
         assertFalse(repo.invite("team-1", bob, TeamRoles.VIEWER, envelope = byteArrayOf(8), invitedBy = alice, now = 21))
 
-        // до принятия: invited, конверт доступен, в активные не входит
+        // before acceptance: invited, envelope available, not counted as active
         val invited = repo.teamsFor(bob).single()
         assertEquals(TeamMemberStatus.INVITED, invited.status)
         assertContentEquals(byteArrayOf(7, 7), invited.envelope)
@@ -63,7 +63,7 @@ class TeamRepositoryTest {
         assertEquals(2, invited.memberCount)
 
         assertTrue(repo.accept("team-1", bob))
-        // повторное принятие — no-op
+        // accepting again is a no-op
         assertFalse(repo.accept("team-1", bob))
 
         val active = repo.membership("team-1", bob)!!
@@ -84,7 +84,7 @@ class TeamRepositoryTest {
         assertTrue(repo.updateRole("team-1", bob, TeamRoles.ADMIN))
         assertEquals(TeamRoles.ADMIN, repo.membership("team-1", bob)!!.role)
 
-        // владелец не меняется, несуществующий участник — false
+        // the owner's role is unchanged; a non-existent member returns false
         assertFalse(repo.updateRole("team-1", alice, TeamRoles.VIEWER))
         assertEquals(TeamRoles.OWNER, repo.membership("team-1", alice)!!.role)
         assertFalse(repo.updateRole("team-1", "ghost@example.com", TeamRoles.VIEWER))
@@ -101,7 +101,7 @@ class TeamRepositoryTest {
         assertTrue(repo.removeMember("team-1", bob))
         assertNull(repo.membership("team-1", bob))
 
-        // владелец защищён от удаления (команду убирает только deleteTeam)
+        // the owner is protected from removal (only deleteTeam removes the team)
         assertFalse(repo.removeMember("team-1", alice))
         assertEquals(TeamRoles.OWNER, repo.membership("team-1", alice)!!.role)
     }

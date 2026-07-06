@@ -71,41 +71,41 @@ class TeamRoutesTest {
         val aliceTokens = client.registerAccount(alice, password)
         val bobTokens = client.registerAccount(bob, password, deviceId = "dev-bob")
 
-        // ключи: до публикации 404, после — отдаётся
+        // keys: 404 before publishing, served after
         assertEquals(HttpStatusCode.NotFound, client.get("/account/keys/$bob") { bearerAuth(aliceTokens.accessToken) }.status)
         assertEquals(HttpStatusCode.OK, client.publishKey(bobTokens.accessToken, ByteArray(32) { 7 }).status)
         val bobKey: AccountKeyResponse = client.get("/account/keys/$bob") { bearerAuth(aliceTokens.accessToken) }.body()
         assertEquals(ByteArray(32) { 7 }.b64(), bobKey.publicKey)
 
-        // создание команды; дубликат id — 409
+        // create a team; duplicate id -> 409
         assertEquals(HttpStatusCode.Created, client.createTeam(aliceTokens.accessToken).status)
         assertEquals(HttpStatusCode.Conflict, client.createTeam(aliceTokens.accessToken).status)
 
-        // приглашение
+        // invite
         val envelope = byteArrayOf(9, 9, 9)
         assertEquals(HttpStatusCode.Created, client.invite(aliceTokens.accessToken, bob, envelope).status)
         assertEquals(HttpStatusCode.Conflict, client.invite(aliceTokens.accessToken, bob, envelope).status)
 
-        // Боб видит приглашение с конвертом
+        // Bob sees the invite with the envelope
         val bobTeams: TeamsResponse = client.get("/teams") { bearerAuth(bobTokens.accessToken) }.body()
         val invitedTeam = bobTeams.teams.single()
         assertEquals("invited", invitedTeam.status)
         assertEquals(envelope.b64(), invitedTeam.envelope)
         assertEquals(2, invitedTeam.memberCount)
 
-        // до принятия записи команды недоступны (403)
+        // team records are inaccessible before accepting (403)
         assertEquals(
             HttpStatusCode.Forbidden,
             client.get("/teams/$teamId/records?since=0") { bearerAuth(bobTokens.accessToken) }.status,
         )
 
-        // принятие: конверт очищен, статус active
+        // accept: envelope cleared, status active
         assertEquals(HttpStatusCode.OK, client.post("/teams/$teamId/accept") { bearerAuth(bobTokens.accessToken) }.status)
         val accepted: TeamsResponse = client.get("/teams") { bearerAuth(bobTokens.accessToken) }.body()
         assertEquals("active", accepted.teams.single().status)
         assertNull(accepted.teams.single().envelope)
 
-        // Алиса пушит запись — Боб её видит в дельте
+        // Alice pushes a record; Bob sees it in the delta
         val push: PushResponse = client.put("/teams/$teamId/records") {
             bearerAuth(aliceTokens.accessToken)
             contentType(ContentType.Application.Json)
@@ -116,7 +116,7 @@ class TeamRoutesTest {
         val delta: RecordsResponse = client.get("/teams/$teamId/records?since=0") { bearerAuth(bobTokens.accessToken) }.body()
         assertEquals("r1", delta.records.single().id)
 
-        // участники видны обоим
+        // members are visible to both
         val members: TeamMembersResponse = client.get("/teams/$teamId/members") { bearerAuth(bobTokens.accessToken) }.body()
         assertEquals(setOf(alice, bob), members.members.map { it.accountId }.toSet())
         assertNotNull(members.members.single { it.role == "owner" && it.accountId == alice })
@@ -136,31 +136,31 @@ class TeamRoutesTest {
         client.invite(aliceTokens.accessToken, bob, byteArrayOf(1))
         client.post("/teams/$teamId/accept") { bearerAuth(bobTokens.accessToken) }
 
-        // посторонний не видит команду (404, не 403 — не раскрываем существование)
+        // a non-member does not see the team (404, not 403, to avoid revealing existence)
         assertEquals(HttpStatusCode.NotFound, client.get("/teams/$teamId/members") { bearerAuth(eveTokens.accessToken) }.status)
         assertEquals(
             HttpStatusCode.NotFound,
             client.get("/teams/$teamId/records?since=0") { bearerAuth(eveTokens.accessToken) }.status,
         )
 
-        // рядовой участник не приглашает и не удаляет команду
+        // a regular member cannot invite or delete the team
         assertEquals(HttpStatusCode.Forbidden, client.invite(bobTokens.accessToken, "eve@example.com", byteArrayOf(2)).status)
         assertEquals(HttpStatusCode.Forbidden, client.delete("/teams/$teamId") { bearerAuth(bobTokens.accessToken) }.status)
 
-        // владельца нельзя удалить даже владельцу
+        // the owner cannot be removed, even by themselves
         assertEquals(
             HttpStatusCode.NotFound,
             client.delete("/teams/$teamId/members/$alice") { bearerAuth(aliceTokens.accessToken) }.status,
         )
 
-        // участник может выйти сам; после выхода — команду не видит
+        // a member can leave on their own; after leaving they no longer see the team
         assertEquals(HttpStatusCode.OK, client.delete("/teams/$teamId/members/$bob") { bearerAuth(bobTokens.accessToken) }.status)
         assertEquals(
             HttpStatusCode.NotFound,
             client.get("/teams/$teamId/records?since=0") { bearerAuth(bobTokens.accessToken) }.status,
         )
 
-        // после удаления команды владельцем — 404 всем
+        // after the owner deletes the team, everyone gets 404
         assertEquals(HttpStatusCode.OK, client.delete("/teams/$teamId") { bearerAuth(aliceTokens.accessToken) }.status)
         val gone: TeamsResponse = client.get("/teams") { bearerAuth(aliceTokens.accessToken) }.body()
         assertEquals(0, gone.teams.size)
@@ -175,7 +175,7 @@ class TeamRoutesTest {
         val tokens = client.registerAccount(alice, password)
         client.createTeam(tokens.accessToken)
 
-        // SETTINGS — per-account тип, в team-scope запрещён
+        // SETTINGS is a per-account type, forbidden in team scope
         val resp = client.put("/teams/$teamId/records") {
             bearerAuth(tokens.accessToken)
             contentType(ContentType.Application.Json)

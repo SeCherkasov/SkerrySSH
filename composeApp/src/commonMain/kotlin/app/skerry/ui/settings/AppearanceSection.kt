@@ -57,13 +57,13 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 
-// Секция Appearance: темы терминала, шрифт/метрики, язык интерфейса, секция RECENT.
+// Appearance section: terminal themes, font/metrics, UI language, RECENT section.
 
 @Composable
 internal fun AppearanceSection(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
     SectionTitle(stringResource(Res.string.appearance_title), stringResource(Res.string.appearance_subtitle))
-    // Карточки тем сеткой 2×N из каталога [TerminalThemes]; выбор проводится в терминал на лету.
+    // Theme cards in a 2×N grid from the [TerminalThemes] catalog; selection applies to the terminal live.
     TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
         if (rowIndex > 0) Box(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -76,12 +76,12 @@ internal fun AppearanceSection(state: DesktopDesignState) {
                     modifier = Modifier.weight(1f),
                 )
             }
-            // Нечётный хвост — добиваем пустой ячейкой, чтобы карточка не растянулась на всю ширину.
+            // Odd tail: pad with an empty cell so the last card doesn't stretch to full width.
             if (rowThemes.size == 1) Box(Modifier.weight(1f))
         }
     }
-    // Раскладка по секциям, по одной настройке в полноширинной строке: слева подпись + подсказка дефолта
-    // (с быстрым сбросом), справа у края — контрол. Кегль/высота/интервал — точный числовой ввод (степпер).
+    // One setting per full-width row: label + default-value hint (with quick reset) on the left,
+    // control on the right. Size/line-height/spacing use a numeric stepper for precise input.
     SectionLabel(stringResource(Res.string.appearance_section_terminal))
     SettingRow(label = stringResource(Res.string.appearance_font)) {
         Box(Modifier.width(180.dp)) { FontPicker(state.terminalFont, onPick = state::chooseTerminalFont) }
@@ -139,7 +139,7 @@ internal fun AppearanceSection(state: DesktopDesignState) {
     SettingRow(label = stringResource(Res.string.appearance_language)) {
         Box(Modifier.width(180.dp)) { LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage) }
     }
-    // Секция RECENT в сайдбаре: показывать ли её и сколько хостов (степпер виден только когда включено).
+    // RECENT section in the sidebar: whether to show it and how many hosts (stepper only when enabled).
     SettingToggleRow(
         stringResource(Res.string.appearance_recent_show),
         stringResource(Res.string.appearance_recent_show_desc),
@@ -167,8 +167,8 @@ internal fun AppearanceSection(state: DesktopDesignState) {
 }
 
 /**
- * Полноширинная строка настройки: слева подпись, под ней (при [hasHint]) подсказка дефолта с быстрым
- * сбросом; справа на той же линии — контрол ([NumberStepper]/дропдаун).
+ * Full-width setting row: label on the left, optional ([hasHint]) default-value hint with quick
+ * reset below it; control ([NumberStepper]/dropdown) on the right of the same line.
  */
 @Composable
 private fun SettingRow(
@@ -192,7 +192,7 @@ private fun SettingRow(
     }
 }
 
-/** Заголовок группы настроек: мелкие капсы в приглушённом цвете, с отступом сверху для отделения секций. */
+/** Settings group heading: small caps in a muted color, top padding to separate sections. */
 @Composable
 private fun SectionLabel(text: String) {
     Txt(
@@ -206,8 +206,8 @@ private fun SectionLabel(text: String) {
 }
 
 /**
- * Подсказка значения по умолчанию: серый статичный текст, когда значение уже дефолтное; cyan-кликабельная
- * строка со значком сброса, когда изменено (клик возвращает к [defaultText]-значению через [onReset]).
+ * Default-value hint: static gray text when the value is already default; a clickable cyan row
+ * with a reset icon when changed (click restores [defaultText] via [onReset]).
  */
 @Composable
 private fun DefaultValueHint(isDefault: Boolean, defaultText: String, onReset: () -> Unit) {
@@ -227,8 +227,8 @@ private fun DefaultValueHint(isDefault: Boolean, defaultText: String, onReset: (
 }
 
 /**
- * Формат дробного значения с фиксированным числом знаков после точки (KMP-common без String.format).
- * Корректно показывает знак для отрицательных дробей с нулевой целой частью (−0.5).
+ * Formats a float with a fixed number of decimal places (KMP-common, no String.format).
+ * Preserves the sign for negative fractions with a zero integer part (-0.5).
  */
 internal fun formatDecimal(value: Float, decimals: Int): String {
     val factor = if (decimals <= 1) 10 else 100
@@ -239,21 +239,22 @@ internal fun formatDecimal(value: Float, decimals: Int): String {
     return "$sign$whole.$frac"
 }
 
-/** Выпадающий список языка интерфейса (System / English / Русский). */
+/** UI language dropdown (System / English / Russian). */
 @Composable
 private fun LanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
     DropdownField(current, UiLanguage.entries, label = { it.label() }, onPick = onPick)
 }
 
-/** Выпадающий список шрифта терминала (Hack / JetBrains Mono) — оба без лигатур. */
+/** Terminal font dropdown (Hack / JetBrains Mono) — neither has ligatures. */
 @Composable
 private fun FontPicker(current: TerminalFont, onPick: (TerminalFont) -> Unit) {
     DropdownField(current, TerminalFont.entries, label = { it.displayName }, onPick = onPick)
 }
 
 /**
- * Карточка выбора темы терминала: мини-превью `ls -la` в РЕАЛЬНЫХ цветах [theme] (фон/текст/ANSI) —
- * так пользователь видит палитру до применения. Клик выбирает тему; активная — cyan-рамка + бейдж.
+ * Terminal theme card: a mini `ls -la` preview rendered in the actual [theme] colors
+ * (background/text/ANSI) so the user sees the palette before applying it. Click selects the
+ * theme; the active one gets a cyan border and badge.
  */
 @Composable
 private fun ThemeCard(

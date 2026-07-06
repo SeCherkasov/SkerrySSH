@@ -39,7 +39,7 @@ class AccountAndPairingTest {
 
         assertTrue(repo.revoke("alice@example.com", "dev1"))
         assertTrue(repo.isRevoked("alice@example.com", "dev1"))
-        // неизвестное устройство считается отозванным
+        // an unknown device is considered revoked
         assertTrue(repo.isRevoked("alice@example.com", "ghost"))
     }
 
@@ -51,9 +51,9 @@ class AccountAndPairingTest {
         assertTrue(repo.revoke("alice@example.com", "dev1"))
         assertTrue(repo.isRevoked("alice@example.com", "dev1"))
 
-        // Повторная аутентификация тем же устройством (register на входе/логине) снимает отзыв:
-        // знание мастер-пароля = владение аккаунтом, revoke лишь гасит текущие токены, а не блокирует
-        // навсегда. Иначе устройство с верным паролем оставалось бы запертым (register=409, sync=401).
+        // Re-registering the same device (login flow) clears the revoke: knowing the master
+        // password proves account ownership, and revoke only invalidates current tokens rather
+        // than locking the device out forever.
         repo.register("alice@example.com", "dev1", "Laptop", now = 300)
         assertFalse(repo.isRevoked("alice@example.com", "dev1"))
     }
@@ -66,11 +66,11 @@ class AccountAndPairingTest {
         repo.register("a@x", "shared-id", "A device")
         repo.register("b@x", "shared-id", "B device")
 
-        // у каждого аккаунта своё устройство с этим id
+        // each account has its own device under this id
         assertEquals("A device", repo.find("a@x", "shared-id")!!.name)
         assertEquals("B device", repo.find("b@x", "shared-id")!!.name)
 
-        // отзыв в аккаунте A не трогает одноимённое устройство аккаунта B
+        // revoking in account A doesn't affect account B's device with the same id
         repo.revoke("a@x", "shared-id")
         assertTrue(repo.isRevoked("a@x", "shared-id"))
         assertFalse(repo.isRevoked("b@x", "shared-id"))
@@ -85,10 +85,10 @@ class AccountAndPairingTest {
 
         val first = repo.consume("code123", now = 500)!!
         assertContentEquals(secret, first.encryptedDataKey)
-        // повторная выдача того же кода невозможна
+        // the same code cannot be redeemed twice
         assertNull(repo.consume("code123", now = 600))
 
-        // истёкший код не выдаётся
+        // an expired code is not issued
         repo.create("code456", "alice@example.com", secret, expiresAt = 1_000)
         assertNull(repo.consume("code456", now = 2_000))
     }

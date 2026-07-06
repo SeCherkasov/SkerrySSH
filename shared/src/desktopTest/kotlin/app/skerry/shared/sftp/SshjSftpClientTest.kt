@@ -32,8 +32,8 @@ private const val README_BODY = "hello sftp\n"
 private val acceptAllKeys = HostKeyVerifier { _, _, _, _ -> true }
 
 /**
- * Интеграционные тесты [SshjSftpClient] против встроенного Apache MINA SSHD с SFTP-подсистемой.
- * Корень сервера — временный каталог (виртуальная ФС), засеянный `readme.txt` и каталогом `sub`.
+ * Integration tests for [SshjSftpClient] against an embedded Apache MINA SSHD with an SFTP subsystem.
+ * The server root is a temp directory (virtual FS) seeded with `readme.txt` and a `sub` directory.
  */
 class SshjSftpClientTest {
 
@@ -45,8 +45,8 @@ class SshjSftpClientTest {
         root = Files.createTempDirectory("skerry-sftp-root")
         root.resolve("readme.txt").writeText(README_BODY)
         root.resolve("sub").createDirectory().resolve("nested.txt").writeText("nested\n")
-        // Симлинк на каталог: проверяем, что lstat (а не stat) не идёт по цели —
-        // тип должен быть Symlink, а не Directory, согласованно с листингом.
+        // Symlink to a directory: verifies lstat (not stat) doesn't follow the target —
+        // type must be Symlink, not Directory, consistent with the listing.
         Files.createSymbolicLink(root.resolve("sub-link"), root.resolve("sub"))
 
         server = SshServer.setUpDefaultServer().apply {
@@ -71,11 +71,11 @@ class SshjSftpClientTest {
     private suspend fun connect(): SshConnection =
         SshjTransport(acceptAllKeys).connect(target(), SshAuth.Password(PASSWORD))
 
-    /** Открыть SFTP, выполнить блок, гарантированно закрыть и разорвать соединение. */
+    /** Opens SFTP, runs the block, and always closes it and disconnects. */
     private suspend fun <T> withSftp(block: suspend (SftpClient) -> T): T {
         val connection = connect()
         try {
-            // openSftp() внутри try: иначе исключение при открытии оставило бы connection незакрытым.
+            // openSftp() inside try: otherwise a failure to open would leave connection unclosed.
             val sftp = connection.openSftp()
             try {
                 return block(sftp)
@@ -91,9 +91,9 @@ class SshjSftpClientTest {
     fun `list returns directory entries without dot and dotdot`() = runTest {
         withSftp { sftp ->
             val names = sftp.list("/").map { it.name }
-            assertTrue("readme.txt" in names, "ожидали readme.txt, получили $names")
-            assertTrue("sub" in names, "ожидали каталог sub, получили $names")
-            assertTrue("." !in names && ".." !in names, "листинг не должен содержать . и .., получили $names")
+            assertTrue("readme.txt" in names, "expected readme.txt, got $names")
+            assertTrue("sub" in names, "expected directory sub, got $names")
+            assertTrue("." !in names && ".." !in names, "listing should not contain . or .., got $names")
         }
     }
 
@@ -160,7 +160,7 @@ class SshjSftpClientTest {
                 }
             }
             assertEquals(README_BODY, Files.readString(dest))
-            assertTrue(progress.isNotEmpty(), "ожидали хотя бы один колбэк прогресса")
+            assertTrue(progress.isNotEmpty(), "expected at least one progress callback")
             val (lastTransferred, lastTotal) = progress.last()
             assertEquals(README_BODY.length.toLong(), lastTransferred)
             assertEquals(README_BODY.length.toLong(), lastTotal)
@@ -182,7 +182,7 @@ class SshjSftpClientTest {
                 }
                 assertContentEquals(payload.encodeToByteArray(), sftp.read("/uploaded.txt"))
             }
-            assertTrue(progress.isNotEmpty(), "ожидали хотя бы один колбэк прогресса")
+            assertTrue(progress.isNotEmpty(), "expected at least one progress callback")
             assertEquals(payload.length.toLong(), progress.last().first)
         } finally {
             src.parent.toFile().deleteRecursively()
@@ -259,7 +259,7 @@ class SshjSftpClientTest {
     @Test
     fun `lstat and list agree that a symlink is a symlink`() = runTest {
         withSftp { sftp ->
-            // stat использует lstat — линк не разворачивается, тип Symlink, а не Directory цели.
+            // stat uses lstat — the link isn't followed, type is Symlink, not the target's Directory.
             assertEquals(SftpEntryType.Symlink, sftp.stat("/sub-link")?.type)
             val fromList = sftp.list("/").first { it.name == "sub-link" }
             assertEquals(SftpEntryType.Symlink, fromList.type)
@@ -268,7 +268,7 @@ class SshjSftpClientTest {
 
     @Test
     fun `read rejects a file larger than the configured limit`() = runTest {
-        // README_BODY = 11 байт; лимит 4 байта — чтение должно отвергнуться, а не загрузиться в память.
+        // README_BODY = 11 bytes; limit 4 bytes — read must be rejected, not loaded into memory.
         val (ssh, sftp) = rawSftp(maxReadBytes = 4)
         try {
             assertFailsWith<SftpException> { sftp.read("/readme.txt") }
@@ -292,9 +292,9 @@ class SshjSftpClientTest {
     }
 
     /**
-     * SFTP-клиент с настраиваемым лимитом чтения через прямой конструктор [SshjSftpClient]
-     * (минуя [SshConnection.openSftp], где лимит — дефолтный). Возвращает и сырой [SSHClient],
-     * чтобы тест мог его закрыть.
+     * SFTP client with a configurable read limit via [SshjSftpClient]'s direct constructor
+     * (bypassing [SshConnection.openSftp], which uses the default limit). Also returns the
+     * raw [SSHClient] so the test can close it.
      */
     private fun rawSftp(maxReadBytes: Long): Pair<SSHClient, SshjSftpClient> {
         val ssh = SSHClient().apply {

@@ -13,8 +13,8 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 import org.jetbrains.exposed.sql.update
 
 /**
- * Одноразовые pairing-сессии (вариант B, design §3). Сервер хранит dataKey зашифрованным
- * одноразовым transferKey и не может его прочитать; сессия живёт до TTL и сгорает при выдаче.
+ * One-shot pairing sessions (variant B, design §3). The server stores the dataKey encrypted under
+ * a one-time transferKey and cannot read it; the session lives until its TTL and burns on claim.
  */
 class PairingRepository(private val db: Database) {
 
@@ -30,13 +30,13 @@ class PairingRepository(private val db: Database) {
         }
 
     /**
-     * Атомарно выдаёт и гасит сессию. Возвращает `null`, если кода нет, он уже выдан или истёк
-     * (на момент [now]).
+     * Atomically claims and burns the session. Returns `null` if the code doesn't exist, was
+     * already claimed, or has expired (as of [now]).
      *
-     * TOCTOU-устойчиво: гашение делается одним conditional UPDATE (`consumed=false AND
-     * expiresAt>now`), а не read-then-update. Только транзакция, чей UPDATE реально изменил строку
-     * (count==1), считается победителем и строит [PairingRow]; параллельный второй claim того же
-     * кода обновит 0 строк и получит `null`. Так один код нельзя выдать дважды даже при гонке.
+     * TOCTOU-safe: the claim is a single conditional UPDATE (`consumed=false AND expiresAt>now`),
+     * not read-then-update. Only the transaction whose UPDATE actually changed a row (count==1)
+     * wins and builds a [PairingRow]; a concurrent second claim of the same code updates 0 rows and
+     * gets `null`. This guarantees a code can never be claimed twice, even under a race.
      */
     suspend fun consume(code: String, now: Long = System.currentTimeMillis()): PairingRow? =
         newSuspendedTransaction(Dispatchers.IO, db) {
@@ -46,7 +46,7 @@ class PairingRepository(private val db: Database) {
                 it[consumed] = true
             }
             if (claimed != 1) return@newSuspendedTransaction null
-            // Эта транзакция выиграла гонку — теперь безопасно прочитать неизменяемые поля сессии.
+            // This transaction won the race; the session's immutable fields are now safe to read.
             val row = Pairing.selectAll().where { Pairing.code eq code }.single()
             PairingRow(
                 code = row[Pairing.code],

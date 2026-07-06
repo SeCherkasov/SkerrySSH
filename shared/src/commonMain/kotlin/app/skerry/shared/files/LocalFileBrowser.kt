@@ -9,11 +9,11 @@ import okio.Path.Companion.toPath
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * [FileBrowser] над локальной файловой системой через okio — один код для desktop (JVM) и Android
- * (I/O спрятан за [FileSystem]: приложение подаёт `FileSystem.SYSTEM`, тесты — `FakeFileSystem`).
- * [home] — стартовый каталог панели, который возвращает `realpath(".")`. Блокирующий I/O уводится
- * на [ioDispatcher] (приложение — `Dispatchers.IO`, тесты — `Dispatchers.Unconfined`); okio-ошибки
- * I/O заворачиваются в [FileBrowserException], чтобы панель не зависела от платформенного типа.
+ * [FileBrowser] over the local filesystem via okio — shared code for desktop (JVM) and Android
+ * (I/O behind [FileSystem]: the app passes `FileSystem.SYSTEM`, tests pass `FakeFileSystem`).
+ * [home] is the panel's starting directory, returned by `realpath(".")`. Blocking I/O runs on
+ * [ioDispatcher] (`Dispatchers.IO` in the app, `Dispatchers.Unconfined` in tests); okio I/O errors
+ * are wrapped in [FileBrowserException] so the panel doesn't depend on a platform-specific type.
  */
 class LocalFileBrowser(
     private val fileSystem: FileSystem,
@@ -22,12 +22,12 @@ class LocalFileBrowser(
     private val ioDispatcher: CoroutineDispatcher,
 ) : FileBrowser {
 
-    /** Нормализация путей — чистая (без I/O), поэтому не уходит на [ioDispatcher]. */
+    /** Path normalization is pure (no I/O), so it doesn't run on [ioDispatcher]. */
     override suspend fun realpath(path: String): String =
         if (path == ".") home else path.toPath().normalized().toString()
 
-    /** Файл, исчезнувший между [FileSystem.list] и [FileSystem.metadataOrNull], отбрасывается (а не
-     *  показывается «прочим» объектом с нулями) — `mapNotNull` фильтрует пропавшие метаданные. */
+    /** A file that disappears between [FileSystem.list] and [FileSystem.metadataOrNull] is dropped
+     *  rather than shown as an Other entry with zeroed fields — `mapNotNull` filters missing metadata. */
     override suspend fun list(path: String): List<FileItem> = io {
         fileSystem.list(path.toPath()).mapNotNull { p ->
             val md = fileSystem.metadataOrNull(p) ?: return@mapNotNull null
@@ -45,8 +45,8 @@ class LocalFileBrowser(
         fileSystem.createDirectory(path.toPath(), mustCreate = true)
     }
 
-    /** Рекурсивно: okio `deleteRecursively` снимает файл, симлинк (как линк) и непустой каталог;
-     *  отсутствующий путь — `IOException` → [FileBrowserException]. Паритет с SFTP-браузером. */
+    /** Recursive: okio `deleteRecursively` removes a file, symlink (as a link), or non-empty
+     *  directory; a missing path raises `IOException` → [FileBrowserException]. Parity with the SFTP browser. */
     override suspend fun delete(item: FileItem): Unit = io {
         fileSystem.deleteRecursively(item.path.toPath(), mustExist = true)
     }
@@ -56,9 +56,9 @@ class LocalFileBrowser(
     }
 
     /**
-     * Выполнить блокирующий I/O на [ioDispatcher], завернув okio [IOException] в [FileBrowserException].
-     * [CancellationException] пробрасывается явно (она не [IOException], но защищаем намерение от
-     * будущего расширения catch — единый стиль с остальным кодом базы).
+     * Run blocking I/O on [ioDispatcher], wrapping okio [IOException] in [FileBrowserException].
+     * [CancellationException] is rethrown explicitly (not an [IOException], but kept for consistency
+     * in case the catch is broadened later).
      */
     private suspend inline fun <T> io(crossinline block: () -> T): T =
         withContext(ioDispatcher) {
@@ -67,12 +67,12 @@ class LocalFileBrowser(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
-                throw FileBrowserException(e.message ?: "Ошибка файловой системы", e)
+                throw FileBrowserException(e.message ?: "Filesystem error", e)
             }
         }
 }
 
-/** Тип объекта по okio-метаданным; симлинк определяется по цели раньше файла/каталога. */
+/** Object type from okio metadata; a symlink is detected by target before file/directory checks. */
 private fun FileMetadata?.toItemType(): FileItemType = when {
     this == null -> FileItemType.Other
     symlinkTarget != null -> FileItemType.Symlink

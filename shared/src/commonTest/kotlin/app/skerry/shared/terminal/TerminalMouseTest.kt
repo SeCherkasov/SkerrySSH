@@ -8,7 +8,7 @@ class TerminalMouseTest {
 
     private val esc = 27
 
-    /** Удобный декод результата в человекочитаемую форму: ESC → "ESC", прочее как ASCII/число. */
+    /** Decodes bytes into a readable form: ESC -> "ESC", else ASCII char or numeric code. */
     private fun ByteArray.show(): String = joinToString("") { b ->
         val v = b.toInt() and 0xff
         when {
@@ -32,7 +32,7 @@ class TerminalMouseTest {
         ctrl: Boolean = false,
     ) = encodeMouseReport(tracking, sgr, button, type, col, row, shift, alt, ctrl)
 
-    // Режим Off
+    // Off mode
 
     @Test
     fun `off reports nothing`() {
@@ -88,7 +88,7 @@ class TerminalMouseTest {
 
     @Test
     fun `pixel mode encodes pixel coordinates not cells`() {
-        // pixels=true: координаты берутся из pixelX/pixelY (1-based), а не из col/row.
+        // pixels=true: coordinates come from pixelX/pixelY (1-based), not col/row.
         val out = encodeMouseReport(
             MouseTracking.ButtonEvent, sgr = true, button = MouseButton.Left, type = MouseEventType.Press,
             col = 3, row = 7, pixels = true, pixelX = 119, pixelY = 239,
@@ -98,7 +98,7 @@ class TerminalMouseTest {
 
     @Test
     fun `pixel mode release uses lowercase m and keeps button even without sgr flag`() {
-        // 1016 без 1006 (sgr=false): release всё равно сохраняет код кнопки (не legacy-3).
+        // 1016 without 1006 (sgr=false): release still keeps the button code (not legacy-3).
         val out = encodeMouseReport(
             MouseTracking.ButtonEvent, sgr = false, button = MouseButton.Right, type = MouseEventType.Release,
             col = 0, row = 0, pixels = true, pixelX = 9, pixelY = 4,
@@ -108,12 +108,12 @@ class TerminalMouseTest {
 
     @Test
     fun `pixel mode forces sgr form even when sgr flag is false`() {
-        // 1016 подразумевает SGR-кодировку независимо от 1006.
+        // 1016 implies SGR encoding regardless of 1006.
         val out = encodeMouseReport(
             MouseTracking.ButtonEvent, sgr = false, button = MouseButton.Middle, type = MouseEventType.Drag,
             col = 0, row = 0, pixels = true, pixelX = 0, pixelY = 0,
         )
-        // Cb = 1(middle) + 32(motion) = 33; координаты 0+1/0+1.
+        // Cb = 1(middle) + 32(motion) = 33; coordinates 0+1/0+1.
         assertEquals("ESC[<33;1;1M", out!!.show())
     }
 
@@ -155,7 +155,7 @@ class TerminalMouseTest {
         assertEquals("ESC[M <255>!", out!!.show())
     }
 
-    // Гейтинг по режимам
+    // Mode gating
 
     @Test
     fun `x10 reports only button press, no release drag wheel`() {
@@ -167,7 +167,7 @@ class TerminalMouseTest {
 
     @Test
     fun `x10 ignores modifiers`() {
-        // В X10 модификаторы не кодируются: остаётся чистый Cb=32.
+        // X10 does not encode modifiers: Cb stays plain 32.
         val out = encode(MouseTracking.X10, sgr = false, button = MouseButton.Left, type = MouseEventType.Press, ctrl = true)
         assertEquals("ESC[M !!", out!!.show())
     }
@@ -186,7 +186,7 @@ class TerminalMouseTest {
 
     @Test
     fun `any-event mode reports move with motion bit and button 3`() {
-        // Движение без кнопки: motion(32) + «нет кнопки» (3) = 35.
+        // Move without a button: motion(32) + "no button" (3) = 35.
         val out = encode(MouseTracking.AnyEvent, sgr = true, button = MouseButton.Left, type = MouseEventType.Move)
         assertEquals("ESC[<35;1;1M", out!!.show())
     }
@@ -207,24 +207,24 @@ class TerminalMouseTest {
     @Test
     fun `bracketed paste strips embedded closing marker (anti-injection)`() {
         val esc = esc.toChar()
-        // Текст с подсаженным закрывающим маркером + "вредоносной" командой за ним.
+        // Text with an injected closing marker followed by a "malicious" command.
         val malicious = "ok${esc}[201~rm -rf /"
         val out = bracketedPasteWrap(malicious, bracketed = true).show()
-        // Закрывающий маркер встречается ровно один раз — наш собственный, в самом конце.
+        // The closing marker appears exactly once, our own, at the very end.
         assertEquals("ESC[200~okrm -rf /ESC[201~", out)
     }
 
     @Test
     fun `disabled paste strips CR and ESC (anti command injection)`() {
-        // Без bracketed-paste shell не отличает вставку от ввода: подсаженный CR = Enter → команда
-        // за ним исполнилась бы. Режем CR и ESC (и прочие управляющие C0/DEL).
+        // Without bracketed paste, the shell can't tell paste from typing: an injected CR would act
+        // as Enter and run a trailing command. Strip CR and ESC (and other C0/DEL controls).
         assertEquals("okrm -rf /", bracketedPasteWrap("ok" + Char(13) + "rm -rf /", bracketed = false).show())
         assertEquals("plain", bracketedPasteWrap("pl" + Char(27) + "ain", bracketed = false).show())
     }
 
     @Test
     fun `disabled paste keeps tab and newline`() {
-        // Tab и LF — легитимные разделители многострочной/колоночной вставки, их сохраняем.
+        // Tab and LF are legitimate multi-line/column paste separators; kept as-is.
         val input = "a" + Char(9) + "b" + Char(10) + "c"
         assertEquals("a<9>b<10>c", bracketedPasteWrap(input, bracketed = false).show())
     }
@@ -237,13 +237,13 @@ class TerminalMouseTest {
 
     @Test
     fun `enabled paste preserves control chars inside markers`() {
-        // В bracketed-режиме приложение само знает, что это вставка — управляющие байты безопасны
-        // и должны дойти как литералы (режем только подсаженный закрывающий маркер, см. тест выше).
+        // In bracketed mode the app knows it's a paste, so control bytes are safe and pass through
+        // literally (only a smuggled closing marker is stripped, see test above).
         val input = "a" + Char(13) + "b" + Char(9) + "c"
         assertEquals("ESC[200~a<13>b<9>cESC[201~", bracketedPasteWrap(input, bracketed = true).show())
     }
 
-    // Гейтинг X10 в SGR-кодировке
+    // X10 gating in SGR encoding
 
     @Test
     fun `x10 drops non-press events even in sgr encoding`() {

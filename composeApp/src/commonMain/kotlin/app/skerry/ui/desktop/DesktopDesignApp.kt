@@ -181,61 +181,62 @@ import app.skerry.ui.app.asDesktopView
 import app.skerry.ui.session.draggableTab
 
 /**
- * Корень десктопного приложения. Поставляет шрифты
- * через [LocalFonts], держит [DesktopDesignState] и собирает структуру: titlebar (44dp) →
- * rail (62dp) + viewport → statusbar (26dp). Поверх — оверлеи lock / new-connection / settings.
+ * Root of the desktop app. Supplies fonts
+ * via [LocalFonts], holds [DesktopDesignState] and assembles the layout: titlebar (44dp) →
+ * rail (62dp) + viewport → statusbar (26dp). On top — lock / new-connection / settings overlays.
  *
- * Живой слой подключается через [vault]: если передан, весь chrome закрыт гейтом мастер-пароля
- * ([app.skerry.ui.vault.VaultGate]) поверх [app.skerry.ui.vault.VaultGateController] — экраны
- * создания/разблокировки рисуются в стиле макета ([DesktopCreateScreen]/[DesktopUnlockScreen]),
- * а чип «Unlocked» в titlebar реально запирает vault. Без [vault] (путь скриншота/превью) данные
- * остаются мок-статичными ([DesktopMockData]), а блокировка — заглушка ([DesktopDesignState]).
+ * The live layer is wired in via [vault]: if passed, the whole chrome is gated behind the master
+ * password ([app.skerry.ui.vault.VaultGate]) on top of [app.skerry.ui.vault.VaultGateController] —
+ * the create/unlock screens are drawn in the mockup style ([DesktopCreateScreen]/[DesktopUnlockScreen]),
+ * and the "Unlocked" chip in the titlebar actually locks the vault. Without [vault] (the
+ * screenshot/preview path) data stays mock-static ([DesktopMockData]) and locking is a stub
+ * ([DesktopDesignState]).
  */
 @Composable
 fun DesktopDesignApp(
-    // Видимость info-панели персистится снаружи (desktop main): стартовое значение + колбэк записи.
+    // Info panel visibility is persisted externally (desktop main): starting value + write callback.
     initialInfoPanel: Boolean = true,
     onInfoPanelChange: (Boolean) -> Unit = {},
-    // Схлопнутые папки хостов — так же персистятся снаружи (desktop main): стартовый набор + колбэк записи.
+    // Collapsed host groups — also persisted externally (desktop main): starting set + write callback.
     initialCollapsedGroups: Set<String> = emptySet(),
     onCollapsedGroupsChange: (Set<String>) -> Unit = {},
-    // Недавние подключения (секция RECENT) — тоже персистятся снаружи (desktop main): стартовый порядок + колбэк записи.
+    // Recent connections (RECENT section) — also persisted externally (desktop main): starting order + write callback.
     initialRecentHostIds: List<String> = emptyList(),
     onRecentHostIdsChange: (List<String>) -> Unit = {},
-    // Пользовательские (пустые) группы хостов — тоже персистятся снаружи (desktop main): стартовый список + колбэк записи.
+    // User-defined (empty) host groups — also persisted externally (desktop main): starting list + write callback.
     initialCustomGroups: List<String> = emptyList(),
     onCustomGroupsChange: (List<String>) -> Unit = {},
-    // Показ скрытых в SFTP (Ctrl+H) — персистится снаружи (desktop main): стартовое значение + колбэк записи.
+    // Show hidden files in SFTP (Ctrl+H) — persisted externally (desktop main): starting value + write callback.
     initialSftpShowHidden: Boolean = true,
     onSftpShowHiddenChange: (Boolean) -> Unit = {},
-    // Шрифт терминала и его кегль (Appearance → Font / Font size) — персистятся снаружи (desktop main).
+    // Terminal font and its size (Appearance → Font / Font size) — persisted externally (desktop main).
     initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
     onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     onTerminalFontSizeChange: (Int) -> Unit = {},
-    // Высота строки и межбуквенный интервал терминала (Appearance) — персистятся снаружи (desktop main).
+    // Terminal line height and letter spacing (Appearance) — persisted externally (desktop main).
     initialTerminalLineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
     onTerminalLineHeightChange: (Float) -> Unit = {},
     initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
     onTerminalLetterSpacingChange: (Float) -> Unit = {},
-    // Язык интерфейса (Appearance → Language) — персистится снаружи (desktop main): стартовое значение + колбэк записи.
+    // UI language (Appearance → Language) — persisted externally (desktop main): starting value + write callback.
     initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
     onUiLanguageChange: (UiLanguage) -> Unit = {},
-    // Настройки терминала (Settings → Терминал): scrollback, стиль курсора, показ OSC-заголовка на вкладках —
-    // персистятся снаружи (desktop main): стартовые значения + колбэки записи.
+    // Terminal settings (Settings → Terminal): scrollback, cursor style, show OSC title on tabs —
+    // persisted externally (desktop main): starting values + write callbacks.
     initialTerminalScrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
     onTerminalScrollbackChange: (Int) -> Unit = {},
     initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
     onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
     initialShowTerminalTitleOnTabs: Boolean = false,
     onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
-    // Цветовая тема терминала (Appearance → карточки тем) — персистится снаружи (desktop main).
+    // Terminal color theme (Appearance → theme cards) — persisted externally (desktop main).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     onTerminalThemeChange: (TerminalTheme) -> Unit = {},
-    // Порог автоблокировки по простою (Settings → Безопасность) — персистится снаружи (desktop main).
+    // Idle auto-lock threshold (Settings → Security) — persisted externally (desktop main).
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     onAutoLockChange: (AutoLockDuration) -> Unit = {},
-    // Видимость и размер секции RECENT (Settings → Appearance → Interface) — персистятся снаружи (desktop main).
+    // Visibility and size of the RECENT section (Settings → Appearance → Interface) — persisted externally (desktop main).
     initialShowRecent: Boolean = true,
     onShowRecentChange: (Boolean) -> Unit = {},
     initialRecentLimit: Int = DesktopDesignState.MAX_RECENT_HOSTS,
@@ -258,14 +259,14 @@ fun DesktopDesignApp(
     },
     vault: Vault? = null,
     biometrics: VaultBiometrics? = null,
-    // Локальный журнал событий безопасности (Settings → Безопасность). `null` — мок/превью: секция
-    // рисует пустой журнал и нейтральную подпись пароля.
+    // Local security event log (Settings → Security). `null` — mock/preview: the section draws an empty
+    // log and a neutral password caption.
     securityLog: SecurityLog? = null,
     hosts: HostManagerController? = null,
     transport: SshTransport? = null,
-    // Транспорт для разовой проверки «Test connection»: отдельный от [transport] (живых сессий),
-    // потому что проба НЕ должна заносить ключ хоста в known_hosts (read-only verifier). `null` —
-    // использовать [transport] (офскрин-рендер/превью, где enroll-побочки нет). См. main.kt.
+    // Transport for the one-off "Test connection": separate from [transport] (live sessions), because a
+    // probe must not add the host key to known_hosts (read-only verifier). `null` — use [transport]
+    // (offscreen render/preview, where there's no enroll side effect). See main.kt.
     testTransport: SshTransport? = null,
     credentials: CredentialManagerController? = null,
     sessions: SessionsController? = null,
@@ -274,23 +275,23 @@ fun DesktopDesignApp(
     certificateInspector: SshCertificateInspector? = null,
     tunnels: TunnelManager? = null,
     snippets: SnippetManager? = null,
-    // Координатор self-hosted sync (Phase 2). `null` — sync не подключён на платформе/мок-путь:
-    // секция Sync в настройках рисует статичный макет, модалка-онбординг не показывается.
+    // Self-hosted sync coordinator. `null` — sync not connected on the platform / mock path: the Sync
+    // settings section draws a static mock, the onboarding modal isn't shown.
     sync: SyncCoordinator? = null,
-    // Координатор Teams (шеринг между аккаунтами поверх sync). `null` — экран Teams в мок-режиме.
+    // Teams coordinator (cross-account sharing over sync). `null` — Teams screen in mock mode.
     teams: app.skerry.ui.teams.TeamsCoordinator? = null,
-    // Контроллер AI-ассистента (BYOK, внешний OpenAI-совместимый провайдер). `null` — AI не подключён:
-    // таб «AI» в настройках рисует статичный макет. Поставляется за гейтом vault (ключ хранится в vault).
+    // AI assistant controller (BYOK, external OpenAI-compatible provider). `null` — AI not connected: the
+    // "AI" settings tab draws a static mock. Supplied behind the vault gate (the key is stored in the vault).
     ai: app.skerry.ui.ai.AiAssistantController? = null,
     features: FeatureFlags = FeatureFlags(),
-    // Вызывается один раз после разблокировки vault, до перечитывания списков — точка для миграции
-    // данных (схлопывание двухуровневой модели → хост ссылается на keychain-секрет). No-op в мок/превью.
+    // Called once after vault unlock, before list reload — a hook for data migration (collapsing the
+    // two-level model → a host references a keychain secret). No-op in mock/preview.
     onVaultUnlocked: () -> Unit = {},
-    // Пустые папки хостов синкаются в записи-макете vault (Phase A): на старте vault залочен, поэтому
-    // после unlock (и миграции в [onVaultUnlocked]) перечитываем их отсюда в состояние. No-op в мок/превью.
+    // Empty host folders sync in the vault layout record: at startup the vault is locked, so after unlock
+    // (and migration in [onVaultUnlocked]) reread them into state from here. No-op in mock/preview.
     customGroupsProvider: () -> List<String> = { emptyList() },
-    // Внешняя чистка при сбросе vault (хосты/known_hosts/настройки по [ResetScope]). Вызывается после
-    // стирания файла vault; реальную реализацию подставляет desktop `main`. No-op в мок/превью.
+    // External cleanup on vault reset (hosts/known_hosts/settings per [ResetScope]). Called after the
+    // vault file is erased; the real implementation is supplied by desktop `main`. No-op in mock/preview.
     onVaultReset: (ResetScope) -> Unit = {},
 ) {
     val fonts = DesignFonts(
@@ -298,11 +299,11 @@ fun DesktopDesignApp(
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
-    // Настройка показа скрытых в SFTP: держим в стейте, чтобы Ctrl+H обновлял UI мгновенно, и пишем
-    // наружу (персист) при каждом изменении. remember обязателен (как terminalAppearance ниже):
-    // LocalSftpPrefs — staticCompositionLocalOf, и новый инстанс на каждой рекомпозиции форсил бы
-    // полный пересбор поддерева потребителей. Колбэк персиста — через rememberUpdatedState, чтобы
-    // лямбда внутри remember всегда звала свежий onSftpShowHiddenChange.
+    // SFTP show-hidden setting: kept in state so Ctrl+H updates the UI instantly, and written out
+    // (persisted) on every change. remember is required (like terminalAppearance below):
+    // LocalSftpPrefs is staticCompositionLocalOf, and a new instance on every recomposition would
+    // force a full rebuild of the consumer subtree. The persist callback goes through
+    // rememberUpdatedState so the lambda inside remember always calls the fresh onSftpShowHiddenChange.
     var sftpShowHidden by remember { mutableStateOf(initialSftpShowHidden) }
     val sftpShowHiddenWriter = rememberUpdatedState(onSftpShowHiddenChange)
     val sftpPrefs = remember(sftpShowHidden) {
@@ -311,13 +312,13 @@ fun DesktopDesignApp(
             sftpShowHiddenWriter.value(value)
         }
     }
-    // Менеджер сессий: либо подан снаружи (офскрин-рендер с фейковым транспортом), либо строится
-    // из живого транспорта — один shell на вкладку, как в [app.skerry.ui.mobile.MobileApp]. Свой
-    // граф закрываем при dispose; внешний — собственность вызывающего, не трогаем.
+    // Session manager: either supplied from outside (offscreen render with a fake transport), or
+    // built from the live transport — one shell per tab, like in [app.skerry.ui.mobile.MobileApp].
+    // We close our own graph on dispose; an externally-owned one belongs to the caller and is left alone.
     val scope = rememberCoroutineScope()
     val liveSessions = sessions ?: remember(transport, scope, vault) {
         transport?.let { t ->
-            // Персист истории команд терминала per-host (для автодополнения) поверх зашифрованного vault.
+            // Per-host terminal command history persistence (for autocomplete) on top of the encrypted vault.
             val termHistory = vault?.let { VaultTerminalHistoryStore(it) }
             var counter = 0
             SessionsController(
@@ -325,23 +326,23 @@ fun DesktopDesignApp(
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
-                        // Читаем настройки терминала в момент connect — новые сессии подхватывают текущий
-                        // выбор scrollback/курсора, открытые сохраняют свой эмулятор.
+                        // Read terminal settings at connect time — new sessions pick up the current
+                        // scrollback/cursor choice, already-open ones keep their emulator's.
                         terminalPrefs = { TerminalSessionPrefs(state.terminalScrollback, state.terminalCursorStyle) },
                     )
                 },
             )
         }
     }
-    // Владение фиксируем снимком на момент композиции: внешний менеджер сессий — собственность
-    // вызывающего (не рвём), локально построенный закрываем при dispose.
+    // Ownership is fixed as a snapshot at composition time: an externally-supplied session manager
+    // belongs to the caller (don't tear it down), a locally built one is closed on dispose.
     val ownsSessions = sessions == null
     DisposableEffect(liveSessions) {
         onDispose { if (ownsSessions) liveSessions?.disconnectAll() }
     }
-    // Смена стиля курсора в настройках применяется к УЖЕ открытым сессиям на лету (новые берут его при
-    // connect через terminalPrefs). Проталкиваем в терминалы каждой вкладки и её split-панели; команда
-    // идёт через очередь эмулятора, поэтому без гонки. Отсоединённые/пустые вкладки просто пропускаем.
+    // A cursor-style change in settings applies to ALREADY open sessions live (new ones pick it up at
+    // connect via terminalPrefs). Pushed into each tab's terminal and its split pane; the command goes
+    // through the emulator's queue, so no race. Detached/empty tabs are simply skipped.
     val cursorStyle = state.terminalCursorStyle
     LaunchedEffect(cursorStyle, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
@@ -350,9 +351,9 @@ fun DesktopDesignApp(
             s.splitSession?.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
         }
     }
-    // Смена буфера прокрутки в настройках так же применяется к УЖЕ открытым сессиям на лету: при
-    // уменьшении лишняя старая история обрезается, при увеличении новые строки дольше держатся.
-    // Новые сессии берут значение при connect через terminalPrefs.
+    // A scrollback-buffer change in settings likewise applies to ALREADY open sessions live: shrinking
+    // trims the extra old history, growing keeps new lines around longer. New sessions pick up the
+    // value at connect via terminalPrefs.
     val scrollbackLines = TerminalSessionPrefs(scrollback = state.terminalScrollback).effectiveScrollback
     LaunchedEffect(scrollbackLines, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
@@ -361,16 +362,16 @@ fun DesktopDesignApp(
             s.splitSession?.liveTerminal?.applyScrollback(scrollbackLines)
         }
     }
-    // Мемоизируем: LocalTerminalAppearance — staticCompositionLocalOf (сравнение по ссылке), а
-    // DesktopDesignApp рекомпозируется на смене вкладок/сессий/событий vault. Без remember новый
-    // инстанс на каждой рекомпозиции форсил бы полный пересбор поддерева потребителей (весь Canvas
-    // терминала), даже когда шрифт/кегль не менялись.
+    // Memoized: LocalTerminalAppearance is staticCompositionLocalOf (reference comparison), and
+    // DesktopDesignApp recomposes on tab/session switches and vault events. Without remember a new
+    // instance on every recomposition would force a full rebuild of the consumer subtree (the whole
+    // terminal Canvas), even when font/size hadn't changed.
     val terminalAppearance = remember(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing) {
         TerminalAppearance(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing)
     }
-    // Язык ответов терминального AI = язык интерфейса: провайдер читает применённый тег локали
-    // ([app.skerry.ui.i18n.LocalAppLocale]) и переустанавливается при смене языка (SideEffect
-    // перезапускается по смене тега), так что INFO/ASK идут на текущем языке без пересоздания контроллера.
+    // The terminal AI's reply language = UI language: the provider reads the applied locale tag
+    // ([app.skerry.ui.i18n.LocalAppLocale]) and is reset on language change (SideEffect reruns when
+    // the tag changes), so INFO/ASK go out in the current language without recreating the controller.
     val aiLocaleTag = app.skerry.ui.i18n.LocalAppLocale.current
     androidx.compose.runtime.SideEffect {
         ai?.uiLanguageProvider = { app.skerry.ui.i18n.aiResponseLanguageName(aiLocaleTag) }
@@ -388,12 +389,12 @@ fun DesktopDesignApp(
         LocalSnippets provides snippets,
         LocalFeatures provides features,
         LocalSftpPrefs provides sftpPrefs,
-        // Внешний вид терминала из настроек: шрифт + кегль читает [app.skerry.ui.terminal.TerminalScreen].
+        // Terminal appearance from settings: font + size, read by [app.skerry.ui.terminal.TerminalScreen].
         LocalTerminalAppearance provides terminalAppearance,
-        // Цветовая тема терминала (Appearance → карточки): фон/текст/ANSI/курсор — тот же рендер.
+        // Terminal color theme (Appearance → cards): background/text/ANSI/cursor — same rendering.
         LocalTerminalTheme provides state.terminalTheme,
-        // Открытый vault + биометрия за гейтом — нужны повторной аутентификации перед копированием
-        // пароля из keychain (на desktop биометрии нет, путь сводится к мастер-паролю).
+        // The open vault + biometrics behind the gate — needed for re-authentication before copying
+        // a password from the keychain (desktop has no biometrics, so the path reduces to the master password).
         LocalVault provides vault,
         LocalVaultBiometrics provides biometrics,
         LocalSecurityLog provides securityLog,
@@ -406,12 +407,12 @@ fun DesktopDesignApp(
                 vault = vault,
                 biometrics = biometrics,
                 securityLog = securityLog,
-                // Порог автоблокировки из настроек: смена в UI рекомпозирует VaultGate и перезапускает
-                // idle-таймер; Never (idleMs == null) выключает его.
+                // Idle auto-lock threshold from settings: changing it in the UI recomposes VaultGate
+                // and restarts the idle timer; Never (idleMs == null) turns it off.
                 autoLockIdleMs = state.autoLock.idleMs,
                 onReset = onVaultReset,
-                // onPairingComplete != null (есть sync) — экран создания предлагает «у меня есть код»:
-                // координатор сам создаст vault под выбранным паролем и примет ключ аккаунта.
+                // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
+                // the coordinator creates the vault under the chosen password itself and accepts the account key.
                 createForm = { error, onCreate, onPairingComplete ->
                     DesktopCreateScreen(error, onCreate, sync, onPairingComplete)
                 },
@@ -420,8 +421,8 @@ fun DesktopDesignApp(
                 },
                 corruptedForm = { onReset -> DesktopCorruptedScreen(onReset) },
                 resetForm = { onConfirm, onCancel -> DesktopResetScreen(onConfirm, onCancel) },
-                // Шаг sync в онбординге (паритет с mobile): подключить sync и подтянуть данные сразу
-                // после создания vault. Только если sync проведён в граф.
+                // Sync onboarding step (parity with mobile): connect sync and pull data right after
+                // creating the vault. Only if sync was wired into the graph.
                 offerSyncForm = sync?.let { s -> { onDone -> SyncOnboardingScreen(s, onDone) } },
             ) { onLock -> DesktopChrome(state, onLock, liveSessions, credentials, onVaultUnlocked, customGroupsProvider) }
         } else {
@@ -431,9 +432,9 @@ fun DesktopDesignApp(
 }
 
 /**
- * Основной chrome (titlebar → rail+viewport → statusbar) и оверлеи. [onLock] != null —
- * живой путь за гейтом: чип «Unlocked» запирает vault. null — мок-путь: блокировку рисует
- * заглушечный [LockScreen] по [DesktopDesignState.locked].
+ * The main chrome (titlebar → rail+viewport → statusbar) and overlays. [onLock] != null —
+ * the live path behind the gate: the "Unlocked" chip locks the vault. null — the mock path:
+ * locking is drawn by the stub [LockScreen] driven by [DesktopDesignState.locked].
  */
 @Composable
 private fun DesktopChrome(
@@ -444,21 +445,22 @@ private fun DesktopChrome(
     onVaultUnlocked: () -> Unit,
     customGroupsProvider: () -> List<String>,
 ) {
-    // Keychain-секреты живут в открытом vault — за гейтом мастер-пароля сперва прогоняем
-    // миграцию данных ([onVaultUnlocked]), затем перечитываем (секреты + синканутые пустые папки).
+    // Keychain secrets live in the open vault — behind the master-password gate we first run the
+    // data migration ([onVaultUnlocked]), then reload (secrets + synced empty folders).
     LaunchedEffect(credentials) {
         onVaultUnlocked()
         credentials?.reload()
         state.loadCustomGroups(customGroupsProvider())
     }
 
-    // Хост без привязанного секрета → спрашиваем пароль перед подключением. Единое состояние на все
-    // три пути ([PendingAuth]): новая вкладка / split (целевую вкладку фиксируем в момент выбора
-    // хоста, а не submit — иначе при переключении вкладок во время ввода пароля split откроется не
-    // там, где его запросили) / «Run on host» сниппета (помним и команду).
+    // A host with no bound secret → ask for a password before connecting. One shared state for all
+    // three paths ([PendingAuth]): new tab / split (the target tab is fixed at the moment the host is
+    // chosen, not at submit — otherwise switching tabs while typing the password would open the split
+    // in the wrong place) / snippet's "Run on host" (also remembers the command).
     var pendingAuth by remember { mutableStateOf<PendingAuth?>(null) }
 
-    // Единый диспетчер подключения с готовой аутентификацией: куда идёт сессия — по типу [PendingAuth].
+    // Single connect dispatcher with resolved auth already in hand: where the session goes is decided
+    // by [PendingAuth]'s type.
     fun openResolved(target: PendingAuth, auth: SshAuth) {
         when (target) {
             is PendingAuth.NewTab -> openHostSession(sessions, state, target.host, auth)
@@ -468,8 +470,8 @@ private fun DesktopChrome(
         }
     }
 
-    // Общий шаг всех трёх путей: резолв аутентификации ([resolveHostAuth]) → сразу подключить либо
-    // спросить пароль, запомнив цель.
+    // Shared step for all three paths: resolve auth ([resolveHostAuth]) → connect right away, or ask
+    // for a password while remembering the target.
     fun connectOrAsk(target: PendingAuth) {
         when (val resolution = resolveHostAuth(target.host, credentials)) {
             is HostAuthResolution.Resolved -> openResolved(target, resolution.auth)
@@ -477,41 +479,42 @@ private fun DesktopChrome(
         }
     }
 
-    // Стабильные лямбды коннекта: без remember они пересоздавались бы на каждой рекомпозиции и,
-    // уходя в staticCompositionLocalOf, инвалидировали бы всех потребителей [LocalConnectHost] и др.
+    // Stable connect lambdas: without remember they'd be recreated on every recomposition and,
+    // flowing into a staticCompositionLocalOf, would invalidate all consumers of [LocalConnectHost] etc.
     val connectHost = remember(sessions, credentials, state) {
         { host: Host -> connectOrAsk(PendingAuth.NewTab(host)) }
     }
 
-    // «Run on host» сниппета: открыть сессию к хосту и выполнить команду после подключения.
+    // Snippet's "Run on host": open a session to the host and run the command once connected.
     val runSnippetOnHost = remember(sessions, credentials, state) {
         { host: Host, command: String -> connectOrAsk(PendingAuth.Snippet(host, command)) }
     }
 
-    // Тот же резолв, но в split-панель активной вкладки (новая независимая вторичная сессия).
+    // Same resolution, but into the active tab's split pane (a new independent secondary session).
     val connectSplitHost = remember(sessions, credentials, state) {
         { host: Host -> connectOrAsk(PendingAuth.Split(host, sessions?.activeId)) }
     }
 
-    // Лок vault должен снять все активные туннели: их соединения держат расшифрованный секрет, и после
-    // запирания висеть им нельзя (zero-knowledge). closeAll идемпотентен; для мок-пути (onLock==null)
-    // оборачивать нечего.
+    // Locking the vault must tear down all active tunnels: their connections hold the decrypted
+    // secret, and they can't keep hanging around after locking (zero-knowledge). closeAll is
+    // idempotent; the mock path (onLock==null) has nothing to wrap.
     val tunnels = LocalTunnels.current
-    // Лок снимает активные туннели (их соединения держат расшифрованный секрет — zero-knowledge), но
-    // СЕССИИ ВКЛАДОК (включая split) намеренно ПЕРЕЖИВАЮТ lock: после разблокировки терминалы на месте.
-    // Висящие диалоги запроса пароля сбрасываем (не оставлять ввод пароля под lock-экраном).
-    // Стабилизируем как onRootKey ниже: лямбда уходит в TitleBar и lockAction, и без remember новый
-    // инстанс на каждой рекомпозиции заставлял бы их перевычисляться впустую.
+    // Locking tears down active tunnels (their connections hold the decrypted secret — zero-knowledge),
+    // but TAB SESSIONS (including split) are deliberately meant to SURVIVE a lock: terminals stay put
+    // after unlocking. Any pending password-prompt dialogs are dismissed (don't leave password entry
+    // sitting under the lock screen). Stabilized like onRootKey below: the lambda flows into TitleBar
+    // and lockAction, and without remember a new instance on every recomposition would force them to
+    // recompute for nothing.
     val onLockWithTunnels: (() -> Unit)? = if (onLock == null) null else remember(onLock, tunnels, sessions, state) {
         {
             pendingAuth = null
-            // Висящее подтверждение разрыва/закрытия сбрасываем тоже — после unlock действие требует
-            // свежего намерения пользователя (как pendingAuth), а не «всплывает» поверх.
+            // Also dismiss any pending disconnect/close confirmation — after unlock an action needs a
+            // fresh user intent (like pendingAuth), not to "resurface" on its own.
             state.dismissClose()
             tunnels?.closeAll()
-            // Сессии переживают lock (открытый сокет жить остаётся), но авто-реконнект после lock
-            // переаутентифицировался бы устаревшим секретом на запертом vault — запрещаем его,
-            // сбрасывая сохранённые учётки у всех сессий и их split-панелей (zero-knowledge).
+            // Sessions survive a lock (the open socket stays alive), but auto-reconnect after a lock
+            // would re-authenticate with a stale secret against a locked vault — forbid it by clearing
+            // the saved credentials on every session and its split panes (zero-knowledge).
             sessions?.sessions?.forEach { s ->
                 s.controller.clearReconnectCredentials()
                 s.splitSession?.controller?.clearReconnectCredentials()
@@ -526,20 +529,21 @@ private fun DesktopChrome(
         LocalRunSnippetOnHost provides runSnippetOnHost,
         LocalCredentials provides credentials,
     ) {
-        // Глобальный хоткей сниппета: preview-события идут от корня к фокусу, поэтому корневой Box
-        // перехватывает аккорд раньше терминала. Совпал сохранённый shortcut и есть подключённая
-        // сессия — выполняем команду в её терминале и гасим событие. ГЕЙТ: срабатывает только когда
-        // на экране живая сессия (нет app-оверлея/модалки/настроек) — иначе аккорд, набранный в полях
-        // редактора сниппета (Command/ShortcutField) или New connection, ушёл бы командой в терминал.
+        // Global snippet hotkey: preview events flow from the root down to focus, so the root Box
+        // intercepts the chord before the terminal does. If a saved shortcut matches and there's a
+        // connected session, run the command in its terminal and consume the event. GATE: only fires
+        // when a live session is on screen (no app overlay/modal/settings) — otherwise a chord typed
+        // into the snippet editor's fields (Command/ShortcutField) or New connection would go to the
+        // terminal as a command.
         val snippets = LocalSnippets.current
-        // Живой lock (сбрасывает туннели/учётки) на живом пути; state.lock — мок/превью. Через
-        // rememberUpdatedState, чтобы onRootKey не зависел от смены самой лямбды блокировки.
+        // Live lock (tears down tunnels/credentials) on the live path; state.lock is mock/preview.
+        // Via rememberUpdatedState so onRootKey doesn't depend on the lock lambda itself changing.
         val lockAction = rememberUpdatedState(onLockWithTunnels ?: state::lock)
-        // Глобальные хоткеи каркаса (⌘/Ctrl+Shift — New conn/Split/SFTP/AI-bar/Lock, Ctrl+Tab —
-        // соседняя вкладка, Alt+цифра — вкладка по номеру) проверяются ПЕРЕД хоткеем сниппета. Тот же
-        // гейт: только на живом сессионном экране (нет оверлея/модалки/настроек), чтобы аккорд из полей
-        // редактора не ушёл в терминал/навигацию. SelectTab/Next вне диапазона возвращает false и
-        // проваливается в сниппет-матчинг (Alt+7 при 4 вкладках может остаться сниппетом).
+        // Global shell hotkeys (⌘/Ctrl+Shift — New conn/Split/SFTP/AI-bar/Lock, Ctrl+Tab — adjacent
+        // tab, Alt+digit — tab by number) are checked BEFORE the snippet hotkey. Same gate: only on a
+        // live session screen (no overlay/modal/settings), so a chord from editor fields doesn't leak
+        // into the terminal/navigation. SelectTab/Next out of range returns false and falls through to
+        // snippet matching (Alt+7 with 4 tabs can still be a snippet).
         val onRootKey = remember(snippets, sessions, state) {
             { event: KeyEvent ->
                 if (event.type != KeyEventType.KeyDown) false
@@ -567,14 +571,14 @@ private fun DesktopChrome(
             }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost)
             if (state.settingsOpen) SettingsPanel(state)
-            // Модалка-онбординг sync поверх настроек: появляется по «Set up sync», закрывается сама
-            // при успешном подключении. Только когда координатор подан (мок-путь без бэкенда — нет).
+            // Sync onboarding modal over settings: appears via "Set up sync", closes itself on a
+            // successful connect. Only when the coordinator is supplied (the mock path with no backend has none).
             LocalSync.current?.let { if (state.syncSetupOpen) SyncSetupDialog(it, onDismiss = state::closeSyncSetup) }
-            // Диалог «Link a device»: показывает QR/код быстрого паринга для нового устройства.
+            // "Link a device" dialog: shows a QR/code for quick pairing of a new device.
             LocalSync.current?.let { if (state.pairingOpen) PairingShowDialog(it, onDismiss = state::closePairing) }
             if (onLock == null && state.locked) LockScreen(state)
-            // Один диалог запроса пароля на все три пути подключения; после submit цель ([PendingAuth])
-            // диспетчеризуется тем же openResolved, что и путь с привязанным секретом.
+            // A single password-prompt dialog for all three connect paths; after submit the target
+            // ([PendingAuth]) is dispatched through the same openResolved as the bound-secret path.
             pendingAuth?.let { pending ->
                 DesktopPasswordDialog(
                     host = pending.host,
@@ -585,8 +589,8 @@ private fun DesktopChrome(
                     },
                 )
             }
-            // Подтверждение удаления профиля хоста (вызывается из контекстного меню сайдбара).
-            // Сам keychain-секрет остаётся в vault (переиспользуемый, управляется во вкладке Vault).
+            // Delete-host-profile confirmation (invoked from the sidebar's context menu). The keychain
+            // secret itself stays in the vault (reusable, managed from the Vault tab).
             val hosts = LocalHosts.current
             state.pendingDeleteHost?.let { host ->
                 DesktopDeleteHostDialog(
@@ -595,9 +599,9 @@ private fun DesktopChrome(
                     onConfirm = { hosts?.delete(host.id); state.dismissDeleteHost() },
                 )
             }
-            // Создание/правка группы хостов (кнопка «+папка» и карандаш в заголовке папки). Rename
-            // одновременно переписывает Host.group через контроллер и правит side-channel пустых/
-            // схлопнутых групп в state; delete разгруппировывает хосты (профили целы).
+            // Create/edit a host group ("+folder" button and the pencil in a folder header). Rename
+            // both rewrites Host.group through the controller and updates the side-channel of
+            // empty/collapsed groups in state; delete ungroups the hosts (profiles are untouched).
             when (val gd = state.groupDialog) {
                 GroupDialog.Create -> GroupEditDialog(
                     initialName = "",
@@ -621,7 +625,7 @@ private fun DesktopChrome(
                 )
                 null -> {}
             }
-            // Подтверждение разрыва сессии (power) / закрытия split-панели — деструктивно, без авто-реконнекта.
+            // Confirm disconnecting a session (power) / closing a split pane — destructive, no auto-reconnect.
             when (val pc = state.pendingClose) {
                 is PendingClose.Session -> {
                     val name = sessions?.sessions?.firstOrNull { it.id == pc.id }?.displayTitle ?: stringResource(Res.string.shell_this_session)
@@ -649,27 +653,28 @@ private fun DesktopChrome(
 }
 
 /**
- * Отложенное подключение, ждущее ввода пароля (SSH-хост без привязанного секрета), — и одновременно
- * адрес доставки готовой аутентификации: новая вкладка, split-панель конкретной вкладки или запуск
- * команды сниппета на хосте.
+ * A pending connect waiting on a password (SSH host with no bound secret) — and at the same time
+ * the delivery address for the resolved auth: a new tab, a specific tab's split pane, or running a
+ * snippet command on the host.
  */
 private sealed interface PendingAuth {
     val host: Host
 
-    /** Подключение новой вкладкой (или в активную пустую). */
+    /** Connect as a new tab (or into the active empty one). */
     data class NewTab(override val host: Host) : PendingAuth
 
-    /** Подключение в split-панель вкладки [parentId] (фиксируется в момент выбора хоста). */
+    /** Connect into the split pane of tab [parentId] (fixed at the moment the host was chosen). */
     data class Split(override val host: Host, val parentId: String?) : PendingAuth
 
-    /** Открыть сессию к хосту и выполнить [command] после подключения. */
+    /** Open a session to the host and run [command] once connected. */
     data class Snippet(override val host: Host, val command: String) : PendingAuth
 }
 
 /**
- * Глобальный хоткей сниппета: на KeyDown сериализует аккорд ([SnippetShortcut]), ищет сниппет с этим
- * хоткеем и, если есть подключённая сессия, выполняет его команду в её терминале. Возвращает `true`
- * (событие поглощено) только при реальном запуске — иначе клавиша уходит дальше (в терминал и т.д.).
+ * Global snippet hotkey: on KeyDown, serializes the chord ([SnippetShortcut]), looks up a snippet with
+ * that hotkey and, if there's a connected session, runs its command in that session's terminal.
+ * Returns `true` (event consumed) only on an actual run — otherwise the key falls through (to the
+ * terminal, etc.).
  */
 private fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, sessions: SessionsController?): Boolean {
     if (event.type != KeyEventType.KeyDown || manager == null) return false
@@ -683,10 +688,10 @@ private fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, sessions
 }
 
 /**
- * Исполнить глобальный хоткей каркаса ([matchDesktopShortcut]). Возвращает `true`, если действие
- * применилось (событие поглощаем), `false` — если нет цели (напр. Alt+цифра вне числа вкладок): тогда
- * вызывающий пропускает клавишу дальше (в т.ч. в хоткей сниппета). Живой режим адресует вкладки через
- * [SessionsController]; мок/превью (нет живых сессий) — через демо-вкладки [DesktopDesignState].
+ * Run a global shell hotkey ([matchDesktopShortcut]). Returns `true` if the action was applied
+ * (consume the event), `false` if there's no target (e.g. Alt+digit past the tab count): the caller
+ * then lets the key fall through (including to the snippet hotkey). Live mode addresses tabs via
+ * [SessionsController]; mock/preview (no live sessions) uses the demo tabs in [DesktopDesignState].
  */
 private fun runDesktopShortcut(
     shortcut: DesktopShortcut,
@@ -711,7 +716,7 @@ private fun runDesktopShortcut(
     return true
 }
 
-/** Выбрать вкладку по 0-based индексу; `false`, если такой вкладки нет (клавиша пойдёт дальше). */
+/** Select a tab by 0-based index; `false` if no such tab exists (the key falls through). */
 internal fun selectTabByIndex(index: Int, state: DesktopDesignState, sessions: SessionsController?): Boolean {
     if (sessions != null) {
         val target = sessions.sessions.getOrNull(index) ?: return false
@@ -723,7 +728,7 @@ internal fun selectTabByIndex(index: Int, state: DesktopDesignState, sessions: S
     return true
 }
 
-/** Циклически сдвинуть активную вкладку на [delta] (по кругу); `false`, если вкладок нет. */
+/** Cyclically shift the active tab by [delta] (wrapping); `false` if there are no tabs. */
 internal fun cycleTab(delta: Int, state: DesktopDesignState, sessions: SessionsController?): Boolean {
     if (sessions != null) {
         val list = sessions.sessions
@@ -741,8 +746,8 @@ internal fun cycleTab(delta: Int, state: DesktopDesignState, sessions: SessionsC
 }
 
 /**
- * Подключиться к [host] с [auth]: если активна пустая вкладка («+») — коннект в неё, иначе новая
- * вкладка ([SessionsController.connect]). Затем переключаемся на терминал (сбрасывая app-оверлей).
+ * Connect to [host] with [auth]: if an empty ("+") tab is active — connect into it, otherwise a new
+ * tab ([SessionsController.connect]). Then switch to the terminal (clearing the app overlay).
  */
 private fun openHostSession(
     sessions: SessionsController?,
@@ -751,7 +756,7 @@ private fun openHostSession(
     auth: SshAuth,
     onConnected: ((app.skerry.ui.terminal.TerminalScreenState) -> Unit)? = null,
 ) {
-    // Отмечаем хост в секции RECENT сайдбара (новейший — первым, переживает перезапуск).
+    // Record the host in the sidebar's RECENT section (newest first, survives restart).
     state.recordRecentHost(host.id)
     sessions?.connect(
         hostId = host.id,
@@ -761,18 +766,18 @@ private fun openHostSession(
         auth = auth,
         onConnected = onConnected,
     )
-    // Живой режим: подвью держит сама вкладка — лишь снимаем оверлей, чтобы показать её терминал.
-    // Мок/превью (нет сессий): фолбэк на Terminal через showView.
+    // Live mode: the sub-view is held by the tab itself — just clear the overlay to show its terminal.
+    // Mock/preview (no sessions): fall back to Terminal via showView.
     if (sessions != null) state.clearOverlay() else state.showView(DesktopView.Terminal)
 }
 
 /**
- * Подключить [host] с [auth] в split-панель активной вкладки (новая независимая вторичная сессия).
- * Без активной вкладки — no-op. См. [SessionsController.connectSplit].
+ * Connect [host] with [auth] into the active tab's split pane (a new independent secondary session).
+ * No-op with no active tab. See [SessionsController.connectSplit].
  */
 private fun openSplitSession(sessions: SessionsController?, state: DesktopDesignState, parentId: String?, host: Host, auth: SshAuth) {
     if (sessions == null || parentId == null) return
-    // Подключение во вторичную панель — тоже реальный коннект к хосту: отмечаем его в RECENT.
+    // Connecting into the secondary pane is also a real connect to the host — record it in RECENT too.
     state.recordRecentHost(host.id)
     sessions.connectSplit(
         parentId = parentId,
@@ -804,23 +809,23 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            // Живые вкладки из менеджера сессий (за гейтом vault); иначе — мок-вкладки.
+            // Live tabs from the session manager (behind the vault gate); otherwise mock tabs.
             val sessions = LocalSessions.current
-            // Локализованная подпись новой пустой вкладки резолвится здесь (composable-сторона):
-            // в SessionsController stringResource недоступен, поэтому лейбл прокидываем в openBlank.
+            // The localized label for a new blank tab is resolved here (composable side): stringResource
+            // isn't available in SessionsController, so the label is passed into openBlank.
             val newTabTitle = stringResource(Res.string.shtail_new_tab)
             if (sessions != null) {
-                // Состояние drag-reorder вкладок: перетаскивание чипов местами.
+                // Tab drag-reorder state: dragging chips to swap places.
                 val tabDrag = remember { TabDragState() }
-                // rememberUpdatedState: pointerInput пересоздаётся лишь по ключу tabId, поэтому лямбда
-                // ids() должна читать свежий список через .value, иначе onDragEnd взял бы устаревший
-                // порядок (как сделано для drag хостов).
+                // rememberUpdatedState: pointerInput is only recreated by the tabId key, so the ids()
+                // lambda must read the fresh list via .value, otherwise onDragEnd would use a stale
+                // order (same as done for host drag).
                 val tabIds = rememberUpdatedState(sessions.sessions.map { it.id })
                 sessions.sessions.forEachIndexed { index, s ->
-                    // Линия вставки перед чипом, над которым сейчас зависла перетаскиваемая вкладка.
+                    // Insert line before the chip the dragged tab is currently hovering over.
                     if (tabDrag.insertLineIndex == index) TabInsertLine()
-                    // При сплите чип показывает сфокусированную панель: имя меняется
-                    // при переключении фокуса между основной и split-панелью.
+                    // On a split, the chip shows the focused pane: the name changes when focus
+                    // switches between the main and split panes.
                     val focused = if (s.splitOpen && s.focusedSplit) s.splitSession ?: s else s
                     SessionTabChip(
                         name = focused.tabTitle(state.showTerminalTitleOnTabs),
@@ -835,22 +840,22 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
                             .draggableTab(tabDrag, s.id, ids = { tabIds.value }) { from, to -> sessions.moveTab(from, to) },
                     )
                 }
-                // Линия вставки в самом конце ряда (перенос вкладки в хвост).
+                // Insert line at the very end of the row (moving a tab to the tail).
                 if (tabDrag.insertLineIndex == sessions.sessions.size) TabInsertLine()
             } else {
                 state.tabs.forEachIndexed { i, tab ->
                     SessionTabChip(tab.name, tab.dot, active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
                 }
             }
-            // «+» создаёт ПУСТУЮ вкладку без сессии (живой режим) и переключает на её терминал-
-            // плейсхолдер; первое подключение из сайдбара заполнит её ([SessionsController.connect]).
-            // В мок/превью (нет живых сессий) сохраняем прежнее поведение — открыть модалку.
+            // "+" creates a BLANK tab with no session (live mode) and switches to its terminal
+            // placeholder; the first connect from the sidebar fills it in ([SessionsController.connect]).
+            // In mock/preview (no live sessions), keep the old behavior — open the modal.
             IconBtn(
                 "add",
                 onClick = {
                     if (sessions != null) {
-                        // Новая пустая вкладка стартует с подвью Terminal (дефолт Session.view);
-                        // снимаем оверлей, чтобы показать её терминал-плейсхолдер.
+                        // A new blank tab starts on the Terminal sub-view (Session.view's default);
+                        // clear the overlay to show its terminal placeholder.
                         sessions.openBlank(newTabTitle)
                         state.clearOverlay()
                     } else {
@@ -880,12 +885,11 @@ private fun TitleBar(state: DesktopDesignState, onLock: (() -> Unit)?) {
 }
 
 /**
- * Вкладка-сессия как сегментная пилюля (стиль референса в палитре night-sea) с выделением в духе
- * редактора: активная — тонкая cyan-полоска по верхней кромке + cyan-подложка с ярким текстом;
- * наведённая неактивная — чуть более светлый фон; покоящаяся — приглушённая полупрозрачная пилюля
- * с тусклым текстом. Слева статус-точка соединения. Крестик закрытия показывается только на активной
- * либо наведённой вкладке; у прочих место зарезервировано пустым боксом, чтобы текст
- * не прыгал при появлении крестика.
+ * A session tab as a segmented pill with editor-style selection: active — a thin cyan strip on the top
+ * edge + cyan background with bright text; hovered inactive — a slightly lighter background; resting — a
+ * muted translucent pill with dim text. A connection status dot on the left. The close cross shows only
+ * on the active or hovered tab; others reserve the space with an empty box so text doesn't jump when the
+ * cross appears.
  */
 @Composable
 private fun SessionTabChip(
@@ -899,13 +903,13 @@ private fun SessionTabChip(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(8.dp)
-    // Общий interactionSource: clickable эмитит hover-события, которые читает collectIsHoveredAsState.
+    // Shared interactionSource: clickable emits hover events that collectIsHoveredAsState reads.
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val showClose = active || hovered
     Row(
         modifier
-            // Перетаскиваемый чип приглушаем (alpha), чтобы было видно, что он «оторван» от ряда.
+            // Dim a dragged chip (alpha) so it reads as "lifted" out of the row.
             .alpha(if (dragging) 0.5f else 1f)
             .height(28.dp)
             .clip(shape)
@@ -917,8 +921,8 @@ private fun SessionTabChip(
                 },
             )
             .border(1.dp, if (active) D.cyan20 else D.line, shape)
-            // Акцентная полоска по верхней кромке активной вкладки (стиль вкладок редактора).
-            // drawBehind рисуем поверх фона/обводки, но под контентом; ширину чипа не раздувает.
+            // Accent strip on the active tab's top edge (editor tab style). drawBehind renders over the
+            // background/border but under content; doesn't inflate the chip's width.
             .then(
                 if (active) {
                     Modifier.drawBehind { drawRect(D.cyan, size = Size(size.width, 2.dp.toPx())) }
@@ -932,7 +936,7 @@ private fun SessionTabChip(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Dot(dot)
-        // Значок split: вкладка держит две панели.
+        // Split marker: the tab holds two panes.
         if (split) Sym("splitscreen_right", size = 13.sp, color = if (active) D.cyan else D.faint)
         Txt(
             name,
@@ -951,7 +955,7 @@ private fun SessionTabChip(
     }
 }
 
-/** Вертикальная линия-индикатор позиции вставки при drag-reorder вкладок (cyan-акцент). */
+/** Vertical insertion-position indicator during tab drag-reorder (cyan accent). */
 @Composable
 private fun TabInsertLine() {
     Box(Modifier.width(2.dp).height(22.dp).clip(RoundedCornerShape(1.dp)).background(D.cyan))
@@ -960,8 +964,8 @@ private fun TabInsertLine() {
 @Composable
 private fun IconRail(state: DesktopDesignState) {
     val sessions = LocalSessions.current
-    // Текущий session-level пункт для подсветки: подвью активной вкладки (живой режим) либо
-    // мок-фолбэк [state.view]. Под открытым app-оверлеем session-пункты не подсвечены.
+    // Current session-level item to highlight: the active tab's subview (live mode) or the mock fallback
+    // [state.view]. Under an open app overlay, session items aren't highlighted.
     val currentSessionView = sessions?.active?.view?.asDesktopView() ?: state.view
     Column(
         Modifier
@@ -980,9 +984,9 @@ private fun IconRail(state: DesktopDesignState) {
                 label = stringResource(item.label),
                 active = active,
                 onClick = {
-                    // App-level (Vault/Known/Teams/Snippets) → оверлей. Session-level: в живом режиме
-                    // правит ТОЛЬКО подвью активной вкладки (источник правды) + снимает оверлей, не
-                    // трогая мок-фолбэк state.view; без сессий — мок-путь через showView.
+                    // App-level (Vault/Known/Teams/Snippets) → overlay. Session-level: in live mode edits
+                    // only the active tab's subview (source of truth) + clears the overlay, without
+                    // touching the mock fallback state.view; with no sessions — the mock path via showView.
                     when {
                         item.view.isAppLevel -> state.showView(item.view)
                         sessions != null -> { state.clearOverlay(); sessions.setActiveView(item.view.asSessionView()) }
@@ -999,8 +1003,8 @@ private fun IconRail(state: DesktopDesignState) {
 @Composable
 private fun RailButton(icon: String, label: String, active: Boolean, onClick: () -> Unit) {
     val fg = if (active) D.cyanBright else D.faint
-    // Иконки без подписей: имя пункта уезжает в tooltip по наведению (desktop), чтобы узкая
-    // колонка не переносила длинные слова («Хранилище», «Настройки»).
+    // Icons without labels: the item name goes to a hover tooltip (desktop) so the narrow column doesn't
+    // wrap long words.
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     Box(Modifier.fillMaxWidth().hoverable(interaction)) {
@@ -1025,7 +1029,7 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
         ) {
             Sym(icon, size = 21.sp, color = fg)
         }
-        // Всплывающая подпись справа от рейла — только пока курсор над кнопкой.
+        // Tooltip to the right of the rail — only while the cursor is over the button.
         if (hovered) {
             val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
             val position = remember(gap) {
@@ -1062,27 +1066,27 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
 @Composable
 private fun StatusBar() {
     val mono = LocalFonts.current.mono
-    // В живом режиме статус слева и throughput отражают активную сессию.
+    // In live mode the left status and throughput reflect the active session.
     val sessions = LocalSessions.current
     val active = sessions?.active
     val connected = active?.controller?.uiState is ConnectionUiState.Connected
     val live = sessions != null
     val statusText = if (!live || connected) stringResource(Res.string.shell_status_connected) else stringResource(Res.string.shell_status_disconnected)
     val statusColor = if (!live || connected) D.moss else D.faint
-    // Поллер скорости канала активной сессии (когда подключена). remember безусловный — ключи
-    // (сессия + флаг connected) пересоздают его при смене сессии/подключения; openThroughput
-    // идемпотентен (кэш в ConnectionController).
+    // Channel throughput poller for the active session (when connected). The remember is unconditional —
+    // keys (session + connected flag) recreate it on session/connection change; openThroughput is
+    // idempotent (cached in ConnectionController).
     val throughput = remember(active, connected) {
         if (connected) active.controller.openThroughput() else null
     }
     val upRate = throughput?.upRate
     val downRate = throughput?.downRate
-    // RTT-пинг активной сессии (тот же приём, что throughput); до первого замера/при сбое — null.
+    // RTT ping of the active session (same approach as throughput); null before the first sample / on failure.
     val ping = remember(active, connected) {
         if (connected) active.controller.openPing() else null
     }
     val rttMs = ping?.rttMs
-    // Размер сетки — живой cols×rows активного терминала; вне коннекта остаётся мок-метка макета.
+    // Grid size — live cols×rows of the active terminal; off-connection the mock label remains.
     val gridLabel = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)
         ?.terminal?.let { "${it.cols} × ${it.rows}" } ?: "80 × 24"
     Row(
@@ -1096,16 +1100,16 @@ private fun StatusBar() {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
-            // RTT-пинг активной сессии live (до первого замера — «—»); в мок-режиме — метка шаблона.
+            // Live RTT ping of the active session (before the first sample — "—"); mock mode — template label.
             StatusItem("network_ping", if (live) (rttMs?.let { "$it ms" } ?: "—") else "42 ms", mono = mono)
-            // Throughput канала live (до коннекта — «—»); в мок-режиме (офскрин) — метки шаблона.
+            // Live channel throughput (before connect — "—"); mock mode (offscreen) — template labels.
             StatusItem("arrow_upward", if (live) (upRate?.let { humanRate(it) } ?: "—") else "1.2 KB/s", mono = mono)
             StatusItem("arrow_downward", if (live) (downRate?.let { humanRate(it) } ?: "—") else "8.4 KB/s", mono = mono)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            // Индикатор sync ведёт по статусу сессии (см. syncIndicator): «Sync online» только при
-            // активной сессии + доступном сервере; привязано-но-не-подключено → «Sync paused», и т.д.
-            // Прячем, когда sync не настроен / ещё не пинговали.
+            // The sync indicator follows session status (see syncIndicator): "Sync online" only with an
+            // active session + reachable server; linked-but-not-connected → "Sync paused", etc. Hidden
+            // when sync isn't configured / not yet pinged.
             val syncC = LocalSync.current
             val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
             if (ind != null) {
@@ -1120,7 +1124,7 @@ private fun StatusBar() {
                     mono = mono,
                 )
             }
-            // Версия сервера — live ident активной сессии (до коннекта/если транспорт молчит — «—»).
+            // Server version — live ident of the active session (before connect / if the transport is silent — "—").
             StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
             Txt(stringResource(Res.string.shell_status_encoding), color = D.faint, size = 10.5.sp, font = mono)
             Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)

@@ -3,30 +3,29 @@ package app.skerry.shared.ai
 import kotlinx.serialization.Serializable
 
 /**
- * Per-host политика AI (принцип «AI under policy», `docs/skerry-product-brief.md`). Вывод модели —
- * недоверенный источник; политика решает, можно ли слать контекст в облако и надо ли вычищать секреты.
- * Подтверждение перед выполнением команды — ВСЕГДА, независимо от политики (это отдельный инвариант UI).
+ * Per-host AI policy ("AI under policy" principle, `docs/skerry-product-brief.md`). Model output is
+ * an untrusted source; the policy decides whether context can go to the cloud and whether secrets
+ * must be scrubbed. Confirmation before command execution is always required regardless of policy
+ * (separate UI invariant).
  *
- * - [Strict] — только локальный AI (Phase 3). Сейчас локального провайдера нет → облако запрещено,
- *   т.е. AI-бар для такого хоста фактически недоступен. Санитизация секретов. Дефолт для новых хостов.
- * - [Balanced] — облако разрешено, секреты вычищаются перед отправкой.
- * - [Permissive] — облако разрешено без санитизации (только несенситивные системы).
- * - [Off] — AI выключен для этого хоста полностью.
+ * - [Strict] — local AI only. Sanitizes secrets. Default for new hosts.
+ * - [Balanced] — cloud allowed, secrets scrubbed before sending.
+ * - [Permissive] — cloud allowed without sanitization (non-sensitive systems only).
+ * - [Off] — AI disabled entirely for this host.
  *
- * Порядок значений соответствует UI-прототипу; сериализация идёт по имени, поэтому порядок
- * на обратную совместимость сохранённых хостов не влияет.
+ * Value order matches the UI prototype; serialization is by name, so order doesn't affect backward
+ * compatibility of saved hosts.
  */
 @Serializable
 enum class AiPolicy { Strict, Balanced, Permissive, Off }
 
 /**
- * Разбор [AiPolicy] в конкретные runtime-разрешения. Единственный источник правды для UI/контроллеров:
- * не размазывать `when(policy)` по слоям.
+ * Resolves [AiPolicy] into concrete runtime permissions. Single source of truth for UI/controllers,
+ * so `when(policy)` isn't scattered across layers.
  *
- * @property aiEnabled показывать ли AI-возможности для хоста вообще (false только для [AiPolicy.Off]).
- * @property cloudAllowed можно ли слать запрос внешнему (облачному) провайдеру. Для [AiPolicy.Strict]
- *   `false` — «локальный AI only», а локального провайдера пока нет, поэтому AI-бар будет заблокирован.
- * @property sanitizeSecrets вычищать ли секреты из промпта перед отправкой (см. [SecretRedactor]).
+ * @property aiEnabled whether to show AI features for the host at all (false only for [AiPolicy.Off]).
+ * @property cloudAllowed whether a request may go to an external (cloud) provider.
+ * @property sanitizeSecrets whether to scrub secrets from the prompt before sending (see [SecretRedactor]).
  */
 data class AiPolicyDecision(
     val aiEnabled: Boolean,

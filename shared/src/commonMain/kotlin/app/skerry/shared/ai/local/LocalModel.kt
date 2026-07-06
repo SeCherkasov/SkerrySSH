@@ -1,14 +1,14 @@
 package app.skerry.shared.ai.local
 
 /**
- * Описание локальной GGUF-модели из курируемого каталога ([LocalModelCatalog]). Каталог — часть
- * приложения, не пользовательский ввод: [url] всегда https на официальный репозиторий модели,
- * [sha256] проверяется после скачивания ([ModelDownloader]) — скачанный блоб не считается
- * моделью, пока дайджест не совпал.
+ * Description of a local GGUF model from the curated catalog ([LocalModelCatalog]). The catalog is
+ * part of the app, not user input: [url] is always https to the model's official repo, [sha256] is
+ * verified after download ([ModelDownloader]) — a downloaded blob isn't considered a model until
+ * the digest matches.
  *
- * [id] — стабильный идентификатор в настройках ([app.skerry.shared.ai.AiSettings]); менять между
- * версиями нельзя (настройки синкаются между устройствами). [sizeBytes] — точный размер файла:
- * по нему считается прогресс и валидируется установка (см. [LocalModelStore.isInstalled]).
+ * [id] is a stable identifier in settings ([app.skerry.shared.ai.AiSettings]); must not change
+ * across versions (settings sync between devices). [sizeBytes] is the exact file size, used for
+ * progress and to validate installation (see [LocalModelStore.isInstalled]).
  */
 data class LocalModel(
     val id: String,
@@ -19,8 +19,8 @@ data class LocalModel(
     val sha256: String,
     val license: String,
     /**
-     * Модель-специфичная добавка к системному промпту (напр. `/no_think` у Qwen3 — выключить
-     * thinking-режим chat-шаблона); `null` — не нужна. Данные каталога вместо if-по-имени в коде.
+     * Model-specific addition to the system prompt (e.g. Qwen3's `/no_think` disables the chat
+     * template's thinking mode); `null` if not needed. Catalog data instead of an if-by-name in code.
      */
     val extraSystem: String? = null,
 )

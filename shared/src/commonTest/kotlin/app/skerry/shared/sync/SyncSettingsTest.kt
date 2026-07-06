@@ -10,7 +10,7 @@ class SyncSettingsTest {
     @Test
     fun `default syncs everything except local terminal history`() {
         val s = SyncSettings()
-        // TERMINAL_HISTORY — сознательно локальная (per-host, объёмная, чувствительная), не синкается.
+        // TERMINAL_HISTORY is intentionally local (per-host, large, sensitive) and never syncs.
         RecordType.entries.filter { it != RecordType.TERMINAL_HISTORY }
             .forEach { assertTrue(s.shouldSync(it), "default must sync $it") }
         assertFalse(s.shouldSync(RecordType.TERMINAL_HISTORY), "terminal history never syncs")
@@ -27,8 +27,8 @@ class SyncSettingsTest {
     @Test
     fun `both off syncs only the always-on record types`() {
         val s = SyncSettings(syncHosts = false, syncSnippets = false)
-        // TEAM/TEAM_IDENTITY — ключи команд и identity-пара: без них другое устройство не откроет
-        // team-vault'ы вовсе, поэтому селективный синк их не гейтит (как и сам SETTINGS-рекорд).
+        // TEAM/TEAM_IDENTITY hold team keys and the identity pair; without them another device
+        // can't open team vaults at all, so selective sync never gates them (like SETTINGS).
         val alwaysOn = setOf(RecordType.SETTINGS, RecordType.TEAM, RecordType.TEAM_IDENTITY)
         RecordType.entries.filter { it !in alwaysOn }
             .forEach { assertFalse(s.shouldSync(it), "$it must be gated when both off") }

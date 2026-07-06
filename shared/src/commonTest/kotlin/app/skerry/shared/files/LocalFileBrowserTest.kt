@@ -12,9 +12,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Тесты локального браузера идут через in-memory [FakeFileSystem] — общие для всех таргетов
- * (commonTest), без касания реальной ФС. Проверяем навигацию (realpath), листинг с типами/размерами
- * и мутации (mkdir/rename/delete), включая заворачивание okio-ошибок в [FileBrowserException].
+ * Tests the local browser through an in-memory [FakeFileSystem] (commonTest, no real FS). Covers
+ * navigation (realpath), listing with types/sizes, mutations (mkdir/rename/delete), and wrapping
+ * okio errors as [FileBrowserException].
  */
 class LocalFileBrowserTest {
 

@@ -1,10 +1,10 @@
 package app.skerry.ui.snippet
 
 /**
- * Парсинг строки тегов сниппета в список: разделители — запятая/пробел/перевод строки/таб,
- * ведущий `#` снимается, пустые и дубли отбрасываются, порядок сохраняется. Общий для desktop
- * ([SnippetsView]) и mobile (`MobileSnippetsView`) редакторов; регистр тегов не канонизируется
- * (в отличие от тегов хоста), см. [snippetTagSuggestions].
+ * Parses a snippet tag string into a list: separators are comma/space/newline/tab, a leading `#`
+ * is stripped, empties and duplicates are dropped, order is preserved. Shared by the desktop
+ * ([SnippetsView]) and mobile (`MobileSnippetsView`) editors; tag casing isn't canonicalized,
+ * unlike host tags — see [snippetTagSuggestions].
  */
 fun parseSnippetTags(text: String): List<String> =
     text.split(',', ' ', '\n', '\t')

@@ -33,7 +33,7 @@ class VaultTerminalHistoryStoreTest {
         store.save("h1", listOf("a"))
         store.save("h1", listOf("b", "a"))
         assertEquals(listOf("b", "a"), store.load("h1"))
-        // Ровно одна запись истории для ключа (upsert, а не накопление).
+        // Exactly one history record per key (upsert, not accumulation).
         assertEquals(1, vault.records().count { it.type == RecordType.TERMINAL_HISTORY && !it.deleted })
     }
 
@@ -41,7 +41,7 @@ class VaultTerminalHistoryStoreTest {
     fun `caps stored commands`() {
         val store = VaultTerminalHistoryStore(FakeVault(), cap = 2)
         store.save("h1", listOf("c3", "c2", "c1"))
-        assertEquals(listOf("c3", "c2"), store.load("h1")) // хвост отброшен
+        assertEquals(listOf("c3", "c2"), store.load("h1")) // tail dropped
     }
 
     @Test
@@ -52,6 +52,6 @@ class VaultTerminalHistoryStoreTest {
     @Test
     fun `terminal history never syncs regardless of flags`() {
         assertFalse(SyncSettings(syncHosts = true, syncSnippets = true).shouldSync(RecordType.TERMINAL_HISTORY))
-        assertTrue(SyncSettings().shouldSync(RecordType.SETTINGS)) // контроль: settings всё ещё синкается
+        assertTrue(SyncSettings().shouldSync(RecordType.SETTINGS)) // control: settings still syncs
     }
 }

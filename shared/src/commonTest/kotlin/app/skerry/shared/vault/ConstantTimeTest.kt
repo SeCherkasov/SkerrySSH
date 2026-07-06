@@ -14,9 +14,9 @@ class ConstantTimeTest {
 
     @Test
     fun `difference in any position is detected`() {
-        assertFalse(constantTimeEquals(byteArrayOf(9, 2, 3), byteArrayOf(1, 2, 3)), "первый байт")
-        assertFalse(constantTimeEquals(byteArrayOf(1, 2, 9), byteArrayOf(1, 2, 3)), "последний байт")
-        // Различие только в знаковом бите — ловушка наивного сложения вместо XOR/or.
+        assertFalse(constantTimeEquals(byteArrayOf(9, 2, 3), byteArrayOf(1, 2, 3)), "first byte")
+        assertFalse(constantTimeEquals(byteArrayOf(1, 2, 9), byteArrayOf(1, 2, 3)), "last byte")
+        // Difference only in the sign bit — catches naive addition used instead of XOR/or.
         assertFalse(constantTimeEquals(byteArrayOf(0x7f), byteArrayOf(-0x80)))
     }
 

@@ -7,15 +7,17 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Файловый курсор дельта-синка (desktop + android, общий jvmShared): построчно `accountId=cursor` в
- * приватном файле (0600 через [PrivateConfig], каталог 0700). Переживает перезапуск процесса — иначе
- * каждый старт делал бы полный re-pull всей истории `since 0` (LWW идемпотентен, но это лишняя
- * нагрузка и усилитель ретрансляции старых тромбстоунов). Сам курсор не секрет (serverSeq), но лежит
- * рядом с приватной конфигурацией и пишется тем же атомарным путём.
+ * File-based delta-sync cursor store (desktop + Android, shared jvmShared): line-per-account
+ * `accountId=cursor` in a private file (0600 via [PrivateConfig], 0700 directory). Survives
+ * process restart — otherwise every launch would do a full re-pull of the whole history
+ * `since 0` (LWW is idempotent, but that's wasted load and amplifies retransmission of old
+ * tombstones). The cursor itself isn't secret (serverSeq), but it lives alongside the private
+ * config and is written via the same atomic path.
  *
- * Кэш в памяти заполняется один раз при создании; [setCursor] обновляет его и атомарно переписывает
- * файл. Доступ синхронизирован — координатор зовёт [setCursor] и из ручного, и из WS-live-pull цикла.
- * Чтение best-effort: битый/отсутствующий файл → пустой курсор (0 на любой аккаунт).
+ * The in-memory cache is filled once at construction; [setCursor] updates it and atomically
+ * rewrites the file. Access is synchronized — the coordinator calls [setCursor] from both the
+ * manual and the WS live-pull loop. Reads are best-effort: a corrupt/missing file yields an
+ * empty cursor map (0 for any account).
  */
 class FileSyncStateStore(private val path: Path) : SyncStateStore {
 
@@ -37,7 +39,7 @@ class FileSyncStateStore(private val path: Path) : SyncStateStore {
             Files.readAllLines(path).mapNotNull { line ->
                 val i = line.indexOf('=')
                 if (i <= 0) return@mapNotNull null
-                // accountId URL-кодирован → перенос строки/`=` экранированы, разбор построчный безопасен.
+                // accountId is URL-encoded -> newline/`=` are escaped, line-by-line parsing is safe.
                 val account = URLDecoder.decode(line.substring(0, i), Charsets.UTF_8)
                 val value = line.substring(i + 1).toLongOrNull() ?: return@mapNotNull null
                 account to value

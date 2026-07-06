@@ -52,11 +52,11 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
 /**
- * Push-экран Known hosts: шапка-назад + баннеры смены ключа (Accept/Reject прямо в баннере — на
- * телефоне нет боковой панели сравнения отпечатков desktop-`KnownHostsView`) + список доверенных
- * ключей. Поверх живого [KnownHostsController] ([LocalKnownHosts]): баннеры из `mismatches`, строки
- * из `entries`, статус Verified/Changed. Забыть ключ — long-press → Forget (прячем в контекстное
- * меню). Без контроллера (превью/офскрин) — статичная заглушка.
+ * Push screen for Known hosts: back header + key-change banners (Accept/Reject inline — no
+ * side-by-side fingerprint panel like desktop `KnownHostsView` on phone) + trusted key list. Over
+ * the live [KnownHostsController] ([LocalKnownHosts]): banners from `mismatches`, rows from
+ * `entries`, Verified/Changed status. Forgetting a key is long-press → Forget in a context sheet.
+ * Without a controller (preview/offscreen), shows a static mock.
  */
 @Composable
 fun MobileKnownScreen(state: MobileDesignState) {
@@ -70,17 +70,17 @@ fun MobileKnownScreen(state: MobileDesignState) {
     }
 }
 
-// Живой путь.
+// Live path.
 
 /**
- * Живое тело экрана поверх [KnownHostsController]: баннеры по каждому незакрытому событию смены ключа
- * (Accept → принять новый ключ, Reject → отклонить, оставив прежний доверенным) + список доверенных
- * ключей со статусом. После Accept/Reject контроллер перечитывает сторы — баннер исчезает, строка
- * возвращается в Verified.
+ * Live screen body over [KnownHostsController]: a banner per unresolved key-change event
+ * (Accept trusts the new key, Reject rejects it and keeps the old one trusted) + trusted key list
+ * with status. After Accept/Reject the controller re-reads the stores, the banner disappears, and
+ * the row returns to Verified.
  */
 @Composable
 private fun LiveMobileKnownBody(controller: KnownHostsController, mono: FontFamily) {
-    // Экран мог открыться после того, как реконнект записал новый ключ в общий стор — перечитываем.
+    // The screen may have opened after a reconnect wrote a new key to the shared store; re-read.
     LaunchedEffect(Unit) { controller.refresh() }
     val mismatches = controller.mismatches
     val entries = controller.entries
@@ -88,11 +88,11 @@ private fun LiveMobileKnownBody(controller: KnownHostsController, mono: FontFami
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 4.dp),
     ) {
         mismatches.forEach { mismatch ->
-            // key по идентичности: forEach переиспользует слоты позиционно — без ключа состояние
-            // баннера «переехало» бы при снятии соседнего события.
+            // Keyed by identity: forEach reuses slots positionally, so without a key the banner's
+            // state would "move" when a sibling event clears.
             key(mismatch.host, mismatch.port, mismatch.keyType) {
-                // Стабилизируем обработчики (mismatch — data class, валидный ключ remember), чтобы
-                // forEach не пересоздавал лямбды баннера на каждой рекомпозиции тела.
+                // Stabilizes handlers (mismatch is a data class, a valid remember key) so forEach
+                // doesn't recreate banner lambdas on every recomposition.
                 val onAccept = remember(mismatch) { { controller.acceptNewKey(mismatch) } }
                 val onReject = remember(mismatch) { { controller.reject(mismatch) } }
                 MobileMismatchBanner(
@@ -110,7 +110,7 @@ private fun LiveMobileKnownBody(controller: KnownHostsController, mono: FontFami
                 entries.forEach { entry ->
                     val host = entry.host
                     key(host.host, host.port, host.keyType) {
-                        // entry — @Immutable data class, валидный ключ remember для стабильного onForget.
+                        // entry is an @Immutable data class, a valid remember key for a stable onForget.
                         val onForget = remember(entry) { { controller.forget(entry) } }
                         LiveKnownRow(entry, mono, onForget = onForget)
                     }
@@ -121,7 +121,7 @@ private fun LiveMobileKnownBody(controller: KnownHostsController, mono: FontFami
     }
 }
 
-/** Живая строка доверенного ключа: имя + подпись (тип·отпечаток / тип·changed) + иконка статуса; long-press → лист Forget. */
+/** Live trusted-key row: name + subtitle (type·fingerprint / type·changed) + status icon; long-press opens the Forget sheet. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun LiveKnownRow(entry: KnownHostEntry, mono: FontFamily, onForget: () -> Unit) {
@@ -145,7 +145,7 @@ private fun LiveKnownRow(entry: KnownHostEntry, mono: FontFamily, onForget: () -
     }
 }
 
-/** Пустое состояние: доверенных ключей ещё нет (первый коннект запишет ключ по TOFU). */
+/** Empty state: no trusted keys yet (the first connect will record one via TOFU). */
 @Composable
 private fun MobileEmptyKnown() {
     Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
@@ -157,11 +157,11 @@ private fun MobileEmptyKnown() {
     }
 }
 
-// Общие куски разметки.
+// Shared layout pieces.
 
 /**
- * Баннер смены ключа: коралловая карточка, заголовок с иконкой gpp_maybe, тело и две кнопки
- * Accept/Reject во всю ширину. [onAccept]/[onReject] == no-op в мок-пути (превью/офскрин).
+ * Key-change banner: coral card, gpp_maybe icon header, body text, and two full-width
+ * Accept/Reject buttons. [onAccept]/[onReject] are no-ops on the mock path (preview/offscreen).
  */
 @Composable
 private fun MobileMismatchBanner(title: String, body: String, onAccept: () -> Unit, onReject: () -> Unit) {
@@ -227,7 +227,7 @@ private fun BannerButton(
     }
 }
 
-/** Карточка-строка доверенного ключа: имя (mono) + подпись (mono) + иконка статуса; коралловый тон у сменившегося. */
+/** Trusted-key row card: name (mono) + subtitle (mono) + status icon; coral tone when changed. */
 @Composable
 private fun KnownRowContent(
     name: String,
@@ -255,18 +255,18 @@ private fun KnownRowContent(
     }
 }
 
-// Мок (превью/офскрин).
+// Mock (preview/offscreen).
 
 private data class MockKnownHost(val name: String, val subtitle: String, val status: KnownHostStatus)
 
-/** Статичные строки для превью/офскрин. */
+/** Static rows for preview/offscreen. */
 private val MOCK_KNOWN = listOf(
     MockKnownHost("prod-web-01", "ed25519 · 8c3F1a…pK9R", KnownHostStatus.Verified),
     MockKnownHost("db-master", "ed25519 · 2dE7b…wQ1z", KnownHostStatus.Verified),
     MockKnownHost("nas-truenas", "ed25519 · changed", KnownHostStatus.Changed),
 )
 
-/** Мок-тело (превью/офскрин): баннер смены ключа + статичные строки. */
+/** Mock body (preview/offscreen): key-change banner + static rows. */
 @Composable
 private fun MockMobileKnownBody(mono: FontFamily) {
     Column(

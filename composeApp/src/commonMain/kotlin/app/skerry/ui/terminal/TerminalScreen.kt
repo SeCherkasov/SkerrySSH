@@ -115,40 +115,40 @@ import app.skerry.ui.generated.resources.terminal_reverse_search_no_matches
 import app.skerry.ui.generated.resources.terminal_reverse_search_prompt
 import app.skerry.ui.theme.SkerryColors
 
-/** Порог между кликами (мс), в пределах которого они складываются в двойной/тройной. */
+/** Max gap (ms) between clicks to count as double/triple click. */
 private const val DOUBLE_CLICK_MS = 350
 
-/** Полупериод мигания курсора (мс) — стандартный xterm-ритм ~530 мс на фазу. */
+/** Cursor blink half-period (ms), matching xterm's ~530ms phase. */
 private const val CURSOR_BLINK_MS = 530L
 
 private const val PADDING_DP = 14
-// Сколько совпадений истории показывать в оверлее reverse-search (Ctrl-R) за раз.
+// Number of history matches shown at once in the reverse-search (Ctrl-R) overlay.
 private const val REVERSE_SEARCH_ROWS = 6
 
-/** Радиус «капли» тач-маркера выделения и радиус зоны попадания пальца по нему. */
+/** Radius of the touch selection handle's dot, and its finger hit-test radius. */
 private const val HANDLE_RADIUS_DP = 7
 private const val HANDLE_TOUCH_RADIUS_DP = 22
 
 /**
- * Интерактивный терминал: рендерит модель экрана [TerminalScreenState.screen] (сетку ячеек с
- * цветом/жирностью из [app.skerry.shared.terminal.TerminalEmulator]) и блок-курсор в позиции
- * курсора. Это активная зона ввода — фокус держится здесь, нажатия идут в PTY посимвольно
- * ([mapTerminalKey]); эхо рисует сам shell. Командной строки под терминалом НЕТ — нижняя строка
- * окна отведена под AI-ассистента (Phase 2).
+ * Interactive terminal: renders [TerminalScreenState.screen] (cell grid with color/weight from
+ * [app.skerry.shared.terminal.TerminalEmulator]) and a block cursor at the cursor position. This is
+ * the input focus target; keystrokes go to the PTY per-character ([mapTerminalKey]) and the shell
+ * draws its own echo. There is no command line under the terminal; the bottom row is reserved for
+ * the AI assistant.
  *
- * Выделение: на мыши — перетаскивание сразу тянет линейный диапазон ([TerminalSelection]) поверх
- * сетки (одиночный клик снимает выделение, фокус возвращается); на таче обычный drag отдаётся
- * прокрутке, а выделение начинается после long-press. Диапазон подсвечивается полупрозрачным cyan.
- * Копирование: `Ctrl+Shift+C` (desktop) и системное текстовое меню «Copy» над выделением, которое
- * всплывает по окончании тач-выделения ([LocalTextToolbar]). Печать снимает выделение и меню.
+ * Selection: on mouse, drag directly extends a linear range ([TerminalSelection]) over the grid
+ * (single click clears selection and returns focus); on touch, plain drag scrolls and selection
+ * starts on long-press. The range is highlighted with translucent cyan. Copy via `Ctrl+Shift+C`
+ * (desktop) or the system text toolbar's "Copy" menu that appears after touch selection
+ * ([LocalTextToolbar]). Typing clears both selection and menu.
  *
- * [imeInput] включает мобильный путь ввода: софт-клавиатура не шлёт key-события в
- * [onPreviewKeyEvent], поэтому ввод снимается со скрытого `BasicTextField` ([imeDeltaToPty]).
- * На desktop оставлен `false` — там работает физическая клавиатура через [mapTerminalKey].
+ * [imeInput] enables the mobile input path: the soft keyboard does not send key events to
+ * [onPreviewKeyEvent], so input is captured from a hidden `BasicTextField` ([imeDeltaToPty]).
+ * Desktop keeps this `false`, relying on the physical keyboard via [mapTerminalKey].
  *
- * [imeTransform] (только для IME-пути) пост-обрабатывает непустой результат [imeDeltaToPty] перед
- * отправкой — мобильная клавишная панель пропускает через него sticky-ctrl ([app.skerry.ui.mobile.applyStickyCtrl]),
- * чтобы Ctrl+<буква> работал и с софт-клавиатуры, а не только с клавиш панели.
+ * [imeTransform] (IME path only) post-processes a non-empty [imeDeltaToPty] result before sending —
+ * the mobile key panel routes it through sticky-ctrl ([app.skerry.ui.mobile.applyStickyCtrl]) so
+ * Ctrl+<letter> works from the soft keyboard too, not just from panel keys.
  */
 @Composable
 fun TerminalScreen(
@@ -157,30 +157,30 @@ fun TerminalScreen(
     imeInput: Boolean = false,
     imeTransform: ((String) -> String)? = null,
 ) {
-    // Шрифт и кегль терминала — из настроек Appearance ([LocalTerminalAppearance]); дефолт Hack 13px
-    // там, где провайдер не выставлен (мобильный таргет/превью/экран подключения). Лигатуры гасим
-    // всегда ([NO_LIGATURES]), чтобы `->`/`=>`/`!=` не склеивались независимо от выбранного шрифта.
+    // Terminal font/size from Appearance settings ([LocalTerminalAppearance]); defaults to Hack 13px
+    // where no provider is set (mobile target/preview/connection screen). Ligatures always disabled
+    // ([NO_LIGATURES]) so `->`/`=>`/`!=` never merge regardless of font.
     val appearance = LocalTerminalAppearance.current
-    // Цветовая тема терминала (Appearance → выбор темы): фон/текст/ANSI/акцент курсора. Меняется на
-    // лету — все обращения ниже (фон Box, textStyle, cellBgColor, курсор, выделение) читают её.
+    // Terminal color theme (Appearance settings): background/text/ANSI/cursor accent. Read live by
+    // Box background, textStyle, cellBgColor, cursor, and selection below.
     val termTheme = LocalTerminalTheme.current
     val cursorBg = termTheme.cursor
     val cursorFg = termTheme.cursorText
     val selectionBg = termTheme.selection
     val handleColor = termTheme.cursor
     val mono = rememberTerminalFontFamily(appearance.font)
-    // Ключ — сам appearance (@Immutable data class, структурное равенство): меняется ровно при выборе
-    // нового шрифта/кегля. FontFamily ключом ненадёжен — равенство двух собранных инстансов зависит от
-    // equals у Font compose-resources, и при reference-equality textStyle/metrics инвалидировались бы
-    // на каждой рекомпозиции. mono захватывается лямбдой и согласован с appearance.font.
+    // Keyed on appearance itself (@Immutable data class, structural equality): changes exactly when
+    // font/size changes. FontFamily is not a reliable key — equality of two built instances depends
+    // on compose-resources Font.equals, so reference-equality would invalidate textStyle/metrics on
+    // every recomposition. mono is captured by the lambda and stays consistent with appearance.font.
     val textStyle = remember(appearance, termTheme) {
         TextStyle(
             fontFamily = mono,
             fontFeatureSettings = NO_LIGATURES,
             fontSize = appearance.fontSizeSp.sp,
             lineHeight = (appearance.fontSizeSp * appearance.lineHeight).sp,
-            // Межбуквенный интервал входит в advance: cellWidth ниже меряется этим же стилем, поэтому
-            // сетка (глифы/фон/курсор/мышь) остаётся согласованной при любом значении.
+            // Letter spacing is part of advance: cellWidth below is measured with this same style, so
+            // the grid (glyphs/background/cursor/mouse) stays consistent for any value.
             letterSpacing = appearance.letterSpacingSp.sp,
             color = termTheme.foreground,
         )
@@ -189,122 +189,123 @@ fun TerminalScreen(
     val closed = sessionState is TerminalState.Closed
     val scroll = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
-    // Скрытое IME-поле (тач-ввод): держит фокус/клавиатуру, всегда сброшено к якорю.
+    // Hidden IME field (touch input): holds focus/keyboard, always reset to the anchor.
     val imeFocusRequester = remember { FocusRequester() }
     val imeBaseline = remember { TextFieldValue(ANCHOR, selection = TextRange(ANCHOR.length)) }
     var imeValue by remember { mutableStateOf(imeBaseline) }
-    // Системный буфер обмена — новый suspend-API ([androidx.compose.ui.platform.Clipboard]); чтение/запись
-    // идут через clipboardScope (вызовы из не-suspend обработчиков клавиш/мыши — fire-and-forget).
+    // System clipboard via the suspend API ([androidx.compose.ui.platform.Clipboard]); reads/writes
+    // go through clipboardScope (called fire-and-forget from non-suspend key/mouse handlers).
     val clipboard = LocalClipboard.current
     val clipboardScope = rememberCoroutineScope()
     val textToolbar = LocalTextToolbar.current
     val uriHandler = LocalUriHandler.current
-    // Контроллер софт-клавиатуры: на таче поднимаем её явно, т.к. requestFocus() на уже
-    // сфокусированном скрытом поле — no-op (после скрытия фокус остаётся, клавиатура не всплывает).
+    // Soft keyboard controller: shown explicitly on touch since requestFocus() on an already-focused
+    // hidden field is a no-op (focus remains after hiding, so the keyboard would not reappear).
     val keyboard = LocalSoftwareKeyboardController.current
     var layoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    // Подсчёт кликов мышью для двойного (слово) / тройного (строка) выделения: запоминаем время и
-    // позицию предыдущего клика; повтор в той же ячейке за порог времени наращивает счётчик.
-    // Ключ по state — при смене активной вкладки счётчик сбрасывается, иначе первый клик на новой
-    // вкладке в той же позиции и в пределах порога ошибочно посчитался бы двойным/тройным.
+    // Mouse click counting for double (word) / triple (line) selection: tracks time and position of
+    // the previous click; a repeat in the same cell within the threshold increments the count.
+    // Keyed on state so the counter resets on tab switch; otherwise the first click on a new tab at
+    // the same position within the threshold would be miscounted as a double/triple click.
     var clickCount by remember(state) { mutableStateOf(0) }
     var lastClickMark by remember(state) { mutableStateOf<TimeMark?>(null) }
     var lastClickPos by remember(state) { mutableStateOf<TerminalPos?>(null) }
 
-    // Размер моноширинной ячейки в пикселях — единственный источник правды по геометрии: глифы,
-    // фон, выделение, курсор, мышь и маркеры считаются от него арифметикой (col*cellWidth /
-    // row*cellHeight), поэтому всё совпадает при любом шрифте и системном масштабе.
+    // Monospace cell size in pixels is the single source of truth for geometry: glyphs, background,
+    // selection, cursor, mouse, and handles are all derived from it via col*cellWidth /
+    // row*cellHeight, so everything stays consistent across fonts and system scale.
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
     val metrics = remember(textStyle, density) {
-        // cellWidth = РЕАЛЬНЫЙ advance шрифта, которым drawText раскладывает ASCII-раны. Меряем на длинной
-        // строке и делим на её длину: size.width — целое (округление ~0.5px), на 10 символах это давало
-        // ошибку до ~0.05px/символ, и к правому краю строки ASCII-ран уползал от cw-сетки на ~1 клетку
-        // (подсветка/курсор/мышь считают по сетке, текст — по advance). На 200 символах ошибка ничтожна,
-        // сетка совпадает с раскладкой drawText, дрейф исчезает.
+        // cellWidth is the font's real advance, which drawText uses to lay out ASCII runs. Measured on
+        // a long string and divided by its length: size.width is an integer (rounds to ~0.5px), which
+        // at 10 chars gave error up to ~0.05px/char and drifted the ASCII run off the cw-grid by ~1
+        // cell near the row's right edge (highlight/cursor/mouse use the grid, text uses advance). At
+        // 200 chars the error is negligible and the grid matches drawText's layout.
         val sampleLen = 200
         val sample = measurer.measure(AnnotatedString("M".repeat(sampleLen)), textStyle)
         TerminalMetrics(
             cellWidth = sample.size.width / sampleLen.toFloat(),
-            // cellHeight ОКРУГЛЯЕМ до целого пикселя: строки тайлятся встык (top = r*cellHeight), и при
-            // дробной высоте (напр. множитель 1.38 → 13×1.38 = 17.94px, либо дробный масштаб дисплея)
-            // границы соседних фон-прямоугольников попадают на дробные пиксели — Skia сглаживает стык, и
-            // на однотонном фоне (панели mc) проступают горизонтальные «полосы» каждую строку. Целая
-            // высота убирает шов. Ширину так округлять нельзя: там намеренно дробный advance (см. выше),
-            // но высоту — можно: текст каждой строки рисуется независимо от её top, дрейф не копится.
+            // cellHeight is rounded to a whole pixel: rows tile edge-to-edge (top = r*cellHeight), and a
+            // fractional height (e.g. line-height multiplier 1.38 → 13×1.38 = 17.94px, or fractional
+            // display scale) puts adjacent background rects' borders on fractional pixels — Skia
+            // antialiases the seam, showing horizontal banding every row on solid backgrounds (e.g. mc
+            // panels). Integer height removes the seam. Width cannot be rounded the same way (its
+            // fractional advance is intentional, see above), but height can: each row's text is drawn
+            // independent of its top, so no drift accumulates.
             cellHeight = with(density) { textStyle.lineHeight.toPx() }.roundToInt().toFloat(),
         )
     }
     val handleRadiusPx = with(density) { HANDLE_RADIUS_DP.dp.toPx() }
     val handleTouchRadiusPx = with(density) { HANDLE_TOUCH_RADIUS_DP.dp.toPx() }
 
-    // Активная сессия на desktop сразу забирает фокус (физическая клавиатура — печатаем без клика).
-    // На таче ([imeInput]) фокус НЕ запрашиваем автоматически: иначе скрытое IME-поле поднимает
-    // софт-клавиатуру прямо при подключении, и она подбрасывает раскладку/терминал вверх — видимый
-    // «скачок». Клавиатура встаёт по тапу пользователя (обработчик жестов ниже, как Termius/Blink);
-    // клавишная панель спецклавиш работает и без неё (шлёт в PTY напрямую).
+    // An active desktop session grabs focus immediately (physical keyboard, no click needed to type).
+    // On touch ([imeInput]) focus is not requested automatically: the hidden IME field would raise the
+    // soft keyboard right on connect, pushing the layout/terminal up. The keyboard appears on user tap
+    // (gesture handler below, as in Termius/Blink); the special-key panel works without it (sends to
+    // the PTY directly).
     LaunchedEffect(state) { if (!closed && !imeInput) focusRequester.requestFocus() }
 
-    // Автоскролл вниз по мере нового вывода. Следим И за snapshotVersion (новый вывод), И за самим
-    // scroll.maxValue: высоту контента layout пересчитывает в фазе размещения, ПОЗЖЕ снимка, поэтому
-    // читать maxValue прямо в момент снимка нельзя — он устаревший. Особенно при `clear`, где высота
-    // резко меняется: по старому maxValue скролл уезжает мимо нового низа (виден старый текст — «экран
-    // не очистился») или в пустоту. snapshotFlow до-эмитит уже пересчитанное значение, поэтому всегда
-    // приземляемся на фактический низ (или на верх при сжатии контента).
+    // Autoscroll to bottom on new output. Watches both snapshotVersion (new output) and
+    // scroll.maxValue: layout recomputes content height in the placement phase, after the snapshot, so
+    // reading maxValue at snapshot time would be stale. This matters especially on `clear`, where
+    // height changes sharply: scrolling by the old maxValue lands past the new bottom (stale text still
+    // visible) or into empty space. snapshotFlow re-emits once the value is recomputed, so this always
+    // lands on the actual bottom (or top, if content shrank).
     LaunchedEffect(state) {
         snapshotFlow { state.snapshotVersion to scroll.maxValue }
             .collect { (_, max) -> scroll.scrollTo(max) }
     }
 
-    // OSC 52: приложение (tmux/vim) просит положить текст в системный буфер — кладём на UI-потоке.
-    // (Запрос чтения буфера сервером эмулятор не пропускает — утечки буфера пользователя нет.)
+    // OSC 52: the app (tmux/vim) requests writing text to the system clipboard; done on the UI thread.
+    // (The emulator does not forward server clipboard-read requests, so no user clipboard leak.)
     LaunchedEffect(state) {
-        // try/catch на каждую запись: сбой одной копии (буфер недоступен) НЕ должен валить collect —
-        // иначе OSC 52 перестанет работать до конца сессии. Отмену корутины пробрасываем.
+        // try/catch per write: one failed copy (clipboard unavailable) must not kill collect, or OSC
+        // 52 would stop working for the rest of the session. Coroutine cancellation is rethrown.
         state.clipboardCopies.collect {
             try {
-                // На Wayland пишем через wl-copy (тот же буфер, что читаем при вставке); иначе Compose.
+                // On Wayland, write via wl-copy (same buffer read on paste); otherwise via Compose.
                 if (!withContext(Dispatchers.Default) { writeSystemClipboardDirect(it) }) {
                     clipboard.setClipEntry(plainTextClipEntry(it))
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // буфер недоступен/занят — копию молча теряем, collect продолжает работать
+                // Clipboard unavailable/busy: drop the copy silently, collect keeps running.
             }
         }
     }
 
-    // Размер вьюпорта в ячейках → PTY/эмулятор: при первом лэйауте и ресайзе окна. Без этого
-    // сетка остаётся дефолтной 80×24 и широкий вывод рвётся. state.resize гасит дубли сам.
-    // Меряем ВНЕШНИЙ Box (вьюпорт), а не прокручиваемый Text: у того размер = высота всего контента.
+    // Viewport size in cells is pushed to the PTY/emulator on first layout and on window resize;
+    // without this the grid stays at the default 80x24 and wide output wraps. state.resize dedupes on
+    // its own. Measured on the outer Box (viewport), not the scrollable Text, whose size is the full
+    // content height.
     val paddingPx = with(density) { PADDING_DP.dp.toPx() }
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
-    // Глифы/курсор не показываем, пока сетка не подогнана под вьюпорт хотя бы раз: иначе первый вывод
-    // шелла лёг бы на дефолтные 80×24, а затем «переукладывался» при ресайзе — видимый «подпрыг»
-    // текста при открытии. До этого виден только фон терминала (тот же цвет), потом — готовый перенос.
+    // Glyphs/cursor stay hidden until the grid has been fitted to the viewport at least once: otherwise
+    // the shell's first output would land on the default 80x24 and then "re-flow" on resize — a visible
+    // jump on open. Until then only the terminal background is visible, then the final layout appears.
     var sized by remember(state) { mutableStateOf(false) }
-    // state в ключах ОБЯЗАТЕЛЕН: при переключении вкладок меняется только state (новый
-    // TerminalScreenState активной сессии), а viewportSize/metrics/paddingPx остаются прежними.
-    // sized сбрасывается в false (remember(state) выше), и без state-ключа этот эффект не
-    // перезапустился бы — resize не вызвался, sized навсегда остался бы false, и сетка/курсор
-    // не рисовались бы (вывод «пропадает» при переключении между вкладками).
+    // state MUST be a key: switching tabs only changes state (a new TerminalScreenState for the active
+    // session), while viewportSize/metrics/paddingPx stay the same. sized resets to false (remember(state)
+    // above), and without the state key this effect wouldn't restart — resize wouldn't fire, sized would
+    // stay false forever, and the grid/cursor wouldn't render (output "disappears" when switching tabs).
     LaunchedEffect(state, viewportSize, metrics, paddingPx) {
         if (viewportSize.width == 0 || viewportSize.height == 0) return@LaunchedEffect
-        // Дебаунс ресайза: при анимации софт-клавиатуры (adjustResize) вьюпорт меняется каждый кадр;
-        // без задержки PTY ресайзился бы на каждый промежуточный размер → сетка переукладывается и
-        // текст «мигает/прыгает и возвращается». Новое изменение размера перезапускает эффект и
-        // отменяет ждущий ресайз, поэтому срабатываем один раз — когда размер устаканился. Самый
-        // первый ресайз (sized=false, открытие терминала) делаем мгновенно, без задержки.
+        // Resize debounce: during the soft-keyboard animation (adjustResize) the viewport changes every
+        // frame; without a delay the PTY would resize on every intermediate size, re-flowing the grid and
+        // making the text "flicker/jump and settle back". A new resize restarts the effect and cancels the
+        // pending one, so this fires once the size has settled. The very first resize (sized=false, terminal
+        // opening) happens instantly, without a delay.
         if (sized) delay(150)
         state.resize(gridSizeFor(viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, metrics))
         sized = true
     }
 
-    // Фаза мигания курсора: при включённом blink дёргаем булеву раз в полупериод; иначе курсор
-    // стоит постоянно. Курсор рисуется ОВЕРЛЕЕМ (см. ниже), поэтому мигание перерисовывает лишь
-    // маленький Canvas, а не весь экранный текст.
+    // Cursor blink phase: with blink on, toggle a boolean once per half-period; otherwise the cursor
+    // stays solid. The cursor is drawn as an overlay (see below), so blinking repaints only a small
+    // Canvas, not the whole screen text.
     var blinkOn by remember { mutableStateOf(true) }
     LaunchedEffect(state.cursorBlink, state.cursorVisible, closed) {
         if (!state.cursorBlink || !state.cursorVisible || closed) {
@@ -320,47 +321,47 @@ fun TerminalScreen(
     }
     val cursorVisibleNow = sized && !closed && state.cursorVisible && blinkOn
 
-    // Единый снимок состояния на рекомпозицию: и текстовый оверлей, и курсорный оверлей читают одни и
-    // те же screen/cursor — иначе между двумя draw-проходами снимок мог бы разъехаться (курсор по новой
-    // позиции на старой сетке). Compose перерисует оба при следующей публикации (snapshotVersion).
+    // A single state snapshot per recomposition: both the text overlay and the cursor overlay read the
+    // same screen/cursor — otherwise the snapshot could diverge between the two draw passes (cursor at a
+    // new position on the old grid). Compose repaints both on the next publish (snapshotVersion).
     val screen = state.screen
     val cursorRow = state.cursorRow
     val cursorCol = state.cursorCol
 
-    // Нижний «слак» прокрутки: сетка из rows строк короче вьюпорта на остаток деления его высоты на
-    // строку (floor в gridSizeFor). Без компенсации при прокрутке вниз в этот зазор сверху подглядывает
-    // последняя строка scrollback — после `clear` это та самая строка с командой, которая должна уйти
-    // вверх. Добавляем пустой зазор ПОД контентом: тогда maxValue == высоте scrollback, и живая сетка
-    // приклеивается к верху вьюпорта (история прячется вверх, как в настоящем терминале).
+    // Bottom scroll slack: a grid of rows rows is shorter than the viewport by the remainder of its
+    // height divided by a row (floor in gridSizeFor). Without compensation, scrolling down lets the last
+    // scrollback row peek into this gap from the top — after `clear`, the very command row that should
+    // scroll up. Add an empty gap below the content: then maxValue == scrollback height and the live grid
+    // sticks to the viewport top (history hides upward, like a real terminal).
     val bottomSlack = with(density) {
         (viewportSize.height - 2 * paddingPx - state.rows * metrics.cellHeight).coerceAtLeast(0f).toDp()
     }
 
-    // Высота прокручиваемого контента ЗАДАЁТСЯ ЯВНО в пикселях (число строк × cellHeight), а НЕ числом
-    // строк невидимого Text: реальная высота строки Text на разных платформах (Compose/Skia на desktop
-    // vs Android) может расходиться с cellHeight, по которому рисует Canvas. На длинном scrollback дрейф
-    // копится и сбивает maxValue ≈ на строку — тогда прокрутка вниз недокручивает и сверху подглядывает
-    // строка scrollback (после `clear` — строка с командой). От метрик шрифта так не зависим.
+    // The scrollable content height is set explicitly in pixels (row count × cellHeight), not by an
+    // invisible Text's row count: the actual Text row height across platforms (Compose/Skia on desktop
+    // vs Android) may differ from the cellHeight the Canvas draws with. On long scrollback the drift
+    // accumulates and skews maxValue by ~a row — then scrolling down under-scrolls and a scrollback row
+    // peeks from the top (after `clear` — the command row). This way we don't depend on font metrics.
     val contentHeight = with(density) { (screen.size * metrics.cellHeight).toDp() }
-    // Сам Text-подложка невидим: задаёт зону ввода/IME и фокус — глифы рисует отдельный оверлей (ниже).
+    // The Text underlay itself is invisible: it sets the input/IME area and focus — glyphs are drawn by a separate overlay (below).
     val structural = remember { AnnotatedString("") }
 
-    // Кэш TextStyle глифа по TermStyle: toGlyphStyle делает merge() (аллокация SpanStyle+TextStyle) на
-    // каждый ран. Строк/ранов на кадр — сотни, но различных стилей мало, поэтому мемоизируем. Сбрасываем
-    // при смене базового стиля или палитры (OSC 4/104) — от них зависит результат.
+    // Glyph TextStyle cache keyed by TermStyle: toGlyphStyle does merge() (SpanStyle+TextStyle
+    // allocation) per run. There are hundreds of rows/runs per frame but few distinct styles, so
+    // memoize. Reset on a base style or palette (OSC 4/104) change — the result depends on them.
     val glyphStyleCache = remember(textStyle, state.palette, termTheme) { HashMap<TermStyle, TextStyle>() }
 
-    // Производные от textStyle стили считаем один раз на смену шрифта/темы, а не в draw-фазе:
-    // курсорный оверлей перерисовывается каждый полупериод мигания, и copy() там аллоцировал бы
-    // новый TextStyle на каждый кадр; то же для «призрака» подсказки и невидимой Text-подложки.
+    // textStyle-derived styles are computed once per font/theme change, not in the draw phase: the
+    // cursor overlay repaints every blink half-period, where copy() would allocate a new TextStyle per
+    // frame; likewise for the suggestion "ghost" and the invisible Text underlay.
     val structuralStyle = remember(textStyle) { textStyle.copy(color = Color.Transparent) }
     val cursorGlyphStyle = remember(textStyle, termTheme) { textStyle.copy(color = cursorFg) }
-    // «Призрак» — приглушённый цвет ТЕКСТА темы (не захардкоженный светлый): на светлых темах
-    // (Solarized Light) полупрозрачный белый на кремовом фоне был невидим.
+    // "Ghost" — a muted theme text color (not a hardcoded light one): on light themes (Solarized Light)
+    // a translucent white on a cream background was invisible.
     val ghostStyle = remember(textStyle, termTheme) { textStyle.copy(color = termTheme.foreground.copy(alpha = 0.45f)) }
 
-    // PathEffect для пунктирного/штрихового подчёркивания зависит только от высоты клетки (константа при
-    // фиксированном шрифте) — считаем один раз, а не на каждый подчёркнутый ран в draw-фазе.
+    // The PathEffect for dotted/dashed underline depends only on cell height (constant at a fixed font)
+    // — compute it once, not per underlined run in the draw phase.
     val underlineEffects = remember(metrics) {
         val t = (metrics.cellHeight / 14f).coerceAtLeast(1f)
         UnderlineEffects(
@@ -371,21 +372,21 @@ fun TerminalScreen(
 
     fun cellAt(x: Float, y: Float) = cellAtOffset(x, y, metrics)
 
-    // Координата указателя → ячейка чистой арифметикой: pointerInput стоит после verticalScroll и
-    // padding, поэтому offset уже в координатах контента (со скроллом, без отступа). Колонку/строку
-    // поджимаем к фактической сетке, чтобы выделение не уходило за её пределы.
+    // Pointer coordinate → cell by plain arithmetic: pointerInput is after verticalScroll and padding,
+    // so offset is already in content coordinates (with scroll, without padding). Column/row are clamped
+    // to the actual grid so selection doesn't run past it.
     fun posAt(x: Float, y: Float): TerminalPos {
         val p = cellAt(x, y)
-        // Свежий снимок (жесты идут вне рекомпозиции), не захваченный composition-локал.
+        // A fresh snapshot (gestures run outside recomposition), not a captured composition-local.
         val snap = state.screen
         if (snap.isEmpty()) return p
         val row = p.row.coerceIn(0, snap.lastIndex)
         return TerminalPos(row, p.col.coerceIn(0, snap[row].size))
     }
 
-    // Репорт мыши приложению по координатам указателя. Пиксели берём из той же системы координат
-    // контента, что и posAt (после verticalScroll/padding), и передаём отдельно — encodeMouseReport
-    // использует их лишь в SGR-Pixels (1016), в клеточных режимах они игнорируются.
+    // Mouse report to the application by pointer coordinates. Pixels come from the same content
+    // coordinate system as posAt (after verticalScroll/padding) and are passed separately — encodeMouseReport
+    // uses them only in SGR-Pixels (1016); in cell modes they're ignored.
     fun reportMouseAt(
         button: MouseButton,
         type: MouseEventType,
@@ -399,14 +400,14 @@ fun TerminalScreen(
         x.toInt().coerceAtLeast(0), y.toInt().coerceAtLeast(0),
     )
 
-    // try/catch на каждую буферную корутину: scope из rememberCoroutineScope несёт обычный Job (не
-    // Supervisor), поэтому необработанное исключение в одной операции отменило бы весь scope и убило бы
-    // копирование/вставку до конца сессии. Отмену корутины пробрасываем, прочее глушим (буфер недоступен).
+    // try/catch per clipboard coroutine: the scope from rememberCoroutineScope carries a regular Job (not
+    // a Supervisor), so an unhandled exception in one operation would cancel the whole scope and kill
+    // copy/paste for the rest of the session. Rethrow cancellation, swallow the rest (clipboard unavailable).
     fun copySelection() {
         val text = state.selectedText() ?: return
         clipboardScope.launch {
             try {
-                // Wayland: wl-copy (парно к вставке через wl-paste); иначе штатный Compose-буфер.
+                // Wayland: wl-copy (paired with paste via wl-paste); otherwise the standard Compose clipboard.
                 if (!withContext(Dispatchers.Default) { writeSystemClipboardDirect(text) }) {
                     clipboard.setClipEntry(plainTextClipEntry(text))
                 }
@@ -417,18 +418,18 @@ fun TerminalScreen(
         }
     }
 
-    // Текст системного CLIPBOARD. На Wayland (прямой путь берёт чтение на себя) читаем через wl-paste,
-    // минуя AWT, — и НЕ откатываемся на Compose даже при пустом результате, иначе при не-текстовом
-    // буфере всплыла бы шумная JDK-трасса. Субпроцесс и резолв утилит держим вне UI-потока (Default).
+    // System CLIPBOARD text. On Wayland (the direct path takes over reading) read via wl-paste, bypassing
+    // AWT — and don't fall back to Compose even on an empty result, else a non-text clipboard would raise
+    // a noisy JDK trace. The subprocess and utility resolution stay off the UI thread (Default).
     suspend fun fetchClipboardText(): String? =
-        // Гейт и субпроцесс — одним заходом на Default; getClipEntry (suspend, ждёт UI-поток) — на
-        // возвращённом контексте вызывающего (Main). Прямой путь, взяв чтение, на AWT уже не падает.
+        // Gate and subprocess in one pass on Default; getClipEntry (suspend, waits on the UI thread) on
+        // the returned caller context (Main). The direct path, once it takes reading, no longer falls to AWT.
         withContext(Dispatchers.Default) {
             if (systemClipboardDirectHandlesReads()) readSystemClipboardDirect() else null
         } ?: if (systemClipboardDirectHandlesReads()) null else clipboard.getClipEntry()?.readPlainText()
 
-    // Вставка из системного буфера: читаем асинхронно и шлём текст в PTY (paste сам оборачивает
-    // bracketed-paste, если приложение включило). Пустой/нетекстовый буфер — no-op.
+    // Paste from the system clipboard: read asynchronously and send text to the PTY (paste wraps
+    // bracketed-paste itself if the app enabled it). Empty/non-text clipboard — no-op.
     fun pasteFromClipboard() {
         clipboardScope.launch {
             try {
@@ -440,9 +441,9 @@ fun TerminalScreen(
         }
     }
 
-    // Средний клик = вставка PRIMARY: системный PRIMARY (X11 AWT / Wayland wl-paste, видит выделение
-    // в других окнах) → in-app буфер → CLIPBOARD. Чтение PRIMARY на Wayland — субпроцесс, поэтому весь
-    // флоу уводим в корутину (Default для чтения, paste обратно на UI), чтобы не блокировать клик.
+    // Middle click = PRIMARY paste: system PRIMARY (X11 AWT / Wayland wl-paste, sees selections in other
+    // windows) → in-app buffer → CLIPBOARD. Reading PRIMARY on Wayland is a subprocess, so the whole flow
+    // goes into a coroutine (Default for reading, paste back on the UI) to not block the click.
     fun pastePrimaryOrClipboard() {
         clipboardScope.launch {
             try {
@@ -457,9 +458,9 @@ fun TerminalScreen(
         }
     }
 
-    // Публикуем завершённое выделение мышью как PRIMARY: в системный PRIMARY (X11 AWT / Wayland wl-copy)
-    // и в in-app буфер. Тогда средний клик вставляет именно выделенное. Запись PRIMARY на Wayland —
-    // субпроцесс, поэтому уводим в корутину (Default), чтобы не блокировать UI. No-op, если выделять нечего.
+    // Publish a finished mouse selection as PRIMARY: to system PRIMARY (X11 AWT / Wayland wl-copy) and
+    // the in-app buffer. Then middle click pastes exactly what was selected. Writing PRIMARY on Wayland
+    // is a subprocess, so it goes into a coroutine (Default) to not block the UI. No-op if nothing is selected.
     fun publishPrimary() {
         val text = state.capturePrimarySelection() ?: return
         clipboardScope.launch {
@@ -472,7 +473,7 @@ fun TerminalScreen(
         }
     }
 
-    // Системное текстовое меню «Copy» над выделением — тач-аффорданс копирования (на мыши Ctrl+Shift+C).
+    // System text "Copy" menu over the selection — a touch copy affordance (Ctrl+Shift+C on a mouse).
     fun showCopyMenu() {
         val sel = state.selection ?: return
         if (state.selectedText() == null) return
@@ -492,18 +493,18 @@ fun TerminalScreen(
     }
 
     Box(modifier.onSizeChanged { viewportSize = it }.background(termTheme.background)) {
-      // Весь видимый экран рисуем ОДНИМ пер-клеточным оверлеем по моноширинной сетке (а не потоковым
-      // Text): фон ячеек на полную ширину строки (включая хвостовые reverse-пробелы TUI), подсветку
-      // выделения и сами глифы — каждый по своей колонке `col*cellWidth`. Так широкие символы (CJK,
-      // emoji) и их continuation-клетки держат сетку, а курсор/мышь/маркеры (та же арифметика) с ней
-      // совпадают. Геометрия как у курсора: тот же padding и сдвиг на прокрутку. Сам Text ниже —
-      // невидимая подложка (высота для скролла + приём ввода).
+      // The whole visible screen is drawn by a single per-cell overlay on the monospace grid (not a
+      // flowing Text): cell backgrounds across the full row width (including TUI trailing reverse-spaces),
+      // the selection highlight, and the glyphs — each at its column `col*cellWidth`. This way wide
+      // characters (CJK, emoji) and their continuation cells hold the grid, and cursor/mouse/handles (same
+      // arithmetic) match it. Geometry like the cursor: same padding and scroll offset. The Text below is
+      // an invisible underlay (height for scroll + input capture).
       if (sized && screen.isNotEmpty()) {
           val sel = state.selection
-          val palette = state.palette // OSC 4/104 переопределения индексов; пусто — дефолты темы
-          // clipToBounds ПОСЛЕ padding: строка scrollback на границе прокрутки рисуется с top=-chh и
-          // иначе вылезала бы в зону верхнего паддинга (на desktop клипа по умолчанию нет, в отличие от
-          // Android) — после `clear` так подглядывала строка с командой. Клип режет её по краю контента.
+          val palette = state.palette // OSC 4/104 index overrides; empty — theme defaults
+          // clipToBounds after padding: the scrollback row at the scroll boundary is drawn at top=-chh and
+          // would otherwise spill into the top padding zone (desktop has no default clip, unlike Android)
+          // — after `clear` the command row would peek there. The clip cuts it at the content edge.
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp).clipToBounds()) {
               val scrollPx = scroll.value.toFloat()
               val cw = metrics.cellWidth
@@ -512,7 +513,7 @@ fun TerminalScreen(
                   val top = r * chh - scrollPx
                   if (top + chh < 0f || top > size.height) continue
                   val row = screen[r]
-                  // 1) Фон ячеек — раны одного цвета схлопываем; хвостовой ран тянем до края вьюпорта.
+                  // 1) Cell backgrounds — collapse same-color runs; stretch the trailing run to the viewport edge.
                   var c = 0
                   while (c < row.size) {
                       val color = cellBgColor(row[c].style, palette, termTheme)
@@ -523,7 +524,7 @@ fun TerminalScreen(
                       val right = if (c >= row.size) size.width else c * cw
                       drawRect(color, topLeft = Offset(left, top), size = Size(right - left, chh))
                   }
-                  // 2) Подсветка выделения — поверх фона, под глифами.
+                  // 2) Selection highlight — over the background, under the glyphs.
                   if (sel != null && !sel.isEmpty) {
                       var k = 0
                       while (k < row.size) {
@@ -533,22 +534,22 @@ fun TerminalScreen(
                           drawRect(selectionBg, topLeft = Offset(s * cw, top), size = Size((k - s) * cw, chh))
                       }
                   }
-                  // 3) Глифы — сегментируем строку на раны (см. glyphRuns): подряд идущие
-                  // одностилевые ASCII-клетки рисуем одним drawText (быстрый моноширинный случай),
-                  // а каждый НЕ-ASCII глиф (box-drawing рамок mc, CJK, символы) — в свою колонку
-                  // отдельно: fallback-шрифт даёт не-cellWidth advance, и длинный ран накапливал бы
-                  // дрейф (рваные горизонтали рамок, съезд цветных строк). Wide-клетка — span=2.
+                  // 3) Glyphs — segment the row into runs (see glyphRuns): consecutive same-style ASCII
+                  // cells are drawn with one drawText (the fast monospace case), while each non-ASCII glyph
+                  // (mc box-drawing, CJK, symbols) is drawn at its own column separately: a fallback font
+                  // gives a non-cellWidth advance, and a long run would accumulate drift (ragged box
+                  // horizontals, colored rows sliding). A wide cell — span=2.
                   for (run in glyphRuns(row)) {
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
                           val style = glyphStyleCache.getOrPut(run.style) { run.style.toGlyphStyle(textStyle, palette, termTheme) }
                           drawGlyphText(measurer, run.text, Offset(x, top), style)
                       }
-                      // Подчёркивание тянем по всей ширине рана, в т.ч. под пробелами (как в xterm).
+                      // Draw the underline across the full run width, including under spaces (like xterm).
                       if (run.style.underline) drawCellUnderline(run.style, x, top, run.span * cw, chh, palette, underlineEffects, termTheme)
                   }
-                  // 4) Гиперссылки (OSC 8) подчёркиваем отдельным проходом — раны соседних клеток с
-                  // одним URI; пропускаем те, что уже подчёркнуты приложением (SGR), чтобы не дублировать.
+                  // 4) Hyperlinks (OSC 8) are underlined in a separate pass — runs of adjacent cells with
+                  // one URI; skip those already underlined by the app (SGR) to avoid duplicating.
                   var h = 0
                   while (h < row.size) {
                       val uri = row[h].hyperlink
@@ -558,7 +559,7 @@ fun TerminalScreen(
                       val to = h
                       var k = from
                       while (k < to) {
-                          if (row[k].style.underline) { k++; continue } // app уже подчёркивает — не дублируем
+                          if (row[k].style.underline) { k++; continue } // app already underlines — don't duplicate
                           val runStart = k
                           while (k < to && !row[k].style.underline) k++
                           drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects, termTheme)
@@ -573,27 +574,27 @@ fun TerminalScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scroll)
-            // bottom += bottomSlack — пустой зазор под контентом, чтобы живая сетка приклеивалась к
-            // верху вьюпорта, а не оставляла сверху подсмотренную строку scrollback (см. bottomSlack).
+            // bottom += bottomSlack — an empty gap below the content so the live grid sticks to the
+            // viewport top rather than leaving a peeked scrollback row above (see bottomSlack).
             .padding(start = PADDING_DP.dp, top = PADDING_DP.dp, end = PADDING_DP.dp, bottom = PADDING_DP.dp + bottomSlack)
-            // Высота прокрутки задаётся явно (contentHeight) от cellHeight, а не метрик шрифта Text.
+            // Scroll height is set explicitly (contentHeight) from cellHeight, not the Text font metrics.
             .height(contentHeight)
             .fillMaxWidth()
             .focusRequester(focusRequester)
-            // Focus reporting (DEC 1004): vim/tmux получают ESC[I/ESC[O при фокусе окна терминала.
+            // Focus reporting (DEC 1004): vim/tmux get ESC[I/ESC[O on terminal window focus.
             .onFocusChanged { state.notifyFocus(it.isFocused) }
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown || closed) return@onPreviewKeyEvent false
-                // --- Reverse-search истории (Ctrl-R): пока оверлей открыт, клавиши правят его, не PTY ---
+                // --- Reverse history search (Ctrl-R): while the overlay is open, keys drive it, not the PTY ---
                 if (state.reverseSearchQuery != null) {
                     when {
                         event.key == Key.Escape -> state.closeReverseSearch()
                         event.key == Key.Enter -> state.reverseSearchAccept()
-                        // Ещё один Ctrl-R (или ↑) — к следующему (более старому) совпадению; ↓ — к новее.
+                        // Another Ctrl-R (or ↑) — to the next (older) match; ↓ — to newer.
                         (event.isCtrlPressed && event.key == Key.R) || event.key == Key.DirectionUp ->
                             state.reverseSearchNext()
                         event.key == Key.DirectionDown -> state.reverseSearchPrev()
-                        // Delete — убрать выбранную команду из истории (ручная чистка), оверлей открыт.
+                        // Delete — remove the selected command from history (manual cleanup), overlay open.
                         event.key == Key.Delete -> state.reverseSearchDeleteSelected()
                         event.key == Key.Backspace -> state.reverseSearchBackspace()
                         else -> {
@@ -605,22 +606,22 @@ fun TerminalScreen(
                     }
                     return@onPreviewKeyEvent true
                 }
-                // Ctrl-R — открыть reverse-search истории (перехват у shell, показываем свой оверлей).
+                // Ctrl-R — open reverse history search (intercept from the shell, show our own overlay).
                 if (event.isCtrlPressed && event.key == Key.R) {
                     state.openReverseSearch()
                     return@onPreviewKeyEvent true
                 }
-                // Shift+Tab — циклировать альтернативы подсказки автодополнения (только если она есть).
+                // Shift+Tab — cycle autocomplete suggestion alternatives (only if one exists).
                 if (event.isShiftPressed && event.key == Key.Tab && state.suggestionTail != null) {
                     state.cycleSuggestion()
                     return@onPreviewKeyEvent true
                 }
-                // Ctrl+Shift+C — копирование выделения (Ctrl+C остаётся SIGINT для shell).
+                // Ctrl+Shift+C — copy the selection (Ctrl+C stays SIGINT for the shell).
                 if (event.isCtrlPressed && event.isShiftPressed && event.key == Key.C) {
                     copySelection()
                     return@onPreviewKeyEvent true
                 }
-                // Ctrl+Shift+V и Shift+Insert — вставка из буфера обмена (bracketed-paste, если приложение включило).
+                // Ctrl+Shift+V and Shift+Insert — paste from the clipboard (bracketed-paste if the app enabled it).
                 if ((event.isCtrlPressed && event.isShiftPressed && event.key == Key.V) ||
                     (event.isShiftPressed && event.key == Key.Insert)
                 ) {
@@ -639,8 +640,8 @@ fun TerminalScreen(
                 if (bytes != null) {
                     state.clearSelection()
                     textToolbar.hide()
-                    // Tab при наличии подсказки автодополнения — принять её (fish-style), не слать в shell.
-                    // Без подсказки Tab уходит в PTY как обычно (серверное completion не ломается).
+                    // Tab with an autocomplete suggestion — accept it (fish-style), don't send to the shell.
+                    // Without a suggestion Tab goes to the PTY as usual (server-side completion isn't broken).
                     if (bytes == "\t" && state.suggestionTail != null) {
                         state.acceptSuggestion()
                     } else {
@@ -653,12 +654,12 @@ fun TerminalScreen(
             }
             .focusable()
             .onGloballyPositioned { layoutCoords = it }
-            // Колесо мыши: когда приложение слушает мышь — шлём wheel-отчёт; в alt-screen без
-            // mouse-tracking (less/man) — стрелки (3 строки за «щелчок»), т.к. своего scrollback нет.
-            // Перехватываем в Initial-проходе и гасим событие, чтобы verticalScroll не дёргал scrollback;
-            // иначе (основной буфер, без репортинга) пропускаем — колесо листает scrollback штатно.
-            // metrics в ключах: reportMouseAt считает ячейку по геометрии, захваченной на старте
-            // цикла, — без перезапуска после смены кегля координаты считались бы по старой сетке.
+            // Mouse wheel: when the app listens for the mouse — send a wheel report; in alt-screen without
+            // mouse tracking (less/man) — arrows (3 rows per "tick"), since there's no own scrollback.
+            // Intercept in the Initial pass and consume the event so verticalScroll doesn't jog scrollback;
+            // otherwise (primary buffer, no reporting) pass it through — the wheel scrolls scrollback normally.
+            // metrics in the keys: reportMouseAt computes the cell from geometry captured at loop start —
+            // without restarting after a font-size change, coordinates would use the old grid.
             .pointerInput(state, closed, metrics) {
                 awaitPointerEventScope {
                     while (true) {
@@ -681,11 +682,11 @@ fun TerminalScreen(
                     }
                 }
             }
-            // Hover-репортинг для AnyEvent (DEC 1003): приложение хочет события движения и без
-            // зажатой кнопки. Шлём Move только при смене ячейки (кнопка 3 = «не зажата» проставляется
-            // внутри encodeMouseReport). Движение с ЗАЖАТОЙ кнопкой — это Drag, его репортят жестовые
-            // циклы ниже (левая — awaitEachGesture, средняя/правая — сырой обработчик), поэтому здесь
-            // глушим события с любой зажатой кнопкой, иначе один кадр движения уйдёт и как Move, и как Drag.
+            // Hover reporting for AnyEvent (DEC 1003): the app wants motion events even with no button
+            // held. Send Move only on a cell change (button 3 = "not held" is set inside
+            // encodeMouseReport). Motion with a button held is Drag, reported by the gesture loops below
+            // (left — awaitEachGesture, middle/right — raw handler), so here we suppress events with any
+            // button held, else one motion frame would go out as both Move and Drag.
             .pointerInput(state, closed, metrics) {
                 var lastHover: TerminalPos? = null
                 awaitPointerEventScope {
@@ -702,10 +703,10 @@ fun TerminalScreen(
                     }
                 }
             }
-            // Средняя/правая кнопки мыши: awaitFirstDown (в жесте ниже) реагирует только на основную
-            // (левую) кнопку, поэтому средний/правый клик ловим здесь на сырых событиях. При активном
-            // mouse-tracking — репортим press/release приложению; иначе средний = вставка (PRIMARY-
-            // выделение X11 c откатом на буфер), правый = КОПИРОВАТЬ текущее выделение в буфер.
+            // Middle/right mouse buttons: awaitFirstDown (in the gesture below) reacts only to the primary
+            // (left) button, so middle/right clicks are caught here on raw events. With active mouse
+            // tracking — report press/release to the app; otherwise middle = paste (X11 PRIMARY selection
+            // with a clipboard fallback), right = copy the current selection to the clipboard.
             .pointerInput(state, closed, metrics) {
                 var reported: MouseButton? = null
                 var lastPos: TerminalPos? = null
@@ -732,23 +733,23 @@ fun TerminalScreen(
                                     reported = btn
                                     lastPos = pos
                                 } else if (btn == MouseButton.Middle) {
-                                    // Средний клик = вставка PRIMARY (PRIMARY → in-app буфер → CLIPBOARD).
-                                    // Чтение PRIMARY на Wayland — субпроцесс, поэтому весь флоу асинхронный.
+                                    // Middle click = PRIMARY paste (PRIMARY → in-app buffer → CLIPBOARD).
+                                    // Reading PRIMARY on Wayland is a subprocess, so the whole flow is async.
                                     pastePrimaryOrClipboard()
                                 } else {
-                                    // Правый клик = копировать текущее выделение в буфер обмена (без
-                                    // вставки — вставка осталась на средней кнопке). No-op, если ничего
-                                    // не выделено. Выделение НЕ снимаем, чтобы можно было копировать повторно.
+                                    // Right click = copy the current selection to the clipboard (no paste —
+                                    // paste stayed on the middle button). No-op if nothing is selected. The
+                                    // selection isn't cleared so it can be copied again.
                                     copySelection()
                                 }
                                 change.consume()
                             }
-                            // Drag средней/правой кнопки (DEC 1002/1003): awaitFirstDown в жесте ниже
-                            // реагирует только на основную кнопку, поэтому движение с зажатой средней/правой
-                            // отслеживаем здесь — репортим только при смене ячейки, чтобы не спамить.
+                            // Middle/right button drag (DEC 1002/1003): awaitFirstDown in the gesture below
+                            // reacts only to the primary button, so motion with middle/right held is tracked
+                            // here — report only on a cell change to avoid spamming.
                             PointerEventType.Move -> reported?.let { btn ->
-                                // Если приложение выключило трекинг (или зажат Shift) на середине drag —
-                                // больше не репортим, но событие всё равно глушим, пока кнопку не отпустят.
+                                // If the app disabled tracking (or Shift is held) mid-drag — stop reporting,
+                                // but still consume the event until the button is released.
                                 if (reporting && pos != lastPos) {
                                     reportMouseAt(btn, MouseEventType.Drag, x, y, shift, mods.isAltPressed, mods.isCtrlPressed)
                                     lastPos = pos
@@ -776,9 +777,9 @@ fun TerminalScreen(
                         focusRequester.requestFocus()
                         val mods = currentEvent.keyboardModifiers
                         val shift = mods.isShiftPressed
-                        // Левая кнопка с зажатым мышиным трекингом: транслируем press/drag/release в
-                        // отчёты, пока не отпущена. (Среднюю/правую ловит отдельный обработчик ниже —
-                        // awaitFirstDown реагирует только на основную кнопку.) Shift форсит выделение.
+                        // Left button with mouse tracking held: translate press/drag/release into reports
+                        // until released. (Middle/right are caught by the separate handler below —
+                        // awaitFirstDown reacts only to the primary button.) Shift forces selection.
                         if (state.mouseTracking != MouseTracking.Off && !shift) {
                             val ctrl = mods.isCtrlPressed
                             val alt = mods.isAltPressed
@@ -791,8 +792,8 @@ fun TerminalScreen(
                                 if (change.pressed) {
                                     val pos = posAt(change.position.x, change.position.y)
                                     if (pos != last) {
-                                        // В Normal-режиме (1000) drag не репортится — encodeMouseReport
-                                        // вернёт false и ничего не отправит; для 1002/1003 уйдёт отчёт.
+                                        // In Normal mode (1000) drag isn't reported — encodeMouseReport
+                                        // returns false and sends nothing; for 1002/1003 a report goes out.
                                         reportMouseAt(MouseButton.Left, MouseEventType.Drag, change.position.x, change.position.y, shift, alt, ctrl)
                                         last = pos
                                     }
@@ -805,11 +806,11 @@ fun TerminalScreen(
                             }
                             return@awaitEachGesture
                         }
-                        // Локальное выделение. Счётчик кликов: 1 — drag-выделение, 2 — слово, 3 — строка.
+                        // Local selection. Click counter: 1 — drag selection, 2 — word, 3 — row.
                         val pos = posAt(down.position.x, down.position.y)
-                        // Ctrl+клик по клетке с OSC 8-гиперссылкой — открыть URI (не начинать выделение).
-                        // URI приходит от НЕДОВЕРЕННОГО сервера — открываем лишь безопасные веб-схемы,
-                        // отсекая file:/javascript:/прочее, что могло бы навредить локально.
+                        // Ctrl+click on a cell with an OSC 8 hyperlink — open the URI (don't start a selection).
+                        // The URI comes from an untrusted server — open only safe web schemes, blocking
+                        // file:/javascript:/anything else that could harm locally.
                         if (mods.isCtrlPressed) {
                             val uri = state.screen.getOrNull(pos.row)?.getOrNull(pos.col)?.hyperlink
                             if (uri != null && isSafeLinkUri(uri)) {
@@ -824,9 +825,9 @@ fun TerminalScreen(
                         lastClickMark = TimeSource.Monotonic.markNow()
                         lastClickPos = pos
                         when ((clickCount - 1) % 3) {
-                            1 -> state.selectWordAt(pos)   // двойной клик — слово
-                            2 -> state.selectLineAt(pos)   // тройной клик — строка
-                            else -> {                       // одиночный — выделение перетаскиванием
+                            1 -> state.selectWordAt(pos)   // double click — word
+                            2 -> state.selectLineAt(pos)   // triple click — row
+                            else -> {                       // single — drag selection
                                 state.beginSelection(pos)
                                 val dragged = drag(down.id) { change ->
                                     change.consume()
@@ -835,14 +836,13 @@ fun TerminalScreen(
                                 if (!dragged || state.selection?.isEmpty != false) state.clearSelection()
                             }
                         }
-                        // Завершённое выделение мышью становится PRIMARY — источник для среднего клика.
+                        // A finished mouse selection becomes PRIMARY — the source for a middle click.
                         publishPrimary()
                     } else {
-                        // Тач: сначала — попал ли палец в маркер уже существующего выделения.
-                        // Если да, перетаскиваем эту границу (вторую держим) — корректировка краёв,
-                        // как в мессенджерах; по окончании обновляем меню «Copy».
-                        // Якоря маркеров и down.position — в одной системе координат контента
-                        // (pointerInput стоит после verticalScroll/padding), поэтому сравниваем напрямую.
+                        // Touch: first — did the finger land on a handle of an existing selection? If so,
+                        // drag that edge (hold the other) — edge adjustment like in messengers; update the
+                        // "Copy" menu when done. Handle anchors and down.position are in the same content
+                        // coordinate system (pointerInput is after verticalScroll/padding), so compare directly.
                         val sel = state.selection
                         val handle = sel?.let { hitTestSelectionHandle(down.position, it, metrics, handleTouchRadiusPx) }
                         if (handle != null) {
@@ -855,14 +855,14 @@ fun TerminalScreen(
                             if (state.selection?.isEmpty != false) state.clearSelection() else { showCopyMenu(); publishPrimary() }
                             return@awaitEachGesture
                         }
-                        // Иначе разводим жесты, чтобы тап-для-клавиатуры и long-press-для-выделения
-                        // не дрались. Long-press → режим выделения (клавиатуру НЕ поднимаем);
-                        // короткий тап → клавиатура; движение пальцем уходит в прокрутку.
+                        // Otherwise split the gestures so tap-for-keyboard and long-press-for-selection
+                        // don't fight. Long press → selection mode (don't raise the keyboard); a short tap
+                        // → keyboard; finger movement goes to scrolling.
                         val held = awaitLongPressOrCancellation(down.id)
                         if (held != null) {
-                            // По зажатию сразу выделяем СЛОВО под пальцем (как в мессенджерах) —
-                            // выделение и маркеры видны мгновенно, без необходимости двигать палец.
-                            // Дальнейший drag тянет границу от слова; меню «Copy» поднимаем в конце.
+                            // On hold, immediately select the word under the finger (like in messengers) —
+                            // selection and handles show instantly, no need to move the finger. A further
+                            // drag extends the edge from the word; raise the "Copy" menu at the end.
                             state.selectWordAt(posAt(held.position.x, held.position.y))
                             drag(held.id) { change ->
                                 change.consume()
@@ -870,8 +870,8 @@ fun TerminalScreen(
                             }
                             if (state.selection?.isEmpty != false) state.clearSelection() else { showCopyMenu(); publishPrimary() }
                         } else if (imeInput) {
-                            // Не long-press: если палец уже отпущен — это тап, поднимаем клавиатуру;
-                            // если ещё на экране (жест забрала прокрутка) — не трогаем.
+                            // Not a long press: if the finger is already released — it's a tap, raise the
+                            // keyboard; if still on screen (scrolling took the gesture) — leave it.
                             val released = currentEvent.changes.none { it.id == down.id && it.pressed }
                             if (released) {
                                 imeFocusRequester.requestFocus()
@@ -883,9 +883,9 @@ fun TerminalScreen(
             },
       )
 
-      // Курсор-оверлей поверх текста по форме DECSCUSR. Block — заливка ячейки + перерисовка
-      // символа контрастным цветом; Underline — полоса снизу; Bar — вертикальная черта слева.
-      // Геометрию берём по той же моноширинной метрике, что и текст, со сдвигом на прокрутку.
+      // Cursor overlay over the text per the DECSCUSR shape. Block — fill the cell + redraw the char in
+      // a contrasting color; Underline — a bar at the bottom; Bar — a vertical line on the left. Geometry
+      // uses the same monospace metric as the text, offset by the scroll.
       if (cursorVisibleNow && screen.isNotEmpty()) {
           val thickness = with(density) { 2.dp.toPx() }
           val glyph = screen.getOrNull(cursorRow)?.getOrNull(cursorCol)?.text
@@ -913,9 +913,9 @@ fun TerminalScreen(
           }
       }
 
-      // «Призрак» автодополнения (Phase 3): серым дорисовываем хвост подсказки от позиции курсора
-      // (fish/zsh-стиль). Та же моноширинная геометрия, что у курсора; Tab (desktop) / чип (mobile)
-      // принимают его. В alt-screen (vim/htop) подсказки нет — [suggestionTail] там уже сброшен.
+      // Autocomplete "ghost": draw the suggestion tail in gray from the cursor position (fish/zsh-style).
+      // Same monospace geometry as the cursor; Tab (desktop) / chip (mobile) accept it. In alt-screen
+      // (vim/htop) there's no suggestion — [suggestionTail] is already cleared there.
       val ghost = state.suggestionTail
       if (ghost != null && !closed && screen.isNotEmpty()) {
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp).clipToBounds()) {
@@ -925,8 +925,8 @@ fun TerminalScreen(
           }
       }
 
-      // Оверлей reverse-search истории (Ctrl-R): панель снизу с текущим запросом и совпадениями
-      // (выбранное — cyan). Enter вставляет, Esc закрывает, повторный Ctrl-R/стрелки листают.
+      // Reverse history search overlay (Ctrl-R): a bottom panel with the current query and matches
+      // (selected — cyan). Enter inserts, Esc closes, another Ctrl-R/arrows page through.
       val rsQuery = state.reverseSearchQuery
       if (rsQuery != null && !closed) {
           val matches = state.reverseSearchResults
@@ -960,9 +960,9 @@ fun TerminalScreen(
           }
       }
 
-      // Тач-маркеры выделения («капли» по краям). Рисуем только на мобильном пути ([imeInput]):
-      // оверлей внутри того же padding, что и текст, со сдвигом по вертикали на текущую прокрутку,
-      // чтобы маркеры держались на границах выделения при скролле. На мыши (desktop) их нет.
+      // Touch selection handles ("drops" at the edges). Drawn only on the mobile path ([imeInput]): the
+      // overlay is inside the same padding as the text, offset vertically by the current scroll so the
+      // handles stay on the selection edges while scrolling. On a mouse (desktop) there are none.
       if (imeInput && !closed) {
           val sel = state.selection
           val anchors = sel?.takeIf { !it.isEmpty }?.let { selectionHandleAnchors(it, metrics) }
@@ -976,24 +976,24 @@ fun TerminalScreen(
           }
       }
 
-      // Тач-ввод: невидимое поле снимает символы софт-клавиатуры. Диффим против якоря
-      // ([imeDeltaToPty]) и сразу сбрасываем — поле служит лишь «воронкой» в PTY, не хранит текст.
+      // Touch input: an invisible field captures soft-keyboard characters. Diff against the anchor
+      // ([imeDeltaToPty]) and reset immediately — the field is just a "funnel" into the PTY, holds no text.
       if (imeInput && !closed) {
           BasicTextField(
               value = imeValue,
               onValueChange = { nv ->
                   val raw = imeDeltaToPty(ANCHOR, nv.text)
-                  // sticky-ctrl и т.п. применяются только к реальному вводу (не к пустой дельте).
+                  // sticky-ctrl etc. apply only to real input (not to an empty delta).
                   val out = if (raw.isEmpty()) raw else imeTransform?.invoke(raw) ?: raw
                   if (out.isNotEmpty()) {
                       state.clearSelection()
                       textToolbar.hide()
-                      // Пока открыт reverse-search — софт-клавиатура правит запрос, а не PTY:
-                      // DEL → backspace, Enter(CR) → принять, печатные символы → в запрос.
+                      // While reverse-search is open — the soft keyboard edits the query, not the PTY:
+                      // DEL → backspace, Enter(CR) → accept, printable chars → into the query.
                       if (state.reverseSearchQuery != null) {
                           for (ch in out) when (ch.code) {
                               127, 8 -> state.reverseSearchBackspace() // DEL / BS
-                              13, 10 -> state.reverseSearchAccept() // CR / LF — принять
+                              13, 10 -> state.reverseSearchAccept() // CR / LF — accept
                               else -> if (ch.code >= 0x20) state.reverseSearchAppend(ch.toString())
                           }
                       } else {
@@ -1017,9 +1017,9 @@ fun TerminalScreen(
 }
 
 /**
- * Рисует один тач-маркер выделения: вертикальную «ножку» вдоль границы ячейки (высотой в строку)
- * и «каплю»-кружок под якорем, смещённый наружу от текста (start — влево, end — вправо), как в
- * системных хэндлах выделения. [anchor] — угловая точка границы в координатах канвы.
+ * Draws one touch selection handle: a vertical "stem" along the cell edge (a row high) and a "drop"
+ * circle below the anchor, offset outward from the text (start — left, end — right), like system
+ * selection handles. [anchor] — the corner point of the edge in canvas coordinates.
  */
 private fun DrawScope.drawSelectionHandle(
     anchor: Offset,
@@ -1039,15 +1039,15 @@ private fun DrawScope.drawSelectionHandle(
 }
 
 /**
- * Рисует ран глифов терминала: явный measure + отрисовка с НАЛОЖЕНИЕМ цвета поверх раскладки.
- * Перегрузкой `drawText(measurer, text, style = …)` пользоваться нельзя: кэш [TextMeasurer]
- * сравнивает стили только по layout-атрибутам (цвет в ключ НЕ входит), а та перегрузка красит
- * цветом, вшитым в закэшированную раскладку, — при смене темы терминала весь экран оставался в
- * старой палитре до пересоздания экрана (переключения вкладки), а одинаковый текст двух разных
- * цветов в одном кадре красился бы цветом первого. Здесь цвет передаётся в момент отрисовки
- * ([drawText] по готовому [androidx.compose.ui.text.TextLayoutResult] переопределяет его), поэтому
- * кэш-хит безопасен; заодно ключ кэша не зависит от колонки (constraints по умолчанию не выводятся
- * из topLeft) — одинаковые глифы в разных колонках делят одну раскладку.
+ * Draws a terminal glyph run: explicit measure + drawing with a color override on top of the layout.
+ * The `drawText(measurer, text, style = …)` overload can't be used: the [TextMeasurer] cache compares
+ * styles only by layout attributes (color isn't in the key), and that overload paints with the color
+ * baked into the cached layout — on a terminal theme change the whole screen stayed in the old palette
+ * until the screen was recreated (tab switch), and identical text of two different colors in one frame
+ * would be painted with the first's color. Here color is passed at draw time ([drawText] over a ready
+ * [androidx.compose.ui.text.TextLayoutResult] overrides it), so a cache hit is safe; the cache key also
+ * doesn't depend on the column (constraints aren't derived from topLeft by default) — identical glyphs
+ * in different columns share one layout.
  */
 private fun DrawScope.drawGlyphText(measurer: TextMeasurer, text: String, topLeft: Offset, style: TextStyle) {
     val layout = measurer.measure(AnnotatedString(text), style, density = this, layoutDirection = layoutDirection)
@@ -1055,10 +1055,10 @@ private fun DrawScope.drawGlyphText(measurer: TextMeasurer, text: String, topLef
 }
 
 /**
- * Цвет ФОНА ячейки для пер-клеточного оверлея (закраска полной ширины строки, включая хвостовые
- * пробелы). inverse → цвет текста (reverse-видео меняет fg/bg местами); заданный bg → его цвет;
- * дефолтный фон без inverse → `null` (рисовать не нужно — виден общий фон терминала). Подсветку
- * выделения накладывает сам оверлей отдельным слоем поверх фона.
+ * Cell background color for the per-cell overlay (fill across the full row width, including trailing
+ * spaces). inverse → the text color (reverse-video swaps fg/bg); an explicit bg → its color; default
+ * background without inverse → `null` (nothing to draw — the shared terminal background shows). The
+ * selection highlight is applied by the overlay in a separate layer over the background.
  */
 private fun cellBgColor(style: TermStyle, palette: Palette, theme: TerminalTheme): Color? = when {
     style.inverse -> style.fg.toComposeColor(theme, palette)
@@ -1067,24 +1067,24 @@ private fun cellBgColor(style: TermStyle, palette: Palette, theme: TerminalTheme
 }
 
 /**
- * Один ран глифов для отрисовки: текст, начальная колонка [col], число занятых колонок [span] (для
- * подчёркивания: Wide=2, ASCII-ран = число клеток) и стиль.
+ * One glyph run to draw: text, start column [col], number of columns occupied [span] (for underline:
+ * Wide=2, ASCII run = cell count), and style.
  */
 internal data class GlyphRun(val col: Int, val text: String, val span: Int, val style: TermStyle)
 
 /**
- * Печатный ASCII (один BMP-символ 0x20..0x7e) — у JetBrains Mono гарантированно cellWidth advance.
- * Вызывается только для Single-клеток (Continuation/Wide отфильтрованы раньше в [glyphRuns]).
+ * Printable ASCII (a single BMP char 0x20..0x7e) — in JetBrains Mono guaranteed a cellWidth advance.
+ * Called only for Single cells (Continuation/Wide are filtered earlier in [glyphRuns]).
  */
 private fun TermCell.isPlainAscii(): Boolean = text.length == 1 && text[0].code in 0x20..0x7e
 
 /**
- * Сегментирует строку сетки на раны глифов. Подряд идущие одностилевые ASCII-клетки склеиваются в
- * один ран (быстрый моноширинный drawText), а каждый НЕ-ASCII глиф (box-drawing рамок mc, CJK,
- * символы) выделяется в отдельный ран на одну колонку — потому что fallback-шрифт рисует такие глифы
- * с advance ≠ cellWidth, и в длинном ране это копит дрейф (рваные горизонтали рамок, съезд цветных
- * строк на колонку). Wide-клетка — отдельный ран на две колонки; Continuation глифа не несёт.
- * Колонка рана — физический индекс клетки, поэтому Continuation-«дыра» не сдвигает следующий ран.
+ * Segments a grid row into glyph runs. Consecutive same-style ASCII cells are merged into one run (the
+ * fast monospace drawText), while each non-ASCII glyph (mc box-drawing, CJK, symbols) is split into its
+ * own one-column run — because a fallback font draws such glyphs with advance ≠ cellWidth, and in a long
+ * run that accumulates drift (ragged box horizontals, colored rows sliding by a column). A wide cell — a
+ * separate two-column run; a Continuation carries no glyph. The run's column is the physical cell index,
+ * so a Continuation "hole" doesn't shift the next run.
  */
 internal fun glyphRuns(row: List<TermCell>): List<GlyphRun> {
     val runs = ArrayList<GlyphRun>()
@@ -1114,14 +1114,14 @@ internal fun glyphRuns(row: List<TermCell>): List<GlyphRun> {
 }
 
 /**
- * [TextStyle] для отрисовки глифа ячейки: базовый моноширинный стиль + цвет/начертание/подчёркивание
- * из [TermStyle]. Фон убираем (его рисует оверлей отдельным слоем по полной ширине ячейки).
+ * [TextStyle] for drawing a cell glyph: the base monospace style + color/weight/underline from
+ * [TermStyle]. The background is removed (the overlay draws it in a separate layer across the full cell width).
  */
 private fun TermStyle.toGlyphStyle(base: TextStyle, palette: Palette, theme: TerminalTheme): TextStyle =
     base.merge(toSpanStyle(palette, theme).copy(background = Color.Unspecified))
 
 private fun TermStyle.toSpanStyle(palette: Palette, theme: TerminalTheme): SpanStyle {
-    // inverse меняет местами текст и фон; при дефолтном фоне он становится цветом фона терминала.
+    // inverse swaps text and background; with a default background it becomes the terminal background color.
     val resolvedFg = fg.toComposeColor(theme, palette)
     val resolvedBg = if (bg == TermColor.Default) theme.background else bg.toComposeColor(theme, palette)
     var fgColor = if (inverse) resolvedBg else resolvedFg
@@ -1132,9 +1132,8 @@ private fun TermStyle.toSpanStyle(palette: Palette, theme: TerminalTheme): SpanS
     }
     if (hidden) fgColor = bgColor.takeIf { it != Color.Unspecified } ?: theme.background
     if (dim) fgColor = fgColor.copy(alpha = 0.6f)
-    // Подчёркивание (включая modern 4:x формы и SGR 58 цвет) рисуем вручную в Canvas — Compose
-    // TextDecoration не умеет ни волнистое/пунктирное/двойное, ни отдельный цвет. Здесь только
-    // strikethrough, которое штатное.
+    // Underline (including modern 4:x forms and the SGR 58 color) is drawn manually in Canvas — Compose
+    // TextDecoration can't do wavy/dotted/double or a separate color. Here only strikethrough, which is native.
     return SpanStyle(
         color = fgColor,
         background = bgColor,
@@ -1144,21 +1143,21 @@ private fun TermStyle.toSpanStyle(palette: Palette, theme: TerminalTheme): SpanS
     )
 }
 
-/** Переопределения палитры (OSC 4/104): индекс 0..255 → Rgb. Пусто — используются дефолты темы. */
+/** Palette overrides (OSC 4/104): index 0..255 → Rgb. Empty — theme defaults are used. */
 private typealias Palette = Map<Int, TermColor.Rgb>
 
-/** Предвычисленные PathEffect для пунктирного/штрихового подчёркивания (зависят лишь от высоты клетки). */
+/** Precomputed PathEffects for dotted/dashed underline (depend only on cell height). */
 private data class UnderlineEffects(val dotted: PathEffect, val dashed: PathEffect)
 
-/** Стиль подчёркивания OSC 8-гиперссылок: одиночная линия тематическим бирюзовым (primary cyan). */
+/** OSC 8 hyperlink underline style: a single line in the theme cyan (primary cyan). */
 private val LINK_UNDERLINE_STYLE = TermStyle(
     underlineStyle = UnderlineStyle.Single,
     underlineColor = TermColor.Rgb(0x2B, 0xBD, 0xEE),
 )
 
 /**
- * Цвет линии подчёркивания: [TermStyle.underlineColor], а при [TermColor.Default] — следует цвету
- * текста (с учётом inverse и dim). Рендерится отдельно от глифа, поэтому цвет считаем тут.
+ * Underline line color: [TermStyle.underlineColor], or with [TermColor.Default] it follows the text
+ * color (accounting for inverse and dim). Rendered separately from the glyph, so the color is computed here.
  */
 private fun TermStyle.underlineDrawColor(palette: Palette, theme: TerminalTheme): Color {
     val base = if (underlineColor == TermColor.Default) {
@@ -1172,8 +1171,8 @@ private fun TermStyle.underlineDrawColor(palette: Palette, theme: TerminalTheme)
 }
 
 /**
- * Рисует линию подчёркивания нужной формы (modern SGR `4:x`) у нижней кромки ячейки/рана.
- * [left]/[width] — горизонтальный отрезок, [top] — верх строки, [chh] — высота клетки.
+ * Draws the underline of the required shape (modern SGR `4:x`) at the bottom edge of a cell/run.
+ * [left]/[width] — the horizontal segment, [top] — the row top, [chh] — the cell height.
  */
 private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects, theme: TerminalTheme) {
     if (style.underlineStyle == UnderlineStyle.None) return
@@ -1221,9 +1220,9 @@ private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Floa
 }
 
 /**
- * Перевод [TermColor] в Compose Color: Default — цвет из контекста; Rgb — напрямую; Indexed —
- * xterm-палитра, где первые 16 индексов взяты из активной темы ([TerminalTheme.ansi]), а 16..255 — стандартный
- * 6×6×6 куб и градации серого.
+ * Converts [TermColor] to a Compose Color: Default — the contextual color; Rgb — directly; Indexed —
+ * the xterm palette, where the first 16 indices come from the active theme ([TerminalTheme.ansi]) and
+ * 16..255 is the standard 6×6×6 cube and grayscale.
  */
 private fun TermColor.toComposeColor(theme: TerminalTheme, palette: Palette): Color = when (this) {
     TermColor.Default -> theme.foreground
@@ -1231,14 +1230,14 @@ private fun TermColor.toComposeColor(theme: TerminalTheme, palette: Palette): Co
     is TermColor.Indexed -> xtermColor(index, palette, theme)
 }
 
-/** ANSI 0..15 из активной темы + стандартный xterm-куб/grayscale для 16..255; OSC 4-override приоритетнее. */
+/** ANSI 0..15 from the active theme + the standard xterm cube/grayscale for 16..255; an OSC 4 override takes priority. */
 private fun xtermColor(index: Int, palette: Palette, theme: TerminalTheme): Color {
     palette[index]?.let { return Color(it.r, it.g, it.b) }
     if (index in 0..15) return theme.ansi[index]
     return xtermDefaultColor(index)
 }
 
-/** Дефолтная xterm-палитра темы (без OSC 4-переопределений). */
+/** The theme's default xterm palette (without OSC 4 overrides). */
 private fun xtermDefaultColor(index: Int): Color = when (index) {
     0 -> Color(0xFF2A3540); 1 -> Color(0xFFE94B4B); 2 -> Color(0xFF5DCE9E); 3 -> Color(0xFFF2A65A)
     4 -> Color(0xFF4A9EDB); 5 -> Color(0xFFC792EA); 6 -> Color(0xFF2BBDEE); 7 -> Color(0xFFC9D6DE)

@@ -4,34 +4,34 @@ import okio.FileSystem
 import okio.Path
 
 /**
- * Дисковое хранилище скачанных GGUF-моделей: раскладка файлов в каталоге [dir] и проверка
- * установленности. Незавершённая закачка живёт рядом с целью как `<файл>.part` (докачивается
- * по Range, см. [ModelDownloader]); установленной модель считается только при точном совпадении
- * размера с каталогом — обрубленный/чужой файл не пройдёт (целостность по sha256 гарантирует
- * загрузчик до финального rename).
+ * Disk storage for downloaded GGUF models: file layout under [dir] and install-state checks. An
+ * in-progress download lives alongside its target as `<file>.part` (resumed via Range, see
+ * [ModelDownloader]); a model counts as installed only when its size exactly matches the catalog —
+ * a truncated/foreign file won't pass (sha256 integrity is guaranteed by the downloader before the
+ * final rename).
  *
- * Модели — публичные веса, не секреты: права 0600/harden не нужны (каталог и так приватный:
- * `filesDir` на Android, `~/.local/share/skerry` на desktop).
+ * Models are public weights, not secrets: no 0600/hardened permissions needed (the directory is
+ * already private: `filesDir` on Android, `~/.local/share/skerry` on desktop).
  */
 class LocalModelStore(
     private val fileSystem: FileSystem,
     private val dir: Path,
 ) {
-    /** Путь установленной модели. */
+    /** Path of the installed model. */
     fun path(model: LocalModel): Path = dir.resolve(model.fileName)
 
-    /** Путь незавершённой закачки (докачивается с этого места). */
+    /** Path of an in-progress download (resumed from here). */
     fun partPath(model: LocalModel): Path = dir.resolve("${model.fileName}.part")
 
-    /** Установлена ли модель: файл на месте и размер совпадает с каталожным байт-в-байт. */
+    /** Whether the model is installed: file present and size matches the catalog byte-for-byte. */
     fun isInstalled(model: LocalModel): Boolean =
         fileSystem.metadataOrNull(path(model))?.size == model.sizeBytes
 
-    /** Сколько байт уже скачано в part-файл; 0 — закачка не начиналась. */
+    /** Bytes downloaded so far into the part file; 0 if the download hasn't started. */
     fun downloadedBytes(model: LocalModel): Long =
         fileSystem.metadataOrNull(partPath(model))?.size ?: 0L
 
-    /** Удалить модель и её незавершённую закачку (идемпотентно). */
+    /** Deletes the model and its in-progress download (idempotent). */
     fun delete(model: LocalModel) {
         fileSystem.delete(path(model), mustExist = false)
         fileSystem.delete(partPath(model), mustExist = false)

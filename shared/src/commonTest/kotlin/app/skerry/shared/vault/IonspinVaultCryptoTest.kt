@@ -11,20 +11,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Криптоядро vault проверяется через поведение, а не через внутренние байты ключей:
- * равенство masterKey/dataKey доказывается тем, что обёртка/запись, созданная одним
- * экземпляром ключа, расшифровывается другим. Это держит [MasterKey]/[DataKey]
- * непрозрачными и одновременно проверяет zero-knowledge-инварианты.
+ * The vault crypto core is verified through behavior, not internal key bytes: masterKey/dataKey
+ * equality is proven by a wrapping/record created with one key instance decrypting with another.
+ * This keeps [MasterKey]/[DataKey] opaque while still verifying zero-knowledge invariants.
  *
- * Тесты общие для всех таргетов (commonTest): на desktop идут на JUnit5, на Android —
- * на родном раннере. libsodium требует асинхронной инициализации до первого вызова, поэтому
- * каждый тест обёрнут в [cryptoTest] (runTest + идемпотентный [initializeVaultCrypto]).
+ * Tests are shared across all targets (commonTest): JUnit5 on desktop, the native runner on
+ * Android. libsodium needs async init before first use, so each test is wrapped in [cryptoTest]
+ * (runTest + idempotent [initializeVaultCrypto]).
  */
 class IonspinVaultCryptoTest {
 
     private val crypto: VaultCrypto = IonspinVaultCrypto()
 
-    /** Гарантирует инициализацию libsodium перед телом теста; init идемпотентен. */
+    /** Ensures libsodium is initialized before the test body; init is idempotent. */
     private fun cryptoTest(block: suspend () -> Unit): TestResult = runTest {
         initializeVaultCrypto()
         block()
@@ -34,19 +33,19 @@ class IonspinVaultCryptoTest {
     fun `deriveAuthKey is deterministic per masterKey and 32 bytes`() = cryptoTest {
         val salt = crypto.newSalt()
         val mk1 = crypto.deriveMasterKey("pw".toCharArray(), salt)
-        val mk2 = crypto.deriveMasterKey("pw".toCharArray(), salt) // тот же пароль+соль ⇒ тот же masterKey
+        val mk2 = crypto.deriveMasterKey("pw".toCharArray(), salt) // same password+salt => same masterKey
 
         val auth1 = crypto.deriveAuthKey(mk1)
         val auth2 = crypto.deriveAuthKey(mk2)
 
         assertEquals(32, auth1.size)
-        assertContentEquals(auth1, auth2) // детерминированность
+        assertContentEquals(auth1, auth2) // deterministic
 
-        // другой masterKey ⇒ другой authKey
+        // different masterKey => different authKey
         val mkOther = crypto.deriveMasterKey("pw".toCharArray(), crypto.newSalt())
         assertFalse(crypto.deriveAuthKey(mkOther).contentEquals(auth1))
 
-        // authKey доменно отделён от обёртки dataKey: не равен ей побайтно
+        // authKey is domain-separated from the dataKey wrapping: not byte-equal to it
         val dataKey = crypto.newDataKey()
         assertFalse(crypto.wrapDataKey(mk1, dataKey).contentEquals(auth1))
     }
@@ -69,7 +68,7 @@ class IonspinVaultCryptoTest {
 
         val sealed = crypto.seal(key, message, VaultCrypto.EMPTY_AAD)
 
-        // шифротекст длиннее открытого текста (nonce + тег) и не содержит его дословно
+        // ciphertext is longer than the plaintext (nonce + tag) and does not contain it verbatim
         assertTrue(sealed.size > message.size)
         assertFalse(sealed.toList().windowed(message.size).any { it == message.toList() })
     }
@@ -110,11 +109,11 @@ class IonspinVaultCryptoTest {
         val payload = "host password".encodeToByteArray()
         val sealed = crypto.seal(key, payload, associatedData = "host-42".encodeToByteArray())
 
-        // правильный AAD — открывается
+        // correct AAD — opens
         assertContentEquals(payload, crypto.open(key, sealed, "host-42".encodeToByteArray()))
-        // чужой AAD (перестановка записи в другой слот) — тег не проходит
+        // wrong AAD (record moved to a different slot) — tag check fails
         assertNull(crypto.open(key, sealed, "host-99".encodeToByteArray()))
-        // отсутствующий AAD — тоже не открывается
+        // missing AAD — also fails to open
         assertNull(crypto.open(key, sealed, VaultCrypto.EMPTY_AAD))
     }
 
@@ -130,8 +129,9 @@ class IonspinVaultCryptoTest {
 
     @Test
     fun `open returns null on a blob too short to hold a nonce and tag`() = cryptoTest {
-        // Слишком короткий blob = обычный провал AEAD (null), НЕ программная ошибка: blob может прийти
-        // из недоверенного источника (запись sync-сервера), и бросок ронял бы весь список — DoS-вектор.
+        // A too-short blob is a plain AEAD failure (null), not a programming error: the blob may
+        // come from an untrusted source (a sync-server record), and throwing would crash the whole
+        // list — a DoS vector.
         assertNull(crypto.open(crypto.newDataKey(), ByteArray(39), VaultCrypto.EMPTY_AAD)) // NPUB(24)+ABYTES(16)-1
     }
 
@@ -146,7 +146,7 @@ class IonspinVaultCryptoTest {
         val unwrapped = crypto.unwrapDataKey(masterKey, wrapped)
 
         assertNotNull(unwrapped)
-        // развёрнутый ключ функционально совпадает с исходным
+        // the unwrapped key is functionally equivalent to the original
         assertContentEquals("host record".encodeToByteArray(), crypto.open(unwrapped, record, VaultCrypto.EMPTY_AAD))
     }
 
@@ -178,7 +178,7 @@ class IonspinVaultCryptoTest {
         val k2 = crypto.deriveMasterKey("master".toCharArray(), salt)
         val dataKey = crypto.newDataKey()
 
-        // обёртка ключом из первой деривации разворачивается ключом из второй
+        // a wrapping made with the first derivation unwraps with the second
         val wrapped = crypto.wrapDataKey(k1, dataKey)
         assertNotNull(crypto.unwrapDataKey(k2, wrapped))
     }
@@ -189,7 +189,7 @@ class IonspinVaultCryptoTest {
         val masterKey2 = crypto.deriveMasterKey("master".toCharArray(), crypto.newSalt())
         val wrapped = crypto.wrapDataKey(masterKey1, crypto.newDataKey())
 
-        // другая соль → другой masterKey → обёртка не разворачивается
+        // different salt => different masterKey => the wrapping doesn't unwrap
         assertNull(crypto.unwrapDataKey(masterKey2, wrapped))
     }
 
@@ -205,14 +205,14 @@ class IonspinVaultCryptoTest {
     @Test
     fun `transfer key round-trips the data key to a new device`() = cryptoTest {
         val dataKey = crypto.newDataKey()
-        // запись, запечатанная исходным dataKey на устройстве A
+        // a record sealed with the original dataKey on device A
         val record = crypto.seal(dataKey, "10.0.0.1 admin".encodeToByteArray(), VaultCrypto.EMPTY_AAD)
 
         val transferKey = crypto.newTransferKey()
-        assertEquals(32, transferKey.size) // длина ключа XChaCha20 — годен как AEAD-ключ
+        assertEquals(32, transferKey.size) // XChaCha20 key length — usable as an AEAD key
         val envelope = crypto.sealDataKeyForTransfer(dataKey, transferKey)
 
-        // устройство B разворачивает dataKey transferKey'ем и читает ту же запись
+        // device B unwraps the dataKey with the transferKey and reads the same record
         val adopted = crypto.openTransferredDataKey(transferKey, envelope)
         assertNotNull(adopted)
         assertContentEquals("10.0.0.1 admin".encodeToByteArray(), crypto.open(adopted, record, VaultCrypto.EMPTY_AAD))
@@ -223,7 +223,7 @@ class IonspinVaultCryptoTest {
         val dataKey = crypto.newDataKey()
         val envelope = crypto.sealDataKeyForTransfer(dataKey, crypto.newTransferKey())
 
-        // чужой transferKey (перехват шифротекста без QR) — AEAD-провал, null
+        // a foreign transferKey (ciphertext intercepted without the QR) — AEAD failure, null
         assertNull(crypto.openTransferredDataKey(crypto.newTransferKey(), envelope))
     }
 

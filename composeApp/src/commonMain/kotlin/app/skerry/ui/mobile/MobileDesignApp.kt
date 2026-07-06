@@ -78,13 +78,13 @@ import app.skerry.ui.design.rememberMono
 import app.skerry.ui.design.rememberSpaceGrotesk
 
 /**
- * Корень мобильного макета. Поставляет шрифты через [LocalFonts] и живые бэкенды через
- * [LocalHosts]/[LocalKnownHosts]/[LocalFeatures], держит [MobileDesignState] и собирает каркас:
- * контент текущего таба (или push-экрана) + нижний таб-бар.
+ * Root of the mobile layout. Supplies fonts via [LocalFonts] and live backends via
+ * [LocalHosts]/[LocalKnownHosts]/[LocalFeatures], holds [MobileDesignState], and assembles the
+ * shell: current tab content (or a push screen) + bottom tab bar.
  *
- * Если в графе есть [AppDependencies.vault], весь контент закрыт гейтом мастер-пароля
- * ([VaultGate]) с мобильными формами ([MobileCreateScreen]/[MobileUnlockScreen]). Без vault
- * (путь превью) рисуется только chrome с мок-данными.
+ * If [AppDependencies.vault] is present, all content is gated behind the master password
+ * ([VaultGate]) with mobile forms ([MobileCreateScreen]/[MobileUnlockScreen]). Without a vault
+ * (preview path), only chrome with mock data is rendered.
  */
 @Composable
 fun MobileDesignApp(
@@ -92,15 +92,15 @@ fun MobileDesignApp(
     state: MobileDesignState = remember { MobileDesignState() },
     features: FeatureFlags = FeatureFlags(),
     sessions: SessionsController? = null,
-    // AI-контроллер снаружи (офскрин-рендер экрана AI с фейковым провайдером); null — строится
-    // из deps.vault ниже, как обычно.
+    // AI controller supplied externally (offscreen render of the AI screen with a fake provider);
+    // null builds it from deps.vault below, as usual.
     aiOverride: AiAssistantController? = null,
-    // Точка миграции данных при разблокировке vault (паритет с desktop `main`/`DesktopDesignApp`).
-    // No-op в превью/офскрине; Android-точка входа подставит вызов VaultMigration, когда появится.
+    // Data migration hook on vault unlock (parity with desktop `main`/`DesktopDesignApp`).
+    // No-op in preview/offscreen; the Android entry point wires up VaultMigration when it lands.
     onVaultUnlocked: () -> Unit = {},
-    // Внешняя чистка при безвозвратном сбросе vault (хосты/known_hosts/настройки по [ResetScope]).
-    // Явный шов паритета с desktop: Android-точка входа подставит реальную чистку (как `onVaultReset`
-    // в desktop `main`), когда мобильный граф vault будет проведён. No-op в превью/офскрине.
+    // External cleanup on an irreversible vault reset (hosts/known_hosts/settings by [ResetScope]).
+    // Parity seam with desktop: the Android entry point wires up real cleanup (like `onVaultReset`
+    // in desktop `main`) once the mobile vault graph is wired. No-op in preview/offscreen.
     onVaultReset: (ResetScope) -> Unit = {},
 ) {
     val fonts = DesignFonts(
@@ -108,13 +108,13 @@ fun MobileDesignApp(
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
-    // Менеджер сессий: либо подан снаружи (офскрин-рендер с фейковым транспортом), либо строится
-    // из живого транспорта — один shell на сессию.
-    // Свой граф закрываем при dispose; внешний — собственность вызывающего, не трогаем.
+    // Session manager: supplied externally (offscreen render with a fake transport) or built from
+    // the live transport — one shell per session.
+    // Dispose our own graph; an externally supplied one is the caller's, leave it alone.
     val scope = rememberCoroutineScope()
     val liveSessions = sessions ?: remember(deps.transport, scope, deps.vault) {
         deps.transport?.let { t ->
-            // Персист истории команд терминала per-host (для автодополнения) поверх зашифрованного vault.
+            // Per-host terminal command history persistence (for autocomplete) over the encrypted vault.
             val termHistory = deps.vault?.let { VaultTerminalHistoryStore(it) }
             var counter = 0
             SessionsController(
@@ -125,16 +125,15 @@ fun MobileDesignApp(
     }
     val ownsSessions = sessions == null
     DisposableEffect(liveSessions) { onDispose { if (ownsSessions) liveSessions?.disconnectAll() } }
-    // Мемоизируем: LocalTerminalAppearance — staticCompositionLocalOf (сравнение по ссылке); без
-    // remember новый инстанс на каждой рекомпозиции форсил бы пересбор поддерева терминала.
+    // Memoized: LocalTerminalAppearance is staticCompositionLocalOf (reference comparison); without
+    // remember a new instance on every recomposition would force a rebuild of the terminal subtree.
     val terminalAppearance = remember(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing) {
         TerminalAppearance(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing)
     }
-    // AI-ассистент — паритет с desktop `main`: настройки (провайдер/BYOK/локальная модель) — запись
-    // SETTINGS в vault; запрос идёт в облако или в локальный рантайм по выбору маршрутизатора
-    // (aiProviderFactory + localAi из платформенного графа). Строится при наличии vault (в превью —
-    // null → AI-поверхности показывают мок). На старте vault залочен (settings=дефолт); refresh при
-    // разблокировке.
+    // AI assistant, parity with desktop `main`: settings (provider/BYOK/local model) are a SETTINGS
+    // record in the vault; requests go to the cloud or a local runtime per the router's choice
+    // (aiProviderFactory + localAi from the platform graph). Built when a vault is present (null in
+    // preview → AI surfaces show a mock). Vault is locked at startup (settings=default); refreshed on unlock.
     val builtAi = remember(deps.vault, scope) {
         deps.vault?.let { v ->
             val store = AiSettingsStore(v)
@@ -150,47 +149,47 @@ fun MobileDesignApp(
         }
     }
     val ai = aiOverride ?: builtAi
-    // AI-настройки живут записью SETTINGS в (синхронизируемом) vault. Контроллер надо перечитывать,
-    // когда синк подтянул записи с сервера — иначе BYOK-ключ, настроенный на другом устройстве, в
-    // мобильном UI не появится без перезахода. Разблокировку vault обрабатываем ОТДЕЛЬНО, в
-    // [MobileChrome] (он композится только за гейтом и заходит в композицию на каждый unlock): вешать
-    // refresh на [deps.credentials] нельзя — на Android этот контроллер создаётся сразу и не меняется,
-    // так что эффект сработал бы ровно один раз на залоченном старте и вернул бы дефолт («AI сбрасывается»).
+    // AI settings live as a SETTINGS record in the (synced) vault. The controller must be reloaded
+    // when sync pulls records from the server, otherwise a BYOK key configured on another device
+    // won't show up in the mobile UI without a re-login. Vault unlock is handled SEPARATELY, in
+    // [MobileChrome] (it composes only behind the gate and re-enters composition on every unlock):
+    // hanging refresh off [deps.credentials] won't work — on Android that controller is created
+    // once and never changes, so the effect would fire exactly once at locked startup and reset to defaults.
     val syncStatus = deps.sync?.status?.collectAsState()?.value
     LaunchedEffect(syncStatus) {
         if (syncStatus is SyncStatus.Online && syncStatus.lastPulled > 0) ai?.refresh()
     }
-    // Язык ответов терминального AI = язык интерфейса (см. DesktopDesignApp): провайдер читает
-    // применённый тег локали и переустанавливается при смене языка.
+    // Terminal AI response language follows the UI language (see DesktopDesignApp): the provider
+    // reads the applied locale tag and resets when the language changes.
     val aiLocaleTag = app.skerry.ui.i18n.LocalAppLocale.current
     androidx.compose.runtime.SideEffect {
         ai?.uiLanguageProvider = { app.skerry.ui.i18n.aiResponseLanguageName(aiLocaleTag) }
     }
     CompositionLocalProvider(
         LocalFonts provides fonts,
-        // Внешний вид терминала из настроек (More → Appearance): шрифт + кегль читает TerminalScreen.
+        // Terminal appearance from settings (More → Appearance): font + size read by TerminalScreen.
         LocalTerminalAppearance provides terminalAppearance,
-        // Цветовая тема терминала (More → Appearance → карточки): фон/текст/ANSI/курсор — тот же рендер.
+        // Terminal color theme (More → Appearance → cards): background/text/ANSI/cursor share the same render.
         LocalTerminalTheme provides state.terminalTheme,
         LocalHosts provides deps.hosts,
         LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,
         LocalFeatures provides features,
-        // AI-ассистент (BYOK): таб настроек More→AI, per-host политики, терминальный AI-бар.
+        // AI assistant (BYOK): More→AI settings tab, per-host policies, terminal AI bar.
         LocalAi provides ai,
-        // Инспектор/генератор SSH-ключей + инспектор сертификатов — таб Vault: отпечатки, генерация, разбор cert.
+        // SSH key inspector/generator + certificate inspector — Vault tab: fingerprints, generation, cert parsing.
         LocalSshKeyGenerator provides deps.keyGenerator,
         LocalSshCertificateInspector provides deps.certificateInspector,
         LocalTunnels provides deps.tunnels,
-        // Сохранённые сниппеты — таб Snippets (библиотека команд + запуск в активный терминал).
+        // Saved snippets — Snippets tab (command library + run into the active terminal).
         LocalSnippets provides deps.snippets,
-        // Vault + биометрия — экрану More для тумблера «разблокировка биометрией» (включить/перенастроить).
+        // Vault + biometrics — for the More screen's "unlock with biometrics" toggle (enable/reconfigure).
         LocalVault provides deps.vault,
         LocalVaultBiometrics provides deps.biometrics,
         LocalSecurityLog provides deps.securityLog,
-        // Координатор self-hosted sync — push-экран More → «Синхронизация».
+        // Self-hosted sync coordinator — More → "Sync" push screen.
         LocalSync provides deps.sync,
-        // Teams — push-экран More → «Команда» (шеринг хостов/сниппетов между аккаунтами).
+        // Teams — More → "Team" push screen (sharing hosts/snippets between accounts).
         LocalTeams provides deps.teams,
     ) {
         Box(Modifier.fillMaxSize().background(D.bg)) {
@@ -200,12 +199,12 @@ fun MobileDesignApp(
                     vault = vault,
                     biometrics = deps.biometrics,
                     securityLog = deps.securityLog,
-                    // Порог автоблокировки из настроек: смена рекомпозирует VaultGate и перезапускает
-                    // idle-таймер; Never (idleMs == null) выключает его.
+                    // Auto-lock threshold from settings: changing it recomposes VaultGate and restarts
+                    // the idle timer; Never (idleMs == null) disables it.
                     autoLockIdleMs = state.autoLock.idleMs,
                     onReset = onVaultReset,
-                    // onPairingComplete != null (есть sync) — экран создания предлагает «у меня есть код»:
-                    // координатор сам создаст vault под выбранным паролем и примет ключ аккаунта.
+                    // onPairingComplete != null (sync present) — the create screen offers "I have a code":
+                    // the coordinator creates the vault under the chosen password and accepts the account key.
                     createForm = { error, onCreate, onPairingComplete ->
                         MobileCreateScreen(error, onCreate, deps.sync, onPairingComplete)
                     },
@@ -214,8 +213,8 @@ fun MobileDesignApp(
                     },
                     corruptedForm = { onReset -> MobileCorruptedScreen(onReset) },
                     resetForm = { onConfirm, onCancel -> MobileResetScreen(onConfirm, onCancel) },
-                    // Шаг sync в онбординге (ДО биометрии) — только если sync проведён в граф. Подключение
-                    // тут принимает dataKey аккаунта, так что биометрия обернёт уже финальный ключ.
+                    // Sync onboarding step (BEFORE biometrics) — only if sync is wired into the graph.
+                    // Connecting here accepts the account's dataKey, so biometrics wraps the final key.
                     offerSyncForm = deps.sync?.let { s -> { onDone -> SyncOnboardingScreen(s, onDone) } },
                     offerBiometricForm = { inFlight, onEnable, onSkip -> MobileBiometricOfferScreen(inFlight, onEnable, onSkip) },
                 ) { onLock -> MobileChrome(state, onLock, liveSessions, deps.credentials, onVaultUnlocked, ai) }
@@ -227,9 +226,9 @@ fun MobileDesignApp(
 }
 
 /**
- * Каркас мобильного макета: контент (push-экран либо корневой таб) + нижний таб-бар, видимый
- * только на корневых экранах ([MobileDesignState.showTabs]). [onLock] != null — живой путь за
- * гейтом (пункт «Lock Skerry» в More реально запирает vault).
+ * Mobile layout shell: content (push screen or root tab) + bottom tab bar, visible only on root
+ * screens ([MobileDesignState.showTabs]). [onLock] != null is the live path behind the gate
+ * ("Lock Skerry" in More actually locks the vault).
  */
 @Composable
 private fun MobileChrome(
@@ -240,26 +239,26 @@ private fun MobileChrome(
     onVaultUnlocked: () -> Unit,
     ai: AiAssistantController?,
 ) {
-    // Keychain-секреты живут в открытом vault — за гейтом мастер-пароля сперва прогоняем миграцию
-    // данных ([onVaultUnlocked]), затем перечитываем. [MobileChrome] композится только за гейтом и
-    // заходит в композицию на каждую разблокировку, поэтому здесь же перечитываем AI-настройки из
-    // теперь-открытого vault (BYOK-ключ хранится записью SETTINGS; на залоченном старте контроллер
-    // видел только дефолт). Синканные с другого устройства правки ловит отдельный эффект в MobileDesignApp.
+    // Keychain secrets live in the open vault — behind the master password gate, first run the data
+    // migration ([onVaultUnlocked]), then reload. [MobileChrome] composes only behind the gate and
+    // re-enters composition on every unlock, so also reload AI settings here from the now-open vault
+    // (BYOK key is a SETTINGS record; at locked startup the controller saw only the default). Edits
+    // synced from another device are caught by a separate effect in MobileDesignApp.
     LaunchedEffect(credentials) {
         onVaultUnlocked()
         credentials?.reload()
         ai?.refresh()
     }
 
-    // Хост без привязанного секрета → спрашиваем пароль листом перед подключением. Вместе с хостом
-    // запоминаем пункт назначения (терминал/файлы), чтобы после ввода пароля уйти туда, откуда звали.
+    // Host with no bound secret → ask for a password via a sheet before connecting. Along with the
+    // host, remember the destination (terminal/files) so entering the password navigates there.
     var pending by remember { mutableStateOf<PendingConnect?>(null) }
 
-    // Стабильная лямбда коннекта (без remember пересоздавалась бы и инвалидировала потребителей
-    // [LocalConnectHost]/[LocalOpenSftp]). Живую сессию хоста переиспользуем, мёртвую/отсутствующую —
-    // открываем заново ([mobileConnectAction]): на телефоне одна сессия за раз, без накопления сокетов.
-    // [dest] — куда уйти после подключения: Connect → терминал, SFTP → таб Files (тот же путь, включая
-    // запрос пароля, расходится только финальной навигацией [navigateAfterConnect]).
+    // Stable connect lambda (without remember it would be recreated and invalidate consumers of
+    // [LocalConnectHost]/[LocalOpenSftp]). Reuse the host's live session; a dead/missing one is
+    // reopened ([mobileConnectAction]): one session at a time on the phone, no accumulating sockets.
+    // [dest] is where to go after connecting: Connect → terminal, SFTP → Files tab (same path,
+    // including the password prompt, diverging only in the final navigation [navigateAfterConnect]).
     val connect = remember(sessions, credentials, state) {
         { host: Host, dest: MobileConnectDest ->
             val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
@@ -270,10 +269,10 @@ private fun MobileChrome(
                 }
                 MobileConnectAction.OpenFresh -> {
                     existing?.let { sessions.close(it.id) }
-                    // Одноуровневый резолв: хост → keychain-секрет по credentialId → SshAuth; нет привязки → пароль.
+                    // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
                     val credential = credentials?.find(host.credentialId)
                     when {
-                        // Telnet/Serial без аутентификации — коннектим сразу, без запроса пароля.
+                        // Telnet/Serial have no auth — connect immediately, no password prompt.
                         host.connectionType != ConnectionType.SSH ->
                             openMobileSession(sessions, state, host, SshAuth.Password(""), dest)
                         credential != null ->
@@ -284,22 +283,23 @@ private fun MobileChrome(
             }
         }
     }
-    // Производные стабильные лямбды для двух точек входа: Connect (→ терминал) и SFTP (→ push-экран Files).
+    // Derived stable lambdas for the two entry points: Connect (→ terminal) and SFTP (→ Files push screen).
     val connectHost = remember(connect) { { host: Host -> connect(host, MobileConnectDest.Terminal) } }
     val openSftp = remember(connect) { { host: Host -> connect(host, MobileConnectDest.Files) } }
 
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
         LocalOpenSftp provides openSftp,
-        // Keychain открытого vault — нужен листу «New connection» для выбора/создания секрета (паритет desktop).
+        // Keychain of the open vault — needed by the "New connection" sheet to pick/create a secret (desktop parity).
         LocalCredentials provides credentials,
     ) {
-        // Системный «назад»/жест ведём по стеку приложения, а не закрываем Activity: закрыть push-экран
-        // (→ подлежащий таб), затем уйти с не-Hosts таба на Hosts. На корневом Hosts без оверлеев back не
-        // перехватываем — система штатно закрывает приложение. Открытые листы/диалоги гасят свой back
-        // СВОИМИ BackHandler (они композятся глубже/позже → перехватывают первыми по LIFO диспетчера),
-        // поэтому при открытом оверлее навигационный перехват держим выключенным, чтобы он не сработал
-        // следом. Регистрируем до контента — он становится самым низкоприоритетным в стеке back.
+        // System back/gesture drives the app's own stack instead of closing the Activity: close a
+        // push screen (→ underlying tab), then leave a non-Hosts tab for Hosts. On the root Hosts
+        // screen with no overlays, back is not intercepted — the system closes the app as usual. Open
+        // sheets/dialogs consume their own back via their OWN BackHandler (they compose deeper/later
+        // → intercept first per the dispatcher's LIFO), so while an overlay is open the navigation
+        // intercept is kept disabled to avoid firing afterward. Registered before the content, making
+        // it the lowest-priority handler in the back stack.
         val overlayOpen = pending != null || state.sheetNewConn || state.renamingGroup != null || state.modalOpen
         val backAction = if (overlayOpen) null else mobileBackAction(state.route, state.tab)
         PlatformBackHandler(enabled = backAction != null) {
@@ -309,9 +309,10 @@ private fun MobileChrome(
                 null -> {}
             }
         }
-        // Клавиатуру читаем ДО того, как корневой safeDrawing её потребит (внутри Box WindowInsets.ime
-        // уже равен 0). Нужно, чтобы спрятать нижний таб-бар на время ввода: safeDrawing поднимает всё
-        // содержимое над клавиатурой, и таб-бар (BottomCenter) иначе всплывал бы полосой прямо над ней.
+        // Read the keyboard inset BEFORE the root safeDrawing consumes it (inside the Box,
+        // WindowInsets.ime is already 0). Needed to hide the bottom tab bar while typing: safeDrawing
+        // lifts all content above the keyboard, and the tab bar (BottomCenter) would otherwise float
+        // as a bar right above it.
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             val route = state.route
@@ -328,8 +329,8 @@ private fun MobileChrome(
             if (state.sheetNewConn) {
                 MobileNewConnectionSheet(state)
             }
-            // Карандаш у заголовка папки → диалог Rename/Delete группы. Профили правит контроллер
-            // (renameGroup/deleteGroup), стор синхронизирует свёрнутость. Паритет desktop GroupDialog.
+            // Pencil icon on a folder header → Rename/Delete group dialog. The controller edits
+            // profiles (renameGroup/deleteGroup), the store syncs collapsed state. Desktop GroupDialog parity.
             state.renamingGroup?.let { groupName ->
                 val hosts = LocalHosts.current
                 MobileGroupRenameDialog(
@@ -358,10 +359,10 @@ private fun MobileChrome(
     }
 }
 
-/** Хост, ждущий ввода пароля, вместе с пунктом назначения после подключения (терминал/файлы). */
+/** Host waiting for a password, with the destination after connecting (terminal/files). */
 private data class PendingConnect(val host: Host, val dest: MobileConnectDest)
 
-/** Открыть сессию к [host] с [auth] и перейти к месту назначения ([dest]): терминал или push-экран Files. */
+/** Open a session to [host] with [auth] and navigate to the destination ([dest]): terminal or the Files push screen. */
 private fun openMobileSession(
     sessions: SessionsController?,
     state: MobileDesignState,
@@ -379,10 +380,10 @@ private fun openMobileSession(
     navigateAfterConnect(state, dest)
 }
 
-// Контент: корневые табы и push-экраны.
+// Content: root tabs and push screens.
 
 /**
- * Корневой экран текущего таба. [onLock] прокидывается в хаб More («Lock Skerry»).
+ * Root screen for the current tab. [onLock] is threaded into the More hub ("Lock Skerry").
  */
 @Composable
 private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
@@ -395,8 +396,8 @@ private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
 }
 
 /**
- * Полноэкранный push-экран. [MobileRoute.HostDetail] открывает [MobileHostDetailScreen];
- * остальные — back-стрелка + заголовок ([MobileRoutePlaceholder]), тело не реализовано.
+ * Full-screen push screen. [MobileRoute.HostDetail] opens [MobileHostDetailScreen]; the rest are
+ * back arrow + title ([MobileRoutePlaceholder]), body not implemented.
  */
 @Composable
 private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
@@ -414,7 +415,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
     }
 }
 
-/** Заглушка push-экрана: back-стрелка + заголовок. */
+/** Push screen placeholder: back arrow + title. */
 @Composable
 private fun MobileRoutePlaceholder(state: MobileDesignState, title: String) {
     Column(Modifier.fillMaxSize()) {

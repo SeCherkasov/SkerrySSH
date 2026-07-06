@@ -1,30 +1,30 @@
 package app.skerry.shared.vault
 
 /**
- * Хранилище keychain-секретов [Credential] поверх [Vault]: каждый секрет — запись
- * [RecordType.CREDENTIAL], чей payload — JSON-сериализация [Credential] (label и секрет внутри
- * зашифрованного blob). Чистая common-логика над контрактом [Vault] — платформенной части нет.
+ * Store for [Credential] keychain secrets over a [Vault]: each secret is a [RecordType.CREDENTIAL]
+ * record whose payload is a JSON serialization of [Credential] (label and secret inside the
+ * encrypted blob). Pure common logic over the [Vault] contract — no platform part.
  *
- * Требует разблокированного vault: CRUD на залоченном бросает из самого [Vault]. Записи, чей
- * payload не расшифровался или не распарсился (битьё/несовместимая миграция), молча пропускаются —
- * одна повреждённая запись не должна валить список.
+ * Requires an unlocked vault: CRUD on a locked one throws from [Vault] itself. Records whose
+ * payload fails to decrypt or parse (corruption/incompatible migration) are silently skipped —
+ * one broken record must not break the whole list.
  */
 class CredentialStore(private val vault: Vault) {
 
     private val codec = VaultRecordCodec(vault, RecordType.CREDENTIAL, Credential.serializer())
 
-    /** Все живые секреты (tombstone и записи других типов отброшены). */
+    /** All live secrets (tombstones and other record types excluded). */
     fun all(): List<Credential> = codec.list()
 
-    /** Секрет по [id] или `null`, если его нет, он удалён или payload не читается. */
+    /** Secret by [id], or `null` if missing, deleted, or unreadable. */
     fun get(id: String): Credential? = codec.get(id)
 
-    /** Создать/обновить секрет (upsert по [Credential.id]). */
+    /** Create/update a secret (upsert by [Credential.id]). */
     fun put(credential: Credential) {
         codec.put(credential.id, credential)
     }
 
-    /** Мягко удалить секрет (tombstone). Учётки, ссылавшиеся на него, увязываются в слое UI. */
+    /** Soft-delete a secret (tombstone). Hosts referencing it are reconciled in the UI layer. */
     fun remove(id: String) {
         codec.remove(id)
     }

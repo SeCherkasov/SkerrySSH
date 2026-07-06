@@ -111,59 +111,60 @@ import app.skerry.ui.host.pickerTypeLabel
 
 
 /**
- * Нижний лист «New connection»: затемнение + панель снизу с формой профиля хоста. С живым
- * [LocalHosts] (за гейтом vault) Save создаёт профиль через
- * [app.skerry.ui.host.HostManagerController] и закрывает лист; без него (превью) Save просто
- * закрывает. Переиспользует общий [NewConnectionFormState].
+ * "New connection" bottom sheet: scrim + panel with the host profile form. With a live
+ * [LocalHosts] (behind the vault gate) Save creates the profile through
+ * [app.skerry.ui.host.HostManagerController] and closes the sheet; without it (preview) Save just
+ * closes. Reuses the shared [NewConnectionFormState].
  *
- * Authentication — живой [MobileAuthPicker]: Ask / новый пароль / новый ключ / уже сохранённый
- * keychain-секрет из [LocalCredentials]. Новый секрет запечатывается в открытый vault и
- * привязывается к хосту через [NewConnectionFormState.resolveCredentialId]; AI-политика спрятана
- * за фича-флагом [FeatureFlags.ai].
+ * Authentication is the live [MobileAuthPicker]: Ask / new password / new key / an existing
+ * keychain secret from [LocalCredentials]. A new secret is sealed into the open vault and linked
+ * to the host via [NewConnectionFormState.resolveCredentialId]; the AI policy is gated by
+ * [FeatureFlags.ai].
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MobileNewConnectionSheet(state: MobileDesignState) {
-    // Форма может содержать вводимые секреты (новый пароль/приватный ключ/passphrase) — защита окна
-    // от снимков экрана/превью в Recent Apps пока лист открыт (Android; desktop — no-op).
+    // The form can hold entered secrets (new password/private key/passphrase) — shield the window
+    // from screenshots/Recent Apps previews while the sheet is open (Android; desktop is a no-op).
     SecureScreen()
     val hosts = LocalHosts.current
     val credentials = LocalCredentials.current
-    // Режим правки: лист предзаполняется из профиля и удерживает его id (паритет desktop NewConnectionModal).
+    // Edit mode: the sheet is prefilled from the profile and keeps its id (parity with desktop NewConnectionModal).
     val editHost = state.editingHost
-    // Ключ по editHost: открытие листа на правку (или смена цели) пересоздаёт форму из профиля.
+    // Keyed on editHost: opening the sheet to edit (or switching target) rebuilds the form from the profile.
     val form = remember(editHost) { editHost?.let { NewConnectionFormState.fromHost(it) } ?: NewConnectionFormState() }
     val canSave = hosts == null || form.canSave
-    // Гард повторного Save (двойной тап) до закрытия листа — иначе дубль секрета+хоста в vault (как desktop).
-    // Ключ по editHost вместе с form: смена цели сбрасывает гард, а не залипает на прежней.
+    // Guards a repeated Save (double tap) before the sheet closes — otherwise a duplicate secret+host in
+    // the vault (same as desktop). Keyed on editHost together with form: switching target resets the guard.
     var submitting by remember(editHost) { mutableStateOf(false) }
-    // Незакоммиченный ввод тега (пилюля ещё не создана); Save дофиксирует его, чтобы не потерялся.
+    // Uncommitted tag input (pill not yet created); Save flushes it so it isn't lost.
     var tagDraft by remember(editHost) { mutableStateOf("") }
-    // Открыт ли диалог «New group» — держим на уровне листа, чтобы оверлей рисовался на корне (не в
-    // скролле формы) и корректно поднимался над клавиатурой.
+    // Whether the "New group" dialog is open — kept at the sheet level so the overlay renders at
+    // the root (not inside the form's scroll) and rises correctly above the keyboard.
     var createGroupOpen by remember(editHost) { mutableStateOf(false) }
     val onSave = {
         if (submitting) {
-            // повторное нажатие до закрытия — игнорируем
+            // Repeated tap before close — ignored.
         } else if (hosts == null) {
-            state.closeSheet() // мок/превью: сохранять некуда
+            state.closeSheet() // mock/preview: nowhere to save
         } else if (form.canSave) {
             submitting = true
             if (tagDraft.isNotBlank()) { form.addTag(tagDraft); tagDraft = "" }
-            // Новый секрет создаём только при живом keychain (иначе он осел бы в vault без ссылки на хост);
-            // ASK/мок-путь → credentialId = null. EXISTING-привязка возвращается как есть (не пересоздаём).
-            // В режиме правки EXISTING-привязка возвращается как есть (секрет не пересоздаётся).
+            // A new secret is created only with a live keychain (otherwise it would sit in the vault
+            // unlinked to a host); ASK/mock path -> credentialId = null. EXISTING binding is passed
+            // through as-is (not recreated), same in edit mode.
             val credentialId = form.resolveCredentialId(saveCredential = { draft -> credentials?.save(draft) })
-            // editHost?.id != null → обновление существующего профиля по месту, иначе создание нового.
+            // editHost?.id != null -> update the existing profile in place, otherwise create a new one.
             hosts.save(form.toDraft(id = editHost?.id, credentialId = credentialId))
-            // Секрет уже запечатан в vault — снимаем ссылки на него из state формы, сокращая окно
-            // жизни ключа/пароля в куче (String на JVM не занулить на месте, но ссылку убираем).
+            // The secret is already sealed into the vault — drop the form state's references to it,
+            // shrinking the key/password's lifetime in the heap (a JVM String can't be zeroed in
+            // place, but the reference is dropped).
             form.password = ""; form.privateKeyPem = ""; form.passphrase = ""
             state.closeSheet()
         }
     }
 
-    // Панель фиксированной высоты (0.92 экрана), скроллится; общая обвязка листа — в MobileBottomSheet.
+    // Fixed-height panel (0.92 of the screen), scrollable; the shared sheet chrome lives in MobileBottomSheet.
     MobileBottomSheet(
         onDismiss = state::closeSheet,
         panelModifier = Modifier
@@ -204,7 +205,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             MobileFormField(if (serial) stringResource(Res.string.conn_field_device) else stringResource(Res.string.conn_field_host_address)) {
                 MobileFormInput(form.address, { form.address = it }, if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45")
             }
-            // Пикер обнаруженных портов (Android — USB-OTG): тап заполняет Device. Пусто — только ручной ввод.
+            // Picker for discovered ports (Android USB-OTG): tap fills Device. Empty means manual entry only.
             if (serial) MobileSerialPortPicker(form)
             Spacer(Modifier.height(14.dp))
             if (form.connectionType == ConnectionType.SSH) {
@@ -220,24 +221,24 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 MobileFormField(stringResource(Res.string.conn_field_authentication)) { MobileAuthPicker(form) }
                 Spacer(Modifier.height(14.dp))
             } else {
-                // Telnet/Serial: аутентификации нет; показываем только порт/скорость.
+                // Telnet/Serial: no authentication; show only port/baud.
                 MobileFormField(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
                     MobileFormInput(form.port, { form.port = it }, if (serial) "9600" else "23", keyboardType = KeyboardType.Number)
                 }
                 Spacer(Modifier.height(14.dp))
             }
-            // Подсказки группы — из уже созданных хостов (паритет desktop GroupPicker); в превью список пуст.
+            // Group suggestions come from already-created hosts (parity with desktop GroupPicker); empty in preview.
             MobileFormField(stringResource(Res.string.conn_field_group)) { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
             Spacer(Modifier.height(14.dp))
             MobileFormField(stringResource(Res.string.conn_field_tags)) {
-                // Подсказки — теги других хостов, ещё не добавленные сюда (паритет desktop Tags); в превью пусто.
+                // Suggestions are tags from other hosts not yet added here (parity with desktop Tags); empty in preview.
                 val allHosts = hosts?.hosts ?: emptyList()
                 val suggestions = remember(allHosts, form.tags, tagDraft) { tagSuggestions(allHosts, form.tags, tagDraft) }
                 MobileTagsEditor(
                     tags = form.tags,
                     onRemove = { form.removeTag(it) },
                     draft = tagDraft,
-                    // Запятая фиксирует тег(и) сразу; одиночный тег — по Enter (onCommit).
+                    // A comma commits the tag(s) immediately; a single tag commits on Enter (onCommit).
                     onDraftChange = { v -> if (v.contains(',')) { form.addTag(v); tagDraft = "" } else tagDraft = v },
                     onCommit = { form.addTag(tagDraft); tagDraft = "" },
                     suggestions = suggestions,
@@ -265,7 +266,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 Txt(if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save_connection), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
             }
     }
-    // Оверлей «New group» — сиблингом над листом (свой полноэкранный скрим), чтобы корректно подниматься над клавиатурой.
+    // "New group" overlay is a sibling above the sheet (its own full-screen scrim), so it rises correctly above the keyboard.
     if (createGroupOpen) {
         MobileGroupCreateDialog(
             onDismiss = { createGroupOpen = false },
@@ -275,9 +276,9 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
 }
 
 /**
- * Сегментированный выбор транспорта (SSH / Telnet / Serial) на телефоне — паритет desktop
- * ProtocolPicker. Пишет тип через [NewConnectionFormState.chooseConnectionType] (подставляет
- * дефолтный порт/скорость) и перестраивает форму.
+ * Segmented transport picker (SSH / Telnet / Serial) on the phone — parity with desktop
+ * ProtocolPicker. Writes the type through [NewConnectionFormState.chooseConnectionType] (fills in
+ * the default port/baud) and rebuilds the form.
  */
 @Composable
 private fun MobileSerialPortPicker(form: NewConnectionFormState) {
@@ -336,10 +337,10 @@ private fun MobileProtocolSegment(label: String, selected: Boolean, modifier: Mo
 }
 
 /**
- * Выбор аутентификации хоста в стиле мобильного листа: селект-триггер раскрывает варианты — Ask
- * every time / новый пароль / новый ключ / уже сохранённые keychain-секреты из живого
- * [LocalCredentials] — плюс инлайн-поля под новый секрет. В мок-пути (без vault) остаются только
- * варианты без сохранения.
+ * Host authentication picker in the mobile sheet style: a select trigger expands into options —
+ * Ask every time / new password / new key / existing keychain secrets from the live
+ * [LocalCredentials] — plus inline fields for a new secret. In the mock path (no vault) only the
+ * non-saving options remain.
  */
 @Composable
 private fun MobileAuthPicker(form: NewConnectionFormState) {
@@ -373,7 +374,7 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
                 }
             },
             menu = { width ->
-                // Настоящий dropdown поверх листа (Popup), а не раздвигание формы; ширина = триггеру, скролл при переполнении.
+                // A real dropdown over the sheet (Popup), not expanding the form; width matches the trigger, scrolls on overflow.
                 Column(
                     Modifier
                         .width(width)
@@ -393,7 +394,7 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
                     MobileAuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
                         form.authMode = AuthMode.NEW_KEY; menuOpen = false
                     }
-                    // Разделитель перед сохранёнными секретами (паритет desktop AuthPicker).
+                    // Divider before saved secrets (parity with desktop AuthPicker).
                     if (saved.isNotEmpty()) {
                         HLine(modifier = Modifier.padding(vertical = 4.dp))
                         saved.forEach { cred ->
@@ -412,9 +413,9 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
             }
             AuthMode.NEW_KEY -> {
                 Spacer(Modifier.height(12.dp))
-                // keyboardType=Password гасит автокоррект/подсказки IME (Android), чтобы ключ не оседал в словаре.
-                // PEM показываем в открытую (не masked): маскирование многострочного поля ломает вставку
-                // ключа и его визуальную проверку — осознанный trade-off, как на desktop ModalTextField.
+                // keyboardType=Password suppresses IME autocorrect/suggestions (Android) so the key
+                // doesn't end up in the dictionary. PEM is shown unmasked: masking a multiline field
+                // would break pasting the key and visually verifying it — a deliberate trade-off, same as desktop ModalTextField.
                 MobileFormInput(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 104)
                 Spacer(Modifier.height(12.dp))
                 MobileFormInput(form.passphrase, { form.passphrase = it }, stringResource(Res.string.conn_auth_passphrase_placeholder), masked = true)
@@ -425,11 +426,11 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
 }
 
 /**
- * Поле «Group» листа: выпадающий селект — пункт «No group», уже созданные группы каталога
- * ([groupSuggestions]) и «New group…», открывающий диалог создания. Выбранная группа хранится в
- * [NewConnectionFormState.group]; создание новой просто проставляет её имя (профиль заведёт папку
- * при сохранении). Свободного ввода в самом поле нет — только список + явное создание, чтобы не
- * плодить опечатки-дубли групп на телефоне.
+ * The sheet's "Group" field: a dropdown select — "No group", the catalog's already-created groups
+ * ([groupSuggestions]), and "New group…" which opens the creation dialog. The selected group is
+ * stored in [NewConnectionFormState.group]; creating a new one just sets its name (the profile
+ * creates the folder on save). No free-form entry in the field itself — only the list + explicit
+ * creation, to avoid typo-duplicate groups on the phone.
  */
 @Composable
 private fun MobileGroupPicker(form: NewConnectionFormState, allHosts: List<Host>, onCreateGroup: () -> Unit) {
@@ -481,7 +482,7 @@ private fun MobileGroupPicker(form: NewConnectionFormState, allHosts: List<Host>
     }
 }
 
-/** Строка-вариант селекта группы: опц. иконка + название + галочка выбранного. */
+/** Group select option row: optional icon + name + checkmark when selected. */
 @Composable
 private fun MobileGroupOption(title: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
     Row(
@@ -499,15 +500,15 @@ private fun MobileGroupOption(title: String, selected: Boolean, icon: String? = 
     }
 }
 
-/** Строка-вариант в дропдауне аутентификации: иконка + название + подпись + галочка выбранного. */
+/** Authentication dropdown option row: icon + name + subtitle + checkmark when selected. */
 @Composable
 private fun MobileAuthOption(icon: String, title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .background(if (selected) D.cyan10 else Color.Transparent)
-            // Без явного interactionSource (паритет desktop AuthOption): remember в forEach позиционен —
-            // при смене порядка saved слот сдвинулся бы на чужую строку.
+            // No explicit interactionSource (parity with desktop AuthOption): remember in forEach is
+            // positional — reordering saved would shift the slot onto a different row.
             .clickable(onClick = onClick)
             .padding(horizontal = 13.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -522,7 +523,7 @@ private fun MobileAuthOption(icon: String, title: String, subtitle: String, sele
     }
 }
 
-/** Пилюли AI-политики (все 4 значения [AiPolicy]) — выбор пишется в форму (Host.aiPolicy). */
+/** AI policy pills (all 4 [AiPolicy] values) — selection writes into the form (Host.aiPolicy). */
 @Composable
 private fun AiPolicyPills(form: NewConnectionFormState) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

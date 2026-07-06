@@ -57,18 +57,18 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.i18n.label
 
-/** Коралл экрана детали (Delete host) — `#E07A5F` из мока; в палитре `D` отдельного токена нет. */
+/** Coral used for the Delete host action; not a token in the `D` palette. */
 private val DetailCoral = Color(0xFFE07A5F)
 private val DetailCoralBorder = Color(0x40E07A5F)
 
-/** Строка карточки Details: подпись, значение и моноширинность значения (адрес/порт — моно). */
+/** Details card row: label, value, and whether the value is monospace (address/port). */
 @Immutable
 data class HostDetailRow(val label: String, val value: String, val mono: Boolean)
 
 /**
- * Свести профиль [Host] к строкам карточки Details: Address, Port, Auth, Group. Только живые поля —
- * Auth отражает наличие привязанного keychain-секрета (`Saved credential` / `Ask on connect`), Group
- * падает в «Ungrouped». AI-политика и онлайн-статус из макета здесь отсутствуют (нет в модели).
+ * Reduces a [Host] profile to Details card rows: Address, Port, Auth, Group. Auth reflects whether
+ * a keychain secret is bound (`Saved credential` / `Ask on connect`); Group falls back to
+ * "Ungrouped". AI policy and online status are not in the model.
  */
 @Composable
 fun mobileHostDetailRows(host: Host): List<HostDetailRow> = listOf(
@@ -83,11 +83,11 @@ fun mobileHostDetailRows(host: Host): List<HostDetailRow> = listOf(
 )
 
 /**
- * Полноэкранная деталь хоста (push поверх Hosts). Профиль берётся из живого [LocalHosts] по
- * [MobileDesignState.selectedHostId] (или превью-каталог вне гейта). Connect — переход на
- * [MobileRoute.Terminal]; Tunnels — на [MobileRoute.Ports]; Delete удаляет профиль через
- * [app.skerry.ui.host.HostManagerController] и возвращает к списку. SFTP подключается к хосту и
- * ведёт на таб Files; Snippets/edit — заглушка (без действия).
+ * Full-screen host detail (pushed over Hosts). Profile comes from the live [LocalHosts] by
+ * [MobileDesignState.selectedHostId] (or the preview catalog outside the gate). Connect navigates
+ * to [MobileRoute.Terminal]; Tunnels to [MobileRoute.Ports]; Delete removes the profile via
+ * [app.skerry.ui.host.HostManagerController] and pops back. SFTP connects to the host and opens
+ * the Files tab; Snippets/edit are stubs.
  */
 @Composable
 fun MobileHostDetailScreen(state: MobileDesignState) {
@@ -108,7 +108,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             return@Column
         }
 
-        // Идентичность: плашка-иконка, имя, user@address. Онлайн-статус макета опущен (нет в модели).
+        // Identity: icon tile, name, user@address. Online status from the mock is omitted (not in the model).
         Column(
             Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 8.dp, bottom = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -130,8 +130,8 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             )
         }
 
-        // Connect: открыть живую сессию через LocalConnectHost (резолвит identity или спрашивает
-        // пароль) и перейти на push-экран терминала; в превью/вне гейта это no-op.
+        // Connect: opens a live session via LocalConnectHost (resolves identity or prompts for a
+        // password) and pushes the terminal screen; a no-op in preview/outside the gate.
         val connect = LocalConnectHost.current
         Box(Modifier.padding(horizontal = 22.dp)) {
             Row(
@@ -153,9 +153,9 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             }
         }
 
-        // Быстрые действия: SFTP подключается к хосту (как Connect, с резолвом секрета/паролем) и
-        // ведёт сразу на таб Files — Remote-браузер активной сессии.
-        // Tunnels — на Ports; Snippets — не реализован.
+        // Quick actions: SFTP connects to the host (like Connect, resolving the secret/password)
+        // and opens the Files tab (the active session's remote browser). Tunnels opens Ports;
+        // Snippets is not implemented.
         val openSftp = LocalOpenSftp.current
         Row(
             Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
@@ -195,8 +195,8 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             }
         }
 
-        // Edit host: открыть лист New connection в режиме правки этого профиля (вне гейта — недоступно,
-        // сохранять некуда). Delete: удалить профиль из живого каталога и вернуться к списку.
+        // Edit host: opens the New connection sheet in edit mode for this profile (unavailable
+        // outside the gate, nothing to save to). Delete: removes the profile from the live catalog and pops back.
         Column(
             Modifier.padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 30.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -234,7 +234,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
     }
 }
 
-/** Карточка быстрого действия (иконка над подписью). [onClick]==null — действие отложено (без ripple). */
+/** Quick-action card (icon above label). [onClick] == null means the action is disabled (no ripple). */
 @Composable
 private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick: (() -> Unit)?) {
     Column(
@@ -262,7 +262,7 @@ private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick
     }
 }
 
-/** Капс-подпись секции на экране детали (Details). */
+/** Uppercase section label on the detail screen (Details). */
 @Composable
 private fun HostsDetailLabel(name: String) {
     Txt(

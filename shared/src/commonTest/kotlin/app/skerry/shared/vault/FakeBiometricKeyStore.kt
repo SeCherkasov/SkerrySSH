@@ -1,15 +1,15 @@
 package app.skerry.shared.vault
 
-/** Программируемый исход биометрического промпта в [FakeBiometricKeyStore]. */
+/** Scripted outcome of a biometric prompt in [FakeBiometricKeyStore]. */
 enum class BiometricOutcome { Success, Cancelled, Failed, Invalidated }
 
 /**
- * In-memory [BiometricKeyStore] для тестов оркестрации без железа. «Оборачивает» XOR'ом по
- * псевдо-`bioKey` (паду), который живёт только внутри фейка — эмуляция неизвлекаемого ключа
- * enclave: на диск (`vault.bio`) уходит `plaintext XOR pad`, не сам `dataKey`, что позволяет
- * тесту убедиться, что хранится именно обёртка. Исходы промпта программируются ([nextWrap]/
- * [nextUnwrap]); по умолчанию — успех. [currentAvailability] меняется тестом для проверки
- * деградации. Учёт вызовов ([ensureKeyCalls], [deletedAliases]) — для ассертов оркестрации.
+ * In-memory [BiometricKeyStore] for orchestration tests without hardware. Wraps via XOR with a
+ * pseudo `bioKey` pad that lives only in the fake, emulating a non-extractable enclave key: disk
+ * (`vault.bio`) gets `plaintext XOR pad`, not the raw `dataKey`, so tests can assert the wrapping
+ * itself is stored. Prompt outcomes are scripted via [nextWrap]/[nextUnwrap] (default: success).
+ * [currentAvailability] is set by the test to exercise degradation. Call tracking
+ * ([ensureKeyCalls], [deletedAliases]) supports orchestration assertions.
  */
 class FakeBiometricKeyStore(
     var currentAvailability: BiometricAvailability = BiometricAvailability.Available,
@@ -55,7 +55,7 @@ class FakeBiometricKeyStore(
         prompt: BiometricPrompt,
     ): BiometricResult<ByteArray> = when (nextUnwrap) {
         BiometricOutcome.Success -> {
-            val pad = pads[alias] ?: return BiometricResult.KeyInvalidated // нет пада ⇒ ключ удалён
+            val pad = pads[alias] ?: return BiometricResult.KeyInvalidated // no pad => key deleted
             BiometricResult.Success(xor(wrapped, pad))
         }
         BiometricOutcome.Cancelled -> BiometricResult.Cancelled
@@ -71,12 +71,12 @@ class FakeBiometricKeyStore(
         deletedAliases += alias
     }
 
-    /** Детерминированный 64-байтный пад из alias — стабилен между «запусками» в одном тесте. */
+    /** Deterministic 64-byte pad derived from alias — stable across "runs" within one test. */
     private fun padFor(alias: String): ByteArray =
         ByteArray(64) { (alias[it % alias.length].code + it).toByte() }
 
     private fun xor(input: ByteArray, pad: ByteArray): ByteArray {
-        require(input.size <= pad.size) { "пад короче входа: ${pad.size} < ${input.size}" }
+        require(input.size <= pad.size) { "pad shorter than input: ${pad.size} < ${input.size}" }
         return ByteArray(input.size) { (input[it].toInt() xor pad[it].toInt()).toByte() }
     }
 }

@@ -11,7 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
-/** Состояние локальной модели для UI (карточка провайдера / список каталога). */
+/** UI-facing state of a local model (provider card / catalog list). */
 sealed interface LocalModelStatus {
     data object NotInstalled : LocalModelStatus
     data class Downloading(val downloadedBytes: Long, val totalBytes: Long) : LocalModelStatus
@@ -21,12 +21,12 @@ sealed interface LocalModelStatus {
 }
 
 /**
- * UI-контроллер жизненного цикла локальных моделей: закачка с прогрессом/отменой, удаление,
- * актуальный [LocalModelStatus] по каждой записи каталога. Зависимости — лямбды ([installed]/
- * [fetch]/[remove]), как у остальных AI-контроллеров: тестируется без сети и диска.
+ * UI controller for local model lifecycle: download with progress/cancel, delete, and current
+ * [LocalModelStatus] per catalog entry. Dependencies are lambdas ([installed]/[fetch]/[remove]),
+ * so it's testable without network or disk.
  *
- * Отмена закачки сохраняет part-файл (докачка при следующем старте — забота `ModelDownloader`),
- * поэтому Cancel безопасен и статус честно возвращается в [LocalModelStatus.NotInstalled].
+ * Cancelling a download keeps the part-file (resume is `ModelDownloader`'s job), so cancel is safe
+ * and the status returns to [LocalModelStatus.NotInstalled].
  */
 class LocalModelController(
     private val installed: (LocalModel) -> Boolean,
@@ -43,7 +43,7 @@ class LocalModelController(
 
     fun status(model: LocalModel): LocalModelStatus = statuses[model.id] ?: LocalModelStatus.NotInstalled
 
-    /** Пересчитать статусы с диска (после разблокировки/возврата на экран); активные закачки не трогаем. */
+    /** Recomputes statuses from disk (after unlock/returning to the screen); active downloads are untouched. */
     fun refresh() {
         LocalModelCatalog.models.forEach { m ->
             if (jobs[m.id]?.isActive != true) {
@@ -52,7 +52,7 @@ class LocalModelController(
         }
     }
 
-    /** Начать (или докачать) модель. No-op, если уже качается или установлена. */
+    /** Starts (or resumes) downloading a model. No-op if already downloading or installed. */
     fun download(model: LocalModel) {
         if (jobs[model.id]?.isActive == true || installed(model)) return
         statuses[model.id] = LocalModelStatus.Downloading(0, model.sizeBytes)
@@ -76,12 +76,12 @@ class LocalModelController(
         }
     }
 
-    /** Отменить активную закачку (part-файл остаётся — продолжится с того же места). */
+    /** Cancels an active download (the part-file remains, resuming from the same point). */
     fun cancel(model: LocalModel) {
         jobs[model.id]?.cancel()
     }
 
-    /** Удалить модель с диска (активную закачку — отменить). */
+    /** Deletes a model from disk (cancels an active download first). */
     fun delete(model: LocalModel) {
         cancel(model)
         remove(model)

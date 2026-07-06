@@ -21,36 +21,37 @@ import app.skerry.ui.host.folderDropTarget
 import app.skerry.ui.host.hostDropTarget
 
 /**
- * Состояние ручной сортировки сайдбара (drag-and-drop). Геометрию каждой строки/папки в координатах
- * окна собирают якорные модификаторы ([hostBoundsAnchor]/[folderRangeAnchor]/[folderHeaderAnchor]);
- * жесты ([draggableHostRow]/[draggableFolderHeader]) ведут указатель и на отпускании считают цель
- * чистыми [hostDropTarget]/[folderDropTarget]. Что куда переставить — решает [HostManagerController]
- * через колбэк, переданный модификатору.
+ * Manual sidebar sort state (drag-and-drop). Anchor modifiers ([hostBoundsAnchor]/[folderRangeAnchor]/
+ * [folderHeaderAnchor]) collect each row/folder's geometry in window coordinates; gestures
+ * ([draggableHostRow]/[draggableFolderHeader]) track the pointer and compute the drop target on
+ * release via pure [hostDropTarget]/[folderDropTarget]. What actually moves where is decided by
+ * [HostManagerController] through the callback passed to the modifier.
  */
 @Stable
 class HostDragState {
-    /** id перетаскиваемого хоста (или null). Перетаскивание хоста и папки взаимоисключающи. */
+    /** Id of the host being dragged (or null). Host and folder dragging are mutually exclusive. */
     var draggingHostId by mutableStateOf<String?>(null)
         private set
 
-    /** Имя папки (HostFolder.name), которую сейчас тащат за заголовок (или null). */
+    /** Name of the folder (HostFolder.name) currently being dragged by its header (or null). */
     var draggingFolderName by mutableStateOf<String?>(null)
         private set
 
-    /** Текущая цель сброса хоста — для подсветки целевой папки и линии вставки. */
+    /** Current host drop target, for highlighting the target folder and the insertion line. */
     var activeHostDrop by mutableStateOf<HostDrop?>(null)
         private set
 
-    /** Текущий индекс вставки папки (среди прочих папок) — для линии между папками. */
+    /** Current folder insertion index (among the other folders), for the between-folders line. */
     var activeFolderDropIndex by mutableStateOf<Int?>(null)
         private set
 
-    /** Вертикальная позиция указателя в координатах окна, ведётся по ходу жеста. */
+    /** Pointer's vertical position in window coordinates, tracked over the gesture. */
     private var pointerY = 0f
 
-    // Bounds в координатах окна — пишутся при layout, читаются только из жестов. Обычные HashMap, а не
-    // Compose-map: composition их не читает, реактивность дала бы снапшот-запись на каждый layout-проход
-    // (в т.ч. при скролле) впустую. Все обращения — на Main-потоке (layout + колбэки жестов).
+    // Bounds in window coordinates, written on layout and read only from gestures. Plain HashMap,
+    // not a Compose map: composition never reads them, so reactivity would only cost a snapshot
+    // write on every layout pass (including scroll) for nothing. All access is on the main thread
+    // (layout + gesture callbacks).
     private val hostBounds = HashMap<String, Rect>()
     private val folderRange = HashMap<String, Rect>()
     private val folderHeader = HashMap<String, Rect>()
@@ -61,7 +62,7 @@ class HostDragState {
     fun setFolderRange(name: String, rect: Rect) { folderRange[name] = rect }
     fun setFolderHeader(name: String, rect: Rect) { folderHeader[name] = rect }
 
-    /** Забыть геометрию строки удалённого хоста — иначе bounds накапливались бы по выбывшим id. */
+    /** Forget a removed host's row geometry, otherwise bounds would accumulate for stale ids. */
     fun clearHostBounds(id: String) { hostBounds.remove(id) }
 
     fun startHostDrag(id: String, localOffsetY: Float) {
@@ -79,16 +80,17 @@ class HostDragState {
     }
 
     /**
-     * FolderBounds для расчёта сброса хоста: центры — без перетаскиваемого (как ждёт moveHostToGroup).
-     * Папка без зафиксированной геометрии (ещё не прошла layout — например, отскроллена за экран)
-     * пропускается; [hostDropTarget] тогда зажмёт сброс к ближайшей видимой папке.
+     * FolderBounds for computing a host drop: centers exclude the dragged host (as moveHostToGroup
+     * expects). A folder with no recorded geometry (hasn't gone through layout yet, e.g. scrolled
+     * off-screen) is skipped; [hostDropTarget] then clamps the drop to the nearest visible folder.
      */
     fun hostFolderBounds(folders: List<HostFolder>): List<FolderBounds> = folders.mapNotNull { folder ->
         val range = folderRange[folder.name] ?: return@mapNotNull null
         FolderBounds(
-            // Пустая папка хостов не имеет (выводимую из них) группу — берём её имя как ключ группы,
-            // чтобы сброс хоста в свежесозданную пустую группу проставлял Host.group=её имя, а не null
-            // (иначе хост уехал бы в Ungrouped). Синтетический «Ungrouped» как группа остаётся null.
+            // An empty folder has no group derivable from its hosts, so use its name as the group
+            // key, so dropping a host into a freshly created empty group sets Host.group to that
+            // name rather than null (else it would land in Ungrouped). The synthetic "Ungrouped"
+            // group itself stays null.
             group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL },
             top = range.top,
             bottom = range.bottom,
@@ -100,7 +102,7 @@ class HostDragState {
 
     fun currentHostDrop(folders: List<HostFolder>): HostDrop? = hostDropTarget(hostFolderBounds(folders), pointerY)
 
-    /** Центры заголовков прочих папок (без перетаскиваемой) в порядке списка — для folderDropTarget. */
+    /** Header centers of the other folders (excluding the dragged one), in list order, for folderDropTarget. */
     fun currentFolderDropIndex(folders: List<HostFolder>): Int {
         val centers = folders
             .filter { it.name != draggingFolderName }
@@ -109,7 +111,7 @@ class HostDragState {
     }
 
     fun refreshHostDrop(folders: List<HostFolder>) {
-        // Только при смене цели — иначе каждое движение указателя перерисовывало бы все папки (подсветка).
+        // Only on target change, otherwise every pointer move would redraw all folders (highlighting).
         val next = currentHostDrop(folders)
         if (next != activeHostDrop) activeHostDrop = next
     }
@@ -127,23 +129,23 @@ class HostDragState {
     }
 }
 
-/** Записывает bounds строки хоста в окно — drag-цели читают его на отпускании. */
+/** Records a host row's window bounds, read by drag targets on release. */
 fun Modifier.hostBoundsAnchor(state: HostDragState, hostId: String): Modifier =
     onGloballyPositioned { state.setHostBounds(hostId, it.boundsInWindow()) }
 
-/** Записывает bounds всего блока папки — определяет, над какой папкой находится указатель. */
+/** Records a folder block's window bounds, used to determine which folder the pointer is over. */
 fun Modifier.folderRangeAnchor(state: HostDragState, name: String): Modifier =
     onGloballyPositioned { state.setFolderRange(name, it.boundsInWindow()) }
 
-/** Записывает bounds заголовка папки — задаёт центры для переупорядочивания папок. */
+/** Records a folder header's window bounds, providing centers for folder reordering. */
 fun Modifier.folderHeaderAnchor(state: HostDragState, name: String): Modifier =
     onGloballyPositioned { state.setFolderHeader(name, it.boundsInWindow()) }
 
 /**
- * Делает строку хоста перетаскиваемой. [folders] читается лениво (на момент жеста — свежий список),
- * [onDrop] получает целевую папку и индекс и переставляет хост через контроллер. [longPress] выбирает
- * старт жеста: на desktop — сразу по drag (мышь), на тач (mobile) — после долгого нажатия, иначе drag
- * перехватывал бы вертикальный скролл списка вместо его прокрутки.
+ * Makes a host row draggable. [folders] is read lazily (a fresh list at gesture time), [onDrop]
+ * receives the target folder and index and moves the host via the controller. [longPress] selects
+ * the gesture start: on desktop, immediately on drag (mouse); on touch (mobile), after a long
+ * press, otherwise drag would hijack the list's vertical scroll.
  */
 fun Modifier.draggableHostRow(
     state: HostDragState,
@@ -165,7 +167,7 @@ fun Modifier.draggableHostRow(
         state.refreshHostDrop(folders())
     }
     val onEnd = {
-        // Без реального перемещения (микро-жест на тапе) не трогаем каталог и диск.
+        // Without an actual move (a micro-gesture from a tap) the catalog and disk stay untouched.
         if (moved) state.currentHostDrop(folders())?.let(onDrop)
         state.endDrag()
     }
@@ -178,9 +180,9 @@ fun Modifier.draggableHostRow(
 }
 
 /**
- * Делает заголовок папки перетаскиваемым. [onDrop] получает целевой индекс среди папок и переставляет
- * блок через контроллер. [longPress] — см. [draggableHostRow]: тач-старт по долгому нажатию, чтобы не
- * мешать скроллу.
+ * Makes a folder header draggable. [onDrop] receives the target index among folders and moves the
+ * block via the controller. [longPress]: see [draggableHostRow], touch starts on a long press to
+ * avoid interfering with scroll.
  */
 fun Modifier.draggableFolderHeader(
     state: HostDragState,

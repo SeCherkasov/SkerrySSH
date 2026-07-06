@@ -6,8 +6,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Ожидаемые управляющие байты проверяются по ЧИСЛОВЫМ кодам символов, а не литералами — иначе
- * ESC/DEL были бы невидимы в Read/grep и легко разъезжались бы с реализацией.
+ * Expected control bytes are checked by numeric char code, not literals — otherwise ESC/DEL
+ * would be invisible in Read/grep and could easily drift from the implementation.
  */
 class TerminalInputTest {
 
@@ -105,8 +105,8 @@ class TerminalInputTest {
 
     @Test
     fun `modified arrows send CSI with xterm modifier parameter`() {
-        // xterm: mod = 1 + shift(1) + alt(2) + ctrl(4). Shift+Up → ESC[1;2A (mc выделяет файлы),
-        // Ctrl+Right → ESC[1;5C (переход по словам в readline), Alt+Left → ESC[1;3D.
+        // xterm: mod = 1 + shift(1) + alt(2) + ctrl(4). Shift+Up -> ESC[1;2A, Ctrl+Right -> ESC[1;5C
+        // (readline word movement), Alt+Left -> ESC[1;3D.
         assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'A'.code),
             codes(mapTerminalKey(Key.DirectionUp, ctrl = false, shift = true, codePoint = 0)))
         assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'B'.code),
@@ -140,19 +140,19 @@ class TerminalInputTest {
 
     @Test
     fun `modified arrows force CSI even in application-cursor mode`() {
-        // С модификатором стрелки всегда CSI 1;<mod> — SS3 не несёт параметр модификатора.
+        // With a modifier, arrows are always CSI 1;<mod> — SS3 carries no modifier parameter.
         assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'A'.code),
             codes(mapTerminalKey(Key.DirectionUp, ctrl = false, shift = true, codePoint = 0, applicationCursor = true)))
     }
 
     @Test
     fun `modified tilde keys send CSI num semicolon mod tilde`() {
-        // Ctrl+Delete → ESC[3;5~ (удалить слово вперёд), Shift+PageUp → ESC[5;2~.
+        // Ctrl+Delete -> ESC[3;5~ (delete word forward), Shift+PageUp -> ESC[5;2~.
         assertEquals(listOf(0x1b, '['.code, '3'.code, ';'.code, '5'.code, '~'.code),
             codes(mapTerminalKey(Key.Delete, ctrl = true, codePoint = 0)))
         assertEquals(listOf(0x1b, '['.code, '5'.code, ';'.code, '2'.code, '~'.code),
             codes(mapTerminalKey(Key.PageUp, ctrl = false, shift = true, codePoint = 0)))
-        // F5 (CSI 15~) с Ctrl → ESC[15;5~, с Shift → ESC[15;2~.
+        // F5 (CSI 15~) with Ctrl -> ESC[15;5~, with Shift -> ESC[15;2~.
         assertEquals(listOf(0x1b, '['.code, '1'.code, '5'.code, ';'.code, '5'.code, '~'.code),
             codes(mapTerminalKey(Key.F5, ctrl = true, codePoint = 0)))
         assertEquals(listOf(0x1b, '['.code, '1'.code, '5'.code, ';'.code, '2'.code, '~'.code),
@@ -161,7 +161,7 @@ class TerminalInputTest {
 
     @Test
     fun `modified F1 to F4 switch from SS3 to CSI with modifier`() {
-        // F1 без модификатора = ESC O P; с Shift → ESC[1;2P.
+        // F1 with no modifier = ESC O P; with Shift -> ESC[1;2P.
         assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '2'.code, 'P'.code),
             codes(mapTerminalKey(Key.F1, ctrl = false, shift = true, codePoint = 0)))
         assertEquals(listOf(0x1b, '['.code, '1'.code, ';'.code, '5'.code, 'S'.code),
@@ -207,7 +207,7 @@ class TerminalInputTest {
         assertEquals(listOf(0x03), codes(mapTerminalKey(Key.C, ctrl = true, codePoint = 'c'.code))) // Ctrl+C = ETX
         assertEquals(listOf(0x04), codes(mapTerminalKey(Key.D, ctrl = true, codePoint = 'd'.code))) // Ctrl+D = EOT
         assertEquals(listOf(0x1a), codes(mapTerminalKey(Key.Z, ctrl = true, codePoint = 'z'.code))) // Ctrl+Z = SUB
-        // Регистр не важен — Ctrl+Shift+C тоже ETX
+        // Case doesn't matter — Ctrl+Shift+C is also ETX.
         assertEquals(listOf(0x03), codes(mapTerminalKey(Key.C, ctrl = true, codePoint = 'C'.code)))
     }
 
@@ -218,15 +218,14 @@ class TerminalInputTest {
 
     @Test
     fun `ctrl letter works when desktop delivers the control char as codePoint`() {
-        // Реальный Compose Desktop: AWT отдаёт Ctrl+C с keyChar 0x03 → utf16CodePoint == 3.
-        // Раньше это падало в null (3 не в 'A'..'Z'/'a'..'z'), и Ctrl-комбо не работали вживую.
+        // Real Compose Desktop: AWT delivers Ctrl+C with keyChar 0x03 -> utf16CodePoint == 3.
         assertEquals(listOf(0x03), codes(mapTerminalKey(Key.C, ctrl = true, codePoint = 3)))
         assertEquals(listOf(0x1a), codes(mapTerminalKey(Key.Z, ctrl = true, codePoint = 26)))
     }
 
     @Test
     fun `ctrl letter derives the control byte from the physical key`() {
-        // Когда AWT не отдаёт символ (CHAR_UNDEFINED 0xFFFF), опираемся на физическую клавишу.
+        // When AWT gives no char (CHAR_UNDEFINED 0xFFFF), fall back to the physical key.
         assertEquals(listOf(0x03), codes(mapTerminalKey(Key.C, ctrl = true, codePoint = 0xFFFF)))
         assertEquals(listOf(0x04), codes(mapTerminalKey(Key.D, ctrl = true, codePoint = 0xFFFF)))
     }
@@ -240,7 +239,7 @@ class TerminalInputTest {
 
     @Test
     fun `bare alt produces nothing (no garbage glyph)`() {
-        // AWT отдаёт одинокие модификаторы с keyChar CHAR_UNDEFINED (0xFFFF) — это НЕ текст.
+        // AWT delivers lone modifier keys with keyChar CHAR_UNDEFINED (0xFFFF) — not text.
         assertNull(mapTerminalKey(Key.AltLeft, ctrl = false, alt = true, codePoint = 0xFFFF))
         assertNull(mapTerminalKey(Key.AltRight, ctrl = false, alt = true, codePoint = 0xFFFF))
     }
@@ -252,14 +251,14 @@ class TerminalInputTest {
 
     @Test
     fun `alt letter sends meta even when desktop omits the codePoint`() {
-        // Linux AWT отдаёт Alt+b с keyChar == CHAR_UNDEFINED; букву берём с физической клавиши.
+        // Linux AWT delivers Alt+b with keyChar == CHAR_UNDEFINED; take the letter from the physical key.
         assertEquals(listOf(0x1b, 'b'.code), codes(mapTerminalKey(Key.B, ctrl = false, alt = true, codePoint = 0xFFFF)))
         assertEquals(listOf(0x1b, 'F'.code), codes(mapTerminalKey(Key.F, ctrl = false, alt = true, shift = true, codePoint = 0xFFFF)))
     }
 
     @Test
     fun `numpad sends literal digits in normal keypad mode`() {
-        // Без application-keypad numpad-клавиши = обычные символы (NumLock on).
+        // Without application keypad mode, numpad keys are plain characters (NumLock on).
         assertEquals("7", mapTerminalKey(Key.NumPad7, ctrl = false, codePoint = '7'.code))
         assertEquals("0", mapTerminalKey(Key.NumPad0, ctrl = false, codePoint = '0'.code))
         assertEquals(listOf(0x0d), codes(mapTerminalKey(Key.NumPadEnter, ctrl = false, codePoint = 0)))
@@ -267,14 +266,14 @@ class TerminalInputTest {
 
     @Test
     fun `numpad sends SS3 in application keypad mode (DECKPAM)`() {
-        // Application keypad (Emacs, калькуляторные TUI): NumPad0..9 → ESC O p..y.
+        // Application keypad (Emacs, calculator-style TUIs): NumPad0..9 -> ESC O p..y.
         assertEquals(listOf(0x1b, 'O'.code, 'p'.code),
             codes(mapTerminalKey(Key.NumPad0, ctrl = false, codePoint = '0'.code, applicationKeypad = true)))
         assertEquals(listOf(0x1b, 'O'.code, 'w'.code),
             codes(mapTerminalKey(Key.NumPad7, ctrl = false, codePoint = '7'.code, applicationKeypad = true)))
         assertEquals(listOf(0x1b, 'O'.code, 'y'.code),
             codes(mapTerminalKey(Key.NumPad9, ctrl = false, codePoint = '9'.code, applicationKeypad = true)))
-        // Операторы и Enter: + → ESC O k, - → ESC O m, * → ESC O j, / → ESC O o, . → ESC O n, Enter → ESC O M.
+        // Operators and Enter: + -> ESC O k, - -> ESC O m, * -> ESC O j, / -> ESC O o, . -> ESC O n, Enter -> ESC O M.
         assertEquals(listOf(0x1b, 'O'.code, 'M'.code),
             codes(mapTerminalKey(Key.NumPadEnter, ctrl = false, codePoint = 0, applicationKeypad = true)))
         assertEquals(listOf(0x1b, 'O'.code, 'k'.code),
@@ -285,7 +284,7 @@ class TerminalInputTest {
 
     @Test
     fun `focus report sequences are CSI I and CSI O`() {
-        // DECSET 1004: фокус окна → ESC[I, потеря фокуса → ESC[O.
+        // DECSET 1004: window focus gained -> ESC[I, focus lost -> ESC[O.
         assertEquals(listOf(0x1b, '['.code, 'I'.code), codes(focusReportSequence(focused = true)))
         assertEquals(listOf(0x1b, '['.code, 'O'.code), codes(focusReportSequence(focused = false)))
     }

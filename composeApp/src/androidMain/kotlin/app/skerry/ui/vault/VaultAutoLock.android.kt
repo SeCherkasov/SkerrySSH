@@ -4,9 +4,8 @@ import android.app.KeyguardManager
 import android.content.Context
 
 /**
- * Контекст приложения для проверки состояния блокировки устройства. Заполняется в
- * `MainActivity.onCreate` (`appContext = applicationContext`). Держит только application-контекст —
- * без утечки Activity.
+ * Application context for checking device lock state, set in `MainActivity.onCreate`
+ * (`appContext = applicationContext`). Holds only the application context, never an Activity.
  */
 object AndroidLockContext {
     @Volatile
@@ -14,10 +13,9 @@ object AndroidLockContext {
 }
 
 /**
- * Android: запираем vault при уходе в фон ТОЛЬКО если устройство реально заблокировано (keyguard).
- * Переключение на другое приложение (системный SAF-пикер, шторка) при разблокированном экране фон
- * vault не запирает — иначе выбор файла рвал бы сессию. Если контекст ещё не установлен —
- * перестраховываемся и запираем (true).
+ * Locks the vault on background only if the device is actually locked (keyguard). Switching to
+ * another app (system SAF picker, notification shade) while the screen is unlocked does not lock
+ * the vault. If the context isn't set yet, defaults to locking (true).
  */
 actual fun deviceMandatesAutoLock(): Boolean {
     val ctx = AndroidLockContext.appContext ?: return true

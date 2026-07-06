@@ -15,9 +15,9 @@ import app.skerry.ui.vault.VaultView
 import app.skerry.ui.app.asSessionView
 
 /**
- * Переключатель основной области. App-level view (Vault/Known/Teams/Snippets) показываются поверх
- * вкладок по [DesktopDesignState.appOverlay]; иначе рисуем подвью активной вкладки
- * ([app.skerry.ui.session.Session.view]) — а без живых сессий (мок/превью) её фолбэк [state.view].
+ * Switches the main content area. App-level views (Vault/Known/Teams/Snippets) render over tabs
+ * per [DesktopDesignState.appOverlay]; otherwise renders the active tab's subview
+ * ([app.skerry.ui.session.Session.view]), falling back to [state.view] with no live sessions.
  */
 @Composable
 fun Viewport(state: DesktopDesignState) {
@@ -27,8 +27,7 @@ fun Viewport(state: DesktopDesignState) {
         DesktopView.Vault -> VaultView()
         DesktopView.Known -> KnownHostsView()
         DesktopView.Teams -> TeamsView()
-        // overlay == null: показываем подвью активной вкладки (showView кладёт в appOverlay только
-        // app-level значения, поэтому session-level сюда не попадает).
+        // overlay == null: renders the active tab's subview (showView only stores app-level values in appOverlay).
         else -> {
             val sessions = LocalSessions.current
             val view = sessions?.active?.view ?: state.view.asSessionView()

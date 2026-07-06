@@ -20,9 +20,9 @@ class SecureFlagControllerTest {
         val c = SecureFlagController { calls.add(it) }
         c.acquire()
         c.acquire()
-        assertEquals(listOf(true), calls) // включили ровно один раз
+        assertEquals(listOf(true), calls) // enabled exactly once
         c.release()
-        assertEquals(listOf(true), calls) // ещё один держатель — флаг держим
+        assertEquals(listOf(true), calls) // one holder remains, flag stays
         c.release()
         assertEquals(listOf(true, false), calls)
     }
@@ -43,7 +43,7 @@ class SecureFlagControllerTest {
         val c = SecureFlagController { calls.add(it) }
         c.acquire()
         c.release()
-        c.release() // лишний release после полного цикла — без эффекта
+        c.release() // extra release after a full cycle is a no-op
         assertEquals(listOf(true, false), calls)
     }
 

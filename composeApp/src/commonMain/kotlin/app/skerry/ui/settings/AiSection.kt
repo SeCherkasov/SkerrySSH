@@ -70,7 +70,7 @@ import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.sync.SyncField
 import org.jetbrains.compose.resources.stringResource
 
-// Секция AI настроек: живой BYOK-таб (LocalAi) или мок-превью.
+// AI settings section: live BYOK tab (LocalAi) or mock preview.
 
 @Composable
 internal fun AiSection(state: DesktopDesignState) {
@@ -78,7 +78,7 @@ internal fun AiSection(state: DesktopDesignState) {
     if (ai != null) LiveAiSection(ai) else AiSectionMock(state)
 }
 
-/** Горизонтальный разделитель секций формы: воздух сверху/снизу единый по всему табу. */
+/** Horizontal divider between form sections; consistent spacing across the tab. */
 @Composable
 private fun SectionDivider() {
     Spacer(Modifier.height(18.dp))
@@ -87,11 +87,10 @@ private fun SectionDivider() {
 }
 
 /**
- * Живой AI-таб: выбор провайдера по умолчанию (локальная модель / BYOK / выключен); начинка —
- * внутри выбранной карточки (каталог моделей / BYOK-поля, ключ шифруется в vault). Быстрый чат
- * для проверки соединения — сворачиваемый блок, по умолчанию скрыт. Полноценный ассистент в
- * терминале (per-host политики, подтверждение команд) — отдельный слайс; здесь вывод модели
- * только показывается, не исполняется.
+ * Live AI tab: default provider picker (device model / BYOK / off), each card expanding its own
+ * content (model catalog / BYOK fields, key encrypted in the vault). Quick chat for testing the
+ * connection is collapsible and hidden by default. The full terminal assistant (per-host policies,
+ * command confirmation) is a separate slice; here model output is only displayed, not executed.
  */
 @Composable
 private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
@@ -99,7 +98,7 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
 
     AiProviderCards(ai, byokContent = { DesktopByokFields(ai) })
 
-    // AI выключен: quick-chat скрываем — конфиг сохранён и вернётся с провайдером.
+    // AI disabled: hide quick chat; config is preserved and returns with the provider.
     if (!ai.enabled) {
         Txt(
             stringResource(Res.string.settings_ai_off_note),
@@ -145,8 +144,8 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
 }
 
 /**
- * BYOK-поля внутри карточки «Мой ключ API»: ключ/модель/эндпоинт + Save (шифрование — на стороне
- * [app.skerry.ui.ai.AiAssistantController.save]). Раскрываются вместе с выбором карточки.
+ * BYOK fields inside the "My API key" card: key/model/endpoint + Save (encryption happens in
+ * [app.skerry.ui.ai.AiAssistantController.save]). Expands when the card is selected.
  */
 @Composable
 private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
@@ -160,8 +159,8 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
     SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_model), value = model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Next) { model = it }
     FieldLabel(stringResource(Res.string.settings_ai_field_endpoint))
     SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_endpoint), value = baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done) { baseUrl = it }
-    // http:// шлёт API-ключ и промпт (при Permissive — с секретами) открытым текстом — как в sync-паринге,
-    // предупреждаем (кроме localhost, где cleartext осознан для локального прокси).
+    // http:// sends the API key and prompt (with secrets under Permissive) in cleartext; warn,
+    // except for localhost where cleartext is intentional for a local proxy.
     if (isInsecureAiEndpoint(baseUrl)) {
         Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
     }

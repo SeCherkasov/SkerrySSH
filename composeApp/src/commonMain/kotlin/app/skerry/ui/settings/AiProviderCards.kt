@@ -53,12 +53,11 @@ import app.skerry.ui.sftp.humanSize
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Живой выбор провайдера AI по умолчанию (хром — 1:1 с карточками прототипа): «На этом
- * устройстве» с каталогом локальных моделей (скачивание/прогресс/удаление), BYOK и «выключен».
- * Начинка раскрывается только у ВЫБРАННОЙ карточки (каталог моделей / [byokContent] — форма
- * ключ-модель-эндпоинт, платформенный layout подаёт вызывающий). Выбор сохраняется сразу
- * ([AiAssistantController.selectProvider]); Strict-хосты всё равно идут локально независимо
- * от выбранного здесь дефолта (см. AiRouter).
+ * Default AI provider picker: on-device with a local model catalog (download/progress/delete),
+ * BYOK, or off. Only the selected card expands its content (model catalog / [byokContent] —
+ * key-model-endpoint form, layout supplied by the caller). Selection saves immediately via
+ * [AiAssistantController.selectProvider]; Strict-policy hosts still route to the device model
+ * regardless of the default chosen here (see AiRouter).
  */
 @Composable
 internal fun AiProviderCards(ai: AiAssistantController, byokContent: (@Composable () -> Unit)? = null) {
@@ -88,7 +87,7 @@ internal fun AiProviderCards(ai: AiAssistantController, byokContent: (@Composabl
         if (provider == AiProviderKind.CLOUD) byokContent?.invoke()
     }
     Box(Modifier.height(8.dp))
-    // Глобальный kill-switch: AI нигде не показывается и ничего не шлёт (сильнее per-host политик).
+    // Global kill switch: AI is hidden everywhere and sends nothing, overriding per-host policies.
     ProviderCard(
         icon = "block",
         title = stringResource(Res.string.settings_ai_provider_off),
@@ -98,7 +97,7 @@ internal fun AiProviderCards(ai: AiAssistantController, byokContent: (@Composabl
     )
 }
 
-/** Список моделей каталога внутри карточки «На этом устройстве»: радио-выбор + статус/действия. */
+/** Model catalog list inside the "On this device" card: radio selection + status/actions. */
 @Composable
 private fun LocalModelList(ai: AiAssistantController, models: LocalModelController) {
     Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -134,8 +133,8 @@ private fun LocalModelRow(ai: AiAssistantController, models: LocalModelControlle
         }
         if (status is LocalModelStatus.Downloading) {
             val fraction = (status.downloadedBytes.toFloat() / status.totalBytes.coerceAtLeast(1)).coerceIn(0f, 1f)
-            // Полоска — отдельной строкой во всю ширину, счётчик — под ней: в одном Row с weight
-            // меняющаяся ширина текста («9.9 MB…» → «10.0 MB…») дёргала бы ширину полоски.
+            // Progress bar is its own full-width row, counter below it: in a single weighted Row
+            // the changing text width ("9.9 MB…" → "10.0 MB…") would jitter the bar width.
             Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(D.line)) {
                 Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(D.cyan))
             }
@@ -151,7 +150,7 @@ private fun LocalModelRow(ai: AiAssistantController, models: LocalModelControlle
     }
 }
 
-/** Действие/статус модели справа в строке: скачать, отменить, удалить, повторить. */
+/** Model action/status on the right of the row: download, cancel, delete, retry. */
 @Composable
 private fun ModelActions(models: LocalModelController, model: LocalModel, status: LocalModelStatus) {
     when (status) {
@@ -172,9 +171,9 @@ private fun ModelActions(models: LocalModelController, model: LocalModel, status
 }
 
 /**
- * Карточка провайдера (стиль прототипа): иконка, заголовок с бейджем, описание, радио-отметка
- * справа. [onClick] `null` — карточка инертна (мок-превью/платформа без подсистемы);
- * [content] — раскрытая начинка (каталог моделей у «на этом устройстве»).
+ * Provider card: icon, title with badge, description, radio mark on the right. [onClick] `null`
+ * makes the card inert (mock preview / platform without the subsystem); [content] is the
+ * expanded body (model catalog for "on this device").
  */
 @Composable
 internal fun ProviderCard(

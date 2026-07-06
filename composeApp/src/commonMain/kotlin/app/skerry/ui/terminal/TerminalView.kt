@@ -71,38 +71,39 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.sessionDotColor
 import org.jetbrains.compose.resources.stringResource
 
-/** Общая высота шапки панели (основной и split) — чтобы заголовки были вровень. */
+/** Shared pane header height (primary and split) so both titles align. */
 private val PANE_HEADER_HEIGHT = 40.dp
 
 /**
- * Свёрнутый сайдбар: тонкий рельс слева с единственной кнопкой — вернуть панель хостов.
- * Держит место панели занятым, чтобы контент не «прыгал» на всю ширину при скрытии.
+ * Collapsed sidebar: thin left rail with a single button to restore the hosts panel.
+ * Keeps the panel's space reserved so content doesn't jump to full width when hidden.
  */
 @Composable
 private fun CollapsedSidebarRail(state: DesktopDesignState) {
     Column(
-        // start=12, top=12, box=34 в точности как у кнопки в шапке развёрнутого сайдбара — кнопка
-        // не «прыгает» ни по вертикали, ни по горизонтали при сворачивании/разворачивании.
+        // start=12, top=12, box=34 match the expanded sidebar header button exactly, so it
+        // doesn't jump when collapsing/expanding.
         Modifier.width(58.dp).fillMaxHeight().background(D.surface2).padding(start = 12.dp, top = 12.dp),
     ) {
         IconBtn("chevron_right", onClick = state::toggleSidebar, box = 34, tint = D.dim)
     }
 }
 
-/** Терминальный view: hosts-sidebar + main (toolbar, панели, AI-bar) + info-panel. */
+/** Terminal view: hosts sidebar + main (toolbar, panes, AI bar) + info panel. */
 @Composable
 fun TerminalView(state: DesktopDesignState) {
     Row(Modifier.fillMaxSize()) {
         if (state.sidebarHidden) CollapsedSidebarRail(state) else HostsSidebar(state)
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            // Общий AI-контроллер живого бара (или null): один экземпляр на оверлей-слой и строку ввода;
-            // key() пересоздаёт при смене активного хоста/политики. Off/мок → null (показ ниже прежним слотом).
+            // Shared live AI bar controller (or null): one instance for the overlay layer and
+            // input row; key() recreates it when the active host/policy changes. Off/mock -> null
+            // (falls back to the slot below).
             val liveAi = LocalAi.current
             val aiSession = LocalSessions.current?.active
             val aiPolicy = aiSession?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
             val aiTerminal = (aiSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-            // liveAi.enabled — в key: глобальный OFF в настройках убирает/возвращает бар
-            // без пересоздания экрана (settings — Compose-state, смена рекомпозирует).
+            // liveAi.enabled is in the key: toggling the global OFF setting shows/hides the bar
+            // without recreating the screen (settings is Compose state, so it recomposes).
             val aiController = key(liveAi, aiPolicy, liveAi?.enabled) {
                 remember {
                     if (liveAi != null && liveAi.enabled && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
@@ -110,22 +111,22 @@ fun TerminalView(state: DesktopDesignState) {
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
             Row(Modifier.fillMaxSize()) {
-                // Живой режим: split привязан к активной вкладке (своя вторичная сессия). Мок/превью —
-                // глобальный флаг.
+                // Live mode: split is tied to the active tab (its own secondary session).
+                // Mock/preview uses a global flag.
                 val sessions = LocalSessions.current
                 val activeId = sessions?.active?.id
                 val showSplit = if (sessions != null) sessions.active?.splitOpen == true else state.split
-                // В режиме split акцентная рамка (primary cyan) обводит сфокусированную панель — явно
-                // показывает, с какой панелью идёт работа. focusedSplit=false → основная.
+                // In split mode, an accent border (primary cyan) outlines the focused pane.
+                // focusedSplit=false means the primary pane.
                 val focusedSplit = sessions?.active?.focusedSplit == true
                 fun paneFocusBorder(focused: Boolean): Modifier =
                     if (showSplit && focused) Modifier.border(1.dp, D.cyan.copy(alpha = 0.35f)) else Modifier
-                // Пока split открыт — клик по основной панели возвращает ей фокус (заголовок чипа).
+                // While split is open, clicking the primary pane returns focus to it (tab chip title).
                 val primaryMod = Modifier.weight(1f).fillMaxHeight()
                     .then(if (sessions != null && activeId != null && showSplit) Modifier.focusPaneOnPress(sessions, activeId, split = false) else Modifier)
                     .then(paneFocusBorder(!focusedSplit))
-                // Основная панель = свой заголовок (тулбар) + терминал, симметрично split-панели: обе
-                // шапки на одном уровне, без «перекоса».
+                // Primary pane: its own header (toolbar) + terminal, symmetric with the split
+                // pane so both headers align.
                 Column(primaryMod) {
                     SessionToolbar(state)
                     TerminalPane(state, Modifier.weight(1f).fillMaxWidth())
@@ -138,10 +139,10 @@ fun TerminalView(state: DesktopDesignState) {
                 if (state.infoPanel) InfoPanel()
             }
             }
-            // Всё в одной строке бара: команда + инлайн-пояснение/причина риска + кнопки; Thinking/blocked/
-            // error там же. Ничего не перекрывает терминал и не меняет его высоту (нет «дёрга»). Off/мок → слот.
-            // AI-бар только при активной сессии: на пустом экране «Нет активной сессии» помощник не нужен.
-            // В дизайн-превью (LocalSessions == null) бар-мок остаётся.
+            // Single bar row: command + inline explanation/risk reason + buttons; thinking/blocked/
+            // error states share it. Never overlaps the terminal or changes its height. Off/mock -> slot.
+            // AI bar only shows with an active session; not shown on the empty "no active session"
+            // screen. Design preview (LocalSessions == null) keeps the mock bar.
             if (aiSession != null || LocalSessions.current == null) {
                 if (aiController != null) AiBarInput(aiController, aiTerminal, state.aiBarFocusRequests) else TerminalAiBarSlot()
             }
@@ -149,7 +150,7 @@ fun TerminalView(state: DesktopDesignState) {
     }
 }
 
-// Тулбар сессии.
+// Session toolbar.
 
 @Composable
 private fun SessionToolbar(state: DesktopDesignState) {
@@ -158,25 +159,24 @@ private fun SessionToolbar(state: DesktopDesignState) {
     val active = sessions?.active
     Column {
         Row(
-            // Фиксированная высота шапки — общая со split-панелью (PANE_HEADER_HEIGHT), чтобы обе шапки
-            // были вровень независимо от контента (слева крупнее из-за кнопок-иконок).
+            // Fixed header height shared with the split pane (PANE_HEADER_HEIGHT) so both
+            // headers align regardless of content.
             Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).background(D.surface2).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (active != null) {
-                    // Живой заголовок: ярлык хоста + user@addr:port + точка состояния соединения.
-                    // Зазоры/паддинги синхронизированы со split-шапкой (LiveSplitPane), чтобы обе панели
-                    // выглядели одинаково.
+                    // Live title: host label + user@addr:port + connection status dot.
+                    // Spacing/padding matches the split header (LiveSplitPane) for visual parity.
                     Txt(active.title, color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
                     Txt(active.subtitle, color = D.dim, size = 11.5.sp, font = mono)
                     Dot(sessionDotColor(active.controller.uiState))
                 } else if (sessions != null) {
-                    // Живой режим без активной сессии: честное пустое состояние, без фейкового хоста.
+                    // Live mode with no active session: explicit empty state, no fake host.
                     Txt(stringResource(Res.string.term_no_active_session), color = D.faint, size = 12.sp, font = mono)
                 } else {
-                    // Мок/превью (офскрин-рендер без LocalSessions): статичный заголовок.
+                    // Mock/preview (offscreen render without LocalSessions): static header.
                     Txt("root@prod-web-01", color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Txt("192.168.1.45:22", color = D.dim, size = 11.5.sp)
@@ -188,18 +188,18 @@ private fun SessionToolbar(state: DesktopDesignState) {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                // Split: живой режим переключает split АКТИВНОЙ вкладки (своя вторичная сессия);
-                // мок/превью — глобальный флаг.
+                // Split: live mode toggles the active tab's split (its own secondary session);
+                // mock/preview uses a global flag.
                 IconBtn("splitscreen_right", onClick = { if (sessions != null) sessions.toggleSplit() else state.toggleSplit() })
-                // Переключают подвью АКТИВНОЙ вкладки (живой режим, + сброс оверлея) / мок-фолбэк state.view.
+                // Switches the active tab's subview (live mode, plus overlay reset) / mock fallback state.view.
                 IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
-                // Tunnels — глобальный раздел, всегда открывается оверлеем.
+                // Tunnels is a global section, always opens as an overlay.
                 IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
-                // Быстрый запуск сниппета в активную сессию без ухода в раздел Snippets.
+                // Quick snippet launch into the active session without leaving for the Snippets section.
                 SnippetPaletteButton(active)
                 IconBtn("info", onClick = state::toggleInfo)
-                // Power: рвёт активную сессию (живой путь) — спрашиваем подтверждение (деструктивно, без
-                // авто-реконнекта); в мок-режиме — no-op заглушка.
+                // Power: closes the active session (live path) with a confirmation prompt
+                // (destructive, no auto-reconnect); no-op stub in mock mode.
                 IconBtn("power_settings_new", onClick = { if (active != null) state.requestCloseSession(active.id) }, tint = D.sunset)
             }
         }
@@ -207,12 +207,12 @@ private fun SessionToolbar(state: DesktopDesignState) {
     }
 }
 
-// Терминальная панель.
+// Terminal pane.
 
 /**
- * Терминальная область: живая ([LocalSessions] подан, за гейтом vault) или мок-демо.
- * Живой путь рендерит реальную сетку активной сессии через готовый [TerminalScreen] (VT-эмулятор
- * + ввод в PTV) или экран-плейсхолдер для прочих состояний соединения.
+ * Terminal area: live ([LocalSessions] present, behind the vault gate) or mock demo.
+ * Live path renders the active session's grid via [TerminalScreen] (VT emulator + PTY input),
+ * or a placeholder for other connection states.
  */
 @Composable
 private fun TerminalPane(state: DesktopDesignState, modifier: Modifier = Modifier) {
@@ -220,20 +220,20 @@ private fun TerminalPane(state: DesktopDesignState, modifier: Modifier = Modifie
     if (sessions != null) LiveTerminalPane(sessions, modifier) else MockTerminalPane(state, modifier)
 }
 
-/** Живой терминал активной вкладки: рендер по состоянию её [ConnectionUiState]. */
+/** Live terminal of the active tab: renders based on its [ConnectionUiState]. */
 @Composable
 private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = Modifier) {
     val active = sessions.active
     Box(modifier.fillMaxHeight().fillMaxWidth().background(D.terminalBg)) {
         when (val st = active?.controller?.uiState) {
             null -> TerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_notice_pick_host_to_connect))
-            // Form у активной вкладки = пустой таб («+»): соединение ещё не запускалось.
+            // Form state on the active tab means an empty ("+") tab: connection not yet started.
             ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new))
             ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), active.subtitle)
             is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
             is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), st.message, color = D.sunset)
-            // Обрыв: экран застыл на момент потери ([ConnectionUiState.Disconnected.terminal]) — показываем
-            // его под баннером разрыва, чтобы вывод не пропал, а статус (реконнект/сдача) был ясен.
+            // Disconnected: screen is frozen at the moment of loss ([ConnectionUiState.Disconnected.terminal]),
+            // shown under the disconnect banner so output isn't lost and status (reconnecting/gave up) stays visible.
             is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 TerminalScreen(st.terminal, Modifier.fillMaxSize())
                 DisconnectedBanner(st, Modifier.align(Alignment.TopCenter))
@@ -243,9 +243,9 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
 }
 
 /**
- * Плашка-индикатор закрытия поверх застывшего терминала. Штатный выход shell (`exit`) — нейтральная
- * «Session closed»; пока идёт авто-реконнект — янтарная «Reconnecting… #N»; когда попытки исчерпаны —
- * закатная «Connection lost».
+ * Closed-state banner over the frozen terminal. Clean shell exit (`exit`) shows neutral
+ * "Session closed"; during auto-reconnect, amber "Reconnecting… #N"; once attempts are
+ * exhausted, red "Connection lost".
  */
 @Composable
 private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: Modifier = Modifier) {
@@ -280,7 +280,7 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
     }
 }
 
-/** Центрированное сообщение на фоне терминала (нет сессии / подключение / ошибка). */
+/** Centered message over the terminal background (no session / connecting / error). */
 @Composable
 private fun TerminalNotice(icon: String, title: String, subtitle: String, color: Color = D.dim) {
     val mono = LocalFonts.current.mono
@@ -295,14 +295,14 @@ private fun TerminalNotice(icon: String, title: String, subtitle: String, color:
     }
 }
 
-// Split-панель.
+// Split pane.
 
 /**
- * Живая split-панель: вторая НЕЗАВИСИМАЯ сессия активной вкладки
- * ([Session.splitSession], своё соединение/терминал/выделение). Шапка показывает её хост и крестик
- * закрытия ([SessionsController.closeSplit]); пока хост не выбран — пикер каталога ([SplitHostPicker]),
- * выбор подключает новую сессию через [LocalConnectSplit]. Клик по телу фокусирует split-панель
- * (заголовок чипа вкладки следует за фокусом).
+ * Live split pane: a second, independent session of the active tab
+ * ([Session.splitSession], its own connection/terminal/selection). Header shows its host and a
+ * close button ([SessionsController.closeSplit]); until a host is picked, shows a catalog picker
+ * ([SplitHostPicker]) that connects a new session via [LocalConnectSplit]. Clicking the body
+ * focuses the split pane (tab chip title follows focus).
  */
 @Composable
 private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignState, modifier: Modifier = Modifier) {
@@ -320,9 +320,9 @@ private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignStat
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Заголовок-селектор как у основной панели: клик раскрывает пикер каталога — выбрать
-                // хост (пусто) или ЗАМЕНИТЬ текущий (connectSplit рвёт прежнюю вторичную сессию).
-                // Зазоры/паддинги совпадают с SessionToolbar — панели выглядят одинаково.
+                // Title selector like the primary pane: click opens the catalog picker to choose
+                // a host (if empty) or replace the current one (connectSplit closes the previous
+                // secondary session). Spacing/padding matches SessionToolbar for visual parity.
                 Row(
                     Modifier.weight(1f).clickable { pickerOpen = !pickerOpen },
                     verticalAlignment = Alignment.CenterVertically,
@@ -338,8 +338,9 @@ private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignStat
                     }
                     Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
                 }
-                // Крестик в шапке закрывает split этой вкладки (рвёт вторичное соединение) —
-                // подтверждаем только когда есть что рвать (хост уже выбран); пустую панель закрываем сразу.
+                // Header close button closes this tab's split (drops the secondary connection);
+                // confirms only when there's something to drop (host already selected), closes
+                // an empty pane immediately.
                 IconBtn(
                     "close",
                     onClick = { if (split != null) state.requestCloseSplit(parent.id) else sessions.closeSplit(parent.id) },
@@ -370,9 +371,9 @@ private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignStat
 }
 
 /**
- * Пикер хостов из каталога ([LocalHosts]) для split-панели: клик по хосту открывает в ней новую
- * независимую сессию через [LocalConnectSplit] (тот же путь резолва секрета, что и у основного
- * подключения). Вне гейта vault (нет живого каталога) — пусто.
+ * Host picker from the catalog ([LocalHosts]) for the split pane: clicking a host opens a new
+ * independent session via [LocalConnectSplit] (same secret-resolution path as the primary
+ * connection). Empty outside the vault gate (no live catalog).
  */
 @Composable
 private fun SplitHostPicker(onPicked: () -> Unit) {
@@ -410,9 +411,9 @@ private fun SplitHostPicker(onPicked: () -> Unit) {
 }
 
 /**
- * Перехват нажатия в [PointerEventPass.Initial] (НЕ потребляя событие): фокусирует панель [split]
- * вкладки [parentId], чтобы заголовок чипа следовал за активной панелью. Клавиатуру маршрутизирует
- * сам [TerminalScreen] (свой focusRequester на pointer-down).
+ * Intercepts press in [PointerEventPass.Initial] (without consuming it): focuses the [split]
+ * pane of tab [parentId] so the tab chip title follows the active pane. Keyboard routing stays
+ * with [TerminalScreen] (its own focusRequester on pointer-down).
  */
 private fun Modifier.focusPaneOnPress(sessions: SessionsController, parentId: String, split: Boolean): Modifier =
     this.pointerInput(sessions, parentId, split) {

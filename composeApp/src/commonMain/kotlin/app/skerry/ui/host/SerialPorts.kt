@@ -3,9 +3,9 @@ package app.skerry.ui.host
 import app.skerry.shared.serial.SerialPortInfo
 
 /**
- * Список обнаруженных последовательных портов для пикера в форме New Connection. Реализуется
- * платформенно поверх `SerialSystem` (живёт в jvmShared-узле shared и напрямую из commonMain UI не
- * виден): desktop — jSerialComm, Android — USB-OTG (enumerate без разрешения). Пустой список — портов
- * нет/платформа не поддерживает: форма остаётся с текстовым полем Device.
+ * List of discovered serial ports for the picker in the New Connection form. Implemented per
+ * platform over `SerialSystem` (lives in shared's jvmShared node, not visible directly from
+ * commonMain UI): desktop uses jSerialComm, Android uses USB-OTG (enumerate without permission).
+ * Empty list means no ports / platform unsupported, the form stays with a plain Device text field.
  */
 expect fun listSerialPorts(): List<SerialPortInfo>

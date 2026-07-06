@@ -77,12 +77,12 @@ private val MOCK_MOBILE_SNIPPETS = listOf(
 )
 
 /**
- * Корневой таб Snippets: библиотека сохранённых команд + FAB добавления. Тап по карточке открывает
- * лист-редактор (Name/Command/Tags с type-ahead, Run/Save/Delete). Сниппет самостоятелен
- * (plain-конфиг, секретов не содержит).
+ * Snippets tab: library of saved commands + add FAB. Tapping a card opens the edit sheet
+ * (Name/Command/Tags with type-ahead, Run/Save/Delete). A snippet is self-contained plain config,
+ * no secrets.
  *
- * Живой путь ([LocalSnippets] != null, за гейтом vault) — реальная библиотека из [SnippetManager];
- * превью/офскрин без менеджера — статичные карточки-заглушки.
+ * Live path ([LocalSnippets] != null, behind the vault gate) uses the real library from
+ * [SnippetManager]; preview/offscreen without a manager renders static mock cards.
  */
 @Composable
 fun MobileSnippetsScreen(state: MobileDesignState) {
@@ -96,14 +96,14 @@ fun MobileSnippetsScreen(state: MobileDesignState) {
 private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager) {
     val mono = LocalFonts.current.mono
     val sessions = LocalSessions.current
-    // Запуск сниппета бьёт в активную подключённую сессию; нет живого терминала — кнопки Run в редакторе нет.
+    // Snippet run targets the active connected session; no live terminal means no Run button in the editor.
     val activeTerminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
 
     var editing by remember { mutableStateOf<SnippetEntry?>(null) }
     var adding by remember { mutableStateOf(false) }
     val sheetOpen = adding || editing != null
 
-    // Открытый лист-редактор прячет таб-бар (иначе он плавает над полями ввода у клавиатуры).
+    // Open edit sheet hides the tab bar (otherwise it floats above the input fields over the keyboard).
     LaunchedEffect(sheetOpen) { state.modalOverlay(sheetOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
 
@@ -134,7 +134,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
             Spacer(Modifier.height(96.dp))
         }
 
-        // FAB добавления (правый-нижний, над таб-баром). Скрыт, пока открыт лист-редактор.
+        // Add FAB (bottom-right, above the tab bar). Hidden while the edit sheet is open.
         if (!sheetOpen) {
             MobileFabButton(
                 onClick = { adding = true; editing = null },
@@ -206,8 +206,8 @@ private fun SnippetTagChip(tag: String) {
 }
 
 /**
- * Палитра запуска сниппета из шапки терминала (иконка `bolt`): список сохранённых команд, тап
- * запускает выбранный сниппет в активной сессии через [onRun].
+ * Snippet-run picker opened from the terminal header (`bolt` icon): list of saved commands, tap
+ * runs the selected snippet in the active session via [onRun].
  */
 @Composable
 internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry) -> Unit, onDismiss: () -> Unit) {
@@ -215,8 +215,8 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
     var query by remember { mutableStateOf("") }
     val all = manager.snippets
     val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
-    // Инлайновый лист (как листы Vault/New connection) — рендерится на верхнем уровне Box экрана, НЕ
-    // через Popup: focusable-Popup менял инсеты окна и слегка сдвигал шапку терминала.
+    // Inline sheet (like the Vault/New connection sheets), rendered at the screen's top-level Box,
+    // not via Popup: a focusable Popup shifted window insets and slightly moved the terminal header.
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.7f) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Txt(stringResource(Res.string.lib_snippets_run_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
@@ -236,11 +236,11 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
     }
 }
 
-// --- Лист-редактор ---
+// --- Edit sheet ---
 
 /**
- * Лист создания/правки сниппета. [entry] == null — создание.
- * [canRun]/[onRun] есть только когда правится существующий сниппет и есть живой терминал.
+ * Snippet create/edit sheet. [entry] == null means create.
+ * [canRun]/[onRun] apply only when editing an existing snippet with a live terminal.
  */
 @Composable
 private fun MobileSnippetEditSheet(
@@ -253,8 +253,8 @@ private fun MobileSnippetEditSheet(
     onDelete: (() -> Unit)?,
     onRun: () -> Unit,
 ) {
-    // Общее состояние формы (desktop ⇆ mobile): seed из entry (включая shortcut — Save не теряет
-    // назначенный на desktop хоткей), canSave, теги, сборка черновика.
+    // Shared form state (desktop <-> mobile): seeds from entry (including shortcut, so Save
+    // doesn't drop a hotkey assigned on desktop), canSave, tags, draft assembly.
     val form = remember { SnippetFormState.fromEntry(entry) }
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.9f) {
@@ -267,8 +267,8 @@ private fun MobileSnippetEditSheet(
                 MobileFormInput(form.command, { form.command = it }, "df -h | sort -k5 -r", mono = true, background = D.terminalBg, singleLine = false, minHeightDp = 88)
             }
             MobileFormField(stringResource(Res.string.lib_snippets_field_tags)) {
-                // Свои теги исключаем через selected; подсказки берём из всех сниппетов (включая правимый —
-                // его собственные теги уже в selected, так что не предложатся повторно).
+                // Own tags are excluded via selected; suggestions come from all snippets (including the
+                // one being edited - its own tags are already selected, so won't be suggested again).
                 val others = remember(allSnippets, entry?.id) { allSnippets.filter { it.id != entry?.id } }
                 val suggestions = remember(others, form.tags, form.tagDraft) { snippetTagSuggestions(others, form.tags, form.tagDraft) }
                 MobileTagsEditor(
@@ -300,7 +300,7 @@ private fun MobileSnippetEditSheet(
 }
 
 
-// --- Статичный мок (превью/офскрин без менеджера) ---
+// --- Static mock (preview/offscreen without a manager) ---
 
 @Composable
 private fun MobileSnippetsMock() {

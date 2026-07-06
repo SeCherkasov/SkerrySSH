@@ -25,7 +25,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** ACL гранулярных ролей (owner/admin/editor/viewer), смены роли и team-scoped аудит-лога. */
+/** ACL for granular roles (owner/admin/editor/viewer), role changes, and the team-scoped audit log. */
 class TeamRolesAclTest {
 
     private val teamId = "team-acl-1"
@@ -111,7 +111,7 @@ class TeamRolesAclTest {
         assertEquals(HttpStatusCode.Created, client.invite(owner.accessToken, "admin@x.io", "admin").status)
         client.accept(admin.accessToken)
 
-        // admin приглашает editor/viewer — можно; admin/owner — нельзя (эскалация)
+        // admin can invite editor/viewer but not admin/owner (privilege escalation)
         assertEquals(HttpStatusCode.Created, client.invite(admin.accessToken, "nn@x.io", "editor").status)
         assertEquals(HttpStatusCode.Forbidden, client.invite(admin.accessToken, "x2@x.io", "admin").status)
         assertEquals(HttpStatusCode.Forbidden, client.invite(admin.accessToken, "x3@x.io", "owner").status)
@@ -131,13 +131,13 @@ class TeamRolesAclTest {
         client.invite(owner.accessToken, "admin@x.io", "admin"); client.accept(admin.accessToken)
         client.invite(owner.accessToken, "editor@x.io", "editor"); client.accept(editor.accessToken)
 
-        // owner может менять роль editor→admin
+        // owner can change editor->admin
         assertEquals(HttpStatusCode.OK, client.changeRole(owner.accessToken, "editor@x.io", "admin").status)
-        // роль владельца фиксирована — даже сам owner не может её сменить (анти-эскалация, 403)
+        // the owner role is fixed; even the owner cannot change it (anti-escalation, 403)
         assertEquals(HttpStatusCode.Forbidden, client.changeRole(owner.accessToken, "owner@x.io", "viewer").status)
-        // admin не может повысить кого-либо до admin (эскалация)
+        // admin cannot promote anyone to admin (escalation)
         assertEquals(HttpStatusCode.Forbidden, client.changeRole(admin.accessToken, "editor@x.io", "admin").status)
-        // admin может понизить editor→viewer... но editor теперь admin, admin не вправе трогать admin
+        // admin cannot demote editor->viewer either, since editor is now admin and admin can't touch admin
         assertEquals(HttpStatusCode.Forbidden, client.changeRole(admin.accessToken, "editor@x.io", "viewer").status)
     }
 

@@ -1,34 +1,33 @@
 package app.skerry.ui.sync
 
 /**
- * Чистая (тестируемая) валидация формы настройки self-hosted sync — модалка-онбординг, которой нет
- * в макете: подключение требует адреса сервера, идентификатора аккаунта и мастер-пароля. Сам пароль
- * в модель не кладём (он живёт CharArray-ом в composable и затирается после отправки) — здесь только
- * его длина. Поля нормализуются (trim) так же, как их потом получит [SyncCoordinator].
+ * Testable validation for the self-hosted sync setup form: connecting needs a server URL, an account
+ * id, and a master password. The password isn't stored in the model (it lives as a CharArray in the
+ * composable and is wiped after submit) — only its length. Fields are normalized (trim) the same way
+ * [SyncCoordinator] later receives them.
  */
 data class SyncSetupForm(
     val serverUrl: String = "",
     val accountId: String = "",
 ) {
-    /** URL сервера без хвостовых пробелов (как уйдёт в [SyncCoordinator]). */
+    /** Server URL trimmed (as it goes to [SyncCoordinator]). */
     val normalizedServerUrl: String get() = serverUrl.trim()
 
-    /** Идентификатор аккаунта без хвостовых пробелов. */
+    /** Account id trimmed. */
     val normalizedAccountId: String get() = accountId.trim()
 
     /**
-     * Готова ли форма к отправке: непустой http(s)-адрес сервера, непустой accountId и непустой
-     * пароль. Схема URL проверяется явно — чтобы не отправлять SRP на заведомо неверный endpoint
-     * (ssh://, голый хост) и дать осмысленную ошибку до сетевого вызова.
+     * Whether the form is ready to submit: a non-empty http(s) server URL, non-empty accountId, and a
+     * non-empty password. The URL scheme is checked explicitly — to avoid sending SRP to a clearly
+     * wrong endpoint (ssh://, bare host) and to give a meaningful error before the network call.
      */
     fun canSubmit(passwordLength: Int): Boolean =
         passwordLength > 0 && normalizedAccountId.isNotEmpty() && isHttpUrl(normalizedServerUrl)
 
     /**
-     * Адрес сервера задан по незашифрованному `http://`. Отправку НЕ блокируем — это рабочий режим
-     * для локального теста/LAN без реверс-прокси с TLS. Но по `http` SRP-взаимная аутентификация и
-     * токены сессии беззащитны перед MITM (security-ревью, HIGH), поэтому UI обязан показать явное
-     * предупреждение, когда это свойство `true`.
+     * The server URL uses unencrypted `http://`. Submission isn't blocked — this is a valid mode for
+     * local testing/LAN without a TLS reverse proxy. But over `http` SRP mutual authentication and
+     * session tokens are defenseless against MITM, so the UI must show an explicit warning when this is `true`.
      */
     val isInsecureUrl: Boolean get() = normalizedServerUrl.startsWith("http://")
 

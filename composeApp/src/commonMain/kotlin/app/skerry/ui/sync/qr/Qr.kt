@@ -9,22 +9,25 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 
 /**
- * Чёрно-белая матрица QR-кода: [side]×[side] модулей, `modules[y * side + x] == true` ⇒ тёмный модуль.
- * Без «тихой зоны» (её добавляет рендер) — это сырые модули кода. Генерится из [encodeQrMatrix].
+ * Black-and-white QR matrix: [side]×[side] modules, `modules[y * side + x] == true` means a dark
+ * module. Excludes the quiet zone (added by the renderer) — these are the raw code modules.
+ * Produced by [encodeQrMatrix].
  */
 class QrMatrix(val side: Int, val modules: BooleanArray)
 
 /**
- * Закодировать [text] в QR-матрицу (ZXing, уровень коррекции M). `null`, если текст не помещается в QR
- * или кодек бросил. Реализация платформенная — ZXing core доступен и на desktop JVM, и на Android.
+ * Encodes [text] into a QR matrix (ZXing, error-correction level M). Returns null if the text
+ * doesn't fit or the codec throws. Platform-specific implementation; ZXing core is available on
+ * both desktop JVM and Android.
  */
 expect fun encodeQrMatrix(text: String): QrMatrix?
 
 /**
- * Нарисовать QR-код [text] на [Canvas]. Тёмные модули — [dark] на фоне [light] с «тихой зоной» вокруг
- * (4 модуля, требование стандарта для надёжного скана). Светлый фон осознанно: камеры читают
- * тёмное-на-светлом надёжнее инверсии, даже в тёмной теме приложения. Матрица кэшируется по [text].
- * Если код не закодировался — рисуем пустой светлый квадрат (вызывающий покажет текстовый код рядом).
+ * Draws a QR code for [text] onto a [Canvas]. Dark modules use [dark] on a [light] background
+ * with a 4-module quiet zone (required by the standard for reliable scanning). Light background
+ * is deliberate: cameras read dark-on-light more reliably than inverted, even in dark theme. The
+ * matrix is cached by [text]. If encoding fails, draws an empty light square (caller shows the
+ * text code alongside).
  */
 @Composable
 fun QrImage(
@@ -35,7 +38,7 @@ fun QrImage(
 ) {
     val matrix = remember(text) { encodeQrMatrix(text) }
     Canvas(modifier) {
-        drawRect(light) // фон + тихая зона
+        drawRect(light) // background plus quiet zone
         if (matrix == null || matrix.side == 0) return@Canvas
         val quiet = 4
         val total = matrix.side + quiet * 2

@@ -7,14 +7,14 @@ import kotlin.test.assertTrue
 
 class TerminalSelectionTest {
 
-    /** Сетка из строк-строчек: каждый символ — ячейка стиля по умолчанию. */
+    /** Grid from string rows: each character is a default-style cell. */
     private fun grid(vararg rows: String): List<List<TermCell>> =
         rows.map { row -> row.map { TermCell(it) } }
 
     @Test
     fun `single line selection extracts the spanned cells`() {
         val sel = TerminalSelection(TerminalPos(0, 1), TerminalPos(0, 4))
-        // "hello" → конец эксклюзивен: колонки [1,4) = "ell".
+        // "hello" → end is exclusive: columns [1,4) = "ell".
         assertEquals("ell", sel.extract(grid("hello")))
     }
 
@@ -27,7 +27,7 @@ class TerminalSelectionTest {
 
     @Test
     fun `multi line selection joins rows with newline`() {
-        // С (0,3) до (2,2): хвост первой строки + вся средняя + голова последней.
+        // From (0,3) to (2,2): tail of the first row + all of the middle + head of the last.
         val sel = TerminalSelection(TerminalPos(0, 3), TerminalPos(2, 2))
         val text = sel.extract(grid("abcdef", "middle", "xyz"))
         assertEquals("def\nmiddle\nxy", text)
@@ -35,7 +35,7 @@ class TerminalSelectionTest {
 
     @Test
     fun `trailing spaces on a fully spanned line are trimmed`() {
-        // Полностью охваченная строка отдаётся без хвостовых пробелов.
+        // A fully-covered row is returned without trailing spaces.
         val sel = TerminalSelection(TerminalPos(0, 0), TerminalPos(1, 3))
         val text = sel.extract(grid("ab    ", "cde"))
         assertEquals("ab\ncde", text)
@@ -51,22 +51,22 @@ class TerminalSelectionTest {
     @Test
     fun `contains reports cells inside the linear range`() {
         val sel = TerminalSelection(TerminalPos(0, 2), TerminalPos(2, 1))
-        // Первая строка: с колонки 2 и дальше.
+        // First row: from column 2 onward.
         assertFalse(sel.contains(0, 1))
         assertTrue(sel.contains(0, 2))
-        // Средняя строка целиком.
+        // The entire middle row.
         assertTrue(sel.contains(1, 0))
         assertTrue(sel.contains(1, 99))
-        // Последняя строка: до колонки 1 эксклюзивно → колонка 0 внутри, 1 уже нет.
+        // Last row: up to column 1 exclusive → column 0 in, 1 out.
         assertTrue(sel.contains(2, 0))
         assertFalse(sel.contains(2, 1))
-        // Вне диапазона строк.
+        // Outside the row range.
         assertFalse(sel.contains(3, 0))
     }
 
     @Test
     fun `extract clamps columns beyond the row length`() {
-        // Выделение уходит за конец короткой строки — берём что есть, без падения.
+        // Selection runs past the end of a short row — take what's there, no crash.
         val sel = TerminalSelection(TerminalPos(0, 0), TerminalPos(0, 99))
         assertEquals("hi", sel.extract(grid("hi")))
     }
@@ -76,7 +76,7 @@ class TerminalSelectionTest {
         val screen = grid("first", "second", "third")
         val sel = lineSelectionAt(screen, TerminalPos(1, 3))
         assertEquals(TerminalPos(1, 0), sel.start)
-        assertEquals(TerminalPos(1, 6), sel.end) // "second" = 6 ячеек, конец эксклюзивен
+        assertEquals(TerminalPos(1, 6), sel.end) // "second" = 6 cells, end is exclusive
         assertEquals("second", sel.extract(screen))
     }
 

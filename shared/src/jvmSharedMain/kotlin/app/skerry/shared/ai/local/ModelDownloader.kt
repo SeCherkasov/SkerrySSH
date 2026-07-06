@@ -18,15 +18,15 @@ import okio.blackholeSink
 import okio.buffer
 
 /**
- * Скачивание GGUF-модели из каталога ([LocalModel.url], всегда https) с докачкой и проверкой
- * целостности. Байты идут в `<файл>.part` ([LocalModelStore.partPath]); при повторном запуске
- * закачка продолжается с текущего размера part-файла через `Range` (сервер без 206 — начинаем
- * заново). Установка атомарна: sha256 проверяется на полном part-файле и только после совпадения
- * файл переименовывается в целевой — полускачанная модель никогда не выглядит установленной.
+ * Downloads a GGUF model from the catalog ([LocalModel.url], always https) with resume and
+ * integrity verification. Bytes go to `<file>.part` ([LocalModelStore.partPath]); on restart the
+ * download resumes from the current part-file size via `Range` (falls back to starting over if
+ * the server doesn't return 206). Install is atomic: sha256 is checked on the full part file and
+ * only on match is it renamed to the target, so a half-downloaded model never looks installed.
  *
- * Отмена корутины сохраняет part-файл (докачаем в следующий раз); сбои сети — тоже.
- * Расхождение с каталогом (лишние байты, чужой sha256) удаляет скачанное: докачивать битое
- * бессмысленно, а подсунутый CDN/прокси мусор не должен дожить до загрузки в рантайм.
+ * Coroutine cancellation and network failures both preserve the part file for later resume.
+ * A catalog mismatch (extra bytes, wrong sha256) deletes the download: resuming corrupt data is
+ * pointless, and CDN/proxy garbage must not reach the runtime loader.
  */
 class ModelDownloader(
     private val http: HttpClient,
@@ -34,10 +34,10 @@ class ModelDownloader(
     private val store: LocalModelStore,
 ) {
     /**
-     * Загрузчик с собственным CIO-клиентом (владение — у процесса, живёт до его конца).
-     * У CIO дефолтный requestTimeout — 15 с НА ВЕСЬ ЗАПРОС: гигабайтная закачка рвалась бы
-     * посреди тела «Network error» на любой скорости — отключаем (отмена/обрыв сокета
-     * по-прежнему обрываются штатно, докачка по Range их подхватывает).
+     * Downloader with its own CIO client, owned by the process and lives for its duration.
+     * CIO's default requestTimeout of 15s applies to the whole request, which would abort a
+     * gigabyte download mid-body with "Network error" at any speed, so it's disabled here
+     * (cancellation/socket drop still terminate normally and are picked up by Range resume).
      */
     constructor(fileSystem: FileSystem, store: LocalModelStore) : this(
         HttpClient(CIO) { engine { requestTimeout = 0 } },
@@ -53,13 +53,13 @@ class ModelDownloader(
             val statement = http.prepareGet(model.url) {
                 if (resumeFrom > 0) header(HttpHeaders.Range, "bytes=$resumeFrom-")
             }
-            // emit() внутри execute-блока безопасен на вызывающей корутине — тот же JVM-контракт
-            // Ktor <4.0, что и в OpenAiProvider.chat (см. комментарий там).
+            // emit() inside the execute block is safe on the calling coroutine, same Ktor <4.0
+            // JVM contract as OpenAiProvider.chat (see the comment there).
             statement.execute { response ->
                 if (!response.status.isSuccess()) {
                     throw ModelDownloadException(ModelDownloadException.Kind.NETWORK, "Model server returned ${response.status}")
                 }
-                // Сервер мог проигнорировать Range (200 вместо 206) — тогда пишем с нуля.
+                // Server may have ignored Range (200 instead of 206), then write from scratch.
                 val appending = resumeFrom > 0 && response.status == HttpStatusCode.PartialContent
                 var written = if (appending) resumeFrom else 0L
                 val sink = if (appending) fileSystem.appendingSink(part) else fileSystem.sink(part)
@@ -94,17 +94,17 @@ class ModelDownloader(
             fileSystem.atomicMove(part, target)
             emit(ModelDownloadEvent.Completed(target))
         } catch (e: CancellationException) {
-            throw e // отмена — не сбой; part-файл остаётся для докачки
+            throw e // cancellation is not a failure; the part file remains for later resume
         } catch (e: ModelDownloadException) {
             if (e.kind == ModelDownloadException.Kind.INTEGRITY) store.delete(model)
             throw e
         } catch (e: Exception) {
-            // Как в OpenAiProvider: не только IOException (CIO кидает и не-IO на кривой хост).
+            // As in OpenAiProvider: not just IOException (CIO also throws non-IO on a bad host).
             throw ModelDownloadException(ModelDownloadException.Kind.NETWORK, "Model download failed: ${e.message}", e)
         }
     }
 
-    /** Потоковый sha256 файла (модель в память не влезает). */
+    /** Streaming sha256 of the file (the model doesn't fit in memory). */
     private fun sha256Hex(path: okio.Path): String =
         HashingSource.sha256(fileSystem.source(path)).use { hashing ->
             hashing.buffer().readAll(blackholeSink())

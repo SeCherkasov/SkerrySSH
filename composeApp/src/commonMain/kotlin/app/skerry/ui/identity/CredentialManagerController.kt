@@ -8,14 +8,15 @@ import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialStore
 
-/** Вид keychain-секрета в форме: разворачивается в [CredentialSecret]. */
+/** Kind of keychain secret in the form; expands into [CredentialSecret]. */
 enum class CredentialKind { PASSWORD, PRIVATE_KEY, CERTIFICATE }
 
 /**
- * Редактируемые поля keychain-секрета без [Credential.id]. Поля всех видов держатся рядом (форма
- * переключается без потери ввода); в [CredentialSecret] разворачивается только активный [kind].
- * [id] == null — создаётся новый секрет, иначе обновляется существующий. [certificate] — строка
- * `*-cert.pub` (для [CredentialKind.CERTIFICATE]; приватный ключ берётся из [privateKeyPem]).
+ * Editable fields of a keychain secret, without [Credential.id]. Fields for all kinds are kept
+ * side by side (switching kind in the form doesn't lose input); only the active [kind] expands
+ * into [CredentialSecret]. [id] == null creates a new secret, otherwise updates an existing one.
+ * [certificate] is a `*-cert.pub` string (for [CredentialKind.CERTIFICATE]; the private key comes
+ * from [privateKeyPem]).
  */
 data class CredentialDraft(
     val id: String? = null,
@@ -32,14 +33,14 @@ data class CredentialDraft(
         CredentialKind.CERTIFICATE -> CredentialSecret.Certificate(privateKeyPem, certificate, passphrase.ifBlank { null })
     }
 
-    // Секрет не должен утечь в логи/сообщения исключений: держим только метаданные.
+    // Secrets must not leak into logs/exception messages: only metadata is exposed.
     override fun toString(): String = "CredentialDraft(id=$id, label=redacted, kind=$kind, secrets=redacted)"
 }
 
 /**
- * Состояние списка keychain-секретов [Credential] поверх [CredentialStore]: держит список как
- * Compose-state и сводит мутации к стору, перечитывая после каждой. Синхронный (vault-CRUD редок).
- * Требует разблокированного vault (живёт за гейтом мастер-пароля).
+ * List state for keychain secrets ([Credential]) over [CredentialStore]: holds the list as
+ * Compose state and reduces mutations to store calls, reloading after each. Synchronous (vault
+ * CRUD is rare). Requires an unlocked vault (lives behind the master password gate).
  */
 @Stable
 class CredentialManagerController(
@@ -49,14 +50,14 @@ class CredentialManagerController(
     var credentials by mutableStateOf(emptyList<Credential>())
         private set
 
-    /** Перечитать список из vault. Требует разблокированного vault (вызывать после unlock). */
+    /** Reloads the list from the vault. Requires an unlocked vault (call after unlock). */
     fun reload() {
         credentials = store.all()
     }
 
     fun find(id: String?): Credential? = id?.let { wanted -> credentials.firstOrNull { it.id == wanted } }
 
-    /** Создать (если [CredentialDraft.id] == null) или обновить секрет; возвращает назначенный id. */
+    /** Creates (if [CredentialDraft.id] == null) or updates a secret; returns the assigned id. */
     fun save(draft: CredentialDraft): String {
         val id = draft.id ?: newId()
         store.put(Credential(id = id, label = draft.label, secret = draft.toSecret()))

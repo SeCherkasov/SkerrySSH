@@ -24,11 +24,11 @@ class RecordRepositoryTest {
         assertEquals(listOf(1L, 2L), first.records.map { it.serverSeq })
         assertEquals(2L, first.cursor)
 
-        // since=0 -> обе записи; since=1 -> только вторая
+        // since=0 -> both records; since=1 -> only the second
         assertEquals(listOf("r1", "r2"), repo.delta("alice@example.com", 0).map { it.id })
         assertEquals(listOf("r2"), repo.delta("alice@example.com", 1).map { it.id })
 
-        // обновление r1 двигает его serverSeq в конец дельты
+        // updating r1 moves its serverSeq to the end of the delta
         val second = repo.upsert("alice@example.com", listOf(rec("r1", 2)))
         assertEquals(3L, second.records.single().serverSeq)
         assertEquals(3L, second.cursor)
@@ -41,7 +41,7 @@ class RecordRepositoryTest {
         val repo = RecordRepository(db)
         repo.upsert("alice@example.com", listOf(rec("r1", 5, blob = byteArrayOf(5))))
 
-        // более старая версия отвергается — сервер возвращает своё состояние
+        // an older version is rejected; the server returns its own state
         val result = repo.upsert("alice@example.com", listOf(rec("r1", 3, blob = byteArrayOf(3)))).records
         assertEquals(5L, result.single().version)
         assertContentEquals(byteArrayOf(5), result.single().blob)
@@ -54,11 +54,11 @@ class RecordRepositoryTest {
         val repo = RecordRepository(db)
         repo.upsert("alice@example.com", listOf(rec("r1", 7, deviceId = "devB", blob = byteArrayOf(11))))
 
-        // та же версия, больший deviceId -> побеждает
+        // same version, greater deviceId -> wins
         val win = repo.upsert("alice@example.com", listOf(rec("r1", 7, deviceId = "devC", blob = byteArrayOf(22)))).records
         assertEquals("devC", win.single().deviceId)
 
-        // та же версия, меньший deviceId -> проигрывает
+        // same version, lesser deviceId -> loses
         val lose = repo.upsert("alice@example.com", listOf(rec("r1", 7, deviceId = "devA", blob = byteArrayOf(33)))).records
         assertEquals("devC", lose.single().deviceId)
         assertContentEquals(byteArrayOf(22), lose.single().blob)

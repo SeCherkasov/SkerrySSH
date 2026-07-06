@@ -55,15 +55,15 @@ class CommandRiskClassifierTest {
 
     @Test
     fun `a renamed fork bomb is still danger`() {
-        // Регрессия: паттерн якорился на имя функции `:` — переименование обходило Danger.
+        // Regression: the pattern was anchored to the function name `:` — renaming bypassed Danger.
         assertEquals(CommandRisk.Danger, risk("f(){ f|f& };f"))
         assertEquals(CommandRisk.Danger, risk("bomb(){ bomb|bomb& };bomb"))
     }
 
     @Test
     fun `decoded payload piped into any interpreter is danger`() {
-        // Регрессия: общее правило «пайп в шелл» знало только sh/bash/zsh — python/perl/ruby/node
-        // мимо curl проваливались как безопасные, хотя это то же исполнение сконструированного кода.
+        // Regression: the generic pipe-into-shell rule only knew sh/bash/zsh — python/perl/ruby/node
+        // without curl fell through as safe, though it's the same execution of constructed code.
         assertEquals(CommandRisk.Danger, risk("echo cHJpbnQoMSk= | base64 -d | python3"))
         assertEquals(CommandRisk.Danger, risk("cat payload | perl"))
     }
@@ -97,7 +97,7 @@ class CommandRiskClassifierTest {
 
     @Test
     fun `backslash escaping does not smuggle a destructive command past the classifier`() {
-        // r\m -\r\f / исполняется шеллом как rm -rf / — нормализация должна это раскрыть.
+        // r\m -\r\f / executes in the shell as rm -rf / — normalization must reveal this.
         assertEquals(CommandRisk.Danger, risk("""r\m -\r\f /"""))
         assertEquals(CommandRisk.Danger, risk("""\rm -rf /"""))
     }

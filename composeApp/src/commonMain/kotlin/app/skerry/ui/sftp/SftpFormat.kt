@@ -2,12 +2,12 @@ package app.skerry.ui.sftp
 
 import kotlin.math.roundToLong
 
-/** Двоичные единицы размера (1 KB = 1024 B), как привычно для файловых менеджеров. */
+/** Binary size units (1 KB = 1024 B), as file managers conventionally use. */
 private val SIZE_UNITS = listOf("KB", "MB", "GB", "TB", "PB")
 
 /**
- * Человекочитаемый размер: ниже 1 КиБ — сырые байты («96 B»), выше — одна десятичная и двоичная
- * единица («1.5 KB», «418.0 MB»). Без `String.format` (нет в commonMain) — десятая часть руками.
+ * Human-readable size: below 1 KiB, raw bytes ("96 B"); above, one decimal digit with a binary
+ * unit ("1.5 KB", "418.0 MB"). No `String.format` (unavailable in commonMain); tenths computed by hand.
  */
 fun humanSize(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
@@ -18,8 +18,8 @@ fun humanSize(bytes: Long): String {
         unit++
     }
     var tenths = (value * 10).roundToLong()
-    // Округление может «дотянуть» до 1024.0 текущей единицы (напр. 1048575 B → 1024.0 KB); тогда
-    // переносим в следующую единицу, чтобы показать «1.0 MB», а не «1024.0 KB».
+    // Rounding can push the value to 1024.0 of the current unit (e.g. 1048575 B -> 1024.0 KB);
+    // bump to the next unit so it shows "1.0 MB" instead of "1024.0 KB".
     if (tenths >= 10_240 && unit < SIZE_UNITS.lastIndex) {
         unit++
         tenths = 10

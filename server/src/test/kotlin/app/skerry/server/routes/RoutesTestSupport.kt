@@ -37,7 +37,7 @@ fun testServices(adminToken: String = ""): Services {
     return Services(config, database)
 }
 
-/** Регистрационный материал SRP, как его посчитал бы клиент перед /auth/register. */
+/** SRP registration material, as the client would compute it before /auth/register. */
 data class SrpRegistration(val salt: String, val verifier: String)
 
 fun srpRegister(accountId: String, password: String): SrpRegistration {
@@ -46,11 +46,11 @@ fun srpRegister(accountId: String, password: String): SrpRegistration {
     return SrpRegistration(salt.toString(16), verifier.toString(16))
 }
 
-/** Клиентская SRP-сессия для теста входа: даёт A и M1 по challenge сервера. */
+/** Client-side SRP session for login tests: derives A and M1 from the server's challenge. */
 fun srpClient(accountId: String, password: String): SRP6ClientSession =
     SRP6ClientSession().apply { step1(accountId, password) }
 
-/** Сырой POST /auth/register (SRP-материал считается как на клиенте) — для проверки статусов. */
+/** Raw POST /auth/register (SRP material computed as on the client), for checking status codes. */
 suspend fun HttpClient.registerAccountResponse(
     accountId: String,
     password: String,
@@ -66,7 +66,7 @@ suspend fun HttpClient.registerAccountResponse(
     }
 }
 
-/** Регистрация аккаунта+устройства, как это делает клиент; возвращает пару токенов. */
+/** Registers an account+device as the client does; returns the token pair. */
 suspend fun HttpClient.registerAccount(
     accountId: String,
     password: String,
@@ -77,7 +77,7 @@ suspend fun HttpClient.registerAccount(
 ): TokenResponse =
     registerAccountResponse(accountId, password, wrappedDataKey, deviceId, deviceName, platform).body()
 
-/** PUT /vault/records с одной записью под bearer-токеном. */
+/** PUT /vault/records with a single record, under a bearer token. */
 suspend fun HttpClient.pushRecord(token: String, record: RecordDto): HttpResponse =
     put("/vault/records") {
         bearerAuth(token)

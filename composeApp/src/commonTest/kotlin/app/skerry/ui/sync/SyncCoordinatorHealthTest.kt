@@ -30,9 +30,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Поллер доступности сервера ([SyncCoordinator.serverReachable]): питает индикатор «сервер работает и
- * доступен» на главных экранах. Проверяем, что пинг идёт по сохранённой привязке (даже при залоченном
- * vault), отражает up/down и гаснет в UNKNOWN, когда sync не настроен / отвязан.
+ * Server-reachability poller ([SyncCoordinator.serverReachable]) feeding the connectivity indicator.
+ * Pings using the saved binding even while the vault is locked, reflects up/down, and falls back to
+ * UNKNOWN when sync is not configured or disconnected.
  */
 class SyncCoordinatorHealthTest {
 
@@ -40,7 +40,7 @@ class SyncCoordinatorHealthTest {
     fun configured_server_reports_reachable_even_while_vault_locked() = runBlocking {
         val client = FakePingClient(reachable = true)
         val store = configuredStore()
-        // vault залочен (StubVault.exportDataKey == null) — пинг health всё равно должен идти.
+        // Vault is locked (StubVault.exportDataKey == null); health ping still proceeds.
         val sut = SyncCoordinator({ client }, StubCrypto(), StubVault(), configStore = store)
         withTimeout(3_000) { sut.serverReachable.first { it == ServerReachable.REACHABLE } }
         assertTrue(client.pings >= 1)
@@ -56,7 +56,7 @@ class SyncCoordinatorHealthTest {
     @Test
     fun unconfigured_stays_unknown_and_never_pings() = runBlocking {
         val client = FakePingClient(reachable = true)
-        val sut = SyncCoordinator({ client }, StubCrypto(), StubVault()) // пустой стор → не настроено
+        val sut = SyncCoordinator({ client }, StubCrypto(), StubVault()) // empty store means unconfigured
         delay(300)
         assertEquals(ServerReachable.UNKNOWN, sut.serverReachable.value)
         assertEquals(0, client.pings)
@@ -77,10 +77,10 @@ class SyncCoordinatorHealthTest {
 }
 
 /**
- * Сброс курсора синка координатором. [SyncCoordinator.disconnect] обнуляет курсор (следующее
- * подключение делает полный re-pull, а не продолжает с tip прошлой сессии), а повторное включение
- * ранее выключенного типа в [SyncCoordinator.setSyncSettings] — обнуляет курсор для backfill
- * (модель Termius: пока тип был OFF, курсор проскочил чужие записи этого типа).
+ * Sync cursor reset by the coordinator. [SyncCoordinator.disconnect] resets the cursor so the next
+ * connection does a full re-pull instead of resuming from the last session's tip. Re-enabling a
+ * previously disabled type in [SyncCoordinator.setSyncSettings] also resets the cursor for backfill,
+ * since the cursor advanced past other devices' records of that type while it was off.
  */
 class SyncCoordinatorCursorTest {
 
@@ -103,11 +103,11 @@ class SyncCoordinatorCursorTest {
             { FakePingClient(reachable = true) }, StubCrypto(), StubVault(),
             configStore = boundStore(), syncState = state,
         )
-        // Выключение типа НЕ трогает курсор — просто перестаём слать/принимать этот тип.
+        // Disabling a type does not touch the cursor; it just stops sending/receiving that type.
         sut.setSyncSettings(SyncSettings(syncHosts = false))
         delay(150)
         assertEquals(7L, state.cursor("maya"))
-        // Повторное включение → полный re-pull: курсор обнуляется, чтобы подтянуть пропущенные записи.
+        // Re-enabling triggers a full re-pull: cursor resets to catch up on missed records.
         sut.setSyncSettings(SyncSettings(syncHosts = true))
         withTimeout(3_000) { while (state.cursor("maya") != 0L) delay(10) }
         assertEquals(0L, state.cursor("maya"))
@@ -119,10 +119,10 @@ class SyncCoordinatorCursorTest {
 }
 
 /**
- * Cursor-guard live-pull: второй разрыватель петли push→WS→push. WS-сигнал несёт курсор аккаунта;
- * наш собственный push возвращается тем же сигналом с курсором, который мы уже знаем — без guard'а это
- * запускало бы лишний синк (а в паре с безусловным серверным publish — петлю). Тянем дельту ТОЛЬКО когда
- * присланный курсор обгоняет локальный (= реально появились чужие изменения).
+ * Cursor guard for live-pull, breaking the push -> WS -> push loop. A WS signal carries the account
+ * cursor; our own push echoes back the same cursor we already know, which without a guard would
+ * trigger a redundant sync (or a loop with unconditional server publish). Pulls a delta only when the
+ * signaled cursor advances past the local one, i.e. another device actually made changes.
  */
 class SyncCoordinatorWatchGuardTest {
 
@@ -133,10 +133,10 @@ class SyncCoordinatorWatchGuardTest {
             { FakePingClient(reachable = true) }, StubCrypto(), StubVault(),
             configStore = boundStore(), syncState = state,
         )
-        // Равный курсор = эхо нашего же push'а: не тянем (иначе петля). Отставший — тем более.
+        // Equal cursor is an echo of our own push; skip (otherwise a loop). A lagging cursor is skipped too.
         assertEquals(false, sut.signalAdvancesCursor("maya", 10))
         assertEquals(false, sut.signalAdvancesCursor("maya", 3))
-        // Курсор обогнал локальный = появились чужие изменения: тянем дельту.
+        // Cursor ahead of local means other devices made changes: pull the delta.
         assertEquals(true, sut.signalAdvancesCursor("maya", 11))
     }
 
@@ -145,7 +145,7 @@ class SyncCoordinatorWatchGuardTest {
     }
 }
 
-/** Клиент, у которого осмыслен только [ping]; остальное health-поллер не вызывает. */
+/** Client where only [ping] is meaningful; the health poller never calls the rest. */
 private class FakePingClient(@Volatile var reachable: Boolean) : SyncClient {
     @Volatile var pings = 0
     override suspend fun ping(): Boolean { pings++; return reachable }
@@ -161,7 +161,7 @@ private class FakePingClient(@Volatile var reachable: Boolean) : SyncClient {
     override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = nope()
     override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult = nope()
     override fun changes(session: SyncSession): Flow<SyncSignal> = nope()
-    private fun nope(): Nothing = throw NotImplementedError("health-поллер не должен это вызывать")
+    private fun nope(): Nothing = throw NotImplementedError("the health poller should not call this")
 }
 
 private class StubCrypto : VaultCrypto {

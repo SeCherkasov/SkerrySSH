@@ -60,8 +60,8 @@ class TerminalAiControllerTest {
 
     @Test
     fun `globally disabled provider blocks even under permissive policy`() = runTest {
-        // Бар при глобальном OFF скрыт на уровне view; этот тест — защита от отправки, если
-        // контроллер всё же жив (настройки сменились при открытом терминале).
+        // The bar is hidden at the view level when globally OFF; this guards against sending if
+        // the controller outlives that (settings changed while the terminal was open).
         val p = CapturingProvider(deltas = listOf("ls"))
         val c = controller(AiPolicy.Permissive, AiSettings(apiKey = "sk-x", provider = app.skerry.shared.ai.AiProviderKind.OFF), p, this)
 
@@ -137,7 +137,7 @@ class TerminalAiControllerTest {
 
     @Test
     fun `pending command is a single line with no newline so it cannot auto-execute`() = runTest {
-        // Модель вернула многострочный/CRLF-вывод: инвариант — pending это одна строка без переводов.
+        // Model output can be multiline/CRLF; pending must always collapse to a single line with no line breaks.
         val p = CapturingProvider(deltas = listOf("ls -la\nrm -rf /\r\n"))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
 
@@ -175,7 +175,7 @@ class TerminalAiControllerTest {
 
     @Test
     fun `a prose reply without a marker is not offered as a command`() = runTest {
-        // Регрессия: «уточните запрос…» без ASK-маркера не должно попадать в слот с кнопкой Run.
+        // Regression: prose without an ASK marker must not be offered as a runnable command.
         val p = CapturingProvider(deltas = listOf("Уточните запрос, пожалуйста."))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
 
@@ -188,7 +188,7 @@ class TerminalAiControllerTest {
 
     @Test
     fun `strips wrapping backticks the model sometimes adds`() = runTest {
-        // Регрессия: `free -h` в бэктиках bash понимает как подстановку → выполняет и падает.
+        // Regression: bash treats backticks as command substitution, so wrapping backticks must be stripped.
         val p = CapturingProvider(deltas = listOf("`free -h`"))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
 
@@ -252,8 +252,8 @@ class TerminalAiControllerTest {
 
     @Test
     fun `a cancelled request does not clobber the state of the next one`() = runTest {
-        // Регрессия (job-reassignment): cancel() сбрасывает busy синхронно, позволяя сразу ask()
-        // новый запрос; finally отменённой корутины не должен обнулять состояние уже активной новой.
+        // Regression (job reassignment): cancel() resets busy synchronously so ask() can start a
+        // new request immediately; the cancelled coroutine's finally must not clear the new request's state.
         val gateFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
         val gateSecond = kotlinx.coroutines.CompletableDeferred<Unit>()
         var call = 0
@@ -275,7 +275,7 @@ class TerminalAiControllerTest {
         c.cancel()
         c.ask("second request")
         runCurrent()
-        // Вторая генерация активна; поздний finally первой (отменённой) не должен её погасить.
+        // The second generation is active; the cancelled first request's late finally must not clear it.
         assertTrue(c.busy, "the second request is still running")
         assertEquals("uptime", c.streaming)
 
@@ -288,7 +288,7 @@ class TerminalAiControllerTest {
 
     @Test
     fun `asks for a command at a low deterministic temperature`() = runTest {
-        // Регрессия: на дефолтной 0.7 маленькие локальные модели давали лотерею CMD/ASK.
+        // Regression: at the default temperature of 0.7, small local models produced random CMD/ASK output.
         val p = CapturingProvider(deltas = listOf("uptime"))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
 
@@ -304,7 +304,7 @@ class TerminalAiControllerTest {
         var endpoint: app.skerry.shared.ai.AiEndpoint? = null
         val c = TerminalAiController(
             AiPolicy.Strict,
-            settings = { AiSettings(apiKey = "sk-x") }, // облачный дефолт — Strict всё равно поведёт локально
+            settings = { AiSettings(apiKey = "sk-x") }, // cloud default; Strict still routes on-device
             providerFactory = { e -> endpoint = e; p },
             scope = this,
             localInstalled = { true },

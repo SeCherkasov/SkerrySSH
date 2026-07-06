@@ -32,8 +32,8 @@ class FileSyncStateStoreTest {
     @Test
     fun `cursor survives reload from disk`() {
         FileSyncStateStore(file()).setCursor("acc", 99L)
-        // Свежий экземпляр на том же пути читает сохранённое — это и есть смысл персистентности
-        // (иначе каждый перезапуск процесса делал бы полный re-pull since 0).
+        // A fresh instance at the same path reads back the saved value — that's the point of
+        // persistence (otherwise every process restart would do a full re-pull since 0).
         assertEquals(99L, FileSyncStateStore(file()).cursor("acc"))
     }
 
@@ -44,7 +44,7 @@ class FileSyncStateStoreTest {
         store.setCursor("b", 2L)
         assertEquals(1L, store.cursor("a"))
         assertEquals(2L, store.cursor("b"))
-        // И после reload оба сохраняются.
+        // Both persist across reload too.
         val reloaded = FileSyncStateStore(file())
         assertEquals(1L, reloaded.cursor("a"))
         assertEquals(2L, reloaded.cursor("b"))

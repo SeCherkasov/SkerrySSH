@@ -1,4 +1,4 @@
 package app.skerry.ui.secure
 
-// Desktop: снимки экрана не блокируем (скриншоты терминала/SFTP должны работать), флаг — no-op.
+// Desktop does not block screenshots (terminal/SFTP screenshots should work); no-op flag.
 actual fun applyPlatformSecureFlag(secure: Boolean) {}

@@ -6,30 +6,29 @@ import app.skerry.shared.vault.VaultRecordCodec
 import kotlinx.serialization.Serializable
 
 /**
- * Персист истории команд терминала per-host. Ключ [key] — стабильный идентификатор хоста
- * (протокол+учётка+адрес+порт), команды хранятся от новой к старой. Реализация поверх зашифрованного
- * vault ([VaultTerminalHistoryStore]) даёт E2E-шифрование покоя; в тестах — in-memory.
+ * Per-host persistence of terminal command history. [key] is a stable host identifier
+ * (protocol+account+address+port); commands are stored newest-first. The vault-backed implementation
+ * ([VaultTerminalHistoryStore]) gives encryption at rest; tests use in-memory.
  *
- * БЕЗОПАСНОСТЬ: сюда доходит только то, что пользователь ввёл в режиме с эхом — ввод пароля/passphrase
- * (без эха) отсекается выше по сигналу [app.skerry.shared.ssh.ShellChannel.echoSuppressed]
- * (см. `TerminalScreenState.typeInput`). Персист именно в vault (а не открытый файл) снимает прежний
- * запрет на дисковую историю: секреты, если и попадут (SSH-эхо недоступен), лежат под тем же
- * шифрованием, что и хосты/ключи.
+ * Security: only echoed input reaches here — password/passphrase input (no echo) is filtered out
+ * upstream via [app.skerry.shared.ssh.ShellChannel.echoSuppressed] (see `TerminalScreenState.typeInput`).
+ * Storing in the vault (not a plaintext file) keeps any secrets that do slip in under the same
+ * encryption as hosts/keys.
  */
 interface TerminalHistoryStore {
-    /** История для [key] от новой к старой; пустой список, если ничего не сохранено/vault залочен. */
+    /** History for [key], newest-first; empty if nothing saved or the vault is locked. */
     fun load(key: String): List<String>
 
-    /** Сохранить [commands] (от новой к старой) для [key]; тихий no-op при залоченном vault. */
+    /** Save [commands] (newest-first) for [key]; silent no-op on a locked vault. */
     fun save(key: String, commands: List<String>)
 }
 
 /**
- * [TerminalHistoryStore] поверх [Vault]: одна запись [RecordType.TERMINAL_HISTORY] на хост-ключ,
- * payload — JSON [TerminalHistoryRecord]. Id записи детерминирован по [key] → повторная запись это
- * upsert той же записи (а не новая). Тип [RecordType.TERMINAL_HISTORY] исключён из синка
- * ([app.skerry.shared.sync.SyncSettings.shouldSync]) — история остаётся локальной для устройства.
- * Список кэпается [cap] при сохранении (защита от неограниченного роста записи).
+ * [TerminalHistoryStore] over [Vault]: one [RecordType.TERMINAL_HISTORY] record per host key, payload
+ * JSON [TerminalHistoryRecord]. The record id is deterministic from [key], so re-saving is an upsert.
+ * [RecordType.TERMINAL_HISTORY] is excluded from sync
+ * ([app.skerry.shared.sync.SyncSettings.shouldSync]) — history stays local to the device. The list is
+ * capped at [cap] on save.
  */
 class VaultTerminalHistoryStore(
     private val vault: Vault,
@@ -55,10 +54,10 @@ class VaultTerminalHistoryStore(
     }
 }
 
-/** payload записи истории: [key] хоста + команды от новой к старой. */
+/** History record payload: host [key] + commands newest-first. */
 @Serializable
 data class TerminalHistoryRecord(val key: String, val commands: List<String>)
 
-/** Стабильный ключ истории для целевого хоста: протокол|учётка@адрес:порт (см. `SshTarget`). */
+/** Stable history key for a target host: protocol|account@address:port (see `SshTarget`). */
 fun terminalHistoryKey(connectionType: String, username: String, host: String, port: Int): String =
     "$connectionType|$username@$host:$port"

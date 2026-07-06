@@ -7,16 +7,14 @@ import kotlinx.coroutines.Dispatchers
 import okio.FileSystem
 
 /**
- * Android: локальная панель Files над приватной папкой приложения. Под scoped storage (Android 11+)
- * прямой доступ к `/storage/emulated/0` запрещён без `MANAGE_EXTERNAL_STORAGE`, поэтому корень —
- * app-specific external files dir (`Android/data/app.skerry/files`): доступен на чтение/запись без
- * разрешений и переживает перезапуск. Сюда же «Download to device» (downloadSelection) кладёт скачанное,
- * так что оно сразу видно в Local; скачивание наружу из песочницы идёт отдельным путём «Save to…»
- * ([pickDownloadTarget] → [TransferCoordinator.downloadToTarget]).
+ * Android: local Files panel rooted at the app's private storage. Under scoped storage, direct access
+ * to `/storage/emulated/0` requires `MANAGE_EXTERNAL_STORAGE`, so the root is the app-specific external
+ * files dir (`Android/data/app.skerry/files`), readable/writable without permissions and persisted
+ * across restarts. "Download to device" writes here so it's immediately visible in Local; downloading
+ * outside the sandbox uses "Save to…" ([pickDownloadTarget] → [TransferCoordinator.downloadToTarget]).
  *
- * Контекст берём из [SafBridge] (его ставит Activity в `onCreate`); до установки — fallback на корень
- * внешнего хранилища (панель просто покажет ошибку доступа вместо краша). `getExternalFilesDir` создаёт
- * каталог при первом обращении, поэтому панель не упадёт на пустом пути.
+ * Context comes from [SafBridge] (set by the Activity in `onCreate`); falls back to the external
+ * storage root before that. `getExternalFilesDir` creates the directory on first access.
  */
 actual fun platformLocalBrowser(): FileBrowser {
     val ctx = SafBridge.context()

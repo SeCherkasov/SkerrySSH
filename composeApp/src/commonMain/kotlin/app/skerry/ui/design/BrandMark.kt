@@ -14,9 +14,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Логотип Skerry — «сигнальная S»: толстая S-кривая (градиент бирюза светлая→глубокая) и три
- * концентрические дуги-волны, открытые вправо (убывающая прозрачность). Рисуется на Canvas
- * (viewBox 0 0 120 120); координаты масштабируются `u = size/120`.
+ * Skerry logo — a "signal S": a thick S-curve (light-to-deep teal gradient) with three
+ * concentric wave arcs open to the right (decreasing opacity). Drawn on a Canvas
+ * (viewBox 0 0 120 120); coordinates scale by `u = size/120`.
  */
 @Composable
 fun BrandMark(modifier: Modifier = Modifier, size: Dp = 28.dp) {
@@ -25,7 +25,7 @@ fun BrandMark(modifier: Modifier = Modifier, size: Dp = 28.dp) {
         fun p(x: Float, y: Float) = Offset(x * u, y * u)
         val sw = 6.5f * u
 
-        // Три волны-дуги: центр ~(58,60), открыты вправо, сектор ≈100°, радиусы 26/40/54.
+        // Three wave arcs: center ~(58,60), open to the right, ~100° sector, radii 26/40/54.
         data class Wave(val r: Float, val alpha: Float)
         listOf(Wave(26f, 0.85f), Wave(40f, 0.45f), Wave(54f, 0.18f)).forEach { w ->
             val r = w.r * u
@@ -41,7 +41,7 @@ fun BrandMark(modifier: Modifier = Modifier, size: Dp = 28.dp) {
             )
         }
 
-        // S-кривая (два кубических сегмента) поверх — градиент tealLight → tealDeep.
+        // S-curve (two cubic segments) on top — tealLight → tealDeep gradient.
         val s = Path().apply {
             moveTo(p(60f, 44f).x, p(60f, 44f).y)
             cubicTo(p(60f, 37f).x, p(60f, 37f).y, p(53f, 34f).x, p(53f, 34f).y, p(46f, 34f).x, p(46f, 34f).y)

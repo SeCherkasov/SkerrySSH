@@ -22,17 +22,17 @@ import javax.crypto.spec.GCMParameterSpec
 import kotlin.coroutines.resume
 
 /**
- * Android-реализация [BiometricKeyStore]: `bioKey` — неизвлекаемый AES-256-GCM ключ в
- * `AndroidKeyStore` (TEE, StrongBox при наличии), огороженный биометрией через
- * [AndroidxBiometricPrompt] + `CryptoObject`. `setUserAuthenticationRequired(true)` требует живой
- * биометрии на каждую операцию; `setInvalidatedByBiometricEnrollment(true)` инвалидирует ключ при
- * добавлении нового отпечатка/лица — тогда `init` бросает [KeyPermanentlyInvalidatedException], а
- * мы отдаём [BiometricResult.KeyInvalidated] (оркестратор снимет биометрию, см. дизайн-док §5).
+ * Android implementation of [BiometricKeyStore]: `bioKey` is a non-exportable AES-256-GCM key in
+ * `AndroidKeyStore` (TEE, StrongBox when available), gated by biometrics via
+ * [AndroidxBiometricPrompt] + `CryptoObject`. `setUserAuthenticationRequired(true)` requires live
+ * biometric auth per operation; `setInvalidatedByBiometricEnrollment(true)` invalidates the key
+ * when a new fingerprint/face is enrolled — then `init` throws [KeyPermanentlyInvalidatedException]
+ * and we return [BiometricResult.KeyInvalidated] (the orchestrator resets biometrics).
  *
- * Промпт привязан к [FragmentActivity] (требование androidx.biometric) и берётся лениво через
- * [activityProvider] — стор переживает пересоздание Activity, а на момент промпта берёт текущую.
- * Формат обёртки: `IV(12) ‖ GCM(ciphertext+tag)`. `wrap`/`unwrap` идут на main-потоке (там живёт
- * промпт); вызывающий затирает переданный `plaintext` сам — здесь его не удерживаем.
+ * The prompt is bound to a [FragmentActivity] (androidx.biometric requirement) and fetched lazily
+ * via [activityProvider] — the store survives Activity recreation and grabs the current one only
+ * at prompt time. Wrapper format: `IV(12) || GCM(ciphertext+tag)`. `wrap`/`unwrap` run on the main
+ * thread (where the prompt lives); the caller is responsible for wiping the passed `plaintext`.
  */
 class AndroidBiometricKeyStore(
     context: Context,
@@ -46,7 +46,7 @@ class AndroidBiometricKeyStore(
             BiometricManager.BIOMETRIC_SUCCESS -> BiometricAvailability.Available
             BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> BiometricAvailability.NotEnrolled
             BiometricManager.BIOMETRIC_STATUS_UNKNOWN -> BiometricAvailability.NoHardware
-            else -> BiometricAvailability.NoHardware // нет железа/HW недоступно/нужно обновление
+            else -> BiometricAvailability.NoHardware // no hardware / HW unavailable / update needed
         }
 
     override suspend fun ensureKey(alias: String): Boolean = withContext(Dispatchers.IO) {
@@ -104,7 +104,7 @@ class AndroidBiometricKeyStore(
             is Auth.Success -> try {
                 BiometricResult.Success(auth.cipher.doFinal(ciphertext))
             } catch (e: Exception) {
-                BiometricResult.Failed // в т.ч. AEADBadTagException — подменённая обёртка
+                BiometricResult.Failed // includes AEADBadTagException — tampered wrapper
             }
             Auth.Cancelled -> BiometricResult.Cancelled
             Auth.Failed, Auth.NoActivity -> BiometricResult.Failed
@@ -115,7 +115,7 @@ class AndroidBiometricKeyStore(
         runCatching { androidKeyStore().deleteEntry(alias) }
     }
 
-    // --- внутреннее ---
+    // --- internal ---
 
     private sealed interface Auth {
         data class Success(val cipher: Cipher) : Auth
@@ -124,7 +124,7 @@ class AndroidBiometricKeyStore(
         data object NoActivity : Auth
     }
 
-    /** Показать системный промпт и дождаться его исхода, привязав auth к [cipher] через CryptoObject. */
+    /** Show the system prompt and await its outcome, binding auth to [cipher] via CryptoObject. */
     private suspend fun authenticate(cipher: Cipher, prompt: BiometricPrompt): Auth =
         suspendCancellableCoroutine { cont ->
             val activity = activityProvider()
@@ -147,11 +147,11 @@ class AndroidBiometricKeyStore(
                             AndroidxBiometricPrompt.ERROR_USER_CANCELED,
                             AndroidxBiometricPrompt.ERROR_CANCELED,
                             -> Auth.Cancelled
-                            else -> Auth.Failed // lockout, hw error и пр. — мягкий откат на пароль
+                            else -> Auth.Failed // lockout, hw error, etc. — soft fallback to password
                         },
                     )
                 }
-                // onAuthenticationFailed (отпечаток не распознан) — не терминально: промпт остаётся.
+                // onAuthenticationFailed (fingerprint not recognized) is not terminal: prompt stays up.
             }
             val bioPrompt = AndroidxBiometricPrompt(activity, ContextCompat.getMainExecutor(appContext), callback)
             val info = AndroidxBiometricPrompt.PromptInfo.Builder()
@@ -161,9 +161,9 @@ class AndroidBiometricKeyStore(
                 .setAllowedAuthenticators(BIOMETRIC_STRONG)
                 .build()
             bioPrompt.authenticate(info, AndroidxBiometricPrompt.CryptoObject(cipher))
-            // Отмена корутины (например, гейт уничтожил поддерево) должна снять системный промпт,
-            // иначе он висит «осиротевшим». cancelAuthentication → onAuthenticationError(CANCELED),
-            // которое cont.isActive-гард уже проглотит.
+            // Coroutine cancellation (e.g. the gate tore down the subtree) must dismiss the system
+            // prompt, or it's left orphaned. cancelAuthentication -> onAuthenticationError(CANCELED),
+            // which the cont.isActive guard already swallows.
             cont.invokeOnCancellation { bioPrompt.cancelAuthentication() }
         }
 
@@ -182,7 +182,7 @@ class AndroidBiometricKeyStore(
             if (strongBox) builder.setIsStrongBoxBacked(true)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // per-operation strong-biometric auth; на <R это поведение по умолчанию для auth-ключа
+            // per-operation strong-biometric auth; default behavior for the auth key on <R
             builder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
         }
         KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE).apply {
@@ -191,7 +191,7 @@ class AndroidBiometricKeyStore(
         }
         true
     } catch (e: StrongBoxUnavailableException) {
-        // Ретрай без StrongBox тоже может бросить (полный keystore, баг TEE) — не дать упасть в enable.
+        // A StrongBox-less retry can also throw (full keystore, TEE bug) — must not fail enable().
         if (strongBox) runCatching { generateKey(alias, strongBox = false) }.getOrDefault(false) else false
     } catch (e: Exception) {
         false

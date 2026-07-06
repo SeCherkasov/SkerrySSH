@@ -11,10 +11,10 @@ import android.os.PersistableBundle
 import app.skerry.ui.sftp.SafBridge
 
 /**
- * Кладёт пароль в системный буфер, помечая клип sensitive на Android 13+ (скрывает его из истории
- * буфера/превью), и планирует автоочистку через [CLIPBOARD_CLEAR_SECONDS] с — но только если к тому
- * моменту в буфере всё ещё наш пароль (иначе пользователь скопировал что-то поверх, не трогаем).
- * Контекст берём у [SafBridge] (тот же application-контекст, что и SFTP) — без утечки Activity.
+ * Copies a password to the system clipboard, marking the clip sensitive on Android 13+ (hides it
+ * from clipboard history/preview), and schedules auto-clear after [CLIPBOARD_CLEAR_SECONDS] —
+ * only if the clipboard still holds this password at that point. Uses [SafBridge]'s application
+ * context to avoid leaking an Activity.
  */
 actual fun copyPasswordToClipboard(password: String) {
     val ctx = SafBridge.context() ?: return
@@ -36,7 +36,7 @@ actual fun copyPasswordToClipboard(password: String) {
     }, CLIPBOARD_CLEAR_SECONDS * 1000L)
 }
 
-/** Не-секретный текст: обычный клип без sensitive-пометки и автоочистки. */
+/** Copies non-secret text: a plain clip, no sensitive flag or auto-clear. */
 actual fun copyTextToClipboard(text: String) {
     val ctx = SafBridge.context() ?: return
     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return

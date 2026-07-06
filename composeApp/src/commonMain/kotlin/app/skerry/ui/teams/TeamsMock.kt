@@ -64,7 +64,7 @@ private val ACTIVITY = listOf(
     Activity("key", D.amber, "June rotated key ", "deploy_ci", "Yesterday"),
 )
 
-/** Статический макет Teams — мок-путь/превью (LocalTeams == null), рисует данные прототипа. */
+/** Static Teams layout — mock/preview path (LocalTeams == null), renders prototype data. */
 @Composable
 internal fun TeamsMockView() {
     val mono = LocalFonts.current.mono

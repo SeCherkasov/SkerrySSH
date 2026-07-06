@@ -12,9 +12,9 @@ import app.skerry.shared.sync.SyncSignal
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Адаптер team-scope под [SyncClient]: pull/push замыкаются на `/teams/{id}/records`, что позволяет
- * гонять записи команды тем же [app.skerry.shared.sync.SyncEngine] (LWW, страницы, курсор), что и
- * аккаунтный vault. Остальные методы контракта осознанно недоступны — движок их не зовёт.
+ * Adapts team scope to [SyncClient]: pull/push close over `/teams/{id}/records`, letting team
+ * records run through the same [app.skerry.shared.sync.SyncEngine] (LWW, paging, cursor) as the
+ * account vault. The rest of the contract is deliberately unsupported — the engine never calls it.
  */
 class TeamScopedSyncClient(
     private val teams: TeamClient,
@@ -37,7 +37,7 @@ class TeamScopedSyncClient(
     override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult = unsupported()
     override fun changes(session: SyncSession): Flow<SyncSignal> = unsupported()
     override suspend fun ping(): Boolean = unsupported()
-    override suspend fun close() = Unit // транспорт живёт у владельца (общий HTTP-клиент)
+    override suspend fun close() = Unit // transport is owned by the caller (shared HTTP client)
 
     private fun unsupported(): Nothing =
         throw UnsupportedOperationException("team-scoped client only supports pull/push")

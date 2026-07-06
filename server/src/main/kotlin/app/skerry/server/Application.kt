@@ -10,9 +10,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Self-hosted sync-сервер Skerry (Phase 2, AGPL-3.0). Zero-knowledge: хранит только шифроблобы
- * и метаданные синхронизации; протокол и модель угроз — `docs/skerry-sync-design.md`.
- * Конфигурация — переменные окружения (см. [ServerConfig], `.env.example`).
+ * Skerry self-hosted sync server (AGPL-3.0). Zero-knowledge: stores only ciphertext and sync
+ * metadata; protocol and threat model are in `docs/skerry-sync-design.md`. Configured via
+ * environment variables (see [ServerConfig], `.env.example`).
  */
 fun main() {
     val config = ServerConfig.fromEnv()
@@ -21,7 +21,7 @@ fun main() {
     }.start(wait = true)
 }
 
-/** Точка входа Ktor: проверяет конфиг, подключает БД, собирает сервер, запускает уборку. */
+/** Ktor entry point: validates config, connects the DB, wires the server, starts cleanup. */
 fun Application.module(config: ServerConfig = ServerConfig.fromEnv()) {
     guardConfig(config)
     val database = Db.connect(config)
@@ -31,9 +31,9 @@ fun Application.module(config: ServerConfig = ServerConfig.fromEnv()) {
 }
 
 /**
- * Fail-fast при заведомо небезопасной конфигурации: дефолтный JWT-секрет в открытом коде
- * позволил бы подделать токен любого аккаунта. В проде запуск с ним запрещён; для локальной
- * разработки разблокируется явным `SKERRY_DEV=1` (security-ревью H1).
+ * Fails fast on a known-unsafe config: the default JWT secret is public, so anyone could forge a
+ * token for any account. Startup with it is blocked in prod; local dev unlocks it via explicit
+ * `SKERRY_DEV=1`.
  */
 private fun guardConfig(config: ServerConfig, env: Map<String, String> = System.getenv()) {
     if (config.usesDefaultJwtSecret && env["SKERRY_DEV"] != "1") {
@@ -44,12 +44,12 @@ private fun guardConfig(config: ServerConfig, env: Map<String, String> = System.
     }
 }
 
-/** Тромбстоуны команд живут 90 дней (политика tombstone дизайн-дока §2), дальше — возрастная уборка. */
+/** Team tombstones live 90 days (design doc §2 tombstone policy), then are aged out. */
 private const val TEAM_TOMBSTONE_TTL_MILLIS = 90L * 24 * 60 * 60 * 1000
 
 /**
- * Периодически чистит истёкшие pairing-сессии (capability-коды не копятся на диске) и старые
- * team-тромбстоуны: в team-scope watermark-компакции нет — состав команды нестабилен.
+ * Periodically purges expired pairing sessions (capability codes don't pile up on disk) and old
+ * team tombstones; team scope has no watermark compaction since team membership is unstable.
  */
 private fun Application.scheduleCleanup(services: Services) {
     launch {

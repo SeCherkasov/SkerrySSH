@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Тесты общего стейта пробросов [ForwardState] (телеметрия + закрытие живых ресурсов). */
+/** Tests for [ForwardState] (telemetry + closing live resources). */
 class ForwardStateTest {
 
     @Test
@@ -25,7 +25,7 @@ class ForwardStateTest {
         val state = ForwardState()
         var closed = 0
         state.live.add(Closeable { closed++ })
-        state.live.add(Closeable { throw IOException("boom") }) // сбой одного не мешает остальным
+        state.live.add(Closeable { throw IOException("boom") }) // a failure in one does not block the others
         state.live.add(Closeable { closed++ })
         state.closeAll()
         assertEquals(2, closed)

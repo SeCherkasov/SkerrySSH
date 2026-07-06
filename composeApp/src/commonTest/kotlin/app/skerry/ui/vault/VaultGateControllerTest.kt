@@ -31,9 +31,9 @@ import kotlin.test.assertTrue
 class VaultGateControllerTest {
 
     /**
-     * Контроллер с немедленным (Unconfined) исполнением scope/kdfDispatcher: асинхронные
-     * [VaultGateController.create]/[VaultGateController.unlock] завершаются до возврата вызова,
-     * так что ассерты «сразу после» остаются валидными, как при старом синхронном контракте.
+     * Controller with immediate (Unconfined) scope/kdfDispatcher execution: async
+     * [VaultGateController.create]/[VaultGateController.unlock] complete before the call returns,
+     * so immediate-after asserts stay valid.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun gate(
@@ -44,8 +44,8 @@ class VaultGateControllerTest {
         offersSyncOnboarding: Boolean = false,
         securityLog: SecurityLog? = null,
         /**
-         * Куда складывать исключения scope. Обязателен для тестов, где vault бросает: без него
-         * исключение уходит в глобальный handler потока и роняет СОСЕДНИЙ тест
+         * Sink for scope exceptions. Required for tests where the vault throws: without it the
+         * exception hits the thread's global handler and fails an unrelated test
          * (UncaughtExceptionsBeforeTest).
          */
         onException: ((Throwable) -> Unit)? = null,
@@ -167,9 +167,9 @@ class VaultGateControllerTest {
 
     @Test
     fun `unlock zeroes the password buffer even when the vault throws`() {
-        // vault бросает и НЕ затирает буфер сам — затирание докажет finally контроллера.
-        // unlock теперь асинхронный: исключение остаётся в scope контроллера (не пробрасывается
-        // вызывающему), но finally обязан затереть буфер и снять verifying до его распространения.
+        // The vault throws without wiping the buffer itself; the wipe proves the controller's finally runs.
+        // unlock is async: the exception stays in the controller's scope (not thrown to the caller),
+        // but finally must wipe the buffer and clear verifying before it propagates.
         val scopeExceptions = mutableListOf<Throwable>()
         val controller = gate(
             FakeVault(exists = true, unlockThrows = true),
@@ -194,20 +194,20 @@ class VaultGateControllerTest {
 
         controller.unlock("whatever".toCharArray())
 
-        // Битый файл — тупик: вводить пароль бессмысленно, уходим на отдельный экран сброса.
+        // A corrupted file is a dead end: entering a password is pointless, go to the reset screen.
         assertEquals(VaultGateState.Corrupted, controller.state)
     }
 
     @Test
     fun `beginReset opens the reset screen and cancelReset returns to where it started`() {
-        // С формы входа («забыл пароль»).
+        // From the unlock form ("forgot password").
         val fromUnlock = gate(FakeVault(exists = true))
         fromUnlock.beginReset()
         assertEquals(VaultGateState.Resetting, fromUnlock.state)
         fromUnlock.cancelReset()
         assertEquals(VaultGateState.NeedsUnlock, fromUnlock.state)
 
-        // С экрана Corrupted: отмена возвращает на Corrupted, а не на бесполезную форму входа.
+        // From the Corrupted screen: cancel returns to Corrupted, not to a useless unlock form.
         val fromCorrupted = gate(FakeVault(exists = true, unlockResult = UnlockResult.Corrupted))
         fromCorrupted.unlock("x".toCharArray())
         assertEquals(VaultGateState.Corrupted, fromCorrupted.state)
@@ -233,8 +233,8 @@ class VaultGateControllerTest {
 
     @Test
     fun `confirmReset still reaches NeedsCreate when external cleanup throws`() {
-        // Файл vault уже стёрт к моменту onReset — застрять на Resetting нельзя, даже если чистка
-        // хостов упала: переход на форму создания гарантирован finally.
+        // The vault file is already erased by the time onReset runs; must not stay stuck on
+        // Resetting even if host cleanup fails: the finally guarantees the move to the create form.
         val vault = FakeVault(exists = true)
         val controller = gate(vault, onReset = { error("cleanup failed") })
 
@@ -281,7 +281,7 @@ class VaultGateControllerTest {
         assertEquals(1, vault.lockCalls)
     }
 
-    // --- Биометрия: тумблер настроек ходит через контроллер (canEnable/enable/disable) ---
+    // --- Biometrics: the settings toggle goes through the controller (canEnable/enable/disable) ---
 
     @Test
     fun `canEnableBiometric reflects device availability`() {
@@ -298,15 +298,15 @@ class VaultGateControllerTest {
 
         assertFalse(controller.canEnableBiometric())
         assertFalse(controller.enableBiometric(PROMPT))
-        controller.disableBiometric() // не должно падать
+        controller.disableBiometric() // must not throw
         assertFalse(controller.biometricEnabled)
     }
 
     @Test
     fun `enableBiometric on a locked vault returns false and leaves biometricEnabled off`() = runTest {
-        // Vault заблокирован → exportDataKey == null → VaultBiometrics.enable == VaultLocked.
-        // Путь enable-успеха требует живого dataKey (DataKey-конструктор internal в :shared) и
-        // покрыт там же, в shared VaultBiometricsTest; здесь проверяем делегирование контроллера.
+        // Vault locked -> exportDataKey == null -> VaultBiometrics.enable == VaultLocked.
+        // The enable-success path needs a live dataKey (DataKey constructor is internal in :shared)
+        // and is covered there, in shared VaultBiometricsTest; here we only check delegation.
         val controller = gate(FakeVault(exists = true), biometrics(BiometricAvailability.Available))
         assertFalse(controller.biometricEnabled)
 
@@ -316,7 +316,7 @@ class VaultGateControllerTest {
 
     @Test
     fun `disableBiometric clears the artifact and biometricEnabled`() = runTest {
-        // Предзасеянный артефакт делает биометрию «включённой» на старте — без пути enable.
+        // A pre-seeded artifact makes biometrics "enabled" at start, without going through enable.
         val artifacts = FakeArtifacts().apply {
             write(BioArtifact(formatVersion = 1, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
         }
@@ -355,12 +355,12 @@ class VaultGateControllerTest {
         assertEquals(VaultGateState.Unlocked, controller.state)
     }
 
-    // --- Sync-онбординг: предлагается ДО биометрии, чтобы биометрия обернула финальный dataKey ---
+    // --- Sync onboarding: offered before biometrics, so biometrics wraps the final dataKey ---
 
     @Test
     fun `create offers sync onboarding first when the platform provides a sync form`() {
-        // Биометрия доступна, но шаг sync идёт раньше: иначе принятие ключа аккаунта обнулило бы
-        // только что включённую биометрию.
+        // Biometrics is available, but the sync step comes first: otherwise accepting the account
+        // key would wipe the biometrics just enabled.
         val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.Available),
@@ -417,8 +417,8 @@ class VaultGateControllerTest {
 
     @Test
     fun `completePairing advances to the biometric offer when the device can enable it`() {
-        // Vault уже создан и разблокирован координатором паринга на экране создания (NeedsCreate),
-        // ключ аккаунта принят — биометрию можно оборачивать сразу.
+        // The vault is already created and unlocked by the pairing coordinator on the create screen
+        // (NeedsCreate), account key accepted; biometrics can wrap right away.
         val controller = gate(
             FakeVault(exists = false),
             biometrics(BiometricAvailability.Available),
@@ -456,8 +456,8 @@ class VaultGateControllerTest {
 
     @Test
     fun `completePairing records a DevicePaired event`() {
-        // Экран create-join: координатор паринга уже создал и разблокировал локальный vault, гейт
-        // подтверждает связывание — единственный момент, когда мы честно знаем, что устройство привязано.
+        // Create-join screen: the pairing coordinator already created and unlocked the local vault;
+        // the gate confirms pairing here, the only point where the device is known to be paired.
         val log = RecordingSecurityLog()
         val controller = gate(
             FakeVault(exists = false),
@@ -480,12 +480,12 @@ class VaultGateControllerTest {
         )
         controller.unlock("correct horse".toCharArray())
 
-        controller.completePairing() // no-op вне NeedsCreate → и в журнал ничего не пишет
+        controller.completePairing() // no-op outside NeedsCreate; logs nothing
 
         assertTrue(log.events.none { it.type == SecurityEventType.DevicePaired })
     }
 
-    // --- Журнал безопасности: контроллер пишет события, которыми владеет, и отдаёт их разделу Настройки ---
+    // --- Security log: the controller records the events it owns and exposes them to Settings ---
 
     @Test
     fun `create records a VaultCreated event as the password baseline`() {
@@ -576,9 +576,9 @@ class VaultGateControllerTest {
     }
 }
 
-private val PROMPT = BiometricPrompt(title = "Включить биометрию", cancelLabel = "Отмена")
+private val PROMPT = BiometricPrompt(title = "Enable biometrics", cancelLabel = "Cancel")
 
-/** Собрать реальный [VaultBiometrics] поверх фейков железа/артефакта — контракт `commonMain`. */
+/** Builds a real [VaultBiometrics] over fake hardware/artifact stubs; contract lives in `commonMain`. */
 private fun biometrics(
     availability: BiometricAvailability,
     artifacts: BioArtifactStore = FakeArtifacts(),
@@ -586,8 +586,8 @@ private fun biometrics(
 ): VaultBiometrics = VaultBiometrics(vault, FakeKeyStore(availability), artifacts, deviceId = "test-device")
 
 /**
- * In-memory [Vault] для тестов гейта: моделирует жизненный цикл create/unlock/lock и затирание
- * переданного пароля (как у файловой реализации). CRUD не задействован контроллером гейта.
+ * In-memory [Vault] for gate tests: models the create/unlock/lock lifecycle and wipes the passed
+ * password (like the file-backed implementation). CRUD is not exercised by the gate controller.
  */
 private class FakeVault(
     exists: Boolean,
@@ -613,8 +613,8 @@ private class FakeVault(
     }
 
     override fun unlock(password: CharArray): UnlockResult {
-        // Реальная реализация затирает буфер сама; в режиме unlockThrows моделируем сбой ДО
-        // затирания, чтобы проверить, что буфер гасит finally контроллера.
+        // The real implementation wipes the buffer itself; unlockThrows models a failure before
+        // the wipe, to verify the controller's finally clears the buffer.
         if (unlockThrows) error("unlock failed")
         password.fill(' ')
         if (unlockResult == UnlockResult.Success) isUnlocked = true
@@ -642,20 +642,20 @@ private class FakeVault(
     override fun put(id: String, type: RecordType, payload: ByteArray) = Unit
     override fun remove(id: String) = Unit
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean {
-        // Реальная реализация затирает переданные буферы — моделируем для симметрии с контроллером.
+        // The real implementation wipes the passed buffers; modeled here for symmetry with the controller.
         oldPassword.fill(' ')
         newPassword.fill(' ')
         return changePasswordResult
     }
     override fun verifyPassword(password: CharArray): Boolean = false
 
-    // Путь биометрии с живым dataKey покрыт в shared (DataKey-конструктор internal в :shared) — стабы.
+    // The biometrics path with a live dataKey is covered in shared (DataKey constructor is internal); stubs here.
     override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
     override fun exportDataKey(): DataKey? = null
     override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = false
 }
 
-/** Фейк secure-enclave: [availability] управляет доступностью, wrap/unwrap — тождественны. */
+/** Fake secure-enclave: [availability] controls availability, wrap/unwrap are identity ops. */
 private class FakeKeyStore(
     private val availability: BiometricAvailability,
 ) : BiometricKeyStore {
@@ -668,7 +668,7 @@ private class FakeKeyStore(
     override fun deleteKey(alias: String) = Unit
 }
 
-/** In-memory [SecurityLog] для тестов: монотонные штампы t0,t1,… — порядок и дериватив детерминированы. */
+/** In-memory [SecurityLog] for tests: monotonic stamps t0, t1, ... make order deterministic. */
 private class RecordingSecurityLog : SecurityLog {
     val events = mutableListOf<SecurityEvent>()
     private var tick = 0
@@ -682,7 +682,7 @@ private class RecordingSecurityLog : SecurityLog {
     override fun clear() = events.clear()
 }
 
-/** Фейк персистентности `vault.bio` — хранит артефакт в памяти. */
+/** Fake `vault.bio` persistence: holds the artifact in memory. */
 private class FakeArtifacts : BioArtifactStore {
     private var artifact: BioArtifact? = null
     override fun exists(): Boolean = artifact != null

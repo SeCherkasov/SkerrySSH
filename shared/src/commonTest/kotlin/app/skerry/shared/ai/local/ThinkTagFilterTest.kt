@@ -27,7 +27,7 @@ class ThinkTagFilterTest {
 
     @Test
     fun `strips an empty think block with surrounding newlines`() {
-        // Qwen3 с /no_think всё равно эмитит пустой блок.
+        // Qwen3 with /no_think still emits an empty think block.
         assertEquals("CMD: free -h", run("<think>\n\n</think>\n\nCMD: free -h"))
     }
 
@@ -43,7 +43,7 @@ class ThinkTagFilterTest {
 
     @Test
     fun `a later think tag is not stripped`() {
-        // Режем только лидирующий блок рассуждений; упоминание тега в ответе — это контент.
+        // Only the leading think block is stripped; a tag mentioned in the answer is content.
         assertEquals("echo '<think>'", run("echo '<think>'"))
     }
 

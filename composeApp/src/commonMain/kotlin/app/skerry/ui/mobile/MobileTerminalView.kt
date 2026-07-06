@@ -81,37 +81,37 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.terminal.arrowSequence
 import app.skerry.ui.session.sessionDotColor
 
-/** Фон клавишной панели терминала (`#0E1A24` из мока). Клавиши — белый 6%, моноширинные. */
+/** Terminal key panel background (`#0E1A24`). Keys — white 6%, monospaced. */
 private val KeybarBg = Color(0xFF0E1A24)
 private val KeyCapBg = Color(0x0FFFFFFF)
 private val KeyCapFg = Color(0xFFC9D6DE)
 
-/** ESC (0x1B) — префикс CSI-последовательностей стрелок и сама клавиша esc. */
+/** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
 private const val ESC = "\u001b"
 
 /**
- * Полноэкранный push-экран терминала мобильного макета `Skerry Mobile.html` (живая SSH-сессия
- * поверх готового PTY-ядра). Шапка с именем хоста и статусом → тело по состоянию соединения активной
- * сессии ([LocalSessions]) → клавишная панель спецклавиш. Тело подключённой сессии рендерит реальную
- * сетку через общий [TerminalScreen] в IME-режиме (как desktop-`LiveTerminalPane`).
+ * Full-screen mobile terminal push-screen (a live SSH session over the PTY core). Header with host name
+ * and status → body by the active session's connection state ([LocalSessions]) → special-key panel. A
+ * connected session's body renders the real grid via the shared [TerminalScreen] in IME mode (like the
+ * desktop `LiveTerminalPane`).
  *
- * Сессию открывает Connect на [MobileHostDetailScreen] (через `LocalConnectHost`); back-стрелка лишь
- * возвращает на список (сессия остаётся живой), а Disconnect в меню `more_horiz` рвёт её и закрывает
- * экран. AI-bar/AI-карточки макета спрятаны за [FeatureFlags.ai] (Phase 2). Split-режим на телефоне
- * не нужен (решение пользователя 2026-06-22) — иконка `splitscreen` из шапки убрана.
+ * The session is opened by Connect on [MobileHostDetailScreen] (via `LocalConnectHost`); the back arrow
+ * just returns to the list (the session stays alive), while Disconnect in the `more_horiz` menu drops it
+ * and closes the screen. AI bar/cards are behind [FeatureFlags.ai]. No split mode on phone — the
+ * `splitscreen` icon is removed from the header.
  */
 @Composable
 fun MobileTerminalScreen(state: MobileDesignState) {
     val sessions = LocalSessions.current
     val active = sessions?.active
-    // Стабильная лямбда Disconnect (пересоздаётся только при смене сессии): рвёт соединение и
-    // возвращает на список — back-стрелка сессию оставляет живой, Disconnect её закрывает.
+    // Stable Disconnect lambda (recreated only on session change): drops the connection and returns to
+    // the list — the back arrow leaves the session alive, Disconnect closes it.
     val onDisconnect = remember(active?.id, sessions) {
         active?.let { s -> { sessions.close(s.id); state.pop() } }
     }
-    // Штатный выход shell (`exit`) на телефоне: закрываем сессию и возвращаемся на список хостов —
-    // полноэкранному push-терминалу незачем висеть застывшим (в отличие от desktop, где остаётся
-    // плашка «Session closed»). Обрыв транспорта сюда не попадает (cleanExit=false) — там экран живёт.
+    // Clean shell exit (`exit`) on phone: close the session and return to the host list — a full-screen
+    // push terminal has no reason to hang frozen (unlike desktop, which keeps a "Session closed" card).
+    // A transport drop doesn't reach here (cleanExit=false) — the screen lives on there.
     val cleanlyExited = (active?.controller?.uiState as? ConnectionUiState.Disconnected)?.cleanExit == true
     LaunchedEffect(active?.id, cleanlyExited) {
         if (cleanlyExited) {
@@ -119,29 +119,29 @@ fun MobileTerminalScreen(state: MobileDesignState) {
             state.pop()
         }
     }
-    // sticky-ctrl поднят на уровень экрана, чтобы армирование клавишной панели влияло И на ввод с
-    // софт-клавиатуры (IME-путь идёт мимо панели). Сбрасывается при смене сессии.
+    // sticky-ctrl is lifted to screen level so the key panel's arming also affects soft-keyboard input
+    // (the IME path bypasses the panel). Reset on session change.
     var ctrlArmed by remember(active?.id) { mutableStateOf(false) }
-    // Колбэки стабилизированы remember'ом (ключ — сессия), иначе свежая лямбда на каждый PTY-чанк
-    // перерисовывала бы клавишную панель/терминал зря. `ctrlArmed` — compose-state, поэтому тело
-    // лямбды видит его живое значение даже сквозь remember.
+    // Callbacks are stabilized by remember (keyed on session), else a fresh lambda per PTY chunk would
+    // repaint the key panel/terminal for nothing. `ctrlArmed` is compose-state, so the lambda body sees
+    // its live value even through remember.
     val setCtrlArmed = remember(active?.id) { { v: Boolean -> ctrlArmed = v } }
     val imeTransform = remember(active?.id) {
         { raw: String ->
-            // Армированный ctrl применяется к первому символу с софт-клавиатуры и тут же снимается
-            // (raw здесь всегда непуст — TerminalScreen зовёт imeTransform только на реальном вводе).
+            // Armed ctrl applies to the first soft-keyboard char and is disarmed immediately (raw is
+            // always non-empty here — TerminalScreen calls imeTransform only on real input).
             val out = applyStickyCtrl(ctrlArmed, raw)
             if (ctrlArmed) ctrlArmed = false
             out
         }
     }
-    // Палитра запуска сниппета (иконка `bolt` в шапке) живёт на верхнем уровне Box, НЕ внутри шапки —
-    // иначе инлайновый лист участвовал бы в раскладке Row и ломал её. Доступна только в коннекте и
-    // когда подключена библиотека сниппетов.
+    // The snippet palette (`bolt` icon in the header) lives at the top-level Box, not inside the header —
+    // otherwise the inline sheet would take part in the Row layout and break it. Available only when
+    // connected and a snippet library is attached.
     var paletteOpen by remember(active?.id) { mutableStateOf(false) }
-    // Меню more_horiz (Disconnect) — инлайновым листом на уровне корневого Box экрана, НЕ через
-    // focusable-Popup [MobileActionSheet]: над открытой софт-клавиатурой Popup меряется по ужатому окну
-    // и повисает по линии бывшей клавиатуры с провалом снизу. Инлайн живёт в том же окне с живыми инсетами.
+    // The more_horiz menu (Disconnect) is an inline sheet at the screen's root Box, not a focusable
+    // [MobileActionSheet] Popup: over an open soft keyboard a Popup measures against the shrunk window and
+    // hangs at the old keyboard line with a gap below. Inline lives in the same window with live insets.
     var menuOpen by remember(active?.id) { mutableStateOf(false) }
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
@@ -163,13 +163,13 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 ConnectionUiState.Connecting ->
                     MobileTerminalNotice("sync", stringResource(Res.string.term_connecting), active.subtitle)
                 is ConnectionUiState.Connected -> {
-                    // AI-контроллер (или null): общий на транзиент-оверлей и строку ввода; key() пересоздаёт
-                    // при смене хоста/политики. Транзиент рисуется поверх низа терминала, чтобы его появление
-                    // НЕ ресайзило терминал (иначе reflow-«дёрг» при вставке/выполнении).
+                    // AI controller (or null): shared by the transient overlay and the input bar; key()
+                    // recreates it on host/policy change. The transient is drawn over the terminal bottom
+                    // so its appearance doesn't resize the terminal (else a reflow jump on paste/run).
                     val liveAi = LocalAi.current
                     val aiPolicy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
-                    // liveAi.enabled — в key: глобальный OFF в настройках убирает/возвращает бар
-                    // без пересоздания экрана (settings — Compose-state, смена рекомпозирует).
+                    // liveAi.enabled in the key: a global OFF in settings removes/restores the bar without
+                    // recreating the screen (settings is Compose-state, a change recomposes).
                     val aiController = key(liveAi, aiPolicy, liveAi?.enabled) {
                         remember {
                             if (liveAi != null && liveAi.enabled && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
@@ -183,14 +183,14 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             imeTransform = imeTransform,
                         )
                     }
-                    // Всегда-присутствующая строка бара — команда/статус внутри неё (нет «дёрга»).
+                    // The always-present bar row — command/status inside it (no jump).
                     if (aiController != null) MobileAiBarInput(aiController, st.terminal)
                     MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
                 }
                 is ConnectionUiState.Error ->
                     MobileTerminalNotice("error", stringResource(Res.string.term_connection_failed), st.message, color = D.sunset)
-                // Обрыв: застывший экран на момент потери, без keybar (канал мёртв). Статус в шапке —
-                // «disconnected» красным. Детальный мобильный паритет (авто-реконнект) — отдельной задачей.
+                // Drop: frozen screen at the moment of loss, no keybar (channel is dead). Header status —
+                // "disconnected" in red. Detailed mobile parity (auto-reconnect) is a separate task.
                 is ConnectionUiState.Disconnected ->
                     TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
             }
@@ -225,10 +225,10 @@ fun MobileTerminalScreen(state: MobileDesignState) {
 }
 
 /**
- * Единственная форма мобильного AI-бара (паритет desktop) — постоянная высота, терминал не ресайзится,
- * ничего не перекрывается. В одной строке: ввод, «Thinking…», blocked/error, а для предложения — команда
- * + инлайн-пояснение (None: что делает; Warn/Danger: причина риска цветом) + кнопки. Деструктивная —
- * красная со знаком «block». Автозапуска нет: Run = подтверждение; для [CommandRisk.Danger] второй тап.
+ * The single form of the mobile AI bar (desktop parity) — constant height, the terminal isn't resized,
+ * nothing is overlapped. One row: input, "Thinking…", blocked/error, and for a suggestion — the command
+ * + inline note (None: what it does; Warn/Danger: risk reason in color) + buttons. Destructive is red
+ * with a "block" icon. No auto-run: Run = confirmation; [CommandRisk.Danger] needs a second tap.
  */
 @Composable
 private fun MobileAiBarInput(controller: TerminalAiController, terminal: TerminalScreenState) {
@@ -241,7 +241,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
     val pending = controller.pending
     val risk = controller.pendingRisk?.risk ?: CommandRisk.None
     val danger = risk == CommandRisk.Danger
-    // Красным — любую деструктивную команду (удаление/перезапись), даже Warn.
+    // Red for any destructive command (delete/overwrite), even Warn.
     val severe = danger || controller.pendingRisk?.destructive == true
     val accent = if (severe) D.sunset else D.moss
     var armed by remember(pending) { mutableStateOf(false) }
@@ -264,8 +264,8 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                             else -> controller.pendingRisk?.reason
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // Команда переносится (до 6 строк), не обрезается: пользователь видит целиком то,
-                            // что подтверждает и исполнит (см. TerminalView — тот же инвариант безопасности).
+                            // The command wraps (up to 6 lines), not truncated: the user sees in full what
+                            // they confirm and run (see TerminalView — the same safety invariant).
                             Txt(pending, color = if (severe) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
                             if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
@@ -325,14 +325,14 @@ private fun MobileAiChip(label: String, color: Color, onClick: () -> Unit) {
 }
 
 /**
- * Шапка терминала по моку (`#0B1A26` + нижняя cyan-линия): back-шеврон, имя хоста + статус-строка с
- * живыми метриками (RTT/throughput), иконка `more_horiz` (меню с Disconnect). [onDisconnect]==null —
- * нет активной сессии, пункт Disconnect скрыт. Split-иконка макета на телефоне убрана (split не нужен).
+ * Terminal header (`#0B1A26` + bottom cyan line): back chevron, host name + status line with live
+ * metrics (RTT/throughput), `more_horiz` icon (menu with Disconnect). [onDisconnect]==null — no active
+ * session, the Disconnect item is hidden. The split icon is removed on phone (split not needed).
  *
- * Метрики берутся из [controller] теми же поллерами, что desktop-статусбар: RTT-пинг ([openPing]) и
- * скорость канала ([openThroughput]). remember безусловный — ключи (controller + флаг connected)
- * пересоздают его при смене сессии/подключения; оба метода идемпотентны (кэш в контроллере). До
- * первого замера/вне коннекта метрика — «—»; узкая строка уезжает за край горизонтальным скроллом.
+ * Metrics come from [controller] via the same pollers as the desktop status bar: RTT ping ([openPing])
+ * and channel throughput ([openThroughput]). The remember is unconditional — keys (controller +
+ * connected flag) recreate it on session/connection change; both methods are idempotent (cached in the
+ * controller). Before the first sample / off-connection the metric is "—"; a narrow line scrolls horizontally.
  */
 @Composable
 private fun MobileTerminalHeader(
@@ -381,7 +381,7 @@ private fun MobileTerminalHeader(
                         Dot(sessionDotColor(status))
                         Txt(mobileTerminalStatusText(status), color = sessionDotColor(status), size = 10.5.sp)
                     }
-                    // Живые метрики активной сессии (паритет desktop-статусбара) — только в коннекте.
+                    // Live metrics of the active session (desktop status-bar parity) — only when connected.
                     if (connected) {
                         MobileTerminalMetric("network_ping", mobileRttLabel(ping?.rttMs), mono)
                         MobileTerminalMetric("arrow_upward", mobileRateLabel(throughput?.upRate), mono)
@@ -416,7 +416,7 @@ private fun MobileTerminalHeader(
     }
 }
 
-/** Одна метрика статус-строки шапки: иконка + моноширинное значение (RTT/throughput). */
+/** One header status-line metric: icon + monospaced value (RTT/throughput). */
 @Composable
 private fun MobileTerminalMetric(icon: String, text: String, mono: FontFamily) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -425,7 +425,7 @@ private fun MobileTerminalMetric(icon: String, text: String, mono: FontFamily) {
     }
 }
 
-/** Центрированное сообщение на фоне терминала (нет сессии / подключение / ошибка). */
+/** Centered message over the terminal background (no session / connecting / error). */
 @Composable
 private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, color: Color = D.dim) {
     val mono = LocalFonts.current.mono
@@ -441,12 +441,12 @@ private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, 
 }
 
 /**
- * Клавишная панель спецклавиш (`#0E1A24`, горизонтальный скролл) — сердце мобильного SSH-UX из мока:
- * esc, tab, ctrl (sticky-модификатор), /, |, -, ~, стрелки. Управляющие последовательности уходят в
- * PTY через [TerminalScreenState.send]. `ctrl` армируется тапом (подсветка cyan): [ctrlArmed] поднят
- * в [MobileTerminalScreen], поэтому применяется и к символьным клавишам панели ([controlByte]), и к
- * вводу с софт-клавиатуры ([applyStickyCtrl] в IME-пути). Стрелки кодируются с учётом DECCKM-режима
- * сессии ([arrowSequence]): CSI в норме, SS3 в application-cursor (vim/less).
+ * Special-key panel (`#0E1A24`, horizontal scroll) — the core of the mobile SSH UX: esc, tab, ctrl
+ * (sticky modifier), /, |, -, ~, arrows. Control sequences go to the PTY via [TerminalScreenState.send].
+ * `ctrl` is armed by a tap (cyan highlight): [ctrlArmed] is lifted to [MobileTerminalScreen], so it
+ * applies to both the panel's character keys ([controlByte]) and soft-keyboard input ([applyStickyCtrl]
+ * in the IME path). Arrows are encoded per the session's DECCKM mode ([arrowSequence]): CSI normally,
+ * SS3 in application-cursor (vim/less).
  */
 @Composable
 private fun MobileKeybar(
@@ -473,28 +473,28 @@ private fun MobileKeybar(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Пока открыт reverse-search (Ctrl-R) — панель показывает его управление; ввод запроса идёт
-        // с софт-клавиатуры (маршрутизируется в TerminalScreen). Иначе — обычный макет.
+        // While reverse-search (Ctrl-R) is open, the panel shows its controls; the query is typed on the
+        // soft keyboard (routed to TerminalScreen). Otherwise — the normal layout.
         if (terminal.reverseSearchQuery != null) {
             KeyCap("esc") { terminal.closeReverseSearch(); onCtrlArmedChange(false) }
-            KeyCapIcon("expand_more") { terminal.reverseSearchNext() } // следующее (старее)
-            KeyCapIcon("expand_less") { terminal.reverseSearchPrev() } // предыдущее (новее)
-            KeyCapIcon("delete") { terminal.reverseSearchDeleteSelected() } // убрать из истории
+            KeyCapIcon("expand_more") { terminal.reverseSearchNext() } // next (older)
+            KeyCapIcon("expand_less") { terminal.reverseSearchPrev() } // previous (newer)
+            KeyCapIcon("delete") { terminal.reverseSearchDeleteSelected() } // remove from history
             KeyCap("insert", accent = true) { terminal.reverseSearchAccept(); onCtrlArmedChange(false) }
             return@Row
         }
         KeyCap("esc") { plain(ESC) }
-        // Tab при наличии подсказки автодополнения — принять её; иначе обычный таб в PTY.
+        // Tab with an autocomplete suggestion — accept it; otherwise a normal tab to the PTY.
         KeyCap("tab") {
             if (terminal.suggestionTail != null) { terminal.acceptSuggestion(); onCtrlArmedChange(false) } else plain("\t")
         }
-        // При показанной подсказке — цикл по альтернативам (аналог Shift+Tab на desktop).
+        // With a suggestion shown — cycle alternatives (like Shift+Tab on desktop).
         if (terminal.suggestionTail != null) {
             KeyCapIcon("autorenew") { terminal.cycleSuggestion() }
         }
-        // Reverse-search истории (Ctrl-R): открыть оверлей поиска (ввод — с софт-клавиатуры).
+        // Reverse history search (Ctrl-R): open the search overlay (query typed on the soft keyboard).
         KeyCapIcon("search") { terminal.openReverseSearch() }
-        // ctrl — спец-клавиша макета (всегда cyan); армирование заливает её сплошным cyan.
+        // ctrl — special panel key (always cyan); arming fills it solid cyan.
         KeyCap("ctrl", accent = true, active = ctrlArmed) { onCtrlArmedChange(!ctrlArmed) }
         KeyCap("/") { char("/") }
         KeyCap("|") { char("|") }
@@ -508,8 +508,8 @@ private fun MobileKeybar(
 }
 
 /**
- * Текстовая клавиша панели. [accent] — спец-клавиша макета (бирюзовый покой, как `ctrl`); [active] —
- * sticky-армирование (залитая бирюза + тёмный текст).
+ * Text panel key. [accent] — special key (cyan at rest, like `ctrl`); [active] — sticky arming (solid
+ * cyan + dark text).
  */
 @Composable
 private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = false, onClick: () -> Unit) {
@@ -534,7 +534,7 @@ private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = fal
     }
 }
 
-/** Иконочная клавиша панели (стрелки). */
+/** Icon panel key (arrows). */
 @Composable
 private fun KeyCapIcon(icon: String, onClick: () -> Unit) {
     Box(
@@ -550,15 +550,15 @@ private fun KeyCapIcon(icon: String, onClick: () -> Unit) {
 }
 
 /**
- * Нижний лист запроса пароля при Connect к хосту без привязанной identity (в стиле листа
- * `New connection`). Пароль уходит в [onConnect] как строку и тут же используется в `SshAuth.Password`;
- * буфер живёт только в этом composable. Тап мимо панели — [onDismiss].
+ * Bottom password-prompt sheet on Connect to a host with no bound identity (styled like the
+ * `New connection` sheet). The password goes to [onConnect] as a string and is used right away in
+ * `SshAuth.Password`; the buffer lives only in this composable. A tap outside the sheet — [onDismiss].
  */
 @Composable
 fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -> Unit) {
     var password by remember { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
-    // Защита ввода SSH-пароля при коннекте от снимков экрана/превью в Recent Apps (Android; desktop — no-op).
+    // Protect SSH password entry on connect from screenshots/Recent Apps previews (Android; desktop no-op).
     SecureScreen()
     MobileBottomSheet(
         onDismiss = onDismiss,

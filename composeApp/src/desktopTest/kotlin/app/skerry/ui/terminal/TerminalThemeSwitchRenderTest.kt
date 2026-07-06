@@ -31,19 +31,18 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Регрессия бага «смена темы терминала перекрашивает не всё до переключения вкладки»: рендерим
- * живой [TerminalScreen] офскрин, меняем [LocalTerminalTheme] на лету (как это делает Appearance
- * через [app.skerry.ui.desktop.DesktopDesignApp]) и проверяем ПИКСЕЛИ обоих путей отрисовки:
- * заливку фона ячейки (SGR 44 → drawRect) и сами глифы (SGR 32 + U+2588 FULL BLOCK → drawText).
- * Глифовый путь исторически стейлился: кэш [androidx.compose.ui.text.TextMeasurer] сравнивает
- * стили ТОЛЬКО по layout-атрибутам (цвет не входит), а перегрузка `drawText(measurer, …)` красит
- * цветом, вшитым в закэшированный параграф, — после смены темы глифы оставались в старой палитре,
- * пока пересоздание экрана (переключение вкладки) не сбрасывало кэш измерителя.
+ * Regression test for "terminal theme switch doesn't recolor everything until tab switch": renders
+ * a live [TerminalScreen] offscreen, swaps [LocalTerminalTheme] at runtime (as Appearance does via
+ * [app.skerry.ui.desktop.DesktopDesignApp]), and checks pixels on both render paths: cell background
+ * fill (SGR 44 -> drawRect) and glyphs (SGR 32 + U+2588 FULL BLOCK -> drawText). The glyph path used
+ * to go stale because the [androidx.compose.ui.text.TextMeasurer] cache compares styles only by
+ * layout attributes (color excluded), and the `drawText(measurer, ...)` overload paints with the
+ * color baked into the cached paragraph, leaving glyphs in the old palette until the cache was reset.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class TerminalThemeSwitchRenderTest {
 
-    /** Фейковая PTY-сессия: только вывод, ввод/resize — no-op. */
+    /** Fake PTY session: output only, input/resize are no-ops. */
     private class FakeSession : TerminalSession {
         private val _state = MutableStateFlow<TerminalState>(TerminalState.Open)
         override val state: StateFlow<TerminalState> = _state.asStateFlow()
@@ -59,7 +58,7 @@ class TerminalThemeSwitchRenderTest {
 
     @Test
     fun themeSwitchRecolorsOpenTerminalWithoutTabSwitch() {
-        // Unconfined: feed/resize обрабатываются синхронно в точке эмита — кадры теста детерминированы.
+        // Unconfined: feed/resize run synchronously at the emit point, making test frames deterministic.
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val session = FakeSession()
         val state = TerminalScreenState(session, scope)
@@ -78,47 +77,47 @@ class TerminalThemeSwitchRenderTest {
                     return scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
                 }
 
-                // Первые кадры: layout → LaunchedEffect(resize) → sized=true. Эмитим вывод только
-                // ПОСЛЕ подгонки сетки: при усадке 80×24 → фактическая сетка верхние строки уходят в
-                // scrollback и прячутся за автоскроллом — пробные строки должны остаться на экране.
+                // First frames: layout -> LaunchedEffect(resize) -> sized=true. Emit output only after
+                // the grid settles: shrinking from 80x24 to the actual grid pushes top rows into
+                // scrollback under autoscroll, so the test rows must stay on screen.
                 repeat(3) { frame() }
-                // Строка 1: SGR 44 — заливка фона (drawRect). Строка 2: SGR 32 + 3×U+2588 FULL BLOCK —
-                // сплошные глифы (drawText). РОВНО ТРИ блока: кэш TextMeasurer держит 8 записей, и как у
-                // пользователя (несколько коротких ранов) все ключи должны УМЕЩАТЬСЯ в кэш — иначе LRU
-                // вытеснит записи и замаскирует стейл старого цвета.
+                // Line 1: SGR 44, background fill (drawRect). Line 2: SGR 32 + 3x U+2588 FULL BLOCK,
+                // solid glyphs (drawText). Exactly three blocks: the TextMeasurer cache holds 8
+                // entries, and all keys must fit in it (as with a few short user runs), or LRU eviction
+                // would mask a stale-color bug.
                 session.emit("\u001b[44m          \u001b[0m\r\n\u001b[32m███\u001b[0m")
 
-                // Ждём, пока отрисуются ОБА пути старой палитры (кадры на эффекты/публикацию снимка).
+                // Wait for both old-palette render paths to draw (frames for effects/snapshot publish).
                 var pixels = frame()
                 var attempts = 0
                 while ((!pixels.hasColor(NIGHT_SEA_ANSI_BLUE) || !pixels.hasColor(NIGHT_SEA_ANSI_GREEN)) && attempts < 30) {
                     pixels = frame()
                     attempts++
                 }
-                assertTrue(pixels.hasColor(NIGHT_SEA_ANSI_BLUE), "не дождались заливки SGR 44 в палитре Night Sea")
-                assertTrue(pixels.hasColor(NIGHT_SEA_ANSI_GREEN), "не дождались глифов SGR 32 в палитре Night Sea")
+                assertTrue(pixels.hasColor(NIGHT_SEA_ANSI_BLUE), "did not see SGR 44 fill in the Night Sea palette")
+                assertTrue(pixels.hasColor(NIGHT_SEA_ANSI_GREEN), "did not see SGR 32 glyphs in the Night Sea palette")
 
-                // Смена темы на лету — как клик по карточке в Appearance.
+                // Switch theme at runtime, as clicking the Appearance card does.
                 theme.value = TerminalThemes.SolarizedLight
                 pixels = frame()
-                pixels = frame() // второй кадр — на случай отложенной инвалидации
+                pixels = frame() // second frame in case of deferred invalidation
 
-                assertTrue(pixels.hasColor(SOLARIZED_BG), "фон терминала должен перекраситься в Solarized Light")
-                assertTrue(pixels.hasColor(SOLARIZED_ANSI_BLUE), "заливка SGR 44 должна перекраситься в синий Solarized")
+                assertTrue(pixels.hasColor(SOLARIZED_BG), "terminal background should recolor to Solarized Light")
+                assertTrue(pixels.hasColor(SOLARIZED_ANSI_BLUE), "SGR 44 fill should recolor to Solarized blue")
                 if (pixels.hasColor(NIGHT_SEA_ANSI_BLUE)) {
-                    fail("заливка SGR 44 осталась синей Night Sea — фоновый слой не перерисован после смены темы")
+                    fail("SGR 44 fill stayed Night Sea blue: background layer not repainted after theme switch")
                 }
                 if (pixels.hasColor(NIGHT_SEA_ANSI_GREEN)) {
-                    fail("глифы SGR 32 остались зелёными Night Sea — drawText рисует старым цветом из кэша TextMeasurer")
+                    fail("SGR 32 glyphs stayed Night Sea green: drawText painted with stale TextMeasurer cache color")
                 }
-                assertTrue(pixels.hasColor(SOLARIZED_ANSI_GREEN), "глифы SGR 32 должны перекраситься в зелёный Solarized")
+                assertTrue(pixels.hasColor(SOLARIZED_ANSI_GREEN), "SGR 32 glyphs should recolor to Solarized green")
             }
         } finally {
             scope.cancel()
         }
     }
 
-    /** Есть ли в кадре хоть один пиксель точного цвета [argb] (скан с шагом 1 — сцена маленькая). */
+    /** Whether the frame contains any pixel of exact color [argb] (step-1 scan; the scene is small). */
     private fun PixelMap.hasColor(argb: Int): Boolean {
         for (y in 0 until height) {
             for (x in 0 until width) {

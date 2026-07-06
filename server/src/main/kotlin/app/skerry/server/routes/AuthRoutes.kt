@@ -22,8 +22,8 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Регистрация и вход. Сервер видит только SRP-соль/верификатор и обёртку dataKey
- * (`docs/skerry-sync-design.md` §3); пароль и dataKey не передаются.
+ * Registration and login. The server sees only the SRP salt/verifier and the wrapped dataKey
+ * (`docs/skerry-sync-design.md` §3); the password and dataKey are never transmitted.
  */
 fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.REGISTER) {
@@ -33,7 +33,7 @@ fun Route.authRoutes(services: Services) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
                 return@post
             }
-            // base64-декод до записи в БД: невалидный payload → 400 (BadRequestException), не 500.
+            // base64-decode before writing to the DB: invalid payload -> 400, not 500.
             val wrapped = req.wrappedDataKey.unb64()
             try {
                 services.accounts.create(
@@ -43,7 +43,7 @@ fun Route.authRoutes(services: Services) {
                     wrappedDataKey = wrapped,
                 )
             } catch (_: IllegalStateException) {
-                // exists-проверка внутри create + перехват PK-гонки (PostgreSQL) → единый 409.
+                // Existence check inside create() plus catching the PK race (PostgreSQL) -> a single 409.
                 call.respond(HttpStatusCode.Conflict, ErrorResponse("account already exists"))
                 return@post
             }
@@ -66,11 +66,11 @@ fun Route.authRoutes(services: Services) {
             return@post
         }
         val account = services.accounts.find(req.accountId)
-        // Anti-enumeration: для несуществующего аккаунта НЕ отвечаем 404 (это раскрыло бы, какие
-        // accountId зарегистрированы). Вместо этого синтезируем структурно идентичный challenge с
-        // детерминированной фейковой солью и настоящим (по форме) `B`, посчитанным из псевдо-
-        // верификатора. Реальный провал происходит лишь на /auth/srp/verify (M1 не сойдётся, либо
-        // challenge неизвестен) — внешне неотличимо от неверного пароля у существующего аккаунта.
+        // Anti-enumeration: a nonexistent account does NOT get a 404 (that would reveal which
+        // accountIds are registered). Instead a structurally identical challenge is synthesized
+        // with a deterministic fake salt and a real-shaped `B` computed from a pseudo-verifier.
+        // Failure only surfaces at /auth/srp/verify (M1 mismatch or unknown challenge) —
+        // externally indistinguishable from a wrong password on an existing account.
         val (id, salt, verifier) = if (account != null) {
             Triple(account.id, account.srpSalt, account.srpVerifier)
         } else {
@@ -97,8 +97,9 @@ fun Route.authRoutes(services: Services) {
         }
         val reactivated = services.devices.register(verified.accountId, req.deviceId, req.deviceName, req.platform)
         services.activity.record(verified.accountId, "auth.login", "srp login", deviceId = req.deviceId)
-        // Возврат отозванного устройства с верным паролем — отдельное событие для админ-консоли:
-        // revoke лишь гасит токены, и без этого сигнала админ не узнал бы, что устройство снова активно.
+        // A revoked device returning with the correct password is a separate admin-console event:
+        // revoke only invalidates tokens, so without this signal the admin wouldn't know the
+        // device is active again.
         if (reactivated) {
             services.activity.record(verified.accountId, "device.reenrolled", "revoked device re-enrolled", deviceId = req.deviceId)
         }
@@ -141,19 +142,19 @@ private fun hmacSha256(secret: String, message: String): ByteArray {
 }
 
 /**
- * Детерминированная фейковая SRP-соль (hex) для несуществующего аккаунта: HMAC-SHA256(серверный
- * секрет, accountId). 32 байта = 64 hex-символа — та же длина, что у клиентской 256-битной соли,
- * так что ответ challenge структурно неотличим от настоящего. Стабильна между запросами (анти-
- * enumeration: повторный challenge того же неизвестного accountId даёт ТУ ЖЕ соль, без сигнала
- * «аккаунта нет»).
+ * Deterministic fake SRP salt (hex) for a nonexistent account: HMAC-SHA256(server secret,
+ * accountId). 32 bytes = 64 hex chars, the same length as a real client 256-bit salt, so the
+ * challenge response is structurally indistinguishable from a real one. Stable across requests
+ * (anti-enumeration: a repeated challenge for the same unknown accountId returns the same salt,
+ * with no "account doesn't exist" signal).
  */
 private fun fakeSalt(accountId: String, serverSecret: String): String =
     hmacSha256(serverSecret, "srp-fake-salt:$accountId").joinToString("") { "%02x".format(it) }
 
 /**
- * Псевдо-верификатор (hex) для синтетического challenge: BigInteger из HMAC, приведённый в группу
- * (mod N, ненулевой). Нужен лишь чтобы `SRP6ServerSession.step1` посчитал правдоподобный `B` той же
- * формы, что у реального аккаунта; знать пароль под него невозможно, поэтому verify всегда падает.
+ * Pseudo-verifier (hex) for the synthetic challenge: a BigInteger from HMAC, reduced into the
+ * group (mod N, nonzero). Only needed so `SRP6ServerSession.step1` computes a plausible `B` of the
+ * same shape as a real account; no password can match it, so verify always fails.
  */
 private fun fakeVerifier(accountId: String, serverSecret: String, n: BigInteger): String {
     val raw = BigInteger(1, hmacSha256(serverSecret, "srp-fake-verifier:$accountId")).mod(n)

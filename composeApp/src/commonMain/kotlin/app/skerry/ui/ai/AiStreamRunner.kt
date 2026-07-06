@@ -10,7 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/** Человекочитаемое сообщение об ошибке AI-провайдера (общее для чата и терминального бара). */
+/** Human-readable error message for an AI provider exception (shared by chat and the terminal bar). */
 internal fun AiException.friendlyMessage(): String = when (kind) {
     AiException.Kind.UNAUTHORIZED -> "Invalid API key — check it in AI settings."
     AiException.Kind.RATE_LIMITED -> "Rate limited by the provider. Try again shortly."
@@ -20,18 +20,16 @@ internal fun AiException.friendlyMessage(): String = when (kind) {
 }
 
 /**
- * Общий прогон одного стримингового AI-запроса — жизненный цикл, одинаковый для
- * [AiAssistantController] и [TerminalAiController]: создать провайдер из [providerFactory]
- * по выбранному [AiEndpoint] (облако или локальная модель), прогнать `chat`, аккумулируя
- * дельты, и гарантированно закрыть провайдер.
+ * Runs a single streaming AI request — the lifecycle shared by [AiAssistantController] and
+ * [TerminalAiController]: create a provider via [providerFactory] for the chosen [AiEndpoint]
+ * (cloud or local model), run `chat` accumulating deltas, and always close the provider.
  *
- * - [onDelta] получает НАКОПЛЕННЫЙ текст после каждой дельты (для поля streaming).
- * - [onComplete] — полный ответ по успешному завершению потока.
- * - [onError] — готовое сообщение для пользователя ([friendlyMessage] для [AiException]);
- *   [CancellationException] пробрасывается, а не маппится в ошибку.
- * - [onFinally] выполняется всегда (успех/ошибка/отмена) ПОСЛЕ закрытия провайдера; guard по
- *   поколению запроса (защита от job-reassignment race) остаётся на вызывающем — он владеет
- *   состоянием busy/streaming.
+ * - [onDelta] receives the accumulated text after each delta.
+ * - [onComplete] fires with the full reply on successful stream completion.
+ * - [onError] receives a ready-to-show message ([friendlyMessage] for [AiException]);
+ *   [CancellationException] is rethrown, not mapped to an error.
+ * - [onFinally] always runs (success/error/cancel), after the provider is closed; generation
+ *   guarding against job-reassignment races is the caller's responsibility.
  */
 internal class AiStreamRunner(
     private val providerFactory: (AiEndpoint) -> AiProvider,
@@ -44,7 +42,7 @@ internal class AiStreamRunner(
         onComplete: (String) -> Unit,
         onError: (String) -> Unit,
         onFinally: () -> Unit,
-        // null — дефолт провайдера; терминальный бар просит низкую (команда, не творчество).
+        // null uses the provider default; the terminal bar requests a low value (command, not creative).
         temperature: Double? = null,
     ): Job = scope.launch {
         var provider: AiProvider? = null

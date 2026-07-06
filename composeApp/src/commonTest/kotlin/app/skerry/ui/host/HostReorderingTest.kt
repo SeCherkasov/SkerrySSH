@@ -7,12 +7,12 @@ import kotlin.test.assertEquals
 private fun host(id: String, group: String? = null) =
     Host(id = id, label = id, address = "$id.example.com", username = "root", group = group)
 
-/** Имена групп каждого хоста — компактная проверка, что блоки групп остались непрерывны. */
+/** Group name of each host — compact check that group blocks stay contiguous. */
 private fun List<Host>.groupsOf() = map { it.group }
 
 class HostReorderingTest {
 
-    // moveHostToGroup: внутри папки
+    // moveHostToGroup: within a folder
 
     @Test
     fun moves_a_host_up_within_its_own_group() {
@@ -41,7 +41,7 @@ class HostReorderingTest {
         assertEquals(listOf("b", "a"), result.map { it.id })
     }
 
-    // moveHostToGroup: между папками
+    // moveHostToGroup: between folders
 
     @Test
     fun moves_a_host_into_another_group_and_rewrites_its_group() {
@@ -49,7 +49,7 @@ class HostReorderingTest {
 
         val result = moveHostToGroup(hosts, hostId = "a", targetGroup = "Lab", targetIndexInGroup = 0)
 
-        // a покинул Prod, встал первым в Lab, его group переписан.
+        // a left Prod, is now first in Lab, its group is rewritten.
         assertEquals(listOf("b", "a", "x"), result.map { it.id })
         assertEquals(listOf("Prod", "Lab", "Lab"), result.groupsOf())
         assertEquals("Lab", result.first { it.id == "a" }.group)
@@ -61,7 +61,7 @@ class HostReorderingTest {
 
         val result = moveHostToGroup(hosts, hostId = "x", targetGroup = "Prod", targetIndexInGroup = 1)
 
-        // Prod появилась первой → остаётся первой; Lab опустела и исчезла.
+        // Prod appeared first, so it stays first; Lab became empty and disappeared.
         assertEquals(listOf("Prod"), result.groupsOf().distinct())
         assertEquals(listOf("a", "x", "b"), result.map { it.id })
     }
@@ -95,13 +95,13 @@ class HostReorderingTest {
 
     @Test
     fun blank_and_null_groups_are_one_ungrouped_bucket() {
-        // Хосты с group="" и group=null — одна папка «Ungrouped»; перенос в null держит их вместе.
+        // Hosts with group="" and group=null are one "Ungrouped" folder; moving to null keeps them together.
         val hosts = listOf(host("blank", ""), host("nul", null), host("p", "Prod"))
 
         val result = moveHostToGroup(hosts, hostId = "p", targetGroup = null, targetIndexInGroup = 0)
 
-        // "" и null слиты в один бакет → все три рядом; у самих хостов сырой group не переписывается
-        // (канонизация — на уровне группировки, [groupHostsByFolder] всё равно сведёт их в Ungrouped).
+        // "" and null are merged into one bucket, so all three end up adjacent; the raw group value on
+        // the hosts themselves is not rewritten ([groupHostsByFolder] still folds them into Ungrouped).
         assertEquals(listOf("p", "blank", "nul"), result.map { it.id })
         assertEquals(listOf("Ungrouped"), groupHostsByFolder(result).map { it.name })
     }
@@ -166,7 +166,7 @@ class HostReorderingTest {
         val result = renameHostGroup(hosts, oldName = "Prod", newName = "Production")
 
         assertEquals(listOf("Production", "Production", "Dev"), result.groupsOf())
-        // Состав id сохранён (требование контракта reorder).
+        // Id set is preserved (reorder contract requirement).
         assertEquals(setOf("a", "b", "c"), result.map { it.id }.toSet())
     }
 
@@ -185,7 +185,7 @@ class HostReorderingTest {
 
         val result = renameHostGroup(hosts, oldName = "Baz", newName = "Foo")
 
-        // c сливается в Foo; блок Foo остаётся непрерывным (a, c), затем Bar.
+        // c merges into Foo; the Foo block stays contiguous (a, c), then Bar.
         assertEquals(listOf("Foo", "Foo", "Bar"), result.groupsOf())
         assertEquals(listOf("a", "c", "b"), result.map { it.id })
     }

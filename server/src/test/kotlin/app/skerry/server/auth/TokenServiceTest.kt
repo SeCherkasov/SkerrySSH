@@ -36,7 +36,7 @@ class TokenServiceTest {
         var now = 1_000_000L
         val svc = TokenService(config(), clock = { now })
         val token = svc.issueAccess("alice@example.com", "dev1")
-        now += 901_000 // за пределами 900-секундного TTL
+        now += 901_000 // past the 900-second TTL
         assertFailsWith<TokenExpiredException> { svc.verifier().verify(token) }
     }
 }

@@ -4,13 +4,12 @@ import app.skerry.shared.serial.SerialTransport
 import app.skerry.shared.telnet.TelnetTransport
 
 /**
- * Маршрутизатор транспортов: по [SshTarget.connectionType] делегирует установку соединения нужной
- * реализации — SSH (sshj), Telnet или Serial. Так весь стек сессий/терминала/реконнекта
- * (`ConnectionController` в UI-слое) остаётся един и работает поверх любого из трёх,
- * а место выбора протокола — одно.
+ * Transport router: delegates connection setup to the right implementation — SSH (sshj), Telnet or
+ * Serial — based on [SshTarget.connectionType]. Keeps the session/terminal/reconnect stack
+ * (`ConnectionController` in the UI layer) working over any of the three through a single call site.
  *
- * [ssh] инжектируется снаружи (несёт свой [HostKeyVerifier]/known-hosts); Telnet/Serial без состояния,
- * поэтому создаются по умолчанию, но их тоже можно подменить в тестах.
+ * [ssh] is injected from outside (carries its own [HostKeyVerifier]/known-hosts); Telnet/Serial are
+ * stateless and default-constructed, but can be swapped in tests too.
  */
 class RoutingTransport(
     private val ssh: SshTransport,

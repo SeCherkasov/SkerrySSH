@@ -1,10 +1,10 @@
 package app.skerry.server.db
 
 /**
- * Аккаунт в том виде, как его хранит сервер (всё, кроме [wrappedDataKey], — открыто).
+ * An account as the server stores it (everything but [wrappedDataKey] is plaintext).
  *
- * equals/hashCode переопределены вручную из-за поля-[ByteArray]: автогенерация data-класса
- * сравнивала бы его по ссылке (kotlin-ревью M).
+ * equals/hashCode are overridden manually because of the [ByteArray] field: the data class
+ * autogeneration would compare it by reference.
  */
 data class AccountRow(
     val id: String,
@@ -42,8 +42,8 @@ data class DeviceRow(
 )
 
 /**
- * Зашифрованная запись vault на сервере. Зеркалит клиентский `VaultRecord` плюс [serverSeq] —
- * присвоенный сервером монотонный курсор для дельта-синхронизации.
+ * An encrypted vault record on the server. Mirrors the client `VaultRecord` plus [serverSeq], a
+ * server-assigned monotonic cursor for delta sync.
  */
 data class StoredRecord(
     val id: String,
@@ -102,7 +102,7 @@ data class PairingRow(
     }
 }
 
-/** Строка аудит-лога (только метаданные синхронизации, без содержимого записей). */
+/** An audit log row (sync metadata only, never record content). */
 data class ActivityRow(
     val seq: Long,
     val accountId: String,

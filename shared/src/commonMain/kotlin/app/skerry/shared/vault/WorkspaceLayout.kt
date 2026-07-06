@@ -3,35 +3,33 @@ package app.skerry.shared.vault
 import kotlinx.serialization.Serializable
 
 /**
- * Структура рабочего пространства, синхронизируемая как одна запись vault: порядок хостов в дереве
- * и список групп (включая пустые папки и их порядок). Хранится как единственный [RecordType.GROUP]
- * с зарезервированным id [WorkspaceLayoutStore.LAYOUT_ID] — поэтому участвует в обычном LWW-синке
- * (`docs/skerry-sync-design.md`): дерево хостов одинаково на всех устройствах.
+ * Workspace structure synced as a single vault record: host order in the tree and the group list
+ * (including empty folders and their order). Stored as the single [RecordType.GROUP] with reserved
+ * id [WorkspaceLayoutStore.LAYOUT_ID], so it takes part in normal LWW sync
+ * (`docs/skerry-sync-design.md`): the host tree is identical on every device.
  *
- * Само членство хоста в группе живёт в [app.skerry.shared.host.Host.group]; здесь — только порядок
- * (хостов и групп) и существование пустых групп, которые иначе негде хранить (у пустой группы нет
- * ни одного хоста). Per-device UI-состояние (свёрнутость папок, недавние подключения) сюда НЕ входит —
- * оно остаётся локальным, не синкается.
+ * Host-to-group membership lives in [app.skerry.shared.host.Host.group]; this holds only order (of
+ * hosts and groups) and the existence of empty groups (which have no host to store them). Per-device
+ * UI state (collapsed folders, recent connections) is not included — it stays local.
  */
 @Serializable
 data class WorkspaceLayout(
-    /** Глобальный порядок id хостов в дереве. Хосты вне списка дорисовываются в конце. */
+    /** Global order of host ids in the tree. Hosts not in the list are appended at the end. */
     val hostOrder: List<String> = emptyList(),
-    /** Имена групп в порядке отображения, включая пустые папки. Пустой → порядок выводится из хостов. */
+    /** Group names in display order, including empty folders. Empty → order derived from hosts. */
     val groups: List<String> = emptyList(),
 )
 
 /**
- * Единственный владелец записи [WorkspaceLayout] в [vault]. И [VaultHostStore], и слой групп пишут
- * макет через один и тот же экземпляр, чтобы read-modify-write не затирал чужое поле (UI сериализует
- * вызовы — гонок между хостами и группами на главном потоке нет). Залоченный/отсутствующий vault →
- * пустой макет.
+ * Sole owner of the [WorkspaceLayout] record in [vault]. Both [VaultHostStore] and the group layer
+ * write the layout through this one instance so read-modify-write doesn't clobber the other's field
+ * (the UI serializes calls). Locked/absent vault → empty layout.
  *
- * Порядок хостов и пустые папки намеренно в ОДНОЙ записи: при синке она применяется как единое целое
- * (LWW по версии), поэтому дерево хостов переезжает между устройствами атомарно. Следствие: локальная
- * правка макета, совпавшая по времени с приходом удалённой версии этой же записи (фоновый
- * [app.skerry.shared.sync.SyncEngine]), разрешается last-writer-wins по всей записи — это by design,
- * а не потеря данных конкретного поля.
+ * Host order and empty folders share one record on purpose: sync applies it as a whole (LWW by
+ * version), so the host tree moves between devices atomically. Consequence: a local layout edit that
+ * coincides with an incoming remote version of this record (background
+ * [app.skerry.shared.sync.SyncEngine]) resolves last-writer-wins over the whole record — by design,
+ * not field-level data loss.
  */
 class WorkspaceLayoutStore(private val vault: Vault) {
 
@@ -46,7 +44,7 @@ class WorkspaceLayoutStore(private val vault: Vault) {
     }
 
     companion object {
-        /** Зарезервированный id записи-макета. Не пересекается с UUID-id хостов/групп. */
+        /** Reserved id of the layout record. Does not collide with UUID ids of hosts/groups. */
         const val LAYOUT_ID = "skerry.workspace.layout"
     }
 }

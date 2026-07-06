@@ -8,9 +8,9 @@ import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
 
 /**
- * Desktop-экспорт через нативный AWT [FileDialog] (как [app.skerry.ui.sftp.pickDownloadTarget]).
- * Модальный диалог запускает вложенный цикл событий EDT, поэтому показываем его на [Dispatchers.Swing].
- * Запись делаем на IO-потоке. Отмена (директория/имя == null) → `false`.
+ * Desktop export via the native AWT [FileDialog] (like [app.skerry.ui.sftp.pickDownloadTarget]).
+ * The modal dialog runs a nested EDT event loop, so it's shown on [Dispatchers.Swing]; the write
+ * happens on the IO dispatcher. Cancellation (directory/name null) returns `false`.
  */
 actual suspend fun exportTextFile(suggestedName: String, content: String): Boolean {
     val path = withContext(Dispatchers.Swing) {

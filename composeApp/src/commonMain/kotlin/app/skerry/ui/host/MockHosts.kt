@@ -4,8 +4,8 @@ import androidx.compose.ui.graphics.Color
 import app.skerry.ui.design.D
 
 /**
- * Статичные демонстрационные хосты для превью-сайдбара (пока живой каталог не подключён).
- * Только моки — боевой каталог хостов живёт в [HostManagerController].
+ * Static demo hosts for the sidebar preview (until the live catalog is wired up).
+ * Mocks only, the real host catalog lives in [HostManagerController].
  */
 
 enum class HostStatus(val color: Color, val glow: Boolean) {

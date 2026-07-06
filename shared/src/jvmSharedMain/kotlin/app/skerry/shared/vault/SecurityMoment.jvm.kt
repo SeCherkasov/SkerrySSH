@@ -6,9 +6,9 @@ import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 /**
- * JVM (desktop + Android): разбор ISO-инстанта в локальную зону через java.time. Считаем разницу в
- * календарных сутках (не в делении на 24 ч), чтобы «вчера в 23:00» и «сегодня в 01:00» различались
- * по датам, как ожидает человек. Любая ошибка парсинга → `null`.
+ * JVM (desktop + Android): parses an ISO instant into local time via java.time. Computes the
+ * difference in calendar days (not 24h buckets) so "yesterday 23:00" and "today 01:00" differ by
+ * date, as expected. Any parse failure returns `null`.
  */
 actual fun securityMoment(iso: String): SecurityMoment? = runCatching {
     val instant = Instant.parse(iso)

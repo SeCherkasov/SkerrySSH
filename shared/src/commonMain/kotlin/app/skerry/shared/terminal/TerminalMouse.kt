@@ -1,26 +1,26 @@
 package app.skerry.shared.terminal
 
-/** Кнопка/колесо мыши для репортинга в приложение. */
+/** Mouse button/wheel reported to the application. */
 enum class MouseButton { Left, Middle, Right, WheelUp, WheelDown }
 
-/** Тип события мыши, отправляемого в PTY. */
+/** Mouse event type sent to the PTY. */
 enum class MouseEventType {
-    /** Нажатие кнопки (а также «тик» колеса). */
+    /** Button press (also a wheel tick). */
     Press,
 
-    /** Отпускание кнопки. */
+    /** Button release. */
     Release,
 
-    /** Движение с зажатой кнопкой (репортится в ButtonEvent/AnyEvent). */
+    /** Motion with a button held (reported in ButtonEvent/AnyEvent). */
     Drag,
 
-    /** Движение без зажатых кнопок (только AnyEvent). */
+    /** Motion with no button held (AnyEvent only). */
     Move,
 }
 
 private val ESC = 27.toChar()
 
-/** Базовый код кнопки в протоколе мыши: левая=0, средняя=1, правая=2, колесо вверх/вниз=64/65. */
+/** Base button code in the mouse protocol: left=0, middle=1, right=2, wheel up/down=64/65. */
 private fun MouseButton.code(): Int = when (this) {
     MouseButton.Left -> 0
     MouseButton.Middle -> 1
@@ -30,20 +30,19 @@ private fun MouseButton.code(): Int = when (this) {
 }
 
 /**
- * Кодирует событие мыши в байты для PTY согласно активному режиму [tracking] и кодировке:
- *  - `sgr=true` — расширенный SGR-формат (DEC 1006): `ESC [ < Cb ; col ; row M|m`, координаты
- *    1-based в десятичном виде, без 223-предела; отпускание идёт строчной `m`, кнопка сохраняется;
- *  - `sgr=false` — классический X11-формат (DEC 1000): `ESC [ M Cb Cx Cy`, где каждый байт = значение+32,
- *    координаты `col+1`/`row+1`, кнопка при отпускании — неразличимый код 3; байты клампятся в 0..255.
- *  - `pixels=true` — SGR-Pixels (DEC 1016): тот же `ESC [ <` -формат, что и SGR, но координаты —
- *    пиксельные [pixelX]/[pixelY] (0-based, в протоколе 1-based) вместо клеточных. Подразумевает
- *    SGR-кодировку независимо от [sgr].
+ * Encodes a mouse event to PTY bytes per the active [tracking] mode and encoding:
+ *  - `sgr=true` — extended SGR format (DEC 1006): `ESC [ < Cb ; col ; row M|m`, 1-based decimal
+ *    coordinates, no 223 limit; release uses lowercase `m` and preserves the button;
+ *  - `sgr=false` — classic X11 format (DEC 1000): `ESC [ M Cb Cx Cy`, each byte = value+32,
+ *    coordinates `col+1`/`row+1`, release uses the indistinguishable code 3; bytes clamped to 0..255.
+ *  - `pixels=true` — SGR-Pixels (DEC 1016): same `ESC [ <` format as SGR but pixel coordinates
+ *    [pixelX]/[pixelY] instead of cells. Implies SGR encoding regardless of [sgr].
  *
- * Cb битами: младшие 2 — кнопка (или 3 = «нет/release»), 4 — Shift, 8 — Meta(Alt), 16 — Ctrl,
- * 32 — движение (Drag/Move), 64 — колесо. Возвращает `null`, если событие в данном режиме не
- * репортится (например, движение в Normal или отпускание в X10).
+ * Cb bits: low 2 = button (or 3 = none/release), 4 = Shift, 8 = Meta(Alt), 16 = Ctrl, 32 = motion
+ * (Drag/Move), 64 = wheel. Returns `null` if the event isn't reported in this mode (e.g. motion in
+ * Normal or release in X10).
  *
- * [col]/[row] — 0-based индексы ячейки; в протоколе они становятся 1-based.
+ * [col]/[row] are 0-based cell indices; the protocol makes them 1-based.
  */
 fun encodeMouseReport(
     tracking: MouseTracking,
@@ -62,28 +61,28 @@ fun encodeMouseReport(
     val wheel = button == MouseButton.WheelUp || button == MouseButton.WheelDown
     val motion = type == MouseEventType.Drag || type == MouseEventType.Move
 
-    // Гейтинг по режиму: какие события вообще репортятся.
+    // Mode gating: which events are reported at all.
     when (tracking) {
         MouseTracking.Off -> return null
-        MouseTracking.X10 -> if (type != MouseEventType.Press || wheel) return null // только нажатия кнопок
-        MouseTracking.Normal -> if (motion) return null // без движения
-        MouseTracking.ButtonEvent -> if (type == MouseEventType.Move) return null // движение только с кнопкой
-        MouseTracking.AnyEvent -> {} // всё
+        MouseTracking.X10 -> if (type != MouseEventType.Press || wheel) return null // button presses only
+        MouseTracking.Normal -> if (motion) return null // no motion
+        MouseTracking.ButtonEvent -> if (type == MouseEventType.Move) return null // motion only with a button
+        MouseTracking.AnyEvent -> {} // everything
     }
 
     val isRelease = type == MouseEventType.Release
-    // Базовый код кнопки. В legacy отпускание кодируется неразличимым 3; в SGR кнопка сохраняется.
-    // Движение без кнопки (Move) — тоже младшие биты 3 («кнопки не зажаты»).
+    // Base button code. Legacy encodes release as the indistinguishable 3; SGR preserves the button.
+    // Motion with no button (Move) is also low bits 3 (no button held).
     var cb = when {
         wheel -> button.code()
         type == MouseEventType.Move -> 3
-        // Только legacy (X11) кодирует отпускание неразличимым 3; SGR и SGR-Pixels сохраняют кнопку
-        // (release различается строчной `m`).
+        // Only legacy (X11) encodes release as the indistinguishable 3; SGR and SGR-Pixels preserve
+        // the button (release is distinguished by lowercase `m`).
         isRelease && !sgr && !pixels -> 3
         else -> button.code()
     }
     if (motion) cb += 32
-    // Модификаторы (X10 их не кодирует).
+    // Modifiers (X10 doesn't encode them).
     if (tracking != MouseTracking.X10) {
         if (shift) cb += 4
         if (alt) cb += 8
@@ -107,18 +106,18 @@ fun encodeMouseReport(
 }
 
 /**
- * Оборачивает вставляемый текст маркерами bracketed-paste (`ESC[200~` … `ESC[201~`), когда режим
- * включён приложением (DEC 2004) — тогда shell/редактор отличает вставку от ввода и не исполняет
- * переводы строк как команды. При выключенном режиме текст возвращается как есть.
+ * Wraps pasted text in bracketed-paste markers (`ESC[200~` … `ESC[201~`) when the mode is enabled by
+ * the application (DEC 2004), so a shell/editor distinguishes paste from input and doesn't execute
+ * newlines as commands. When disabled, text is returned as-is.
  *
- * Из содержимого вырезается закрывающий маркер `ESC[201~`: иначе вставка текста, в который недоверенный
- * SSH-сервер «подсадил» этот маркер (через вывод, попавший в выделение), завершилась бы раньше времени,
- * и хвост ушёл бы в приложение как набранные команды (классическая paste-инъекция).
+ * The closing marker `ESC[201~` is stripped from the content: otherwise pasting text into which an
+ * untrusted SSH server injected this marker (via output that landed in the selection) would end the
+ * paste early and send the tail to the application as typed commands (paste injection).
  *
- * При ВЫКЛЮЧЕННОМ режиме приложение не отличает вставку от ввода, поэтому управляющие байты из буфера
- * (например `CR` = Enter) исполнились бы как команды. Поэтому из сырой вставки режем C0-управляющие
- * (`0x00`–`0x1F`) и `DEL` (`0x7F`), кроме `Tab` и `LF` — легитимных разделителей. В bracketed-режиме
- * управляющие байты, наоборот, оставляем литералами: приложение знает, что это вставка, и не исполнит их.
+ * When the mode is disabled the application can't tell paste from input, so control bytes in the
+ * buffer (e.g. `CR` = Enter) would execute as commands. Raw pastes therefore drop C0 controls
+ * (`0x00`–`0x1F`) and `DEL` (`0x7F`) except `Tab` and `LF` (legitimate separators). In bracketed
+ * mode control bytes are kept literal: the application knows it's a paste and won't execute them.
  */
 fun bracketedPasteWrap(text: String, bracketed: Boolean): String {
     if (!bracketed) return text.filterNot { it.code < 0x20 && it != '\t' && it != '\n' || it.code == 0x7f }

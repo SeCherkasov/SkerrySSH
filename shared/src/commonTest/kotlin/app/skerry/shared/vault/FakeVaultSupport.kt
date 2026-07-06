@@ -4,9 +4,9 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
 
 /**
- * In-memory [Vault] для тестов сторов/миграции: моделирует put/openPayload/records/remove с
- * версиями и tombstone как [FileVault], но без реального шифрования — payload хранится как есть.
- * Жизненный цикл (unlock/lock) и AAD здесь не проверяются.
+ * In-memory [Vault] for store/migration tests: models put/openPayload/records/remove with
+ * versions and tombstones like [FileVault], but without real encryption — payload is stored as-is.
+ * Lifecycle (unlock/lock) and AAD are not exercised here.
  */
 internal class FakeVault : Vault {
     private data class Entry(val record: VaultRecord, val payload: ByteArray)
@@ -54,7 +54,7 @@ internal class FakeVault : Vault {
     }
 }
 
-/** In-memory [HostStore] для тестов миграции: upsert/remove по [Host.id], порядок вставки. */
+/** In-memory [HostStore] for migration tests: upsert/remove by [Host.id], insertion order. */
 internal class FakeHostStore : HostStore {
     private val hosts = LinkedHashMap<String, Host>()
     override fun all(): List<Host> = hosts.values.toList()

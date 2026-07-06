@@ -5,14 +5,13 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecordCodec
 
 /**
- * [SnippetStore] поверх зашифрованного [Vault]: каждый сниппет — запись [RecordType.SNIPPET], чей
- * payload — JSON-сериализация [Snippet]. Команды могут содержать inline-креды, поэтому теперь они
- * под тем же шифрованием и E2E-синком, что и секреты (Phase A). По образцу
- * [app.skerry.shared.vault.CredentialStore].
+ * [SnippetStore] over an encrypted [Vault]: each snippet is a [RecordType.SNIPPET] record whose
+ * payload is the JSON serialization of [Snippet]. Commands may contain inline credentials, so they
+ * get the same encryption and E2E sync as other secrets.
  *
- * Порядка у сниппетов нет (интерфейс — set-семантика), поэтому отдельная запись-макет не нужна:
- * отдаём в порядке [Vault.records]. Чтение на залоченном vault — пустой список; битый payload
- * молча пропускается.
+ * Snippets have no defined order (the interface has set semantics), so no separate order record
+ * is needed; entries come back in [Vault.records] order. Reading a locked vault returns an empty
+ * list; a corrupt payload is silently skipped.
  */
 class VaultSnippetStore(private val vault: Vault) : SnippetStore {
 

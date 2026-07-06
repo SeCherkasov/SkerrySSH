@@ -52,8 +52,8 @@ class VaultPresentationTest {
         assertEquals(SecretTypeStyle("workspace_premium", D.moss, tinted = true), VaultPresentation.secretStyle(cert("c1").secret))
     }
 
-    // Прим.: usedByLabel стала @Composable (текст «used by N host(s)» — строковый ресурс с формой
-    // числа), поэтому её строковый юнит-тест снят — подпись резолвится в composition.
+    // usedByLabel is now @Composable (plural string resource), so its string unit test was dropped;
+    // the label resolves in composition.
 
     @Test
     fun `hostsUsing returns only hosts referencing the credential`() {

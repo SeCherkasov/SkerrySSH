@@ -2,22 +2,22 @@ package app.skerry.shared.ai.local
 
 import okio.Path
 
-/** События закачки модели ([ModelDownloader.download]) — прогресс для UI и фазы завершения. */
+/** Model download events ([ModelDownloader.download]): progress for UI and completion phases. */
 sealed interface ModelDownloadEvent {
-    /** Скачано [downloadedBytes] из [totalBytes] (каталожный размер, Content-Length не доверяем). */
+    /** [downloadedBytes] out of [totalBytes] (catalog size; Content-Length is not trusted). */
     data class Progress(val downloadedBytes: Long, val totalBytes: Long) : ModelDownloadEvent
 
-    /** Файл скачан целиком, идёт проверка sha256 (секунды на гигабайтном файле). */
+    /** File fully downloaded, sha256 verification in progress. */
     data object Verifying : ModelDownloadEvent
 
-    /** Модель установлена и готова к загрузке в рантайм. */
+    /** Model installed and ready to load into the runtime. */
     data class Completed(val path: Path) : ModelDownloadEvent
 }
 
 /**
- * Сбой закачки модели. [Kind.NETWORK] — сеть/HTTP-статус/обрыв, part-файл сохранён для докачки.
- * [Kind.INTEGRITY] — скачанное не совпало с каталогом (sha256/размер): битые данные удалены,
- * докачивать нечего — только заново.
+ * Model download failure. [Kind.NETWORK]: network/HTTP status/disconnect, part file kept for resume.
+ * [Kind.INTEGRITY]: downloaded data doesn't match the catalog (sha256/size); corrupt data is deleted,
+ * nothing to resume from — must restart.
  */
 class ModelDownloadException(val kind: Kind, message: String, cause: Throwable? = null) : Exception(message, cause) {
     enum class Kind { NETWORK, INTEGRITY }

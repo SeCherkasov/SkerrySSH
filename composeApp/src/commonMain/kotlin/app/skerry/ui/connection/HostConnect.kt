@@ -7,22 +7,22 @@ import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 
 /**
- * Чистые хелперы проводки сохранённого профиля хоста к живой сессии. Вынесены отдельно от UI,
- * чтобы desktop-дизайн-слой и мобильный экран собирали [SshTarget]/[SshAuth] и подписи одинаково
- * (DRY) и это покрывалось общими тестами без Compose.
+ * Pure helpers wiring a saved host profile to a live session. Kept separate from UI so the
+ * desktop design layer and the mobile screen build [SshTarget]/[SshAuth] and labels the same way
+ * (DRY), covered by shared tests without Compose.
  */
 
-/** Профиль хоста → адрес для подключения ([SshTarget]); [Host.connectionType] выбирает транспорт. */
+/** Host profile → connection address ([SshTarget]); [Host.connectionType] picks the transport. */
 fun Host.toTarget(): SshTarget =
     SshTarget(host = address, port = port, username = username, connectionType = connectionType)
 
-/** Строка `user@addr:port` — подпись вкладки/заголовка сессии. */
+/** `user@addr:port` string — the session's tab/title label. */
 fun Host.connectionSubtitle(): String = "$username@$address:$port"
 
 /**
- * Keychain-секрет из vault → способ аутентификации SSH. Пароль/ключ/сертификат разворачиваются
- * один в один; ветки совпадают с моделью [CredentialSecret]. Хост ссылается на секрет по
- * `credentialId` — вызывающий резолвит его в [Credential] и зовёт это.
+ * Keychain secret from the vault → SSH auth method. Password/key/certificate map one-to-one;
+ * branches mirror the [CredentialSecret] model. A host references its secret by `credentialId` —
+ * the caller resolves it to a [Credential] and calls this.
  */
 fun Credential.toSshAuth(): SshAuth = when (val s = secret) {
     is CredentialSecret.Password -> SshAuth.Password(s.password)
@@ -31,9 +31,9 @@ fun Credential.toSshAuth(): SshAuth = when (val s = secret) {
 }
 
 /**
- * Имя шифра для тесной info-панели: отбрасывает вендорный суффикс `@…` (`chacha20-poly1305@openssh.com`
- * → `chacha20-poly1305`), чтобы строка влезала. Пустую/`null`-строку возвращает как `null` (нечего
- * показывать). Сам алгоритм в имени не меняется — суффикс лишь маркер вендора OpenSSH.
+ * Cipher name for the compact info panel: drops the vendor suffix `@…` (`chacha20-poly1305@openssh.com`
+ * → `chacha20-poly1305`) so the string fits. An empty/`null` string returns `null` (nothing to
+ * show). The algorithm name itself is unchanged — the suffix is just an OpenSSH vendor marker.
  */
 fun shortCipher(cipher: String?): String? =
     cipher?.trim()?.substringBefore('@')?.takeIf { it.isNotEmpty() }

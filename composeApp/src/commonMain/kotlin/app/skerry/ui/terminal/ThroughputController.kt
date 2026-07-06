@@ -11,14 +11,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Считает скорость терминального канала по дельте накопленных счётчиков байт за период опроса и
- * публикует её в [upRate]/[downRate] (байт/с) для статус-бара. Источник — сэмплеры [sampleUp]/
- * [sampleDown] поверх счётчиков [app.skerry.shared.ssh.ShellChannel.bytesUp]/`bytesDown`.
+ * Computes terminal channel throughput from the delta of accumulated byte counters per poll
+ * period, publishing it as [upRate]/[downRate] (bytes/sec) for the status bar. Sources:
+ * [sampleUp]/[sampleDown] over [app.skerry.shared.ssh.ShellChannel.bytesUp]/`bytesDown` counters.
  *
- * Гоняется на [scope] сессии (как [app.skerry.ui.metrics.HostMetricsController]): переживает
- * переключение вкладок и останавливается вместе с сессией ([stop] из
- * [app.skerry.ui.connection.ConnectionController.disconnect]). Формула скорости — та же, что у
- * [app.skerry.ui.forward.PortForwardController]: `дельта * 1000 / период`.
+ * Runs on the session's [scope] (like [app.skerry.ui.metrics.HostMetricsController]): survives
+ * tab switches and stops with the session ([stop] from
+ * [app.skerry.ui.connection.ConnectionController.disconnect]). Rate formula matches
+ * [app.skerry.ui.forward.PortForwardController]: `delta * 1000 / period`.
  */
 @Stable
 class ThroughputController(
@@ -38,8 +38,8 @@ class ThroughputController(
     private var job: Job? = null
 
     /**
-     * Запустить периодический опрос (идемпотентно). Базис снимаем сразу: уже накопленные к моменту
-     * старта байты (баннер шелла и т.п.) не должны сосчитаться как скорость первого периода.
+     * Starts periodic polling (idempotent). Baseline is captured immediately so bytes already
+     * accumulated before start (shell banner, etc.) aren't counted as first-period throughput.
      */
     fun start() {
         if (job != null) return
@@ -53,7 +53,7 @@ class ThroughputController(
         }
     }
 
-    /** Один замер: скорость = прирост байт за период, приведённый к секунде; счётчик не убывает. */
+    /** One measurement: rate = byte delta over the period, normalized to per-second; counter never decreases. */
     internal fun poll() {
         val up = sampleUp()
         val down = sampleDown()
@@ -63,7 +63,7 @@ class ThroughputController(
         prevDown = down
     }
 
-    /** Остановить опрос. */
+    /** Stops polling. */
     fun stop() {
         job?.cancel()
         job = null

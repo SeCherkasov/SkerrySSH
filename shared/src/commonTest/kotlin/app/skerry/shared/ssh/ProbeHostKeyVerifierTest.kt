@@ -18,7 +18,7 @@ class ProbeHostKeyVerifierTest {
 
         assertTrue(verifier.verify("example.com", 22, ed25519, fpA))
 
-        // Проба не оставляет следов в known_hosts.
+        // Probing leaves no trace in known_hosts.
         assertEquals(emptyList(), store.all())
         assertEquals(0, store.adds)
     }
@@ -34,8 +34,8 @@ class ProbeHostKeyVerifierTest {
 
     @Test
     fun `accepts a new key type for a known host without writing`() {
-        // Известен ed25519, сервер предъявляет rsa — это новая тройка (host, port, keyType): проба
-        // принимает (как новый хост) и НЕ пишет.
+        // ed25519 is known, server presents rsa: a new (host, port, keyType) triple, so the probe
+        // accepts it as a new host and does not write.
         val store = RecordingKnownHostsStore().apply { seed(KnownHost("example.com", 22, ed25519, fpA)) }
         val verifier = ProbeHostKeyVerifier(store)
 
@@ -54,13 +54,13 @@ class ProbeHostKeyVerifierTest {
     }
 }
 
-/** Хранилище known-hosts в памяти, считающее вызовы [add] — чтобы проверить read-only поведение пробы. */
+/** In-memory known-hosts store that counts [add] calls, to verify probe read-only behavior. */
 private class RecordingKnownHostsStore : KnownHostsStore {
     private val entries = mutableListOf<KnownHost>()
     var adds = 0
         private set
 
-    /** Положить запись в обход счётчика [adds] (предзаполнение «доверенного» состояния). */
+    /** Seeds an entry without incrementing [adds] (pre-fills trusted state). */
     fun seed(host: KnownHost) { entries += host }
 
     override fun all(): List<KnownHost> = entries.toList()

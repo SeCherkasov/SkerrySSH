@@ -25,157 +25,156 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.design.D
 
-/** Левый rail / основные view макета. */
+/** Left rail / top-level views of the layout. */
 enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
 
 /**
- * View уровня приложения (не привязаны к конкретной SSH-сессии): Ports(Tunnels)/Snippets/Vault/
- * Known/Teams. Они открываются «поверх» вкладок ([DesktopDesignState.appOverlay]) и общие на весь
- * app, тогда как Terminal/SFTP — подвью активной вкладки ([app.skerry.ui.session.Session.view]).
+ * App-level views not tied to a specific SSH session: Ports(Tunnels)/Snippets/Vault/Known/Teams.
+ * They open "over" the tabs ([DesktopDesignState.appOverlay]) and are shared across the app, while
+ * Terminal/SFTP are sub-views of the active tab ([app.skerry.ui.session.Session.view]).
  *
- * Tunnels — глобальный список сохранённых пробросов: туннель самостоятелен и сам
- * открывает соединение к хосту, поэтому раздел общий, а не часть открытой сессии.
+ * Tunnels is a global list of saved forwards: a tunnel is self-contained and opens its own
+ * connection to the host, so the section is shared rather than part of an open session.
  */
 val DesktopView.isAppLevel: Boolean
     get() = this == DesktopView.Ports || this == DesktopView.Snippets || this == DesktopView.Vault ||
         this == DesktopView.Known || this == DesktopView.Teams
 
-/** DesktopView (rail) → подвью сессии; app-level/Terminal сводятся к Terminal. */
+/** Rail item → session sub-view; app-level/Terminal map to Terminal. */
 fun DesktopView.asSessionView(): SessionView = when (this) {
     DesktopView.Sftp -> SessionView.Sftp
     else -> SessionView.Terminal
 }
 
-/** Подвью сессии → пункт rail для подсветки. */
+/** Session sub-view → rail item to highlight. */
 fun SessionView.asDesktopView(): DesktopView = when (this) {
     SessionView.Terminal -> DesktopView.Terminal
     SessionView.Sftp -> DesktopView.Sftp
 }
 
-/** Вкладки панели настроек. */
+/** Settings panel tabs. */
 enum class SettingsTab { Account, AI, Sync, Security, Appearance, Terminal, Keyboard, About }
 
 /**
- * AI-политика подключения. Единый тип с [app.skerry.shared.host.Host.aiPolicy] — дизайн-слой
- * использует shared-enum через alias, чтобы выбор в модалке писался прямо в профиль хоста.
+ * Connection AI policy. Aliases the shared enum ([app.skerry.shared.host.Host.aiPolicy]) so the
+ * modal's choice writes directly into the host profile.
  */
 typealias AiPolicy = app.skerry.shared.ai.AiPolicy
 
 /**
- * Запрошенное деструктивное действие над сессией, ждущее подтверждения ([ConfirmActionDialog]).
- * Само действие (close/closeSplit) выполняет [DesktopChrome] — там доступен менеджер сессий.
+ * A destructive session action awaiting confirmation ([ConfirmActionDialog]). The action itself
+ * (close/closeSplit) is performed by [DesktopChrome], which has access to the session manager.
  */
 sealed interface PendingClose {
-    /** Разрыв сессии-вкладки целиком (кнопка power в тулбаре). */
+    /** Closing an entire session tab (power button in the toolbar). */
     data class Session(val id: String) : PendingClose
 
-    /** Закрытие split-панели вкладки [parentId] (крестик в шапке split). */
+    /** Closing the split pane of tab [parentId] (close icon in the split header). */
     data class Split(val parentId: String) : PendingClose
 }
 
 /**
- * Открытый диалог управления группой хостов сайдбара: создание новой ([Create]) либо правка
- * существующей по имени ([Rename]). `null` в [DesktopDesignState.groupDialog] — диалога нет.
+ * Open dialog for managing a sidebar host group: creating a new one ([Create]) or editing an
+ * existing one by name ([Rename]). `null` in [DesktopDesignState.groupDialog] means no dialog.
  */
 sealed interface GroupDialog {
-    /** Создание новой (пока пустой) группы. */
+    /** Creating a new (still empty) group. */
     data object Create : GroupDialog
 
-    /** Правка группы [name]: переименование либо удаление (разгруппировать её хосты). */
+    /** Editing group [name]: rename or delete (ungroups its hosts). */
     data class Rename(val name: String) : GroupDialog
 }
 
-/** Вкладка сессии в titlebar: имя хоста + цвет статус-точки. */
+/** A session tab in the titlebar: host name + status-dot color. */
 @Stable
 data class SessionTab(val name: String, val dot: Color)
 
-/** Строка демо-терминала: команда (с промптом) либо вывод. */
+/** A demo-terminal line: a command (with prompt) or output. */
 @Stable
 data class TermLine(val text: String, val isCmd: Boolean, val color: Color = D.textMid)
 
 /**
- * UI-состояние десктопного приложения без бэкенда: демо-терминал (`exec`) и переключатели —
- * заглушки; живая функциональность подключается отдельно. Compose-state через [mutableStateOf],
- * мутаторы инкапсулированы (`private set`) — тем же приёмом, что [app.skerry.ui.session.SessionsController].
+ * UI state for the desktop app without a backend: demo terminal (`exec`) and toggles are stubs;
+ * live functionality is wired in separately. Compose state via [mutableStateOf], mutators
+ * encapsulated (`private set`), the same approach as [app.skerry.ui.session.SessionsController].
  */
 @Stable
 class DesktopDesignState(
-    // Стартовая видимость info-панели (на desktop читается из персиста при запуске) + колбэк её
-    // изменения (там же пишется обратно), чтобы выбор пользователя переживал перезапуск. Дефолты
-    // сохраняют прежнее поведение для мок/превью/тестов.
+    // Initial info-panel visibility (read from persistence at desktop startup) plus a callback for
+    // changes (written back there too), so the user's choice survives a restart. Defaults preserve
+    // prior behavior for mock/preview/tests.
     initialInfoPanel: Boolean = true,
     private val onInfoPanelChange: (Boolean) -> Unit = {},
-    // Схлопнутые папки хостов в сайдбаре (имена групп). Стартовое значение читается из персиста при
-    // запуске, колбэк пишет его обратно — состояние папок переживает перезапуск. Дефолты (всё
-    // развёрнуто, no-op) сохраняют прежнее поведение для мок/превью/тестов.
+    // Collapsed host folders in the sidebar (group names). Read from persistence at startup, written
+    // back via the callback, so folder state survives a restart. Defaults (all expanded, no-op)
+    // preserve prior behavior for mock/preview/tests.
     initialCollapsedGroups: Set<String> = emptySet(),
     private val onCollapsedGroupsChange: (Set<String>) -> Unit = {},
-    // Недавние подключения (секция RECENT в сайдбаре): id хостов в порядке свежести, новейший —
-    // первым. Стартовое значение читается из персиста, колбэк пишет обратно, чтобы список переживал
-    // перезапуск. Дефолты (пусто, no-op) сохраняют прежнее поведение для мок/превью/тестов.
+    // Recent connections (RECENT section in the sidebar): host ids, newest first. Read from
+    // persistence, written back via the callback, so the list survives a restart. Defaults (empty,
+    // no-op) preserve prior behavior for mock/preview/tests.
     initialRecentHostIds: List<String> = emptyList(),
     private val onRecentHostIdsChange: (List<String>) -> Unit = {},
-    // Пользовательские группы хостов, ещё не имеющие профилей (созданы кнопкой «+папка» до того, как
-    // в них перетащили/завели хост). Группы с хостами выводятся из [Host.group], а пустые жить там не
-    // могут — поэтому держим их именами здесь и персистим. Дефолты (пусто, no-op) — для мок/превью/тестов.
+    // Custom host groups without profiles yet (created via the "+folder" button before a host is
+    // dragged in). Groups with hosts are derived from [Host.group]; empty groups can't live there, so
+    // they're kept by name here and persisted. Defaults (empty, no-op) are for mock/preview/tests.
     initialCustomGroups: List<String> = emptyList(),
     private val onCustomGroupsChange: (List<String>) -> Unit = {},
-    // Шрифт терминала (Appearance → Font) и его кегль. Стартовые значения читаются из персиста при
-    // запуске, колбэки пишут их обратно — выбор переживает перезапуск. Дефолты (Hack 13px, no-op) —
-    // для мок/превью/тестов.
+    // Terminal font (Appearance → Font) and its size. Read from persistence at startup, written back
+    // via the callbacks. Defaults (Hack 13px, no-op) are for mock/preview/tests.
     initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
     private val onTerminalFontSizeChange: (Int) -> Unit = {},
-    // Высота строки (множитель) и межбуквенный интервал терминала (Appearance → Line height / Letter
-    // spacing). Тоже персистятся снаружи (desktop main). Дефолты (18/13, 0, no-op) — для мок/превью/тестов.
+    // Terminal line height (multiplier) and letter spacing (Appearance → Line height / Letter
+    // spacing). Also persisted externally (desktop main). Defaults (18/13, 0, no-op) are for
+    // mock/preview/tests.
     initialTerminalLineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
     private val onTerminalLineHeightChange: (Float) -> Unit = {},
     initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
     private val onTerminalLetterSpacingChange: (Float) -> Unit = {},
-    // Язык интерфейса (Appearance → Language). Стартовое значение читается из персиста при запуске,
-    // колбэк пишет его обратно — выбор переживает перезапуск. Дефолты (System, no-op) сохраняют
-    // прежнее поведение (автоопределение по локали ОС) для мок/превью/тестов.
+    // UI language (Appearance → Language). Read from persistence at startup, written back via the
+    // callback. Defaults (System, no-op) preserve OS-locale auto-detection for mock/preview/tests.
     initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
     private val onUiLanguageChange: (UiLanguage) -> Unit = {},
-    // Настройки терминала (Settings → Терминал): глубина scrollback, стиль курсора и показ живого
-    // OSC-заголовка на вкладках. Стартовые значения читаются из персиста при запуске, колбэки пишут
-    // обратно — выбор переживает перезапуск. Дефолты (10 000 строк, мигающий блок, показ выкл, no-op) —
-    // для мок/превью/тестов. Первые две применяются к НОВЫМ сессиям при connect (см.
-    // [app.skerry.ui.terminal.TerminalSessionPrefs]) И проталкиваются в уже открытые сессии на лету.
+    // Terminal settings (Settings → Terminal): scrollback depth, cursor style, and showing the live
+    // OSC title on tabs. Read from persistence at startup, written back via the callbacks. Defaults
+    // (10,000 lines, blinking block, title off, no-op) are for mock/preview/tests. The first two apply
+    // to NEW sessions on connect (see [app.skerry.ui.terminal.TerminalSessionPrefs]) and are also
+    // pushed live into already-open sessions.
     initialTerminalScrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
     private val onTerminalScrollbackChange: (Int) -> Unit = {},
     initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
     private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
     initialShowTerminalTitleOnTabs: Boolean = false,
     private val onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
-    // Цветовая тема терминала (Appearance → карточки тем). Стартовое значение читается из персиста при
-    // запуске, колбэк пишет обратно — выбор переживает перезапуск. Проводится в терминал через
-    // [app.skerry.ui.terminal.LocalTerminalTheme] и применяется к открытым сессиям на лету. Дефолт
-    // (Night Sea, no-op) сохраняет прежний вид для мок/превью/тестов.
+    // Terminal color theme (Appearance → theme cards). Read from persistence at startup, written back
+    // via the callback. Threaded into the terminal via [app.skerry.ui.terminal.LocalTerminalTheme] and
+    // applied to open sessions live. Default (Night Sea, no-op) preserves the prior look for
+    // mock/preview/tests.
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
-    // Порог автоблокировки по простою (Settings → Безопасность). Стартовое значение из персиста,
-    // колбэк пишет обратно; проводится в [app.skerry.ui.vault.VaultGate] как idleMs таймера.
+    // Idle auto-lock threshold (Settings → Security). Read from persistence, written back via the
+    // callback; threaded into [app.skerry.ui.vault.VaultGate] as the timer's idleMs.
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
-    // Видимость и размер секции RECENT в сайдбаре (Settings → Appearance → Interface). Стартовые
-    // значения из персиста, колбэки пишут обратно — выбор переживает перезапуск. Дефолты (показывать,
-    // полный кап) сохраняют прежнее поведение для мок/превью/тестов. [recentLimit] режет только показ:
-    // хранилище недавних по-прежнему копит до [MAX_RECENT_HOSTS], лимит применяется при рендере.
+    // Visibility and size of the RECENT sidebar section (Settings → Appearance → Interface). Read
+    // from persistence, written back via the callbacks. Defaults (shown, full cap) preserve prior
+    // behavior for mock/preview/tests. [recentLimit] only trims the display: the recent-hosts store
+    // still accumulates up to [MAX_RECENT_HOSTS], the limit applies at render time.
     initialShowRecent: Boolean = true,
     private val onShowRecentChange: (Boolean) -> Unit = {},
     initialRecentLimit: Int = MAX_RECENT_HOSTS,
     private val onRecentLimitChange: (Int) -> Unit = {},
 ) {
-    // session-level view (Terminal/SFTP/Ports) — мок/превью-фолбэк, когда нет живых сессий; в живом
-    // режиме подвью держит каждая вкладка ([app.skerry.ui.session.Session.view]).
+    // Session-level view (Terminal/SFTP/Ports): mock/preview fallback when there are no live
+    // sessions; in live mode each tab holds its own sub-view ([app.skerry.ui.session.Session.view]).
     var view: DesktopView by mutableStateOf(DesktopView.Terminal); private set
 
     /**
-     * Открытый app-level view поверх вкладок (Vault/Known/Teams/Snippets) или `null` — показываем
-     * подвью активной вкладки. Эти разделы общие на весь app, поэтому держатся отдельно от [view]
-     * и не зависят от того, какая вкладка активна (см. [DesktopView.isAppLevel]).
+     * App-level view open over the tabs (Vault/Known/Teams/Snippets), or `null` to show the active
+     * tab's sub-view. These sections are shared across the app, so they're kept separate from [view]
+     * and independent of which tab is active (see [DesktopView.isAppLevel]).
      */
     var appOverlay: DesktopView? by mutableStateOf(null); private set
 
@@ -183,88 +182,88 @@ class DesktopDesignState(
     var modalOpen: Boolean by mutableStateOf(false); private set
     var settingsOpen: Boolean by mutableStateOf(false); private set
 
-    /** Открыта ли модалка-онбординг настройки sync (Settings → Sync → «Set up sync»). */
+    /** Whether the sync setup onboarding modal is open (Settings → Sync → "Set up sync"). */
     var syncSetupOpen: Boolean by mutableStateOf(false); private set
 
-    /** Открыт ли диалог «Link a device» (показ кода/QR быстрого паринга — Settings → Account). */
+    /** Whether the "Link a device" dialog is open (quick-pairing code/QR — Settings → Account). */
     var pairingOpen: Boolean by mutableStateOf(false); private set
     var settingsTab: SettingsTab by mutableStateOf(SettingsTab.AI); private set
     var split: Boolean by mutableStateOf(false); private set
-    /** Скрыт ли левый сайдбар хостов (сворачивается в тонкий рельс с кнопкой раскрытия). */
+    /** Whether the left host sidebar is collapsed into a thin rail with an expand button. */
     var sidebarHidden: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
 
-    /** Имена схлопнутых папок хостов в сайдбаре (свёрнут список их хостов). */
+    /** Names of collapsed host folders in the sidebar (their host lists are hidden). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
 
-    /** Id недавно подключённых хостов, новейший — первым (секция RECENT в сайдбаре). */
+    /** Ids of recently connected hosts, newest first (RECENT section in the sidebar). */
     var recentHostIds: List<String> by mutableStateOf(initialRecentHostIds); private set
 
-    /** Показывать ли секцию RECENT в сайдбаре (Settings → Appearance → Interface). */
+    /** Whether to show the RECENT section in the sidebar (Settings → Appearance → Interface). */
     var showRecent: Boolean by mutableStateOf(initialShowRecent); private set
 
-    /** Сколько недавних хостов показывать (1..[MAX_RECENT_HOSTS]); режет только показ, не хранилище. */
+    /** How many recent hosts to display (1..[MAX_RECENT_HOSTS]); trims display only, not storage. */
     var recentLimit: Int by mutableStateOf(initialRecentLimit.coerceIn(1, MAX_RECENT_HOSTS)); private set
 
-    /** Имена пользовательских (пока пустых) групп хостов — показываются как папки наравне с выводимыми из хостов. */
+    /** Names of custom (still empty) host groups, shown as folders alongside host-derived ones. */
     var customGroups: List<String> by mutableStateOf(initialCustomGroups); private set
 
     /**
-     * Заменить список пустых папок целиком БЕЗ обратной записи ([onCustomGroupsChange]). Это загрузка
-     * извне, а не правка пользователя: вызывается после разблокировки vault, когда пустые папки
-     * прочитаны из синхронизируемой записи-макета ([app.skerry.shared.vault.WorkspaceLayout]) —
-     * на старте vault залочен и список пуст. Писать обратно тут нельзя (затёрли бы синканутое).
+     * Replace the empty-folder list wholesale without writing back ([onCustomGroupsChange]). This is
+     * an external load, not a user edit: called after vault unlock, once empty folders are read from
+     * the synced layout record ([app.skerry.shared.vault.WorkspaceLayout]) — the list starts empty
+     * while the vault is locked. Must not write back here, or it would clobber the synced value.
      */
     fun loadCustomGroups(groups: List<String>) {
         customGroups = groups
     }
 
-    /** Выбранный шрифт терминала (Appearance → Font). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalAppearance]. */
+    /** Selected terminal font (Appearance → Font). Threaded via [app.skerry.ui.terminal.LocalTerminalAppearance]. */
     var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
 
-    /** Кегль шрифта терминала, px (Appearance → Font size). */
+    /** Terminal font size, px (Appearance → Font size). */
     var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
 
-    /** Множитель высоты строки терминала (Appearance → Line height). */
+    /** Terminal line height multiplier (Appearance → Line height). */
     var terminalLineHeight: Float by mutableStateOf(initialTerminalLineHeight); private set
 
-    /** Межбуквенный интервал терминала, sp (Appearance → Letter spacing). */
+    /** Terminal letter spacing, sp (Appearance → Letter spacing). */
     var terminalLetterSpacing: Float by mutableStateOf(initialTerminalLetterSpacing); private set
 
-    /** Тема терминала (Appearance → карточки). Проводится в терминал через [app.skerry.ui.terminal.LocalTerminalTheme]. */
+    /** Terminal theme (Appearance → cards). Threaded via [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
-    /** Порог автоблокировки по простою (Settings → Безопасность). Проводится в [app.skerry.ui.vault.VaultGate]. */
+    /** Idle auto-lock threshold (Settings → Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
     var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
 
-    /** Язык интерфейса (Appearance → Language). Проводится в корень через [app.skerry.ui.i18n.AppLocaleProvider]. */
+    /** UI language (Appearance → Language). Threaded to the root via [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
 
-    /** Глубина scrollback новой сессии, строк (Terminal → Буфер прокрутки). Применяется к новым сессиям. */
+    /** Scrollback depth for new sessions, lines (Terminal → Scrollback buffer). Applies to new sessions. */
     var terminalScrollback: Int by mutableStateOf(initialTerminalScrollback); private set
 
-    /** Стиль курсора по умолчанию (Terminal → Стиль курсора). Применяется к новым сессиям. */
+    /** Default cursor style (Terminal → Cursor style). Applies to new sessions. */
     var terminalCursorStyle: TerminalCursorStyle by mutableStateOf(initialTerminalCursorStyle); private set
 
-    /** Показывать ли живой OSC-заголовок терминала на вкладках (Terminal → Показывать заголовок…). */
+    /** Whether to show the live OSC title on terminal tabs (Terminal → Show title on tabs). */
     var showTerminalTitleOnTabs: Boolean by mutableStateOf(initialShowTerminalTitleOnTabs); private set
 
-    /** Открытый диалог управления группой (создание/правка) или `null`. */
+    /** Open group management dialog (create/edit), or `null`. */
     var groupDialog: GroupDialog? by mutableStateOf(null); private set
     var selectedHost: String by mutableStateOf("prod-web-01"); private set
 
-    /** Текст поиска в сайдбаре хостов (по имени/адресу/пользователю/группе/тегам). Пусто — без фильтра. */
+    /** Host sidebar search text (by name/address/user/group/tags). Empty means no filter. */
     var hostSearchQuery: String by mutableStateOf(""); private set
     var activeTab: Int by mutableStateOf(0); private set
     var modalPolicy: AiPolicy by mutableStateOf(AiPolicy.Strict); private set
 
-    /** Хост, открытый в модалке на правку (null — модалка в режиме «New connection»). */
+    /** Host open in the modal for editing (null means the modal is in "New connection" mode). */
     var editingHost: Host? by mutableStateOf(null); private set
 
-    /** Хост, для которого показан диалог подтверждения удаления (null — диалога нет). */
+    /** Host for which the delete-confirmation dialog is shown (null means no dialog). */
     var pendingDeleteHost: Host? by mutableStateOf(null); private set
 
-    /** Деструктивное действие над сессией, ждущее подтверждения (null — диалога нет). */
+    /** Destructive session action awaiting confirmation (null means no dialog). */
     var pendingClose: PendingClose? by mutableStateOf(null); private set
 
     var tabs: List<SessionTab> by mutableStateOf(
@@ -285,9 +284,9 @@ class DesktopDesignState(
     var termLines: List<TermLine> by mutableStateOf(emptyList()); private set
 
     /**
-     * Открыть view из rail: app-level (Vault/Known/Teams/Snippets) → поднимаем оверлей поверх
-     * вкладок; session-level (Terminal/SFTP/Ports) → сбрасываем оверлей и фиксируем подвью (для
-     * живого режима подвью также проставляет вызывающий на активной вкладке).
+     * Open a view from the rail: app-level (Vault/Known/Teams/Snippets) raises the overlay over the
+     * tabs; session-level (Terminal/SFTP/Ports) clears the overlay and sets the sub-view (in live mode
+     * the caller also sets it on the active tab).
      */
     fun showView(v: DesktopView) {
         if (v.isAppLevel) {
@@ -299,9 +298,9 @@ class DesktopDesignState(
     }
 
     /**
-     * Снять app-оверлей, вернувшись к подвью активной вкладки, НЕ трогая [view]. В живом режиме
-     * подвью держит [app.skerry.ui.session.Session.view] — единственный источник правды; [view]
-     * остаётся лишь мок/превью-фолбэком и не должен переписываться при навигации с живыми сессиями.
+     * Clear the app overlay, returning to the active tab's sub-view without touching [view]. In live
+     * mode the sub-view is held by [app.skerry.ui.session.Session.view], the source of truth; [view]
+     * is only a mock/preview fallback and must not be overwritten when navigating with live sessions.
      */
     fun clearOverlay() { appOverlay = null }
     fun selectHost(name: String) { selectedHost = name }
@@ -309,8 +308,8 @@ class DesktopDesignState(
     fun setTab(i: Int) { if (i in tabs.indices) activeTab = i }
 
     /**
-     * Закрыть вкладку [i] — поведение прототипа: индекс активной зажимается в новый диапазон
-     * (сосед справа сместился на освободившийся индекс, иначе ближайший слева, иначе 0).
+     * Close tab [i]: the active index is clamped into the new range (the neighbor on the right shifts
+     * into the freed index, else the nearest one on the left, else 0), matching the prototype.
      */
     fun closeTab(i: Int) {
         if (i !in tabs.indices) return
@@ -344,26 +343,26 @@ class DesktopDesignState(
     fun toggleSidebar() { sidebarHidden = !sidebarHidden }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
 
-    // Сигнал «сфокусировать строку ввода AI-бара» (хоткей ⌘/ / Ctrl+Shift+/). SharedFlow, а не
-    // счётчик-состояние: на подписку не реплеится, поэтому переунтаж AI-бара (смена вкладки) не крадёт
-    // фокус задним числом — фокус запрашивается только на НОВОЕ событие. extraBufferCapacity=1, чтобы
-    // tryEmit не терялся без активного коллектора в момент нажатия.
+    // Signal to focus the AI bar's input (hotkey Cmd// Ctrl+Shift+/). SharedFlow rather than a counter
+    // state: it does not replay to a new subscriber, so remounting the AI bar (tab switch) can't steal
+    // focus retroactively — focus is requested only on a NEW event. extraBufferCapacity=1 so tryEmit
+    // isn't dropped when no collector is active at the moment of the keypress.
     private val _aiBarFocusRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val aiBarFocusRequests: SharedFlow<Unit> = _aiBarFocusRequests
     fun requestAiBarFocus() { _aiBarFocusRequests.tryEmit(Unit) }
 
-    /** Свёрнута ли папка [name] (её список хостов скрыт). */
+    /** Whether folder [name] is collapsed (its host list hidden). */
     fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
 
-    /** Свернуть/развернуть папку [name] и сообщить новый набор наружу (для персиста). */
+    /** Toggle folder [name] collapsed/expanded and report the new set outward (for persistence). */
     fun toggleGroupCollapsed(name: String) {
         collapsedGroups = if (name in collapsedGroups) collapsedGroups - name else collapsedGroups + name
         onCollapsedGroupsChange(collapsedGroups)
     }
     /**
-     * Отметить хост [id] как недавно подключённый: двигаем его в начало списка (без дубля),
-     * обрезаем до [MAX_RECENT_HOSTS] и сообщаем наружу (для персиста). Повторный коннект к уже
-     * первому хосту — no-op (ни мутации, ни записи). Пустой id игнорируется.
+     * Mark host [id] as recently connected: move it to the front of the list (no duplicate), trim to
+     * [MAX_RECENT_HOSTS], and report outward (for persistence). Reconnecting to the already-first host
+     * is a no-op (no mutation, no write). Blank id is ignored.
      */
     fun recordRecentHost(id: String) {
         if (id.isBlank()) return
@@ -373,7 +372,7 @@ class DesktopDesignState(
         onRecentHostIdsChange(recentHostIds)
     }
 
-    /** Показать/скрыть секцию RECENT и сообщить наружу (для персиста). Повтор того же значения — no-op. */
+    /** Show/hide the RECENT section and report outward (for persistence). Repeating the same value is a no-op. */
     fun setRecentVisible(on: Boolean) {
         if (on == showRecent) return
         showRecent = on
@@ -381,8 +380,8 @@ class DesktopDesignState(
     }
 
     /**
-     * Сменить число показываемых недавних хостов (зажимается в 1..[MAX_RECENT_HOSTS]) и сообщить
-     * наружу. То же (уже зажатое) значение — no-op: ни мутации, ни записи.
+     * Change the number of recent hosts shown (clamped to 1..[MAX_RECENT_HOSTS]) and report outward.
+     * The same (already-clamped) value is a no-op: no mutation, no write.
      */
     fun chooseRecentLimit(n: Int) {
         val next = n.coerceIn(1, MAX_RECENT_HOSTS)
@@ -396,11 +395,11 @@ class DesktopDesignState(
     fun dismissGroupDialog() { groupDialog = null }
 
     /**
-     * Завести новую (пока пустую) группу. Имя триммится, переносы строк вырезаются (они не хранимы
-     * построчно в персисте). Пустое или точно совпадающее с существующей пользовательской группой —
-     * игнорируется. Сопоставление точное (по регистру) — как `Host.group`/[groupHostsByFolder]/
-     * [collapsedGroups] во всей системе; дубль с группой, выводимой из хостов (точное имя), отсеётся
-     * при рендере слиянием папок. Персист — через колбэк.
+     * Create a new (initially empty) group. Name is trimmed and stripped of newlines (not storable
+     * line-by-line in persistence). Empty or exactly matching an existing custom group is ignored.
+     * Case-exact matching, consistent with `Host.group`/[groupHostsByFolder]/[collapsedGroups]
+     * throughout the system; a duplicate of a group derived from hosts (exact name) is deduplicated at
+     * render by folder merging. Persisted via callback.
      */
     fun addCustomGroup(name: String) {
         val n = name.trim().filterNot { it == '\n' || it == '\r' }
@@ -410,11 +409,12 @@ class DesktopDesignState(
     }
 
     /**
-     * Переименование группы в side-channel: правит список пустых групп и набор схлопнутых ([old]→[new]).
-     * Переписывание `Host.group` у реальных профилей делает [app.skerry.ui.host.HostManagerController.renameGroup]
-     * — вызывающий UI зовёт обе стороны. Сопоставление точное (по регистру), как в
-     * [app.skerry.ui.host.renameHostGroup], чтобы side-channel не разъезжался с профилями (включая
-     * правку только регистра). Имя триммится+чистится от переносов; пустое/неизменное [new] — no-op.
+     * Rename a group in the side channel: updates the empty-group list and the collapsed set
+     * ([old]->[new]). Rewriting `Host.group` on real profiles is done by
+     * [app.skerry.ui.host.HostManagerController.renameGroup] — the calling UI invokes both. Case-exact
+     * matching, as in [app.skerry.ui.host.renameHostGroup], so the side channel doesn't drift from
+     * profiles (including case-only edits). Name is trimmed and stripped of newlines; empty/unchanged
+     * [new] is a no-op.
      */
     fun renameGroupName(old: String, new: String) {
         val n = new.trim().filterNot { it == '\n' || it == '\r' }
@@ -429,7 +429,7 @@ class DesktopDesignState(
         }
     }
 
-    /** Снять пользовательскую группу [name] из side-channel (список пустых + набор схлопнутых). */
+    /** Remove custom group [name] from the side channel (empty-group list + collapsed set). */
     fun removeCustomGroup(name: String) {
         if (name in customGroups) {
             customGroups = customGroups.filterNot { it == name }
@@ -441,28 +441,28 @@ class DesktopDesignState(
         }
     }
 
-    /** Выбрать шрифт терминала и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    /** Choose the terminal font and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseTerminalFont(font: TerminalFont) {
         if (font == terminalFont) return
         terminalFont = font
         onTerminalFontChange(font)
     }
 
-    /** Выбрать тему терминала и сообщить наружу (для персиста). Повтор той же — no-op (ни записи). */
+    /** Choose the terminal theme and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseTerminalTheme(theme: TerminalTheme) {
         if (theme == terminalTheme) return
         terminalTheme = theme
         onTerminalThemeChange(theme)
     }
 
-    /** Выбрать порог автоблокировки и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    /** Choose the auto-lock threshold and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseAutoLock(duration: AutoLockDuration) {
         if (duration == autoLock) return
         autoLock = duration
         onAutoLockChange(duration)
     }
 
-    /** Выбрать язык интерфейса и сообщить наружу (для персиста). Повтор того же — no-op (ни записи). */
+    /** Choose the UI language and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseUiLanguage(language: UiLanguage) {
         if (language == uiLanguage) return
         uiLanguage = language
@@ -470,8 +470,8 @@ class DesktopDesignState(
     }
 
     /**
-     * Задать кегль шрифта терминала и сообщить наружу (для персиста). Значение вне [TERMINAL_FONT_SIZE_RANGE]
-     * и повтор текущего — no-op (ни записи, ни колбэка).
+     * Set the terminal font size and report outward (for persistence). A value outside
+     * [TERMINAL_FONT_SIZE_RANGE] or equal to the current one is a no-op (no write, no callback).
      */
     fun chooseTerminalFontSize(px: Int) {
         if (px == terminalFontSize || px !in TERMINAL_FONT_SIZE_RANGE) return
@@ -480,8 +480,8 @@ class DesktopDesignState(
     }
 
     /**
-     * Задать множитель высоты строки: значение приводится к диапазону/шагу ([clampTerminalLineHeight]).
-     * Совпадение с текущим — no-op (ни записи, ни колбэка).
+     * Set the line-height multiplier, clamped/stepped via [clampTerminalLineHeight]. Equal to the
+     * current value is a no-op (no write, no callback).
      */
     fun chooseTerminalLineHeight(ratio: Float) {
         val v = clampTerminalLineHeight(ratio)
@@ -491,8 +491,8 @@ class DesktopDesignState(
     }
 
     /**
-     * Задать межбуквенный интервал: значение приводится к диапазону/шагу ([clampTerminalLetterSpacing]).
-     * Совпадение с текущим — no-op (ни записи, ни колбэка).
+     * Set the letter spacing, clamped/stepped via [clampTerminalLetterSpacing]. Equal to the
+     * current value is a no-op (no write, no callback).
      */
     fun chooseTerminalLetterSpacing(sp: Float) {
         val v = clampTerminalLetterSpacing(sp)
@@ -502,8 +502,9 @@ class DesktopDesignState(
     }
 
     /**
-     * Задать глубину scrollback и сообщить наружу (для персиста). Значение вне [TERMINAL_SCROLLBACK_OPTIONS]
-     * и повтор текущего — no-op (ни записи, ни колбэка). Применяется к последующим сессиям.
+     * Set the scrollback depth and report outward (for persistence). A value outside
+     * [TERMINAL_SCROLLBACK_OPTIONS] or equal to the current one is a no-op (no write, no callback).
+     * Applies to subsequent sessions.
      */
     fun chooseTerminalScrollback(lines: Int) {
         if (lines == terminalScrollback || lines !in TERMINAL_SCROLLBACK_OPTIONS) return
@@ -511,14 +512,14 @@ class DesktopDesignState(
         onTerminalScrollbackChange(lines)
     }
 
-    /** Выбрать стиль курсора и сообщить наружу (для персиста). Повтор того же — no-op. */
+    /** Choose the cursor style and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseTerminalCursorStyle(style: TerminalCursorStyle) {
         if (style == terminalCursorStyle) return
         terminalCursorStyle = style
         onTerminalCursorStyleChange(style)
     }
 
-    /** Переключить показ живого OSC-заголовка терминала на вкладках и сообщить наружу (для персиста). */
+    /** Toggle showing the terminal's live OSC title on tabs and report outward (for persistence). */
     fun toggleShowTerminalTitleOnTabs() {
         showTerminalTitleOnTabs = !showTerminalTitleOnTabs
         onShowTerminalTitleOnTabsChange(showTerminalTitleOnTabs)
@@ -530,7 +531,7 @@ class DesktopDesignState(
 
     fun onCmd(value: String) { cmd = value }
 
-    /** Демо-исполнение команды (как `exec` в макете): известные → вывод, иначе not found. */
+    /** Demo command execution (mock `exec`): known commands produce output, otherwise not found. */
     fun runCmd() {
         val c = cmd.trim()
         if (c == "clear") { termLines = emptyList(); cmd = ""; return }
@@ -548,10 +549,10 @@ class DesktopDesignState(
         return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, color = D.sunset)
     }
 
-    // internal (не private): MAX_RECENT_HOSTS читается настройками/персистом/тестами в этом же модуле
-    // как кап числа показываемых недавних (Settings → Appearance → Interface).
+    // internal (not private): MAX_RECENT_HOSTS is read by settings/persistence/tests in this module
+    // as the cap on the number of recents shown (Settings -> Appearance -> Interface).
     internal companion object {
-        /** Максимум записей в секции RECENT сайдбара — старейшие вытесняются новыми коннектами. */
+        /** Max entries in the sidebar's RECENT section; oldest are evicted by new connections. */
         const val MAX_RECENT_HOSTS = 8
 
         val DEMO_OUTPUT = mapOf(

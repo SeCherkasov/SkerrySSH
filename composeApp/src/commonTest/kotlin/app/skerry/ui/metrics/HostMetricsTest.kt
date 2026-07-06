@@ -89,7 +89,7 @@ class HostMetricsTest {
 
     @Test
     fun disk_percent_taken_only_from_disk_section() {
-        // %-токен из соседней (mem) секции не должен подменить метрику диска.
+        // A %-token from the neighboring (mem) section must not be picked up as the disk metric.
         val out = """
             cpu  100 0 100 800 0 0 0 0
             cpu  150 0 150 900 0 0 0 0
@@ -105,7 +105,7 @@ class HostMetricsTest {
 
     @Test
     fun disk_takes_root_row_when_multiple_data_rows_present() {
-        // На случай нескольких строк df берётся первая строка данных (после заголовка) — корень.
+        // When df has multiple rows, the first data row (after the header) — root — is used.
         val out = """
             cpu  100 0 100 800 0 0 0 0
             cpu  150 0 150 900 0 0 0 0
@@ -122,16 +122,16 @@ class HostMetricsTest {
     @Test
     fun parses_host_facts_from_their_sections() {
         val m = parseHostMetrics(fullOutput)!!
-        assertEquals(372_765L, m.uptimeSeconds) // первый токен /proc/uptime, дробная часть отброшена
-        assertEquals("0.42 0.51 0.48", m.loadAverage) // первые три токена /proc/loadavg
-        assertEquals("Ubuntu 22.04.4 LTS", m.osName) // PRETTY_NAME без кавычек
+        assertEquals(372_765L, m.uptimeSeconds) // first token of /proc/uptime, fractional part dropped
+        assertEquals("0.42 0.51 0.48", m.loadAverage) // first three tokens of /proc/loadavg
+        assertEquals("Ubuntu 22.04.4 LTS", m.osName) // PRETTY_NAME without quotes
         assertEquals("Linux 5.15.0-105-generic x86_64", m.kernel)
         assertEquals(4, m.cpuCount)
     }
 
     @Test
     fun host_facts_are_null_when_their_sections_absent() {
-        // Старый формат без новых секций: ресурсы парсятся, факты null (не мусор).
+        // Old format without the new sections: resources parse, facts are null (not garbage).
         val out = """
             cpu  100 0 100 800 0 0 0 0
             cpu  150 0 150 900 0 0 0 0
@@ -163,7 +163,7 @@ class HostMetricsTest {
             $longName
         """.trimIndent()
         val m = parseHostMetrics(out)!!
-        assertEquals(120, m.osName?.length) // длина обрезана до предела вёрстки
+        assertEquals(120, m.osName?.length) // length capped to the layout limit
         assertEquals(120, m.kernel?.length)
     }
 
@@ -172,7 +172,7 @@ class HostMetricsTest {
         assertEquals("04:12:45", formatUptime(4 * 3600 + 12 * 60 + 45L))
         assertEquals("4d 07:01:05", formatUptime(4 * 86_400 + 7 * 3600 + 1 * 60 + 5L))
         assertEquals("00:00:09", formatUptime(9L))
-        assertEquals("00:00:00", formatUptime(-5L)) // отрицательное зажимается в ноль
+        assertEquals("00:00:00", formatUptime(-5L)) // negative clamps to zero
     }
 
     @Test

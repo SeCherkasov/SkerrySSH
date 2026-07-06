@@ -36,10 +36,10 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
-// Мок-превью терминального view (офскрин-рендер/дизайн-превью без живых сессий):
-// статичный демо-терминал, AI-карточка макета и статичная split-панель.
+// Mock preview of the terminal view (offscreen render/design preview without live sessions):
+// static demo terminal, mocked AI card, and static split pane.
 
-/** Демо-терминал (мок-путь без живых сессий: офскрин-рендер/превью). */
+/** Demo terminal (mock path without live sessions: offscreen render/preview). */
 @Composable
 internal fun MockTerminalPane(state: DesktopDesignState, modifier: Modifier = Modifier) {
     val mono = LocalFonts.current.mono
@@ -62,7 +62,7 @@ internal fun MockTerminalPane(state: DesktopDesignState, modifier: Modifier = Mo
             LogLine(mono, "127.0.0.1 - - [21/Jun/2026:14:25:15] \"GET /assets/main.css HTTP/1.1\" ", "200", " 4521", D.moss)
             TermOut("127.0.0.1 - - [21/Jun/2026:14:25:22] \"POST /api/auth HTTP/1.1\" 500 245", mono, color = D.storm)
 
-            // AI-карточка — фича MVP2 за фича-флагом; в MVP1 (дефолт) её в выводе нет.
+            // AI suggestion card is behind a feature flag; hidden by default.
             if (LocalFeatures.current.ai) AiSuggestionCard()
 
             state.termLines.forEach { line ->
@@ -124,7 +124,7 @@ private fun LogLine(mono: FontFamily, head: String, code: String, tail: String, 
     }
 }
 
-// AI-карточка-подсказка.
+// AI suggestion card.
 
 @Composable
 private fun AiSuggestionCard() {
@@ -191,7 +191,7 @@ private fun AiSuggestionCard() {
     }
 }
 
-// Статичная split-панель мок-превью.
+// Static split pane for the mock preview.
 
 @Composable
 internal fun SplitPane(modifier: Modifier = Modifier) {

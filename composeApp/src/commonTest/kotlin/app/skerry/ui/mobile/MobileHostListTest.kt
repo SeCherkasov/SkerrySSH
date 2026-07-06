@@ -6,9 +6,8 @@ import kotlin.test.assertEquals
 import app.skerry.ui.host.ALL_HOSTS_CHIP
 
 /**
- * Чистая логика списка Hosts мобильного макета `Skerry Mobile.html`: фильтр-чипсы по тегам, поиск и
- * группировка в секции по группам. Поведение зафиксировано здесь, переиспользуется компоновкой
- * экрана. Семантика чипсов/фильтра — общая ([HostChipsTest]); здесь проверяется связка с секциями.
+ * Logic for the mobile Hosts list: tag filter-chips, search, and grouping into sections by group.
+ * Chip/filter semantics are shared with [HostChipsTest]; this covers the section grouping.
  */
 class MobileHostListTest {
 
@@ -32,8 +31,8 @@ class MobileHostListTest {
     fun chips_are_all_plus_distinct_tags() {
         val hosts = listOf(
             host("1", "a", tags = listOf("prod", "web")),
-            host("2", "b", tags = listOf("docker", "prod")), // дубль "prod" не повторяется
-            host("3", "c", tags = emptyList()), // без тегов — чипов не даёт
+            host("2", "b", tags = listOf("docker", "prod")), // duplicate "prod" is not repeated
+            host("3", "c", tags = emptyList()), // no tags: yields no chips
         )
         assertEquals(listOf(ALL_HOSTS_CHIP, "prod", "web", "docker"), buildMobileHostList(hosts).chips)
     }
@@ -81,11 +80,11 @@ class MobileHostListTest {
             host("1", "prod-web-01", tags = listOf("prod")),
             host("2", "homelab-web", tags = listOf("lab")),
         )
-        // запрос "web" совпал бы с обоими, но активный тег-чип сужает до lab
+        // query "web" would match both, but the active tag chip narrows to lab
         val view = buildMobileHostList(hosts, query = "web", activeChip = "lab")
         assertEquals(listOf("homelab-web"), view.allHosts().map { it.label })
     }
 
-    /** Все хосты всех секций по порядку — удобно для проверок фильтра. */
+    /** All hosts across sections in order; convenient for filter assertions. */
     private fun MobileHostList.allHosts() = sections.flatMap { it.hosts }
 }

@@ -6,15 +6,15 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.shared.vault.Credential
 
-// Чистые хелперы редактора туннелей — вынесены из Compose, чтобы покрываться тестами без UI.
+// Pure tunnel editor helpers, kept out of Compose for UI-free testability.
 
 private fun parsePort(value: String, min: Int): Int? =
     value.trim().toIntOrNull()?.takeIf { it in min..65535 }
 
 /**
- * Собрать валидный [TunnelDraft] из полей формы или `null`, если ввод неполон/некорректен. Правила:
- * имя и хост обязательны; bind-порт `0..65535` (0 = выберет ОС); для `-L`/`-R` обязателен адрес и порт
- * назначения (`1..65535`); для `-D` (SOCKS) назначения нет. Пустой bind-адрес → loopback.
+ * Builds a valid [TunnelDraft] from form fields, or `null` if input is incomplete/invalid. Name
+ * and host are required; bind port `0..65535` (0 = OS-assigned); `-L`/`-R` require a destination
+ * host and port (`1..65535`); `-D` (SOCKS) has no destination. Empty bind host defaults to loopback.
  */
 fun buildTunnelDraft(
     id: String?,
@@ -47,9 +47,9 @@ fun buildTunnelDraft(
 }
 
 /**
- * Резолв сохранённого туннеля к параметрам подключения (для production-лямбды [TunnelManager]).
- * Хост ищется по [Tunnel.hostId], секрет — по [Host.credentialId] в открытом vault. Сообщения —
- * generic-константы (без технических деталей), так требует контракт [TunnelResolution.Unavailable].
+ * Resolves a saved tunnel to connection parameters (for the [TunnelManager] production lambda).
+ * Host is looked up by [Tunnel.hostId], credential by [Host.credentialId] in the unlocked vault.
+ * Messages are generic constants without technical detail, per [TunnelResolution.Unavailable].
  */
 fun resolveTunnel(
     tunnel: app.skerry.shared.tunnel.Tunnel,

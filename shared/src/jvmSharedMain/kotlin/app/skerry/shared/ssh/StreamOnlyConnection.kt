@@ -3,25 +3,25 @@ package app.skerry.shared.ssh
 import app.skerry.shared.sftp.SftpClient
 
 /**
- * База для соединений с единственным байтовым потоком (Telnet, serial), встроенных под контракт
- * [SshConnection]. Возможности SSH, которых у таких протоколов нет (exec, SFTP, проброс портов),
- * собраны здесь и бросают [UnsupportedOperationException] с именем протокола [protocolName] —
- * наследники реализуют только openShell/disconnect/isConnected.
+ * Base for single-byte-stream connections (Telnet, serial) fitted to the [SshConnection]
+ * contract. SSH capabilities such protocols lack (exec, SFTP, port forwarding) are collected here
+ * and throw [UnsupportedOperationException] naming the protocol [protocolName] — subclasses
+ * implement only openShell/disconnect/isConnected.
  */
 abstract class StreamOnlyConnection(private val protocolName: String) : SshConnection {
 
     final override suspend fun exec(command: String): ExecResult =
-        throw UnsupportedOperationException("$protocolName не поддерживает exec-каналы")
+        throw UnsupportedOperationException("$protocolName does not support exec channels")
 
     final override suspend fun openSftp(): SftpClient =
-        throw UnsupportedOperationException("$protocolName не поддерживает SFTP")
+        throw UnsupportedOperationException("$protocolName does not support SFTP")
 
     final override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward =
-        throw UnsupportedOperationException("$protocolName не поддерживает проброс портов")
+        throw UnsupportedOperationException("$protocolName does not support port forwarding")
 
     final override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward =
-        throw UnsupportedOperationException("$protocolName не поддерживает проброс портов")
+        throw UnsupportedOperationException("$protocolName does not support port forwarding")
 
     final override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward =
-        throw UnsupportedOperationException("$protocolName не поддерживает проброс портов")
+        throw UnsupportedOperationException("$protocolName does not support port forwarding")
 }

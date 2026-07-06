@@ -3,57 +3,58 @@ package app.skerry.ui.desktop
 import androidx.compose.ui.input.key.Key
 
 /**
- * Глобальный хоткей десктопного каркаса (титлбар/рейл/сессии), распознанный из аккорда клавиш.
- * Чистый тип без Compose-зависимостей — матчинг ([matchDesktopShortcut]) и исполнение
- * ([runDesktopShortcut]) тестируются без композиции.
+ * A global hotkey of the desktop shell (titlebar/rail/sessions), recognized from a key chord.
+ * A pure type with no Compose dependency — matching ([matchDesktopShortcut]) and execution
+ * ([runDesktopShortcut]) are tested without composition.
  */
 sealed interface DesktopShortcut {
-    /** Открыть модалку «New connection» (⌘N / Ctrl+Shift+N). */
+    /** Open the "New connection" modal (⌘N / Ctrl+Shift+N). */
     data object NewConnection : DesktopShortcut
 
-    /** Разделить/свести панель терминала активной вкладки (⌘D / Ctrl+Shift+D). */
+    /** Split/collapse the active tab's terminal pane (⌘D / Ctrl+Shift+D). */
     data object SplitTerminal : DesktopShortcut
 
-    /** Открыть SFTP активной вкладки (⌘F / Ctrl+Shift+F). */
+    /** Open the active tab's SFTP (⌘F / Ctrl+Shift+F). */
     data object OpenSftp : DesktopShortcut
 
-    /** Сфокусировать строку ввода AI-бара (⌘/ / Ctrl+Shift+/). */
+    /** Focus the AI bar's input field (⌘/ / Ctrl+Shift+/). */
     data object FocusAiBar : DesktopShortcut
 
-    /** Запереть vault (⌘L / Ctrl+Shift+L). */
+    /** Lock the vault (⌘L / Ctrl+Shift+L). */
     data object Lock : DesktopShortcut
 
-    /** Следующая вкладка (Ctrl+Tab). */
+    /** Next tab (Ctrl+Tab). */
     data object NextTab : DesktopShortcut
 
-    /** Предыдущая вкладка (Ctrl+Shift+Tab). */
+    /** Previous tab (Ctrl+Shift+Tab). */
     data object PrevTab : DesktopShortcut
 
-    /** Выбрать вкладку по номеру, 0-based (Alt+1..9). */
+    /** Select a tab by number, 0-based (Alt+1..9). */
     data class SelectTab(val index: Int) : DesktopShortcut
 }
 
 /**
- * Сопоставить аккорд клавиш глобальному хоткею каркаса или `null`, если совпадения нет.
+ * Matches a key chord to a global shell hotkey, or `null` if there's no match.
  *
- * Схема выбрана так, чтобы НЕ отбирать клавиши у терминала (корневой `onPreviewKeyEvent` видит их
- * раньше него):
- * - **Alt+цифра** — выбор вкладки. Требование запроса пользователя; сознательно перехватывает
- *   Alt-цифру (терминальный Meta-префикс `ESC 1`) в пользу навигации.
- * - **Ctrl+Tab / Ctrl+Shift+Tab** — переключение вкладок (Tab не буква, с терминальным
- *   `Ctrl+буква`→C0 не пересекается).
- * - **Модификатор приложения** = `⌘` (Meta без Ctrl/Alt) на macOS ИЛИ `Ctrl+Shift` на Linux/Windows.
- *   Требование Shift на Ctrl-пути оставляет чистый `Ctrl+буква` терминалу (Ctrl+L очистка, Ctrl+D EOF,
- *   Ctrl+C сигнал и т.д. продолжают работать в шелле), а `Ctrl+Shift+C/V` не задеты — это копипаст.
+ * The scheme is chosen to NOT steal keys from the terminal (the root `onPreviewKeyEvent` sees
+ * them before it does):
+ * - **Alt+digit** — select tab. A user-requested requirement; deliberately intercepts
+ *   Alt+digit (the terminal's Meta prefix `ESC 1`) in favor of navigation.
+ * - **Ctrl+Tab / Ctrl+Shift+Tab** — tab switching (Tab isn't a letter, so it doesn't collide
+ *   with the terminal's `Ctrl+letter`→C0 mapping).
+ * - **App modifier** = `⌘` (Meta without Ctrl/Alt) on macOS OR `Ctrl+Shift` on Linux/Windows.
+ *   Requiring Shift on the Ctrl path leaves plain `Ctrl+letter` to the terminal (Ctrl+L clear,
+ *   Ctrl+D EOF, Ctrl+C signal etc. keep working in the shell), and `Ctrl+Shift+C/V` is untouched —
+ *   that's copy/paste.
  *
- * AltGr (на многих раскладках = Ctrl+Alt) исключён из ветки Alt+цифра проверкой `!ctrl`.
+ * AltGr (on many layouts = Ctrl+Alt) is excluded from the Alt+digit branch via the `!ctrl` check.
  */
 fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Boolean, key: Key): DesktopShortcut? {
-    // Alt+цифра → выбрать вкладку (только Alt, без прочих модификаторов).
+    // Alt+digit → select tab (Alt only, no other modifiers).
     if (alt && !ctrl && !meta && !shift) {
         digitIndex(key)?.let { return DesktopShortcut.SelectTab(it) }
     }
-    // Переключение вкладок циклически.
+    // Cyclic tab switching.
     if (ctrl && !alt && !meta && key == Key.Tab) {
         return if (shift) DesktopShortcut.PrevTab else DesktopShortcut.NextTab
     }
@@ -69,7 +70,7 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
     }
 }
 
-/** Индекс вкладки (0-based) для цифровой клавиши верхнего ряда 1..9, иначе `null`. */
+/** Tab index (0-based) for the top-row digit key 1..9, else `null`. */
 private fun digitIndex(key: Key): Int? = when (key) {
     Key.One -> 0
     Key.Two -> 1

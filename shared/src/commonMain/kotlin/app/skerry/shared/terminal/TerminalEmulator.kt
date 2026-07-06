@@ -4,9 +4,9 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * Цвет ячейки. UI-независим (не Compose Color): рендер сам переводит в палитру темы.
- *  - [Default] — «цвет по умолчанию» (берётся из темы);
- *  - [Indexed] — индекс xterm-палитры: 0..7 базовые ANSI, 8..15 яркие, 16..255 куб/градации серого;
+ * Cell color. UI-independent (not Compose Color) — the renderer maps it into the theme palette.
+ *  - [Default] — theme default;
+ *  - [Indexed] — xterm palette index: 0..7 base ANSI, 8..15 bright, 16..255 cube/grayscale;
  *  - [Rgb] — truecolor (24-bit).
  */
 sealed interface TermColor {
@@ -15,7 +15,7 @@ sealed interface TermColor {
     data class Rgb(val r: Int, val g: Int, val b: Int) : TermColor
 
     companion object {
-        // Имена для читаемости тестов/кода. Это просто индексы xterm-палитры.
+        // Named aliases for test/code readability — plain xterm palette indices.
         val Black = Indexed(0)
         val Red = Indexed(1)
         val Green = Indexed(2)
@@ -36,17 +36,17 @@ sealed interface TermColor {
 }
 
 /**
- * Стиль подчёркивания (modern SGR `4:x`): помимо классического одиночного — двойное, волнистое,
- * пунктирное и штриховое. [None] — без подчёркивания. Рендер сам рисует линию нужной формы.
+ * Underline style (modern SGR `4:x`): besides classic single — double, curly, dotted, dashed.
+ * [None] — no underline. The renderer draws the line shape itself.
  */
 enum class UnderlineStyle { None, Single, Double, Curly, Dotted, Dashed }
 
 /**
- * Атрибуты ячейки. Цвета — [TermColor]; флаги покрывают полный набор SGR-атрибутов.
+ * Cell attributes. Colors are [TermColor]; flags cover the full SGR attribute set.
  *
- * Подчёркивание держим как [underlineStyle] (форма) + [underlineColor] (цвет, `SGR 58/59`; [TermColor.Default]
- * означает «брать цвет текста»). Булев [underline] — производное для рендера/тестов, которым достаточно
- * факта наличия подчёркивания.
+ * Underline is [underlineStyle] (shape) + [underlineColor] (color, `SGR 58/59`; [TermColor.Default]
+ * means "use the text color"). The boolean [underline] is a derived convenience for renderer/tests
+ * that only need to know whether underline is present at all.
  */
 data class TermStyle(
     val fg: TermColor = TermColor.Default,
@@ -61,88 +61,88 @@ data class TermStyle(
     val hidden: Boolean = false,
     val strikethrough: Boolean = false,
 ) {
-    /** Есть ли подчёркивание любой формы. */
+    /** Whether underline is present in any form. */
     val underline: Boolean get() = underlineStyle != UnderlineStyle.None
 }
 
 /**
- * Ширина ячейки в сетке (для CJK/emoji двойной ширины):
- *  - [Single] — обычная клетка в одну колонку;
- *  - [Wide] — ведущая клетка двухколоночного символа (рендер растягивает глиф на 2 колонки);
- *  - [Continuation] — вторая колонка под широким символом; глиф не рисуется, курсор её перешагивает.
+ * Cell width in the grid (for double-width CJK/emoji):
+ *  - [Single] — ordinary one-column cell;
+ *  - [Wide] — leading cell of a two-column character (the renderer stretches the glyph over 2 columns);
+ *  - [Continuation] — second column under a wide character; no glyph drawn, cursor skips over it.
  */
 enum class CellWidth { Single, Wide, Continuation }
 
 /**
- * Одна ячейка экрана: отображаемый текст + стиль + ширина. [text] — строка (а не `Char`), чтобы
- * вмещать астральные символы (emoji > U+FFFF как суррогатную пару) и при необходимости комбинируемые
- * последовательности; у [Continuation]-клетки [text] пуст.
+ * One screen cell: displayed text + style + width. [text] is a String (not `Char`) to hold
+ * astral characters (emoji > U+FFFF as a surrogate pair) and combining sequences when needed;
+ * a [Continuation] cell's [text] is empty.
  */
 data class TermCell(
     val text: String = " ",
     val style: TermStyle = TermStyle(),
     val width: CellWidth = CellWidth.Single,
-    /** URI гиперссылки (OSC 8) для этой клетки, либо `null`. Кликабельность/подсветку решает рендер. */
+    /** Hyperlink URI (OSC 8) for this cell, or `null`. Clickability/highlight is up to the renderer. */
     val hyperlink: String? = null,
 ) {
-    /** Удобный конструктор от одиночного BMP-символа (бланк, ASCII, line-drawing-глиф). */
+    /** Convenience constructor from a single BMP character (blank, ASCII, line-drawing glyph). */
     constructor(char: Char, style: TermStyle = TermStyle()) : this(char.toString(), style, CellWidth.Single)
 }
 
 /**
- * Одна строка сетки: ячейки + флаг [wrapped]. `wrapped == true` означает «мягкий перенос» — строку
- * оборвал автоперенос (DECAWM) и она логически продолжается на следующей; honest `\n` оставляет
- * `false`. Reflow при ресайзе склеивает соседние wrapped-строки в логическую и переразбивает её по
- * новой ширине. Делегирует [MutableList], поэтому весь код сетки работает со строкой как со списком
- * ячеек, не зная про флаг.
+ * One grid row: cells + the [wrapped] flag. `wrapped == true` means a soft line break — auto-wrap
+ * (DECAWM) cut the line and it logically continues on the next row; an honest `\n` leaves it `false`.
+ * Reflow on resize joins adjacent wrapped rows into one logical line and re-splits it at the new
+ * width. Delegates to [MutableList], so all grid code treats a row as a list of cells without
+ * knowing about the flag.
  */
 class TermRow(
     private val cells: MutableList<TermCell>,
     var wrapped: Boolean = false,
 ) : MutableList<TermCell> by cells
 
-/** Режим репортинга мыши в приложение (DEC private modes). Кодировку выбирает [TerminalEmulator.mouseSgr]. */
+/** Mouse reporting mode to the application (DEC private modes). Encoding is chosen by [TerminalEmulator.mouseSgr]. */
 enum class MouseTracking { Off, X10, Normal, ButtonEvent, AnyEvent }
 
-/** Форма курсора (DECSCUSR `CSI Ps SP q`): блок, подчёркивание или вертикальная черта. */
+/** Cursor shape (DECSCUSR `CSI Ps SP q`): block, underline, or vertical bar. */
 enum class CursorShape { Block, Underline, Bar }
 
-/** Дефолтная глубина scrollback эмулятора (строк) — базовое значение/страховка, когда настройка не задана. */
+/** Default scrollback depth (rows) — fallback used when the setting isn't provided. */
 const val DEFAULT_MAX_SCROLLBACK = 5000
 
 /**
- * Полноценный VT/ANSI-эмулятор поверх фиксированной сетки `rows × cols` — устройство-независимая
- * логика (без Compose). UI рендерит [lines] (scrollback + экран) и блок-курсор по
- * [cursorRow]/[cursorCol] (абсолютные индексы в [lines]).
+ * Full VT/ANSI emulator over a fixed `rows × cols` grid — device-independent logic (no Compose).
+ * The UI renders [lines] (scrollback + screen) and a block cursor at [cursorRow]/[cursorCol]
+ * (absolute indices into [lines]).
  *
- * Парсер — байтовая state-machine, держащая состояние между вызовами [feed], поэтому корректно
- * переживает разрезанные между чанками escape-последовательности И многобайтовый UTF-8.
+ * The parser is a byte state machine holding state across [feed] calls, so it correctly survives
+ * escape sequences and multi-byte UTF-8 split across chunks.
  *
- * Покрыто: печать с автопереносом (DECAWM) и pending-wrap; CR/LF/BS/HT/BEL; IND/NEL/RI/HTS/RIS;
- * DECSC/DECRC; адресация курсора (CUU/CUD/CUF/CUB/CNL/CPL/CHA/CUP/VPA/HPA/CHT/CBT); стирание
- * (EL/ED; `ED 2`/`ED 3` уносят экран в scrollback, историю не вытирают — clear/Ctrl+L её хранят);
- * вставка/удаление (ICH/DCH/ECH/IL/DL/SU/SD);
- * регион прокрутки (DECSTBM); insert-режим (IRM); полный SGR (атрибуты + 16/256/truecolor);
- * приватные режимы (DECCKM/DECOM/DECAWM/?25/alt-screen 47/1047/1049/mouse 1000-1006/bracketed
- * paste 2004); табстопы; ответы DSR/DA и заголовок окна (OSC 0/1/2). Неизвестные
- * последовательности безопасно поглощаются.
+ * Covered: printing with auto-wrap (DECAWM) and pending-wrap; CR/LF/BS/HT/BEL; IND/NEL/RI/HTS/RIS;
+ * DECSC/DECRC; cursor addressing (CUU/CUD/CUF/CUB/CNL/CPL/CHA/CUP/VPA/HPA/CHT/CBT); erase
+ * (EL/ED; `ED 2`/`ED 3` move the screen to scrollback, history is kept — clear/Ctrl+L rely on this);
+ * insert/delete (ICH/DCH/ECH/IL/DL/SU/SD);
+ * scroll region (DECSTBM); insert mode (IRM); full SGR (attributes + 16/256/truecolor);
+ * private modes (DECCKM/DECOM/DECAWM/?25/alt-screen 47/1047/1049/mouse 1000-1006/bracketed
+ * paste 2004); tab stops; DSR/DA replies and window title (OSC 0/1/2). Unknown sequences are
+ * safely absorbed.
  *
- * НЕ потокобезопасен: [feed] и чтение состояния идут из одной корутины-сборщика вывода
- * (так его и использует `TerminalScreenState`).
+ * NOT thread-safe: [feed] and state reads run on the same output-collecting coroutine
+ * (as used by `TerminalScreenState`).
  *
- * @param respond вызывается с ответами терминала (DSR/DA) — UI шлёт их обратно в PTY.
- * @param onBell вызывается на BEL (0x07).
- * @param onClipboardCopy вызывается на OSC 52-запись (декодированный текст) — UI кладёт его в системный
- *   буфер. Запрос ЧТЕНИЯ буфера (OSC 52 с `?`) намеренно игнорируется: содержимое буфера пользователя
- *   не отдаётся недоверенному серверу.
+ * @param respond called with terminal replies (DSR/DA) — the UI sends them back to the PTY.
+ * @param onBell called on BEL (0x07).
+ * @param onClipboardCopy called on an OSC 52 write (decoded text) — the UI puts it on the system
+ *   clipboard. A clipboard READ request (OSC 52 with `?`) is deliberately ignored: the user's
+ *   clipboard contents are not handed to an untrusted server.
  */
 class TerminalEmulator(
     cols: Int = 80,
     rows: Int = 24,
     maxScrollback: Int = DEFAULT_MAX_SCROLLBACK,
-    // Форма/мигание курсора ПО УМОЛЧАНИЮ (пользовательская настройка «Стиль курсора»). Действуют, пока
-    // приложение не задало своё через DECSCUSR; RIS (полный сброс) возвращает именно к ним, а не к
-    // жёсткому xterm-дефолту. Значения по умолчанию (блок + мигание) сохраняют прежнее поведение.
+    // Default cursor shape/blink (the "cursor style" user setting). In effect until the application
+    // sets its own via DECSCUSR; RIS (full reset) returns to these, not to a hardcoded xterm default.
+    // Defaults (block + blinking) preserve prior behavior.
     private val initialCursorShape: CursorShape = CursorShape.Block,
     private val initialCursorBlink: Boolean = true,
     private val respond: (String) -> Unit = {},
@@ -159,35 +159,35 @@ class TerminalEmulator(
     private var grid: MutableList<TermRow> = primaryGrid
     private val scrollback = ArrayDeque<TermRow>()
 
-    // Глубина scrollback (настройка «Буфер прокрутки»). Не val: её можно сменить на лету у уже
-    // открытой сессии через [applyMaxScrollback] — при уменьшении лишние старые строки сразу
-    // обрезаются, при увеличении новые строки просто дольше держатся.
+    // Scrollback depth (the "scrollback buffer" setting). Not a val: can be changed on the fly on
+    // an already-open session via [applyMaxScrollback] — shrinking trims excess old rows
+    // immediately, growing just lets new rows stick around longer.
     private var maxScrollback: Int = maxScrollback.coerceAtLeast(0)
 
-    /** true, когда активен альтернативный буфер (полноэкранные TUI). У него нет scrollback. */
+    /** true when the alternate buffer (full-screen TUIs) is active. It has no scrollback. */
     var altScreen: Boolean = false
         private set
 
-    // Курсор относительно текущего экрана (0-based).
+    // Cursor relative to the current screen (0-based).
     private var cx = 0
     private var cy = 0
     private var pendingWrap = false
 
-    // Последний напечатанный codepoint — для REP (CSI Ps b): nano 9.0/ncurses заполняют им полосы
-    // (reverse title-бар), вместо литеральных пробелов. null до первой печати. Хранится как Int
-    // (codepoint), а не Char, чтобы корректно повторять и астральные символы.
+    // Last printed codepoint — for REP (CSI Ps b): nano 9.0/ncurses fill bars (reverse title bar)
+    // with it instead of literal spaces. null before the first print. Stored as Int (codepoint),
+    // not Char, to correctly repeat astral characters too.
     private var lastPrintedCp: Int? = null
 
-    /** Абсолютный индекс строки курсора в [lines] (с учётом scrollback в основном буфере). */
+    /** Absolute row index of the cursor in [lines] (accounting for scrollback on the main buffer). */
     val cursorRow: Int get() = (if (altScreen) 0 else scrollback.size) + cy
 
-    /** Колонка курсора (0-based). */
+    /** Cursor column (0-based). */
     val cursorCol: Int get() = cx
 
     /**
-     * Снимок для отрисовки: scrollback (только основной буфер) + строки текущего экрана.
-     * Каждая строка копируется в неизменяемый список — снимок безопасно переживает последующие
-     * [feed] (внутренние строки сетки живые и мутируются на месте).
+     * Snapshot for rendering: scrollback (main buffer only) + current screen rows. Each row is
+     * copied into an immutable list — the snapshot safely survives subsequent [feed] calls (the
+     * grid's internal rows are live and mutated in place).
      */
     val lines: List<List<TermCell>>
         get() = ArrayList<List<TermCell>>((if (altScreen) 0 else scrollback.size) + grid.size).apply {
@@ -197,12 +197,12 @@ class TerminalEmulator(
 
     private var style = TermStyle()
 
-    // Регион прокрутки (DECSTBM), 0-based включительно.
+    // Scroll region (DECSTBM), 0-based inclusive.
     private var scrollTop = 0
     private var scrollBottom = this.rows - 1
 
-    // Сохранённый курсор (DECSC/DECRC; также используется alt-screen 1049). По VT220 DECSC
-    // сохраняет и активный графический набор — иначе текст после DECRC мисрендерится в line-drawing.
+    // Saved cursor (DECSC/DECRC; also used by alt-screen 1049). Per VT220, DECSC also saves the
+    // active graphic set — otherwise text after DECRC would misrender as line-drawing.
     private var savedCx = 0
     private var savedCy = 0
     private var savedStyle = TermStyle()
@@ -212,7 +212,7 @@ class TerminalEmulator(
 
     private var tabStops = defaultTabStops(this.cols)
 
-    // Режимы.
+    // Modes.
     private var autoWrap = true
     private var originMode = false
     private var insertMode = false
@@ -220,24 +220,24 @@ class TerminalEmulator(
     var cursorVisible: Boolean = true
         private set
 
-    // Пользовательский дефолт курсора (настройка «Стиль курсора»): к нему возвращает RIS и его же
-    // можно сменить на лету у открытой сессии через [applyCursorDefault]. Отдельно от текущих
-    // [cursorShape]/[cursorBlink], которые приложение может перебить своим DECSCUSR.
+    // User default cursor (the "cursor style" setting): RIS returns to this, and it can also be
+    // changed on the fly on an open session via [applyCursorDefault]. Separate from the current
+    // [cursorShape]/[cursorBlink], which the application can override with its own DECSCUSR.
     private var defaultCursorShape: CursorShape = initialCursorShape
     private var defaultCursorBlink: Boolean = initialCursorBlink
 
-    /** Форма курсора (DECSCUSR). Стартует с настройки [initialCursorShape] (дефолт — блок, как у xterm). */
+    /** Cursor shape (DECSCUSR). Starts from [initialCursorShape] (default: block, like xterm). */
     var cursorShape: CursorShape = initialCursorShape
         private set
 
-    /** Должен ли курсор мигать (DECSCUSR steady/blink). Стартует с настройки [initialCursorBlink] (дефолт — мигает). */
+    /** Whether the cursor blinks (DECSCUSR steady/blink). Starts from [initialCursorBlink] (default: blinking). */
     var cursorBlink: Boolean = initialCursorBlink
         private set
 
     /**
-     * Сменить пользовательский дефолт курсора на лету (настройка изменилась при уже открытой сессии):
-     * применяется и к текущему курсору немедленно, и к значению, к которому вернёт RIS. Приложение всё
-     * ещё может перебить форму своим DECSCUSR позже. Вызывать из корутины-владельца эмулятора.
+     * Changes the user default cursor on the fly (the setting changed on an already-open session):
+     * applies immediately to the current cursor and to the value RIS returns to. The application
+     * can still override the shape with its own DECSCUSR later. Call from the emulator's owner coroutine.
      */
     fun applyCursorDefault(shape: CursorShape, blink: Boolean) {
         defaultCursorShape = shape
@@ -247,9 +247,9 @@ class TerminalEmulator(
     }
 
     /**
-     * Сменить глубину scrollback на лету (настройка «Буфер прокрутки» изменилась при уже открытой
-     * сессии). При уменьшении лишние старые строки сразу обрезаются с начала истории. Вызывать из
-     * корутины-владельца эмулятора.
+     * Changes scrollback depth on the fly (the "scrollback buffer" setting changed on an
+     * already-open session). Shrinking trims excess old rows from the start of history
+     * immediately. Call from the emulator's owner coroutine.
      */
     fun applyMaxScrollback(lines: Int) {
         maxScrollback = lines.coerceAtLeast(0)
@@ -269,30 +269,31 @@ class TerminalEmulator(
     var mousePixels: Boolean = false
         private set
 
-    /** Focus reporting (DEC 1004): когда включён, UI шлёт ESC[I при фокусе окна и ESC[O при потере. */
+    /** Focus reporting (DEC 1004): when enabled, the UI sends ESC[I on window focus and ESC[O on blur. */
     var focusReporting: Boolean = false
         private set
     var title: String = ""
         private set
 
-    // Стек заголовка окна (XTWINOPS CSI 22/23 t): vim/tmux сохраняют заголовок при входе и
-    // восстанавливают при выходе. Кап от недоверенного сервера, который мог бы пушить без pop.
+    // Window title stack (XTWINOPS CSI 22/23 t): vim/tmux save the title on entry and restore it
+    // on exit. Capped against an untrusted server that could push without ever popping.
     private val titleStack = ArrayDeque<String>()
 
-    // Активная гиперссылка OSC 8 (URI) — вешается на печатаемые клетки до закрытия пустым URI.
+    // Active OSC 8 hyperlink (URI) — attached to printed cells until closed by an empty URI.
     private var currentHyperlink: String? = null
 
-    // Переопределения палитры (OSC 4): index 0..255 → Rgb. Пусто = используются дефолты темы.
-    // Рендер консультируется с этим слоем при разрешении TermColor.Indexed.
+    // Palette overrides (OSC 4): index 0..255 → Rgb. Empty means theme defaults are used.
+    // The renderer consults this layer when resolving TermColor.Indexed.
     private val paletteOverrides = HashMap<Int, TermColor.Rgb>()
 
-    // Кэш неизменяемого снимка палитры: пересобирается лишь при мутации (paletteDirty), чтобы
-    // publishSnapshot() отдавал ОДНУ И ТУ ЖЕ ссылку между кадрами — иначе referential-equality Compose
-    // считал бы state «грязным» и аллокация HashMap шла бы на каждый feed.
+    // Cache of the immutable palette snapshot: rebuilt only on mutation (paletteDirty), so
+    // publishSnapshot() returns the SAME reference across frames — otherwise Compose's
+    // referential-equality check would see the state as "dirty" and a HashMap would be allocated
+    // on every feed.
     private var paletteCache: Map<Int, TermColor.Rgb> = emptyMap()
     private var paletteDirty = false
 
-    /** Снимок переопределений палитры (OSC 4) для рендера; пуст, пока приложение их не задавало. */
+    /** Snapshot of palette overrides (OSC 4) for the renderer; empty until the application sets any. */
     fun paletteSnapshot(): Map<Int, TermColor.Rgb> {
         if (paletteDirty) {
             paletteCache = if (paletteOverrides.isEmpty()) emptyMap() else HashMap(paletteOverrides)
@@ -301,32 +302,33 @@ class TerminalEmulator(
         return paletteCache
     }
 
-    // --- Парсер ------------------------------------------------------------
+    // --- Parser --------------------------------------------------------------
 
     private enum class State { Ground, Esc, Csi, Osc, OscEsc, Consume, Utf8, StrSeq, StrSeqEsc }
 
     private var parser = State.Ground
     private val params = StringBuilder()
 
-    // Промежуточный байт CSI (0x20..0x2f). NUL = «не было»: отличаем от РЕАЛЬНОГО пробельного
-    // intermediate (0x20) у DECSCUSR (`CSI Ps SP q`) — иначе форму курсора не отличить от обычного CSI.
+    // CSI intermediate byte (0x20..0x2f). NUL = "none seen": distinguishes it from a REAL space
+    // intermediate (0x20) in DECSCUSR (`CSI Ps SP q`) — otherwise cursor-shape would be indistinguishable
+    // from a plain CSI.
     private var csiIntermediate = NO_INTERMEDIATE
     private val osc = StringBuilder()
 
-    // Тело строковой последовательности (DCS/APC/PM/SOS) — копим до ST (ESC\) или BEL. [strSeqIsDcs]
-    // отличает DCS (его разбираем: XTGETTCAP) от APC/PM/SOS (поглощаем целиком: kitty graphics и пр.).
+    // Body of a string sequence (DCS/APC/PM/SOS) — accumulated until ST (ESC\) or BEL. [strSeqIsDcs]
+    // distinguishes DCS (parsed: XTGETTCAP) from APC/PM/SOS (absorbed whole: kitty graphics, etc).
     private val strSeq = StringBuilder()
     private var strSeqIsDcs = false
 
     private var utf8Remaining = 0
     private var utf8CodePoint = 0
 
-    // Графические наборы G0/G1 (DEC). true = DEC Special Graphics (line-drawing), false = US-ASCII.
-    // glG1 — какой набор сейчас в GL: false=G0, true=G1; переключают SO (0x0e) / SI (0x0f).
+    // G0/G1 graphic sets (DEC). true = DEC Special Graphics (line-drawing), false = US-ASCII.
+    // glG1 — which set is currently in GL: false=G0, true=G1; toggled by SO (0x0e) / SI (0x0f).
     private var g0LineDrawing = false
     private var g1LineDrawing = false
     private var glG1 = false
-    // Куда применить следующий designation-байт: 0=G0 (`ESC (`), 1=G1 (`ESC )`), -1=прочее (поглотить).
+    // Where the next designation byte applies: 0=G0 (`ESC (`), 1=G1 (`ESC )`), -1=other (absorb).
     private var pendingDesignation = -1
 
     fun feed(data: ByteArray) {
@@ -355,21 +357,21 @@ class TerminalEmulator(
             b == 0x08 -> { if (cx > 0) cx--; pendingWrap = false }
             b == 0x09 -> { cx = nextTabStop(cx); pendingWrap = false }
             b == 0x07 -> onBell()
-            b == 0x0e -> glG1 = true  // SO — активировать G1 в GL
-            b == 0x0f -> glG1 = false // SI — вернуть G0 в GL
-            b < 0x20 -> {} // прочие C0 — игнор
+            b == 0x0e -> glG1 = true  // SO — activate G1 in GL
+            b == 0x0f -> glG1 = false // SI — restore G0 in GL
+            b < 0x20 -> {} // other C0 — ignored
             b < 0x80 -> putCodePoint(mapGlyph(b).code)
             else -> beginUtf8(b)
         }
     }
 
-    /** Применяет активный графический набор: в DEC Special Graphics ASCII 0x60..0x7e → box-drawing. */
+    /** Applies the active graphic set: in DEC Special Graphics, ASCII 0x60..0x7e maps to box-drawing. */
     private fun mapGlyph(b: Int): Char {
         val lineDrawing = if (glG1) g1LineDrawing else g0LineDrawing
         return if (lineDrawing && b in 0x60..0x7e) DEC_SPECIAL_GRAPHICS[b - 0x60] else b.toChar()
     }
 
-    /** Обрабатывает байт после `ESC (`/`ESC )`/прочих: `0` = line-drawing, иначе US-ASCII. */
+    /** Handles the byte after `ESC (`/`ESC )`/others: `0` = line-drawing, else US-ASCII. */
     private fun consumeDesignation(b: Int) {
         val lineDrawing = b == '0'.code
         when (pendingDesignation) {
@@ -430,10 +432,11 @@ class TerminalEmulator(
 
     private fun csi(b: Int) {
         when {
-            // Кап длины: сверх лимита цифры/разделители роняем, но парсим до финального байта (хвост
-            // не утечёт в Ground как текст). Реальные CSI — десятки байт, так что усечение безвредно.
-            b in 0x30..0x3f -> if (params.length < MAX_CSI_PARAMS_LEN) params.append(b.toChar()) // цифры, ';', ':', маркеры ?<=>
-            b in 0x20..0x2f -> csiIntermediate = b.toChar() // промежуточные байты
+            // Length cap: digits/separators beyond the limit are dropped, but parsing continues to the
+            // final byte (so the tail doesn't leak into Ground as text). Real CSIs are dozens of bytes,
+            // so truncation is harmless.
+            b in 0x30..0x3f -> if (params.length < MAX_CSI_PARAMS_LEN) params.append(b.toChar()) // digits, ';', ':', markers ?<=>
+            b in 0x20..0x2f -> csiIntermediate = b.toChar() // intermediate bytes
             b in 0x40..0x7e -> { dispatchCsi(b.toChar()); parser = State.Ground }
             else -> parser = State.Ground
         }
@@ -441,11 +444,12 @@ class TerminalEmulator(
 
     private fun oscByte(b: Int) {
         when (b) {
-            0x07 -> { finishOsc(); parser = State.Ground } // BEL — конец OSC
-            0x1b -> parser = State.OscEsc // возможно ST (ESC \)
-            // Кап длины: недоверенный сервер мог бы слать бесконечный OSC (особенно OSC 52 base64) и
-            // раздуть кучу до OOM. Сверх лимита байты роняем, но парсим до терминатора (хвост не утечёт
-            // в Ground как текст). Усечённый OSC 52 → битый base64 → тихо отбрасывается в setClipboard.
+            0x07 -> { finishOsc(); parser = State.Ground } // BEL — end of OSC
+            0x1b -> parser = State.OscEsc // possibly ST (ESC \)
+            // Length cap: an untrusted server could send an unbounded OSC (especially OSC 52 base64) and
+            // blow up the heap to OOM. Bytes beyond the limit are dropped, but parsing continues to the
+            // terminator (so the tail doesn't leak into Ground as text). A truncated OSC 52 -> broken
+            // base64 -> silently discarded in setClipboard.
             else -> if (osc.length < MAX_OSC_LEN) osc.append((b and 0xff).toChar())
         }
     }
@@ -457,41 +461,41 @@ class TerminalEmulator(
     }
 
     private fun finishOsc() {
-        // Байты OSC копились как символы 1:1 (byte→char), но полезная нагрузка — UTF-8 (заголовок
-        // окна, URI гиперссылки; терминал в целом UTF-8-only, как Ground-состояние). Декодируем
-        // весь payload разом: ASCII-подкоманды (base64 OSC 52, цветовые spec) декод не меняет,
-        // битые последовательности становятся U+FFFD вместо mojibake.
+        // OSC bytes were accumulated as characters 1:1 (byte->char), but the payload is UTF-8 (window
+        // title, hyperlink URI; the terminal is UTF-8-only overall, like the Ground state). The whole
+        // payload is decoded at once: ASCII subcommands (base64 OSC 52, color specs) are unaffected by
+        // decoding, broken sequences become U+FFFD instead of mojibake.
         val s = ByteArray(osc.length) { osc[it].code.toByte() }.decodeToString()
         val sep = s.indexOf(';')
-        // code-only OSC (без ';') допустим — например `OSC 104 ST` (сброс всей палитры).
+        // A code-only OSC (no ';') is valid — e.g. `OSC 104 ST` (reset the whole palette).
         val code = (if (sep < 0) s else s.substring(0, sep)).toIntOrNull() ?: return
         val rest = if (sep < 0) "" else s.substring(sep + 1)
         when (code) {
-            // C0/C1/DEL из заголовка вырезаем: сервер не должен искажать UI вкладки или
-            // протаскивать управляющие байты в потребителей строки (логи и т.п.).
+            // C0/C1/DEL are stripped from the title: a server must not corrupt the tab UI or smuggle
+            // control bytes into consumers of the string (logs, etc).
             0, 1, 2 -> title = rest.filter { it.code in 0x20..0x7e || it.code >= 0xa0 }
             4 -> setPalette(rest)     // OSC 4 ; index ; spec [ ; index ; spec ... ]
             8 -> setHyperlink(rest)   // OSC 8 ; params ; URI
             52 -> setClipboard(rest)  // OSC 52 ; Pc ; Pd
-            104 -> resetPalette(rest) // OSC 104 [ ; index ... ]  (пусто = вся палитра)
+            104 -> resetPalette(rest) // OSC 104 [ ; index ... ]  (empty = whole palette)
         }
     }
 
     /**
-     * OSC 52: `Pc;Pd`. Pd — base64 текста для записи в буфер обмена (через [onClipboardCopy]).
-     * Pd == `?` — запрос ЧТЕНИЯ буфера сервером; намеренно игнорируем (буфер пользователя не утекает).
-     * Невалидный base64 тихо отбрасываем.
+     * OSC 52: `Pc;Pd`. Pd is base64 text to write to the clipboard (via [onClipboardCopy]).
+     * Pd == `?` is a server request to READ the clipboard; deliberately ignored (the user's
+     * clipboard is never handed to the server). Invalid base64 is silently discarded.
      */
     @OptIn(ExperimentalEncodingApi::class)
     private fun setClipboard(rest: String) {
         val data = rest.substringAfter(';', "")
-        if (data.isEmpty() || data.startsWith("?")) return // пусто либо запрос чтения — буфер не отдаём
+        if (data.isEmpty() || data.startsWith("?")) return // empty or a read request — clipboard not handed over
         val text = runCatching { Base64.decode(data).decodeToString() }.getOrNull() ?: return
-        if (text.length > MAX_CLIPBOARD_LEN) return // анти-флуд: сервер не льёт мегабайты в системный буфер
+        if (text.length > MAX_CLIPBOARD_LEN) return // anti-flood: server can't dump megabytes into the system clipboard
         onClipboardCopy(text)
     }
 
-    /** OSC 4: пары `index;spec`. spec `?` (запрос) пропускаем — отвечать нечем (цвета знает рендер). */
+    /** OSC 4: `index;spec` pairs. A `?` spec (query) is skipped — nothing to reply with (renderer owns colors). */
     private fun setPalette(rest: String) {
         val parts = rest.split(';')
         var i = 0
@@ -503,15 +507,16 @@ class TerminalEmulator(
         }
     }
 
-    /** OSC 104: без аргументов — сброс всей палитры; иначе сброс перечисленных индексов. */
+    /** OSC 104: no arguments resets the whole palette; otherwise resets the listed indices. */
     private fun resetPalette(rest: String) {
         if (rest.isBlank()) { paletteOverrides.clear(); paletteDirty = true; return }
         for (part in rest.split(';')) part.toIntOrNull()?.let { if (paletteOverrides.remove(it) != null) paletteDirty = true }
     }
 
     /**
-     * Разбор X11/xterm color-spec в [TermColor.Rgb]: `rgb:R/G/B` (по 1..4 hex-цифры на компоненту,
-     * масштабируются в 0..255) и `#RGB`/`#RRGGBB`/`#RRRRGGGGBBBB`. Прочее (`?`, имена цветов) → null.
+     * Parses an X11/xterm color spec into [TermColor.Rgb]: `rgb:R/G/B` (1..4 hex digits per
+     * component, scaled to 0..255) and `#RGB`/`#RRGGBB`/`#RRRRGGGGBBBB`. Anything else (`?`, color
+     * names) yields null.
      */
     private fun parseXColor(spec: String): TermColor.Rgb? {
         if (spec.startsWith("rgb:")) {
@@ -524,7 +529,7 @@ class TerminalEmulator(
         }
         if (spec.startsWith("#")) {
             val hex = spec.substring(1)
-            // X11 #-форма: 3 (#RGB), 6 (#RRGGBB) или 12 (#RRRRGGGGBBBB) hex-цифр; прочие длины — мусор.
+            // X11 #-form: 3 (#RGB), 6 (#RRGGBB), or 12 (#RRRRGGGGBBBB) hex digits; other lengths are invalid.
             if (hex.length != 3 && hex.length != 6 && hex.length != 12) return null
             val n = hex.length / 3
             val r = scaleHex(hex.substring(0, n)) ?: return null
@@ -535,7 +540,7 @@ class TerminalEmulator(
         return null
     }
 
-    /** hex-компонента 1..4 цифр → 0..255 масштабированием по разрядности (`ff`→255, `ffff`→255, `8080`→128). */
+    /** Hex component of 1..4 digits scaled to 0..255 by digit count (`ff`->255, `ffff`->255, `8080`->128). */
     private fun scaleHex(h: String): Int? {
         if (h.isEmpty() || h.length > 4) return null
         val v = h.toIntOrNull(16) ?: return null
@@ -544,26 +549,26 @@ class TerminalEmulator(
     }
 
     /**
-     * OSC 8: `params;URI` — params (например `id=...`) игнорируем, берём URI после первого `;`.
-     * Пустой URI закрывает текущую ссылку. Активный URI вешается на последующие печатаемые клетки.
+     * OSC 8: `params;URI` — params (e.g. `id=...`) are ignored, the URI is taken after the first
+     * `;`. An empty URI closes the current link. The active URI attaches to subsequently printed cells.
      */
     private fun setHyperlink(rest: String) {
-        // Кап длины: URI тиражируется в каждую печатаемую клетку, мегабайтный URI раздул бы grid.
+        // Length cap: the URI is duplicated onto every printed cell, so a megabyte URI would bloat the grid.
         val uri = rest.substringAfter(';', "").trim().take(MAX_HYPERLINK_LEN)
         currentHyperlink = uri.ifEmpty { null }
     }
 
-    // --- Строковые последовательности (DCS / APC / PM / SOS) ----------------
+    // --- String sequences (DCS / APC / PM / SOS) ----------------------------
 
     private fun strSeqByte(b: Int) {
         when (b) {
-            // BEL как терминатор — нестандартное послабление (по ECMA-48 DCS/APC/PM/SOS терминирует
-            // только ST), удобно для приложений, шлющих BEL. ВНИМАНИЕ: при Phase-3 sixel это убрать —
-            // 0x07 может встретиться в бинарных graphics-данных и оборвать тело раньше времени.
+            // BEL as terminator is a nonstandard relaxation (per ECMA-48, DCS/APC/PM/SOS terminate only
+            // on ST), convenient for applications that send BEL. Note: 0x07 can occur in binary graphics
+            // data, so a future streamed-graphics feature would need to drop this relaxation.
             0x07 -> { finishStrSeq(); parser = State.Ground }
-            0x1b -> parser = State.StrSeqEsc                        // возможно ST (ESC \)
-            // Кап длины переиспользует MAX_OSC_LEN (4 MiB) — с запасом под будущий потоковый sixel;
-            // для текущего XTGETTCAP хватило бы килобайтов. Защита от бесконечного DCS → OOM.
+            0x1b -> parser = State.StrSeqEsc                        // possibly ST (ESC \)
+            // Length cap reuses MAX_OSC_LEN (4 MiB) — generous headroom for future streamed graphics;
+            // current XTGETTCAP usage needs only kilobytes. Protects against unbounded DCS -> OOM.
             else -> if (strSeq.length < MAX_OSC_LEN) strSeq.append((b and 0xff).toChar())
         }
     }
@@ -571,15 +576,15 @@ class TerminalEmulator(
     private fun strSeqEsc(b: Int) {
         finishStrSeq()
         parser = State.Ground
-        // process(b) безопасен даже при b==ESC: strSeq уже очищен в finishStrSeq, повторного flush не будет.
-        if (b != '\\'.code) process(b) // не ST — ESC начинает новую последовательность
+        // process(b) is safe even when b==ESC: strSeq was already cleared in finishStrSeq, so no double flush.
+        if (b != '\\'.code) process(b) // not ST — ESC starts a new sequence
     }
 
     /**
-     * Завершение строковой последовательности. APC/PM/SOS поглощаем целиком (тело экран не трогает —
-     * так kitty graphics, оконные сообщения и т.п. не текут мусором). DCS дополнительно разбираем на
-     * XTGETTCAP (`+q`); прочие DCS (sixel `q…`, DECRQSS `$q…`) сейчас просто поглощаются — рендер
-     * изображений отложен в Phase 3.
+     * Finishes a string sequence. APC/PM/SOS are absorbed whole (their body never touches the
+     * screen — kitty graphics, window messages, etc. don't leak as garbage). DCS is additionally
+     * parsed for XTGETTCAP (`+q`); other DCS forms (sixel `q...`, DECRQSS `$q...`) are currently just
+     * absorbed — image rendering isn't implemented yet.
      */
     private fun finishStrSeq() {
         if (strSeqIsDcs) {
@@ -590,21 +595,21 @@ class TerminalEmulator(
     }
 
     /**
-     * XTGETTCAP (`DCS + q <hex-name>[;…] ST`): на каждое запрошенное имя отвечаем DCS-ответом —
-     * `DCS 1 + r <name>=<hex-value> ST` для известных, `DCS 0 + r <name> ST` для неизвестных
-     * (имена/значения в hex, как в terminfo). Заявляем себя как xterm-256color, чтобы приложения
-     * включали 256 цветов / truecolor.
+     * XTGETTCAP (`DCS + q <hex-name>[;...] ST`): replies with a DCS response for each requested
+     * name — `DCS 1 + r <name>=<hex-value> ST` for known ones, `DCS 0 + r <name> ST` for unknown
+     * (names/values in hex, as in terminfo). Reports itself as xterm-256color so applications enable
+     * 256 colors / truecolor.
      *
-     * Безопасность: [hexName] вставляется в строку ответа как есть, но `hexDecode(hexName) ?: continue`
-     * пропускает дальше ТОЛЬКО валидный hex (чётная длина, цифры 0-9a-fA-F), поэтому в ответ не попадут
-     * ESC/`\`/`;` — инъекция управляющих последовательностей в поток к серверу невозможна.
+     * Security: [hexName] is inserted into the reply string as-is, but `hexDecode(hexName) ?: continue`
+     * only lets through VALID hex (even length, digits 0-9a-fA-F), so ESC/`\`/`;` can never reach the
+     * reply — injecting control sequences into the stream back to the server is impossible.
      */
     private fun replyXtGetTcap(hexNames: String) {
         var replies = 0
         for (hexName in hexNames.split(';')) {
-            if (replies >= MAX_XTGETTCAP_REPLIES) break // анти-амплификация: один DCS не плодит тысячи ответов
+            if (replies >= MAX_XTGETTCAP_REPLIES) break // anti-amplification: one DCS can't spawn thousands of replies
             if (hexName.isEmpty()) continue
-            val name = hexDecode(hexName) ?: continue // также гарантирует, что hexName — чистый hex (см. выше)
+            val name = hexDecode(hexName) ?: continue // also guarantees hexName is clean hex (see above)
             replies++
             val value = when (name) {
                 "Co", "colors" -> "256"
@@ -617,7 +622,7 @@ class TerminalEmulator(
         }
     }
 
-    /** Декодирует строку из пар hex-цифр в ASCII; нечётная длина или не-hex → null. */
+    /** Decodes a string of hex-digit pairs to ASCII; odd length or non-hex yields null. */
     private fun hexDecode(s: String): String? {
         if (s.length % 2 != 0) return null
         val sb = StringBuilder(s.length / 2)
@@ -630,7 +635,7 @@ class TerminalEmulator(
         return sb.toString()
     }
 
-    /** Кодирует ASCII-строку в пары hex-цифр (верхний регистр, как в terminfo/xterm). */
+    /** Encodes an ASCII string as hex-digit pairs (uppercase, as in terminfo/xterm). */
     private fun hexEncode(s: String): String {
         val sb = StringBuilder(s.length * 2)
         for (ch in s) {
@@ -640,12 +645,12 @@ class TerminalEmulator(
         return sb.toString()
     }
 
-    // --- Диспетчеризация CSI ----------------------------------------------
+    // --- CSI dispatch --------------------------------------------------------
 
     private fun dispatchCsi(final: Char) {
         val raw = params.toString()
         val privateMarker = raw.firstOrNull()?.takeIf { it == '?' || it == '<' || it == '=' || it == '>' }
-        // DECRQM (CSI [?] Ps $ p): запрос текущего состояния режима — отвечаем DECRPM.
+        // DECRQM (CSI [?] Ps $ p): request the current mode state — reply with DECRPM.
         if (csiIntermediate == '$' && final == 'p') {
             val body = if (privateMarker == '?') raw.substring(1) else raw
             reportMode(parseArgs(body).firstOrNull() ?: 0, private = privateMarker == '?')
@@ -653,16 +658,16 @@ class TerminalEmulator(
         }
         if (privateMarker == '?') { privateMode(final, parseArgs(raw.substring(1))); return }
         if (privateMarker != null) {
-            // Вторичная DA (CSI > c) и прочие — отвечаем минимально, остальное поглощаем.
+            // Secondary DA (CSI > c) and others — reply minimally, absorb the rest.
             if (privateMarker == '>' && final == 'c') respond("$ESC[>0;10;0c")
-            // XTVERSION (CSI > q): сообщаем имя/версию терминала через DCS.
+            // XTVERSION (CSI > q): report terminal name/version via DCS.
             if (privateMarker == '>' && final == 'q') respond("${ESC}P>|Skerry(0.1)$ESC\\")
             return
         }
         if (csiIntermediate == '!' && final == 'p') { softReset(); return }
-        // DECSCUSR (CSI Ps SP q) — форма и мигание курсора.
+        // DECSCUSR (CSI Ps SP q) — cursor shape and blink.
         if (csiIntermediate == ' ' && final == 'q') { setCursorStyle(parseArgs(raw)); return }
-        if (csiIntermediate != NO_INTERMEDIATE) return // прочие intermediate-последовательности поглощаем
+        if (csiIntermediate != NO_INTERMEDIATE) return // other intermediate sequences are absorbed
 
         val args = parseArgs(raw)
         fun arg(i: Int, d: Int) = args.getOrNull(i)?.takeIf { it > 0 } ?: d
@@ -678,9 +683,9 @@ class TerminalEmulator(
             'G', '`' -> { cx = (arg(0, 1) - 1).coerceIn(0, cols - 1); pendingWrap = false }
             'd' -> { cy = absRow(arg(0, 1) - 1); pendingWrap = false }
             'H', 'f' -> cursorTo(arg(0, 1) - 1, arg(1, 1) - 1)
-            // Счётчик капнут числом колонок: курсор всё равно упрётся в границу, поэтому больший повтор
-            // бессмыслен. Без капа `ESC[2147483647I` дал бы ~2 млрд итераций в некооперативном цикле —
-            // сессия/UI зависли бы без возможности прервать (сервер недоверенный, см. другие repeat-команды).
+            // Count is capped at the column count: the cursor hits the edge regardless, so a larger
+            // repeat is pointless. Without the cap, `ESC[2147483647I` would loop ~2 billion times
+            // uninterruptibly, hanging the session/UI (the server is untrusted; see other repeat commands).
             'I' -> { repeat(arg(0, 1).coerceAtMost(cols)) { cx = nextTabStop(cx) }; pendingWrap = false }
             'Z' -> { repeat(arg(0, 1).coerceAtMost(cols)) { cx = prevTabStop(cx) }; pendingWrap = false }
             'J' -> eraseDisplay(args.getOrNull(0)?.takeIf { it >= 0 } ?: 0)
@@ -705,21 +710,22 @@ class TerminalEmulator(
     }
 
     /**
-     * XTWINOPS (CSI Ps ; Ps ; Ps t). Поддерживаем только стек заголовка окна — 22 (push) и 23 (pop);
-     * второй параметр выбирает цель: 0 = icon + window title, 2 = window title (оба моделируем как
-     * заголовок), 1 = только icon name. В xterm icon- и window-title — РАЗДЕЛЬНЫЕ стеки; icon-only
-     * (`;1`) не трогает window-стек ни на push, ни на pop, поэтому мы такие операции игнорируем целиком
-     * — наш единственный (window) стек видит лишь сбалансированные `{0,2}`-пары и остаётся согласован.
-     * Прочие операции (ресайз/перемещение/запрос геометрии окна) намеренно игнорируем: они либо
-     * неуместны для встроенного терминала, либо утечка отпечатка (xterm их по умолчанию тоже отключает).
+     * XTWINOPS (CSI Ps ; Ps ; Ps t). Only the window title stack is supported — 22 (push) and 23
+     * (pop); the second parameter selects the target: 0 = icon + window title, 2 = window title
+     * (both modeled as the title), 1 = icon name only. In xterm, icon and window title are SEPARATE
+     * stacks; icon-only (`;1`) never touches the window stack on push or pop, so such operations are
+     * ignored entirely here — the single (window) stack only ever sees balanced `{0,2}` pairs and
+     * stays consistent. Other operations (resize/move/geometry queries) are deliberately ignored:
+     * they're either irrelevant to an embedded terminal or a fingerprinting leak (xterm disables them
+     * by default too).
      */
     private fun windowOp(args: List<Int>) {
         val op = args.getOrNull(0) ?: return
-        val target = args.getOrNull(1) ?: 0 // отсутствует -> 0 (icon + window)
-        if (target != 0 && target != 2) return // только icon (1) или иное -> заголовок окна не затронут
+        val target = args.getOrNull(1) ?: 0 // absent -> 0 (icon + window)
+        if (target != 0 && target != 2) return // icon-only (1) or other -> window title untouched
         when (op) {
             22 -> {
-                if (titleStack.size >= MAX_TITLE_STACK) titleStack.removeFirst() // кап против пуша без pop
+                if (titleStack.size >= MAX_TITLE_STACK) titleStack.removeFirst() // cap against push-without-pop
                 titleStack.addLast(title)
             }
             23 -> titleStack.removeLastOrNull()?.let { title = it }
@@ -748,8 +754,8 @@ class TerminalEmulator(
     }
 
     /**
-     * DECRQM → DECRPM: отвечает состоянием режима [code]. Pm: 1 = установлен, 2 = сброшен,
-     * 0 = не распознан. [private] выбирает DEC-private (`?`-маркер) или ANSI-набор.
+     * DECRQM -> DECRPM: replies with the state of mode [code]. Pm: 1 = set, 2 = reset,
+     * 0 = unrecognized. [private] selects the DEC-private (`?`-marker) or ANSI set.
      */
     private fun reportMode(code: Int, private: Boolean) {
         val set: Boolean? = if (private) privateModeSet(code) else ansiModeSet(code)
@@ -758,7 +764,7 @@ class TerminalEmulator(
         respond("$ESC[$marker$code;$pm\$y")
     }
 
-    /** Текущее состояние DEC-private-режима для DECRQM, или `null` если режим не распознан. */
+    /** Current state of a DEC-private mode for DECRQM, or `null` if the mode is unrecognized. */
     private fun privateModeSet(code: Int): Boolean? = when (code) {
         1 -> applicationCursorKeys
         6 -> originMode
@@ -776,7 +782,7 @@ class TerminalEmulator(
         else -> null
     }
 
-    /** Текущее состояние ANSI-режима для DECRQM, или `null` если режим не распознан. */
+    /** Current state of an ANSI mode for DECRQM, or `null` if the mode is unrecognized. */
     private fun ansiModeSet(code: Int): Boolean? = when (code) {
         4 -> insertMode // IRM
         else -> null
@@ -785,28 +791,28 @@ class TerminalEmulator(
     private fun deviceStatus(code: Int) {
         when (code) {
             5 -> respond("$ESC[0n") // OK
-            6 -> { // CPR — позиция курсора, 1-based, относительно origin при DECOM
+            6 -> { // CPR — cursor position, 1-based, relative to origin under DECOM
                 val row = (if (originMode) cy - scrollTop else cy) + 1
                 respond("$ESC[$row;${cx + 1}R")
             }
         }
     }
 
-    // --- Печать и перемещение ---------------------------------------------
+    // --- Printing and movement ------------------------------------------------
 
     private fun putCodePoint(cp: Int) {
-        if (CharMetrics.isCombining(cp) && appendCombining(cp)) return // прицепили к базе — курсор не двигаем
+        if (CharMetrics.isCombining(cp) && appendCombining(cp)) return // attached to the base — cursor unchanged
         val w = CharMetrics.charWidth(cp)
         if (pendingWrap) {
-            // Мягкий перенос: покидаемая строка логически продолжается на следующей — помечаем её
-            // wrapped (для reflow) ДО lineFeed, пока cy ещё указывает на неё.
+            // Soft wrap: the row being left logically continues on the next one — mark it wrapped
+            // (for reflow) BEFORE lineFeed, while cy still points at it.
             grid[cy].wrapped = true
             cx = 0
             lineFeed()
             pendingWrap = false
         }
-        // Широкий символ не помещается в последнюю колонку: при автопереносе уходим на новую строку,
-        // иначе размещаем его как одиночный в последней клетке (нет места под continuation).
+        // A wide character doesn't fit in the last column: with autowrap, move to a new row;
+        // otherwise place it alone in the last cell (no room for a continuation).
         if (w == 2 && cx >= cols - 1 && autoWrap) { grid[cy].wrapped = true; cx = 0; lineFeed() }
 
         val text = CharMetrics.codePointToString(cp)
@@ -827,28 +833,28 @@ class TerminalEmulator(
     }
 
     /**
-     * Прицепляет комбинируемый знак (диакритика, ZWJ, вариационный селектор) к тексту предыдущей
-     * базовой клетки, не двигая курсор и не меняя её ширину — так "e"+U+0301 рендерится как одна
-     * клетка, а ZWJ-emoji-цепочки не разваливаются. Возвращает false, если базы слева нет (курсор в
-     * колонке 0) — тогда знак печатается как обычная клетка (фолбэк). Длину кластера ограничиваем
-     * (защита от недоверенного сервера, льющего знаки в одну клетку).
+     * Attaches a combining mark (diacritic, ZWJ, variation selector) to the text of the previous
+     * base cell without moving the cursor or changing its width — so "e"+U+0301 renders as one cell,
+     * and ZWJ emoji chains don't fall apart. Returns false when there's no base to the left (cursor
+     * in column 0) — the mark is then printed as an ordinary cell (fallback). Cluster length is
+     * capped (protects against an untrusted server flooding marks into one cell).
      */
     private fun appendCombining(cp: Int): Boolean {
         val row = grid[cy]
         val baseCol = when {
-            pendingWrap -> cx                                                    // курсор не сдвинулся: cx == cols-1 (>=0), это последняя напечатанная клетка
-            cx == 0 -> return false                                              // слева пусто — крепить не к чему
-            row[cx - 1].width == CellWidth.Continuation && cx >= 2 -> cx - 2     // под Wide-символом — берём саму Wide-клетку
+            pendingWrap -> cx                                                    // cursor hasn't moved: cx == cols-1 (>=0), the last printed cell
+            cx == 0 -> return false                                              // nothing to the left to attach to
+            row[cx - 1].width == CellWidth.Continuation && cx >= 2 -> cx - 2     // under a Wide char — take the Wide cell itself
             else -> cx - 1
         }
         val base = row[baseCol]
-        if (base.width == CellWidth.Continuation) return false                   // защита: на голую континуацию не крепим
-        if (base.text.length >= MAX_GRAPHEME_LEN) return true                    // кластер переполнен — знак глотаем
+        if (base.width == CellWidth.Continuation) return false                   // guard: never attach to a bare continuation
+        if (base.text.length >= MAX_GRAPHEME_LEN) return true                    // cluster full — silently drop the mark
         row[baseCol] = base.copy(text = base.text + CharMetrics.codePointToString(cp))
         return true
     }
 
-    /** REP (CSI Ps b): повторить последний печатный символ Ps раз. Кламп — не больше площади экрана. */
+    /** REP (CSI Ps b): repeats the last printed character Ps times. Clamped to the screen area. */
     private fun repeatLastChar(n: Int) {
         val cp = lastPrintedCp ?: return
         repeat(n.coerceIn(1, cols * rows)) { putCodePoint(cp) }
@@ -870,14 +876,14 @@ class TerminalEmulator(
         pendingWrap = false
     }
 
-    /** Перевод 0-based строки в абсолютную с учётом origin-режима (внутри региона). */
+    /** Maps a 0-based row to absolute, honoring origin mode (within the region). */
     private fun absRow(row: Int): Int =
         if (originMode) (scrollTop + row).coerceIn(scrollTop, scrollBottom) else row.coerceIn(0, rows - 1)
 
     private fun topLimit() = if (originMode) scrollTop else 0
     private fun bottomLimit() = if (originMode) scrollBottom else rows - 1
 
-    // --- Прокрутка ---------------------------------------------------------
+    // --- Scrolling ---------------------------------------------------------
 
     private fun scrollUp(n: Int) = repeat(n.coerceAtMost(scrollBottom - scrollTop + 1)) {
         val removed = grid.removeAt(scrollTop)
@@ -895,13 +901,13 @@ class TerminalEmulator(
         while (scrollback.size > maxScrollback) scrollback.removeFirst()
     }
 
-    // --- Стирание / вставка / удаление ------------------------------------
+    // --- Erase / insert / delete ------------------------------------------
 
     private fun eraseLine(mode: Int) {
         val row = grid[cy]
         when (mode) {
-            // Стирание хвоста (0) или всей строки (2) убирает её продолжение — снимаем wrapped,
-            // чтобы reflow не приклеил к ней следующую. Стирание головы (1) хвост не трогает.
+            // Erasing the tail (0) or the whole row (2) removes its continuation — clear wrapped so
+            // reflow doesn't glue the next row to it. Erasing the head (1) leaves the tail alone.
             0 -> { for (c in cx until cols) row[c] = blankCell(); row.wrapped = false }
             1 -> for (c in 0..cx.coerceAtMost(cols - 1)) row[c] = blankCell()
             2 -> { for (c in 0 until cols) row[c] = blankCell(); row.wrapped = false }
@@ -912,31 +918,31 @@ class TerminalEmulator(
         when (mode) {
             0 -> { eraseLine(0); for (r in cy + 1 until rows) blankLine(r) }
             1 -> { for (r in 0 until cy) blankLine(r); eraseLine(1) }
-            // ED 2/3 гасят весь экран. На основном буфере прежний экран уносим в scrollback, чтобы
-            // `clear`/`Ctrl+L` оставляли вывод прокручиваемым вверх (как gnome-terminal/VTE), а не
-            // теряли его. ED 3 («erase saved lines») историю НАМЕРЕННО не вытираем — clear шлёт его
-            // следом за ED 2, к этому моменту экран уже пуст, поэтому лишних строк в историю не уйдёт.
+            // ED 2/3 clear the whole screen. On the primary buffer the old screen goes to scrollback so
+            // `clear`/`Ctrl+L` leave output scrollable (like gnome-terminal/VTE) rather than lost. ED 3
+            // ("erase saved lines") deliberately does not wipe history — clear sends it right after ED 2,
+            // by which point the screen is already empty, so no extra rows reach history.
             2, 3 -> clearScreenToScrollback()
         }
     }
 
     /**
-     * Погасить видимый экран, перенеся его в scrollback (только основной буфер) — прежний вывод
-     * остаётся прокручиваемым вверх. Хвостовые пустые строки в историю не уносим, иначе каждый
-     * `clear` плодил бы экран пустых строк. На альт-экране scrollback'а нет — чистим на месте.
+     * Clear the visible screen by moving it to scrollback (primary buffer only) — old output stays
+     * scrollable. Trailing empty rows aren't moved to history, else every `clear` would spawn a screen
+     * of blank rows. The alt screen has no scrollback — clear in place.
      */
     private fun clearScreenToScrollback() {
         if (altScreen) {
             for (r in 0 until rows) blankLine(r)
             return
         }
-        // Хвостовые ВИЗУАЛЬНО пустые строки в историю не уносим (иначе каждый clear плодил бы экран
-        // пустых строк). «Пусто» = пробелы без фонового цвета: строку с BCE-фоном (цветная полоса)
-        // считаем содержимым и сохраняем.
+        // Don't move visually-empty trailing rows to history (else every clear would spawn a screen of
+        // blank rows). "Empty" = spaces with no background color: a row with a BCE background (colored
+        // strip) counts as content and is kept.
         var last = rows - 1
         while (last >= 0 && grid[last].all { it.text == " " && it.style.bg == TermColor.Default && !it.style.inverse }) last--
-        // Граница перенесённого экрана и свежей пустой сетки не должна склеиться при reflow: снимаем
-        // wrapped с последней уносимой строки, иначе ресайз приклеит к ней пустую строку сетки.
+        // The boundary between the moved screen and the fresh blank grid must not glue during reflow:
+        // clear wrapped on the last moved row, else a resize would attach a blank grid row to it.
         if (last >= 0) grid[last].wrapped = false
         for (r in 0..last) pushScrollback(grid[r])
         for (r in 0 until rows) grid[r] = blankRow()
@@ -989,7 +995,7 @@ class TerminalEmulator(
         }
     }
 
-    // --- Курсор / сброс / alt-screen --------------------------------------
+    // --- Cursor / reset / alt-screen --------------------------------------
 
     private fun saveCursor() {
         savedCx = cx; savedCy = cy; savedStyle = style
@@ -1028,9 +1034,9 @@ class TerminalEmulator(
     }
 
     /**
-     * DECSCUSR (`CSI Ps SP q`): число задаёт форму и мигание курсора. 0/1 — мигающий блок (дефолт),
-     * 2 — блок, 3 — мигающее подчёркивание, 4 — подчёркивание, 5 — мигающая черта, 6 — черта.
-     * Нечётные (и 0) мигают, чётные — нет.
+     * DECSCUSR (`CSI Ps SP q`): the number sets cursor shape and blink. 0/1 — blinking block (default),
+     * 2 — block, 3 — blinking underline, 4 — underline, 5 — blinking bar, 6 — bar. Odd (and 0) blink,
+     * even don't.
      */
     private fun setCursorStyle(args: List<Int>) {
         val n = args.getOrNull(0)?.takeIf { it >= 0 } ?: 0
@@ -1079,11 +1085,11 @@ class TerminalEmulator(
         bracketedPaste = false; mouseTracking = MouseTracking.Off; mouseSgr = false; mousePixels = false; focusReporting = false
         g0LineDrawing = false; g1LineDrawing = false; glG1 = false
         pendingDesignation = -1
-        strSeq.clear(); strSeqIsDcs = false; parser = State.Ground // RIS прерывает любую частичную последовательность
-        title = ""; titleStack.clear() // RIS возвращает заголовок к дефолту (вкладка падает на host.label)
+        strSeq.clear(); strSeqIsDcs = false; parser = State.Ground // RIS aborts any partial sequence
+        title = ""; titleStack.clear() // RIS resets the title to default (the tab falls back to host.label)
     }
 
-    // --- Табстопы ----------------------------------------------------------
+    // --- Tab stops ---------------------------------------------------------
 
     private fun nextTabStop(from: Int): Int {
         var c = from + 1
@@ -1097,7 +1103,7 @@ class TerminalEmulator(
         return c.coerceAtLeast(0)
     }
 
-    /** TBC: 0 — снять табстоп в текущей колонке, 3 — очистить все. */
+    /** TBC: 0 — clear the tab stop at the current column, 3 — clear all. */
     private fun clearTabStop(mode: Int) {
         when (mode) {
             0 -> if (cx in tabStops.indices) tabStops[cx] = false
@@ -1108,14 +1114,13 @@ class TerminalEmulator(
     // --- Resize ------------------------------------------------------------
 
     /**
-     * Изменить размер сетки. Основной буфер переукладывается (reflow): мягко-перенесённые строки
-     * склеиваются в логические и переразбиваются по новой ширине, scrollback участвует, курсор едет
-     * со своим текстом. Alt-буфер НЕ reflow'ится (приложение перерисует) — обрезка/дополнение.
-     * Сбрасывает регион прокрутки и табстопы.
+     * Resize the grid. The primary buffer is reflowed: soft-wrapped rows are joined into logical rows
+     * and re-split at the new width, scrollback participates, the cursor moves with its text. The alt
+     * buffer is not reflowed (the app repaints) — trim/pad. Resets the scroll region and tab stops.
      */
     fun resize(newCols: Int, newRows: Int) {
-        // Кап сверху: исключает переполнение Int в cols*rows (REP) и безумный объём работы на ресайз;
-        // 2000 с запасом покрывает любой реальный дисплей при крошечном шрифте.
+        // Upper cap: rules out Int overflow in cols*rows (REP) and an insane amount of resize work;
+        // 2000 comfortably covers any real display at a tiny font.
         val nc = newCols.coerceIn(1, MAX_DIMENSION)
         val nr = newRows.coerceIn(1, MAX_DIMENSION)
         if (nc == cols && nr == rows) return
@@ -1134,17 +1139,17 @@ class TerminalEmulator(
         } else {
             cx = newCx.coerceIn(0, nc - 1)
             cy = newCy.coerceIn(0, nr - 1)
-            // Если курсор был в pending-wrap и после reflow снова сел на последнюю колонку — сохраняем
-            // режим (следующий символ перенесётся, а не перезапишет). Иначе сбрасываем.
+            // If the cursor was in pending-wrap and after reflow landed on the last column again — keep
+            // the mode (the next char wraps rather than overwrites). Otherwise reset it.
             pendingWrap = wasPendingWrap && cx == nc - 1
         }
     }
 
     /**
-     * Переукладка основного буфера (scrollback + [primaryGrid]) под ширину [nc]/высоту [nr] — сам
-     * алгоритм в [TerminalReflow.reflow] (чистые функции), здесь только сбор входа и применение
-     * результата к состоянию. Возвращает новую позицию курсора `(cy, cx)` в координатах нового grid
-     * (имеет смысл лишь при [trackCursor]).
+     * Reflow the primary buffer (scrollback + [primaryGrid]) to width [nc]/height [nr] — the
+     * algorithm in [TerminalReflow.reflow] (pure functions); here only input collection and applying the
+     * result to state. Returns the new cursor position `(cy, cx)` in new-grid coordinates (meaningful
+     * only with [trackCursor]).
      */
     private fun reflowPrimary(nc: Int, nr: Int, trackCursor: Boolean): Pair<Int, Int> {
         val src = ArrayList<TermRow>(scrollback.size + primaryGrid.size).apply {
@@ -1166,14 +1171,14 @@ class TerminalEmulator(
         return Pair(result.cursorRow, result.cursorCol)
     }
 
-    /** Ресайз сетки БЕЗ reflow (alt-screen): обрезка/дополнение строк и рядов. */
+    /** Resize the grid without reflow (alt-screen): trim/pad columns and rows. */
     private fun resizeGrid(g: MutableList<TermRow>, nc: Int, nr: Int, activePrimary: Boolean) {
         for (row in g) {
             while (row.size > nc) row.removeAt(row.size - 1)
             while (row.size < nc) row.add(TermCell(' '))
         }
         if (g.size > nr) {
-            // При сжатии активного основного буфера сдвигаем верх в scrollback, чтобы курсор остался виден.
+            // When shrinking the active primary buffer, shift the top into scrollback so the cursor stays visible.
             if (activePrimary) {
                 val keepFromTop = (cy - (nr - 1)).coerceAtLeast(0).coerceAtMost(g.size - nr)
                 repeat(keepFromTop) { pushScrollback(g.removeAt(0)); cy-- }
@@ -1184,17 +1189,17 @@ class TerminalEmulator(
         }
     }
 
-    // --- Фабрики ячеек -----------------------------------------------------
+    // --- Cell factories ----------------------------------------------------
 
     private fun freshScreen(): MutableList<TermRow> =
         MutableList(rows) { TermRow(MutableList(cols) { TermCell(' ') }) }
 
     /**
-     * Пустая ячейка с текущим фоном — background-color-erase (BCE): стирание и прокрутка красят
-     * ячейки ТЕКУЩИМ SGR-фоном, включая reverse-video (тогда «фоном» становится цвет текста).
-     * Несём fg/bg/inverse: ncurses (nano/htop) дозаполняет reverse-полосы через `ESC[K`, полагаясь
-     * на BCE — без флага inverse хвост строки рисовался бы обычным фоном. Глифовые атрибуты
-     * (bold/underline/strike) у пустой ячейки не несём: xterm их при стирании не применяет.
+     * A blank cell with the current background — background-color-erase (BCE): erase and scroll paint
+     * cells with the current SGR background, including reverse-video (then the "background" is the text
+     * color). Carry fg/bg/inverse: ncurses (nano/htop) refills reverse strips via `ESC[K` relying on BCE
+     * — without the inverse flag the row tail would draw with the normal background. Glyph attributes
+     * (bold/underline/strike) aren't carried on a blank cell: xterm doesn't apply them on erase.
      */
     private fun blankCell() = TermCell(' ', TermStyle(fg = style.fg, bg = style.bg, inverse = style.inverse))
 
@@ -1208,49 +1213,49 @@ class TerminalEmulator(
 
     private fun parseArgs(raw: String): List<Int> {
         if (raw.isEmpty()) return emptyList()
-        // Не-SGR CSI (курсор, DECSCUSR, режимы) colon не несут; на всякий случай сводим ':' к ';'.
-        // SGR разбирает отдельный colon-aware [SgrParser.parseParams] (субпараметры там значимы).
+        // Non-SGR CSI (cursor, DECSCUSR, modes) carry no colon; fold ':' to ';' just in case. SGR is
+        // parsed by the separate colon-aware [SgrParser.parseParams] (subparameters matter there).
         return raw.replace(':', ';').split(';').map { it.toIntOrNull() ?: -1 }
     }
 
     private companion object {
-        /** Потолок длины OSC-строки (защита от OOM на недоверенном выводе); 4 MiB с запасом под OSC 52. */
+        /** OSC string length cap (OOM guard on untrusted output); 4 MiB with headroom for OSC 52. */
         const val MAX_OSC_LEN = 4 * 1024 * 1024
 
-        /** Потолок длины буфера параметров CSI (защита от OOM: сервер льёт цифры без финального байта). */
+        /** CSI params buffer length cap (OOM guard: a server pours digits with no final byte). */
         const val MAX_CSI_PARAMS_LEN = 1024
 
-        /** Потолок размера текста OSC 52 для записи в системный буфер обмена (анти-флуд буфера). */
+        /** OSC 52 text size cap for writing to the system clipboard (anti-flood). */
         const val MAX_CLIPBOARD_LEN = 64 * 1024
 
-        /** Потолок числа ответов на один XTGETTCAP-запрос (анти-амплификация исходящего PTY-трафика). */
+        /** Cap on replies per XTGETTCAP request (anti-amplification of outgoing PTY traffic). */
         const val MAX_XTGETTCAP_REPLIES = 64
 
-        /** Потолок длины OSC 8 URI (URI копируется в каждую клетку — защита от раздувания grid). */
+        /** OSC 8 URI length cap (the URI is copied into every cell — grid bloat guard). */
         const val MAX_HYPERLINK_LEN = 2048
 
-        /** Потолок ширины/высоты сетки: против Int-overflow в cols*rows и чрезмерной работы на ресайз. */
+        /** Grid width/height cap: against Int overflow in cols*rows and excessive resize work. */
         const val MAX_DIMENSION = 2000
 
-        /** Потолок глубины стека заголовка окна (CSI 22 t без парного 23 t) — против раздувания. */
+        /** Window-title stack depth cap (CSI 22 t without a matching 23 t) — bloat guard. */
         const val MAX_TITLE_STACK = 128
 
-        /** Потолок длины grapheme-кластера в клетке (база + комбинируемые) — против раздувания. */
+        /** Cell grapheme-cluster length cap (base + combining) — bloat guard. */
         const val MAX_GRAPHEME_LEN = 32
         const val TAB = 8
         val ESC = 27.toChar().toString()
         private const val HEX_DIGITS = "0123456789ABCDEF"
 
-        /** Sentinel «у CSI не было intermediate-байта» (NUL) — отличаем от реального пробела (0x20) DECSCUSR. */
-        // NUL через toChar(), а не char-литерал: правило проекта запрещает сырые управляющие
-        // байты в исходнике, а \u-escape Edit-инструмент сворачивает в сырой байт. Сравнение
-        // редкое (раз на CSI-последовательность), поэтому отсутствие const-инлайна несущественно.
+        /** Sentinel "CSI had no intermediate byte" (NUL) — distinguishes it from a real space (0x20) in DECSCUSR. */
+        // NUL via toChar(), not a char literal: the project bans raw control bytes in source, and the
+        // Edit tool folds \u-escapes into a raw byte. The comparison is rare (once per CSI sequence), so
+        // the lack of a const inline is immaterial.
         val NO_INTERMEDIATE = 0.toChar()
 
         /**
-         * DEC Special Graphics (VT100 line-drawing): ASCII 0x60..0x7e → Unicode-глифы.
-         * Индекс = code - 0x60. Уголки/тройники/линии (j..x) — то, чем tmux/mc/htop рисуют рамки;
-         * прочие (диамант, затенение, скан-линии, ≤≥π≠£·) добиты для полноты набора.
+         * DEC Special Graphics (VT100 line-drawing): ASCII 0x60..0x7e → Unicode glyphs. Index = code -
+         * 0x60. Corners/tees/lines (j..x) are what tmux/mc/htop draw borders with; the rest (diamond,
+         * shading, scan lines, ≤≥π≠£·) are filled in for completeness.
          */
         const val DEC_SPECIAL_GRAPHICS =
             "◆▒␉␌␍␊°±" + // ` a b c d e f g

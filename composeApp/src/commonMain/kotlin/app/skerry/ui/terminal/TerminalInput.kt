@@ -3,31 +3,31 @@ package app.skerry.ui.terminal
 import androidx.compose.ui.input.key.Key
 
 /**
- * AWT отдаёт keyChar = CHAR_UNDEFINED (0xFFFF) для «нажатий без символа»: одинокие модификаторы и
- * Alt+буква на Linux. Compose кладёт это значение прямо в `utf16CodePoint`, поэтому такой codePoint
- * мусорный и НЕ должен попадать в PTY как печатный символ.
+ * AWT sends keyChar = CHAR_UNDEFINED (0xFFFF) for "keypresses without a char": lone modifiers and
+ * Alt+letter on Linux. Compose puts this value straight into `utf16CodePoint`, so this codePoint is
+ * garbage and must NOT reach the PTY as a printable character.
  */
 private const val CHAR_UNDEFINED = 0xffff
 
-/** ESC (0x1b) и DEL (0x7f) — единственное место с \u-эскейпом, дальше собираем шаблонами. */
+/** ESC (0x1b) and DEL (0x7f) — the only place with a \u-escape; sequences are built from these below. */
 private const val ESC = ""
 private const val DEL = ""
 
 /**
- * Перевод нажатия клавиши в байты для PTY — raw-режим интерактивного терминала: символы уходят
- * в shell посимвольно, эхо рисует сам shell. Возвращает строку для отправки в сессию или `null`,
- * если клавишу игнорируем (одинокий модификатор, неподдержанная комбинация).
+ * Maps a key press to PTY bytes — raw mode of the interactive terminal: characters go to the shell
+ * one at a time, echo is drawn by the shell itself. Returns the string to send to the session, or
+ * `null` if the key is ignored (lone modifier, unsupported combo).
  *
- * Спецклавиши кодируются xterm-совместимо: курсорные и Home/End учитывают DECCKM
- * ([applicationCursor]) — в application-режиме шлются как SS3 (`ESC O x`), иначе CSI (`ESC[x`);
- * F-клавиши/Page/Insert/Delete — фиксированные CSI/SS3, на DECCKM не реагируют. С зажатым
- * Shift/Ctrl/Alt спецклавиши кодируются как modifyOtherKeys-CSI (`ESC[1;<mod>x` для стрелок/Home/
- * End/F1–F4, `ESC[<n>;<mod>~` для tilde-клавиш), где `mod = 1 + Shift + Alt·2 + Ctrl·4` — это даёт
- * Shift+стрелку для выделения в mc, Ctrl+стрелку для перехода по словам и т.п. [shift]+Tab даёт
- * back-tab (`ESC[Z`). [alt] = Meta: для печатных символов и C0-байтов (Ctrl/Backspace/Enter)
- * добавляется префикс ESC (readline word-ops, Alt+Backspace = удалить слово).
+ * Special keys are encoded xterm-compatibly: arrow keys and Home/End honor DECCKM
+ * ([applicationCursor]) — sent as SS3 (`ESC O x`) in application mode, else CSI (`ESC[x`); function
+ * keys/Page/Insert/Delete are fixed CSI/SS3, unaffected by DECCKM. With Shift/Ctrl/Alt held, special
+ * keys switch to modifyOtherKeys-CSI form (`ESC[1;<mod>x` for arrows/Home/End/F1-F4, `ESC[<n>;<mod>~`
+ * for tilde keys), where `mod = 1 + Shift + Alt·2 + Ctrl·4` — enabling Shift+arrow for selection in
+ * mc, Ctrl+arrow for word jumps, etc. [shift]+Tab produces back-tab (`ESC[Z`). [alt] = Meta: for
+ * printable characters and C0 bytes (Ctrl/Backspace/Enter), prepends ESC (readline word-ops,
+ * Alt+Backspace = delete word).
  *
- * Параметры — примитивы (а не `KeyEvent`), чтобы функция была чистой и тестируемой.
+ * Parameters are primitives (not `KeyEvent`) to keep the function pure and testable.
  */
 fun mapTerminalKey(
     key: Key,
@@ -38,26 +38,27 @@ fun mapTerminalKey(
     applicationCursor: Boolean = false,
     applicationKeypad: Boolean = false,
 ): String? {
-    // Application keypad (DECKPAM): numpad шлёт SS3 (ESC O p..y / M/k/m/j/o/n) вместо цифр. Только без
-    // ctrl — Ctrl+numpad оставляем общему пути. Перехватываем до when ниже (иначе NumPadEnter дал бы CR).
+    // Application keypad (DECKPAM): numpad sends SS3 (ESC O p..y / M/k/m/j/o/n) instead of digits.
+    // Only without ctrl — Ctrl+numpad falls through to the general path. Checked before the `when`
+    // below (otherwise NumPadEnter would produce CR).
     if (applicationKeypad && !ctrl) keypadSequence(key)?.let { return it }
-    // Навигация и F-клавиши идут ПЕРВЫМИ: при Ctrl/Alt/Shift они кодируют модификатор внутри CSI
-    // (ESC[1;<mod>x), поэтому Ctrl+стрелка не должна провалиться в ctrl-блок ниже (там она дала бы null).
+    // Navigation and function keys come FIRST: with Ctrl/Alt/Shift they encode the modifier inside
+    // CSI (ESC[1;<mod>x), so Ctrl+arrow must not fall into the ctrl block below (which would return null).
     navKeySequence(key, applicationCursor, shift, alt, ctrl)?.let { return it }
     if (ctrl) {
-        // Ctrl+клавиша → C0-байт. Определяем по ФИЗИЧЕСКОЙ клавише, а не по codePoint: на desktop
-        // AWT отдаёт Ctrl+C сразу как готовый control-байт (keyChar 0x03), а раскладочные/одинокие
-        // комбо — как CHAR_UNDEFINED, поэтому опора на codePoint ломала Ctrl+букву вживую.
-        // Alt добавляет meta-префикс ESC.
+        // Ctrl+key → C0 byte. Determined from the PHYSICAL key, not codePoint: on desktop AWT sends
+        // Ctrl+C directly as the finished control byte (keyChar 0x03), but layout-dependent/lone
+        // combos as CHAR_UNDEFINED, so relying on codePoint broke Ctrl+letter in practice.
+        // Alt adds the meta ESC prefix.
         val ctrlByte = controlByte(key, codePoint) ?: return null
         return meta(alt, ctrlByte.toChar().toString())
     }
-    // C0-байтовые клавиши редактирования — honor Alt=Meta (Alt+Backspace = удалить слово).
+    // C0-byte editing keys — honor Alt=Meta (Alt+Backspace = delete word).
     when (key) {
         Key.Enter, Key.NumPadEnter -> return meta(alt, "\r")
         Key.Backspace -> return meta(alt, DEL)
         Key.Escape -> return meta(alt, ESC)
-        // Shift+Tab — back-tab (многобайтный CSI, без meta); иначе одиночный HT, honor Alt=Meta.
+        // Shift+Tab — back-tab (multi-byte CSI, no meta); otherwise plain HT, honor Alt=Meta.
         Key.Tab -> return if (shift) "$ESC[Z" else meta(alt, "\t")
     }
     val ch = printableChar(key, codePoint, shift) ?: return null
@@ -65,8 +66,8 @@ fun mapTerminalKey(
 }
 
 /**
- * SS3-последовательность numpad-клавиши в application-keypad-режиме (DECKPAM) или `null`, если [key]
- * не из numpad. Кодировка xterm: цифры 0..9 → `ESC O p`..`ESC O y`, `.`→`ESC O n`, Enter→`ESC O M`,
+ * SS3 sequence for a numpad key in application-keypad mode (DECKPAM), or `null` if [key] isn't from
+ * the numpad. xterm encoding: digits 0..9 → `ESC O p`..`ESC O y`, `.`→`ESC O n`, Enter→`ESC O M`,
  * `+`→`ESC O k`, `-`→`ESC O m`, `*`→`ESC O j`, `/`→`ESC O o`, `=`→`ESC O X`, `,`→`ESC O l`.
  */
 private fun keypadSequence(key: Key): String? = when (key) {
@@ -92,19 +93,19 @@ private fun keypadSequence(key: Key): String? = when (key) {
 }
 
 /**
- * Последовательность focus-reporting (DEC 1004): фокус окна → `ESC[I`, потеря фокуса → `ESC[O`.
- * UI шлёт её в PTY при смене фокуса, только когда приложение включило режим (vim/tmux).
+ * Focus-reporting sequence (DEC 1004): window focus → `ESC[I`, focus lost → `ESC[O`.
+ * The UI sends this to the PTY on focus change, only when the app enabled the mode (vim/tmux).
  */
 fun focusReportSequence(focused: Boolean): String = if (focused) "$ESC[I" else "$ESC[O"
 
-/** Meta-обёртка: при зажатом Alt добавляет префикс ESC (xterm metaSendsEscape). */
+/** Meta wrapper: prepends ESC when Alt is held (xterm metaSendsEscape). */
 private fun meta(alt: Boolean, seq: String): String = if (alt) ESC + seq else seq
 
 /**
- * Управляющий C0-байт для Ctrl+клавиша или `null`, если комбинация не управляющая.
- * Сначала по физической клавише (надёжно при любом keyChar от AWT: Ctrl+C приходит как 0x03,
- * иногда как CHAR_UNDEFINED), затем фолбэк на codePoint — если AWT уже отдал готовый C0-байт
- * (1..26) или, для совместимости с юнит-вызовами, букву.
+ * Control C0 byte for Ctrl+key, or `null` if the combo isn't a control sequence. Determined from the
+ * physical key first (reliable regardless of AWT's keyChar: Ctrl+C arrives as 0x03, sometimes as
+ * CHAR_UNDEFINED), then falls back to codePoint — if AWT already gave a finished C0 byte (1..26) or,
+ * for unit-test compatibility, a letter.
  */
 private fun controlByte(key: Key, codePoint: Int): Int? {
     letterIndex(key)?.let { return it + 1 } // Ctrl+A..Z → 0x01..0x1A
@@ -123,10 +124,10 @@ private fun controlByte(key: Key, codePoint: Int): Int? {
 }
 
 /**
- * Печатный символ нажатия или `null`. [codePoint] используется, только если это реальный символ
- * (не 0, не [CHAR_UNDEFINED], не ISO-control). Когда AWT символ не отдал — типично для Alt+буква на
- * Linux и одиноких модификаторов (keyChar == CHAR_UNDEFINED) — берём букву с физической клавиши,
- * чтобы Alt=Meta работал, а одинокий Alt НЕ слал мусорный глиф.
+ * Printable character of the keypress, or `null`. [codePoint] is used only if it's a real character
+ * (not 0, not [CHAR_UNDEFINED], not ISO-control). When AWT didn't provide one — typically Alt+letter
+ * on Linux and lone modifiers (keyChar == CHAR_UNDEFINED) — falls back to the physical key's letter,
+ * so Alt=Meta works while a lone Alt does NOT send a garbage glyph.
  */
 private fun printableChar(key: Key, codePoint: Int, shift: Boolean): Char? {
     if (codePoint != 0 && codePoint != CHAR_UNDEFINED) {
@@ -139,7 +140,7 @@ private fun printableChar(key: Key, codePoint: Int, shift: Boolean): Char? {
     }
 }
 
-/** Индекс буквенной клавиши A..Z → 0..25, или `null` для не-буквы. */
+/** Index of a letter key A..Z → 0..25, or `null` for a non-letter key. */
 private fun letterIndex(key: Key): Int? = when (key) {
     Key.A -> 0; Key.B -> 1; Key.C -> 2; Key.D -> 3; Key.E -> 4; Key.F -> 5; Key.G -> 6
     Key.H -> 7; Key.I -> 8; Key.J -> 9; Key.K -> 10; Key.L -> 11; Key.M -> 12; Key.N -> 13
@@ -149,20 +150,19 @@ private fun letterIndex(key: Key): Int? = when (key) {
 }
 
 /**
- * xterm-последовательность навигационной/функциональной клавиши или `null`, если [key] не из этого
- * набора.
+ * xterm sequence for a navigation/function key, or `null` if [key] isn't from this set.
  *
- * Без модификаторов: стрелки и Home/End учитывают DECCKM ([applicationCursor]) — в application-режиме
- * вводный код SS3 (`ESC O`), иначе CSI (`ESC[`); Page/Insert/Delete как CSI `ESC[<n>~`, F1–F4 как SS3
- * `ESC O P..S`, F5–F12 как CSI `ESC[<n>~`.
+ * Without modifiers: arrow keys and Home/End honor DECCKM ([applicationCursor]) — SS3 lead-in
+ * (`ESC O`) in application mode, else CSI (`ESC[`); Page/Insert/Delete as CSI `ESC[<n>~`, F1-F4 as SS3
+ * `ESC O P..S`, F5-F12 as CSI `ESC[<n>~`.
  *
- * С зажатым [shift]/[alt]/[ctrl] клавиша кодируется в modifyOtherKeys-форме: «буквенные» (стрелки,
- * Home/End, F1–F4) → `ESC[1;<mod><letter>` (всегда CSI, SS3/DECCKM игнорируются — SS3 не несёт
- * параметр), «tilde» (Page/Insert/Delete, F5–F12) → `ESC[<n>;<mod>~`. `mod = 1 + Shift + Alt·2 + Ctrl·4`.
+ * With [shift]/[alt]/[ctrl] held, the key is encoded in modifyOtherKeys form: "letter" keys (arrows,
+ * Home/End, F1-F4) → `ESC[1;<mod><letter>` (always CSI, SS3/DECCKM ignored — SS3 carries no
+ * parameter), "tilde" keys (Page/Insert/Delete, F5-F12) → `ESC[<n>;<mod>~`. `mod = 1 + Shift + Alt·2 + Ctrl·4`.
  */
 private fun navKeySequence(key: Key, applicationCursor: Boolean, shift: Boolean, alt: Boolean, ctrl: Boolean): String? {
     val mod = 1 + (if (shift) 1 else 0) + (if (alt) 2 else 0) + (if (ctrl) 4 else 0)
-    // «Буквенные» клавиши: финальный байт + (для стрелок/Home/End) учёт DECCKM в немодифицированном виде.
+    // "Letter" keys: final byte + (for arrows/Home/End) DECCKM honored when unmodified.
     val letter: Char? = when (key) {
         Key.DirectionUp -> 'A'
         Key.DirectionDown -> 'B'
@@ -178,11 +178,11 @@ private fun navKeySequence(key: Key, applicationCursor: Boolean, shift: Boolean,
     }
     if (letter != null) {
         if (mod != 1) return "$ESC[1;$mod$letter"
-        // F1–F4 без модификатора — SS3 независимо от DECCKM; стрелки/Home/End — SS3 только в application.
+        // F1-F4 without a modifier — SS3 regardless of DECCKM; arrows/Home/End — SS3 only in application mode.
         val ss3 = key == Key.F1 || key == Key.F2 || key == Key.F3 || key == Key.F4 || applicationCursor
         return if (ss3) "${ESC}O$letter" else "$ESC[$letter"
     }
-    // «Tilde»-клавиши: CSI <n> [; <mod>] ~.
+    // "Tilde" keys: CSI <n> [; <mod>] ~.
     val num: Int = when (key) {
         Key.Insert -> 2
         Key.Delete -> 3

@@ -50,9 +50,9 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 
 /**
- * Диалог создания/правки группы хостов: одно поле имени + кнопки. [onDelete] != null — режим правки
- * (показывается кнопка «Delete group», разгруппировывающая хосты группы). Сохранение недоступно при
- * пустом имени. Стиль — скрим + карточка макета, как [DesktopDeleteHostDialog]/[ConfirmActionDialog].
+ * Dialog for creating/renaming a host group: a name field plus buttons. [onDelete] != null means
+ * edit mode (shows a "Delete group" button that ungroups the group's hosts). Save is disabled when
+ * the name is empty. Styled as a scrim + card, matching [DesktopDeleteHostDialog]/[ConfirmActionDialog].
  */
 @Composable
 fun GroupDialog(
@@ -89,8 +89,8 @@ fun GroupDialog(
                 color = D.dim, size = 12.5.sp, lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
-            // Рамку/плейсхолдер кладём в decorationBox + fillMaxWidth, чтобы клик по всей площади ставил
-            // каретку (правило для рукописных полей проекта).
+            // Border/placeholder live in decorationBox + fillMaxWidth so a click anywhere in the
+            // field places the caret.
             BasicTextField(
                 value = name,
                 onValueChange = { name = it },

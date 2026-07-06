@@ -19,23 +19,22 @@ import java.security.interfaces.RSAPublicKey
 import java.util.Base64
 
 /**
- * JVM-генератор SSH-ключей на BouncyCastle (lightweight crypto API), общий для desktop и Android.
- * Пара кодируется в тот же формат, что читает sshj при коннекте ([SshjTransport]), поэтому
- * сгенерированный ключ сразу пригоден для аутентификации:
- *  - ED25519 → приватный ключ в `openssh-key-v1` (PEM `OPENSSH PRIVATE KEY`);
- *  - RSA-4096 → PKCS#1 (PEM `RSA PRIVATE KEY`) — обе формы [SSHClient.loadKeys] разбирает.
+ * JVM SSH key generator on BouncyCastle (lightweight crypto API), shared by desktop and Android.
+ * Encodes the pair in the format sshj reads on connect ([SshjTransport]):
+ *  - ED25519 → private key as `openssh-key-v1` (PEM `OPENSSH PRIVATE KEY`);
+ *  - RSA-4096 → PKCS#1 (PEM `RSA PRIVATE KEY`) — both parsed by [SSHClient.loadKeys].
  *
- * Публичная часть (строка `authorized_keys` + SHA256-отпечаток) считается из ssh-wire-кодировки
- * публичного ключа — той же, по которой OpenSSH строит отпечаток. Ключи генерируются без passphrase:
- * шифрование at-rest обеспечивает сам vault.
+ * The public part (`authorized_keys` line + SHA256 fingerprint) is derived from the ssh-wire
+ * encoding of the public key, matching OpenSSH's fingerprint. Keys are generated without a
+ * passphrase; at-rest encryption is handled by the vault.
  */
 class BouncyCastleSshKeyGenerator(
     private val random: SecureRandom = SecureRandom(),
 ) : SshKeyGenerator {
 
     override fun generate(type: SshKeyType, comment: String): GeneratedSshKey {
-        // На Android системный BouncyCastle урезан — для совместимости разбора/использования ключа
-        // регистрируем полный провайдер (idempotent, no-op на desktop), как и SSH-транспорт.
+        // Android's system BouncyCastle is stripped down; register the full provider for key
+        // parsing/use (idempotent, no-op on desktop), same as the SSH transport.
         ensureCryptoProvider()
         val pair = when (type) {
             SshKeyType.ED25519 -> Ed25519KeyPairGenerator().apply {
@@ -49,7 +48,7 @@ class BouncyCastleSshKeyGenerator(
         val publicBlob = OpenSSHPublicKeyUtil.encodePublicKey(pair.public)
         val sshKeyType = sshTypeString(type)
         val pem = pem(pemHeader(type), privateKeyBytes)
-        // Затираем plaintext-байты ключа из heap, как только PEM построен (дисциплина FileVault).
+        // Wipe the plaintext key bytes from the heap once the PEM is built.
         privateKeyBytes.fill(0)
         return GeneratedSshKey(
             privateKeyPem = pem,
@@ -62,15 +61,15 @@ class BouncyCastleSshKeyGenerator(
     }
 
     override fun inspect(privateKeyPem: String, passphrase: String?): SshPublicKeyInfo? = runCatching {
-        // sshj loadKeys идёт через JCE-провайдер «BC»; на Android он урезан и парсинг PEM падает
-        // («Key could not be read» в Vault). Регистрируем полный провайдер до разбора (idempotent).
+        // sshj loadKeys goes through the JCE "BC" provider, stripped down on Android, which breaks
+        // PEM parsing. Register the full provider before parsing (idempotent).
         ensureCryptoProvider()
         val pwdf = passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-        // SSHClient — Closeable; для loadKeys соединение не открывается, но ресурсы освобождаем через use.
+        // SSHClient is Closeable; loadKeys opens no connection but resources are freed via use.
         val publicKey = SSHClient().use { it.loadKeys(privateKeyPem, null, pwdf).public }
         val publicBlob = Buffer.PlainBuffer().putPublicKey(publicKey).compactData
         SshPublicKeyInfo(
-            // Комментарий из PEM не восстанавливается — строка без хвоста.
+            // The PEM comment isn't recoverable; line has no trailing comment.
             publicKeyOpenSsh = authorizedKeysLine(KeyType.fromKey(publicKey).toString(), publicBlob, comment = ""),
             fingerprintSha256 = fingerprint(publicBlob),
             keyTypeLabel = displayLabel(publicKey),
@@ -87,7 +86,7 @@ class BouncyCastleSshKeyGenerator(
         SshKeyType.RSA_4096 -> "ssh-rsa"
     }
 
-    /** Метка типа для уже сохранённого ключа: RSA — с реальной разрядностью, прочее — по wire-имени. */
+    /** Type label for a stored key: RSA shows actual bit length, otherwise the wire name. */
     private fun displayLabel(key: PublicKey): String = when {
         key is RSAPublicKey -> "RSA-${key.modulus.bitLength()}"
         KeyType.fromKey(key) == KeyType.ED25519 -> "ED25519"
@@ -96,7 +95,7 @@ class BouncyCastleSshKeyGenerator(
 
     private fun authorizedKeysLine(keyType: String, blob: ByteArray, comment: String): String {
         val body = "$keyType ${Base64.getEncoder().encodeToString(blob)}"
-        // Перенос строки в comment разорвал бы строку authorized_keys на несколько записей — гасим.
+        // Strip newlines from the comment; they would split the authorized_keys line into multiple entries.
         val safeComment = comment.replace(Regex("[\\r\\n]"), " ").trim()
         return if (safeComment.isEmpty()) body else "$body $safeComment"
     }
@@ -114,7 +113,7 @@ class BouncyCastleSshKeyGenerator(
     private companion object {
         val rsaPublicExponent: BigInteger = BigInteger.valueOf(65537L)
         const val RSA_KEY_SIZE = 4096
-        // Итерации Miller–Rabin: 100 — индустриальный минимум для RSA-4096 (как дефолт BouncyCastle).
+        // Miller-Rabin iterations: 100, the industry-standard minimum for RSA-4096 (BouncyCastle default).
         const val RSA_CERTAINTY = 100
         const val PEM_LINE = 64
     }

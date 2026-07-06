@@ -6,15 +6,16 @@ import androidx.compose.ui.platform.asAwtTransferable
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
 
-/** Desktop: текст оборачиваем в AWT [StringSelection] (нативный носитель [ClipEntry] на desktop). */
+/** Wraps text in AWT [StringSelection] (the native [ClipEntry] carrier on desktop). */
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun plainTextClipEntry(text: String): ClipEntry = ClipEntry(StringSelection(text))
 
 /**
- * Desktop: тянем у AWT-[java.awt.datatransfer.Transferable] ровно `stringFlavor` — без перебора прочих
- * форматов. Любой сбой (формат не поддержан, IO, недоступность буфера) гасим в `null`, чтобы вставка
- * молча откатилась. (Замечание: диагностический stack-trace при чужих сериализованных flavor'ах печатает
- * сам JDK внутри `getContents`/перечисления форматов — он безвреден и от нашего выбора flavor не зависит.)
+ * Reads exactly `stringFlavor` from the AWT [java.awt.datatransfer.Transferable], without trying
+ * other formats. Any failure (unsupported format, IO, clipboard unavailable) is swallowed to
+ * `null` so paste silently falls back. (The JDK itself may print a diagnostic stack trace for
+ * foreign serialized flavors inside `getContents`/format enumeration; it is harmless and unrelated
+ * to this flavor choice.)
  */
 @OptIn(ExperimentalComposeUiApi::class)
 internal actual fun ClipEntry.readPlainText(): String? = try {
@@ -23,13 +24,13 @@ internal actual fun ClipEntry.readPlainText(): String? = try {
     null
 }
 
-/** Desktop: на Wayland читаем CLIPBOARD через `wl-paste` (минуя AWT — без шумной JDK-трассы); иначе null. */
+/** On Wayland, reads CLIPBOARD via `wl-paste` (bypassing AWT, no noisy JDK trace); otherwise null. */
 internal actual fun readSystemClipboardDirect(): String? =
     if (WaylandClipboard.available) WaylandClipboard.paste(primary = false) else null
 
-/** Desktop: на Wayland пишем CLIPBOARD через `wl-copy` (парно к чтению); иначе false → штатный Compose-буфер. */
+/** On Wayland, writes CLIPBOARD via `wl-copy` (paired with the read side); otherwise false, falling back to the regular Compose clipboard. */
 internal actual fun writeSystemClipboardDirect(text: String): Boolean =
     WaylandClipboard.available && WaylandClipboard.copy(text, primary = false)
 
-/** Desktop: на Wayland прямой путь читает буфер целиком (без отката на AWT — без JDK-трассы). */
+/** On Wayland, the direct path reads the whole clipboard (no AWT fallback, no JDK trace). */
 internal actual fun systemClipboardDirectHandlesReads(): Boolean = WaylandClipboard.available

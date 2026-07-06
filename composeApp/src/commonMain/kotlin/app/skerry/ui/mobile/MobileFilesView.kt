@@ -83,19 +83,19 @@ import app.skerry.ui.sftp.NameDialog
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
-/** Фон карточки передачи (`#0B1A26` = [D.surface2]); трек прогресс-полосы — белый 7%. */
+/** Transfer card background (`#0B1A26` = [D.surface2]); progress track is white at 7%. */
 private val TransferTrack = Color(0x12FFFFFF)
 
 /**
- * Корневой таб Files: single-pane браузер Remote-SFTP активной сессии поверх кэшированного
- * [TransferCoordinator]. Локальная панель устройства убрана (scoped-storage Android делает её
- * бесполезной), переключатель Remote/Local тоже — экран всегда показывает каталог хоста.
+ * Root Files tab: single-pane browser of the active session's remote SFTP over a cached
+ * [TransferCoordinator]. The local device pane is removed (Android scoped storage makes it
+ * useless), and so is the Remote/Local switch — the screen always shows the host's directory.
  *
- * Режим выбирается [mobileFilesMode]: без менеджера сессий — статичный мок ([MockMobileFilesView]),
- * с подключённой активной сессией — живой листинг, иначе — уведомление «нет сессии». Видимые действия:
- * тап по папке — вход, тап по файлу (иконка `ios_share`) — скачать через системный «Save to…», FAB —
- * создать каталог / залить файл с устройства. Переименование/удаление и «Download to device» спрятаны
- * в контекстное меню (long-press).
+ * Mode is picked by [mobileFilesMode]: no session manager — static mock ([MockMobileFilesView]);
+ * a connected active session — live listing; otherwise a "no session" notice. Visible actions:
+ * tap a folder to enter, tap a file (`ios_share` icon) to download via the system "Save to…", FAB
+ * creates a directory / uploads a file from the device. Rename/delete and "Download to device" are
+ * in the context menu (long-press).
  */
 @Composable
 fun MobileFilesScreen(onBack: (() -> Unit)? = null) {
@@ -107,22 +107,22 @@ fun MobileFilesScreen(onBack: (() -> Unit)? = null) {
     val connecting = uiState is ConnectionUiState.Connecting
     when (mobileFilesMode(hasSessions = sessions != null, connected = connected, connecting = connecting)) {
         MobileFilesMode.Preview -> MockMobileFilesView(mono)
-        // active?.let вместо !! : sessions.active — производный геттер над двумя snapshot-полями,
-        // и при гонке закрытия сессии мог бы оказаться null даже при connected — раннее «ничего».
+        // active?.let instead of !!: sessions.active is a derived getter over two snapshot fields,
+        // and a session-close race could leave it null even while connected — fall back to nothing.
         MobileFilesMode.Live -> active?.let { LiveMobileFilesView(it.controller, it.subtitle, mono, onBack) }
-        // «Connecting…» с подписью хоста: после тапа SFTP/Connect сессия ещё в хендшейке — не мигаем
-        // «No active session». active?.let на случай гонки закрытия (как в Live).
+        // "Connecting…" with the host subtitle: after tapping SFTP/Connect the session is still
+        // handshaking — don't flash "No active session". active?.let for the same close race as Live.
         MobileFilesMode.Connecting -> active?.let { ConnectingMobileFilesView(it.subtitle, onBack) }
         MobileFilesMode.NoSession -> NoSessionMobileFilesView(mono, onBack)
     }
 }
 
-// Живой путь.
+// Live path.
 
 /**
- * Живой Files-экран поверх кэшированного [TransferCoordinator] сессии (открывается один раз и живёт
- * на scope сессии — переключение таба путь/выделение не сбрасывает). Показывает только Remote-панель
- * (каталог хоста); Local-панель координатора используется лишь как приёмник «Download to device».
+ * Live Files screen over the session's cached [TransferCoordinator] (opened once and lives on the
+ * session scope — switching tabs doesn't reset path/selection). Shows only the Remote pane (the
+ * host's directory); the coordinator's Local pane is used only as the "Download to device" sink.
  */
 @Composable
 private fun LiveMobileFilesView(controller: ConnectionController, subtitle: String, mono: FontFamily, onBack: (() -> Unit)? = null) {
@@ -130,10 +130,10 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
     var fabOpen by remember(controller) { mutableStateOf(false) }
-    // UI-scope только для нативного пикера файла (FAB Upload); сама передача живёт на scope сессии
-    // внутри координатора и переживёт уход вью из композиции.
+    // UI scope only for the native file picker (FAB Upload); the transfer itself lives on the
+    // session scope inside the coordinator and survives the view leaving composition.
     val uiScope = rememberCoroutineScope()
-    // stringResource нельзя звать внутри LaunchedEffect — поднимаем значение заранее.
+    // stringResource can't be called inside LaunchedEffect — resolve the value beforehand.
     val openFailedMsg = stringResource(Res.string.ftail_open_failed)
     LaunchedEffect(controller) {
         openError = null
@@ -151,28 +151,28 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
         Column(Modifier.fillMaxSize()) {
             MobileFilesTitle(onBack)
             when {
-                // Один нейтральный центрированный статус на всю фазу ожидания: хендшейк сессии →
-                // открытие SFTP-канала → первый листинг каталога. Текст и позиция не меняются (как у
-                // терминала — «какая разница terminal это или sftp»), поэтому экран не мигает и не
-                // «прыгает» вертикально. Хлебную крошку + список показываем только когда листинг готов.
+                // One neutral centered status for the whole waiting phase: session handshake →
+                // SFTP channel open → first directory listing. Text and position stay fixed (same
+                // idea as the terminal — it doesn't matter whether it's a terminal or sftp), so the
+                // screen doesn't flash or jump vertically. Breadcrumb + list show only once loaded.
                 openError != null -> MobileFilesNoticeBox("error", stringResource(Res.string.sftp_unavailable), openError, D.sunset)
                 c == null || c.remote.state is FilePaneState.Loading ->
                     MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_connecting), subtitle, D.cyanBright)
                 else -> {
                     val pane = c.remote
-                    // Видимое действие строки-файла (ios_share): скачать НАРУЖУ из песочницы через
-                    // системный «Save to…» ([pickDownloadTarget] → SAF на Android, нативный диалог на
-                    // desktop) — пикер suspend, поэтому через uiScope. Стабилизируем по (c, uiScope),
-                    // чтобы лямбда не пересоздавалась на каждой рекомпозиции (напр. при обновлении
-                    // карточки передачи) и зря не инвалидировала список.
+                    // File row's visible action (ios_share): download OUT of the sandbox via the
+                    // system "Save to…" ([pickDownloadTarget] → SAF on Android, native dialog on
+                    // desktop) — the picker is suspend, so it goes through uiScope. Stabilized on
+                    // (c, uiScope) so the lambda isn't recreated on every recomposition (e.g. when
+                    // the transfer card updates) and doesn't needlessly invalidate the list.
                     val onTransfer = remember(c, uiScope) {
                         { item: FileItem ->
                             uiScope.launch { pickDownloadTarget(item.name)?.let { c.downloadToTarget(item, it) } }
                             Unit
                         }
                     }
-                    // «Download to device» (long-press на файле): скачать БЕЗ диалога в каталог
-                    // приложения (Local-панель координатора), чтобы файл сразу лежал на устройстве.
+                    // "Download to device" (long-press on a file): download WITHOUT a dialog into
+                    // the app's directory (coordinator's Local pane), so the file lands on device right away.
                     val downloadHere = remember(c) {
                         { item: FileItem -> c.remote.selectOnly(item); c.downloadSelection() }
                     }
@@ -185,11 +185,11 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                         modifier = Modifier.weight(1f),
                     )
                     MobileTransferCard(c.transfer, mono, onDismiss = c::clearTransfer)
-                    Spacer(Modifier.height(88.dp)) // место под плавающую FAB (push-экран без таб-бара)
+                    Spacer(Modifier.height(88.dp)) // room for the floating FAB (push screen has no tab bar)
                 }
             }
         }
-        // Скрим-подложка под раскрытым меню: тап мимо гасит FAB (мобильная идиома speed-dial).
+        // Scrim behind the expanded menu: tapping outside collapses the FAB (mobile speed-dial idiom).
         if (fabOpen) {
             Box(
                 Modifier
@@ -199,8 +199,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                     },
             )
         }
-        // Единый «+»-FAB: раскрывает действия над Remote-панелью — «Создать директорию» и «Загрузить
-        // файл» (uploadSource целит в remote.path). Действия всплывают НАД кнопкой стопкой с подписями.
+        // Single "+" FAB: expands actions over the Remote pane — "Create directory" and "Upload
+        // file" (uploadSource targets remote.path). Actions stack up ABOVE the button with labels.
         if (c != null && openError == null && c.remote.state !is FilePaneState.Loading) {
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 24.dp),
@@ -221,8 +221,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
             }
         }
         if (creatingFolder && c != null) {
-            // Создание каталога в Remote-панели. Переиспользуем общий NameDialog
-            // (валидирует пустоту/«/»/«.»/«..»/управляющие), как desktop «New folder».
+            // Create a directory in the Remote pane. Reuses the shared NameDialog
+            // (validates empty/"/"/"."/".."/control chars), like desktop "New folder".
             val pane = c.remote
             NameDialog(
                 title = stringResource(Res.string.sftp_new_folder),
@@ -232,8 +232,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                 onDismiss = { creatingFolder = false },
             )
         }
-        // Конфликт перезаписи (скачивание/загрузка нашли одноимённый объект в приёмнике) — тот же
-        // диалог подтверждения, что на desktop; координатор общий, поэтому и состояние [overwrite] общее.
+        // Overwrite conflict (download/upload found a same-named object at the destination) — the
+        // same confirmation dialog as desktop; the coordinator is shared, so [overwrite] state is shared too.
         c?.overwrite?.let { conflict ->
             val single = conflict.names.singleOrNull()
             ConfirmDangerDialog(
@@ -249,9 +249,9 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
 }
 
 /**
- * Живая панель (Remote или Local) поверх [FilePaneController]: листинг + строка-вверх «..» +
- * контекстное меню переименования/удаления (long-press). [onTransfer] — передача файла (видимое
- * действие `ios_share` строки-файла).
+ * Live pane (Remote or Local) over [FilePaneController]: listing + ".." up row + rename/delete
+ * context menu (long-press). [onTransfer] is the file transfer action (the file row's `ios_share`
+ * visible action).
  */
 @Composable
 private fun MobileLivePane(
@@ -264,11 +264,11 @@ private fun MobileLivePane(
     var renaming by remember(pane) { mutableStateOf<FileItem?>(null) }
     var deleting by remember(pane) { mutableStateOf<FileItem?>(null) }
 
-    // Новый каталог всегда показываем с начала. Панель НЕ перезагружается через Loading
-    // (reload() сразу ставит Loaded), поэтому скролл-колонка переживает смену каталога, и без
-    // явного сброса verticalScroll унаследовал бы прокрутку предыдущего каталога — остаточный
-    // офсет (после флинга/оверскролла) переносился бы в новый листинг, и список «прыгал» бы на
-    // пару пикселей при каждом переходе. Сбрасываем в начало при смене пути (scrollTo — мгновенно).
+    // Always show a new directory from the top. The pane doesn't reload through Loading (reload()
+    // sets Loaded directly), so the scroll column survives the directory change, and without an
+    // explicit reset verticalScroll would inherit the previous directory's scroll — a leftover
+    // offset (after a fling/overscroll) would carry into the new listing, making the list jump a
+    // few pixels on every navigation. Reset to the top on path change (scrollTo is instant).
     val scroll = rememberScrollState()
     LaunchedEffect(pane.path) { scroll.scrollTo(0) }
 
@@ -283,8 +283,8 @@ private fun MobileLivePane(
                     MobileFileUpRow(mono, onClick = pane::goUp)
                 }
                 st.entries.forEach { entry ->
-                    // key по пути: forEach в Column переиспользует слоты позиционно, и без ключа
-                    // открытое контекстное меню «переехало» бы на новую строку после refresh/rename.
+                    // key by path: forEach in Column reuses slots positionally, and without a key
+                    // an open context menu would "migrate" to a different row after refresh/rename.
                     key(entry.path) {
                         val isDir = entry.type == FileItemType.Directory
                         MobileFileRow(
@@ -321,9 +321,9 @@ private fun MobileLivePane(
 }
 
 /**
- * Строка списка файлов: ведущая иконка ([mobileFileIcon]) + имя (mono) + мета +
- * завершающая иконка ([mobileFileTrailingIcon]). Тап — [onClick] (войти/передать); long-press —
- * контекстное меню Rename/Delete.
+ * File list row: leading icon ([mobileFileIcon]) + name (mono) + meta + trailing icon
+ * ([mobileFileTrailingIcon]). Tap is [onClick] (enter/transfer); long-press opens the
+ * Rename/Delete context menu.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -371,7 +371,7 @@ private fun MobileFileRow(
     }
 }
 
-/** Строка возврата в родительский каталог («..»). */
+/** Row that navigates up to the parent directory (".."). */
 @Composable
 private fun MobileFileUpRow(mono: FontFamily, onClick: () -> Unit) {
     Row(
@@ -389,8 +389,8 @@ private fun MobileFileUpRow(mono: FontFamily, onClick: () -> Unit) {
 }
 
 /**
- * Карточка передачи мобильного макета (под списком): иконка направления + имя + процент + полоса.
- * Active — живой прогресс; Failed — ошибка с закрытием; Idle — ничего.
+ * Mobile layout's transfer card (below the list): direction icon + name + percent + bar.
+ * Active shows live progress; Failed shows the error with a close button; Idle renders nothing.
  */
 @Composable
 private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDismiss: () -> Unit) {
@@ -445,12 +445,12 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
     }
 }
 
-// Общий chrome.
+// Shared chrome.
 
 /**
- * Заголовок «Files» (28sp, как в макете). Действия (создать каталог/загрузить) — в общем «+»-FAB.
- * [onBack] (push-режим SFTP с карточки хоста) добавляет слева back-стрелку, как у терминала; в превью
- * (`null`) её нет.
+ * "Files" title (28sp, as in the layout). Actions (create directory/upload) live in the shared
+ * "+" FAB. [onBack] (push-mode SFTP from a host card) adds a back arrow on the left, like the
+ * terminal; absent (`null`) in preview.
  */
 @Composable
 private fun MobileFilesTitle(onBack: (() -> Unit)? = null) {
@@ -471,7 +471,7 @@ private fun MobileFilesTitle(onBack: (() -> Unit)? = null) {
     }
 }
 
-/** Строка-крошка под заголовком: иконка хоста (dns) + «label : path» активной Remote-сессии. */
+/** Breadcrumb row below the title: host icon (dns) + "label : path" of the active Remote session. */
 @Composable
 private fun MobileFilesBreadcrumbRow(label: String, path: String, mono: FontFamily) {
     Row(
@@ -491,13 +491,13 @@ private fun MobileFilesBreadcrumbRow(label: String, path: String, mono: FontFami
     }
 }
 
-/** Круглая «+»-FAB Files — общий [MobileFabButton]; в раскрытом состоянии [open] показывает «×» для сворачивания. */
+/** Round "+" FAB for Files — the shared [MobileFabButton]; when expanded, [open] shows "x" to collapse. */
 @Composable
 private fun MobileFabButton(open: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     MobileFabButton(onClick = onClick, modifier = modifier, icon = if (open) "close" else "add", iconSize = 26.sp)
 }
 
-/** Пункт меню «+»-FAB: пилюля с иконкой и подписью (всплывает над кнопкой). */
+/** "+" FAB menu item: pill with icon and label (floats above the button). */
 @Composable
 private fun MobileFabAction(icon: String, label: String, onClick: () -> Unit) {
     Row(
@@ -515,7 +515,7 @@ private fun MobileFabAction(icon: String, label: String, onClick: () -> Unit) {
     }
 }
 
-/** Центрированное уведомление в свободной области под заголовком (подключение/открытие/загрузка/ошибка). */
+/** Centered notice in the free area below the title (connecting/opening/loading/error). */
 @Composable
 private fun MobileFilesNoticeBox(icon: String, title: String, subtitle: String?, color: Color) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -532,7 +532,7 @@ private fun MobileFilesNoticeContent(icon: String, title: String, subtitle: Stri
     }
 }
 
-/** Менеджер сессий есть, но активная не подключена: заголовок + уведомление. */
+/** Session manager exists but the active session isn't connected: title + notice. */
 @Composable
 private fun NoSessionMobileFilesView(mono: FontFamily, onBack: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
@@ -541,7 +541,7 @@ private fun NoSessionMobileFilesView(mono: FontFamily, onBack: (() -> Unit)? = n
     }
 }
 
-/** Активная сессия ещё подключается (тап SFTP/Connect): заголовок + «Connecting…» с подписью хоста. */
+/** Active session is still connecting (tapped SFTP/Connect): title + "Connecting…" with the host subtitle. */
 @Composable
 private fun ConnectingMobileFilesView(subtitle: String, onBack: (() -> Unit)? = null) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
@@ -550,11 +550,11 @@ private fun ConnectingMobileFilesView(subtitle: String, onBack: (() -> Unit)? = 
     }
 }
 
-// Мок (превью/офскрин).
+// Mock (preview/offscreen).
 
 private data class MockFileEntry(val icon: String, val iconColor: Color, val name: String, val meta: String, val trailing: String, val selected: Boolean = false)
 
-/** Статичные данные Remote-панели (превью/офскрин). */
+/** Static Remote pane data (preview/offscreen). */
 private val MOCK_REMOTE_FILES = listOf(
     MockFileEntry("folder", D.cyanBright, "html", "drwxr-xr-x · 4 items", "chevron_right"),
     MockFileEntry("folder", D.cyanBright, "releases", "drwxr-xr-x · 12 items", "chevron_right"),
@@ -563,7 +563,7 @@ private val MOCK_REMOTE_FILES = listOf(
     MockFileEntry("description", D.dim, "robots.txt", "112 B · May 30", "ios_share"),
 )
 
-/** Статичный мок секции Files (превью/офскрин без бэкенда). */
+/** Static mock of the Files section (preview/offscreen, no backend). */
 @Composable
 private fun MockMobileFilesView(mono: FontFamily) {
     Box(Modifier.fillMaxSize().background(D.bg)) {
@@ -600,7 +600,7 @@ private fun MockFileRow(entry: MockFileEntry, mono: FontFamily) {
     }
 }
 
-/** Карточка передачи макета (статичная, 64%). */
+/** Layout's transfer card (static, 64%). */
 @Composable
 private fun MockTransferCard(mono: FontFamily) {
     Column(

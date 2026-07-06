@@ -1,18 +1,18 @@
 package app.skerry.shared.terminal
 
 /**
- * Движок автодополнения терминала (модель inline-подсказки fish/zsh). Клиент не парсит удалённый
- * shell — он локально отслеживает строку, которую пользователь НАБИРАЕТ (по отправленным в PTY
- * байтам), и предлагает «призрачное» продолжение из истории команд и списка типовых команд/путей.
+ * Terminal autocomplete engine (fish/zsh-style inline suggestion). Doesn't parse the remote
+ * shell — it locally tracks the line the user is TYPING (from bytes sent to the PTY) and offers a
+ * ghost completion from command history and a list of common commands/paths.
  *
- * Отслеживание строки грубое (клиент не знает реальную позицию курсора): обрабатываются печатные
- * ASCII/UTF-8 символы, Backspace/Delete, Ctrl-U/Ctrl-C (сброс) и Enter (коммит строки в историю).
- * Управляющие/ESC-последовательности (стрелки и пр.) сбрасывают подсказку, но строку не портят.
- * Этого достаточно для набора команды с нуля — самого частого сценария автодополнения.
+ * Line tracking is approximate (the client doesn't know the real cursor position): handles
+ * printable ASCII/UTF-8, Backspace/Delete, Ctrl-U/Ctrl-C (reset), and Enter (commits the line to
+ * history). Control/ESC sequences (arrows, etc.) clear the suggestion but leave the line intact.
+ * Sufficient for typing a command from scratch — the common autocomplete case.
  *
- * Использование из UI: [onUserInput] на каждый отправленный в сессию блок; [suggestionTail] —
- * что дорисовать серым после ввода; [acceptSuggestion] — байты, которые надо отправить, чтобы
- * принять подсказку (Tab/→), с обновлением внутренней строки.
+ * UI usage: [onUserInput] on each block sent to the session; [suggestionTail] is what to render
+ * in gray after the typed text; [acceptSuggestion] returns the bytes to send to accept the
+ * suggestion (Tab/→), updating the internal line.
  */
 class AutocompleteEngine(
     private val history: CommandHistory = CommandHistory(),
@@ -20,32 +20,32 @@ class AutocompleteEngine(
 ) {
     private val line = StringBuilder()
 
-    // Курсор циклирования альтернатив (Shift+Tab): индекс в списке [candidates]. Сбрасывается на 0
-    // при любом изменении строки, чтобы после нового символа снова показывалась лучшая подсказка.
+    // Cycle cursor for alternatives (Shift+Tab): index into [candidates]. Reset to 0 on any line
+    // change so the best suggestion shows again after a new character.
     private var cycleIndex = 0
 
-    /** Текущая набранная строка (для тестов/диагностики). */
+    /** Current typed line (for tests/diagnostics). */
     val currentLine: String get() = line.toString()
 
-    /** История команд (для reverse-search из UI). */
+    /** Command history (for reverse-search from the UI). */
     val commandHistory: CommandHistory get() = history
 
-    /** Забыть команду из истории (напр. опечатку с «command not found»). `true`, если была. */
+    /** Forgets a command from history (e.g. a typo that produced "command not found"). `true` if it was present. */
     fun forget(command: String): Boolean = history.forget(command)
 
-    /** Сбросить текущую отслеживаемую строку БЕЗ записи в историю (напр. на входе в режим без эха). */
+    /** Resets the tracked line without recording it to history (e.g. entering a no-echo mode). */
     fun reset() {
         line.clear()
         cycleIndex = 0
     }
 
     /**
-     * Учесть отправленные пользователем в PTY [data] байты. Возвращает команду, если ввод содержал
-     * Enter (её же движок кладёт в историю), иначе `null`. Несколько строк в одном блоке
-     * обрабатываются по очереди — возвращается ПОСЛЕДНЯЯ закоммиченная.
+     * Processes [data] bytes the user sent to the PTY. Returns the command if the input contained
+     * Enter (also recorded to history), else `null`. Multiple lines in one block are processed in
+     * order — the LAST committed one is returned.
      */
     fun onUserInput(data: ByteArray): String? {
-        cycleIndex = 0 // строка меняется — циклирование начинается заново с лучшего кандидата
+        cycleIndex = 0 // line changed — cycling restarts from the best candidate
         var committed: String? = null
         var i = 0
         while (i < data.size) {
@@ -61,11 +61,11 @@ class AutocompleteEngine(
                 }
                 b == BS || b == DEL -> if (line.isNotEmpty()) line.deleteAt(line.length - 1)
                 b == CTRL_U || b == CTRL_C -> line.clear()
-                b == ESC -> { line.clear(); i = skipEscapeSequence(data, i) } // стрелки/навигация — сбрасываем
-                b == TAB -> { /* accept — обрабатывает UI через acceptSuggestion */ }
-                b < 0x20 -> { /* прочие управляющие — игнор, строку не трогаем */ }
+                b == ESC -> { line.clear(); i = skipEscapeSequence(data, i) } // arrows/navigation — reset
+                b == TAB -> { /* accept — handled by the UI via acceptSuggestion */ }
+                b < 0x20 -> { /* other control bytes — ignored, line untouched */ }
                 else -> {
-                    // Печатный символ: собираем как UTF-8 (многобайтовые последовательности целиком).
+                    // Printable character: decoded as UTF-8 (multi-byte sequences taken whole).
                     val (ch, next) = decodeUtf8(data, i)
                     if (ch != null) line.append(ch)
                     i = next
@@ -78,10 +78,10 @@ class AutocompleteEngine(
     }
 
     /**
-     * Упорядоченный список полных предложений для текущей строки (для циклирования). Приоритет:
-     * история → типовые команды → (при уже начатом аргументе) известные подкоманды и пути/токены,
-     * встреченные в истории этой сессии. Дубликаты схлопнуты, сохранён порядок первого появления.
-     * Пустой список, если подсказывать нечего (пустая строка / завершается пробелом).
+     * Ordered list of full completion candidates for the current line (for cycling). Priority:
+     * history, then common commands, then (once an argument has started) known subcommands and
+     * path/tokens seen in this session's history. Duplicates collapsed, first-seen order kept.
+     * Empty if there's nothing to suggest (empty line / ends with a space).
      */
     fun candidates(): List<String> {
         val prefix = line.toString()
@@ -96,22 +96,22 @@ class AutocompleteEngine(
         return out.filter { it.length > prefix.length && it.startsWith(prefix) }.toList()
     }
 
-    /** Полное предложение для текущей строки — кандидат под курсором циклирования, либо `null`. */
+    /** Full suggestion for the current line — the candidate under the cycle cursor, or `null`. */
     fun suggestion(): String? {
         val c = candidates()
         if (c.isEmpty()) return null
         return c[cycleIndex.mod(c.size)]
     }
 
-    /** «Хвост» подсказки — то, что дорисовать серым после уже набранного, либо `null`. */
+    /** Suggestion tail — what to render in gray after the typed text, or `null`. */
     fun suggestionTail(): String? {
         val full = suggestion() ?: return null
         return full.substring(line.length)
     }
 
     /**
-     * Переключить подсказку на следующую альтернативу (Shift+Tab). Циклирует по [candidates] с
-     * заворотом; при одном/нуле кандидатов — no-op. Строку не меняет — только выбираемый «призрак».
+     * Switches to the next suggestion alternative (Shift+Tab). Cycles through [candidates] with
+     * wraparound; a no-op with zero/one candidates. Doesn't change the line, only the selected ghost.
      */
     fun cycleSuggestion() {
         val size = candidates().size
@@ -119,8 +119,8 @@ class AutocompleteEngine(
     }
 
     /**
-     * Принять подсказку: вернуть байты, которые надо отправить в сессию, чтобы дописать команду
-     * (сам «хвост»), и обновить внутреннюю строку. `null`, если принимать нечего.
+     * Accepts the suggestion: returns the bytes to send to the session to complete the command
+     * (the tail), and updates the internal line. `null` if there's nothing to accept.
      */
     fun acceptSuggestion(): ByteArray? {
         val tail = suggestionTail() ?: return null
@@ -130,8 +130,8 @@ class AutocompleteEngine(
     }
 
     /**
-     * Подсказки известных подкоманд: для строки `cmd partial` (ровно два слова, где `cmd` — команда
-     * из [SUBCOMMANDS]) вернуть `cmd sub` для каждой подкоманды, начинающейся с `partial`.
+     * Known-subcommand suggestions: for a line `cmd partial` (exactly two words, `cmd` in
+     * [SUBCOMMANDS]) returns `cmd sub` for each subcommand starting with `partial`.
      */
     private fun subcommandCandidates(prefix: String): List<String> {
         val words = prefix.split(' ')
@@ -142,8 +142,8 @@ class AutocompleteEngine(
     }
 
     /**
-     * Дополнение последнего слова путём/токеном, встреченным как аргумент в истории этой сессии
-     * (пути, имена файлов/юнитов и пр.). Токены собираются из истории на лету, от новых к старым.
+     * Completes the last word with a path/token seen as an argument in this session's history
+     * (paths, file/unit names, etc). Tokens are collected from history on the fly, newest first.
      */
     private fun tokenCandidates(prefix: String): List<String> {
         val lastSpace = prefix.lastIndexOf(' ')
@@ -155,7 +155,7 @@ class AutocompleteEngine(
             .map { head + it }
     }
 
-    /** Различимые аргументы (не первое слово) из истории команд, от новых к старым, без дублей. */
+    /** Distinct arguments (not the first word) from command history, newest first, deduplicated. */
     private fun sessionTokens(): List<String> {
         val seen = LinkedHashSet<String>()
         for (cmd in history.commands) {
@@ -168,24 +168,24 @@ class AutocompleteEngine(
         return seen.toList()
     }
 
-    /** Пропустить ESC-последовательность (CSI/`ESC [ … final` или простой `ESC x`); вернуть индекс её конца. */
+    /** Skips an ESC sequence (CSI/`ESC [ … final` or plain `ESC x`); returns the index past it. */
     private fun skipEscapeSequence(data: ByteArray, escIndex: Int): Int {
         if (escIndex + 1 >= data.size) return escIndex
         val next = data[escIndex + 1].toInt() and 0xFF
-        if (next != '['.code && next != 'O'.code) return escIndex + 1 // простой ESC x
+        if (next != '['.code && next != 'O'.code) return escIndex + 1 // plain ESC x
         var j = escIndex + 2
         while (j < data.size) {
             val c = data[j].toInt() and 0xFF
-            if (c in 0x40..0x7E) return j // финальный байт CSI
+            if (c in 0x40..0x7E) return j // CSI final byte
             j++
         }
         return data.size - 1
     }
 
     /**
-     * Декодировать один UTF-8 символ, начиная с [i]; вернуть (строка символа|null, индекс следующего
-     * байта). Строка, а не Char: символ вне BMP (4-байтовый UTF-8) — это суррогатная ПАРА в UTF-16,
-     * одним Char её не унести (терялся младший суррогат).
+     * Decodes one UTF-8 character starting at [i]; returns (character string|null, next byte
+     * index). A String, not a Char: a character outside the BMP (4-byte UTF-8) is a surrogate
+     * pair in UTF-16, which a single Char can't hold.
      */
     private fun decodeUtf8(data: ByteArray, i: Int): Pair<String?, Int> {
         val b = data[i].toInt() and 0xFF
@@ -194,9 +194,9 @@ class AutocompleteEngine(
             b in 0xC0..0xDF -> 2
             b in 0xE0..0xEF -> 3
             b in 0xF0..0xF7 -> 4
-            else -> 1 // недопустимый ведущий байт — пропускаем один
+            else -> 1 // invalid leading byte — skip one
         }
-        if (i + len > data.size) return null to (i + 1) // неполная последовательность в этом блоке
+        if (i + len > data.size) return null to (i + 1) // incomplete sequence in this block
         val text = data.copyOfRange(i, i + len).decodeToString()
         return text.ifEmpty { null } to (i + len)
     }
@@ -214,8 +214,8 @@ class AutocompleteEngine(
 }
 
 /**
- * Небольшой список частых команд/путей для автодополнения, когда история пуста. Намеренно короткий и
- * «безопасный» (ничего деструктивного не подсказываем как первое совпадение перед destructive-словами).
+ * Small list of common commands/paths for autocomplete when history is empty. Intentionally short
+ * and conservative (nothing destructive is suggested as the first match ahead of a destructive word).
  */
 val COMMON_COMMANDS: List<String> = listOf(
     "cd ", "ls -la", "ls -lah", "cat ", "grep -rn ", "tail -f ", "less ",
@@ -228,8 +228,8 @@ val COMMON_COMMANDS: List<String> = listOf(
 )
 
 /**
- * Известные подкоманды частых CLI для дополнения второго слова (`git pus` → `git push`). Намеренно
- * компактно и без деструктивных подсказок первыми. Работает и с пустой историей.
+ * Known subcommands of common CLIs for second-word completion (`git pus` -> `git push`).
+ * Intentionally compact, no destructive suggestions first. Works with an empty history too.
  */
 val SUBCOMMANDS: Map<String, List<String>> = mapOf(
     "git" to listOf(

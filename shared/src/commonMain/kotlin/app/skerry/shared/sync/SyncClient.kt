@@ -3,19 +3,20 @@ package app.skerry.shared.sync
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Идентификация устройства в аккаунте (id — стабильный, генерируется при первом входе).
- * [platform] — открытая метка (напр. «Android 34», «Linux») для админ-консоли; `null` означает
- * «не сообщать» (сервер не затирает уже известное значение).
+ * Device identity within an account (id is stable, generated on first login).
+ * [platform] is a display label (e.g. "Android 34", "Linux") for the admin console; `null` means
+ * "don't report" (the server keeps the already-known value).
  */
 data class DeviceInfo(val id: String, val name: String, val platform: String? = null)
 
-/** Активная сессия с sync-сервером: accountId и пара токенов (см. §4 дизайна). */
+/** Active session with the sync server: accountId and a token pair (see design doc §4). */
 data class SyncSession(val accountId: String, val accessToken: String, val refreshToken: String)
 
 /**
- * Зашифрованная запись «как на проводе»: метаданные открыты, [blob] — шифротекст
- * XChaCha20-Poly1305 (см. `VaultRecord`). Доменная модель клиента; сериализация в JSON/base64 —
- * деталь сетевой реализации. `equals`/`hashCode` дефолтные (ByteArray по ссылке) — не ключ коллекции.
+ * Encrypted record as sent over the wire: metadata is plaintext, [blob] is XChaCha20-Poly1305
+ * ciphertext (see `VaultRecord`). Client-side domain model; JSON/base64 serialization is a
+ * network-layer detail. `equals`/`hashCode` are default (ByteArray by reference) — not used as a
+ * collection key.
  */
 data class RemoteRecord(
     val id: String,
@@ -28,10 +29,10 @@ data class RemoteRecord(
 )
 
 /**
- * Страница дельты: записи + новый курсор синхронизации (`lastSyncVersion`). [compactedIds] — id
- * надгробий, которые сервер считает полностью распространёнными (все устройства их дочитали):
- * клиент физически забывает их ([Vault.compact]) и перестаёт пушить, иначе re-push воскрешал бы их
- * после серверного purge. Пусто для старого сервера (поле опционально на проводе).
+ * A delta page: records plus the new sync cursor (`lastSyncVersion`). [compactedIds] are tombstone
+ * ids the server considers fully propagated (all devices have read them): the client physically
+ * forgets them ([Vault.compact]) and stops pushing them, otherwise a re-push would resurrect them
+ * after a server-side purge. Empty for an older server (the field is optional on the wire).
  */
 data class RecordPage(val records: List<RemoteRecord>, val cursor: Long, val compactedIds: List<String> = emptyList())
 
@@ -44,24 +45,24 @@ data class RemoteDevice(
     val current: Boolean,
 )
 
-/** Тикет быстрого паринга (вариант B): код для QR и срок жизни. */
+/** Quick pairing ticket (variant B): a QR code and its expiry. */
 data class PairingTicket(val code: String, val expiresAt: Long)
 
-/** Результат claim'а паринга на новом устройстве: зашифрованный dataKey + готовая сессия. */
+/** Result of claiming a pairing on a new device: encrypted dataKey plus a ready session. */
 data class PairingResult(val accountId: String, val encryptedDataKey: ByteArray, val session: SyncSession)
 
 /**
- * Клиент self-hosted sync-сервера (`docs/skerry-sync-design.md` §3). Контракт в ядре,
- * реализация платформенная (JVM: Ktor client + Nimbus SRP). Zero-knowledge: наружу уходят
- * только [authKey]-производный SRP-верификатор и шифроблобы; пароль/masterKey/dataKey остаются
- * на устройстве. [authKey] вычисляет вызывающая сторона через `VaultCrypto.deriveAuthKey`.
+ * Client for the self-hosted sync server (`docs/skerry-sync-design.md` §3). Contract lives in the
+ * core module; implementation is platform-specific (JVM: Ktor client + Nimbus SRP). Zero-knowledge:
+ * only the [authKey]-derived SRP verifier and ciphertext blobs leave the device; password/masterKey/
+ * dataKey never do. [authKey] is computed by the caller via `VaultCrypto.deriveAuthKey`.
  *
- * Ошибки сети/протокола сигнализируются исключением [SyncException]; ожидаемый «неверный
- * пароль/нет аккаунта» — тоже [SyncException] с соответствующим [SyncException.Kind].
+ * Network/protocol errors are signaled via [SyncException]; expected outcomes like "wrong
+ * password/no account" are also [SyncException] with the matching [SyncException.Kind].
  */
 interface SyncClient {
 
-    /** Регистрация нового аккаунта: клиент сам считает SRP-соль/верификатор из [authKey]. */
+    /** Registers a new account: the client computes the SRP salt/verifier from [authKey]. */
     suspend fun register(
         accountId: String,
         authKey: ByteArray,
@@ -69,62 +70,62 @@ interface SyncClient {
         device: DeviceInfo,
     ): SyncSession
 
-    /** Вход по SRP (без передачи пароля): challenge → доказательство → токены. */
+    /** Logs in via SRP (password never transmitted): challenge -> proof -> tokens. */
     suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession
 
-    /** Обёртка dataKey для расшифровки на этом устройстве (вариант A паринга). */
+    /** Wrapped dataKey to decrypt on this device (pairing variant A). */
     suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray
 
-    /** Дельта записей с серверным курсором `since`. */
+    /** Delta of records since server cursor `since`. */
     suspend fun pull(session: SyncSession, since: Long): RecordPage
 
-    /** Batch upsert; ответ — победившее по LWW состояние и новый курсор. */
+    /** Batch upsert; response is the LWW-winning state and the new cursor. */
     suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage
 
     suspend fun listDevices(session: SyncSession): List<RemoteDevice>
 
     suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean
 
-    /** Ротация токенов по refresh. */
+    /** Rotates tokens via refresh. */
     suspend fun refresh(session: SyncSession): SyncSession
 
-    /** Старт паринга на вошедшем устройстве: кладёт зашифрованный transferKey dataKey, отдаёт код. */
+    /** Starts pairing on the logged-in device: stores the encrypted transferKey-wrapped dataKey, returns a code. */
     suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket
 
-    /** Claim паринга на новом устройстве по коду (без входа). */
+    /** Claims a pairing on a new device by code (no login required). */
     suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult
 
-    /** Поток сигналов «появились изменения» (WS push). Завершается при закрытии соединения. */
+    /** Stream of "changes available" signals (WS push). Completes when the connection closes. */
     fun changes(session: SyncSession): Flow<SyncSignal>
 
     /**
-     * Лёгкая проверка доступности сервера (health-пробник `GET /healthz`, без аутентификации):
-     * `true`, если сервер ответил успехом. Намеренно НЕ бросает — любой сетевой/протокольный сбой
-     * даёт `false`. Питает индикатор «сервер доступен», который должен работать и при заблокированном
-     * vault (активной сессии может не быть).
+     * Lightweight server availability check (health probe `GET /healthz`, unauthenticated):
+     * `true` if the server responded successfully. Deliberately does not throw — any network/
+     * protocol failure yields `false`. Feeds a "server reachable" indicator that must work even
+     * with a locked vault (there may be no active session).
      */
     suspend fun ping(): Boolean
 
-    /** Освобождает сетевые ресурсы (HTTP/WS клиент). */
+    /** Releases network resources (HTTP/WS client). */
     suspend fun close()
 }
 
 /**
- * Сигнал live-sync из WS-канала `/sync`. Кадры не несут содержимого — только «что перечитать»:
- * `{cursor}` → [Account]; `team:{id}:{cursor}` → [Team]; `teams` → [Membership].
+ * Live-sync signal from the `/sync` WS channel. Frames carry no content, only "what to reread":
+ * `{cursor}` -> [Account]; `team:{id}:{cursor}` -> [Team]; `teams` -> [Membership].
  */
 sealed interface SyncSignal {
-    /** В аккаунтном vault появились изменения до [cursor] — сделать дельта-pull. */
+    /** Changes appeared in the account vault up to [cursor] — do a delta pull. */
     data class Account(val cursor: Long) : SyncSignal
 
-    /** В команде [teamId] появились записи до [cursor] — синкнуть team-vault. */
+    /** Records appeared in team [teamId] up to [cursor] — sync the team vault. */
     data class Team(val teamId: String, val cursor: Long) : SyncSignal
 
-    /** Изменился состав команд/приглашения аккаунта — перечитать список команд. */
+    /** Account's team membership/invites changed — reread the team list. */
     data object Membership : SyncSignal
 }
 
-/** Ошибка sync-клиента: сетевая, протокольная или ожидаемая (нет аккаунта / неверный пароль). */
+/** Sync client error: network, protocol, or expected (no account / wrong password). */
 class SyncException(val kind: Kind, message: String, cause: Throwable? = null) : Exception(message, cause) {
     enum class Kind { NETWORK, UNAUTHORIZED, CONFLICT, NOT_FOUND, GONE, PROTOCOL }
 }

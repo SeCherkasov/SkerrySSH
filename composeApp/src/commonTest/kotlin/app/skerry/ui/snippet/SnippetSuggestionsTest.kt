@@ -4,7 +4,7 @@ import app.skerry.shared.snippet.Snippet
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Чистая логика type-ahead подсказок тегов сниппетов: сбор, исключение выбранных, сужение запросом. */
+/** Pure type-ahead logic for snippet tag suggestions: collection, excluding selected, query narrowing. */
 class SnippetSuggestionsTest {
 
     private fun snip(vararg tags: String) = Snippet(id = "s-${tags.joinToString()}", label = "l", command = "c", tags = tags.toList())

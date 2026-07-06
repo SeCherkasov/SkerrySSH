@@ -20,26 +20,25 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
 
 /**
- * Фича-флаги отображения дизайн-слоя. Поставляются параметром в [DesktopDesignApp] и доступны
- * любому composable через [LocalFeatures]. Незавершённые фичи прячутся за флагом (а не удаляются
- * из макета), чтобы вернуть их одним переключателем, когда бэкенд готов.
+ * Feature flags for the design layer. Supplied via [DesktopDesignApp] and available to any
+ * composable through [LocalFeatures]. Unfinished features are hidden behind a flag rather than
+ * removed from the layout.
  *
- * [ai] — AI-ассистент (Phase 2 / MVP2): нижний AI-bar, suggestion-карточки в терминале, выбор
- * AI-политики в New connection и таб «AI» в настройках. По умолчанию выключен — в MVP1 этих
- * элементов в UI нет, реализация остаётся заглушкой до MVP2.
+ * [ai] gates the AI assistant surfaces: the bottom AI bar, terminal suggestion cards, AI policy
+ * choice in New connection, and the "AI" settings tab. Off by default.
  */
 @Immutable
 data class FeatureFlags(
     val ai: Boolean = false,
 )
 
-/** Текущие фича-флаги; дефолт — всё незавершённое выключено (мок-путь/превью и MVP1). */
+/** Current feature flags; default has all unfinished features off (mock path/preview). */
 val LocalFeatures: ProvidableCompositionLocal<FeatureFlags> = staticCompositionLocalOf { FeatureFlags() }
 
 /**
- * Настройки двухпанельного SFTP, переживающие перезапуск. [showHidden] — показывать ли скрытые
- * объекты (dotfiles), как в mc; [setShowHidden] меняет значение И персистит его. Поставляется
- * [DesktopDesignApp] из платформенного хранилища; дефолт — показывать, без персиста (мок/превью).
+ * Dual-pane SFTP settings that persist across restarts. [showHidden] toggles dotfiles, like mc;
+ * [setShowHidden] updates the value and persists it. Supplied by [DesktopDesignApp] from platform
+ * storage; default shows hidden files without persisting (mock/preview).
  */
 @Immutable
 data class SftpPrefs(
@@ -47,143 +46,148 @@ data class SftpPrefs(
     val setShowHidden: (Boolean) -> Unit = {},
 )
 
-/** Текущие SFTP-настройки; дефолт — скрытые показаны, изменения никуда не пишутся (мок-путь/превью). */
+/** Current SFTP settings; default shows hidden files and does not persist changes (mock path/preview). */
 val LocalSftpPrefs: ProvidableCompositionLocal<SftpPrefs> = staticCompositionLocalOf { SftpPrefs() }
 
 /**
- * Живые бэкенды, подаваемые в дизайн-слой через CompositionLocal (тем же приёмом, что [LocalFonts]) —
- * чтобы не протаскивать контроллеры параметрами через каждый composable. `null` означает
- * мок-путь (офскрин-рендер/превью): composable рисует статичные данные [DesktopMockData].
+ * Live backend supplied to the design layer via CompositionLocal (same approach as [LocalFonts]) so
+ * controllers don't need to be threaded through every composable's parameters. `null` means the mock
+ * path (offscreen render/preview): the composable renders static data from [DesktopMockData].
  */
 val LocalHosts: ProvidableCompositionLocal<HostManagerController?> = staticCompositionLocalOf { null }
 
 /**
- * Менеджер keychain-секретов (ключи/пароли/сертификаты в открытом vault) — сырой материал, на
- * который ссылаются хосты по `credentialId`. `null` — мок-путь/превью без vault: разделы keychain
- * в [app.skerry.ui.vault.VaultView] рисуют статичный макет. Поставляется [DesktopDesignApp] за
- * гейтом мастер-пароля (там же, где списки перечитываются).
+ * Manager for keychain secrets (keys/passwords/certificates in the unlocked vault), referenced by
+ * hosts via `credentialId`. `null` — mock path/preview without a vault: the keychain sections in
+ * [app.skerry.ui.vault.VaultView] render a static layout. Supplied by [DesktopDesignApp] behind the
+ * master-password gate.
  */
 val LocalCredentials: ProvidableCompositionLocal<CredentialManagerController?> = staticCompositionLocalOf { null }
 
 /**
- * Генератор/инспектор SSH-ключей (создание пары в разделе Vault, вычисление отпечатка/типа уже
- * сохранённых ключей). `null` — мок-путь/превью без платформенной крипты: [app.skerry.ui.vault.VaultView]
- * рисует статичный макет, кнопка генерации недоступна. Поставляется [DesktopDesignApp] за гейтом vault.
+ * SSH key generator/inspector (key-pair creation in the Vault section, fingerprint/type computation
+ * for stored keys). `null` — mock path/preview without platform crypto: [app.skerry.ui.vault.VaultView]
+ * renders a static layout with the generate button disabled. Supplied by [DesktopDesignApp] behind the
+ * vault gate.
  */
 val LocalSshKeyGenerator: ProvidableCompositionLocal<SshKeyGenerator?> = staticCompositionLocalOf { null }
 
 /**
- * Инспектор SSH-сертификатов (разбор метаданных импортированного `*-cert.pub`: principals, срок,
- * serial, CA). `null` — мок-путь/превью без платформенной реализации: раздел Certificates в
- * [app.skerry.ui.vault.VaultView] показывает заглушку. Поставляется [DesktopDesignApp] за гейтом vault.
+ * SSH certificate inspector (parses metadata of an imported `*-cert.pub`: principals, validity,
+ * serial, CA). `null` — mock path/preview without a platform implementation: the Certificates section
+ * in [app.skerry.ui.vault.VaultView] shows a placeholder. Supplied by [DesktopDesignApp] behind the
+ * vault gate.
  */
 val LocalSshCertificateInspector: ProvidableCompositionLocal<SshCertificateInspector?> = staticCompositionLocalOf { null }
 
 /**
- * Менеджер открытых сессий (вкладки + живые соединения). `null` — мок-путь без бэкенда соединений:
- * титулбар и терминал рисуют статичные данные макета.
+ * Manager for open sessions (tabs + live connections). `null` — mock path without a connection
+ * backend: the titlebar and terminal render static layout data.
  */
 val LocalSessions: ProvidableCompositionLocal<SessionsController?> = staticCompositionLocalOf { null }
 
 /**
- * Менеджер known-hosts (доверенные ключи хостов + незакрытые события смены ключа). `null` — мок-путь
- * без бэкенда: [app.skerry.ui.known.KnownHostsView] рисует статичную таблицу и панель смены ключа
- * из макета. Поставляется [DesktopDesignApp] за гейтом vault.
+ * Known-hosts manager (trusted host keys + unresolved key-change events). `null` — mock path without
+ * a backend: [app.skerry.ui.known.KnownHostsView] renders the static table and key-change panel from
+ * the layout. Supplied by [DesktopDesignApp] behind the vault gate.
  */
 val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticCompositionLocalOf { null }
 
 /**
- * Действие «подключиться к хосту»: резолвит секрет (keychain-секрет из vault или запрос пароля) и
- * открывает сессию. Поставляется корнем chrome ([DesktopDesignApp]); дефолт — no-op (мок-путь/превью).
+ * "Connect to host" action: resolves the secret (a keychain secret from the vault, or a password
+ * prompt) and opens a session. Supplied by the chrome root ([DesktopDesignApp]); default is a no-op
+ * (mock path/preview).
  */
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
 /**
- * Действие «открыть хост в split-панели активной вкладки»: тот же резолв секрета, что и
- * [LocalConnectHost], но открывает НОВУЮ независимую вторичную сессию рядом, а не
- * новую вкладку. Поставляется [DesktopDesignApp]; дефолт — no-op (мок-путь/превью).
+ * "Open host in the active tab's split pane" action: same secret resolution as [LocalConnectHost], but
+ * opens a new independent secondary session alongside, rather than a new tab. Supplied by
+ * [DesktopDesignApp]; default is a no-op (mock path/preview).
  */
 val LocalConnectSplit: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
 /**
- * SSH-транспорт ИСКЛЮЧИТЕЛЬНО для разовых проверок «Test connection» из формы (коннект без открытия
- * сессии). Намеренно отделён от транспорта живых сессий: за ним read-only verifier
- * ([app.skerry.shared.ssh.ProbeHostKeyVerifier]), который НЕ заносит ключ нового хоста в known_hosts —
- * проба не должна фиксировать постоянное доверие (это делает только реальный коннект через TOFU).
- * Поэтому НЕ использовать этот слот для открытия настоящих сессий. `null` — мок-путь/превью без живого
- * транспорта: кнопка Test недоступна. Поставляется [DesktopDesignApp]; единственный потребитель —
+ * SSH transport for one-off "Test connection" checks from the form (connect without opening a
+ * session). Deliberately separate from the live-session transport: behind it is a read-only verifier
+ * ([app.skerry.shared.ssh.ProbeHostKeyVerifier]) that does not add the new host's key to known_hosts,
+ * since a probe must not establish permanent trust (only a real connect via TOFU does). Do not use
+ * this slot to open real sessions. `null` — mock path/preview without a live transport: the Test
+ * button is disabled. Supplied by [DesktopDesignApp]; sole consumer is
  * [app.skerry.ui.host.NewConnectionModal].
  */
 val LocalTestTransport: ProvidableCompositionLocal<SshTransport?> = staticCompositionLocalOf { null }
 
 /**
- * Действие «открыть SFTP хоста»: тот же путь подключения, что и [LocalConnectHost] (резолв секрета,
- * возобновление живой сессии), но в конце ведёт на таб Files (Remote-браузер), а не на терминал —
- * чтобы кнопка SFTP детали хоста сразу показывала файлы без отдельного Connect. Дефолт — no-op (превью).
+ * "Open host's SFTP" action: same connection path as [LocalConnectHost] (secret resolution, resuming
+ * a live session), but ends on the Files tab (remote browser) instead of the terminal, so the SFTP
+ * button on host detail shows files without a separate Connect step. Default is a no-op (preview).
  */
 val LocalOpenSftp: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
 /**
- * Менеджер глобальных сохранённых туннелей: список пробросов + включение/выключение,
- * каждый сам открывает соединение к хосту. `null` — мок-путь/превью без бэкенда:
- * [app.skerry.ui.tunnel.TunnelsView] рисует статичный макет. Поставляется [DesktopDesignApp] за гейтом
- * vault (резолв секрета хоста требует открытого vault).
+ * Manager for globally saved tunnels: the list of forwards plus enable/disable, each opening its own
+ * connection to the host. `null` — mock path/preview without a backend: [app.skerry.ui.tunnel.TunnelsView]
+ * renders a static layout. Supplied by [DesktopDesignApp] behind the vault gate (resolving a host's
+ * secret requires an unlocked vault).
  */
 val LocalTunnels: ProvidableCompositionLocal<TunnelManager?> = staticCompositionLocalOf { null }
 
 /**
- * Менеджер сохранённых сниппетов: библиотека команд + запуск в активном терминале.
- * `null` — мок-путь/превью без бэкенда: [app.skerry.ui.snippet.SnippetsView] рисует статичный макет.
- * Поставляется [DesktopDesignApp] (сниппеты — plain-конфиг, vault не требуют).
+ * Manager for saved snippets: the command library plus running one in the active terminal. `null` —
+ * mock path/preview without a backend: [app.skerry.ui.snippet.SnippetsView] renders a static layout.
+ * Supplied by [DesktopDesignApp] (snippets are plain config, not vault-gated).
  */
 val LocalSnippets: ProvidableCompositionLocal<SnippetManager?> = staticCompositionLocalOf { null }
 
 /**
- * Действие «Run on host» сниппета: открыть/использовать сессию к [Host] и выполнить переданную команду
- * сразу после подключения (запуск на выбранном хосте, а не только в активном
- * терминале). Резолвит секрет тем же путём, что [LocalConnectHost] (keychain или запрос пароля).
- * Поставляется [DesktopDesignApp]; дефолт — no-op (мок-путь/превью).
+ * Snippet "Run on host" action: open/reuse a session to [Host] and run the given command right after
+ * connecting, rather than only in the active terminal. Resolves the secret the same way as
+ * [LocalConnectHost] (keychain or password prompt). Supplied by [DesktopDesignApp]; default is a no-op
+ * (mock path/preview).
  */
 val LocalRunSnippetOnHost: ProvidableCompositionLocal<(Host, String) -> Unit> = staticCompositionLocalOf { { _, _ -> } }
 
 /**
- * Открытый [Vault] за гейтом мастер-пароля — нужен экрану настроек (More), чтобы включить/выключить
- * разблокировку биометрией (обёртка `dataKey` под `bioKey`). `null` — мок-путь/превью без vault.
+ * Unlocked [Vault] behind the master-password gate, needed by the settings screen (More) to toggle
+ * biometric unlock (wrapping `dataKey` under `bioKey`). `null` — mock path/preview without a vault.
  */
 val LocalVault: ProvidableCompositionLocal<Vault?> = staticCompositionLocalOf { null }
 
 /**
- * Оркестратор биометрии vault. `null` — биометрия не сконфигурирована на платформе (desktop без
- * железа/офскрин): экран настроек прячет тумблер. Поставляется за гейтом vault теми же провайдерами.
+ * Vault biometrics orchestrator. `null` — biometrics not configured on this platform (desktop
+ * without hardware/offscreen): the settings screen hides the toggle. Supplied behind the vault gate
+ * by the same providers.
  */
 val LocalVaultBiometrics: ProvidableCompositionLocal<VaultBiometrics?> = staticCompositionLocalOf { null }
 
 /**
- * Локальный журнал событий безопасности (Settings → Безопасность): недавние события + дериватив
- * «последняя смена пароля». `null` — мок/превью: секция рисует пустой журнал и нейтральную подпись.
- * Не синкается (аудит конкретного устройства). Поставляется за гейтом vault.
+ * Local security event log (Settings → Security): recent events plus a derived "last password
+ * change". `null` — mock/preview: the section renders an empty log and a neutral caption. Not synced
+ * (per-device audit trail). Supplied behind the vault gate.
  */
 val LocalSecurityLog: ProvidableCompositionLocal<SecurityLog?> = staticCompositionLocalOf { null }
 
 /**
- * Координатор self-hosted синхронизации (Phase 2): register/login/syncNow/disconnect + поток статуса.
- * `null` — мок-путь/превью или платформа без sync: секция Sync в настройках рисует статичный макет.
- * Поставляется [DesktopDesignApp]/[MobileDesignApp] за гейтом vault (для серверной обёртки нужен dataKey).
+ * Self-hosted sync coordinator: register/login/syncNow/disconnect plus a status flow. `null` — mock
+ * path/preview or a platform without sync: the Sync section in settings renders a static layout.
+ * Supplied by [DesktopDesignApp]/[MobileDesignApp] behind the vault gate (the server wrapper needs
+ * dataKey).
  */
 val LocalSync: ProvidableCompositionLocal<SyncCoordinator?> = staticCompositionLocalOf { null }
 
 /**
- * Координатор Teams (шеринг хостов/секретов/сниппетов между аккаунтами поверх sync-сервера).
- * `null` — мок-путь/превью или sync не подключён: экран Teams рисует пустое состояние с
- * приглашением настроить синхронизацию. Поставляется вместе с [LocalSync].
+ * Teams coordinator (sharing hosts/secrets/snippets between accounts on top of the sync server).
+ * `null` — mock path/preview or sync not connected: the Teams screen renders an empty state prompting
+ * to set up sync. Supplied together with [LocalSync].
  */
 val LocalTeams: ProvidableCompositionLocal<app.skerry.ui.teams.TeamsCoordinator?> = staticCompositionLocalOf { null }
 
 /**
- * Контроллер AI-ассистента (внешний OpenAI-совместимый провайдер, BYOK). `null` — мок-путь/превью
- * или платформа без AI: таб «AI» в настройках рисует статичный макет. Когда контроллер задан, таб
- * становится живым (ввод ключа/модели, быстрый чат), независимо от [FeatureFlags.ai], который
- * по-прежнему гейтит незавершённые AI-поверхности терминала. Поставляется за гейтом vault
- * (ключ хранится зашифрованным в vault).
+ * AI assistant controller (external OpenAI-compatible provider, BYOK). `null` — mock path/preview or
+ * a platform without AI: the "AI" settings tab renders a static layout. When set, the tab is live
+ * (key/model input, quick chat) independent of [FeatureFlags.ai], which still gates the unfinished
+ * AI surfaces in the terminal. Supplied behind the vault gate (the key is stored encrypted in the
+ * vault).
  */
 val LocalAi: ProvidableCompositionLocal<AiAssistantController?> = staticCompositionLocalOf { null }

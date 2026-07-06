@@ -3,50 +3,50 @@ package app.skerry.shared.vault
 import kotlinx.serialization.Serializable
 
 /**
- * Доступность биометрии на устройстве в момент опроса. Опрашивается перед каждой операцией:
- * пользователь мог добавить/убрать отпечаток или временно залочить сенсор между запусками.
- * `NoHardware` — штатное состояние desktop (единого биометрического API нет), там тумблер скрыт.
+ * Biometric availability on the device at poll time. Polled before every operation: the user may
+ * have added/removed a fingerprint or temporarily locked the sensor between runs. `NoHardware` is
+ * the normal desktop state (no unified biometric API), so the toggle is hidden there.
  */
 enum class BiometricAvailability {
-    /** Железо есть и хотя бы один биометрический фактор зачислен — можно включать/разблокировать. */
+    /** Hardware present and at least one biometric factor enrolled — can enable/unlock. */
     Available,
 
-    /** Сенсора нет (или платформа без биометрии — desktop MVP). */
+    /** No sensor (or a platform without biometrics — desktop). */
     NoHardware,
 
-    /** Железо есть, но отпечаток/лицо не настроены — предложить настроить в системе. */
+    /** Hardware present but no fingerprint/face enrolled — prompt to set it up in the system. */
     NotEnrolled,
 
-    /** Временно заблокировано после серии неудачных попыток — только пароль до разлока системой. */
+    /** Temporarily locked out after failed attempts — password only until the system unlocks it. */
     LockedOut,
 }
 
 /**
- * Исход биометрической операции, огороженной системным промптом. Параметризован полезной
- * нагрузкой ([Success.value]) — для `wrap`/`unwrap` это `ByteArray`. Неуспехи разделены, чтобы
- * оркестрация различала «молча падаем на пароль» (`Cancelled`/`Failed`) и «ключ инвалидирован,
- * биометрию надо пересоздать» (`KeyInvalidated`, напр. добавлен новый отпечаток — см. модель угроз).
+ * Outcome of a biometric operation gated by the system prompt. Parameterized by the payload
+ * ([Success.value]) — `ByteArray` for `wrap`/`unwrap`. Failure cases are split so orchestration
+ * can distinguish "silently fall back to password" (`Cancelled`/`Failed`) from "key invalidated,
+ * biometrics must be recreated" (`KeyInvalidated`, e.g. a new fingerprint was enrolled).
  */
 sealed interface BiometricResult<out T> {
     data class Success<T>(val value: T) : BiometricResult<T>
 
-    /** Пользователь отменил промпт или истёк таймаут — не ошибка, просто нет результата. */
+    /** User dismissed the prompt or it timed out — not an error, just no result. */
     data object Cancelled : BiometricResult<Nothing>
 
-    /** Биометрия не распозналась / сбой сенсора — откат на мастер-пароль. */
+    /** Biometric match failed / sensor error — fall back to the master password. */
     data object Failed : BiometricResult<Nothing>
 
     /**
-     * `bioKey` безвозвратно инвалидирован платформой (изменился набор биометрии). Оркестрация
-     * обязана удалить артефакт `vault.bio` и потребовать мастер-пароль. См. `setInvalidatedBy
-     * BiometricEnrollment` (Android) в `docs/skerry-biometric-design.md`.
+     * `bioKey` was irreversibly invalidated by the platform (biometric enrollment changed).
+     * Orchestration must delete the `vault.bio` artifact and require the master password.
      */
     data object KeyInvalidated : BiometricResult<Nothing>
 }
 
 /**
- * Тексты системного биометрического промпта. UI-строки (локализованные) приходят сверху —
- * `commonMain` их не зашивает. `cancelLabel` обязателен: на Android это negative button промпта.
+ * Text for the system biometric prompt. UI strings (localized) are supplied from above —
+ * `commonMain` does not hardcode them. `cancelLabel` is required: on Android it's the prompt's
+ * negative button.
  */
 data class BiometricPrompt(
     val title: String,
@@ -55,40 +55,40 @@ data class BiometricPrompt(
 )
 
 /**
- * Платформенное защищённое биометрией хранилище ключа `bioKey`. Реализация платформенная
- * (Android Keystore + `androidx.biometric`; desktop — `NoHardware`-заглушка), поэтому
- * контракт живёт в ядре, а железо за интерфейсом
- * (по `architecture-discipline`). `bioKey` неизвлекаем: наружу выходит только обёртка `dataKey`.
+ * Platform-backed, biometrics-protected store for the `bioKey`. Implementation is
+ * platform-specific (Android Keystore + `androidx.biometric`; desktop — `NoHardware` stub), so
+ * the contract lives in the core with hardware behind the interface. `bioKey` is non-extractable:
+ * only the wrapped `dataKey` leaves it.
  *
- * `wrap`/`unwrap` — `suspend`, потому что показывают системный промпт и ждут пользователя; их
- * **нельзя** звать под `synchronized`-локой [Vault]. Вызывающая сторона отвечает за затирание
- * переданного `plaintext` после [wrap]; реализация его не удерживает.
+ * `wrap`/`unwrap` are `suspend` because they show a system prompt and wait for the user; they
+ * must not be called under [Vault]'s `synchronized` lock. The caller is responsible for wiping
+ * the `plaintext` passed to [wrap] afterward; the implementation does not retain it.
  */
 interface BiometricKeyStore {
 
-    /** Текущая доступность биометрии; опрашивать перед каждой операцией. */
+    /** Current biometric availability; poll before every operation. */
     fun availability(): BiometricAvailability
 
     /**
-     * Идемпотентно создать неизвлекаемый `bioKey` под [alias] в secure storage. `false`, если
-     * создать нельзя (нет железа/не зачислена биометрия) — вызывающий не продолжает включение.
+     * Idempotently create a non-extractable `bioKey` under [alias] in secure storage. `false` if
+     * it can't be created (no hardware/not enrolled) — the caller aborts enabling biometrics.
      */
     suspend fun ensureKey(alias: String): Boolean
 
-    /** Показать промпт и при успехе обернуть [plaintext] ключом [alias]. */
+    /** Show the prompt and, on success, wrap [plaintext] with the [alias] key. */
     suspend fun wrap(alias: String, plaintext: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray>
 
-    /** Показать промпт и при успехе развернуть [wrapped] ключом [alias]. */
+    /** Show the prompt and, on success, unwrap [wrapped] with the [alias] key. */
     suspend fun unwrap(alias: String, wrapped: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray>
 
-    /** Удалить `bioKey` (выключение биометрии, паника, смена устройства). Неизвестный alias — no-op. */
+    /** Delete the `bioKey` (disabling biometrics, panic wipe, device change). Unknown alias is a no-op. */
     fun deleteKey(alias: String)
 }
 
 /**
- * Открытый артефакт `vault.bio`: обёртка `dataKey` под `bioKey` плюс метаданные для разворота.
- * Лежит рядом с `vault.json`; `dataKey` один и тот же, поэтому смена мастер-пароля артефакт не
- * трогает (см. дизайн-док §2). Сам по себе бесполезен без `bioKey` из secure-enclave устройства.
+ * The plaintext `vault.bio` artifact: `dataKey` wrapped under `bioKey` plus metadata for
+ * unwrapping. Stored next to `vault.json`; `dataKey` stays the same, so a master password change
+ * does not touch this artifact. Useless on its own without the device's `bioKey` secure enclave.
  */
 @Serializable
 data class BioArtifact(
@@ -97,8 +97,8 @@ data class BioArtifact(
     val deviceId: String,
     val wrappedBio: ByteArray,
 ) {
-    // ByteArray ломает автогенерацию структурного equals/hashCode — реализованы вручную. При
-    // добавлении поля обновить обе функции И toString (компилятор об этом не предупредит).
+    // ByteArray breaks structural equals/hashCode autogeneration — implemented manually. Adding a
+    // field requires updating both functions AND toString (the compiler won't warn about this).
     override fun toString(): String =
         "BioArtifact(formatVersion=$formatVersion, alias=$alias, deviceId=$deviceId, wrappedBio=<redacted>)"
 
@@ -121,19 +121,19 @@ data class BioArtifact(
 }
 
 /**
- * Персистентность артефакта `vault.bio`. Отдельный контракт (как [Vault] над файлом), чтобы
- * оркестрацию [VaultBiometrics] можно было тестировать на `FakeFileSystem` без реального железа.
+ * Persistence for the `vault.bio` artifact. A separate contract (like [Vault] over a file) so
+ * [VaultBiometrics] orchestration can be tested on `FakeFileSystem` without real hardware.
  */
 interface BioArtifactStore {
-    /** Есть ли сохранённый артефакт (включена ли биометрия для этого vault). */
+    /** Whether a saved artifact exists (biometrics enabled for this vault). */
     fun exists(): Boolean
 
-    /** Прочитать артефакт; `null`, если файла нет или он не парсится. */
+    /** Read the artifact; `null` if the file is missing or unparsable. */
     fun read(): BioArtifact?
 
-    /** Записать/перезаписать артефакт атомарно. */
+    /** Write/overwrite the artifact atomically. */
     fun write(artifact: BioArtifact)
 
-    /** Удалить артефакт (выключение биометрии). Отсутствие файла — no-op. */
+    /** Delete the artifact (disabling biometrics). Missing file is a no-op. */
     fun clear()
 }

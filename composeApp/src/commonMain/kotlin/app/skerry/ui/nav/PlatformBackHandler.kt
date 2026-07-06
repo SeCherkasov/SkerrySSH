@@ -3,12 +3,11 @@ package app.skerry.ui.nav
 import androidx.compose.runtime.Composable
 
 /**
- * Перехват системного «назад» (кнопка/жест). Android — делегирует `androidx.activity.compose.BackHandler`
- * (регистрация в `OnBackPressedDispatcher` Activity); desktop — no-op (системного back нет, навигация
- * внутри экранов идёт мышью/клавишами).
+ * Intercepts the system back button/gesture. Android delegates to `androidx.activity.compose.BackHandler`
+ * (registered on the Activity's `OnBackPressedDispatcher`); desktop is a no-op (no system back).
  *
- * При [enabled]=false обработчик прозрачен: событие уходит следующему по стеку (более «глубокий»/позже
- * скомпонованный [PlatformBackHandler] перехватывает первым — диспетчер вызывает обработчики LIFO).
+ * When [enabled] is false the handler is transparent: the event passes to the next one in the stack
+ * (the deepest/most recently composed [PlatformBackHandler] intercepts first, LIFO).
  */
 @Composable
 expect fun PlatformBackHandler(enabled: Boolean = true, onBack: () -> Unit)

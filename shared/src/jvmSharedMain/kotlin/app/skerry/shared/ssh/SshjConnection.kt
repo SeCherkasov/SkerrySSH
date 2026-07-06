@@ -17,7 +17,7 @@ import net.schmizz.sshj.connection.ConnectionException
 import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
 import net.schmizz.sshj.transport.TransportException
 
-/** Живое sshj-соединение: exec/shell/SFTP/пробросы поверх одного аутентифицированного клиента. */
+/** Live sshj connection: exec/shell/SFTP/forwards over one authenticated client. */
 internal class SshjConnection(
     private val client: SSHClient,
     override val cipher: String?,
@@ -29,47 +29,49 @@ internal class SshjConnection(
 
     override suspend fun exec(command: String): ExecResult = withContext(Dispatchers.IO) {
         try {
-            // Весь exec под таймаутом: без него зависший на сервере процесс (не закрывший stdout —
-            // `tail -f`, ожидание ввода) держал бы readAtMost вечно, а cmd.join(таймаут) до него не
-            // доходил. withTimeoutOrNull отменяет внутреннюю работу и отдаёт null (как measureRoundTrip),
-            // не путая «тайм-аут» с внешней отменой; чтение под runInterruptible реально прерывается.
+            // Entire exec is under a timeout: otherwise a server process that hangs without closing
+            // stdout (`tail -f`, waiting for input) would block readAtMost forever, and cmd.join(timeout)
+            // would never be reached. withTimeoutOrNull cancels the inner work and returns null (like
+            // measureRoundTrip), without conflating a timeout with external cancellation; reads under
+            // runInterruptible are actually interruptible.
             val result = withTimeoutOrNull(EXEC_TIMEOUT_SECONDS * 1000L) {
                 client.startSession().use { session ->
                     val cmd = session.exec(command)
-                    // Объём капнут: недоверенный/зависший сервер не должен уметь выесть память клиента
-                    // многословным выводом (в отличие от прежнего readBytes() без границы).
+                    // Output is capped: an untrusted/hung server must not be able to exhaust client
+                    // memory with a verbose stream.
                     val stdout = runInterruptible { cmd.inputStream.readAtMost(MAX_EXEC_OUTPUT_BYTES) }.decodeToString()
                     val stderr = runInterruptible { cmd.errorStream.readAtMost(MAX_EXEC_OUTPUT_BYTES) }.decodeToString()
                     runInterruptible { cmd.join(EXEC_TIMEOUT_SECONDS, TimeUnit.SECONDS) }
                     ExecResult(exitCode = cmd.exitStatus, stdout = stdout, stderr = stderr)
                 }
             }
-            result ?: throw SshConnectionException("Тайм-аут выполнения команды")
+            result ?: throw SshConnectionException("Command execution timed out")
         } catch (e: IOException) {
-            throw SshConnectionException("Ошибка выполнения команды", e)
+            throw SshConnectionException("Command execution failed", e)
         }
     }
 
     override suspend fun measureRoundTrip(): Long? = withContext(Dispatchers.IO) {
         if (!client.isConnected) return@withContext null
         val startNanos = System.nanoTime()
-        // Таймаут держим снаружи через withTimeoutOrNull: при просрочке корутина отменяется (и через
-        // runInterruptible прерывает блокирующий retrieve), а наружу выходит чистый null — без
-        // угадывания «ответ или таймаут» по времени. Отмену извне withTimeoutOrNull не глотает.
+        // Timeout is enforced externally via withTimeoutOrNull: on expiry the coroutine is cancelled
+        // (interrupting the blocking retrieve via runInterruptible) and a clean null is returned, rather
+        // than guessing "reply or timeout" from elapsed time. External cancellation is not swallowed.
         withTimeoutOrNull(PING_TIMEOUT_MILLIS) {
-            // sendGlobalRequest ВНЕ runInterruptible: Promise регистрируется в стейте sshj до того,
-            // как мы уходим в прерываемое ожидание ответа, — прерывание не оставит «висячий» Promise
-            // (на крайний случай его подберёт teardown соединения при disconnect).
+            // sendGlobalRequest is OUTSIDE runInterruptible: the Promise is registered in sshj's state
+            // before we enter the interruptible wait for the reply, so interruption never leaves a
+            // dangling Promise (worst case, connection teardown on disconnect picks it up).
             val replied = try {
                 val promise = client.connection.sendGlobalRequest(KEEPALIVE_REQUEST, true, ByteArray(0))
-                // keepalive@openssh.com, wantReply=true: OpenSSH отвечает SUCCESS (retrieve вернётся),
-                // прочие серверы — REQUEST_FAILURE (retrieve бросит ConnectionException). Оба = round-trip.
+                // keepalive@openssh.com, wantReply=true: OpenSSH replies SUCCESS (retrieve returns);
+                // other servers reply REQUEST_FAILURE (retrieve throws ConnectionException). Both count
+                // as a round trip.
                 runInterruptible { promise.retrieve() }
                 true
             } catch (e: ConnectionException) {
-                true // REQUEST_FAILURE — это ОТВЕТ сервера, round-trip состоялся
+                true // REQUEST_FAILURE is a server reply; the round trip happened
             } catch (e: TransportException) {
-                false // обрыв транспорта — round-trip не состоялся
+                false // transport broke; no round trip
             }
             if (replied) (System.nanoTime() - startNanos) / 1_000_000 else null
         }
@@ -82,7 +84,7 @@ internal class SshjConnection(
                 session.allocatePTY(term, size.cols, size.rows, size.widthPx, size.heightPx, emptyMap())
                 SshjShellChannel(session, session.startShell())
             } catch (e: IOException) {
-                throw SshConnectionException("Не удалось открыть shell-канал", e)
+                throw SshConnectionException("Failed to open shell channel", e)
             }
         }
 
@@ -90,15 +92,15 @@ internal class SshjConnection(
         try {
             SshjSftpClient(client.newSFTPClient())
         } catch (e: IOException) {
-            throw SshConnectionException("Не удалось открыть SFTP-подсистему", e)
+            throw SshConnectionException("Failed to open SFTP subsystem", e)
         }
     }
 
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward =
         withContext(Dispatchers.IO) {
-            // Каждое принятое соединение сами туннелируем через direct-tcpip-канал к destHost:destPort —
-            // это даёт счётчики трафика и паузу (см. [SshjLocalForward]); штатный sshj
-            // LocalPortForwarder перекачку прячет внутри.
+            // Each accepted connection is tunneled ourselves through a direct-tcpip channel to
+            // destHost:destPort — this gives traffic counters and pause (see [SshjLocalForward]);
+            // sshj's stock LocalPortForwarder hides the pumping internally.
             SshjLocalForward(client, bindListener(spec.bindHost, spec.bindPort), spec.destHost, spec.destPort)
         }
 
@@ -113,20 +115,20 @@ internal class SshjConnection(
                 )
             } catch (e: IOException) {
                 throw PortForwardException(
-                    "Сервер отверг обратный проброс ${spec.bindHost}:${spec.bindPort}", e,
+                    "Server rejected remote forward ${spec.bindHost}:${spec.bindPort}", e,
                 )
             }
         }
 
     override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward =
         withContext(Dispatchers.IO) {
-            // Слушатель — как у `-L`; дальше каждое принятое соединение обслуживает SOCKS5-протокол.
+            // Listener as for `-L`; each accepted connection then speaks the SOCKS5 protocol.
             SshjDynamicForward(client, bindListener(spec.bindHost, spec.bindPort))
         }
 
     /**
-     * Забиндить локальный слушатель для пробросов (`-L`, `-D`): биндим сами, чтобы читать фактический
-     * порт при bindPort=0 и ловить «порт занят» как [PortForwardException] ещё до запуска цикла accept.
+     * Bind a local listener for forwards (`-L`, `-D`): bound ourselves so the actual port can be read
+     * when bindPort=0, and "port in use" is caught as [PortForwardException] before the accept loop starts.
      */
     private fun bindListener(bindHost: String, bindPort: Int): ServerSocket =
         try {
@@ -135,13 +137,13 @@ internal class SshjConnection(
                 bind(InetSocketAddress(bindHost, bindPort))
             }
         } catch (e: IOException) {
-            throw PortForwardException("Не удалось занять локальный порт $bindHost:$bindPort", e)
+            throw PortForwardException("Failed to bind local port $bindHost:$bindPort", e)
         }
 
     override suspend fun disconnect() {
-        // Таймаут + runInterruptible: штатно disconnect быстр, но запись SSH_MSG_DISCONNECT в уже мёртвый
-        // сокет (переполненный TCP-буфер) могла бы зависнуть неопределённо долго, а вызов идёт из
-        // UI-потока при закрытии вкладки. По истечении таймаута просто закрываем клиент принудительно.
+        // Timeout + runInterruptible: disconnect is normally fast, but writing SSH_MSG_DISCONNECT to an
+        // already-dead socket (full TCP buffer) could hang indefinitely, and this is called from the UI
+        // thread on tab close. On timeout, just force-close the client.
         withContext(Dispatchers.IO) {
             withTimeoutOrNull(DISCONNECT_TIMEOUT_MILLIS) { runInterruptible { client.disconnect() } }
                 ?: runCatching { client.close() }
@@ -149,7 +151,7 @@ internal class SshjConnection(
         }
     }
 
-    /** Прочитать не более [limit] байт из потока (остаток бросаем — session.use его закроет). */
+    /** Read at most [limit] bytes from the stream (remainder discarded; session.use closes it). */
     private fun InputStream.readAtMost(limit: Int): ByteArray {
         val out = ByteArrayOutputStream()
         val chunk = ByteArray(8192)
@@ -168,6 +170,6 @@ internal class SshjConnection(
         const val KEEPALIVE_REQUEST = "keepalive@openssh.com"
         const val PING_TIMEOUT_MILLIS = 5_000L
         const val DISCONNECT_TIMEOUT_MILLIS = 5_000L
-        const val MAX_EXEC_OUTPUT_BYTES = 1 * 1024 * 1024 // 1 MiB на stdout и на stderr
+        const val MAX_EXEC_OUTPUT_BYTES = 1 * 1024 * 1024 // 1 MiB per stdout and per stderr
     }
 }

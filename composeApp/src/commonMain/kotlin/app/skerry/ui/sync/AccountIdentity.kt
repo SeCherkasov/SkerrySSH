@@ -37,16 +37,15 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Идентификаторы аккаунта для Teams-приглашений: accountId и отпечаток СВОЕГО ключа шеринга (X25519).
- * Показываются в настройках аккаунта (desktop Settings → Account, mobile More → Sync), чтобы их можно
- * было скопировать и сообщить владельцу команды, не разыскивая ID в админке sync-сервера. Оба значения
- * публичные — копируются обычным буфером без пометки sensitive.
+ * Account identifiers for Teams invites: accountId and the own sharing-key fingerprint (X25519).
+ * Shown in account settings (desktop Settings → Account, mobile More → Sync) so they can be copied
+ * and sent to a team owner. Both are public — copied via the normal clipboard, not marked sensitive.
  */
 @Composable
 fun AccountIdentityBlock(accountId: String, modifier: Modifier = Modifier) {
     val teams = LocalTeams.current
-    // Отпечаток считается из identity-пары в личном vault'е: настройки открываются только с открытым
-    // vault'ом, так что null здесь — превью/офскрин без Teams-бэкенда (или ключ ещё не создан).
+    // Fingerprint is derived from the identity pair in the personal vault; settings only open with an
+    // unlocked vault, so null here means preview/offscreen without a Teams backend (or no key yet).
     val fingerprint = remember(teams, accountId) { teams?.ownFingerprint() }
     val mono = LocalFonts.current.mono
     var copied by remember { mutableStateOf<String?>(null) }

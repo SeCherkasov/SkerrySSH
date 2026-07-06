@@ -13,13 +13,13 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 import org.jetbrains.exposed.sql.update
 
 /**
- * Команды и их участники (Teams). Сервер — только доска объявлений: состав, роли и
- * запечатанные конверты приглашений; teamKey и содержимое записей ему недоступны.
- * ACL-проверки маршрутов опираются на [membership] (роль/статус).
+ * Teams and their members. The server only tracks membership, roles, and sealed invite
+ * envelopes; it never sees teamKey or record contents. Route ACL checks rely on
+ * [membership] (role/status).
  */
 class TeamRepository(private val db: Database) {
 
-    /** Публикует (или заменяет) публичный X25519-ключ аккаунта для приглашений. */
+    /** Publishes (or replaces) an account's public X25519 key used for invitations. */
     suspend fun publishKey(accountId: String, publicKey: ByteArray, now: Long): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
         val updated = AccountKeys.update({ AccountKeys.accountId eq accountId }) {
             it[AccountKeys.publicKey] = ExposedBlob(publicKey)
@@ -38,7 +38,7 @@ class TeamRepository(private val db: Database) {
             .singleOrNull()?.get(AccountKeys.publicKey)?.bytes
     }
 
-    /** Создаёт команду с владельцем-активным участником. false — id уже занят. */
+    /** Creates a team with the owner as an active member. Returns false if the id is taken. */
     suspend fun create(teamId: String, ownerAccountId: String, now: Long): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         val exists = Teams.selectAll().where { Teams.id eq teamId }.any()
         if (exists) return@newSuspendedTransaction false
@@ -60,7 +60,7 @@ class TeamRepository(private val db: Database) {
         true
     }
 
-    /** Членства аккаунта (включая непринятые приглашения) с метаданными команд. */
+    /** Account memberships (including unaccepted invites) with team metadata. */
     suspend fun teamsFor(accountId: String): List<TeamMembershipView> = newSuspendedTransaction(Dispatchers.IO, db) {
         val memberships = TeamMembers.selectAll().where { TeamMembers.accountId eq accountId }
             .map { it.toMemberRow() }
@@ -86,7 +86,7 @@ class TeamRepository(private val db: Database) {
         Teams.selectAll().where { Teams.id eq teamId }.singleOrNull()?.toTeamRow()
     }
 
-    /** Приглашает аккаунт с ролью [role] (status=invited, конверт с teamKey). false — уже участник/приглашён. */
+    /** Invites an account with role [role] (status=invited, envelope carries teamKey). False if already a member/invited. */
     suspend fun invite(teamId: String, accountId: String, role: String, envelope: ByteArray, invitedBy: String, now: Long): Boolean =
         newSuspendedTransaction(Dispatchers.IO, db) {
             val exists = TeamMembers.selectAll()
@@ -105,7 +105,7 @@ class TeamRepository(private val db: Database) {
             true
         }
 
-    /** Меняет роль участника (owner защищён от смены). false — участника нет или это owner. */
+    /** Changes a member's role (owner's role cannot change). False if member missing or is the owner. */
     suspend fun updateRole(teamId: String, accountId: String, role: String): Boolean =
         newSuspendedTransaction(Dispatchers.IO, db) {
             TeamMembers.update({
@@ -117,8 +117,8 @@ class TeamRepository(private val db: Database) {
         }
 
     /**
-     * Принять приглашение: invited → active. Конверт очищается — после принятия teamKey живёт
-     * в собственном vault участника и синхронизируется его аккаунтным синком.
+     * Accepts an invite: invited -> active. The envelope is cleared; after acceptance teamKey
+     * lives in the member's own vault and syncs via their account sync.
      */
     suspend fun accept(teamId: String, accountId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         TeamMembers.update({
@@ -130,7 +130,7 @@ class TeamRepository(private val db: Database) {
         } > 0
     }
 
-    /** Удаляет участника (отзыв доступа, отклонение приглашения или выход). Владельца не удаляет. */
+    /** Removes a member (access revocation, invite decline, or leave). Never removes the owner. */
     suspend fun removeMember(teamId: String, accountId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         TeamMembers.deleteWhere {
             (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId) and
@@ -138,14 +138,14 @@ class TeamRepository(private val db: Database) {
         } > 0
     }
 
-    /** Удаляет команду целиком: записи, участников, саму команду. */
+    /** Deletes a team entirely: records, members, and the team itself. */
     suspend fun deleteTeam(teamId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         TeamRecords.deleteWhere { TeamRecords.teamId eq teamId }
         TeamMembers.deleteWhere { TeamMembers.teamId eq teamId }
         Teams.deleteWhere { Teams.id eq teamId } > 0
     }
 
-    /** id команд, где аккаунт — активный участник (для WS-подписок и ACL записей). */
+    /** Ids of teams where the account is an active member (for WS subscriptions and record ACLs). */
     suspend fun activeTeamIdsFor(accountId: String): List<String> = newSuspendedTransaction(Dispatchers.IO, db) {
         TeamMembers.selectAll()
             .where { (TeamMembers.accountId eq accountId) and (TeamMembers.status eq TeamMemberStatus.ACTIVE) }

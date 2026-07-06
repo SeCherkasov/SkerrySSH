@@ -5,12 +5,12 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecordCodec
 
 /**
- * [TunnelStore] поверх зашифрованного [Vault]: каждый проброс — запись [RecordType.TUNNEL], чей
- * payload — JSON-сериализация [Tunnel] (он хранит лишь ссылку `hostId`, не секрет). Перенесён в vault
- * ради E2E-синка рабочего пространства (Phase A). По образцу [app.skerry.shared.vault.CredentialStore].
+ * [TunnelStore] over an encrypted [Vault]: each forward is a [RecordType.TUNNEL] record whose
+ * payload is a JSON serialization of [Tunnel] (it holds only the `hostId` reference, not the
+ * secret). Modeled on [app.skerry.shared.vault.CredentialStore].
  *
- * Порядка у туннелей нет (интерфейс — set-семантика); отдаём в порядке [Vault.records]. Чтение на
- * залоченном vault — пустой список; битый payload молча пропускается.
+ * Tunnels have no order (the interface has set semantics); returned in [Vault.records] order.
+ * Reading a locked vault yields an empty list; a corrupt payload is silently skipped.
  */
 class VaultTunnelStore(private val vault: Vault) : TunnelStore {
 

@@ -19,12 +19,12 @@ import com.ionspin.kotlin.crypto.pwhash.crypto_pwhash_argon2id_ALG_ARGON2ID13
 import com.ionspin.kotlin.crypto.util.LibsodiumRandom
 
 /**
- * Инициализирует нативный libsodium; должна отработать до создания/использования
- * [IonspinVaultCrypto]. Идемпотентна: повторный вызов в уже инициализированном процессе — no-op.
- * Это важно на Android/Native — там `LibsodiumInitializer.initialize()` при повторном `sodium_init`
- * бросает (код возврата 1 = «уже инициализировано»), что роняло пересоздание Activity (поворот/
- * возврат из фона). Держит ionspin внутренней деталью ядра — точка входа зовёт эту функцию, а не
- * ionspin напрямую (см. [IonspinVaultCrypto]).
+ * Initializes native libsodium; must run before creating/using [IonspinVaultCrypto]. Idempotent:
+ * calling it again in an already-initialized process is a no-op. This matters on Android/Native,
+ * where `LibsodiumInitializer.initialize()` throws on a repeated `sodium_init` (return code 1 =
+ * "already initialized"), which used to crash Activity recreation (rotation/return from background).
+ * Keeps ionspin an internal core detail — the app entry point calls this, not ionspin directly (see
+ * [IonspinVaultCrypto]).
  */
 suspend fun initializeVaultCrypto() {
     if (!LibsodiumInitializer.isInitialized()) {
@@ -33,22 +33,22 @@ suspend fun initializeVaultCrypto() {
 }
 
 /**
- * Единая реализация [VaultCrypto] на ionspin multiplatform-crypto-libsodium-bindings — один
- * и тот же код для desktop (JVM) и Android. Соответствует иерархии ключей
- * из `docs/skerry-sync-design.md`: Argon2id(m=64MiB, t=3) → masterKey; XChaCha20-Poly1305 с
- * 24-байтным nonce в префиксе для обёртки dataKey и для каждой записи.
+ * Single [VaultCrypto] implementation on ionspin multiplatform-crypto-libsodium-bindings — same
+ * code for desktop (JVM) and Android. Follows the key hierarchy from `docs/skerry-sync-design.md`:
+ * Argon2id(m=64MiB, t=3) → masterKey; XChaCha20-Poly1305 with a 24-byte nonce prefix for the
+ * dataKey wrapper and for each record.
  *
- * Операции stateless и потокобезопасны. **Важно:** libsodium требует асинхронной инициализации
- * ([LibsodiumInitializer.initialize], suspend) до первого вызова — её выполняет точка входа
- * приложения; каждая операция здесь страхуется быстрым [requireInitialized].
+ * Operations are stateless and thread-safe. libsodium requires async initialization
+ * ([LibsodiumInitializer.initialize], suspend) before first use — done by the app entry point;
+ * every operation here is guarded by a cheap [requireInitialized] check.
  *
- * Ограничение zero-knowledge относительно desktop-предшественника на lazysodium: ionspin
- * принимает пароль только как `String` ([PasswordHash.pwhash]), поэтому из входного [CharArray]
- * неизбежно создаётся immutable-строка, которую нельзя затереть (живёт до GC). Время её жизни
- * сведено к минимуму (локальная переменная внутри [deriveMasterKey]); затирание самого
- * [CharArray] — на стороне вызывающего, как и прежде (см. контракт [VaultCrypto.deriveMasterKey]).
+ * Zero-knowledge limitation versus the earlier desktop lazysodium implementation: ionspin only
+ * accepts the password as a `String` ([PasswordHash.pwhash]), so the input [CharArray] inevitably
+ * produces an immutable string that can't be wiped (lives until GC). Its lifetime is minimized (a
+ * local variable inside [deriveMasterKey]); wiping the [CharArray] itself remains the caller's job,
+ * as before (see the [VaultCrypto.deriveMasterKey] contract).
  */
-@OptIn(ExperimentalUnsignedTypes::class) // ionspin отдаёт/принимает ключи и блобы как UByteArray
+@OptIn(ExperimentalUnsignedTypes::class) // ionspin passes/returns keys and blobs as UByteArray
 class IonspinVaultCrypto : VaultCrypto {
 
     override fun newSalt(): ByteArray {
@@ -58,8 +58,8 @@ class IonspinVaultCrypto : VaultCrypto {
 
     override fun deriveSyncSalt(accountId: String): ByteArray {
         requireInitialized()
-        // BLAKE2b(accountId) усечённый до длины Argon2id-соли — детерминированно и без коллизий
-        // на разумных accountId; одинаков на всех устройствах (design §1: «salt = accountId»).
+        // BLAKE2b(accountId) truncated to the Argon2id salt length — deterministic and collision-free
+        // for reasonable accountIds; the same on every device (design §1: "salt = accountId").
         return GenericHash.genericHash(
             message = accountId.encodeToByteArray().toUByteArray(),
             requestedHashLength = crypto_pwhash_SALTBYTES,
@@ -69,8 +69,8 @@ class IonspinVaultCrypto : VaultCrypto {
     override fun deriveMasterKey(password: CharArray, salt: ByteArray): MasterKey {
         requireInitialized()
         require(salt.size == crypto_pwhash_SALTBYTES) { "salt must be $crypto_pwhash_SALTBYTES bytes" }
-        // Регрессия относительно CharArray-пути: ionspin не даёт варианта pwhash на байтах/CharArray,
-        // поэтому строка пароля неизбежна и не затирается (см. KDoc класса).
+        // Regression versus a CharArray-based path: ionspin has no byte/CharArray pwhash variant, so
+        // the password string is unavoidable and isn't wiped (see class KDoc).
         val passwordString = password.concatToString()
         val key = PasswordHash.pwhash(
             outputLength = KEY_BYTES,
@@ -80,8 +80,8 @@ class IonspinVaultCrypto : VaultCrypto {
             memLimit = MEM_LIMIT,
             algorithm = crypto_pwhash_argon2id_ALG_ARGON2ID13,
         )
-        // UByteArray-выход pwhash — промежуточная копия ключа: затираем после снятия ByteArray-копии,
-        // чтобы в куче оставался один экземпляр masterKey (его затирает владелец MasterKey).
+        // pwhash's UByteArray output is an intermediate key copy: wipe it after taking a ByteArray
+        // copy, so only one masterKey instance remains in the heap (wiped by the MasterKey owner).
         return MasterKey(key.toByteArray()).also { key.fill(0u) }
     }
 
@@ -93,9 +93,9 @@ class IonspinVaultCrypto : VaultCrypto {
     override fun deriveAuthKey(masterKey: MasterKey): ByteArray {
         requireInitialized()
         require(masterKey.bytes.size == KEY_BYTES) { "masterKey must be $KEY_BYTES bytes" }
-        // libsodium crypto_kdf (BLAKE2b): субключ из masterKey в домене AUTH_CONTEXT. Контекст
-        // отделяет authKey от любых других субключей того же masterKey (доменная изоляция).
-        val masterCopy = masterKey.bytes.toUByteArray() // промежуточная копия ключа — затираем ниже
+        // libsodium crypto_kdf (BLAKE2b): a subkey from masterKey in the AUTH_CONTEXT domain. The
+        // context separates authKey from any other subkey of the same masterKey (domain isolation).
+        val masterCopy = masterKey.bytes.toUByteArray() // intermediate key copy — wiped below
         val subKey = Kdf.deriveFromKey(AUTH_SUBKEY_ID, KEY_BYTES, AUTH_CONTEXT, masterCopy)
         masterCopy.fill(0u)
         return subKey.toByteArray().also { subKey.fill(0u) }
@@ -127,7 +127,7 @@ class IonspinVaultCrypto : VaultCrypto {
     override fun newSharingKeyPair(): SharingKeyPair {
         requireInitialized()
         val pair = Box.keypair()
-        // UByteArray-выходы — промежуточные копии: затираем после снятия ByteArray-копий.
+        // UByteArray outputs are intermediate copies: wiped after taking ByteArray copies.
         return SharingKeyPair(pair.publicKey.toByteArray(), pair.secretKey.toByteArray()).also {
             pair.publicKey.fill(0u)
             pair.secretKey.fill(0u)
@@ -150,8 +150,8 @@ class IonspinVaultCrypto : VaultCrypto {
 
     override fun openSealedEnvelope(keyPair: SharingKeyPair, envelope: ByteArray): ByteArray? {
         requireInitialized()
-        // Короткий/битый конверт — обычный провал (null), не бросок: конверт доставляет сервер,
-        // то есть недоверенный источник (та же логика, что в aeadOpen).
+        // A short/broken envelope is an ordinary failure (null), not a throw: the envelope is
+        // delivered by the server, an untrusted source (same logic as in aeadOpen).
         if (envelope.size < crypto_box_SEALBYTES) return null
         val secretCopy = keyPair.secretKey.toUByteArray()
         return try {
@@ -163,12 +163,12 @@ class IonspinVaultCrypto : VaultCrypto {
         }
     }
 
-    /** nonce‖XChaCha20-Poly1305(key, plaintext; ad). Nonce случайный — повтор key безопасен. */
+    /** nonce‖XChaCha20-Poly1305(key, plaintext; ad). Nonce is random — reusing the key is safe. */
     private fun aeadSeal(key: ByteArray, plaintext: ByteArray, ad: ByteArray): ByteArray {
         requireInitialized()
         require(key.size == KEY_BYTES) { "key must be $KEY_BYTES bytes" }
         val nonce = LibsodiumRandom.buf(NPUB_BYTES)
-        val keyCopy = key.toUByteArray() // промежуточная копия ключа — затираем в finally
+        val keyCopy = key.toUByteArray() // intermediate key copy — wiped in finally
         try {
             val cipher = AuthenticatedEncryptionWithAssociatedData.xChaCha20Poly1305IetfEncrypt(
                 message = plaintext.toUByteArray(),
@@ -182,19 +182,19 @@ class IonspinVaultCrypto : VaultCrypto {
         }
     }
 
-    /** Обратное к [aeadSeal]; `null` ⇒ провал AEAD-тега (неверный ключ, подмена или чужой ad). */
+    /** Reverse of [aeadSeal]; `null` means an AEAD tag failure (wrong key, tampering, or wrong ad). */
     private fun aeadOpen(key: ByteArray, blob: ByteArray, ad: ByteArray): ByteArray? {
         requireInitialized()
         require(key.size == KEY_BYTES) { "key must be $KEY_BYTES bytes" }
-        // Слишком короткий blob трактуем как обычный провал AEAD (null), а НЕ как программную ошибку:
-        // blob может прийти из недоверенного источника (запись sync-сервера кладётся mergeRemote'ом как
-        // есть). Бросок здесь ронял бы весь список при первом же чтении — DoS через вредоносный сервер.
+        // A too-short blob is treated as an ordinary AEAD failure (null), not a programming error:
+        // the blob can come from an untrusted source (a sync-server record is applied by mergeRemote
+        // as-is). Throwing here would fail the whole list on the first bad read — a DoS via a malicious server.
         if (blob.size < NPUB_BYTES + ABYTES) return null
         val nonce = blob.copyOfRange(0, NPUB_BYTES).toUByteArray()
         val cipher = blob.copyOfRange(NPUB_BYTES, blob.size).toUByteArray()
-        // ionspin сигнализирует провал тега исключением, а контракт VaultCrypto ждёт null —
-        // это ожидаемый, обрабатываемый исход (неверный ключ/пароль, подмена, чужой AAD).
-        val keyCopy = key.toUByteArray() // промежуточная копия ключа — затираем в finally
+        // ionspin signals a tag failure with an exception, but the VaultCrypto contract expects null —
+        // this is an expected, handled outcome (wrong key/password, tampering, wrong AAD).
+        val keyCopy = key.toUByteArray() // intermediate key copy — wiped in finally
         return try {
             AuthenticatedEncryptionWithAssociatedData.xChaCha20Poly1305IetfDecrypt(
                 ciphertextAndTag = cipher,
@@ -209,35 +209,35 @@ class IonspinVaultCrypto : VaultCrypto {
         }
     }
 
-    // check, не require: неинициализированный libsodium — нарушение порядка запуска приложения
-    // (IllegalState), а не некорректный аргумент вызова.
+    // check, not require: an uninitialized libsodium is an app-startup-order violation
+    // (IllegalState), not a bad call argument.
     private fun requireInitialized() =
         check(LibsodiumInitializer.isInitialized()) {
             "libsodium is not initialized; call LibsodiumInitializer.initialize() at app startup"
         }
 
     private companion object {
-        val KEY_BYTES = crypto_aead_xchacha20poly1305_ietf_KEYBYTES   // 32 = размер master/data ключа
+        val KEY_BYTES = crypto_aead_xchacha20poly1305_ietf_KEYBYTES   // 32 = master/data key size
         val NPUB_BYTES = crypto_aead_xchacha20poly1305_ietf_NPUBBYTES // 24
-        val ABYTES = crypto_aead_xchacha20poly1305_ietf_ABYTES        // 16 (тег Poly1305)
+        val ABYTES = crypto_aead_xchacha20poly1305_ietf_ABYTES        // 16 (Poly1305 tag)
 
-        // Параметры Argon2id из docs/skerry-sync-design.md §1 заданы явными литералами, а не
-        // через libsodium-пресеты (INTERACTIVE/MODERATE): пресеты связывают свои t и m в пары,
-        // и подмена литерала именованной константой молча изменила бы стойкость. Параллелизм p
-        // из спецификации cryptoPwHash фиксируется в 1 — ограничение libsodium, единое для всех.
-        const val OPS_LIMIT = 3UL                     // t = 3 итерации
-        const val MEM_LIMIT: Int = 64 * 1024 * 1024   // m = 64 MiB (явный Int: страховка от переполнения)
+        // Argon2id parameters from docs/skerry-sync-design.md §1 are explicit literals, not
+        // libsodium presets (INTERACTIVE/MODERATE): presets pair their own t and m, and swapping a
+        // literal for a named preset would silently change the strength. Parallelism p from the
+        // cryptoPwHash spec is fixed at 1 — a libsodium limitation shared by all platforms.
+        const val OPS_LIMIT = 3UL                     // t = 3 iterations
+        const val MEM_LIMIT: Int = 64 * 1024 * 1024   // m = 64 MiB (explicit Int: guards against overflow)
 
-        // Доменный AAD обёртки dataKey: отделяет её от записей (seal с AAD слота), чтобы
-        // обёртку нельзя было подставить как запись и наоборот даже при совпадении ключей.
+        // Domain AAD for the dataKey wrapper: separates it from records (sealed with a slot AAD) so
+        // the wrapper can't be substituted for a record or vice versa even if keys match.
         val WRAP_AAD = "skerry.vault.wrapped-data-key.v1".encodeToByteArray()
 
-        // Доменный AAD конверта быстрого паринга (вариант B): отделяет перенос dataKey под
-        // transferKey от обёртки masterKey'ем и от записей — конверт нельзя подставить как иной блоб.
+        // Domain AAD for the quick-pairing envelope (variant B): separates the dataKey transfer under
+        // transferKey from the masterKey wrapper and from records — the envelope can't pass as another blob.
         val TRANSFER_AAD = "skerry.pairing.transfer-key.v1".encodeToByteArray()
 
-        // Деривация authKey: контекст ровно 8 байт (crypto_kdf_CONTEXTBYTES), субключ №1.
-        const val AUTH_CONTEXT = "skerryau" // 8 ASCII-символов
+        // authKey derivation: context is exactly 8 bytes (crypto_kdf_CONTEXTBYTES), subkey #1.
+        const val AUTH_CONTEXT = "skerryau" // 8 ASCII characters
         const val AUTH_SUBKEY_ID = 1u
     }
 }

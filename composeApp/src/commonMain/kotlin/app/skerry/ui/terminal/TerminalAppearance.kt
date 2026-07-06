@@ -16,81 +16,78 @@ import kotlin.math.round
 import org.jetbrains.compose.resources.Font
 
 /**
- * Шрифт терминала, выбираемый в настройках (Appearance → Font). Оба варианта рендерятся БЕЗ
- * программных лигатур ([NO_LIGATURES]): `->`, `=>`, `!=` остаются раздельными глифами — обязательное
- * условие посимвольной сетки терминала. Hack лигатур не имеет by design; JetBrains Mono их имеет,
- * поэтому для него выключение существенно. [id] — стабильный ключ для персиста (см. desktop `main`).
+ * Terminal font, chosen in settings (Appearance → Font). Both variants render WITHOUT programmatic
+ * ligatures ([NO_LIGATURES]): `->`, `=>`, `!=` stay separate glyphs — required for the terminal's
+ * per-character grid. Hack has no ligatures by design; JetBrains Mono does, so disabling them matters
+ * there. [id] is a stable key for persistence (see desktop `main`).
  */
 enum class TerminalFont(val displayName: String, val id: String) {
-    /** Hack — моноширинный без лигатур, дефолт терминала. */
+    /** Hack — monospace without ligatures, terminal default. */
     Hack("Hack", "hack"),
 
-    /** JetBrains Mono — дизайн-токен Skerry (тот же, что в остальном UI); лигатуры гасим принудительно. */
+    /** JetBrains Mono — Skerry's design-token font (same as the rest of the UI); ligatures forced off. */
     JetBrainsMono("JetBrains Mono", "jetbrains-mono");
 
     companion object {
         val DEFAULT = Hack
 
-        /** Разобрать сохранённый [id] обратно в значение; неизвестный/`null` → [DEFAULT]. */
+        /** Parses a persisted [id] back into a value; unknown/`null` → [DEFAULT]. */
         fun fromId(id: String?): TerminalFont = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
 }
 
 /**
- * Размер шрифта терминала по умолчанию. Применяется как `.sp` (см. [TerminalAppearance.fontSizeSp]);
- * в слайдере подписан «px» — на масштабе шрифта 1.0 это одно и то же число.
+ * Default terminal font size. Applied as `.sp` (see [TerminalAppearance.fontSizeSp]); the slider
+ * labels it "px" — at font scale 1.0 these are the same number.
  */
 const val DEFAULT_TERMINAL_FONT_SIZE = 13
 
-/**
- * Границы кегля шрифта терминала (px), которые пользователь крутит слайдером Appearance → Font size.
- * Диапазон широкий (8..40) — «крутить как хочешь», в отличие от прежнего фиксированного списка 11..18.
- */
+/** Terminal font size bounds (px) for the Appearance → Font size slider. */
 const val TERMINAL_FONT_SIZE_MIN = 8
 const val TERMINAL_FONT_SIZE_MAX = 40
 val TERMINAL_FONT_SIZE_RANGE: IntRange = TERMINAL_FONT_SIZE_MIN..TERMINAL_FONT_SIZE_MAX
 
 /**
- * Отношение высоты строки к кеглю по умолчанию (13px → 18px в макете). Высота строки = кегль × это
- * значение, чтобы межстрочный интервал масштабировался вместе с кеглем. Пользователь может изменить
- * его слайдером Appearance → Line height в пределах [TERMINAL_LINE_HEIGHT_MIN]..[TERMINAL_LINE_HEIGHT_MAX].
+ * Default line-height-to-font-size ratio (13px → 18px). Line height = font size × this value, so
+ * line spacing scales with font size. Adjustable via the Appearance → Line height slider within
+ * [TERMINAL_LINE_HEIGHT_MIN]..[TERMINAL_LINE_HEIGHT_MAX].
  */
 const val DEFAULT_TERMINAL_LINE_HEIGHT = 18f / 13f
 const val TERMINAL_LINE_HEIGHT_MIN = 1.0f
 const val TERMINAL_LINE_HEIGHT_MAX = 2.0f
 
 /**
- * Межбуквенный интервал терминала (sp/px на масштабе 1.0), слайдер Appearance → Letter spacing. По
- * умолчанию 0 (натуральный advance шрифта); отрицательное сжимает, положительное растягивает. Сетка
- * терминала остаётся согласованной: ширина ячейки меряется тем же [TextStyle] и учитывает интервал.
+ * Terminal letter spacing (sp/px at scale 1.0), Appearance → Letter spacing slider. Defaults to 0
+ * (natural font advance); negative compresses, positive expands. The terminal grid stays consistent
+ * since cell width is measured with the same [TextStyle] and accounts for spacing.
  */
 const val DEFAULT_TERMINAL_LETTER_SPACING = 0f
 const val TERMINAL_LETTER_SPACING_MIN = -1.5f
 const val TERMINAL_LETTER_SPACING_MAX = 4.0f
 
-/** Округление дробного значения до 2 знаков — чтобы слайдер не плодил «1.4000001» в состоянии/персисте. */
+/** Rounds a float to 2 decimals, so the slider doesn't produce "1.4000001" in state/persistence. */
 private fun round2(value: Float): Float = round(value * 100f) / 100f
 
-/** Привести высоту строки к допустимому диапазону и шагу (clamp + округление). */
+/** Clamps line height to the valid range and rounds it. */
 fun clampTerminalLineHeight(value: Float): Float =
     round2(value.coerceIn(TERMINAL_LINE_HEIGHT_MIN, TERMINAL_LINE_HEIGHT_MAX))
 
-/** Привести межбуквенный интервал к допустимому диапазону и шагу (clamp + округление). */
+/** Clamps letter spacing to the valid range and rounds it. */
 fun clampTerminalLetterSpacing(value: Float): Float =
     round2(value.coerceIn(TERMINAL_LETTER_SPACING_MIN, TERMINAL_LETTER_SPACING_MAX))
 
 /**
- * Выключение программных лигатур в `TextStyle.fontFeatureSettings`: гасит `liga`/`calt`/`dlig`,
- * чтобы пары вроде `->` не склеивались в один глиф. Применяется к шрифту терминала независимо от
- * выбора (для Hack безвредно, для JetBrains Mono — необходимо).
+ * Disables programmatic ligatures via `TextStyle.fontFeatureSettings`: turns off `liga`/`calt`/`dlig`
+ * so pairs like `->` don't merge into one glyph. Applied to the terminal font regardless of choice
+ * (harmless for Hack, necessary for JetBrains Mono).
  */
 const val NO_LIGATURES = "\"liga\" 0, \"calt\" 0, \"dlig\" 0"
 
 /**
- * Стиль курсора терминала (Settings → Терминал → «Стиль курсора»): комбинация формы (DECSCUSR
- * блок/подчёркивание/черта) и мигания. Действует как ДЕФОЛТ для новой сессии — приложение внутри
- * может переопределить форму через DECSCUSR (`CSI Ps SP q`); RIS вернёт именно к выбранному стилю.
- * [id] — стабильный ключ персиста (см. desktop `main`); порядок [entries] = порядок в дропдауне.
+ * Terminal cursor style (Settings → Terminal → cursor style): shape (DECSCUSR block/underline/bar)
+ * combined with blink. Acts as the DEFAULT for a new session — the app inside can override the shape
+ * via DECSCUSR (`CSI Ps SP q`); RIS resets back to the chosen style. [id] is a stable persistence key
+ * (see desktop `main`); [entries] order matches the dropdown order.
  */
 enum class TerminalCursorStyle(val shape: CursorShape, val blink: Boolean, val id: String) {
     BlockBlink(CursorShape.Block, true, "block-blink"),
@@ -101,58 +98,57 @@ enum class TerminalCursorStyle(val shape: CursorShape, val blink: Boolean, val i
     BarSteady(CursorShape.Bar, false, "bar-steady");
 
     companion object {
-        /** Дефолт — мигающий блок (как у xterm и как показывал прежний мок настроек). */
+        /** Default — blinking block (matches xterm). */
         val DEFAULT = BlockBlink
 
-        /** Разобрать сохранённый [id] обратно в значение; неизвестный/`null` → [DEFAULT]. */
+        /** Parses a persisted [id] back into a value; unknown/`null` → [DEFAULT]. */
         fun fromId(id: String?): TerminalCursorStyle = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
 }
 
-/** Глубина scrollback по умолчанию (Settings → Терминал → «Буфер прокрутки»), строк. */
+/** Default scrollback depth (Settings → Terminal → scrollback buffer), in rows. */
 const val DEFAULT_TERMINAL_SCROLLBACK = 10_000
 
-/** Пресеты глубины scrollback (строк) для выпадающего списка «Буфер прокрутки». */
+/** Scrollback depth presets (rows) for the scrollback-buffer dropdown. */
 val TERMINAL_SCROLLBACK_OPTIONS: List<Int> = listOf(1_000, 5_000, 10_000, 50_000)
 
 /**
- * Настройки терминала, применяемые к НОВОЙ сессии при её создании ([app.skerry.ui.connection.ConnectionController]):
- * глубина scrollback и стиль курсора по умолчанию. Читаются провайдером в момент connect, поэтому
- * смена настроек влияет на последующие сессии; уже открытые сессии сохраняют свой эмулятор.
+ * Terminal settings applied to a NEW session on creation ([app.skerry.ui.connection.ConnectionController]):
+ * default scrollback depth and cursor style. Read by the provider at connect time, so changing
+ * settings affects subsequent sessions; already-open sessions keep their own emulator.
  */
 @Immutable
 data class TerminalSessionPrefs(
     val scrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
     val cursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
 ) {
-    /** Эффективная глубина scrollback: пресет валидируется, иначе — дефолт эмулятора (страховка). */
+    /** Effective scrollback depth: validated preset, else the emulator default (safety net). */
     val effectiveScrollback: Int get() = scrollback.takeIf { it > 0 } ?: DEFAULT_MAX_SCROLLBACK
 }
 
-/** Внешний вид терминала, проводимый в [TerminalScreen] через [LocalTerminalAppearance]. */
+/** Terminal appearance, threaded into [TerminalScreen] via [LocalTerminalAppearance]. */
 @Immutable
 data class TerminalAppearance(
     val font: TerminalFont = TerminalFont.DEFAULT,
     val fontSizeSp: Int = DEFAULT_TERMINAL_FONT_SIZE,
-    /** Множитель высоты строки (см. [DEFAULT_TERMINAL_LINE_HEIGHT]): lineHeight = кегль × это значение. */
+    /** Line height multiplier (see [DEFAULT_TERMINAL_LINE_HEIGHT]): lineHeight = font size × this value. */
     val lineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
-    /** Межбуквенный интервал в sp (см. [DEFAULT_TERMINAL_LETTER_SPACING]). */
+    /** Letter spacing in sp (see [DEFAULT_TERMINAL_LETTER_SPACING]). */
     val letterSpacingSp: Float = DEFAULT_TERMINAL_LETTER_SPACING,
 )
 
 /**
- * Внешний вид терминала для всего дерева. Дефолт ([TerminalAppearance] по умолчанию = Hack 13px)
- * действует там, где провайдер не выставлен (мобильный таргет, превью, экран подключения), сохраняя
- * прежнее поведение. Desktop-корень ([app.skerry.ui.desktop.DesktopDesignApp]) подменяет его выбором
- * пользователя из настроек.
+ * Terminal appearance for the whole tree. The default ([TerminalAppearance] default = Hack 13px)
+ * applies wherever no provider is set (mobile target, preview, connection screen). The desktop root
+ * ([app.skerry.ui.desktop.DesktopDesignApp]) overrides it with the user's settings choice.
  */
 val LocalTerminalAppearance = staticCompositionLocalOf { TerminalAppearance() }
 
 /**
- * Семейство шрифта терминала по выбору [font] (regular + bold из compose-resources). `remember` внутри
- * не нужен: `Font(...)` сам @Composable и кэширует данные ресурса в слоте композиции (как
- * [app.skerry.ui.design.rememberMono] и соседи). Префикс `remember` сохранён ради единого стиля
- * со шрифтовыми фабриками проекта.
+ * Terminal font family for the chosen [font] (regular + bold from compose-resources). No `remember`
+ * needed internally: `Font(...)` is itself @Composable and caches resource data in the composition
+ * slot (like [app.skerry.ui.design.rememberMono] and siblings). The `remember` prefix is kept for
+ * naming consistency with the project's font factories.
  */
 @Composable
 fun rememberTerminalFontFamily(font: TerminalFont): FontFamily = when (font) {

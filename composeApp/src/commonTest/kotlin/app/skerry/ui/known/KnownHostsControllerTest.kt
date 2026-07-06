@@ -80,8 +80,8 @@ class KnownHostsControllerTest {
 
     @Test
     fun `refresh picks up keys added to the store after construction`() {
-        // Реконнект пишет новый ключ в общий стор из потока TOFU — view должен подхватить его, когда
-        // экран снова откроется и вызовет refresh(), а не только после перезапуска приложения.
+        // A reconnect writes a new key to the shared store from the TOFU flow; the view should pick
+        // it up when the screen reopens and calls refresh(), not only after an app restart.
         val store = fakeStore(KnownHost("prod", 22, ed, "SHA256:AAA", ""))
         val controller = KnownHostsController(store, fakeMismatches())
         assertEquals(listOf("prod"), controller.entries.map { it.host.host })

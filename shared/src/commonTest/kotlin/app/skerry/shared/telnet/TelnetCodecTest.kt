@@ -45,7 +45,7 @@ class TelnetCodecTest {
     @Test
     fun `server DO NAWS is answered with WILL NAWS plus window size`() {
         val d = TelnetCodec(cols = 80, rows = 24).consume(bytes(IAC, DO, NAWS))
-        // WILL NAWS, затем SB NAWS 0 80 0 24 SE
+        // WILL NAWS, then SB NAWS 0 80 0 24 SE
         assertContentEquals(
             bytes(IAC, WILL, NAWS, IAC, SB, NAWS, 0, 80, 0, 24, IAC, SE),
             d.reply,
@@ -64,7 +64,7 @@ class TelnetCodecTest {
         val first = codec.consume(bytes(IAC, DO, SGA))
         assertContentEquals(bytes(IAC, WILL, SGA), first.reply)
         val second = codec.consume(bytes(IAC, DO, SGA))
-        assertTrue(second.reply.isEmpty(), "повторный DO SGA не должен вызывать ответ")
+        assertTrue(second.reply.isEmpty(), "a repeated DO SGA should not trigger a reply")
     }
 
     @Test
@@ -106,28 +106,28 @@ class TelnetCodecTest {
     @Test
     fun `server WILL ECHO toggles serverEchoEnabled`() {
         val codec = TelnetCodec()
-        assertTrue(!codec.serverEchoEnabled) // до неготиации сервер не подтвердил эхо
+        assertTrue(!codec.serverEchoEnabled) // before negotiation the server hasn't confirmed echo
         codec.consume(bytes(IAC, WILL, ECHO))
         assertTrue(codec.serverEchoEnabled)
-        codec.consume(bytes(IAC, WONT, ECHO)) // сервер выключает эхо (напр. prompt пароля)
+        codec.consume(bytes(IAC, WONT, ECHO)) // server disables echo (e.g. password prompt)
         assertTrue(!codec.serverEchoEnabled)
     }
 
     @Test
     fun `oversized subnegotiation without SE is dropped and parser recovers`() {
         val codec = TelnetCodec()
-        // IAC SB NAWS, затем 100k байт БЕЗ IAC SE — не должно копиться бесконечно (защита от OOM).
+        // IAC SB NAWS, then 100k bytes with no IAC SE: must not buffer unboundedly (OOM guard).
         codec.consume(bytes(IAC, SB, NAWS))
         val flood = ByteArray(100_000) { 0x20 }
         codec.consume(flood)
-        // Закрываем «зависшее» SB и шлём обычные данные — парсер должен вернуться в DATA и отдать их.
+        // Close the stuck SB and send plain data; the parser must return to DATA and emit it.
         val d = codec.consume(bytes(IAC, SE) + "ok".encodeToByteArray())
         assertEquals("ok", d.data.decodeToString())
     }
 
     @Test
     fun `windowSize builds a NAWS subnegotiation with escaped 0xFF`() {
-        // 255 в размере окна должен экранироваться удвоением внутри тела SB.
+        // A 255 in the window size must be escaped by doubling inside the SB body.
         val out = TelnetCodec().windowSize(newCols = 255, newRows = 24)
         assertContentEquals(bytes(IAC, SB, NAWS, 0, 255, 255, 0, 24, IAC, SE), out)
     }

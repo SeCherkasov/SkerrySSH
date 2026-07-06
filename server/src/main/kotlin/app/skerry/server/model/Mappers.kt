@@ -8,7 +8,7 @@ import java.util.Base64
 
 fun ByteArray.b64(): String = Base64.getEncoder().encodeToString(this)
 
-/** Невалидный base64 — ошибка клиента (400), а не сервера: Ktor отвечает 400 на BadRequestException. */
+/** Invalid base64 is a client error (400): Ktor responds 400 to BadRequestException. */
 fun String.unb64(): ByteArray = try {
     Base64.getDecoder().decode(this)
 } catch (e: IllegalArgumentException) {

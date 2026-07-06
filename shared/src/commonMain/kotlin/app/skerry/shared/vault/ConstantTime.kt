@@ -1,9 +1,9 @@
 package app.skerry.shared.vault
 
 /**
- * Сравнение секретных байтов за время, не зависящее от места первого расхождения (OR-аккумулятор
- * XOR-разниц, без ранних выходов) — по таймингу нельзя подбирать ключ побайтово. Расхождение длин
- * возвращает false сразу: длина ключей фиксирована форматом vault и секретом не является.
+ * Compares secret bytes in time independent of the first differing position (OR-accumulate XOR
+ * diffs, no early exit) so timing can't be used to brute-force a key byte by byte. A length
+ * mismatch returns false immediately: key length is fixed by the vault format, not a secret.
  */
 internal fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean {
     if (a.size != b.size) return false

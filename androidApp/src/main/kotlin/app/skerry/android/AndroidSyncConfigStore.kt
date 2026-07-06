@@ -7,12 +7,10 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 
 /**
- * Файловое хранилище привязки к sync-серверу (Android): `sync.json` в приватном каталоге приложения
- * ([android.content.Context.getFilesDir] — изолирован по UID, дополнительные POSIX-права не нужны).
- * Хранит только НЕсекретное — URL сервера, accountId и стабильный deviceId; токены и пароль здесь не
- * лежат (переавторизация по мастер-паролю). Формат — `key=urlencoded` построчно (паритет с desktop
- * [FileSyncConfigStore]); URL-кодирование экранирует переносы строк, разбор построчный безопасен.
- * Чтение best-effort: битый/отсутствующий файл → `null` (sync просто выключен).
+ * File-backed sync-server binding store (Android): `sync.json` in the app's private files dir.
+ * Holds only non-secret data (server URL, accountId, deviceId); no tokens or password. Format is
+ * `key=urlencoded` per line (mirrors desktop [FileSyncConfigStore]). Read is best-effort: a
+ * missing/corrupt file yields `null` (sync disabled).
  */
 class AndroidSyncConfigStore(private val file: File) : SyncConfigStore {
 
@@ -45,12 +43,11 @@ class AndroidSyncConfigStore(private val file: File) : SyncConfigStore {
             appendLine("keepConnected=${config.keepConnected}")
             config.sealedRefreshToken?.let { appendLine("sealedRefreshToken=${URLEncoder.encode(it, "UTF-8")}") }
         }
-        // Атомарно: пишем во временный файл и переименовываем — иначе обрыв процесса между truncate
-        // и записью оставил бы пустой/усечённый sync.json (паритет с desktop PrivateConfig.atomicWrite).
+        // Atomic write: write to a temp file then rename, so a process kill mid-write can't leave a truncated sync.json.
         val tmp = File(file.parentFile, "${file.name}.tmp")
         tmp.writeText(text)
         if (!tmp.renameTo(file)) {
-            // renameTo не атомарен на некоторых FS, если цель существует — фолбэк через копирование.
+            // renameTo is not atomic on all filesystems when the target exists; fall back to direct write.
             file.writeText(text)
             tmp.delete()
         }

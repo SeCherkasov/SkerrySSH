@@ -8,24 +8,23 @@ import com.auth0.jwt.interfaces.DecodedJWT
 import java.util.Date
 
 /**
- * Выпуск и проверка JWT (`docs/skerry-sync-design.md` §4: короткий TTL + refresh). Токен
- * привязан к accountId и deviceId; даёт доступ только к шифроблобам, не к содержимому.
+ * Issues and verifies JWTs (`docs/skerry-sync-design.md` §4: short TTL + refresh). A token is
+ * bound to accountId and deviceId, and grants access only to ciphertext, never plaintext content.
  *
- * ## Отзыв refresh-токенов: осознанный stateless trade-off
+ * ## Refresh token revocation: stateless by design
  *
- * Refresh-токены здесь — самодостаточные (stateless) JWT: сервер не хранит их в БД и не ведёт
- * per-token список выданных. Это упрощает self-hosted инстанс (нет таблицы токенов, нет уборки),
- * но означает, что отдельный refresh-токен нельзя «погасить» индивидуально — подписанный JWT
- * действителен до своего `exp`.
+ * Refresh tokens are self-contained stateless JWTs: the server keeps no per-token DB record, so an
+ * individual refresh token cannot be revoked on its own — a signed JWT stays valid until its `exp`.
  *
- * Канал отзыва при компрометации — **revoke устройства**: и `/auth/refresh`, и access-валидатор
- * (`auth-jwt`) на каждый запрос сверяются с [app.skerry.server.db.DeviceRepository.isRevoked]
- * (accountId+deviceId). Отзыв устройства мгновенно перекрывает и его access-, и его refresh-поток,
- * не трогая остальные устройства. Глобальный отзыв всех токенов аккаунта = ротация
- * `SKERRY_JWT_SECRET` (инвалидирует все подписи) или смена мастер-пароля (ротация SRP-верификатора).
+ * Revocation on compromise goes through **device revoke**: both `/auth/refresh` and the access
+ * validator (`auth-jwt`) check [app.skerry.server.db.DeviceRepository.isRevoked] (accountId+deviceId)
+ * on every request. Revoking a device instantly cuts off both its access and refresh flow without
+ * touching other devices. A global revoke of all of an account's tokens means rotating
+ * `SKERRY_JWT_SECRET` (invalidates all signatures) or changing the master password (rotates the
+ * SRP verifier).
  *
- * Поэтому generation-counter / БД-список refresh-токенов НЕ реализуется намеренно: device-revoke
- * уже даёт нужную гранулярность отзыва при принятой модели одиночного инстанса.
+ * A generation counter / DB-backed refresh token list is intentionally not implemented: device
+ * revoke already gives the needed granularity for the single-instance model.
  */
 class TokenService(private val config: ServerConfig, private val clock: () -> Long = System::currentTimeMillis) {
 
@@ -56,10 +55,10 @@ class TokenService(private val config: ServerConfig, private val clock: () -> Lo
             .sign(algorithm)
     }
 
-    /** Верификатор для Ktor `jwt {}` — проверяет подпись и издателя (срок проверяет сам Ktor/JWT). */
+    /** Verifier for Ktor `jwt {}`: checks signature and issuer (expiry is checked by Ktor/JWT itself). */
     fun verifier(): JWTVerifier = JWT.require(algorithm).withIssuer(config.jwtIssuer).build()
 
-    /** Декодирует и проверяет refresh-токен; `null`, если он не refresh, просрочен или подделан. */
+    /** Decodes and verifies a refresh token; `null` if it's not a refresh token, expired, or forged. */
     fun verifyRefresh(token: String): DecodedJWT? = try {
         val decoded = verifier().verify(token)
         if (decoded.getClaim(CLAIM_TYPE).asString() != TYPE_REFRESH) null else decoded

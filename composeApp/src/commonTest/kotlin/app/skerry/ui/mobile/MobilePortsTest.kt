@@ -7,7 +7,7 @@ import app.skerry.ui.tunnel.TunnelStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Чистая логика мобильного экрана Port forwarding (глобальные туннели): проекция строки, счётчики хаба More. */
+/** Pure logic for the mobile Port forwarding screen (global tunnels): row projection, More-hub counters. */
 class MobilePortsTest {
 
     private fun tunnel(
@@ -19,7 +19,7 @@ class MobilePortsTest {
     private fun entry(direction: TunnelDirection, status: TunnelStatus = TunnelStatus.Active(8080)): TunnelEntry =
         TunnelEntry(tunnel(direction)).also { it.status = status }
 
-    // Стрелка между source и dest
+    // Arrow between source and dest
 
     @Test
     fun arrow_is_all_inclusive_for_dynamic_else_forward() {
@@ -28,11 +28,11 @@ class MobilePortsTest {
         assertEquals("all_inclusive", mobileTunnelArrow(TunnelDirection.Dynamic))
     }
 
-    // Прим.: mobileTunnelDest, mobileMorePortsSubtitle и mobileMoreKnownSubtitle стали @Composable
-    // (текст локализован через строковые ресурсы), поэтому их строковые юнит-тесты сняты — проекция
-    // адреса/счётчика теперь резолвится в composition. Ниже — оставшаяся чистая логика (стрелка, счётчик).
+    // mobileTunnelDest, mobileMorePortsSubtitle and mobileMoreKnownSubtitle are now @Composable
+    // (localized via string resources), so their unit tests are gone; only the remaining pure
+    // logic (arrow, counter) is tested below.
 
-    // Счётчик активных туннелей для подзаголовка хаба More
+    // Active-tunnel counter for the More-hub subtitle
 
     @Test
     fun active_count_counts_only_active() {
@@ -42,7 +42,7 @@ class MobilePortsTest {
             entry(TunnelDirection.Dynamic, status = TunnelStatus.Inactive),
             entry(TunnelDirection.Local, status = TunnelStatus.Failed("boom")),
         )
-        // Активен только первый: поднимается/выключен/упал — не считаются.
+        // Only the first is active: connecting/inactive/failed don't count.
         assertEquals(1, mobileActiveTunnelCount(tunnels))
         assertEquals(0, mobileActiveTunnelCount(emptyList()))
     }

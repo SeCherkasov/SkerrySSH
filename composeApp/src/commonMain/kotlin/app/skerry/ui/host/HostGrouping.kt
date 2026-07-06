@@ -7,27 +7,26 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shtail_ungrouped
 import org.jetbrains.compose.resources.stringResource
 
-/** Папка списка хостов: имя группы + хосты в ней (порядок исходного списка). */
+/** A host list folder: group name plus its hosts (in source list order). */
 @Immutable
 data class HostFolder(val name: String, val hosts: List<Host>)
 
 /**
- * ТЕХНИЧЕСКИЙ ключ синтетической корзины для профилей без группы (`Host.group` пуст/`null`).
- * Используется как ключ группировки в чистой логике ([groupHostsByFolder]) и в сравнениях
- * `folder.name != UNGROUPED_LABEL` — поэтому НЕ локализуется (иначе сломалась бы группировка при
- * смене языка). Для показа пользователю берите [ungroupedLabel].
+ * Technical key for the synthetic bucket holding hosts without a group (`Host.group` blank/`null`).
+ * Used as the grouping key in [groupHostsByFolder] and in `folder.name != UNGROUPED_LABEL`
+ * comparisons; not localized, since that would break grouping on locale change. For display, use
+ * [ungroupedLabel].
  */
 const val UNGROUPED_LABEL = "Ungrouped"
 
-/** Локализованная подпись корзины «без группы» для отображения (не для группировки — см. [UNGROUPED_LABEL]). */
+/** Localized "ungrouped" bucket label for display (not for grouping, see [UNGROUPED_LABEL]). */
 @Composable
 fun ungroupedLabel(): String = stringResource(Res.string.shtail_ungrouped)
 
 /**
- * Сгруппировать профили по [Host.group] для сайдбара. Папки идут в порядке первого появления
- * группы во входном списке, хосты внутри — в исходном порядке. Пустая/`null`-группа сводится в
- * корзину [ungroupedLabel]. Чистая функция (без Compose) — зафиксирована
- * [app.skerry.ui.host.HostGroupingTest], переиспользуется desktop/мобильным сайдбаром.
+ * Group hosts by [Host.group] for the sidebar. Folders appear in order of the group's first
+ * appearance in the input list, hosts within a folder keep source order. Blank/`null` group falls
+ * into the [ungroupedLabel] bucket. Pure function (no Compose), shared by desktop and mobile sidebars.
  */
 fun groupHostsByFolder(hosts: List<Host>, ungroupedLabel: String = UNGROUPED_LABEL): List<HostFolder> {
     val buckets = LinkedHashMap<String, MutableList<Host>>()

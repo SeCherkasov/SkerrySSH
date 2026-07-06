@@ -153,10 +153,10 @@ private val REMOTE_FILES = listOf(
 )
 
 /**
- * SFTP view (двухпанельный, Total-Commander): заголовок + Local-панель (локальная ФС) + Remote-панель
- * (хост) + панель действий передачи + полоса прогресса. При живой сессии ([LocalSessions]) обе панели
- * рендерятся поверх [TransferCoordinator] активной сессии — листинг/навигация/CRUD/передача реальны.
- * Без сессии (офскрин-рендер дизайна без бэкенда) показывается статичный мок.
+ * SFTP view (two-pane, Total Commander style): header + Local pane (local FS) + Remote pane (host) +
+ * transfer action bar + progress bar. With a live session ([LocalSessions]) both panes render over the
+ * active session's [TransferCoordinator] — listing/navigation/CRUD/transfer are real. Without a session
+ * (offscreen design render without a backend) a static mock is shown.
  */
 @Composable
 fun SftpView() {
@@ -177,7 +177,7 @@ fun SftpView() {
     }
 }
 
-/** Верхняя шапка view: иконка + «File transfer» + подзаголовок сессии. */
+/** View top bar: icon + "File transfer" + session subtitle. */
 @Composable
 private fun SftpTopBar(subtitle: String, mono: FontFamily) {
     Row(
@@ -191,13 +191,13 @@ private fun SftpTopBar(subtitle: String, mono: FontFamily) {
     }
 }
 
-// Живой путь.
+// Live path.
 
 /**
- * Живой двухпанельный SFTP поверх кэшированного [TransferCoordinator] сессии. Координатор открывается
- * один раз ([ConnectionController.openTransferCoordinator]) и живёт на scope сессии — переключение
- * view путь/выделение панелей не сбрасывает, канал закрывает `disconnect()`. [subtitle] идёт меткой
- * удалённой панели.
+ * Live two-pane SFTP over the session's cached [TransferCoordinator]. The coordinator is opened once
+ * ([ConnectionController.openTransferCoordinator]) and lives on the session scope — switching views
+ * doesn't reset the panes' path/selection, `disconnect()` closes the channel. [subtitle] is the remote
+ * pane's label.
  */
 @Composable
 private fun LiveSftpView(
@@ -210,23 +210,23 @@ private fun LiveSftpView(
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
     var active by remember(controller) { mutableStateOf(ActivePane.Local) }
-    // Цели F8 Delete / F6 Move — активная панель в момент вызова (диалог читает её operands() для
-    // текста/выполнения). null — диалог закрыт.
+    // F8 Delete / F6 Move targets — the active pane at call time (the dialog reads its operands() for
+    // text/execution). null — dialog closed.
     var deleteTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
     var moveTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
-    // Цель F5 Copy — активная панель в момент вызова (источник; назначение — противоположная панель).
+    // F5 Copy target — the active pane at call time (source; destination is the opposite pane).
     var copyTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
-    // Цель F2 Rename — пара (панель, строка под курсором) на момент нажатия. null — диалог закрыт.
+    // F2 Rename target — a (pane, cursored row) pair at press time. null — dialog closed.
     var renameTarget by remember(controller) { mutableStateOf<Pair<FilePaneController, FileItem>?>(null) }
     val localList = rememberLazyListState()
     val remoteList = rememberLazyListState()
-    // Персистентная настройка показа скрытых (Ctrl+H) — единый источник правды для обеих панелей.
+    // Persistent show-hidden setting (Ctrl+H) — single source of truth for both panes.
     val sftpPrefs = LocalSftpPrefs.current
     val focus = remember(controller) { FocusRequester() }
-    // UI-scope только для показа нативного пикера файла (fallback Upload); сама передача живёт на
-    // scope сессии внутри координатора и переживёт уход вью из композиции.
+    // UI scope only for showing the native file picker (Upload fallback); the transfer itself lives on
+    // the session scope inside the coordinator and survives the view leaving composition.
     val uiScope = rememberCoroutineScope()
-    // stringResource нельзя звать внутри LaunchedEffect — поднимаем значение заранее.
+    // stringResource can't be called inside LaunchedEffect — hoist the value beforehand.
     val openFailedMsg = stringResource(Res.string.ftail_open_failed)
     LaunchedEffect(controller) {
         openError = null
@@ -240,10 +240,10 @@ private fun LiveSftpView(
     }
 
     val c = coord
-    // Как только координатор открыт — даём панелям фокус, чтобы стрелки/Tab работали без клика.
+    // Once the coordinator is open — give the panes focus so arrows/Tab work without a click.
     LaunchedEffect(c) { if (c != null) focus.requestFocus() }
-    // Применяем сохранённую настройку показа скрытых к обеим панелям: при открытии координатора и при
-    // каждом переключении Ctrl+H (sftpPrefs.showHidden — ключ эффекта).
+    // Apply the saved show-hidden setting to both panes: on coordinator open and on every Ctrl+H toggle
+    // (sftpPrefs.showHidden is the effect key).
     LaunchedEffect(c, sftpPrefs.showHidden) {
         if (c != null) {
             c.local.setShowHidden(sftpPrefs.showHidden)
@@ -251,30 +251,30 @@ private fun LiveSftpView(
         }
     }
 
-    // Единая точка для F-клавиш: и нажатие клавиши, и клик по строке нижней панели идут сюда. Операции
-    // работают над АКТИВНОЙ панелью, цель — её operands() (выделение либо строка под курсором, mc-стиль).
-    // F3 View / F4 Edit — заглушки (нужно чтение файла в контракте FileBrowser).
+    // Single point for F-keys: both a key press and a click on a bottom-pane row come here. Operations
+    // act on the active pane, the target is its operands() (selection or the cursored row, mc-style).
+    // F3 View / F4 Edit are stubs (need file reading in the FileBrowser contract).
     val fKey: (Int) -> Unit = remember(c) { fKey@{ n ->
         val coord = c ?: return@fKey
         val pane = if (active == ActivePane.Local) coord.local else coord.remote
         when (n) {
-            2 -> pane.cursoredItem()?.let { renameTarget = pane to it } // Rename строки под курсором
-            5 -> { // Copy: выделение/курсор активной панели в другую (upload/download), с подтверждением
+            2 -> pane.cursoredItem()?.let { renameTarget = pane to it } // Rename the cursored row
+            5 -> { // Copy: active pane's selection/cursor to the other (upload/download), with confirmation
                 ensureOperandSelection(pane)
                 if (pane.operands().isNotEmpty()) copyTarget = pane
             }
-            6 -> { // Move: copy + delete источника, с подтверждением
+            6 -> { // Move: copy + delete the source, with confirmation
                 ensureOperandSelection(pane)
                 if (pane.operands().isNotEmpty()) moveTarget = pane
             }
             7 -> creatingFolder = true // MkDir
-            8 -> { // Delete активной панели, с подтверждением
+            8 -> { // Delete on the active pane, with confirmation
                 ensureOperandSelection(pane)
                 if (pane.operands().isNotEmpty()) deleteTarget = pane
             }
-            9 -> { coord.local.refresh(); coord.remote.refresh() } // Refresh обеих панелей
-            10 -> onQuit() // Quit: назад в терминал этой вкладки
-            else -> {} // F3 View / F4 Edit — заглушка
+            9 -> { coord.local.refresh(); coord.remote.refresh() } // Refresh both panes
+            10 -> onQuit() // Quit: back to this tab's terminal
+            else -> {} // F3 View / F4 Edit — stub
         }
     } }
 
@@ -285,8 +285,8 @@ private fun LiveSftpView(
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
                 if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                // Ctrl+H — показать/скрыть скрытые объекты (dotfiles); меняем персистентную настройку,
-                // а её применение к обеим панелям делает LaunchedEffect ниже (единый источник правды).
+                // Ctrl+H — show/hide hidden entries (dotfiles); toggle the persistent setting, and the
+                // LaunchedEffect below applies it to both panes (single source of truth).
                 if (event.isCtrlPressed && event.key == Key.H) {
                     sftpPrefs.setShowHidden(!sftpPrefs.showHidden)
                     return@onPreviewKeyEvent true
@@ -323,7 +323,7 @@ private fun LiveSftpView(
             }
             .focusable(),
     ) {
-        // Шапка: слева «File transfer» + подзаголовок, справа Upload + New folder.
+        // Header: "File transfer" + subtitle on the left, Upload + New folder on the right.
         Row(
             Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -335,8 +335,8 @@ private fun LiveSftpView(
                 Txt(stringResource(Res.string.sftp_subtitle_host, subtitle), color = D.faint, size = 11.5.sp, font = mono)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Upload: есть выделение локальных файлов → передаём их; иначе fallback — нативный
-                // диалог выбора файла → заливаем в текущий каталог remote-панели. New folder — в remote.
+                // Upload: if there's a local file selection → transfer it; otherwise fall back to the
+                // native file picker → upload into the remote pane's current directory. New folder — in remote.
                 GhostButton(
                     stringResource(Res.string.sftp_upload),
                     onClick = {
@@ -388,8 +388,8 @@ private fun LiveSftpView(
     }
 
     if (creatingFolder && c != null) {
-        // New folder создаётся в АКТИВНОЙ панели (F7/тулбар) — а не всегда в remote, иначе из локальной
-        // панели папка «улетала» в remote и казалось, что мы провалились в чужой каталог.
+        // New folder is created in the active pane (F7/toolbar) — not always in remote, otherwise a
+        // folder created from the local pane would "fly" to remote and seem to drop into another directory.
         val target = if (active == ActivePane.Local) c.local else c.remote
         NameDialog(
             title = stringResource(Res.string.sftp_new_folder),
@@ -401,9 +401,9 @@ private fun LiveSftpView(
         )
     }
 
-    // F8 Delete активной панели: подтверждение по operands() (выделение или строка под курсором).
-    // Если цель внезапно опустела (фоновый refresh между нажатием и кадром) — закрываем через эффект,
-    // а не записью стейта прямо в композиции.
+    // F8 Delete on the active pane: confirm by operands() (selection or the cursored row). If the target
+    // suddenly emptied (a background refresh between the press and the frame) — close via an effect, not
+    // by writing state directly in composition.
     deleteTarget?.let { pane ->
         val items = pane.operands()
         if (items.isEmpty()) {
@@ -417,8 +417,8 @@ private fun LiveSftpView(
         }
     }
 
-    // F6 Move активной панели в другую: copy + delete источника, с подтверждением. Назначение —
-    // текущий каталог противоположной панели.
+    // F6 Move the active pane to the other: copy + delete the source, with confirmation. Destination —
+    // the opposite pane's current directory.
     moveTarget?.let { pane ->
         val coord = c
         val items = pane.operands()
@@ -437,8 +437,8 @@ private fun LiveSftpView(
         }
     }
 
-    // F5 Copy активной панели в другую (upload/download), с подтверждением. Назначение — текущий
-    // каталог противоположной панели.
+    // F5 Copy the active pane to the other (upload/download), with confirmation. Destination — the
+    // opposite pane's current directory.
     copyTarget?.let { pane ->
         val coord = c
         val items = pane.operands()
@@ -460,8 +460,8 @@ private fun LiveSftpView(
         }
     }
 
-    // Конфликт перезаписи: передача (F5/F6 или drag) нашла в приёмнике одноимённые объекты. Взводится
-    // самим координатором ПОСЛЕ подтверждения копирования — иначе тихо перезаписали бы без спроса.
+    // Overwrite conflict: a transfer (F5/F6 or drag) found same-named entries in the destination. Raised
+    // by the coordinator after copy confirmation — otherwise we'd silently overwrite without asking.
     c?.overwrite?.let { conflict ->
         val single = conflict.names.singleOrNull()
         ConfirmDangerDialog(
@@ -474,7 +474,7 @@ private fun LiveSftpView(
         )
     }
 
-    // F2 Rename строки под курсором активной панели (классика mc — клавиатурный путь, без меню).
+    // F2 Rename the active pane's cursored row (classic mc — keyboard path, no menu).
     renameTarget?.let { (pane, item) ->
         NameDialog(
             title = stringResource(Res.string.sftp_rename),
@@ -488,17 +488,17 @@ private fun LiveSftpView(
 }
 
 /**
- * Цель пакетных F-операций активной панели: если ничего не помечено — выделить строку под курсором
- * (mc копирует/двигает/удаляет объект под курсором, когда нет выделения). На «..»/пустом — no-op.
+ * Target of the active pane's batch F-operations: if nothing is marked — select the cursored row (mc
+ * copies/moves/deletes the cursored item when there's no selection). On ".."/empty — no-op.
  */
 private fun ensureOperandSelection(pane: FilePaneController) {
     if (pane.selection.isEmpty()) pane.cursoredItem()?.let { pane.selectOnly(it) }
 }
 
 /**
- * Раскладка нижней панели F-клавиш в стиле mc (классика, адаптированная под Skerry).
- * [done] = клавиша реально что-то делает; false — заглушка. Нерабочие помечены «*»
- * в панели, чтобы было видно, что подключено, а что ещё нет.
+ * mc-style bottom F-key bar layout (classic, adapted for Skerry).
+ * [done] = the key actually does something; false — a stub. Non-working ones are marked "*" in the bar
+ * so it's visible what's wired and what isn't.
  */
 private data class FKeyDef(val n: Int, val label: StringResource, val done: Boolean)
 
@@ -515,9 +515,8 @@ private val FKEY_LABELS = listOf(
 )
 
 /**
- * Нижняя панель горячих клавиш (mc/Total Commander): строка ячеек «F3 View … F10 Quit».
- * И клик по ячейке, и нажатие F-клавиши идут через общий [onKey]. [enabled] гасит панель,
- * пока SFTP-координатор не открыт.
+ * Bottom hotkey bar (mc/Total Commander): a row of cells "F3 View … F10 Quit". Both a cell click and an
+ * F-key press go through the shared [onKey]. [enabled] disables the bar until the SFTP coordinator is open.
  */
 @Composable
 private fun FKeyBar(enabled: Boolean, onKey: (Int) -> Unit, mono: FontFamily) {
@@ -556,15 +555,15 @@ private fun FKeyCell(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        // «*» — пометка нерабочей заглушки (F3 View / F4 Edit).
+        // "*" marks a non-working stub (F3 View / F4 Edit).
         if (!def.done) Txt("*", color = D.sunset, size = 11.sp, weight = FontWeight.SemiBold)
     }
 }
 
 /**
- * Одна живая панель поверх [FilePaneController]: шапка [label] + путь (без
- * тулбара — навигация вверх строкой «..») и листинг. Файловые операции — через нижнюю панель F-клавиш,
- * выделение — ЛКМ (toggle) и rubber-band зажатой ПКМ.
+ * One live pane over [FilePaneController]: header [label] + path (no toolbar — up-navigation via the
+ * ".." row) and the listing. File operations go through the bottom F-key bar; selection is left-click
+ * (toggle) and rubber-band with held right-click.
  */
 @Composable
 private fun LivePane(
@@ -578,12 +577,12 @@ private fun LivePane(
     onActivate: () -> Unit,
     modifier: Modifier,
 ) {
-    // Держим курсорную строку в видимой области при навигации с клавиатуры. Индекс в LazyColumn
-    // сдвинут на синтетическую строку «..» (она идёт перед entries, когда мы не в корне).
+    // Keep the cursored row in view during keyboard navigation. The LazyColumn index is offset by the
+    // synthetic ".." row (it precedes entries when we're not at root).
     LaunchedEffect(pane.cursor, pane.cursorOnParent, pane.state) {
         val st = pane.state as? FilePaneState.Loaded ?: return@LaunchedEffect
         val target = if (pane.cursorOnParent) {
-            0 // строка «..» всегда сверху
+            0 // the ".." row is always on top
         } else {
             val idx = st.entries.indexOfFirst { it.path == pane.cursor }
             if (idx < 0) return@LaunchedEffect
@@ -651,16 +650,16 @@ private fun LivePaneList(
             item(key = "..") {
                 LiveFileRow(
                     "arrow_upward", D.faint, "..", "", selected = false, cursored = pane.cursorOnParent, active = active, mono,
-                    // Одиночный клик только ставит курсор на «..»; вверх — двойным кликом (как вход в каталог).
+                    // A single click only puts the cursor on ".."; going up is a double click (like entering a directory).
                     onPress = { onActivate(); pane.setCursorOnParent() },
                     onDoubleClick = { onActivate(); pane.goUp() },
-                    rubberBand = null, // строку «..» нельзя пометить — rubber-band на ней не нужен
+                    rubberBand = null, // the ".." row can't be marked — no rubber-band needed on it
                 )
             }
         }
         items(entries, key = { it.path }) { entry ->
-            // Одиночный клик (по нажатию): активировать панель и навести курсор — НЕ помечает и НЕ входит.
-            // Вход в каталог — двойным кликом (open; для файла no-op). Выделение — ПКМ/Space/Insert.
+            // Single click (on press): activate the pane and place the cursor — doesn't mark or enter.
+            // Entering a directory is a double click (open; no-op for a file). Selection — RMB/Space/Insert.
             val onPress = {
                 onActivate()
                 pane.setCursor(entry)
@@ -688,11 +687,11 @@ private fun LivePaneList(
 }
 
 /**
- * Жест rubber-band строки (выделение зажатой ПКМ в стиле mc). Нажатие красит строку-[entry] (toggle
- * по её текущему состоянию), протяжка вниз/вверх красит весь диапазон в тот же знак. Курсор мыши,
- * захваченный строкой нажатия, переводим в координаты списка через смещение строки в [listState],
- * затем ищем строку под ним в [listState] и красим до неё. Скролл при протяжке у краёв не делаем
- * (правая кнопка список не прокручивает) — смещения стабильны на всё время жеста.
+ * Row rubber-band gesture (mc-style selection with held RMB). A press paints [entry] (toggle by its
+ * current state), dragging down/up paints the whole range with the same sign. The mouse cursor captured
+ * by the pressed row is translated into list coordinates via the row offset in [listState], then the row
+ * under it is found in [listState] and painted up to it. No scroll on edge drag (the right button doesn't
+ * scroll the list) — offsets are stable for the whole gesture.
  */
 private class RowRubberBand(
     val entry: FileItem,
@@ -701,10 +700,10 @@ private class RowRubberBand(
     val entries: List<FileItem>,
     val onActivate: () -> Unit,
 ) {
-    // Member-extension на restricted-scope AwaitPointerEventScope — иначе awaitPointerEvent() звать нельзя.
+    // Member-extension on the restricted-scope AwaitPointerEventScope — else awaitPointerEvent() can't be called.
     suspend fun AwaitPointerEventScope.dragSelect(press: PointerEvent) {
-        onActivate() // красим в этой панели — делаем её активной (F-клавиши пойдут сюда)
-        // Знак фиксируем по строке под нажатием: не помечена → красим, помечена → стираем.
+        onActivate() // painting in this pane — make it active (F-keys go here)
+        // Fix the sign by the pressed row: not marked → paint, marked → clear.
         val select = entry.path !in pane.selection
         pane.rubberBandTo(entry, entry, select)
         press.changes.forEach { it.consume() }
@@ -712,7 +711,7 @@ private class RowRubberBand(
             .firstOrNull { it.key == entry.path }?.offset ?: 0
         while (true) {
             val drag = awaitPointerEvent()
-            if (!drag.buttons.isSecondaryPressed) break // ПКМ отпущена — конец жеста
+            if (!drag.buttons.isSecondaryPressed) break // RMB released — end of gesture
             val listY = anchorOffset + drag.changes.first().position.y
             val key = listState.layoutInfo.visibleItemsInfo
                 .firstOrNull { listY >= it.offset && listY < it.offset + it.size }?.key as? String
@@ -724,16 +723,15 @@ private class RowRubberBand(
 }
 
 /**
- * Строка живого листинга (иконка + имя + размер, без ⋮). ЛКМ просто
- * ставит курсор (НЕ помечает и НЕ входит в каталог) — реагирует мгновенно по нажатию ([onPress]),
- * чтобы не было задержки распознавания двойного клика. Двойной клик — вход в каталог ([onDoubleClick]).
- * Выделение — ПКМ-нажатие/протяжка (rubber-band, [RowRubberBand]) либо Space/Insert. Контекстного
- * меню нет: действия идут через нижнюю панель F-клавиш.
+ * A live listing row (icon + name + size, no ⋮). Left-click just places the cursor (doesn't mark or
+ * enter a directory) — responds instantly on press ([onPress]) so there's no double-click recognition
+ * delay. A double click enters the directory ([onDoubleClick]). Selection — RMB press/drag (rubber-band,
+ * [RowRubberBand]) or Space/Insert. No context menu: actions go through the bottom F-key bar.
  */
-/** Какая из двух панелей активна (получает клавиатуру и курсорную подсветку). */
+/** Which of the two panes is active (receives the keyboard and cursor highlight). */
 private enum class ActivePane { Local, Remote }
 
-/** Порог двойного клика по строке (мс между двумя нажатиями ЛКМ → вход в каталог). */
+/** Double-click threshold for a row (ms between two LMB presses → enter directory). */
 private const val DOUBLE_CLICK_MS = 350L
 
 @Composable
@@ -748,15 +746,15 @@ private fun LiveFileRow(
     mono: FontFamily,
     onPress: () -> Unit,
     onDoubleClick: () -> Unit,
-    // Данные для rubber-band зажатой ПКМ (mc): строка-якорь, контроллер, состояние списка для
-    // перевода позиции курсора в строку, и текущий листинг. null для синтетической строки «..».
+    // Data for held-RMB rubber-band (mc): the anchor row, controller, list state for translating the
+    // cursor position to a row, and the current listing. null for the synthetic ".." row.
     rubberBand: RowRubberBand?,
 ) {
-    // Последние колбэки без перезапуска жеста (pointerInput ключуем на Unit — он живёт всю жизнь строки).
+    // Latest callbacks without restarting the gesture (pointerInput is keyed on Unit — it lives the row's whole life).
     val currentPress by rememberUpdatedState(onPress)
     val currentDouble by rememberUpdatedState(onDoubleClick)
-    // Курсор (позиция навигации) и выделение (помеченные файлы) — разные сущности mc: курсор активной
-    // панели — яркая полоса, неактивной — рамка; выделение — подсветка + жирное имя.
+    // Cursor (navigation position) and selection (marked files) are distinct in mc: the active pane's
+    // cursor is a bright bar, the inactive one's a border; selection is a highlight + bold name.
     val rowBg = when {
         cursored && active -> D.cyan.copy(alpha = 0.22f)
         selected -> D.cyan06
@@ -768,10 +766,10 @@ private fun LiveFileRow(
             .clip(RoundedCornerShape(5.dp))
             .background(rowBg)
             .then(if (cursored && !active) Modifier.border(1.dp, D.lineStrong, RoundedCornerShape(5.dp)) else Modifier)
-            // ЛКМ: свой разбор тапов в одном цикле — надёжнее detectTapGestures (тот терял двойной клик
-            // из-за slop/тайм-аутов). Каждое нажатие ЛКМ мгновенно ставит курсор (currentPress); два
-            // нажатия подряд ближе DOUBLE_CLICK_MS — это двойной клик (вход в каталог). Время берём из
-            // самого события (uptimeMillis) — детерминированно. ПКМ пропускаем (её ведёт rubber-band ниже).
+            // LMB: our own tap parsing in one loop — more reliable than detectTapGestures (which lost
+            // double clicks to slop/timeouts). Each LMB press instantly places the cursor (currentPress);
+            // two presses closer than DOUBLE_CLICK_MS are a double click (enter directory). Time comes
+            // from the event itself (uptimeMillis) — deterministic. RMB is skipped (rubber-band below handles it).
             .pointerInput(Unit) {
                 var lastDownMs = 0L
                 awaitPointerEventScope {
@@ -782,21 +780,21 @@ private fun LiveFileRow(
                         currentPress()
                         if (t - lastDownMs <= DOUBLE_CLICK_MS) {
                             currentDouble()
-                            lastDownMs = 0L // сброс, чтобы тройной клик не дал второй вход
+                            lastDownMs = 0L // reset so a triple click doesn't give a second enter
                         } else {
                             lastDownMs = t
                         }
                     }
                 }
             }
-            // ПКМ (mc): нажатие красит строку (toggle по знаку), протяжка вниз/вверх красит диапазон в
-            // тот же знак — rubber-band. Идёт ПОСЛЕ детектора тапов (inner) и потребляет правую кнопку
-            // в Main-проходе раньше — поэтому detectTapGestures (requireUnconsumed) её игнорирует, а ЛКМ
-            // не трогает (без consume) и достаётся детектору тапов.
+            // RMB (mc): a press paints the row (toggle by sign), dragging down/up paints the range with
+            // the same sign — rubber-band. It runs after the tap detector (inner) and consumes the right
+            // button in the Main pass earlier — so detectTapGestures (requireUnconsumed) ignores it, while
+            // LMB is untouched (no consume) and reaches the tap detector.
             .then(
                 if (rubberBand != null) {
-                    // Ключ — якорь+листинг (стабильны во время протяжки: смена selection их не трогает,
-                    // поэтому жест не перезапускается прямо посреди rubber-band).
+                    // Key — anchor+listing (stable during a drag: a selection change doesn't touch them,
+                    // so the gesture isn't restarted mid rubber-band).
                     Modifier.pointerInput(rubberBand.entry, rubberBand.entries) {
                         awaitPointerEventScope {
                             while (true) {
@@ -834,7 +832,7 @@ private fun LiveFileRow(
     }
 }
 
-/** Полоса прогресса передачи: активная (бар + счётчик), ошибка (с закрытием) или ничего при Idle. */
+/** Transfer progress bar: active (bar + counter), error (with a close), or nothing when Idle. */
 @Composable
 private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismiss: () -> Unit) {
     when (transfer) {
@@ -884,9 +882,9 @@ private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismi
     }
 }
 
-// Диалоги.
+// Dialogs.
 
-/** Модальный ввод имени (New folder / Rename) в дизайн-стиле. Confirm активен только при валидном имени. */
+/** Modal name input (New folder / Rename). Confirm is enabled only for a valid name. */
 @Composable
 internal fun NameDialog(
     title: String,
@@ -896,16 +894,16 @@ internal fun NameDialog(
     onDismiss: () -> Unit,
     existing: Set<String> = emptySet(),
 ) {
-    // Ключ initial: при повторном показе под другой entry (rename без выхода из композиции) поле
-    // должно сброситься на новое имя, а не сохранить прежнее.
+    // Keyed on initial: on a re-show under a different entry (rename without leaving composition) the
+    // field must reset to the new name rather than keep the old one.
     var name by remember(initial) { mutableStateOf(initial) }
     val trimmed = name.trim()
-    // Конфликт имён ловим заранее (имя уже есть в каталоге) — иначе mkdir/rename упал бы в Error и
-    // панель «прыгнула» бы; вместо этого показываем сообщение в диалоге и держим его открытым.
-    // initial разрешён (rename в то же имя — no-op, не конфликт).
+    // Catch name conflicts early (name already in the directory) — otherwise mkdir/rename would fail
+    // into Error and the pane would "jump"; instead show a message in the dialog and keep it open.
+    // initial is allowed (rename to the same name — a no-op, not a conflict).
     val conflict = trimmed.isNotEmpty() && trimmed != initial && trimmed in existing
-    // Отвергаем пустое имя, разделитель пути, «.»/«..» и управляющие символы (null-байт/перевод
-    // строки) — последние ломают пути на POSIX-ФС/SFTP-сервере и вёрстку строки.
+    // Reject an empty name, a path separator, "."/".." and control characters (null byte/newline) — the
+    // latter break paths on POSIX FS/SFTP servers and the row layout.
     val valid = trimmed.isNotEmpty() &&
         "/" !in trimmed &&
         trimmed != "." &&
@@ -914,19 +912,19 @@ internal fun NameDialog(
     val mono = LocalFonts.current.mono
     val ok = valid && !conflict
     val submit = { if (ok) onConfirm(trimmed) }
-    // Автофокус: поле должно быть готово к вводу сразу при открытии диалога, без клика.
+    // Autofocus: the field should be ready for input the moment the dialog opens, without a click.
     val fieldFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { fieldFocus.requestFocus() }
     SftpDialogFrame(onDismiss = onDismiss) {
             Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
-            // Рамка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+            // Border in decorationBox so a click anywhere in the field places the caret.
             BasicTextField(
                 value = name,
                 onValueChange = { name = it },
                 singleLine = true,
                 textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono),
                 cursorBrush = SolidColor(D.cyan),
-                // Enter подтверждает (если имя валидно), Esc закрывает — обработчик ДО focusable поля.
+                // Enter confirms (if the name is valid), Esc closes — handler before the focusable field.
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(fieldFocus)
@@ -966,8 +964,8 @@ internal fun NameDialog(
 }
 
 /**
- * Подтверждение удаления пакета [items] (F8 над активной панелью): один объект — конкретное имя,
- * несколько — счётчик. Текст предупреждает о рекурсии, если в пакете есть каталог.
+ * Confirmation for deleting a batch of [items] (F8 on the active pane): a single item — its name,
+ * several — a count. The text warns about recursion if the batch contains a directory.
  */
 @Composable
 private fun ConfirmDeleteItemsDialog(items: List<FileItem>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
@@ -989,7 +987,7 @@ private fun ConfirmDeleteItemsDialog(items: List<FileItem>, onConfirm: () -> Uni
 }
 
 /**
- * Подтверждение копирования пакета [items] в каталог [destPath] панели [destLabel] (F5).
+ * Confirmation for copying a batch of [items] into directory [destPath] of pane [destLabel] (F5).
  */
 @Composable
 private fun ConfirmCopyDialog(
@@ -1013,8 +1011,8 @@ private fun ConfirmCopyDialog(
 }
 
 /**
- * Подтверждение перемещения пакета [items] в каталог [destPath] панели [destLabel] (F6). Перемещение
- * между ФС = копирование + удаление источника, поэтому подтверждаем явно.
+ * Confirmation for moving a batch of [items] into directory [destPath] of pane [destLabel] (F6). Moving
+ * between filesystems = copy + delete the source, so confirm explicitly.
  */
 @Composable
 private fun ConfirmMoveDialog(
@@ -1038,9 +1036,9 @@ private fun ConfirmMoveDialog(
 }
 
 /**
- * Общий каркас диалога подтверждения (заголовок + текст + Cancel/действие) в дизайн-стиле. Управляется
- * с клавиатуры (mc-стиль): по умолчанию фокус на действии — Enter сразу подтверждает (F8→Enter удаляет);
- * ←/→/Tab переключают между Cancel и действием, Esc отменяет. Фокусированная кнопка обведена рамкой.
+ * Shared confirmation dialog frame (title + text + Cancel/action). Keyboard-driven (mc-style): by
+ * default focus is on the action — Enter confirms immediately (F8→Enter deletes); ←/→/Tab switch between
+ * Cancel and the action, Esc cancels. The focused button is outlined.
  */
 @Composable
 internal fun ConfirmDangerDialog(
@@ -1086,9 +1084,9 @@ internal fun ConfirmDangerDialog(
 }
 
 /**
- * Общий каркас модалки SFTP: [Dialog] + карточка 340dp (поверхность/скругление 12/line-рамка,
- * паддинг 18, контент колонкой с зазором 14). [modifier] дописывается ПОСЛЕ паддинга — так
- * ConfirmDangerDialog вешает свой фокус/клавиатурный обработчик, не меняя каркас.
+ * Shared SFTP modal frame: [Dialog] + a 340dp card (surface/12 rounding/line border, 18 padding, content
+ * in a column with 14 spacing). [modifier] is appended after the padding — so ConfirmDangerDialog hangs
+ * its focus/keyboard handler without changing the frame.
  */
 @Composable
 private fun SftpDialogFrame(
@@ -1111,7 +1109,7 @@ private fun SftpDialogFrame(
     }
 }
 
-/** Обводка кнопки диалога рамкой, когда она в фокусе клавиатуры (←/→/Tab). */
+/** Outlines a dialog button when it has keyboard focus (←/→/Tab). */
 @Composable
 private fun DialogButtonFocus(focused: Boolean, content: @Composable () -> Unit) {
     Box(
@@ -1122,7 +1120,7 @@ private fun DialogButtonFocus(focused: Boolean, content: @Composable () -> Unit)
     ) { content() }
 }
 
-/** Подтверждение удаления файла/каталога в дизайн-стиле. */
+/** File/directory deletion confirmation. */
 @Composable
 internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val isDir = entry.type == FileItemType.Directory
@@ -1145,9 +1143,9 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
     }
 }
 
-// Общее и мок-путь.
+// Shared and mock path.
 
-/** Центрированное уведомление в области листинга (открытие/ошибка/нет сессии). */
+/** Centered notice in the listing area (opening/error/no session). */
 @Composable
 private fun PaneNotice(icon: String, title: String, subtitle: String?, color: Color) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1162,14 +1160,14 @@ private fun PaneNotice(icon: String, title: String, subtitle: String?, color: Co
     }
 }
 
-/** Имя Material-иконки (лигатура [Sym]) по типу объекта файловой панели. */
+/** Material icon name ([Sym] ligature) for a file-pane item type. */
 private fun fileItemIcon(type: FileItemType): String = when (type) {
     FileItemType.Directory -> "folder"
     FileItemType.Symlink -> "link"
     FileItemType.File, FileItemType.Other -> "description"
 }
 
-/** Живая сессия есть, но не подключена: заголовок + уведомление. */
+/** A live session exists but isn't connected: header + notice. */
 @Composable
 private fun NoSessionSftpView(mono: FontFamily) {
     Column(Modifier.fillMaxSize().background(D.bg)) {
@@ -1181,7 +1179,7 @@ private fun NoSessionSftpView(mono: FontFamily) {
     }
 }
 
-/** Статичный мок (офскрин-рендер/превью без бэкенда сессий). */
+/** Static mock (offscreen render/preview without a session backend). */
 @Composable
 private fun MockSftpView(mono: FontFamily) {
     Column(Modifier.fillMaxSize().background(D.bg)) {

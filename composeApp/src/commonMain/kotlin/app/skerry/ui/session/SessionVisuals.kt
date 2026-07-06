@@ -5,17 +5,16 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.D
 
 /**
- * Цвет статус-точки сессии (вкладка titlebar, строка хоста в сайдбаре) по состоянию соединения:
- * подключено — зелёный, идёт connect — янтарный, ошибка — закатный, иначе (форма/нет сессии) —
- * приглушённый. Палитра — токены [D] макета.
+ * Session status-dot color (titlebar tab, sidebar host row) by connection state: connected -
+ * green, connecting - amber, error - sunset, otherwise (form/no session) - faint. Palette from
+ * [D] design tokens.
  */
 fun sessionDotColor(state: ConnectionUiState?): Color = when (state) {
     is ConnectionUiState.Connected -> D.moss
     ConnectionUiState.Connecting -> D.amber
     is ConnectionUiState.Error -> D.sunset
-    // Закрытие сессии: штатный выход shell (`exit`) — приглушённый (это не ошибка); пока идёт
-    // авто-реконнект — янтарный (как Connecting, «работаем над этим»); когда попытки исчерпаны —
-    // закатный, как ошибка (живой сессии нет).
+    // Clean shell exit is faint (not an error); auto-reconnect in progress is amber (like
+    // Connecting); exhausted retries are sunset, same as an error (no live session).
     is ConnectionUiState.Disconnected -> when {
         state.cleanExit -> D.faint
         state.reconnecting -> D.amber

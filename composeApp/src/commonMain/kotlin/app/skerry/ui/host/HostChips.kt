@@ -2,14 +2,14 @@ package app.skerry.ui.host
 
 import app.skerry.shared.host.Host
 
-/** Чип «все хосты» в начале фильтр-ленты списка Hosts (desktop-сайдбар и `Skerry Mobile.html`). */
+/** "All hosts" chip at the start of the Hosts list filter row (desktop sidebar and mobile). */
 const val ALL_HOSTS_CHIP = "All"
 
 /**
- * Фильтр-чипсы = `All` плюс уникальные теги хостов в порядке первого появления (каноническая форма
- * без `#`). Папки списка строятся отдельно по [Host.group] ([app.skerry.ui.host.groupHostsByFolder]):
- * группа = папка-секция, тег = чип-фильтр — две независимые оси. Чистая функция, зафиксирована
- * [HostChipsTest], переиспользуется desktop/мобильным списком.
+ * Filter chips: `All` plus unique host tags in order of first appearance (canonical form, no `#`).
+ * List folders are built separately by [Host.group] ([app.skerry.ui.host.groupHostsByFolder]) —
+ * group is the folder section, tag is the filter chip, two independent axes. Pure function, shared
+ * by desktop and mobile lists.
  */
 fun hostTagChips(hosts: List<Host>): List<String> = buildList {
     add(ALL_HOSTS_CHIP)
@@ -17,12 +17,12 @@ fun hostTagChips(hosts: List<Host>): List<String> = buildList {
     for (host in hosts) for (tag in host.tags) if (seen.add(tag)) add(tag)
 }
 
-/** Подпись чипа на экране: `All` как есть, тег — с префиксом `#` (значение в модели — без `#`). */
+/** Chip label for display: `All` as-is, tags prefixed with `#` (model value has no `#`). */
 fun hostChipLabel(chip: String): String = if (chip == ALL_HOSTS_CHIP) chip else "#$chip"
 
 /**
- * Сузить [hosts] активным чипом ([activeChip] = тег, `All` — без фильтра) и строкой [query] (AND).
- * Поиск без учёта регистра по имени/адресу/пользователю/группе/тегам («Search hosts, tags…»).
+ * Narrow [hosts] by the active chip ([activeChip] = tag, `All` = no filter) and [query] (AND).
+ * Case-insensitive search across name/address/username/group/tags.
  */
 fun filterHosts(hosts: List<Host>, activeChip: String = ALL_HOSTS_CHIP, query: String = ""): List<Host> {
     val needle = query.trim().lowercase()
@@ -33,7 +33,7 @@ fun filterHosts(hosts: List<Host>, activeChip: String = ALL_HOSTS_CHIP, query: S
     }
 }
 
-/** [needle] уже в нижнем регистре; теги хранятся в нижнем регистре (см. normalizeTag). */
+/** [needle] is already lowercase; tags are stored lowercase (see normalizeTag). */
 private fun Host.matchesQuery(needle: String): Boolean =
     label.lowercase().contains(needle) ||
         address.lowercase().contains(needle) ||

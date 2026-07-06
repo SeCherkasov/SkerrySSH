@@ -16,7 +16,7 @@ import kotlin.test.assertEquals
 import app.skerry.ui.terminal.ArrowKey
 import app.skerry.ui.terminal.arrowSequence
 
-/** Чистая логика мобильного терминал-экрана: статус-строка, решение Connect, sticky-ctrl. */
+/** Pure logic for the mobile terminal screen: status line, Connect decision, sticky-ctrl. */
 class MobileTerminalTest {
 
     private fun connected(): ConnectionUiState.Connected {
@@ -30,7 +30,7 @@ class MobileTerminalTest {
         return ConnectionUiState.Connected(TerminalScreenState(session, CoroutineScope(Job())))
     }
 
-    // Статус-строка шапки
+    // Header status line
 
     @Test
     fun status_text_reflects_connection_state() {
@@ -41,41 +41,41 @@ class MobileTerminalTest {
         assertEquals("no session", mobileTerminalStatusText(null))
     }
 
-    // Метрики статус-бара шапки (RTT/throughput).
+    // Header status-bar metrics (RTT/throughput).
 
     @Test
     fun rtt_label_formats_ms_or_dash_before_first_ping() {
         assertEquals("42 ms", mobileRttLabel(42))
         assertEquals("0 ms", mobileRttLabel(0))
-        assertEquals("—", mobileRttLabel(null)) // до первого замера/при сбое пинга
+        assertEquals("—", mobileRttLabel(null)) // before the first measurement / on ping failure
     }
 
     @Test
     fun rate_label_humanizes_or_dash_before_first_sample() {
-        // Гуманизация B/s, «—» пока нет замера.
+        // Humanized B/s, "—" until a sample exists.
         assertEquals("0 B/s", mobileRateLabel(0))
         assertEquals("1 KB/s", mobileRateLabel(1024))
         assertEquals("—", mobileRateLabel(null))
     }
 
-    // Решение при тапе Connect
+    // Decision on Connect tap
 
     @Test
     fun connect_resumes_live_session_else_opens_fresh() {
-        // Живая (подключена/подключается) сессия хоста — возобновляем, не плодим вкладки.
+        // A live (connected/connecting) session for the host is resumed, not duplicated as a new tab.
         assertEquals(MobileConnectAction.Resume, mobileConnectAction(connected()))
         assertEquals(MobileConnectAction.Resume, mobileConnectAction(ConnectionUiState.Connecting))
-        // Мёртвая/ошибочная/отсутствующая — переподключаемся заново.
+        // Dead/errored/missing session reconnects fresh.
         assertEquals(MobileConnectAction.OpenFresh, mobileConnectAction(ConnectionUiState.Error("x")))
         assertEquals(MobileConnectAction.OpenFresh, mobileConnectAction(ConnectionUiState.Form))
         assertEquals(MobileConnectAction.OpenFresh, mobileConnectAction(null))
     }
 
-    // sticky-ctrl на клавишной панели
+    // sticky-ctrl on the key panel
 
     @Test
     fun control_byte_encodes_ctrl_combos() {
-        // Ctrl+<буква> = код в верхнем регистре & 0x1F (C0). Регистр не важен.
+        // Ctrl+<letter> = uppercase code & 0x1F (C0). Case-insensitive.
         assertEquals("\u0003", controlByte('c')) // Ctrl+C = ETX
         assertEquals("\u0003", controlByte('C'))
         assertEquals("\u0004", controlByte('d')) // Ctrl+D = EOT
@@ -83,12 +83,12 @@ class MobileTerminalTest {
         assertEquals("\u001b", controlByte('[')) // Ctrl+[ = ESC
     }
 
-    // sticky-ctrl поверх ввода с софт-клавиатуры (IME-путь).
-    // ESC и control-байты строим из кодов (27.toChar()/controlByte) — никаких невидимых литералов.
+    // sticky-ctrl over soft-keyboard input (IME path).
+    // ESC and control bytes are built from codes (27.toChar()/controlByte), never invisible literals.
 
     @Test
     fun sticky_ctrl_encodes_first_soft_keyboard_char() {
-        // Армированный ctrl + буква с экранной клавиатуры → Ctrl+<буква>; остаток (если есть) как есть.
+        // Armed ctrl + a letter from the on-screen keyboard maps to Ctrl+<letter>; any remainder passes through.
         assertEquals(controlByte('c'), applyStickyCtrl(armed = true, input = "c"))
         assertEquals(controlByte('c') + "rest", applyStickyCtrl(armed = true, input = "crest"))
     }
@@ -99,7 +99,7 @@ class MobileTerminalTest {
         assertEquals("", applyStickyCtrl(armed = true, input = ""))
     }
 
-    // Стрелки с учётом DECCKM (application-cursor-keys)
+    // Arrows respecting DECCKM (application-cursor-keys)
 
     @Test
     fun arrows_use_csi_in_normal_mode() {
@@ -112,7 +112,7 @@ class MobileTerminalTest {
 
     @Test
     fun arrows_use_ss3_in_application_cursor_mode() {
-        // В DECCKM (vim/less прислали ESC[?1h) стрелки идут как SS3 ESC O <буква>.
+        // In DECCKM (vim/less sent ESC[?1h) arrows go as SS3 ESC O <letter>.
         val esc = 27.toChar().toString()
         assertEquals("${esc}OA", arrowSequence(ArrowKey.Up, applicationCursor = true))
         assertEquals("${esc}OB", arrowSequence(ArrowKey.Down, applicationCursor = true))

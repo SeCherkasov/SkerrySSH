@@ -8,7 +8,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Прямые тесты чистого разбора ответа модели (security-критичные функции бара подтверждения). */
+/** Direct tests of pure model-reply parsing (security-critical for the confirmation bar). */
 class AiReplyParserTest {
 
     // --- sanitizeCommand ---
@@ -56,7 +56,7 @@ class AiReplyParserTest {
     fun `isSafeInputChar rejects bidi and zero-width characters`() {
         // RLO, LRE, LRI, ZWSP, LRM, BOM, soft hyphen, word joiner, line separator, ALM.
         listOf(0x202E, 0x202A, 0x2066, 0x200B, 0x200E, 0xFEFF, 0x00AD, 0x2060, 0x2028, 0x061C)
-            .forEach { assertFalse(AiReplyParser.isSafeInputChar(it.toChar()), "ожидали запрет U+${it.toString(16)}") }
+            .forEach { assertFalse(AiReplyParser.isSafeInputChar(it.toChar()), "expected U+${it.toString(16)} to be rejected") }
     }
 
     @Test
@@ -134,7 +134,7 @@ class AiReplyParserTest {
 
     @Test
     fun `parse ignores a CMD line that is itself prose`() {
-        // CMD-строка с прозой не должна попасть в слот с кнопкой Run; ASK берёт верх.
+        // A CMD line containing prose must not land in the Run-button slot; ASK takes precedence.
         val reply = AiReplyParser.parse("CMD: please clarify the request\nASK: What exactly?")
         assertIs<Reply.Ask>(reply)
     }

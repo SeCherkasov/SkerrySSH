@@ -2,12 +2,12 @@ package app.skerry.ui.ai
 
 import app.skerry.shared.ai.AiPolicy
 
-/** Вариант per-host AI-политики для пикеров (форма соединения, настройки). */
+/** A per-host AI policy option for pickers (connection form, settings). */
 data class PolicyOption(val policy: AiPolicy, val icon: String, val title: String, val desc: String)
 
 /**
- * http://-endpoint AI-провайдера (кроме localhost/127.0.0.1) — повод предупредить: ключ и промпт
- * (при Permissive — вместе с секретами) уйдут открытым текстом, как небезопасный sync-URL в паринге.
+ * Whether an AI provider endpoint uses plain http:// (excluding localhost/127.0.0.1) — the key and
+ * prompt (with secrets, under Permissive) would travel in plaintext.
  */
 fun isInsecureAiEndpoint(url: String): Boolean {
     val u = url.trim()

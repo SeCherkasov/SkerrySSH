@@ -13,9 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
 /**
- * Скрим модального оверлея: затемнение на весь экран, клик мимо карточки — [onDismiss], карточка
- * центрируется (или по [contentAlignment]). Карточка внутри [content] должна гасить собственные
- * клики ([consumeClicks]), иначе тап по ней закрыл бы модалку.
+ * Modal overlay scrim: full-screen dimming, tap outside the card calls [onDismiss]; the card
+ * centers (or uses [contentAlignment]). The card inside [content] must consume its own clicks
+ * ([consumeClicks]), or tapping it would also dismiss the modal.
  */
 @Composable
 fun ModalScrim(
@@ -35,7 +35,7 @@ fun ModalScrim(
     )
 }
 
-/** Гасит клики по карточке модалки (no-op-clickable без индикации), чтобы тап не дошёл до скрима. */
+/** Consumes clicks on a modal card (no-op clickable, no indication) so taps don't reach the scrim. */
 @Composable
 fun Modifier.consumeClicks(): Modifier =
     clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})

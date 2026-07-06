@@ -13,30 +13,31 @@ import io.ktor.websocket.close
 import kotlinx.coroutines.launch
 
 /**
- * WS push (`docs/skerry-sync-design.md` §3): сервер шлёт сигналы «появились изменения, сделай
- * дельта-pull» — никакого содержимого в кадрах. Форматы кадров:
- * - `{cursor}` — курсор аккаунтного vault (исторический формат);
- * - `team:{teamId}:{cursor}` — курсор записей команды;
- * - `teams` — изменился состав/приглашения — клиент перечитывает список команд.
+ * WS push (`docs/skerry-sync-design.md` §3): the server sends "changes are available, do a delta
+ * pull" signals, no content in frames. Frame formats:
+ * - `{cursor}` — account vault cursor (legacy format);
+ * - `team:{teamId}:{cursor}` — team record cursor;
+ * - `teams` — membership/invites changed, client re-reads the team list.
  */
 fun Route.syncWebSocket(services: Services) {
     webSocket("/sync") {
         val principal = call.principal<JWTPrincipal>()
         if (principal == null) {
-            // Defense-in-depth: маршрут стоит под authenticate("auth-jwt"), но при случайном
-            // переносе наружу закрываемся явным CloseReason, а не молчаливым обрывом.
+            // Defense-in-depth: the route sits under authenticate("auth-jwt"), but if it's ever
+            // accidentally moved outside that, close with an explicit CloseReason, not a silent drop.
             close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "authentication required"))
             return@webSocket
         }
         val accountId = principal.accountId
         val deviceId = principal.deviceId
 
-        // Уведомления — в дочерней корутине; основная читает incoming, чтобы Close-кадр клиента
-        // (и обрыв соединения) завершал сессию сразу, а не висел в collect до следующего publish.
+        // Notifications run in a child coroutine; the main one reads incoming so a client Close
+        // frame (or connection drop) ends the session immediately, instead of hanging in collect
+        // until the next publish.
         val notifications = launch {
             services.notifier.forAccount(accountId).collect { cursor ->
-                // JWT проверяется лишь на рукопожатии; отзыв устройства после подключения обязан
-                // перепроверяться на каждом сигнале — иначе отозванный сокет получал бы push вечно.
+                // JWT is only checked at handshake; device revocation after connecting must be
+                // rechecked on every signal, or a revoked socket would keep receiving pushes forever.
                 if (services.devices.isRevoked(accountId, deviceId)) {
                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "device revoked"))
                 } else {
@@ -46,8 +47,8 @@ fun Route.syncWebSocket(services: Services) {
         }
         val teamNotifications = launch {
             services.notifier.teamChanges().collect { change ->
-                // Членство меняется во время жизни сокета — фильтруем на каждом сигнале, а не на
-                // рукопожатии; заодно тот же revoke-чек, что и в аккаунтном канале.
+                // Membership can change during the socket's lifetime, so filter per signal rather
+                // than at handshake; also applies the same revoke check as the account channel.
                 if (services.devices.isRevoked(accountId, deviceId)) {
                     close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "device revoked"))
                 } else if (change.teamId in services.teams.activeTeamIdsFor(accountId)) {
@@ -65,8 +66,8 @@ fun Route.syncWebSocket(services: Services) {
             }
         }
         try {
-            // Протокол server-push-only: содержимое клиентских кадров игнорируем, канал дочитываем
-            // до закрытия (Close-кадр/обрыв TCP завершают итерацию).
+            // Server-push-only protocol: client frame content is ignored, the channel is drained
+            // until close (a Close frame or TCP drop ends the iteration).
             @Suppress("ControlFlowWithEmptyBody")
             for (frame in incoming) {
             }

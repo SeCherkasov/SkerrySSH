@@ -1,56 +1,55 @@
 package app.skerry.shared.sftp
 
 /**
- * SFTP поверх установленной SSH-сессии. Открывается из [app.skerry.shared.ssh.SshConnection.openSftp];
- * платформенная реализация — sshj на desktop ([app.skerry.shared.sftp] desktopMain), мобильные позже.
+ * SFTP over an established SSH session. Opened via [app.skerry.shared.ssh.SshConnection.openSftp];
+ * platform implementation is sshj on desktop ([app.skerry.shared.sftp] desktopMain).
  *
- * Каркас MVP: каталоги ([list]/[mkdir]/[rmdir]), метаданные ([stat]/[realpath]), целиковое
- * чтение/запись небольших файлов ([read]/[write]), операции над путями ([rename]/[remove]) и
- * потоковая передача файлов между сервером и локальной ФС ([download]/[upload]) — без загрузки
- * целиком в память, с колбэком прогресса. Докачка по смещению — отдельный шаг позже. Все методы
- * suspend: I/O уводится с вызывающего потока.
+ * Covers directories ([list]/[mkdir]/[rmdir]), metadata ([stat]/[realpath]), whole-file
+ * read/write for small files ([read]/[write]), path operations ([rename]/[remove]), and streamed
+ * transfer between server and local filesystem ([download]/[upload]) without loading the whole
+ * file into memory, with a progress callback. Resuming a partial transfer is not supported. All
+ * methods are suspend: I/O runs off the calling thread.
  *
- * Пути трактуются сервером (POSIX-семантика, разделитель `/`). Относительные пути и `~`
- * разворачивает сам сервер; [realpath] канонизирует путь (в т.ч. стартовый каталог по `.`).
+ * Paths are interpreted by the server (POSIX semantics, `/` separator). Relative paths and `~`
+ * are expanded by the server; [realpath] canonicalizes a path (including the start directory via `.`).
  */
 interface SftpClient {
 
     /**
-     * Содержимое каталога [path] без `.` и `..`. Порядок — как отдаёт сервер (не сортируется).
-     * @throws SftpException путь не существует, это не каталог или нет прав
+     * Contents of directory [path], excluding `.` and `..`. Order is server-supplied (not sorted).
+     * @throws SftpException path doesn't exist, isn't a directory, or lacks permission
      */
     suspend fun list(path: String): List<SftpEntry>
 
-    /** Метаданные одного объекта или `null`, если по [path] ничего нет. */
+    /** Metadata for one object, or `null` if [path] doesn't exist. */
     suspend fun stat(path: String): SftpEntry?
 
     /**
-     * Канонический абсолютный путь для [path] (разворачивает `.`, `..`, относительные пути).
-     * Передать `.` — получить стартовый рабочий каталог сессии.
-     * @throws SftpException путь не разрешается
+     * Canonical absolute path for [path] (resolves `.`, `..`, relative paths).
+     * Passing `.` returns the session's start working directory.
+     * @throws SftpException path can't be resolved
      */
     suspend fun realpath(path: String): String
 
     /**
-     * Прочитать файл [path] целиком в память (MVP — небольшие файлы).
-     * @throws SftpException путь не существует, это каталог или нет прав
+     * Reads file [path] entirely into memory (small files only).
+     * @throws SftpException path doesn't exist, is a directory, or lacks permission
      */
     suspend fun read(path: String): ByteArray
 
     /**
-     * Записать [data] в файл [path], создав или перезаписав его (truncate). Каталог-родитель
-     * должен существовать.
-     * @throws SftpException нет прав или родителя, либо [path] — каталог
+     * Writes [data] to file [path], creating or truncating it. The parent directory must exist.
+     * @throws SftpException no permission, missing parent, or [path] is a directory
      */
     suspend fun write(path: String, data: ByteArray)
 
     /**
-     * Потоково скачать удалённый файл [remotePath] в локальный путь [localPath] — без чтения
-     * целиком в память (в отличие от [read]). Локальный файл создаётся/перезаписывается. По ходу
-     * передачи вызывается [onProgress] с (переданоБайт, всегоБайт); всегоБайт — заявленный размер
-     * удалённого файла (`0`, если сервер его не сообщил). Колбэк может прийти из IO-потока:
-     * переключение на UI-поток — на вызывающей стороне.
-     * @throws SftpException файла нет, это каталог, нет прав или обрыв канала/локального I/O
+     * Streams remote file [remotePath] to local path [localPath] without loading it entirely into
+     * memory (unlike [read]). The local file is created/overwritten. [onProgress] is called with
+     * (transferred bytes, total bytes) as the transfer proceeds; total is the remote file's
+     * reported size (`0` if the server didn't report one). The callback may fire from an IO
+     * thread; switching to the UI thread is the caller's responsibility.
+     * @throws SftpException file missing, is a directory, no permission, or channel/local I/O failure
      */
     suspend fun download(
         remotePath: String,
@@ -59,10 +58,10 @@ interface SftpClient {
     )
 
     /**
-     * Потоково загрузить локальный файл [localPath] в удалённый [remotePath] — создаётся/
-     * перезаписывается. По ходу передачи вызывается [onProgress] с (переданоБайт, всегоБайт),
-     * где всегоБайт — размер локального файла. Каталог-родитель на сервере должен существовать.
-     * @throws SftpException локального файла нет, нет прав/родителя на сервере или обрыв канала
+     * Streams local file [localPath] to remote path [remotePath], creating/overwriting it.
+     * [onProgress] is called with (transferred bytes, total bytes), where total is the local
+     * file's size. The parent directory on the server must exist.
+     * @throws SftpException local file missing, no permission/parent on the server, or channel failure
      */
     suspend fun upload(
         localPath: String,
@@ -71,49 +70,49 @@ interface SftpClient {
     )
 
     /**
-     * Создать каталог [path]. Родитель должен существовать (без `-p`).
-     * @throws SftpException путь занят или нет прав
+     * Creates directory [path]. The parent must already exist (no `-p`).
+     * @throws SftpException path already exists or lacks permission
      */
     suspend fun mkdir(path: String)
 
     /**
-     * Удалить файл (не каталог) [path].
-     * @throws SftpException путь не существует, это каталог или нет прав
+     * Removes file (not directory) [path].
+     * @throws SftpException path doesn't exist, is a directory, or lacks permission
      */
     suspend fun remove(path: String)
 
     /**
-     * Удалить пустой каталог [path].
-     * @throws SftpException каталог не пуст, не существует или нет прав
+     * Removes empty directory [path].
+     * @throws SftpException directory not empty, doesn't exist, or lacks permission
      */
     suspend fun rmdir(path: String)
 
     /**
-     * Переименовать/переместить [from] в [to] в пределах сервера.
-     * @throws SftpException источника нет, цель занята или нет прав
+     * Renames/moves [from] to [to] on the server.
+     * @throws SftpException source missing, target exists, or no permission
      */
     suspend fun rename(from: String, to: String)
 
-    /** Закрыть SFTP-сессию (канал). Идемпотентно. SSH-соединение остаётся открытым. */
+    /** Closes the SFTP session (channel). Idempotent. The SSH connection stays open. */
     suspend fun close()
 }
 
 /**
- * Колбэк прогресса потоковой передачи ([SftpClient.download]/[SftpClient.upload]).
- * [transferred] — накопленное число переданных байт, [total] — полный размер (`0`, если неизвестен).
- * Вызывается многократно по ходу передачи; может прийти из IO-потока.
+ * Progress callback for streamed transfers ([SftpClient.download]/[SftpClient.upload]).
+ * [transferred] is the cumulative bytes transferred, [total] is the full size (`0` if unknown).
+ * Called repeatedly during the transfer; may fire from an IO thread.
  */
 fun interface SftpProgress {
     fun onProgress(transferred: Long, total: Long)
 }
 
-/** Тип объекта в SFTP-листинге; «прочее» — устройства, сокеты, FIFO и т.п. */
+/** Object type in an SFTP listing; `Other` covers devices, sockets, FIFOs, etc. */
 enum class SftpEntryType { File, Directory, Symlink, Other }
 
 /**
- * Метаданные объекта в SFTP. [path] — путь, переданный/разрешённый при листинге; [size] в байтах;
- * [modifiedEpochSeconds] — mtime (Unix-секунды); [permissions] — POSIX mode bits (как `st_mode &
- * 0o7777`), для UI прав доступа. Для симлинка атрибуты — самого линка (без перехода по цели).
+ * Metadata for an SFTP object. [path] is the path passed in or resolved during listing; [size] in
+ * bytes; [modifiedEpochSeconds] is mtime (Unix seconds); [permissions] are POSIX mode bits (as
+ * `st_mode & 0o7777`) for UI display. For a symlink, attributes describe the link itself, not its target.
  */
 data class SftpEntry(
     val name: String,
@@ -124,5 +123,5 @@ data class SftpEntry(
     val permissions: Int,
 )
 
-/** Ошибка SFTP-операции: нет пути/прав, неверный тип объекта или обрыв канала. */
+/** SFTP operation error: missing path/permission, wrong object type, or channel failure. */
 class SftpException(message: String, cause: Throwable? = null) : Exception(message, cause)

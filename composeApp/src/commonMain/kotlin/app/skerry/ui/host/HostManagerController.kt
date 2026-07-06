@@ -10,9 +10,9 @@ import app.skerry.shared.host.HostStore
 import app.skerry.shared.ssh.ConnectionType
 
 /**
- * Редактируемые поля профиля без [Host.id]: форма создания/правки оперирует черновиком,
- * а идентичность присваивает [HostManagerController]. [id] == null — создаётся новый хост,
- * иначе обновляется существующий.
+ * Editable profile fields without [Host.id]: the create/edit form operates on a draft, and
+ * [HostManagerController] assigns identity. [id] == null creates a new host, otherwise updates
+ * the existing one.
  */
 data class HostDraft(
     val id: String? = null,
@@ -28,13 +28,13 @@ data class HostDraft(
 )
 
 /**
- * Состояние менеджера хостов поверх [HostStore]: держит список профилей как Compose-state
- * и сводит мутации к стору, перечитывая [hosts] после каждой. Генерация id инъектируется
- * ([newId]) — в тестах детерминирована, на платформе подставляется UUID-генератор.
+ * Host manager state over [HostStore]: keeps the profile list as Compose state and routes
+ * mutations to the store, rereading [hosts] after each one. Id generation is injected ([newId]) —
+ * deterministic in tests, a UUID generator on the platform.
  *
- * Хранилище синхронно (мутации редки, инициируются из UI), поэтому контроллер не держит
- * собственную корутинную scope — в отличие от [app.skerry.ui.connection.ConnectionController],
- * где живёт поток вывода терминала.
+ * The store is synchronous (mutations are rare, UI-initiated), so the controller holds no
+ * coroutine scope of its own, unlike [app.skerry.ui.connection.ConnectionController], which hosts
+ * the terminal output stream.
  */
 @Stable
 class HostManagerController(
@@ -47,17 +47,17 @@ class HostManagerController(
     fun find(id: String): Host? = hosts.firstOrNull { it.id == id }
 
     /**
-     * Перечитать список из стора. Нужно после записей в обход контроллера (например, миграция vault
-     * пишет перенаправленные [Host.credentialId] прямо в [HostStore] при unlock).
+     * Reread the list from the store. Needed after writes bypassing the controller (e.g. vault
+     * migration writes remapped [Host.credentialId] straight into [HostStore] on unlock).
      */
     fun reload() {
         hosts = store.all()
     }
 
     /**
-     * Создать (если [HostDraft.id] == null) или обновить профиль и перечитать список.
-     * Возвращает назначенный id — для нового хоста это сгенерированный [newId], чтобы
-     * вызывающий мог выделить только что созданную запись.
+     * Create (if [HostDraft.id] == null) or update a profile and reread the list. Returns the
+     * assigned id — for a new host this is the generated [newId], so callers can highlight the
+     * newly created record.
      */
     fun save(draft: HostDraft): String {
         val id = draft.id ?: newId()
@@ -85,28 +85,28 @@ class HostManagerController(
     }
 
     /**
-     * Ручная сортировка (drag-and-drop): переставить хост [hostId] в папку [targetGroup] на позицию
-     * [targetIndexInGroup] среди её хостов. Покрывает и переупорядочивание внутри папки, и перенос в
-     * другую (с переписыванием [Host.group]). Пересчёт — чистой [moveHostToGroup], фиксация — атомарным
-     * [HostStore.replaceAll].
+     * Manual reorder (drag-and-drop): move host [hostId] into folder [targetGroup] at
+     * [targetIndexInGroup] among its hosts. Covers both reordering within a folder and moving to
+     * another (rewriting [Host.group]). Computed by pure [moveHostToGroup], committed atomically
+     * via [HostStore.replaceAll].
      */
     fun moveHost(hostId: String, targetGroup: String?, targetIndexInGroup: Int) {
-        // Пересчёт внутри store.reorder — над актуальным снимком стора под его блокировкой, а не над
-        // (потенциально устаревшим) Compose-state hosts; иначе гонка с конкурентной записью (миграция).
+        // Computed inside store.reorder, over the store's current snapshot under its lock, not
+        // over the (possibly stale) Compose-state hosts; otherwise races a concurrent write (migration).
         store.reorder { moveHostToGroup(it, hostId, targetGroup, targetIndexInGroup) }
         hosts = store.all()
     }
 
-    /** Ручная сортировка: переставить целую папку [group] на позицию [targetGroupIndex] среди папок. */
+    /** Manual reorder: move folder [group] as a whole to [targetGroupIndex] among folders. */
     fun moveFolder(group: String?, targetGroupIndex: Int) {
         store.reorder { moveGroup(it, group, targetGroupIndex) }
         hosts = store.all()
     }
 
     /**
-     * Переименовать группу [oldName] → [newName] во всех профилях. Чистый пересчёт [renameHostGroup]
-     * под блокировкой стора (как и прочие сортировки); набор id сохраняется. Side-channel пустых/
-     * схлопнутых групп правит вызывающий UI отдельно.
+     * Rename group [oldName] to [newName] across all profiles. Computed by pure [renameHostGroup]
+     * under the store's lock (like other reorders); the id set is preserved. The calling UI handles
+     * empty/collapsed groups separately.
      */
     fun renameGroup(oldName: String, newName: String) {
         store.reorder { renameHostGroup(it, oldName, newName) }
@@ -114,8 +114,8 @@ class HostManagerController(
     }
 
     /**
-     * «Удалить» группу [name]: её хосты разгруппировываются (`Host.group`=`null`, переезжают в
-     * Ungrouped) — сами профили и их секреты не трогаются. Реализация — [renameHostGroup] в `null`.
+     * "Delete" group [name]: its hosts are ungrouped (`Host.group`=`null`, moving to Ungrouped) —
+     * the profiles themselves and their secrets are untouched. Implemented via [renameHostGroup] to `null`.
      */
     fun deleteGroup(name: String) {
         store.reorder { renameHostGroup(it, name, null) }

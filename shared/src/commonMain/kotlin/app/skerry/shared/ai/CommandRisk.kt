@@ -1,12 +1,12 @@
 package app.skerry.shared.ai
 
-/** Уровень риска предложенной AI shell-команды. */
+/** Risk level of a proposed AI shell command. */
 enum class CommandRisk { None, Warn, Danger }
 
 /**
- * Оценка команды: уровень + человекочитаемая причина ([reason] `null` только для [CommandRisk.None]).
- * [destructive] — команда теряет/затирает данные (удаление, перезапись, форматирование): UI красит её
- * красным даже на уровне [CommandRisk.Warn] (не деструктивные Warn вроде sudo/kill — янтарные).
+ * Command assessment: level plus a human-readable reason ([reason] is `null` only for [CommandRisk.None]).
+ * [destructive] marks commands that lose/overwrite data (delete, overwrite, format): the UI colors it
+ * red even at [CommandRisk.Warn] (non-destructive warns like sudo/kill stay amber).
  */
 data class CommandAssessment(val risk: CommandRisk, val reason: String?, val destructive: Boolean = false) {
     companion object {
@@ -15,28 +15,27 @@ data class CommandAssessment(val risk: CommandRisk, val reason: String?, val des
 }
 
 /**
- * Эвристический классификатор потенциально опасных команд для терминального AI-бара.
+ * Heuristic classifier for potentially dangerous commands in the terminal AI bar.
  *
- * Принцип «AI under policy»: вывод модели — недоверенный источник, поэтому перед подтверждением
- * деструктивные команды подсвечиваются. [CommandRisk.Danger] в UI требует отдельного арм-подтверждения
- * («Run anyway» → «Confirm run»), [CommandRisk.Warn] показывает предупреждение с причиной. Danger
- * проверяется раньше Warn; первое совпадение выигрывает.
+ * "AI under policy" principle: model output is untrusted, so destructive commands are flagged
+ * before confirmation. [CommandRisk.Danger] requires a separate arm-confirmation in the UI
+ * ("Run anyway" -> "Confirm run"), [CommandRisk.Warn] shows a warning with a reason. Danger is
+ * checked before Warn; first match wins.
  *
- * Это НЕ песочница и не полный парсер шелла — намеренно консервативная эвристика, ловящая классические
- * footgun'ы. Последнее слово всегда за пользователем; ложных срабатываний допускаем больше, чем пропусков.
+ * Not a sandbox or a full shell parser — a deliberately conservative heuristic catching classic
+ * footguns. The user always has final say; false positives are preferred over misses.
  */
 object CommandRiskClassifier {
 
     private fun rx(pattern: String) = Regex(pattern, RegexOption.IGNORE_CASE)
 
-    // Все регэкспы скомпилированы один раз при инициализации объекта: assess() зовётся на каждый
-    // ввод/предложение AI, перекомпиляция ~25 паттернов на вызов была бы чистой потерей.
+    // All regexes are compiled once at object init: assess() is called on every AI suggestion/input,
+    // recompiling ~25 patterns per call would be pure waste.
 
     // ---------- DANGER ----------
     private val FORK_BOMB_ANON = rx(""":\s*\(\s*\)\s*\{[^}]*\|[^}]*&""")
-    // `}` вне класса — ТОЛЬКО экранированной: java.util.regex прощает голую, а ICU-движок
-    // Android (com.android.icu) бросает PatternSyntaxException — краш всего приложения при
-    // первой же оценке команды (грабли: desktop-тесты этот класс расхождений не ловят).
+    // A bare `}` outside a char class is tolerated by java.util.regex but throws
+    // PatternSyntaxException on Android's ICU engine — must stay escaped.
     private val FORK_BOMB_NAMED = rx("""\b(\w+)\s*\(\s*\)\s*\{[^}]*\|[^}]*&[^}]*\}\s*;\s*\1\b""")
     private val RM_WORD = rx("""\brm\b""")
     private val RM_RECURSIVE = rx("""\s-\w*r|\s--recursive""")
@@ -76,16 +75,16 @@ object CommandRiskClassifier {
     fun assess(command: String): CommandAssessment {
         val raw = command.trim()
         if (raw.isEmpty()) return CommandAssessment.SAFE
-        // Нормализуем строку так, как её увидит шелл, чтобы закрыть класс обходов «regex ≠ парсер»:
-        // снимаем экранирующие бэкслеши (r\m -\r\f → rm -rf), раскрываем $IFS/${'$'}{IFS} в пробел
-        // (rm${'$'}{IFS}-rf → rm -rf) и убираем кавычки (rm -r "/" == rm -r /).
+        // Normalize to how the shell would see it, closing the "regex != parser" bypass class:
+        // strip escaping backslashes (r\m -\r\f -> rm -rf), expand $IFS/${'$'}{IFS} to a space
+        // (rm${'$'}{IFS}-rf -> rm -rf), and drop quotes (rm -r "/" == rm -r /).
         val cmd = normalize(raw)
         val lower = cmd.lowercase()
         val compact = cmd.replace(" ", "")
 
         // ---------- DANGER ----------
 
-        // Fork-бомба :(){ :|:& };: — а также переименованная (обратная ссылка на то же имя функции).
+        // Fork bomb :(){ :|:& };: — including a renamed variant (self-referencing function).
         if (compact.contains(":(){:|:&};:") ||
             FORK_BOMB_ANON.containsMatchIn(cmd) ||
             FORK_BOMB_NAMED.containsMatchIn(cmd)
@@ -93,7 +92,7 @@ object CommandRiskClassifier {
             return danger("Fork bomb — will exhaust system resources.")
         }
 
-        // rm: рекурсивно + принудительно, либо рекурсивно по широкому пути (/, ~, $HOME, *)
+        // rm: recursive + force, or recursive on a broad target (/, ~, $HOME, *)
         if (RM_WORD.containsMatchIn(lower)) {
             val recursive = RM_RECURSIVE.containsMatchIn(lower)
             val force = RM_FORCE.containsMatchIn(lower)
@@ -102,7 +101,7 @@ object CommandRiskClassifier {
             if (recursive && broadTarget) return danger("Recursive delete of a broad path — irreversible data loss.")
         }
 
-        // Прямая запись на дисковое устройство / форматирование
+        // Direct write to a disk device / formatting
         if (DD_TO_DEVICE.containsMatchIn(lower) ||
             DISK_TOOLS.containsMatchIn(lower) ||
             REDIRECT_TO_DISK.containsMatchIn(lower)
@@ -110,23 +109,23 @@ object CommandRiskClassifier {
             return danger("Writes directly to a disk device — can destroy the filesystem.")
         }
 
-        // Скачать и сразу отдать в шелл (удалённый неверифицированный код)
+        // Download and pipe straight into a shell (unverified remote code)
         if (DOWNLOAD_TO_SHELL.containsMatchIn(lower)) {
             return danger("Pipes a downloaded script straight into a shell — runs unverified remote code.")
         }
 
-        // Любой пайп в интерпретатор (шелл ИЛИ python/perl/ruby/node, в т.ч. base64 -d | python3) —
-        // исполнение сконструированного/декодированного кода. Список интерпретаторов совпадает с curl|… выше.
+        // Any pipe into an interpreter (shell or python/perl/ruby/node, e.g. base64 -d | python3) —
+        // runs constructed/decoded code. Interpreter list matches curl|... above.
         if (PIPE_TO_INTERPRETER.containsMatchIn(lower)) {
             return danger("Pipes output into an interpreter — runs constructed or remote code.")
         }
 
-        // rsync --delete — зеркальное удаление, стирает всё в приёмнике, чего нет в источнике
+        // rsync --delete — mirror delete, wipes destination files absent from the source
         if (RSYNC_DELETE.containsMatchIn(lower)) {
             return danger("Mirror delete — wipes files in the destination that are absent from the source.")
         }
 
-        // Выключение / перезагрузка
+        // Power off / reboot
         if (POWER_OFF.containsMatchIn(lower) ||
             INIT_0_6.containsMatchIn(lower) ||
             SYSTEMCTL_POWER.containsMatchIn(lower)
@@ -134,21 +133,21 @@ object CommandRiskClassifier {
             return danger("Powers off or reboots the machine.")
         }
 
-        // Рекурсивная смена прав/владельца по системному пути
+        // Recursive permission/ownership change on a system path
         if (CHMOD_CHOWN_RECURSIVE.containsMatchIn(lower) &&
             SYSTEM_PATH.containsMatchIn(lower)
         ) {
             return danger("Recursive permission/ownership change on a system path.")
         }
 
-        // Перезапись security-критичных файлов (через > или tee)
+        // Overwrite of security-critical files (via > or tee)
         if (REDIRECT_TO_SECURITY_FILE.containsMatchIn(lower) ||
             TEE_TO_SECURITY_FILE.containsMatchIn(lower)
         ) {
             return danger("Overwrites a security-critical file.")
         }
 
-        // Сброс фаервола — можно отрезать себе доступ
+        // Firewall flush — can cut off own access
         if (FIREWALL_FLUSH.containsMatchIn(lower)) {
             return danger("Flushes firewall rules — may cut off remote access.")
         }
@@ -189,20 +188,20 @@ object CommandRiskClassifier {
     }
 
     /**
-     * Привести команду к тому виду, в котором её разберёт шелл, — чтобы простое экранирование не
-     * протаскивало опасную команду мимо literal-регэкспов. Известный не покрытый обход: косвенность
-     * через переменные (`T=/dev/sda; dd of=$T`) — требует отслеживания присваиваний; тут сознательно
-     * не ловим (основной гейт — подтверждение пользователя перед выполнением).
+     * Normalizes a command to how the shell would parse it, so simple escaping can't smuggle a
+     * dangerous command past the literal regexes. Known uncovered bypass: indirection via variables
+     * (`T=/dev/sda; dd of=$T`) would need assignment tracking; deliberately not caught here (the
+     * main gate is user confirmation before execution).
      */
     private fun normalize(command: String): String {
         var s = command
-        // $IFS / ${'$'}{IFS} шелл раскрывает в разделитель — подставляем пробел.
+        // The shell expands $IFS / ${'$'}{IFS} to a separator — substitute a space.
         s = s.replace("${'$'}{IFS}", " ").replace("${'$'}IFS", " ")
-        // Снять одиночные экранирующие бэкслеши: \x → x (как это делает шелл вне кавычек).
+        // Strip single escaping backslashes: \x -> x (as the shell does outside quotes).
         s = s.replace(ESCAPED_CHAR) { it.groupValues[1] }
-        // Кавычки не меняют исполнение команды/пути — убираем, чтобы `rm -r "/"` == `rm -r /`.
+        // Quotes don't change command/path execution — strip them so `rm -r "/"` == `rm -r /`.
         s = s.replace("\"", "").replace("'", "")
-        // Схлопнуть повторные пробелы (после раскрытия $IFS их может стать много).
+        // Collapse repeated spaces (there can be many after $IFS expansion).
         return s.replace(WHITESPACE_RUN, " ").trim()
     }
 

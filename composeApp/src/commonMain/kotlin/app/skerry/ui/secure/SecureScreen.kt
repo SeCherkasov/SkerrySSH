@@ -4,11 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 
 /**
- * Счётчик «держателей» защиты экрана от снимков. Флаг включается на первом захвате и снимается
- * только на последнем освобождении — перекрывающиеся секретные экраны (например таб Vault и диалог
- * поверх него) не снимают защиту преждевременно.
- *
- * apply вызывается из Compose-эффектов (UI-поток), поэтому счётчик без синхронизации.
+ * Reference-counted holder for the screenshot-protection flag: enabled on the first acquire,
+ * disabled only on the last release, so overlapping secure screens don't disable it prematurely.
+ * `apply` runs from Compose effects (UI thread), so the counter needs no synchronization.
  */
 class SecureFlagController(private val apply: (Boolean) -> Unit) {
     private var holders = 0
@@ -25,14 +23,14 @@ class SecureFlagController(private val apply: (Boolean) -> Unit) {
     }
 }
 
-/** Применяет флаг защиты от снимков экрана на платформе. Android — FLAG_SECURE; desktop — no-op. */
+/** Applies the platform screenshot-protection flag. Android: FLAG_SECURE; desktop: no-op. */
 expect fun applyPlatformSecureFlag(secure: Boolean)
 
 private val secureFlagController = SecureFlagController(::applyPlatformSecureFlag)
 
 /**
- * Помечает экран как секретный: пока этот composable в композиции, окно защищено от снимков экрана
- * и превью в списке недавних приложений. Только Android; desktop — no-op.
+ * Marks the screen as secret: while this composable is in composition, the window is protected
+ * from screenshots and recent-apps previews. Android only; desktop is a no-op.
  */
 @Composable
 fun SecureScreen() {

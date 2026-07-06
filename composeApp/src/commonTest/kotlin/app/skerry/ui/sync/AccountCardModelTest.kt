@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Проекция состояния sync на карточку аккаунта (Settings → Account / mobile More). */
+/** Projects sync status onto the account card (Settings -> Account / mobile More). */
 class AccountCardModelTest {
 
     @Test
@@ -77,10 +77,10 @@ class AccountCardModelTest {
 
     @Test
     fun server_host_handles_ipv6_literals() {
-        // IPv6 в скобках: наивный substringBefore(':') вернул бы «[» — берём содержимое скобок без порта.
+        // IPv6 in brackets: a naive substringBefore(':') would return "[" — take the bracket contents, no port.
         assertEquals("::1", serverHost("http://[::1]:8080/sync"))
         assertEquals("2001:db8::1", serverHost("https://[2001:db8::1]:8443"))
         assertEquals("::1", serverHost("http://[::1]"))
-        assertEquals(null, serverHost("http://[]:8080")) // пустые скобки — не хост
+        assertEquals(null, serverHost("http://[]:8080")) // empty brackets aren't a host
     }
 }

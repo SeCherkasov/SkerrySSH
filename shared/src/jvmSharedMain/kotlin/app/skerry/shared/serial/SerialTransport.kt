@@ -17,13 +17,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Транспорт последовательного порта, встроенный под тот же контракт [SshTransport], что и SSH/Telnet,
- * чтобы весь стек терминала/сессий переиспользовался без изменений. Возможности SSH (SFTP, проброс,
- * exec) отсутствуют и бросают [UnsupportedOperationException].
+ * Serial port transport implementing the same [SshTransport] contract as SSH/Telnet, so the
+ * terminal/session stack is reused unchanged. SSH-only capabilities (SFTP, forwarding, exec)
+ * are absent and throw [UnsupportedOperationException].
  *
- * Конфигурация приходит через [SshTarget]: [SshTarget.host] — имя устройства, [SshTarget.port] —
- * скорость (baud). Аутентификации у serial нет — [SshAuth] игнорируется. Открытие делает платформенный
- * [SerialSystem]; [openPort] инъектируется для тестов (по умолчанию — реальный порт).
+ * Configuration comes via [SshTarget]: [SshTarget.host] is the device name, [SshTarget.port] is
+ * the baud rate. Serial has no authentication — [SshAuth] is ignored. Opening is delegated to the
+ * platform [SerialSystem]; [openPort] is injectable for tests (defaults to a real port).
  */
 class SerialTransport(
     private val openPort: (SerialConfig) -> SerialPortHandle = { SerialSystem.open(it) },
@@ -35,15 +35,15 @@ class SerialTransport(
             val handle = try {
                 openPort(config)
             } catch (e: SerialUnavailableException) {
-                throw SshConnectionException(e.message ?: "Не удалось открыть порт ${target.host}", e)
+                throw SshConnectionException(e.message ?: "Failed to open port ${target.host}", e)
             }
             SerialConnection(handle)
         }
 }
 
 /**
- * Соединение поверх одного открытого порта: единственный интерактивный поток. Отсутствующие у serial
- * возможности SSH (exec, SFTP, пробросы) бросает база [StreamOnlyConnection].
+ * Connection over a single open port: one interactive stream. SSH capabilities serial lacks
+ * (exec, SFTP, forwarding) are thrown by the base [StreamOnlyConnection].
  */
 private class SerialConnection(private val handle: SerialPortHandle) : StreamOnlyConnection("Serial") {
 
@@ -52,7 +52,7 @@ private class SerialConnection(private val handle: SerialPortHandle) : StreamOnl
     override val isConnected: Boolean get() = handle.isOpen
 
     override suspend fun openShell(size: PtySize, term: String): ShellChannel {
-        check(shellOpened.compareAndSet(false, true)) { "Порт уже открыл свой поток" }
+        check(shellOpened.compareAndSet(false, true)) { "Port already opened its stream" }
         return SerialShellChannel(handle)
     }
 
@@ -62,11 +62,11 @@ private class SerialConnection(private val handle: SerialPortHandle) : StreamOnl
 }
 
 /**
- * Интерактивный поток последовательного порта. Каркас read-цикла/close — в базе
- * [app.skerry.shared.ssh.StreamShellChannel]: нативный serial-read не реагирует на Thread.interrupt
- * (unblockReadOnCancel = true — отмена сбора закрывает порт), а `read < 0` — это отключение
- * устройства, не «сервер закрыл shell» (eofOnStreamEnd = false). Записи сериализованы [writeLock].
- * У serial нет размера окна — [resize] no-op.
+ * Interactive serial port stream. The read-loop/close scaffolding lives in
+ * [app.skerry.shared.ssh.StreamShellChannel]: native serial reads ignore Thread.interrupt
+ * (unblockReadOnCancel = true — cancelling the collector closes the port), and `read < 0` means
+ * the device disconnected, not "server closed the shell" (eofOnStreamEnd = false). Writes are
+ * serialized via [writeLock]. Serial has no window size — [resize] is a no-op.
  */
 private class SerialShellChannel(private val handle: SerialPortHandle) :
     StreamShellChannel(unblockReadOnCancel = true, eofOnStreamEnd = false) {
@@ -78,7 +78,7 @@ private class SerialShellChannel(private val handle: SerialPortHandle) :
     override fun readBlocking(buffer: ByteArray): Int = handle.read(buffer)
 
     override fun closeSource() {
-        runCatching { handle.close() } // разблокирует read в output
+        runCatching { handle.close() } // unblocks read in output
     }
 
     override suspend fun write(data: ByteArray) = withContext(Dispatchers.IO) {
@@ -87,10 +87,10 @@ private class SerialShellChannel(private val handle: SerialPortHandle) :
                 handle.write(data)
                 countBytesUp(data.size)
             } catch (e: IOException) {
-                throw SshConnectionException("Запись в последовательный порт не удалась", e)
+                throw SshConnectionException("Failed to write to serial port", e)
             }
         }
     }
 
-    override suspend fun resize(size: PtySize) { /* у последовательного порта нет размера окна */ }
+    override suspend fun resize(size: PtySize) { /* serial port has no window size */ }
 }

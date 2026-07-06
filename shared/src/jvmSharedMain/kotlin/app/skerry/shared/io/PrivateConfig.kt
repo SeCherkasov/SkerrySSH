@@ -7,11 +7,9 @@ import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermissions
 
 /**
- * Помощники для приватных конфиг-файлов Skerry: каталог получает права 0700, файл — 0600, чтобы
- * локальные данные (инлайн-креды сниппетов, профили хостов, known-hosts) не были мир-читаемыми под
- * общим домашним каталогом. На системах без POSIX-атрибутов (Windows) права не выставляются —
- * доступ там ограничен ACL пользовательского профиля. Установка прав — best-effort: её отказ
- * (не-POSIX FS) не должен валить запись.
+ * Helpers for Skerry private config files: directory set to 0700, files to 0600 so local data
+ * (inline snippet creds, host profiles, known-hosts) is not world-readable. No-op on non-POSIX
+ * filesystems (Windows), where the user profile ACL applies; permission failures never fail the write.
  */
 object PrivateConfig {
 
@@ -20,31 +18,29 @@ object PrivateConfig {
     private val FILE_PERMS = setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)
 
     /**
-     * Гарантировать каталог [dir] с правами 0700. Если каталога нет — создаётся вместе с предками
-     * (атрибут применяется только к создаваемым уровням). Если каталог уже есть — права всё равно
-     * подтягиваются к 0700: апгрейд со старой установки, где каталог мог остаться 0755 от umask.
+     * Ensures [dir] exists with 0700 perms. Created with parents when missing; an existing directory
+     * is still forced to 0700 (upgrades installs where umask left it 0755).
      */
     fun ensureDir(dir: Path) {
         if (Files.exists(dir)) {
             runCatching { Files.setPosixFilePermissions(dir, DIR_PERMS_SET) }
             return
         }
-        // file-attribute не поддержан на не-POSIX FS — тогда создаём без него (права по umask).
+        // file attribute is unsupported on non-POSIX filesystems; fall back to creating without it.
         runCatching { Files.createDirectories(dir, DIR_PERMS) }
             .onFailure { runCatching { Files.createDirectories(dir) } }
     }
 
-    /** Выставить файлу права 0600 (best-effort; на не-POSIX FS — no-op). */
+    /** Sets file perms to 0600 (best-effort; no-op on non-POSIX filesystems). */
     fun harden(path: Path) {
         runCatching { Files.setPosixFilePermissions(path, FILE_PERMS) }
     }
 
     /**
-     * Атомарно записать [bytes] в [path] приватным файлом (0600) в каталоге 0700: запись идёт в
-     * уникальный временный файл рядом (на POSIX он сразу 0600 — `createTempFile`), затем он
-     * перемещается на место ([ATOMIC_MOVE], при неподдержке — [REPLACE_EXISTING]). Уникальное имя
-     * (а не фиксированное `.tmp`) исключает гонку между двумя процессами за один и тот же tmp. Сбой
-     * пробрасывается — потеря данных не должна быть тихой; недописанный tmp подчищается.
+     * Atomically writes [bytes] to [path] as a private file (0600). Writes to a unique adjacent temp
+     * file (0600 on POSIX via `createTempFile`), then moves it into place ([ATOMIC_MOVE], falling back
+     * to [REPLACE_EXISTING]). The unique name (not a fixed `.tmp`) avoids a race between two processes
+     * over the same temp. Failures are rethrown and the partial temp is cleaned up.
      */
     fun atomicWrite(path: Path, bytes: ByteArray) {
         val parent = path.parent
@@ -56,7 +52,7 @@ object PrivateConfig {
         }
         try {
             Files.write(tmp, bytes)
-            harden(tmp) // на не-POSIX FS createTempFile не даёт 0600 — добиваем явно (no-op на POSIX)
+            harden(tmp) // createTempFile does not set 0600 on non-POSIX filesystems; enforce it (no-op on POSIX)
             runCatching { Files.move(tmp, path, StandardCopyOption.ATOMIC_MOVE) }
                 .onFailure { Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING) }
         } catch (t: Throwable) {

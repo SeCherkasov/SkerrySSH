@@ -10,11 +10,11 @@ import app.skerry.ui.generated.resources.rail_tunnels
 import app.skerry.ui.generated.resources.rail_vault
 import org.jetbrains.compose.resources.StringResource
 
-/** Пункт левого icon-rail desktop-оболочки. Подпись — ресурс, локализуется по языку интерфейса. */
+/** Item of the desktop shell's left icon rail. Label is a resource, localized to the UI language. */
 data class RailItem(val view: DesktopView, val icon: String, val label: StringResource)
 
-// Files намеренно нет в рейле: SFTP открывается быстрой кнопкой (иконка folder) прямо на терминале
-// активной сессии — отдельный пункт рейла дублировал бы её. [DesktopView.Sftp] остаётся session-вью.
+// Files is intentionally absent from the rail: SFTP opens via a quick button (folder icon) on the
+// active session's terminal; a separate rail item would duplicate it. [DesktopView.Sftp] stays a session view.
 val RAIL = listOf(
     RailItem(DesktopView.Terminal, "terminal", Res.string.rail_terminal),
     RailItem(DesktopView.Ports, "lan", Res.string.rail_tunnels),

@@ -2,21 +2,22 @@ package app.skerry.shared.tunnel
 
 import kotlinx.serialization.Serializable
 
-/** Направление проброса сохранённого туннеля: `-L` / `-R` / `-D` (см. spec'и в ssh-ядре). */
+/** Direction of a saved tunnel forward: `-L` / `-R` / `-D` (see specs in the ssh core). */
 @Serializable
 enum class TunnelDirection { Local, Remote, Dynamic }
 
 /**
- * Сохранённый туннель (port forwarding) в духе Termius: самостоятельный объект, а не эфемерная часть
- * открытой терминальной сессии. Идентичность — стабильный [id] (назначается при создании, не меняется
- * при правках). [label] — отображаемое имя; [hostId] ссылается на [app.skerry.shared.host.Host], через
- * который поднимается проброс (secret берётся из vault по [Host.credentialId] при активации).
+ * A saved tunnel (port forwarding): a standalone object, not an ephemeral part of an open
+ * terminal session. Identity is the stable [id] (assigned at creation, unchanged by edits).
+ * [label] is the display name; [hostId] references the [app.skerry.shared.host.Host] used to
+ * open the forward (the secret is loaded from the vault via [Host.credentialId] on activation).
  *
- * [bindHost]/[bindPort] — слушатель на этой машине (для `-L`/`-D`) либо на сервере (для `-R`); `0` —
- * порт выберет ОС/сервер. [destHost]/[destPort] — адрес назначения для `-L`/`-R`; для `-D` (SOCKS5)
- * назначения нет, поэтому оба `null`.
+ * [bindHost]/[bindPort] is the listener on this machine (for `-L`/`-D`) or on the server (for
+ * `-R`); `0` lets the OS/server pick the port. [destHost]/[destPort] is the destination for
+ * `-L`/`-R`; `-D` (SOCKS5) has no destination, so both are `null`.
  *
- * Сам секрет тут НЕ хранится — туннель ссылается на хост, а хост на keychain-запись vault.
+ * The secret itself is not stored here — the tunnel references a host, and the host references
+ * a vault keychain record.
  */
 @Serializable
 data class Tunnel(

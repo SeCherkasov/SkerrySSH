@@ -3,16 +3,15 @@ package app.skerry.shared.ssh
 import kotlinx.serialization.Serializable
 
 /**
- * Транспорт профиля подключения. [SSH] — интерактивный shell поверх SSH (полный набор возможностей:
- * SFTP, проброс портов, метрики). [TELNET] — сырой TCP-стрим с Telnet-неготиацией опций (RFC 854),
- * без аутентификации/шифрования и без SFTP/пробросов. [SERIAL] — локальный последовательный порт
- * (desktop: нативный порт, Android: USB-OTG позже); в профиле `address` хранит имя устройства, `port` —
- * скорость (baud).
+ * Transport of a connection profile. [SSH] — interactive shell over SSH (SFTP, port forwarding,
+ * metrics). [TELNET] — raw TCP stream with Telnet option negotiation (RFC 854), no auth/encryption,
+ * no SFTP/forwarding. [SERIAL] — local serial port (desktop: native port, Android: USB-OTG); in the
+ * profile `address` holds the device name and `port` holds the baud rate.
  *
- * Живёт в пакете `ssh`, потому что это транспортный признак: [SshTarget.connectionType] несёт его в
- * маршрутизатор транспортов ([RoutingTransport]), а [app.skerry.shared.host.Host.connectionType] — в
- * профиле. Сериализуется по имени (как [app.skerry.shared.ai.AiPolicy]): порядок значений на обратную
- * совместимость не влияет, отсутствие поля в старых файлах даёт дефолт [SSH].
+ * Lives in package `ssh` as a transport tag: [SshTarget.connectionType] feeds it to the transport
+ * router ([RoutingTransport]), [app.skerry.shared.host.Host.connectionType] to the profile.
+ * Serialized by name (like [app.skerry.shared.ai.AiPolicy]): enum order doesn't affect backward
+ * compatibility; a missing field in old files defaults to [SSH].
  */
 @Serializable
 enum class ConnectionType { SSH, TELNET, SERIAL }

@@ -6,9 +6,9 @@ import kotlinx.coroutines.withContext
 import net.schmizz.sshj.connection.channel.direct.Session
 
 /**
- * Интерактивный shell-канал sshj: чтение PTY в output, запись/resize/close поверх [session].
- * Каркас read-цикла/close — в базе [StreamShellChannel]; read sshj-очереди реагирует на
- * Thread.interrupt, поэтому unblockReadOnCancel не нужен.
+ * Interactive sshj shell channel: reads the PTY into output, writes/resizes/closes via [session].
+ * The read-loop/close scaffolding lives in [StreamShellChannel]; sshj's queue read responds to
+ * Thread.interrupt, so unblockReadOnCancel isn't needed.
  */
 internal class SshjShellChannel(
     private val session: Session,
@@ -21,10 +21,10 @@ internal class SshjShellChannel(
     override fun readBlocking(buffer: ByteArray): Int = shell.inputStream.read(buffer)
 
     override fun closeSource() {
-        // Закрываем входной поток первым, чтобы разблокировать read в output;
-        // только потом рвём сам канал. Цикл сбора в output читает лишь shell.inputStream
-        // и не обращается к session, поэтому session.close() безопасен даже до того,
-        // как read разблокировался. runCatching — teardown не должен бросать наружу.
+        // Close the input stream first to unblock the output read loop; only then tear down the
+        // channel. The output collector reads only shell.inputStream and never touches session,
+        // so session.close() is safe even before the read unblocks. runCatching: teardown must
+        // not throw.
         runCatching { shell.inputStream.close() }
         runCatching { session.close() }
     }
@@ -35,7 +35,7 @@ internal class SshjShellChannel(
             shell.outputStream.flush()
             countBytesUp(data.size)
         } catch (e: IOException) {
-            throw SshConnectionException("Запись в shell-канал не удалась", e)
+            throw SshConnectionException("Failed to write to shell channel", e)
         }
     }
 
@@ -43,7 +43,7 @@ internal class SshjShellChannel(
         try {
             shell.changeWindowDimensions(size.cols, size.rows, size.widthPx, size.heightPx)
         } catch (e: IOException) {
-            throw SshConnectionException("Не удалось изменить размер PTY", e)
+            throw SshConnectionException("Failed to resize PTY", e)
         }
     }
 }

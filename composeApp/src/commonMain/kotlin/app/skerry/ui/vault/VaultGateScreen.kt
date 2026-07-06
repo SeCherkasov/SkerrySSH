@@ -86,52 +86,50 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-/** Авто-лок по простою: бездействие дольше этого порога блокирует vault (защита оставленного экрана). */
+/** Idle auto-lock: inactivity longer than this threshold locks the vault (protects a left-open screen). */
 private const val AUTO_LOCK_IDLE_MS = 5 * 60 * 1000L
 
 /**
- * Нужно ли запирать vault при уходе приложения в фон (`ON_STOP`) — платформенная политика.
- * Desktop: всегда (как раньше). Android: только если устройство реально заблокировано (keyguard) —
- * переключение на системный пикер/шторку фон vault не запирает, иначе выбор файла рвал бы сессию.
- * Простой по таймеру ([AUTO_LOCK_IDLE_MS]) и завершение процесса (свежий старт всегда заперт)
- * закрывают остальные случаи.
+ * Whether to lock the vault when the app goes to background (`ON_STOP`) — a platform policy. Desktop:
+ * always. Android: only if the device is actually locked (keyguard) — switching to a system picker/shade
+ * doesn't lock the vault, else file picking would break the session. The idle timer ([AUTO_LOCK_IDLE_MS])
+ * and process exit (a fresh start is always locked) cover the rest.
  */
 expect fun deviceMandatesAutoLock(): Boolean
 
 /**
- * Гейт мастер-пароля: пока [Vault] заблокирован, показывает форму создания или разблокировки;
- * после разблокировки рендерит [content] (остальной UI приложения). Контроллер живёт на время
- * композиции (привязан к идентичности [vault]/[biometrics]).
+ * Master-password gate: while [Vault] is locked, show the create or unlock form; after unlock render
+ * [content] (the rest of the app UI). The controller lives for the composition (tied to the
+ * [vault]/[biometrics] identity).
  *
- * Если передан [biometrics], форма входа предлагает разблокировку биометрией (промпт вызывается
- * автоматически при наличии включённой биометрии). Авто-лок: при уходе в фон (lifecycle `ON_STOP`)
- * и по простою ([AUTO_LOCK_IDLE_MS], таймер перезапускается касаниями) vault блокируется.
+ * If [biometrics] is passed, the unlock form offers biometric unlock (the prompt fires automatically
+ * when biometrics is enabled). Auto-lock: the vault locks on background (lifecycle `ON_STOP`) and on
+ * idle ([AUTO_LOCK_IDLE_MS], timer restarted by touches).
  *
- * Поля ввода Compose оперируют [String], поэтому пароль конвертируется в [CharArray] только на
- * сабмите и сразу затирается контроллером; сам строковый буфер поля живёт до рекомпозиции —
- * известное ограничение; секьюрный ввод без String — отдельный шаг.
+ * Compose input fields work with [String], so the password is converted to [CharArray] only on submit
+ * and wiped immediately by the controller; the field's string buffer lives until recomposition — a
+ * known limitation; secure String-free input is a separate step.
  */
 @Composable
 fun VaultGate(
     vault: Vault,
     biometrics: VaultBiometrics? = null,
-    // Локальный журнал событий безопасности (раздел Настройки → Безопасность). Прокидывается в
-    // контроллер: он пишет туда создание/смену пароля, включение/выключение биометрии, разблокировку
-    // биометрией. `null` — журнал не ведётся (мок/превью).
+    // Local security event log (Settings → Security). Passed to the controller: it records
+    // create/change password, biometrics enable/disable, biometric unlock. `null` — not logging (mock/preview).
     securityLog: SecurityLog? = null,
-    // Порог автоблокировки по простою (Настройки → Безопасность). Значение из настроек: при его
-    // изменении VaultGate рекомпозируется и idle-таймер перезапускается. `null` — таймер простоя
-    // выключен ([AutoLockDuration.Never]); блокировка при уходе в фон остаётся (deviceMandatesAutoLock).
+    // Idle auto-lock threshold (Settings → Security). From settings: changing it recomposes VaultGate and
+    // restarts the idle timer. `null` — idle timer off ([AutoLockDuration.Never]); background lock remains
+    // (deviceMandatesAutoLock).
     autoLockIdleMs: Long? = AUTO_LOCK_IDLE_MS,
     modifier: Modifier = Modifier,
-    // Внешняя чистка при сбросе (хосты/known_hosts/настройки по выбранному [ResetScope]). Вызывается
-    // после стирания vault; платформенная проводка (desktop `main`) подставляет реальную реализацию.
+    // External cleanup on reset (hosts/known_hosts/settings per the chosen [ResetScope]). Called after the
+    // vault is erased; the platform wiring (desktop `main`) supplies the real implementation.
     onReset: (ResetScope) -> Unit = {},
-    // [onPairingComplete] != null — платформа умеет связать это устройство по коду прямо на экране
-    // создания (быстрый паринг, вариант B): форма может показать аффорданс «у меня есть код», где
-    // координатор сам создаст vault под выбранным паролем и примет ключ аккаунта; по завершении форма
-    // зовёт [onPairingComplete], уводя гейт к предложению биометрии/в приложение. null — паринг с
-    // экрана создания недоступен (нет sync / превью), показывается только обычное создание.
+    // [onPairingComplete] != null — the platform can link this device by code right on the creation screen
+    // (quick pairing, variant B): the form can show an "I have a code" affordance where the coordinator
+    // creates the vault under the chosen password and adopts the account key; on completion the form calls
+    // [onPairingComplete], moving the gate to the biometrics offer / into the app. null — pairing from the
+    // creation screen is unavailable (no sync / preview), only normal creation is shown.
     createForm: @Composable (
         error: VaultGateError?,
         onCreate: (CharArray, CharArray) -> Unit,
@@ -152,24 +150,24 @@ fun VaultGate(
                 UnlockVaultForm(error, canUseBiometric, onUnlock, onBiometric, onForgotPassword)
             }
         },
-    // Шаг подключения sync в онбординге ([VaultGateState.OfferSync]) — показывается сразу после
-    // создания vault, ДО предложения биометрии. Форма сама дёргает SyncCoordinator (подключить/
-    // пропустить) и вызывает onDone, когда шаг завершён. null (по умолчанию) — шаг не показывается
-    // (на устройстве/в превью без sync); тогда после создания сразу биометрия/приложение.
+    // Sync connect step in onboarding ([VaultGateState.OfferSync]) — shown right after vault creation,
+    // before the biometrics offer. The form drives SyncCoordinator (connect/skip) itself and calls onDone
+    // when the step finishes. null (default) — the step isn't shown (device/preview without sync); then
+    // creation goes straight to biometrics/app.
     offerSyncForm: (@Composable (onDone: () -> Unit) -> Unit)? = null,
-    // Экран повреждённого файла: единственное действие — уйти на подтверждение сброса ([onReset]).
+    // Corrupted file screen: the only action is to go to reset confirmation ([onReset]).
     corruptedForm: @Composable (onReset: () -> Unit) -> Unit =
         { onResetClick ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CorruptedVaultForm(onResetClick) }
         },
-    // Экран подтверждения сброса: выбор объёма + явное подтверждение, затем onConfirm/onCancel.
+    // Reset confirmation screen: scope choice + explicit confirmation, then onConfirm/onCancel.
     resetForm: @Composable (onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) -> Unit =
         { onConfirm, onCancel ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { ResetVaultForm(onConfirm, onCancel) }
         },
-    // Разовое предложение включить биометрию сразу после создания vault. onEnable запускает промпт
-    // (включает биометрию), onSkip — пропускает; оба ведут в приложение. inFlight гасит кнопки во
-    // время промпта. Показывается только когда биометрия доступна (см. [VaultGateState.OfferBiometric]).
+    // One-time offer to enable biometrics right after vault creation. onEnable triggers the prompt
+    // (enables biometrics), onSkip skips; both lead into the app. inFlight disables buttons during the
+    // prompt. Shown only when biometrics is available (see [VaultGateState.OfferBiometric]).
     offerBiometricForm: @Composable (
         inFlight: Boolean,
         onEnable: () -> Unit,
@@ -182,15 +180,15 @@ fun VaultGate(
         },
     content: @Composable (onLock: () -> Unit) -> Unit,
 ) {
-    // onReset не должен быть ключом remember (контроллер пересоздавать на каждой смене лямбды нельзя —
-    // потерялись бы состояние/ввод). rememberUpdatedState даёт контроллеру всегда свежий колбэк, не
-    // делая его ключом: иначе inline-лямбда вызывающего «застыла» бы на первой композиции.
+    // onReset must not be a remember key (recreating the controller on every lambda change would lose
+    // state/input). rememberUpdatedState gives the controller an always-fresh callback without making it
+    // a key: otherwise the caller's inline lambda would "freeze" on the first composition.
     val currentOnReset by rememberUpdatedState(onReset)
-    // Наличие формы sync не меняется в течение жизни экрана — безопасно зафиксировать на старте
-    // контроллера (он решает, показывать ли шаг OfferSync).
+    // Whether a sync form exists doesn't change over the screen's life — safe to fix at controller start
+    // (it decides whether to show the OfferSync step).
     val offersSync = offerSyncForm != null
-    // Scope композиции — и для промптов биометрии ниже, и для асинхронных create/unlock контроллера
-    // (Argon2id вне UI-потока): гейт живёт, пока живёт контроллер, так что их жизненные циклы совпадают.
+    // Composition scope — for the biometric prompts below and for the controller's async create/unlock
+    // (Argon2id off the UI thread): the gate lives as long as the controller, so their lifecycles match.
     val scope = rememberCoroutineScope()
     val controller = remember(vault, biometrics, securityLog) {
         VaultGateController(
@@ -202,13 +200,13 @@ fun VaultGate(
             scope = scope,
         )
     }
-    // Стабильная ссылка (не новый инстанс на каждую рекомпозицию VaultGate) — иначе createForm и его
-    // поддерево (аффорданс паринга) перерисовывались бы лишний раз. null, когда паринг с экрана
-    // создания недоступен (нет sync).
+    // Stable reference (not a new instance per VaultGate recomposition) — else createForm and its subtree
+    // (the pairing affordance) would repaint needlessly. null when pairing from the creation screen is
+    // unavailable (no sync).
     val onPairingComplete: (() -> Unit)? =
         if (offersSync) remember(controller) { { controller.completePairing() } } else null
 
-    // Промпты биометрии резолвятся в композиции (stringResource), затем прокидываются в корутины.
+    // Biometric prompts are resolved in composition (stringResource), then passed into coroutines.
     val enablePrompt = BiometricPrompt(
         title = stringResource(Res.string.vtail_bio_enable_title),
         cancelLabel = stringResource(Res.string.vtail_bio_enable_cancel),
@@ -220,13 +218,12 @@ fun VaultGate(
         subtitle = stringResource(Res.string.vtail_bio_unlock_subtitle),
     )
 
-    // Авто-лок при уходе приложения в фон: чужие руки на разблокированном устройстве не должны
-    // получить открытый vault после сворачивания.
+    // Background auto-lock: other hands on an unlocked device must not get an open vault after minimizing.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, controller) {
         val observer = LifecycleEventObserver { _, event ->
-            // Не блокировать во время биометрического промпта: он может прислать ON_STOP, а блокировка
-            // посреди аутентификации потеряла бы её успешный результат (см. biometricInFlight).
+            // Don't lock during a biometric prompt: it may send ON_STOP, and locking mid-authentication
+            // would lose its successful result (see biometricInFlight).
             if (event == Lifecycle.Event.ON_STOP &&
                 controller.state == VaultGateState.Unlocked &&
                 !controller.biometricInFlight &&
@@ -239,8 +236,8 @@ fun VaultGate(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Авто-лок по простою: delay перезапускается при изменении activityTick (касание пользователя) и
-    // при смене порога [autoLockIdleMs] из настроек. null (AutoLockDuration.Never) — таймер выключен.
+    // Idle auto-lock: the delay restarts on activityTick change (user touch) and on [autoLockIdleMs]
+    // threshold change from settings. null (AutoLockDuration.Never) — timer off.
     if (controller.state == VaultGateState.Unlocked && autoLockIdleMs != null) {
         LaunchedEffect(controller.activityTick, autoLockIdleMs) {
             delay(autoLockIdleMs)
@@ -248,16 +245,16 @@ fun VaultGate(
         }
     }
 
-    // key по состоянию: при смене экрана Compose уничтожает и пересоздаёт поддерево формы,
-    // чтобы введённый пароль не пережил переход в slot-table (например, после lock()).
+    // key on state: on a screen change Compose destroys and recreates the form subtree, so the entered
+    // password doesn't survive the slot-table transition (e.g. after lock()).
     key(controller.state) {
         when (controller.state) {
             VaultGateState.NeedsCreate ->
                 createForm(
                     controller.error,
                     { password, confirm -> controller.create(password, confirm) },
-                    // null, когда платформа не провела sync (та же готовность, что и для OfferSync):
-                    // иначе claimPairing некому исполнить. Стабильная ссылка — см. onPairingComplete выше.
+                    // null when the platform didn't wire sync (same readiness as OfferSync): otherwise
+                    // there's nothing to run claimPairing. Stable reference — see onPairingComplete above.
                     onPairingComplete,
                 )
 
@@ -270,23 +267,23 @@ fun VaultGate(
                     { controller.beginReset() },
                 )
 
-            // Шаг sync в онбординге: форма сама подключает/пропускает sync и вызывает onDone, после
-            // чего dataKey финальный и можно безопасно предлагать биометрию. offerSyncForm здесь
-            // гарантированно не null — иначе контроллер не пришёл бы в OfferSync (offersSyncOnboarding).
+            // Sync step in onboarding: the form connects/skips sync itself and calls onDone, after which
+            // the dataKey is final and biometrics can be safely offered. offerSyncForm is guaranteed
+            // non-null here — else the controller wouldn't reach OfferSync (offersSyncOnboarding).
             VaultGateState.OfferSync ->
                 offerSyncForm?.invoke { controller.completeSyncOnboarding() }
 
             VaultGateState.Corrupted -> corruptedForm { controller.beginReset() }
 
             VaultGateState.Resetting -> {
-                // Системный «назад» на экране подтверждения сброса = «Отмена»: возврат на разблокировку,
-                // а не закрытие приложения (иначе единственный выход с danger-экрана — кнопка Cancel).
+                // System "back" on the reset confirmation screen = "Cancel": return to unlock, not close
+                // the app (else the only exit from the danger screen would be the Cancel button).
                 PlatformBackHandler { controller.cancelReset() }
                 resetForm({ scope -> controller.confirmReset(scope) }, { controller.cancelReset() })
             }
 
-            // Включение/отказ оба ведут в приложение: при отказе или сбое промпта vault уже открыт,
-            // биометрию можно настроить позже в разделе More. dismissBiometricOffer вызываем в любом исходе.
+            // Enable/decline both lead into the app: on decline or prompt failure the vault is already
+            // open, biometrics can be set up later in More. dismissBiometricOffer is called in any outcome.
             VaultGateState.OfferBiometric ->
                 offerBiometricForm(
                     controller.biometricInFlight,
@@ -294,12 +291,12 @@ fun VaultGate(
                     { controller.dismissBiometricOffer() },
                 )
 
-            // lock() переводит гейт в NeedsUnlock; key(state) рушит поддерево content, чей
-            // DisposableEffect рвёт живую SSH-сессию — блокировка заодно закрывает сессии.
+            // lock() moves the gate to NeedsUnlock; key(state) tears down the content subtree, whose
+            // DisposableEffect drops the live SSH session — locking closes sessions too.
             VaultGateState.Unlocked -> Box(
                 Modifier.fillMaxSize().pointerInput(Unit) {
-                    // наблюдаем нажатия на Initial-проходе, НЕ потребляя — дети получают события,
-                    // а таймер простоя перезапускается при каждом касании.
+                    // Observe presses on the Initial pass without consuming — children still get events,
+                    // and the idle timer restarts on each touch.
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -338,9 +335,9 @@ private fun CreateVaultForm(error: VaultGateError?, onCreate: (CharArray, CharAr
 }
 
 /**
- * Разовое предложение включить биометрию после создания vault (Material-дефолт; мобильный слой даёт
- * свой визуал). Vault уже открыт — это необязательный шаг: «Включить» запускает промпт, «Пропустить»
- * пускает в приложение. Кнопки гаснут на время промпта ([inFlight]).
+ * One-time offer to enable biometrics after vault creation (Material default; the mobile layer provides
+ * its own visuals). The vault is already open — this is optional: "Enable" triggers the prompt, "Skip"
+ * enters the app. Buttons disable during the prompt ([inFlight]).
  */
 @Composable
 private fun OfferBiometricForm(inFlight: Boolean, onEnable: () -> Unit, onSkip: () -> Unit) {
@@ -369,7 +366,7 @@ private fun UnlockVaultForm(
     var password by remember { mutableStateOf("") }
     val canSubmit = password.isNotEmpty()
 
-    // Если биометрия доступна и включена — вызываем промпт сразу при входе на форму (один раз).
+    // If biometrics is available and enabled — trigger the prompt on entering the form (once).
     if (canUseBiometric) {
         LaunchedEffect(Unit) { onBiometric() }
     }
@@ -399,8 +396,8 @@ private fun UnlockVaultForm(
 }
 
 /**
- * Экран повреждённого файла vault (Material-дефолт). Тупик: пароль ввести нельзя, единственный выход —
- * безвозвратный сброс. Кнопка лишь уводит на экран подтверждения [ResetVaultForm].
+ * Corrupted vault file screen (Material default). Dead end: no password entry, the only exit is an
+ * irreversible reset. The button just leads to the [ResetVaultForm] confirmation screen.
  */
 @Composable
 private fun CorruptedVaultForm(onReset: () -> Unit) {
@@ -416,8 +413,8 @@ private fun CorruptedVaultForm(onReset: () -> Unit) {
 }
 
 /**
- * Экран подтверждения безвозвратного сброса (Material-дефолт): выбор объёма ([ResetScope]) и
- * type-to-confirm — кнопка активна только когда вписано слово `RESET`. Список потерь — в подзаголовке.
+ * Irreversible reset confirmation screen (Material default): scope choice ([ResetScope]) and
+ * type-to-confirm — the button is enabled only when `RESET` is typed. The loss list is in the subtitle.
  */
 @Composable
 private fun ResetVaultForm(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
@@ -510,8 +507,8 @@ private fun PasswordField(label: String, value: String, imeAction: ImeAction, on
 }
 
 /**
- * Локализованное сообщение об ошибке гейта. `internal` (не `private`), потому что переиспользуется
- * дизайн-слоем (`ui/design`) поверх того же [VaultGateController]; зафиксировано
+ * Localized gate error message. `internal` (not `private`) because it's reused by the design layer
+ * (`ui/design`) over the same [VaultGateController]; pinned by
  * [app.skerry.ui.vault.VaultGateErrorMessageTest].
  */
 @Composable

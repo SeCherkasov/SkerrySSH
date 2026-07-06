@@ -51,7 +51,7 @@ class SshjCertificateInspectorTest {
 
     @Test
     fun `returns null for a plain (non-certificate) public key`() {
-        // Обычный публичный ключ CA — валидный ключ, но НЕ сертификат: инспектор не должен его принять.
+        // A plain CA public key: valid key but not a certificate, the inspector must reject it.
         val caPub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMaQgzqhP+ZzyG6dpQhjVq8kYqyd8kHrJugsGwQ2JDSQ skerry-ca"
         assertNull(inspector.inspect(caPub))
     }

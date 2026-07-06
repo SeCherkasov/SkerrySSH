@@ -97,24 +97,24 @@ import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-// Сайдбар хостов терминального view: поиск, тег-фильтры, папки каталога (живой drag-and-drop
-// или мок-превью), секция RECENT и кнопка «New connection».
+// Terminal view host sidebar: search, tag filters, catalog folders (live drag-and-drop or mock
+// preview), a RECENT section, and the "New connection" button.
 
 @Composable
 internal fun HostsSidebar(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
     val liveHosts = LocalHosts.current
-    // Состояние ручной сортировки (drag-and-drop) живого каталога; в мок-пути не используется.
+    // Manual reorder (drag-and-drop) state for the live catalog; unused on the mock path.
     val dragState = remember { HostDragState() }
-    // Активный фильтр-чип (тег). Только для живого каталога; в мок-пути чипсы статичны.
+    // Active filter chip (tag); live catalog only, chips are static on the mock path.
     var activeChip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
     val chips = liveHosts?.let { remember(it.hosts) { hostTagChips(it.hosts) } } ?: emptyList()
-    // Если активный тег исчез (хост отредактирован/удалён), фильтр откатывается к «All» — не зависает на пустом.
+    // If the active tag disappears (host edited/deleted), the filter falls back to "All".
     val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
     Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
-            // Кнопка свернуть сайдбар (слева) + поиск. Раскрытие — такой же кнопкой на тонком рельсе;
-            // обе на box=34 с одинаковым верхним отступом, чтобы не «прыгали» по высоте при переключении.
+            // Collapse-sidebar button (left) plus search. Expansion uses the same button on a thin rail;
+            // both use box=34 with the same top padding so height doesn't jump when toggling.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -122,10 +122,10 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 IconBtn("chevron_left", onClick = state::toggleSidebar, box = 34, tint = D.dim)
                 Box(Modifier.weight(1f)) { HostSearchField(state) }
             }
-            // Лента тегов-фильтров уезжает за край (узкий сайдбар) — прокручиваем по горизонтали. На
-            // desktop вертикальное колесо мыши само в горизонталь не переводится, поэтому ловим Scroll
-            // и крутим [chipScroll] вручную (delta.y, а если ось горизонтальная — delta.x); на тач/Android
-            // прокрутка работает обычным drag через horizontalScroll.
+            // The filter-tag row overflows the narrow sidebar, so it scrolls horizontally. Desktop's
+            // vertical mouse wheel doesn't translate to horizontal on its own, so Scroll events are
+            // caught and [chipScroll] is driven manually (delta.y, or delta.x on a horizontal axis);
+            // touch/Android scrolls via horizontalScroll's normal drag.
             val chipScroll = rememberScrollState()
             val chipScope = rememberCoroutineScope()
             Row(
@@ -149,7 +149,7 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 if (liveHosts != null) {
-                    // Чипсы = теги живого каталога; клик переключает фильтр.
+                    // Chips are live-catalog tags; clicking switches the filter.
                     chips.forEach { chip ->
                         key(chip) {
                             Chip(hostChipLabel(chip), active = chip == effectiveChip, onClick = { activeChip = chip })
@@ -169,21 +169,21 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Txt(stringResource(Res.string.term_hosts_section), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
-                // Создать новую (пока пустую) группу — в живом каталоге; в мок-пути иконка декоративна.
+                // Create a new (initially empty) group in the live catalog; decorative on the mock path.
                 if (liveHosts != null) {
                     IconBtn("create_new_folder", onClick = state::openCreateGroup, box = 20, icon = 14.sp, tint = D.faint)
                 } else {
                     Sym("create_new_folder", size = 14.sp, color = D.faint)
                 }
             }
-            // Живой каталог из HostManagerController, если подан (за гейтом vault); иначе мок-данные
-            // (путь офскрин-рендера/превью). Папки — по группам, сузив активным тег-чипом.
+            // Live catalog from HostManagerController when provided (behind the vault gate), otherwise
+            // mock data (offscreen render/preview path). Folders are grouped and narrowed by the active tag.
             if (liveHosts != null) {
                 val query = state.hostSearchQuery
                 val folders = remember(liveHosts.hosts, effectiveChip, query, state.customGroups) {
                     val base = groupHostsByFolder(filterHosts(liveHosts.hosts, effectiveChip, query))
-                    // Пустые пользовательские группы показываем как папки без хостов — но только вне
-                    // фильтра (поиск/тег сужают по хостам, а пустой папке там нечем совпасть).
+                    // Empty user groups are shown as folders with no hosts, but only outside a filter
+                    // (search/tag narrow by host, and an empty folder has nothing to match).
                     if (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP) {
                         base
                     } else {
@@ -191,8 +191,8 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                         base + state.customGroups.filter { it !in present }.map { HostFolder(it, emptyList()) }
                     }
                 }
-                // Сужение поиском/тегом ничего не нашло → подсказка вместо немой пустоты (в отличие от
-                // пустого каталога, где ниже всё равно покажется секция RECENT/кнопка New connection).
+                // Search/tag narrowing found nothing: show a hint instead of silent emptiness (unlike an
+                // empty catalog, where the RECENT section/New connection button still appear below).
                 if (folders.isEmpty() && (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP)) {
                     Txt(
                         stringResource(Res.string.term_no_hosts_match),
@@ -200,9 +200,9 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp),
                     )
                 }
-                // Свежий список папок для drag-целей (жест фиксируется по ключу строки/папки).
+                // Fresh folder list for drag targets (the gesture is keyed to the row/folder key).
                 val foldersUpdated = rememberUpdatedState(folders)
-                // Линия вставки при перетаскивании папки: перед папкой на целевом индексе (или в конце).
+                // Insertion line while dragging a folder: before the folder at the target index, or at the end.
                 val otherFolders = folders.filter { it.name != dragState.draggingFolderName }
                 val folderLineIndex = dragState.draggingFolderName?.let { dragState.activeFolderDropIndex }
                 val folderLineBefore = folderLineIndex?.takeIf { it < otherFolders.size }?.let { otherFolders[it].name }
@@ -213,21 +213,21 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                     }
                 }
                 if (folderLineIndex != null && folderLineIndex == otherFolders.size) DropLine()
-                // Общие хосты команд (Teams): секции по командам под личным каталогом. Показываются
-                // только вне поиска/фильтра — фильтры сужают личный каталог.
+                // Shared team hosts: per-team sections below the personal catalog, shown only outside
+                // search/filter since those narrow the personal catalog.
                 if (query.isBlank() && effectiveChip == ALL_HOSTS_CHIP) {
                     TeamHostsSection(liveHosts.hosts, state, mono)
                 }
             } else {
                 HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }
             }
-            // Живой каталог: секция RECENT из реальной истории подключений ([DesktopDesignState.recentHostIds]),
-            // резолвится в текущие профили — удалённые/неизвестные id просто скрыты. Пусто → секции нет.
-            // Мок/превью (нет живого каталога): статичная строка.
+            // Live catalog: RECENT section from actual connection history ([DesktopDesignState.recentHostIds]),
+            // resolved against current profiles; deleted/unknown ids are simply hidden, empty means no section.
+            // Mock/preview (no live catalog): a static row.
             if (liveHosts != null) {
-                // Секцию можно целиком скрыть (Settings → Appearance → Interface) и ограничить её размер.
-                // Мемоизируем по (порядок недавних, состав каталога, лимит) — как соседний `folders`: иначе
-                // резолв пересчитывался бы на каждой рекомпозиции сайдбара (drag/смена чипа/таба).
+                // The section can be hidden entirely (Settings -> Appearance -> Interface) and size-limited.
+                // Memoized by (recent order, catalog contents, limit), like the `folders` above, so the
+                // resolve doesn't rerun on every sidebar recomposition (drag/chip switch/tab switch).
                 val recent = remember(state.recentHostIds, liveHosts.hosts, state.recentLimit) {
                     state.recentHostIds.mapNotNull { liveHosts.find(it) }.take(state.recentLimit)
                 }
@@ -255,9 +255,9 @@ internal fun HostsSidebar(state: DesktopDesignState) {
 }
 
 /**
- * Поле поиска по сайдбару хостов (имя/адрес/пользователь/группа/теги). Рамка/иконка/плейсхолдер —
- * в decorationBox, чтобы клик по всей площади ставил каретку (см. правило для рукописных полей).
- * Пока пусто — справа бейдж `⌘K`; при вводе он сменяется крестиком очистки.
+ * Search field for the host sidebar (name/address/user/group/tags). Border/icon/placeholder live
+ * in decorationBox so a click anywhere places the caret. Shows a `⌘K` badge when empty, a clear
+ * cross once text is entered.
  */
 @Composable
 private fun HostSearchField(state: DesktopDesignState) {
@@ -301,9 +301,9 @@ private fun HostSearchField(state: DesktopDesignState) {
 }
 
 /**
- * Заголовок папки хостов: шеврон-кнопка свёртки + иконка + имя + счётчик. Шеврон ([collapsed] →
- * `chevron_right`, иначе `expand_more`) кликабелен и переключает свёрнутость папки ([onToggle]) —
- * клик ловится строго на иконке, чтобы не мешать drag-перетаскиванию заголовка (reorder папок).
+ * Host folder header: collapse chevron + icon + name + count. The chevron ([collapsed] ->
+ * `chevron_right`, else `expand_more`) toggles the folder ([onToggle]); the click target is the icon
+ * only, so it doesn't interfere with dragging the header (folder reorder).
  */
 @Composable
 private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit, onEdit: (() -> Unit)? = null) {
@@ -320,7 +320,7 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
         }
         Sym("folder_open", size = 15.sp, color = D.cyanBright)
         Txt(name, color = D.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-        // Переименовать/удалить группу (живой каталог; не для синтетического «Ungrouped»).
+        // Rename/delete the group (live catalog only, not for the synthetic "Ungrouped").
         if (onEdit != null) IconBtn("edit", onClick = onEdit, box = 20, icon = 13.sp, tint = D.faint)
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
             Txt(count.toString(), color = D.faint, size = 10.sp)
@@ -328,7 +328,7 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
     }
 }
 
-/** Заголовок секции RECENT в сайдбаре (общий для живого и мок-пути). */
+/** RECENT section header in the sidebar (shared by the live and mock paths). */
 @Composable
 private fun RecentSectionHeader() {
     Txt(
@@ -339,10 +339,8 @@ private fun RecentSectionHeader() {
 }
 
 /**
- * Строка недавнего подключения: иконка истории + имя хоста ([Host.label]) с `user@address` вторичной
- * подписью под ним — иначе по голому `root@192.168.0.1` непонятно, какой именованный хост это (адреса
- * повторяются/безлики). Клик переподключает к хосту через [LocalConnectHost] — тот же путь, что клик
- * по строке в каталоге.
+ * Recent-connection row: history icon + host name ([Host.label]) with a `user@address` secondary
+ * caption below it. Click reconnects via [LocalConnectHost], same path as clicking a catalog row.
  */
 @Composable
 private fun TeamHostsSectionHeader() {
@@ -354,20 +352,20 @@ private fun TeamHostsSectionHeader() {
 }
 
 /**
- * Секции общих хостов команд под личным каталогом: по секции на активную команду с доехавшим
- * ключом, у которой в team-vault есть хосты. Хосты читаются из per-team vault'а; перечитка
- * привязана к ([hostsSnapshot], список команд) — после team-синка reloadManagers обновляет
- * каталог, меняя снапшот. Клик — тот же [LocalConnectHost] (секрет спросится: ссылки на
- * credential при шеринге стрипаются).
+ * Shared team-hosts sections below the personal catalog: one section per active team with a
+ * received key that has hosts in its team vault. Hosts are read from the per-team vault; the reread
+ * is keyed on ([hostsSnapshot], team list) so it refreshes after reloadManagers updates the catalog
+ * post-team-sync. Click uses the same [LocalConnectHost] path (secret is prompted since credential
+ * links are stripped on share).
  */
 @Composable
 private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignState, mono: FontFamily) {
     val teams = LocalTeams.current ?: return
-    // Подтягиваем общие хосты команд при переходе sync в Online (см. AutoPullTeamsOnOnline).
+    // Pulls shared team hosts when sync transitions to Online, see AutoPullTeamsOnOnline.
     AutoPullTeamsOnOnline()
     val teamList by teams.teams.collectAsState()
-    // revision меняется при каждом team-синке — иначе live-притянутые в team-vault хосты не появятся
-    // до ручного sync (личный каталог не меняется, а секции читают vault императивно).
+    // Changes on every team sync, so hosts freshly pulled into the team vault appear without a
+    // manual sync (the personal catalog doesn't change, and these sections read the vault directly).
     val revision by teams.revision.collectAsState()
     val sections = remember(teamList, hostsSnapshot, revision) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.mapNotNull { team ->
@@ -379,8 +377,8 @@ private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignStat
     if (sections.isEmpty()) return
     TeamHostsSectionHeader()
     sections.forEach { (name, shared) ->
-        // Ключ свёртки с префиксом — иначе команда и группа хостов с одинаковым именем делили бы
-        // одно состояние в общем collapsedGroups.
+        // Prefixed collapse key: otherwise a team and a host group with the same name would share
+        // one entry in the common collapsedGroups.
         val collapseKey = "$TEAM_COLLAPSE_PREFIX$name"
         val collapsed = state.isGroupCollapsed(collapseKey)
         val onToggle = remember(state, collapseKey) { { state.toggleGroupCollapsed(collapseKey) } }
@@ -391,13 +389,12 @@ private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignStat
     }
 }
 
-/** Префикс ключа свёртки команд в общем [DesktopDesignState.collapsedGroups] — см. [TeamHostsSection]. */
+/** Collapse-key prefix for teams in the shared [DesktopDesignState.collapsedGroups], see [TeamHostsSection]. */
 private const val TEAM_COLLAPSE_PREFIX = " team "
 
 /**
- * Заголовок команды в сайдбаре — по образцу [FolderHeader] (шеврон-свёртка + иконка + имя +
- * счётчик), чтобы визуально совпасть с папками хостов; отличается лишь иконкой `group`,
- * отмечающей происхождение из team-vault.
+ * Team header in the sidebar, modeled on [FolderHeader] (collapse chevron + icon + name + count) to
+ * visually match host folders; differs only in the `group` icon marking its team-vault origin.
  */
 @Composable
 private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
@@ -420,7 +417,7 @@ private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onTog
     }
 }
 
-/** Строка общего хоста команды — как [RecentHostRow], но с иконкой шеринга. */
+/** Shared team host row, like [RecentHostRow] but with a share icon. */
 @Composable
 private fun TeamHostRow(host: Host, mono: FontFamily) {
     val connect = LocalConnectHost.current
@@ -446,8 +443,8 @@ private fun TeamHostRow(host: Host, mono: FontFamily) {
 @Composable
 private fun RecentHostRow(host: Host, mono: FontFamily) {
     val connect = LocalConnectHost.current
-    // Стабилизируем лямбду по (host, connect) — как строки каталога: без remember она пересоздавалась
-    // бы на каждой рекомпозиции строки.
+    // Stabilizes the lambda on (host, connect), like catalog rows: without remember it would be
+    // recreated on every row recomposition.
     val onClick = remember(host, connect) { { connect(host) } }
     Row(
         Modifier
@@ -490,14 +487,13 @@ private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, mono: Fo
 }
 
 /**
- * Живая папка каталога: те же визуалы, но из [HostFolder] поверх [HostManagerController]. Клик по
- * хосту запускает подключение ([LocalConnectHost]); точка статуса и подсветка берутся из живых
- * сессий ([LocalSessions]) — хост подсвечен, если он у активной вкладки, цвет точки = состояние
- * соединения свежайшей его сессии.
+ * Live catalog folder: same visuals, sourced from [HostFolder] over [HostManagerController]. Clicking
+ * a host connects via [LocalConnectHost]; the status dot and highlight come from live sessions
+ * ([LocalSessions]) — status-dot color reflects the most recent session's connection state.
  *
- * Ручная сортировка ([dragState]): заголовок папки перетаскивается для смены порядка папок, строки
- * хостов — для переупорядочивания внутри папки и переноса в другую (см. [HostSidebarDnd]). Сброс
- * фиксируется через [controller]; [foldersProvider] отдаёт свежий список папок на момент жеста.
+ * Manual reorder ([dragState]): dragging the folder header reorders folders; dragging a host row
+ * reorders within a folder or moves it to another (see [HostSidebarDnd]). Drops commit through
+ * [controller]; [foldersProvider] supplies the current folder list at gesture time.
  */
 @Composable
 private fun LiveHostFolder(
@@ -510,21 +506,21 @@ private fun LiveHostFolder(
 ) {
     val sessions = LocalSessions.current
     val connect = LocalConnectHost.current
-    // Ключ группы папки: у пустой берём её имя (как FolderBounds), иначе группу первого хоста.
-    // Синтетический «Ungrouped» — это null-группа.
+    // Folder's group key: an empty folder uses its own name (like FolderBounds), otherwise the first
+    // host's group. The synthetic "Ungrouped" folder is the null group.
     val group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL }
     val collapsed = state.isGroupCollapsed(folder.name)
-    // Лямбду свёртки стабилизируем по (state, имя папки) — как и прочие лямбды строк ниже: иначе при
-    // каждой рекомпозиции папки (а во время любого drag это каждый кадр) заголовок перерисовывался бы.
+    // Stabilizes the collapse lambda on (state, folder name), like the row lambdas below: otherwise
+    // every folder recomposition (every frame during a drag) would redraw the header.
     val onToggleCollapsed = remember(state, folder.name) { { state.toggleGroupCollapsed(folder.name) } }
-    // Карандаш правки в заголовке — кроме синтетической корзины «Ungrouped» (её не переименовать).
+    // Edit pencil in the header, except for the synthetic "Ungrouped" bucket (not renameable).
     val onEditGroup = if (folder.name == UNGROUPED_LABEL) null
         else remember(state, folder.name) { { state.openRenameGroup(folder.name) } }
-    // Подсветка целевой папки, пока над ней тащат хост.
+    // Highlights the target folder while a host is dragged over it.
     val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
     val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
-    // Линия вставки внутри папки: индекс считается без перетаскиваемого хоста (как moveHostToGroup),
-    // поэтому к визуальным строкам он привязывается по соседям из того же отфильтрованного списка.
+    // Insertion line within the folder: the index excludes the dragged host (like moveHostToGroup),
+    // so it's anchored to visible rows via neighbors from the same filtered list.
     val others = folder.hosts.filter { it.id != dragState.draggingHostId }
     val dropIndex = if (isDropTarget) dragState.activeHostDrop?.index?.coerceIn(0, others.size) else null
     val lineBeforeId = dropIndex?.takeIf { it < others.size }?.let { others[it].id }
@@ -533,7 +529,7 @@ private fun LiveHostFolder(
             .padding(bottom = 2.dp)
             .alpha(folderAlpha)
             .clip(RoundedCornerShape(6.dp))
-            // После clip — bounds совпадают с видимой (скруглённой) областью папки, а не с её углами.
+            // After clip, so bounds match the folder's visible (rounded) area, not its corners.
             .folderRangeAnchor(dragState, folder.name)
             .border(1.dp, if (isDropTarget) D.cyan else Color.Transparent, RoundedCornerShape(6.dp)),
     ) {
@@ -545,19 +541,19 @@ private fun LiveHostFolder(
         ) {
             FolderHeader(folder.name, folder.hosts.size, collapsed, onToggleCollapsed, onEditGroup)
         }
-        // Свёрнутая папка показывает только заголовок; список хостов (и его drag-цели) скрыт.
+        // A collapsed folder shows only the header; the host list (and its drag targets) is hidden.
         if (!collapsed) Column(Modifier.padding(start = 22.dp)) {
-            // key(host.id): позиционная идентичность строк фиксируется на хосте — открытое меню/состояние
-            // строки не «переезжает» на соседа при переупорядочивании каталога после правки.
+            // key(host.id): row positional identity is pinned to the host, so an open menu/row state
+            // doesn't jump to a neighbor when the catalog reorders after an edit.
             folder.hosts.forEach { host ->
                 key(host.id) {
                     if (host.id == lineBeforeId) DropLine()
-                    // Лямбды стабилизируем по (host, …): иначе каждая рекомпозиция папки пересоздавала бы
-                    // их и заставляла строку (nullable-функции нестабильны) перерисовываться впустую.
+                    // Stabilizes lambdas on (host, ...): otherwise every folder recomposition would
+                    // recreate them and force the row to redraw (nullable functions are unstable).
                     val onClick = remember(host, connect) { { connect(host) } }
                     val onEdit = remember(host, state) { { state.openEditModal(host) } }
                     val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
-                    // Забываем геометрию строки, когда хост уходит из списка (удаление/фильтр).
+                    // Forgets the row's geometry once the host leaves the list (deleted/filtered out).
                     DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
                     Box(
                         Modifier
@@ -569,31 +565,30 @@ private fun LiveHostFolder(
                     ) {
                         HostEntryRow(
                             label = host.label,
-                            // Подсветку «хост активной вкладки» убрали: при split
-                            // активных хостов два — подсветка одного вводила бы в заблуждение. Статус
-                            // живого соединения по-прежнему показывает точка справа.
+                            // Active-tab host highlight removed: with a split view two hosts can be
+                            // active, so highlighting one would mislead. The status dot on the right
+                            // still reflects live connection state.
                             selected = false,
                             dot = sessionDotColor(sessions?.statusFor(host.id)),
                             badge = null,
                             onClick = onClick,
                             mono = mono,
-                            // Объект хоста — для пункта «Run snippet…» (запуск сниппета на этом хосте).
+                            // Host object, for the "Run snippet..." menu item (runs a snippet on this host).
                             host = host,
-                            // Правка/удаление профиля — через контекстное меню (right-click/long-press),
-                            // без отдельных кнопок/⋮.
+                            // Edit/delete the profile via the context menu (right-click/long-press).
                             onEdit = onEdit,
                             onDelete = onDelete,
                         )
                     }
                 }
             }
-            // Сброс в конец папки — линия после последней строки.
+            // Drop at the folder's end: the line goes after the last row.
             if (dropIndex != null && dropIndex == others.size) DropLine()
         }
     }
 }
 
-/** Cyan-линия-индикатор позиции, куда вставится перетаскиваемый хост/папка. */
+/** Cyan indicator line marking where a dragged host/folder will be inserted. */
 @Composable
 private fun DropLine() {
     Box(
@@ -619,12 +614,12 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
 }
 
 /**
- * Общая строка хоста в сайдбаре (мок и живой каталог): точка статуса + имя + опц. бейдж. Клик по
- * строке — подключение ([onClick]). Когда переданы [onEdit]/[onDelete] (живой каталог) или доступен
- * запуск сниппета на хосте ([host] != null + [LocalSnippets] подан), в конце строки появляется кнопка
- * «⋮», открывающая выпадающее меню (Run snippet…/Edit/Delete); её собственный клик перехватывается
- * раньше [onClick], поэтому открытие меню не запускает подключение. «Run snippet…» открывает палитру
- * выбора сниппета и выполняет его на [host] через [LocalRunSnippetOnHost].
+ * Shared host row for the sidebar (mock and live catalog): status dot + name + optional badge.
+ * Clicking the row connects ([onClick]). When [onEdit]/[onDelete] are provided (live catalog) or a
+ * snippet can be run on the host ([host] != null and [LocalSnippets] is present), a trailing "⋮"
+ * button opens a menu (Run snippet.../Edit/Delete); its click is intercepted before [onClick], so
+ * opening the menu doesn't trigger a connection. "Run snippet..." opens the snippet picker and runs
+ * it on [host] via [LocalRunSnippetOnHost].
  */
 @Composable
 private fun HostEntryRow(
@@ -680,8 +675,8 @@ private fun HostEntryRow(
                         }
                     }
                 }
-                // Палитра выбора сниппета: запуск на этом хосте (открывает/использует сессию и
-                // выполняет команду после подключения). Пустая библиотека показывает «No snippets yet».
+                // Snippet picker: runs on this host (opens/reuses a session and runs the command after
+                // connecting). An empty library shows "No snippets yet".
                 if (snippetPickerOpen && host != null && snippets != null) {
                     Popup(
                         alignment = Alignment.TopEnd,
@@ -699,7 +694,7 @@ private fun HostEntryRow(
     }
 }
 
-/** Пункт контекстного меню строки хоста. */
+/** Context menu item for a host row. */
 @Composable
 private fun HostMenuItem(label: String, color: Color, onClick: () -> Unit) {
     Box(

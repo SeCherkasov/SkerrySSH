@@ -21,8 +21,8 @@ import app.skerry.ui.generated.resources.sync_fail_wrong_device_password
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Локализованный текст причины [SyncStatus.Failed] (en+ru из ресурсов). Техническая деталь
- * [SyncStatus.Failed.detail], если есть, добавляется после двоеточия — контроллер строк не строит.
+ * Localized text for a [SyncStatus.Failed] reason. [SyncStatus.Failed.detail], if present, is
+ * appended after a colon.
  */
 @Composable
 fun syncFailureText(failed: SyncStatus.Failed): String {

@@ -3,11 +3,10 @@ package app.skerry.ui.snippet
 import app.skerry.shared.snippet.Snippet
 
 /**
- * Type-ahead подсказки тегов для редактора сниппета: уникальные теги всех [snippets] в порядке первого
- * появления, исключая уже добавленные [selected] (сравнение без учёта регистра), сужённые набранным
- * [query] (подстрока без учёта регистра; пустой/пробельный — все). Регистр самих тегов сохраняется
- * «как сохранён» (теги сниппета не канонизируются, в отличие от тегов хоста). Чистая функция,
- * зафиксирована [app.skerry.ui.snippet.SnippetSuggestionsTest].
+ * Type-ahead tag suggestions for the snippet editor: unique tags across all [snippets] in
+ * first-appearance order, excluding [selected] (case-insensitive), filtered by [query]
+ * (case-insensitive substring; blank matches all). Tag casing is preserved as stored, unlike
+ * host tags. See [app.skerry.ui.snippet.SnippetSuggestionsTest].
  */
 fun snippetTagSuggestions(snippets: List<Snippet>, selected: List<String>, query: String = ""): List<String> {
     val taken = selected.mapTo(HashSet()) { it.lowercase() }

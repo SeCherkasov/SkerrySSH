@@ -1,33 +1,33 @@
 package app.skerry.shared.terminal
 
 /**
- * История введённых команд для автодополнения (модель fish/zsh-autosuggestion). Хранит команды
- * от новой к старой, схлопывает подряд идущие дубликаты и повторный ввод «поднимает» команду наверх,
- * ограничена [capacity]. Чистая логика без IO; сейчас только в памяти на сессию (не персистится).
+ * History of entered commands for autocomplete (fish/zsh-autosuggestion style). Stores commands
+ * newest-first, collapses duplicates by moving a repeated command back to the top, capped at
+ * [capacity]. Pure logic, no I/O; currently in-memory per session only (not persisted).
  *
- * БЕЗОПАСНОСТЬ: сюда пишется всё, что пользователь набрал и подтвердил Enter. Ввод в режиме без эха
- * (пароли/passphrase) верхний слой отсекает ДО записи по сигналу [app.skerry.shared.ssh.ShellChannel.echoSuppressed]
- * (см. `TerminalScreenState.typeInput`). Для SSH эхо-статус недоступен, поэтому in-session пароли —
- * остаточный риск: НЕ добавлять дисковый персист истории, не решив детектирование эха для всех
- * транспортов, иначе секреты попадут на диск.
+ * Everything the user types and confirms with Enter is recorded here. The layer above filters out
+ * no-echo input (passwords/passphrases) before recording, via
+ * [app.skerry.shared.ssh.ShellChannel.echoSuppressed] (see `TerminalScreenState.typeInput`). SSH
+ * echo status isn't always available, so an in-session password is a residual risk: don't add
+ * disk persistence for history until echo detection covers all transports, or secrets could land
+ * on disk.
  */
 class CommandHistory(private val capacity: Int = 500) {
 
-    private val entries = ArrayDeque<String>() // index 0 — самая свежая
+    private val entries = ArrayDeque<String>() // index 0 is the most recent
 
-    /** Снимок истории от новой к старой. */
+    /** Snapshot of history, newest first. */
     val commands: List<String> get() = entries.toList()
 
-    /** Заполнить историю готовым списком (напр. загруженным из стора); порядок — от новой к старой. */
+    /** Fills history from a ready-made list (e.g. loaded from a store); order is newest first. */
     fun preload(history: List<String>) {
         entries.clear()
         history.asReversed().forEach { record(it) }
     }
 
     /**
-     * Записать выполненную [command]. Пустые/пробельные игнорируются; если такая команда уже есть —
-     * она перемещается наверх (без дублей), иначе добавляется в начало. Сверх [capacity] хвост
-     * отбрасывается.
+     * Records an executed [command]. Empty/blank input is ignored; an existing entry is moved to
+     * the top (no duplicates), otherwise it's prepended. The tail beyond [capacity] is dropped.
      */
     fun record(command: String) {
         val trimmed = command.trim()
@@ -38,14 +38,14 @@ class CommandHistory(private val capacity: Int = 500) {
     }
 
     /**
-     * Самая свежая команда, начинающаяся с [prefix] и строго длиннее его, либо `null`. Пустой/пробельный
-     * [prefix] подсказок не даёт (не мешаем в начале строки).
+     * Most recent command starting with [prefix] and strictly longer than it, or `null`. A
+     * blank [prefix] yields no suggestion (doesn't interfere at the start of a line).
      */
     fun suggestion(prefix: String): String? = matches(prefix).firstOrNull()
 
     /**
-     * Все команды, начинающиеся с [prefix] и строго длиннее его, от новой к старой (для циклирования
-     * альтернатив). Пустой/пробельный [prefix] — пустой список.
+     * All commands starting with [prefix] and strictly longer than it, newest first (for cycling
+     * alternatives). A blank [prefix] yields an empty list.
      */
     fun matches(prefix: String): List<String> {
         if (prefix.isBlank()) return emptyList()
@@ -53,14 +53,14 @@ class CommandHistory(private val capacity: Int = 500) {
     }
 
     /**
-     * Поиск по подстроке (reverse-search, как Ctrl-R в bash/zsh): команды, СОДЕРЖАЩИЕ [query],
-     * от новой к старой. Пустой/пробельный [query] — пустой список.
+     * Substring search (reverse-search, like Ctrl-R in bash/zsh): commands CONTAINING [query],
+     * newest first. A blank [query] yields an empty list.
      */
     fun search(query: String): List<String> {
         if (query.isBlank()) return emptyList()
         return entries.filter { it.contains(query) }
     }
 
-    /** Забыть [command] (например, опечатку, упавшую с «command not found»). `true`, если была в истории. */
+    /** Forgets [command] (e.g. a typo that produced "command not found"). `true` if it was present. */
     fun forget(command: String): Boolean = entries.remove(command.trim())
 }

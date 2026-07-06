@@ -9,8 +9,8 @@ import kotlin.test.assertNull
 
 class TerminalGeometryTest {
 
-    // Ячейка 8×18 px. Координаты указателя уже приходят в системе координат контента терминала
-    // (после verticalScroll и padding в цепочке модификаторов), поэтому маппинг — чистое деление.
+    // 8x18 px cell. Pointer coordinates already arrive in the terminal content's coordinate
+    // space (after verticalScroll and padding in the modifier chain), so mapping is a plain division.
     private val metrics = TerminalMetrics(cellWidth = 8f, cellHeight = 18f)
 
     @Test
@@ -20,13 +20,13 @@ class TerminalGeometryTest {
 
     @Test
     fun `column advances every cell width`() {
-        // x = 2.5 ячейки → колонка 2 (floor).
+        // x = 2.5 cells -> column 2 (floor).
         assertEquals(TerminalPos(0, 2), cellAtOffset(x = 20f, y = 2f, metrics = metrics))
     }
 
     @Test
     fun `row advances every cell height`() {
-        // y = 1.5 строки → строка 1.
+        // y = 1.5 rows -> row 1.
         assertEquals(TerminalPos(1, 0), cellAtOffset(x = 1f, y = 27f, metrics = metrics))
     }
 
@@ -39,7 +39,7 @@ class TerminalGeometryTest {
     fun `selection anchor rect covers the start cell in content pixels`() {
         val sel = TerminalSelection(TerminalPos(1, 2), TerminalPos(3, 0))
         val r = selectionAnchorRect(sel, metrics)
-        // start = (row 1, col 2): left=2*8, top=1*18, размер ячейки 8×18.
+        // start = (row 1, col 2): left=2*8, top=1*18, cell size 8x18.
         assertEquals(16f, r.left)
         assertEquals(18f, r.top)
         assertEquals(24f, r.right)
@@ -56,8 +56,8 @@ class TerminalGeometryTest {
 
     @Test
     fun `handle anchors sit at the bottom corners of the selection bounds`() {
-        // start = (row 1, col 2): нижний-левый угол ячейки = (col*cw, (row+1)*ch).
-        // end   = (row 3, col 0) — эксклюзивная граница: правый край последнего символа = (col*cw, (row+1)*ch).
+        // start = (row 1, col 2): bottom-left corner of the cell = (col*cw, (row+1)*ch).
+        // end   = (row 3, col 0), an exclusive bound: right edge of the last char = (col*cw, (row+1)*ch).
         val sel = TerminalSelection(TerminalPos(1, 2), TerminalPos(3, 0))
         val (start, end) = selectionHandleAnchors(sel, metrics)
         assertEquals(Offset(16f, 36f), start)
@@ -75,7 +75,7 @@ class TerminalGeometryTest {
     @Test
     fun `hit test picks the start handle near its anchor`() {
         val sel = TerminalSelection(TerminalPos(1, 2), TerminalPos(3, 4))
-        // около старта (16, 36) в пределах радиуса.
+        // near the start anchor (16, 36), within radius.
         assertEquals(
             SelectionHandle.START,
             hitTestSelectionHandle(Offset(18f, 40f), sel, metrics, radiusPx = 20f),
@@ -85,7 +85,7 @@ class TerminalGeometryTest {
     @Test
     fun `hit test picks the end handle near its anchor`() {
         val sel = TerminalSelection(TerminalPos(1, 2), TerminalPos(3, 4))
-        // около конца (32, 72).
+        // near the end anchor (32, 72).
         assertEquals(
             SelectionHandle.END,
             hitTestSelectionHandle(Offset(34f, 70f), sel, metrics, radiusPx = 20f),
@@ -100,9 +100,9 @@ class TerminalGeometryTest {
 
     @Test
     fun `hit test prefers the nearer handle when both are in range`() {
-        // Короткое выделение: ручки рядом, точка ближе к концу.
+        // Short selection: handles are close together, the point is nearer the end.
         val sel = TerminalSelection(TerminalPos(0, 0), TerminalPos(0, 4))
-        // start anchor = (0, 18), end anchor = (32, 18). Точка x=30 ближе к концу.
+        // start anchor = (0, 18), end anchor = (32, 18). Point x=30 is nearer the end.
         assertEquals(
             SelectionHandle.END,
             hitTestSelectionHandle(Offset(30f, 18f), sel, metrics, radiusPx = 40f),
@@ -111,7 +111,7 @@ class TerminalGeometryTest {
 
     @Test
     fun `grid size divides the padded content area by the cell size`() {
-        // padding 14 с обеих сторон: контент = 10*8 по ширине, 5*18 по высоте.
+        // padding 14 on both sides: content = 10*8 wide, 5*18 tall.
         val size = gridSizeFor(
             viewportWidthPx = 10 * 8f + 28f,
             viewportHeightPx = 5 * 18f + 28f,
@@ -120,14 +120,14 @@ class TerminalGeometryTest {
         )
         assertEquals(10, size.cols)
         assertEquals(5, size.rows)
-        // Пиксельные размеры — это размер контента (без отступов), для отчёта PTY.
+        // Pixel sizes are the content size (no padding), for the PTY report.
         assertEquals(80, size.widthPx)
         assertEquals(90, size.heightPx)
     }
 
     @Test
     fun `grid size floors a partial trailing cell`() {
-        // Контент 84px / 8 = 10.5 колонки → 10 (floor); 99px / 18 = 5.5 → 5.
+        // Content 84px / 8 = 10.5 columns -> 10 (floor); 99px / 18 = 5.5 -> 5.
         val size = gridSizeFor(
             viewportWidthPx = 84f + 28f,
             viewportHeightPx = 99f + 28f,
@@ -140,7 +140,7 @@ class TerminalGeometryTest {
 
     @Test
     fun `grid size never drops below one cell`() {
-        // Вьюпорт меньше отступов: контент уходит в минус → клампим к 1×1.
+        // Viewport smaller than the padding: content goes negative, clamp to 1x1.
         val size = gridSizeFor(
             viewportWidthPx = 10f,
             viewportHeightPx = 10f,

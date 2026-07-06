@@ -76,14 +76,14 @@ class PortForwardControllerTest {
 
     @Test
     fun `a failed forward becomes Failed without dropping the row`() = runTest {
-        val conn = FakeForwardConnection(localError = PortForwardException("порт занят"))
+        val conn = FakeForwardConnection(localError = PortForwardException("port busy"))
         val (controller, _) = controllerWith(conn)
 
         controller.addLocal(bindPort = 22, destHost = "10.0.0.5", destPort = 22)
 
         val entry = controller.forwards.single()
         val status = assertIs<ForwardStatus.Failed>(entry.status)
-        assertEquals("порт занят", status.message)
+        assertEquals("port busy", status.message)
     }
 
     @Test
@@ -122,9 +122,8 @@ class PortForwardControllerTest {
 
     @Test
     fun `pause is a no-op while the forward is still starting`() = runTest {
-        // Соединение зависает на подъёме (порт 0, но статус останется Starting в этом тесте через
-        // ошибку): берём Failed-путь — пауза не должна срабатывать на не-Active строке.
-        val conn = FakeForwardConnection(localError = PortForwardException("ещё не поднят"))
+        // Uses the Failed path (via an error) to verify pause is a no-op on a non-Active row.
+        val conn = FakeForwardConnection(localError = PortForwardException("not up yet"))
         val (controller, _) = controllerWith(conn)
         controller.addLocal(bindPort = 0, destHost = "a", destPort = 1)
         val entry = controller.forwards.single()
@@ -148,10 +147,10 @@ class PortForwardControllerTest {
 
         assertEquals(5000, entry.bytesUp)
         assertEquals(200, entry.bytesDown)
-        assertEquals(5000, entry.upRate) // 5000 байт за интервал 1000мс = 5000 байт/с
+        assertEquals(5000, entry.upRate) // 5000 bytes over a 1000ms interval = 5000 bytes/sec
         assertEquals(200, entry.downRate)
 
-        // Второй опрос считает скорость по дельте к предыдущему снимку.
+        // Second poll computes the rate from the delta to the previous snapshot.
         handle.bytesUp = 5500
         controller.pollTelemetry()
 
@@ -177,7 +176,7 @@ class PortForwardControllerTest {
     }
 }
 
-/** Фейк-соединение: отдаёт настроенный порт/ошибку и запоминает последние spec и проброс. */
+/** Fake connection: returns a configured port/error and records the last spec and forward. */
 private class FakeForwardConnection(
     private val localPort: Int = 0,
     private val remotePort: Int = 0,

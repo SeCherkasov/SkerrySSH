@@ -16,15 +16,14 @@ import net.schmizz.sshj.common.StreamCopier
 import net.schmizz.sshj.xfer.TransferListener
 
 /**
- * Desktop-реализация [SftpClient] поверх sshj `SFTPClient` (один SFTP-канал на экземпляр).
- * Каждая операция уходит на [Dispatchers.IO]: API sshj блокирующее. Ошибки протокола
- * (`SFTPException`) и обрывы (`IOException`) заворачиваются в [SftpException]; единственное
- * исключение — [stat], где «нет такого файла» — это `null`, а не ошибка.
+ * Desktop [SftpClient] implementation over sshj `SFTPClient` (one SFTP channel per instance).
+ * Every operation runs on [Dispatchers.IO] since the sshj API is blocking. Protocol errors
+ * (`SFTPException`) and disconnects (`IOException`) are wrapped in [SftpException]; the one
+ * exception is [stat], where "no such file" is `null`, not an error.
  *
- * [maxReadBytes] — потолок для [read] по **заявленному** размеру файла: защита от OOM при
- * случайном открытии многогигабайтного файла. Спецфайлы с нулевым заявленным размером
- * (`/dev/zero` и т.п.) этим не покрыты — для них нужен потоковый лимит, он придёт со
- * стримингом больших файлов (следующий шаг).
+ * [maxReadBytes] caps [read] by the file's **reported** size, guarding against OOM from
+ * accidentally opening a multi-gigabyte file. Special files reporting size zero (`/dev/zero`
+ * etc.) aren't covered by this — that needs a streaming limit, not implemented yet.
  */
 internal class SshjSftpClient(
     private val sftp: SFTPClient,
@@ -33,46 +32,46 @@ internal class SshjSftpClient(
 
     private val closed = AtomicBoolean(false)
 
-    override suspend fun list(path: String): List<SftpEntry> = io("Не удалось прочитать каталог $path") {
-        // sshj сам отсеивает . и .. из листинга.
+    override suspend fun list(path: String): List<SftpEntry> = io("Failed to read directory $path") {
+        // sshj filters . and .. out of the listing itself.
         sftp.ls(path).map { it.toEntry() }
     }
 
     override suspend fun stat(path: String): SftpEntry? = withContext(Dispatchers.IO) {
-        if (closed.get()) throw SftpException("SFTP-канал закрыт")
+        if (closed.get()) throw SftpException("SFTP channel closed")
         try {
-            // lstat (не stat): не идём по симлинку — атрибуты самого линка, согласованно с list().
+            // lstat, not stat: don't follow symlinks — attributes of the link itself, consistent with list().
             sftp.lstat(path).toEntry(path)
         } catch (e: SFTPException) {
-            // «Нет такого файла» — это null. Сервера расходятся: OpenSSH/встроенные могут вернуть
-            // NO_SUCH_PATH вместо NO_SUCH_FILE, когда отсутствует компонент пути — мапим оба.
+            // "No such file" maps to null. Servers differ: OpenSSH/embedded may return NO_SUCH_PATH
+            // instead of NO_SUCH_FILE when a path component is missing — map both.
             if (e.statusCode == Response.StatusCode.NO_SUCH_FILE ||
                 e.statusCode == Response.StatusCode.NO_SUCH_PATH
             ) {
                 null
             } else {
-                throw SftpException("Не удалось получить метаданные $path", e)
+                throw SftpException("Failed to get metadata for $path", e)
             }
         } catch (e: IOException) {
-            throw SftpException("Не удалось получить метаданные $path", e)
+            throw SftpException("Failed to get metadata for $path", e)
         }
     }
 
-    override suspend fun realpath(path: String): String = io("Не удалось разрешить путь $path") {
+    override suspend fun realpath(path: String): String = io("Failed to resolve path $path") {
         sftp.canonicalize(path)
     }
 
-    override suspend fun read(path: String): ByteArray = io("Не удалось прочитать файл $path") {
+    override suspend fun read(path: String): ByteArray = io("Failed to read file $path") {
         sftp.open(path).use { file ->
             val size = file.length()
             if (size > maxReadBytes) {
-                throw SftpException("Файл $path слишком большой для чтения целиком: $size Б (лимит $maxReadBytes Б)")
+                throw SftpException("File $path is too large to read whole: $size B (limit $maxReadBytes B)")
             }
             file.RemoteFileInputStream().use { it.readBytes() }
         }
     }
 
-    override suspend fun write(path: String, data: ByteArray): Unit = io("Не удалось записать файл $path") {
+    override suspend fun write(path: String, data: ByteArray): Unit = io("Failed to write file $path") {
         sftp.open(path, EnumSet.of(OpenMode.WRITE, OpenMode.CREAT, OpenMode.TRUNC)).use { file ->
             file.RemoteFileOutputStream().use { it.write(data) }
         }
@@ -82,8 +81,8 @@ internal class SshjSftpClient(
         remotePath: String,
         localPath: String,
         onProgress: SftpProgress,
-    ): Unit = io("Не удалось скачать файл $remotePath") {
-        // sshj.get тянет файл потоком на диск; прогресс — через TransferListener канала передачи.
+    ): Unit = io("Failed to download file $remotePath") {
+        // sshj.get streams the file to disk; progress comes from the transfer channel's TransferListener.
         withTransferListener(onProgress) { sftp.get(remotePath, localPath) }
     }
 
@@ -91,44 +90,44 @@ internal class SshjSftpClient(
         localPath: String,
         remotePath: String,
         onProgress: SftpProgress,
-    ): Unit = io("Не удалось загрузить файл в $remotePath") {
+    ): Unit = io("Failed to upload file to $remotePath") {
         withTransferListener(onProgress) { sftp.put(localPath, remotePath) }
     }
 
-    override suspend fun mkdir(path: String): Unit = io("Не удалось создать каталог $path") {
+    override suspend fun mkdir(path: String): Unit = io("Failed to create directory $path") {
         sftp.mkdir(path)
     }
 
-    override suspend fun remove(path: String): Unit = io("Не удалось удалить файл $path") {
+    override suspend fun remove(path: String): Unit = io("Failed to remove file $path") {
         sftp.rm(path)
     }
 
-    override suspend fun rmdir(path: String): Unit = io("Не удалось удалить каталог $path") {
+    override suspend fun rmdir(path: String): Unit = io("Failed to remove directory $path") {
         sftp.rmdir(path)
     }
 
-    override suspend fun rename(from: String, to: String): Unit = io("Не удалось переименовать $from → $to") {
+    override suspend fun rename(from: String, to: String): Unit = io("Failed to rename $from -> $to") {
         sftp.rename(from, to)
     }
 
     override suspend fun close(): Unit = withContext(Dispatchers.IO) {
-        // Идемпотентно: повторный close() не должен повторно дёргать канал.
+        // Idempotent: a repeat close() must not touch the channel again.
         if (!closed.compareAndSet(false, true)) return@withContext
         runCatching { sftp.close() }
         Unit
     }
 
     /**
-     * Выполнить блокирующую sshj-операцию, завернув её ошибки в [SftpException]. Сначала
-     * отсекает использование после [close] — иначе sshj бросил бы невнятный IOException движка.
+     * Run a blocking sshj operation, wrapping its errors as [SftpException]. Rejects use after
+     * [close] up front — otherwise sshj would throw an opaque engine IOException instead.
      */
     private inline fun <T> ioBody(message: String, block: () -> T): T {
-        if (closed.get()) throw SftpException("SFTP-канал закрыт")
+        if (closed.get()) throw SftpException("SFTP channel closed")
         return try {
             block()
         } catch (e: IOException) {
-            // Включаем причину sshj в текст: иначе UI показывает только обёртку («Не удалось
-            // загрузить файл …»), а реальный повод (нет места/прав, обрыв канала) теряется.
+            // Include the sshj cause in the text: otherwise the UI shows only the wrapper message
+            // ("Failed to upload file...") and the real reason (no space/permissions, channel drop) is lost.
             val cause = e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName
             throw SftpException(if (cause != null) "$message: $cause" else message, e)
         }
@@ -138,9 +137,10 @@ internal class SshjSftpClient(
         withContext(Dispatchers.IO) { ioBody(message, block) }
 
     /**
-     * Выставить листенер прогресса на общий канал передачи sshj на время [block] и снять после —
-     * чтобы листенер прошлой передачи не висел на разделяемом `fileTransfer` (операции сериализованы
-     * выше по стеку, но глобальное состояние канала лучше не оставлять «грязным»).
+     * Set a progress listener on sshj's shared transfer channel for the duration of [block] and
+     * clear it after — so the previous transfer's listener doesn't linger on the shared
+     * `fileTransfer` (operations are serialized higher up the stack, but the channel's global
+     * state is best not left dirty).
      */
     private inline fun <T> withTransferListener(onProgress: SftpProgress, block: () -> T): T {
         sftp.fileTransfer.transferListener = progressListener(onProgress)
@@ -152,10 +152,10 @@ internal class SshjSftpClient(
     }
 
     /**
-     * Адаптер прогресса sshj → [SftpProgress]. Иерархический [TransferListener] для одиночного
-     * файла сводится к листенеру байтов: `file(name, size)` отдаёт полный размер, а его
-     * `reportProgress` приходит с накопленным числом переданных байт. Вложенных каталогов в
-     * передаче файла нет, поэтому `directory` просто возвращает себя.
+     * Adapts sshj's progress hierarchy to [SftpProgress]. A hierarchical [TransferListener] for a
+     * single file reduces to a byte listener: `file(name, size)` gives the full size, and its
+     * `reportProgress` reports cumulative bytes transferred. A single file transfer has no nested
+     * directories, so `directory` just returns itself.
      */
     private fun progressListener(onProgress: SftpProgress): TransferListener =
         object : TransferListener {
@@ -165,16 +165,16 @@ internal class SshjSftpClient(
         }
 
     private companion object {
-        /** Потолок чтения по умолчанию для [read] (64 MiB) — секреты/конфиги MVP заведомо меньше. */
+        /** Default read cap for [read] (64 MiB). */
         const val DEFAULT_MAX_READ_BYTES = 64L * 1024 * 1024
     }
 }
 
-/** Запись листинга sshj → [SftpEntry] (имя и путь приходят из ответа сервера). */
+/** sshj listing entry to [SftpEntry] (name and path come from the server response). */
 private fun RemoteResourceInfo.toEntry(): SftpEntry =
     attributes.toEntry(name = name, path = path)
 
-/** Атрибуты одного объекта → [SftpEntry]; имя берём из хвоста [path]. */
+/** Attributes of a single object to [SftpEntry]; name is derived from the tail of [path]. */
 private fun FileAttributes.toEntry(path: String): SftpEntry =
     toEntry(name = path.substringAfterLast('/').ifEmpty { path }, path = path)
 
@@ -185,7 +185,7 @@ private fun FileAttributes.toEntry(name: String, path: String): SftpEntry =
         type = type.toEntryType(),
         size = size,
         modifiedEpochSeconds = mtime,
-        // Только биты прав (без бит типа файла) — для UI прав доступа.
+        // Permission bits only (file-type bits excluded) — for the permissions UI.
         permissions = mode.permissionsMask,
     )
 

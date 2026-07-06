@@ -5,11 +5,11 @@ import org.jetbrains.exposed.sql.Database
 import java.nio.file.Files
 
 /**
- * Изолированная SQLite-БД на временном файле для тестов репозиториев. Файл, а не in-memory:
- * Exposed открывает на транзакцию свой коннект, а `:memory:` у каждого коннекта свой.
+ * Isolated SQLite database on a temp file for repository tests. A file, not in-memory: Exposed
+ * opens its own connection per transaction, and `:memory:` is per-connection.
  *
- * Блок suspend: репозитории перешли на `newSuspendedTransaction`, поэтому тело теста крутим в
- * [runBlocking], сохраняя прежний синхронный стиль вызовов.
+ * Suspend block: repositories moved to `newSuspendedTransaction`, so the test body runs inside
+ * [runBlocking] to keep the synchronous call style.
  */
 fun withTestDb(block: suspend (Database) -> Unit) {
     val file = Files.createTempFile("skerry-test-", ".db")

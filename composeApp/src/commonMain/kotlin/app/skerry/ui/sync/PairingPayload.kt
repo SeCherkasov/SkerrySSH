@@ -4,19 +4,19 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * Полезная нагрузка быстрого паринга (вариант B, `docs/skerry-sync-design.md` §3), которую вошедшее
- * устройство показывает в QR/коде, а новое — считывает камерой или вставляет вручную. Несёт ровно то,
- * что новому устройству нужно, чтобы забрать сессию и расшифровать ключ аккаунта **в обход сервера**:
+ * Quick-pairing payload (variant B, `docs/skerry-sync-design.md` §3): a signed-in device shows it
+ * as a QR/code, a new device reads it via camera or manual entry. Carries exactly what the new
+ * device needs to claim the session and decrypt the account key bypassing the server:
  *
- *  - [serverUrl] — куда идти за claim'ом (новое устройство ещё не знает адрес сервера);
- *  - [code]      — одноразовый claim-код pairing-сессии (его проверяет сервер);
- *  - [transferKey] — одноразовый ключ, которым на сервере запечатан dataKey ([VaultCrypto.newTransferKey]).
- *    Именно поэтому он едет в QR, а НЕ на сервер: сервер хранит лишь конверт и без этого ключа бесполезен.
+ *  - [serverUrl] — where to send the claim (the new device doesn't yet know the server address);
+ *  - [code] — one-time claim code for the pairing session, checked by the server;
+ *  - [transferKey] — one-time key that seals the dataKey on the server ([VaultCrypto.newTransferKey]);
+ *    it travels in the QR, not to the server, which stores only a useless envelope without it.
  *
- * Формат: `"sk1"` + три поля, каждое в base64url-без-паддинга, через `.` — точка не входит в алфавит
- * base64url (`A-Za-z0-9-_`), поэтому `split('.')` однозначен даже когда [serverUrl]/[code] сами содержат
- * `:`/`/`/`-`/`_`. Версионный префикс `sk1` отбивает мусор/чужие QR на входе. Формат компактен (для QR
- * важна плотность) и не зависит от kotlinx.serialization.
+ * Format: `"sk1"` plus three fields, each base64url-no-padding, joined by `.` — the dot isn't in
+ * the base64url alphabet (`A-Za-z0-9-_`), so `split('.')` is unambiguous even when
+ * [serverUrl]/[code] contain `:`/`/`/`-`/`_`. The `sk1` version prefix rejects garbage/unrelated
+ * QR codes. Compact format (QR density matters) with no kotlinx.serialization dependency.
  */
 class PairingPayload(
     val serverUrl: String,
@@ -34,9 +34,9 @@ class PairingPayload(
         ).joinToString(SEP)
     }
 
-    // Обычный class (не data): авто-copy() data-класса делил бы мутабельный transferKey по ссылке —
-    // затирание одной копии молча обнулило бы другую (security-ревью). equals/hashCode по содержимому
-    // (structural) пишем руками — нужно тестам round-trip'а.
+    // Plain class, not data: a data class's auto-generated copy() would share the mutable
+    // transferKey by reference, so wiping one copy would silently zero the other. equals/hashCode
+    // are structural and hand-written for round-trip tests.
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PairingPayload) return false
@@ -52,13 +52,14 @@ class PairingPayload(
         private const val PREFIX = "sk1"
         private const val SEP = "."
 
-        /** Длина transferKey (= AEAD-ключ XChaCha20). Проверяется при decode — см. ниже. */
+        /** Length of transferKey (AEAD key size for XChaCha20); checked in decode. */
         private const val TRANSFER_KEY_SIZE = 32
 
         /**
-         * Разобрать строку из QR/ручного ввода. `null` — не наша строка/битый формат (чужой QR, обрезка,
-         * неверный префикс, не-base64): вызывающий показывает «не похоже на код связывания», а не падает.
-         * Пробелы по краям срезаются (ручная вставка/перенос строки из камеры).
+         * Parses a string from a QR/manual entry. Returns null for anything not ours or
+         * malformed (unrelated QR, truncation, wrong prefix, non-base64); the caller shows
+         * "doesn't look like a pairing code" instead of crashing. Surrounding whitespace is
+         * trimmed (manual paste/camera newline).
          */
         @OptIn(ExperimentalEncodingApi::class)
         fun decode(raw: String): PairingPayload? {
@@ -69,9 +70,9 @@ class PairingPayload(
                 val serverUrl = b64.decode(parts[1]).decodeToString()
                 val code = b64.decode(parts[2]).decodeToString()
                 val transferKey = b64.decode(parts[3])
-                // Структурная валидация ДО любого сетевого вызова: иначе claimPairing сжёг бы одноразовый
-                // код на обрезанном QR (security-ревью). Неверная длина ключа или дикая схема URL
-                // (подменённый QR) — это decode-провал, а не сожжённый код.
+                // Structural validation happens before any network call: otherwise claimPairing
+                // would burn a one-time code on a truncated QR. A wrong key length or invalid URL
+                // scheme (a tampered QR) is a decode failure, not a burned code.
                 if (transferKey.size != TRANSFER_KEY_SIZE) return@runCatching null
                 if (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) return@runCatching null
                 PairingPayload(serverUrl, code, transferKey)

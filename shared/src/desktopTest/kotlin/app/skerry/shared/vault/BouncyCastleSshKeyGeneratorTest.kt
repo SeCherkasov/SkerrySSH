@@ -10,17 +10,18 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Генератор проверяется честной интеграцией с парсером sshj (тем же, что грузит ключ при коннекте):
- * сгенерированный PEM должен разбираться `SSHClient.loadKeys`, а независимо посчитанный из него
- * OpenSSH-отпечаток — совпадать с тем, что вернул генератор. Это доказывает, что PEM настоящий и
- * пригоден для аутентификации, без живого сервера. RSA-4096 генерируется один раз (дорого, но это
- * то, что отгружаем). Тесты в desktopTest, т.к. реализация живёт в jvmSharedMain (BouncyCastle/sshj).
+ * Verifies the generator against a real integration with the sshj parser (the same one used to
+ * load a key on connect): the generated PEM must parse via `SSHClient.loadKeys`, and an
+ * independently computed OpenSSH fingerprint from it must match the one returned by the
+ * generator. This proves the PEM is valid and usable for authentication without a live server.
+ * RSA-4096 is generated once (expensive, but it's what ships). Tests live in desktopTest since
+ * the implementation is in jvmSharedMain (BouncyCastle/sshj).
  */
 class BouncyCastleSshKeyGeneratorTest {
 
     private val gen = BouncyCastleSshKeyGenerator()
 
-    /** Отпечаток OpenSSH из приватного PEM средствами sshj — независимая проверка формата. */
+    /** OpenSSH fingerprint from the private PEM via sshj, an independent format check. */
     private fun fingerprintViaSshj(pem: String): String {
         val keys = SSHClient().loadKeys(pem, null, null)
         val encoded = Buffer.PlainBuffer().putPublicKey(keys.public).compactData
@@ -38,7 +39,7 @@ class BouncyCastleSshKeyGeneratorTest {
         assertTrue(key.info.publicKeyOpenSsh.startsWith("ssh-ed25519 "))
         assertTrue(key.info.publicKeyOpenSsh.endsWith(" alice@skerry"))
         assertTrue(key.info.fingerprintSha256.startsWith("SHA256:"))
-        // Отпечаток генератора == отпечаток, посчитанный из PEM сторонним парсером.
+        // Generator's fingerprint == fingerprint computed from the PEM by a third-party parser.
         assertEquals(fingerprintViaSshj(key.privateKeyPem), key.info.fingerprintSha256)
     }
 
@@ -65,7 +66,7 @@ class BouncyCastleSshKeyGeneratorTest {
 
         assertEquals(key.info.fingerprintSha256, info?.fingerprintSha256)
         assertEquals("ED25519", info?.keyTypeLabel)
-        // Публичная часть совпадает по типу и телу (комментарий из PEM не восстанавливается).
+        // Public part matches by type and body (the PEM comment is not recovered).
         assertTrue(info!!.publicKeyOpenSsh.startsWith("ssh-ed25519 "))
         assertEquals(
             key.info.publicKeyOpenSsh.split(" ")[1],

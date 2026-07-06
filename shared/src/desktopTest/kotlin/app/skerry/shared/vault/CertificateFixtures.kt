@@ -1,28 +1,28 @@
 package app.skerry.shared.vault
 
 /**
- * Детерминированные тестовые SSH-сертификаты, выпущенные `ssh-keygen` от одного тестового CA.
- * Используются и инспектором ([SshjCertificateInspectorTest]), и cert-аутентификацией
- * (`SshjTransport`). Параметры зафиксированы при генерации:
- *  - CA: ed25519, отпечаток [CA_FINGERPRINT];
- *  - ED25519-сертификат: key id `skerry-test@ed25519`, principals `alice,deploy`, serial 42;
- *  - RSA-2048-сертификат: key id `skerry-test@rsa`, principal `bob`, serial 7;
- *  - окно действия обоих: 2024-01-01 … 2034-01-01 (UTC).
+ * Deterministic test SSH certificates issued by `ssh-keygen` from a single test CA. Used by both
+ * the inspector ([SshjCertificateInspectorTest]) and cert authentication (`SshjTransport`).
+ * Fixed generation parameters:
+ *  - CA: ed25519, fingerprint [CA_FINGERPRINT];
+ *  - ED25519 certificate: key id `skerry-test@ed25519`, principals `alice,deploy`, serial 42;
+ *  - RSA-2048 certificate: key id `skerry-test@rsa`, principal `bob`, serial 7;
+ *  - validity window for both: 2024-01-01 to 2034-01-01 (UTC).
  *
- * Ключи учебные и одноразовые — существуют только в тестах.
+ * Keys are throwaway test material only, used nowhere else.
  */
 object CertificateFixtures {
 
     const val CA_FINGERPRINT = "SHA256:wOuEBTY+A3Mt14uVi/GzWzxjVBHF5EcofV4jkBfdcTM"
 
-    /** Публичный ключ CA (`ca.pub`) — доверенный якорь для серверной валидации сертификатов в тестах. */
+    /** CA public key (`ca.pub`), the trust anchor for server-side certificate validation in tests. */
     const val CA_PUBLIC_KEY =
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMaQgzqhP+ZzyG6dpQhjVq8kYqyd8kHrJugsGwQ2JDSQ skerry-ca"
 
-    /** Principal, на который выписан [ED25519_CERT] (под этим именем cert проходит на сервере). */
+    /** Principal [ED25519_CERT] is issued for (the name the cert authenticates as on the server). */
     const val ED25519_PRINCIPAL = "alice"
 
-    /** Бессрочный сертификат (`valid before` == uint64-максимум) — для проверки ветки «forever». */
+    /** Unbounded certificate (`valid before` == uint64 max), for testing the "forever" branch. */
     const val FOREVER_CERT =
         "ssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIPt1kAPPUy8QuXwgRDbMxMYEUaHpvZkGKnhsAgwy5sydAAAAIIeYr544sT/dKZMQfPaZB6tRNa4rXSDbJewJ5GaoGEMnAAAAAAAAAGMAAAABAAAAE3NrZXJyeS10ZXN0QGZvcmV2ZXIAAAAHAAAAA3N2YwAAAAAAAAAA//////////8AAAAAAAAAggAAABVwZXJtaXQtWDExLWZvcndhcmRpbmcAAAAAAAAAF3Blcm1pdC1hZ2VudC1mb3J3YXJkaW5nAAAAAAAAABZwZXJtaXQtcG9ydC1mb3J3YXJkaW5nAAAAAAAAAApwZXJtaXQtcHR5AAAAAAAAAA5wZXJtaXQtdXNlci1yYwAAAAAAAAAAAAAAMwAAAAtzc2gtZWQyNTUxOQAAACDGkIM6oT/mc8hunaUIY1avJGKsnfJB6yboLBsENiQ0kAAAAFMAAAALc3NoLWVkMjU1MTkAAABAue/GyA1Dl+VcwlHH763BsW9oYmixnT6Gc8wqzpIIJ/1wWUF76XDfd7Ra5nudp9KO3voGJnltpc1FbXKYjYFBAw== alice@skerry"
 

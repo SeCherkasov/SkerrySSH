@@ -14,9 +14,9 @@ class SrpServiceTest {
 
     private val params: SRP6CryptoParams = SRP6CryptoParams.getInstance(2048, "SHA-256")
     private val accountId = "alice@example.com"
-    private val password = "correct-auth-key-hex" // на проде сюда идёт authKey, не сырой пароль
+    private val password = "correct-auth-key-hex" // in production this is authKey, not a raw password
 
-    /** Клиентская регистрация: соль + верификатор, как их посчитал бы клиент перед /auth/register. */
+    /** Client-side registration: salt + verifier, as the client would compute them before /auth/register. */
     private fun register(pwd: String = password): Pair<String, String> {
         val salt = BigInteger(256, SecureRandom())
         val verifier = SRP6VerifierGenerator(params).generateVerifier(salt, accountId, pwd)
@@ -38,7 +38,7 @@ class SrpServiceTest {
         assertNotNull(verified)
         assertEquals(accountId, verified.accountId)
 
-        // клиент проверяет встречное доказательство сервера M2 — не бросает = сервер настоящий
+        // Client verifies the server's counter-proof M2; no throw means the server is genuine.
         client.step3(BigInteger(verified.m2, 16))
     }
 
@@ -67,11 +67,11 @@ class SrpServiceTest {
         val challenge = srp.startChallenge(accountId, salt, verifier)
         val creds = client.step2(params, BigInteger(challenge.salt, 16), BigInteger(challenge.b, 16))
 
-        // просрочка
+        // expired
         now = 2_000
         assertNull(srp.verify(challenge.challengeId, creds.A.toString(16), creds.M1.toString(16)))
 
-        // неизвестный challenge
+        // unknown challenge
         assertNull(srp.verify("nope", creds.A.toString(16), creds.M1.toString(16)))
     }
 }

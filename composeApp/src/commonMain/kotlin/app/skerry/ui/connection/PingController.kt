@@ -12,13 +12,14 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * Периодически замеряет RTT до сервера через [measure] (один round-trip на цикл) и публикует его в
- * [rttMs] (мс) для статус-бара. Гоняется на [scope] сессии (как
- * [app.skerry.ui.metrics.HostMetricsController]): переживает переключение вкладок и останавливается
- * вместе с сессией ([stop] из [ConnectionController.disconnect]).
+ * Periodically measures RTT to the server via [measure] (one round-trip per cycle) and publishes
+ * it in [rttMs] (ms) for the status bar. Runs on the session's [scope] (like
+ * [app.skerry.ui.metrics.HostMetricsController]): survives tab switches and stops together with
+ * the session ([stop] from [ConnectionController.disconnect]).
  *
- * Неудачный замер (обрыв, таймаут → [measure] вернул `null` или бросил) НЕ сбрасывает индикатор:
- * [rttMs] держит последнее удачное значение до следующего успешного цикла. Первый замер — сразу.
+ * A failed measurement (dropped connection, timeout — [measure] returned `null` or threw) does
+ * NOT reset the indicator: [rttMs] holds the last successful value until the next successful
+ * cycle. The first measurement runs immediately.
  */
 @Stable
 class PingController(
@@ -31,13 +32,13 @@ class PingController(
 
     private var job: Job? = null
 
-    /** Запустить периодический замер (идемпотентно: повторный вызов не плодит второй цикл). */
+    /** Start periodic measurement (idempotent: a repeat call doesn't spawn a second cycle). */
     fun start() {
         if (job != null) return
         job = scope.launch {
             while (isActive) {
                 runCatching { measure() }
-                    .onFailure { if (it is CancellationException) throw it } // отмену не глотаем
+                    .onFailure { if (it is CancellationException) throw it } // don't swallow cancellation
                     .getOrNull()
                     ?.let { rttMs = it }
                 delay(pollIntervalMillis)
@@ -45,7 +46,7 @@ class PingController(
         }
     }
 
-    /** Остановить замер. */
+    /** Stop measuring. */
     fun stop() {
         job?.cancel()
         job = null

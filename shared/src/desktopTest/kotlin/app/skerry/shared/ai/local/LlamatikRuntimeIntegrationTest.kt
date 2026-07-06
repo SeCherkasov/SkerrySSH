@@ -11,10 +11,10 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * Живой инференс через Llamatik (нативный llama.cpp) — интеграционный тест по образцу e2e sync:
- * в обычном прогоне пропускается, включается переменной окружения `SKERRY_LOCAL_AI_MODEL` —
- * путь к любому instruct-GGUF (для дыма достаточно крошечной SmolLM2-135M). Проверяет весь
- * нативный контракт рантайма: загрузка модели, chat-шаблон из GGUF, стриминговая генерация.
+ * Live inference via Llamatik (native llama.cpp) — integration test in the style of the e2e sync
+ * tests: skipped in normal runs, enabled by the `SKERRY_LOCAL_AI_MODEL` env var — path to any
+ * instruct GGUF (a tiny SmolLM2-135M is enough for a smoke test). Exercises the full native
+ * runtime contract: model loading, chat template from GGUF, streaming generation.
  *
  *     SKERRY_LOCAL_AI_MODEL=/path/model.gguf ./gradlew :shared:desktopTest \
  *         --tests 'app.skerry.shared.ai.local.LlamatikRuntimeIntegrationTest'
@@ -24,7 +24,7 @@ class LlamatikRuntimeIntegrationTest {
     @Test
     fun `loads a real gguf and streams a non-empty answer`() = runTest(timeout = 5.minutes) {
         val modelPath = System.getenv("SKERRY_LOCAL_AI_MODEL")?.takeIf { it.isNotBlank() }
-            ?: return@runTest // не e2e-прогон: пропускаем (обычный CI без гигабайтных весов)
+            ?: return@runTest // not an e2e run: skip (regular CI has no multi-gigabyte weights)
 
         val runtime = LlamatikRuntime(contextLength = 1024)
         val request = AiChatRequest(

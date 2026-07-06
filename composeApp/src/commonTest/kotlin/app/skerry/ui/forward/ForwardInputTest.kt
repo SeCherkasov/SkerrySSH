@@ -35,7 +35,7 @@ class ForwardInputTest {
 
     @Test
     fun `rejects destination port zero`() {
-        // У слушателя 0 = «выбери сам», но порт назначения 0 бессмыслен — туда некуда подключаться.
+        // Listener port 0 means OS-assigned, but destination port 0 is meaningless: nothing to connect to.
         assertNull(parseForwardInput(bindPort = "8080", destHost = "host", destPort = "0"))
     }
 
@@ -51,13 +51,13 @@ class ForwardInputTest {
 
     @Test
     fun `rejects a negative bind port`() {
-        // UI фильтрует ввод до цифр, но функция публична — фиксируем контракт явно.
+        // UI restricts input to digits, but the function is public; the contract is enforced explicitly here.
         assertNull(parseForwardInput(bindPort = "-1", destHost = "host", destPort = "80"))
     }
 
     @Test
     fun `parseBindPort accepts the listener range including zero and rejects the rest`() {
-        // Для -D назначения нет — валиден только порт слушателя (0 = выберет ОС).
+        // -D has no destination; only the listener port is valid (0 = OS-assigned).
         assertEquals(1080, parseBindPort("1080"))
         assertEquals(0, parseBindPort("0"))
         assertNull(parseBindPort("70000"))

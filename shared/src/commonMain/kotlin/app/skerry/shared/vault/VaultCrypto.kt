@@ -1,18 +1,17 @@
 package app.skerry.shared.vault
 
 /**
- * 256-битный ключ, выведенный из мастер-пароля через Argon2id (см. [VaultCrypto.deriveMasterKey]).
- * Существует только в памяти устройства и никогда не сериализуется — наружу уходит лишь
- * обёртка dataKey ([VaultCrypto.wrapDataKey]). Байты держатся `internal`, чтобы ключевой
- * материал не утекал в публичный API, логи или случайные сравнения; [toString] намеренно
- * не печатает содержимое.
+ * 256-bit key derived from the master password via Argon2id (see [VaultCrypto.deriveMasterKey]).
+ * Exists only in device memory and is never serialized — only the wrapped dataKey
+ * ([VaultCrypto.wrapDataKey]) leaves it. Bytes are kept `internal` so the key material can't leak
+ * into the public API, logs, or accidental comparisons; [toString] deliberately doesn't print content.
  */
 class MasterKey internal constructor(internal val bytes: ByteArray) {
     /**
-     * Затереть ключевой материал (`bytes.fill(0)`). Вызывать, как только masterKey больше не нужен:
-     * это выход Argon2id, держать его в heap дольше необходимого незачем (heap-дамп/своп раскрыл бы
-     * ключ). Код `shared` затирает свои masterKey сам; этот публичный метод нужен вызывающим за
-     * пределами модуля (напр. `SyncCoordinator`), которым `bytes` недоступны. Идемпотентно.
+     * Wipe the key material (`bytes.fill(0)`). Call as soon as masterKey is no longer needed: it's
+     * Argon2id output, no reason to keep it in the heap longer than necessary (a heap dump/swap would
+     * expose the key). `shared` code wipes its own masterKeys; this public method is for callers
+     * outside the module (e.g. `SyncCoordinator`) that can't access `bytes`. Idempotent.
      */
     fun zeroize() { bytes.fill(0) }
 
@@ -20,15 +19,15 @@ class MasterKey internal constructor(internal val bytes: ByteArray) {
 }
 
 /**
- * 256-битный случайный ключ данных. Шифрует каждую запись vault (XChaCha20-Poly1305) и сам
- * хранится только в обёрнутом виде под [MasterKey]. Смена мастер-пароля переобёртывает этот
- * ключ, не перешифровывая записи — см. `docs/skerry-sync-design.md` §1.
+ * 256-bit random data key. Encrypts every vault record (XChaCha20-Poly1305) and is itself stored
+ * only wrapped under [MasterKey]. Changing the master password rewraps this key without
+ * re-encrypting records — see `docs/skerry-sync-design.md` §1.
  */
 class DataKey internal constructor(internal val bytes: ByteArray) {
     /**
-     * Затереть ключевой материал **копии** dataKey (например полученной из [Vault.exportDataKey] или
-     * [VaultCrypto.unwrapDataKey]). НЕ вызывать на ключе, которым ещё владеет живой vault — затрёшь
-     * рабочий ключ. Для копий, время жизни которых вызывающий контролирует сам. Идемпотентно.
+     * Wipe the key material of a **copy** of dataKey (e.g. one obtained from [Vault.exportDataKey] or
+     * [VaultCrypto.unwrapDataKey]). Do NOT call on a key still owned by a live vault — that would wipe
+     * the working key. For copies whose lifetime the caller controls. Idempotent.
      */
     fun zeroize() { bytes.fill(0) }
 
@@ -36,139 +35,139 @@ class DataKey internal constructor(internal val bytes: ByteArray) {
 }
 
 /**
- * Криптопримитивы локального zero-knowledge vault. Реализация платформенная (на JVM —
- * libsodium через биндинги), поэтому интерфейс живёт в ядре, а параметры стойкости
- * (Argon2id m=64MiB/t=3/p=4) и шифр (XChaCha20-Poly1305) — детали реализации, не контракта.
- * Та же иерархия ключей переиспользуется E2E-синхронизацией в Phase 2.
+ * Crypto primitives for the local zero-knowledge vault. The implementation is platform-specific (on
+ * JVM: libsodium via bindings), so the interface lives in the core while strength parameters
+ * (Argon2id m=64MiB/t=3/p=4) and cipher (XChaCha20-Poly1305) are implementation details, not part
+ * of the contract. The same key hierarchy is reused by Phase 2's E2E sync.
  *
- * Соглашение об ошибках: [unwrapDataKey] и [open] возвращают `null` **только** при провале
- * проверки AEAD-тега (неверный ключ/мастер-пароль или повреждённый шифротекст) — это
- * ожидаемый, обрабатываемый исход. Структурно некорректный вход (неверная длина ключа,
- * усечённый блоб без места под nonce/тег) — программная ошибка и бросает исключение.
+ * Error convention: [unwrapDataKey] and [open] return `null` **only** on an AEAD tag check failure
+ * (wrong key/master password or corrupted ciphertext) — an expected, handled outcome. Structurally
+ * invalid input (wrong key length, a truncated blob with no room for nonce/tag) is a programming
+ * error and throws.
  */
 interface VaultCrypto {
 
     companion object {
-        /** Пустой AAD — привязки слота нет; геттер отдаёт свежий массив (без shared-mutable). */
+        /** Empty AAD — no slot binding; the getter returns a fresh array (no shared mutable state). */
         val EMPTY_AAD: ByteArray get() = ByteArray(0)
     }
 
-    /** Новая случайная соль для деривации мастер-ключа (длина — требование Argon2id). */
+    /** New random salt for master-key derivation (length required by Argon2id). */
     fun newSalt(): ByteArray
 
     /**
-     * Детерминированная соль деривации masterKey для self-hosted sync — выводится из [accountId]
-     * (`docs/skerry-sync-design.md` §1: «salt = accountId»). Одинакова на всех устройствах, не
-     * секрет; позволяет новому устройству вывести тот же masterKey из одного мастер-пароля и
-     * развернуть серверную обёртку dataKey, не получая соль с сервера. Длина = длине [newSalt].
+     * Deterministic masterKey derivation salt for self-hosted sync — derived from [accountId]
+     * (`docs/skerry-sync-design.md` §1: "salt = accountId"). The same on every device, not a secret;
+     * lets a new device derive the same masterKey from one master password and unwrap the server's
+     * dataKey wrapper without fetching a salt from the server. Length matches [newSalt].
      */
     fun deriveSyncSalt(accountId: String): ByteArray
 
     /**
-     * Argon2id(password, salt) → [MasterKey]. Намеренно дорогая операция (десятки мс и выше);
-     * детерминирована по паре (password, salt). Вызывающая сторона отвечает за затирание
-     * [password] после вызова.
+     * Argon2id(password, salt) → [MasterKey]. Deliberately expensive (tens of ms or more);
+     * deterministic for a given (password, salt) pair. The caller is responsible for wiping
+     * [password] after the call.
      */
     fun deriveMasterKey(password: CharArray, salt: ByteArray): MasterKey
 
-    /** Новый случайный [DataKey] — создаётся один раз при инициализации vault. */
+    /** New random [DataKey] — created once when the vault is initialized. */
     fun newDataKey(): DataKey
 
     /**
-     * Детерминированно выводит 256-битный authKey из [masterKey] для аутентификации в self-hosted
-     * sync (`docs/skerry-sync-design.md` §1: HKDF-ветка masterKey → authKey → SRP-верификатор).
-     * Отдельный домен деривации, не пересекающийся с обёрткой dataKey; сервер authKey не видит —
-     * на него уходит лишь SRP-верификатор. Детерминирована по [masterKey].
+     * Deterministically derives a 256-bit authKey from [masterKey] for self-hosted sync
+     * authentication (`docs/skerry-sync-design.md` §1: HKDF branch masterKey → authKey → SRP
+     * verifier). A separate derivation domain from the dataKey wrapper; the server never sees
+     * authKey, only the SRP verifier. Deterministic for a given [masterKey].
      */
     fun deriveAuthKey(masterKey: MasterKey): ByteArray
 
     /**
-     * Новый одноразовый transfer-ключ для быстрого паринга устройств (вариант B,
-     * `docs/skerry-sync-design.md` §3): 32 случайных байта (длина AEAD-ключа). Уходит **только** в
-     * QR/код, который пользователь переносит на новое устройство глазами/камерой — на сервер не
-     * попадает, поэтому серверный шифротекст dataKey без него бесполезен. Возвращается как сырые
-     * байты (а не [DataKey]), потому что должен сериализоваться в полезную нагрузку паринга.
+     * New one-time transfer key for quick device pairing (variant B,
+     * `docs/skerry-sync-design.md` §3): 32 random bytes (AEAD key length). Goes **only** into the
+     * QR/code the user transfers to the new device visually/via camera — never reaches the server,
+     * so the server's dataKey ciphertext is useless without it. Returned as raw bytes (not
+     * [DataKey]) because it must serialize into the pairing payload.
      */
     fun newTransferKey(): ByteArray
 
     /**
-     * Запечатать живой [dataKey] под одноразовым [transferKey] для переноса на новое устройство
-     * (вариант B). Результат (nonce-prefix XChaCha20-Poly1305) кладётся на сервер в pairing-сессию;
-     * развернуть его можно только тем же [transferKey], которого у сервера нет. Доменный AAD
-     * отделяет конверт паринга от обёртки dataKey и записей. [transferKey] должен быть длиной
-     * AEAD-ключа (см. [newTransferKey]).
+     * Seals a live [dataKey] under a one-time [transferKey] for transfer to a new device (variant
+     * B). The result (nonce-prefixed XChaCha20-Poly1305) is stored on the server in the pairing
+     * session; only the same [transferKey], which the server never has, can unwrap it. A domain AAD
+     * separates the pairing envelope from the dataKey wrapper and records. [transferKey] must be
+     * the AEAD key length (see [newTransferKey]).
      */
     fun sealDataKeyForTransfer(dataKey: DataKey, transferKey: ByteArray): ByteArray
 
     /**
-     * Развернуть перенесённый dataKey на новом устройстве тем [transferKey], что пришёл из QR/кода.
-     * `null` ⇒ неверный [transferKey] или подменённый конверт (AEAD-провал) — как [unwrapDataKey].
+     * Unwraps the transferred dataKey on the new device using the [transferKey] from the QR/code.
+     * `null` means a wrong [transferKey] or a tampered envelope (AEAD failure) — same as [unwrapDataKey].
      */
     fun openTransferredDataKey(transferKey: ByteArray, envelope: ByteArray): DataKey?
 
-    /** Обернуть [dataKey] мастер-ключом для хранения на диске/сервере (видит только шифротекст). */
+    /** Wraps [dataKey] with the master key for storage on disk/server (only ciphertext is visible). */
     fun wrapDataKey(masterKey: MasterKey, dataKey: DataKey): ByteArray
 
-    /** Развернуть обёртку. `null` ⇒ неверный мастер-пароль или повреждённая обёртка. */
+    /** Unwraps the wrapper. `null` means a wrong master password or a corrupted wrapper. */
     fun unwrapDataKey(masterKey: MasterKey, wrapped: ByteArray): DataKey?
 
     /**
-     * Зашифровать запись под [dataKey]; случайный nonce кладётся в префикс результата.
+     * Encrypts a record under [dataKey]; a random nonce is prefixed to the result.
      *
-     * [associatedData] аутентифицируется (AEAD), но не шифруется: вызывающая сторона должна
-     * привязать сюда стабильный идентификатор слота записи (напр. `id‖type`), чтобы шифроблок
-     * нельзя было бесшумно переставить в чужой слот — [open] с другим AAD вернёт `null`. AAD
-     * передаётся всегда явно (дефолта нет — молчаливо «без привязки» запечатать нельзя);
-     * сознательное отсутствие привязки — [EMPTY_AAD].
+     * [associatedData] is authenticated (AEAD) but not encrypted: the caller should bind a stable
+     * record-slot identifier here (e.g. `id‖type`) so the ciphertext can't be silently swapped into
+     * another slot — [open] with a different AAD returns `null`. AAD is always passed explicitly (no
+     * default — sealing "with no binding" can't happen silently); a deliberate absence of binding is
+     * [EMPTY_AAD].
      */
     fun seal(dataKey: DataKey, plaintext: ByteArray, associatedData: ByteArray): ByteArray
 
     /**
-     * Расшифровать запись. `null` ⇒ неверный ключ, повреждённый/подменённый шифротекст **или**
-     * [associatedData], не совпавший с тем, под которым запись была запечатана.
+     * Decrypts a record. `null` means a wrong key, a corrupted/tampered ciphertext, **or**
+     * [associatedData] that doesn't match what the record was sealed with.
      */
     fun open(dataKey: DataKey, ciphertext: ByteArray, associatedData: ByteArray): ByteArray?
 
     /**
-     * Новая пара ключей X25519 для приёма запечатанных конвертов ([sealForRecipient]).
-     * Публичная половина публикуется на sync-сервере, секретная хранится только записью
-     * собственного vault (TEAM_IDENTITY) и не покидает устройства в открытом виде.
+     * New X25519 key pair for receiving sealed envelopes ([sealForRecipient]). The public half is
+     * published on the sync server, the secret half is stored only in the vault's own record
+     * (TEAM_IDENTITY) and never leaves the device in plaintext.
      */
     fun newSharingKeyPair(): SharingKeyPair
 
     /**
-     * Восстановить пару из сериализованных половин (запись vault на другом устройстве).
-     * Байты копируются; затирание входных массивов — на вызывающей стороне.
+     * Restores a pair from serialized halves (a vault record on another device). Bytes are copied;
+     * wiping the input arrays is the caller's job.
      */
     fun sharingKeyPairFromBytes(publicKey: ByteArray, secretKey: ByteArray): SharingKeyPair
 
     /**
-     * Запечатать [plaintext] на публичный ключ получателя (crypto_box_seal: эфемерная пара X25519,
-     * анонимный отправитель). Открыть конверт может только владелец секретной половины —
-     * сервер, доставляющий конверт приглашения, видит лишь шифротекст.
+     * Seals [plaintext] to the recipient's public key (crypto_box_seal: ephemeral X25519 pair,
+     * anonymous sender). Only the owner of the secret half can open the envelope — the server that
+     * delivers the invite envelope sees only ciphertext.
      */
     fun sealForRecipient(recipientPublicKey: ByteArray, plaintext: ByteArray): ByteArray
 
     /**
-     * Открыть запечатанный конверт своей парой. `null` ⇒ конверт адресован другой паре,
-     * повреждён или слишком короток (недоверенный вход с сервера — не бросаем).
+     * Opens a sealed envelope with own key pair. `null` means the envelope is addressed to another
+     * pair, is corrupted, or is too short (untrusted input from the server — not thrown).
      */
     fun openSealedEnvelope(keyPair: SharingKeyPair, envelope: ByteArray): ByteArray?
 }
 
 /**
- * Пара ключей X25519 для sealed-конвертов Teams. Секретная половина держится `internal`
- * по тем же соображениям, что и [MasterKey.bytes]; [exportSecretKey] отдаёт копию только
- * для сериализации в запись собственного vault (шифруется dataKey'ем аккаунта).
+ * X25519 key pair for Teams sealed envelopes. The secret half is kept `internal` for the same
+ * reasons as [MasterKey.bytes]; [exportSecretKey] returns a copy only for serializing into the
+ * account's own vault record (encrypted with the account's dataKey).
  */
 class SharingKeyPair internal constructor(
     val publicKey: ByteArray,
     internal val secretKey: ByteArray,
 ) {
-    /** Копия секретной половины для записи в vault; затирание копии — на вызывающей стороне. */
+    /** Copy of the secret half for storing in the vault; wiping the copy is the caller's job. */
     fun exportSecretKey(): ByteArray = secretKey.copyOf()
 
-    /** Затереть секретную половину, когда пара больше не нужна. Идемпотентно. */
+    /** Wipe the secret half once the pair is no longer needed. Idempotent. */
     fun zeroize() {
         secretKey.fill(0)
     }

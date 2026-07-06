@@ -5,17 +5,17 @@ import okio.Path
 import okio.Path.Companion.toPath
 
 /**
- * Атомарная перезапись UTF-8 файла, общая для [FileVault], [FileSecurityLog] и
- * [FileBioArtifactStore]: текст пишется во временный файл рядом с целью, затем
- * [FileSystem.atomicMove] подменяет цель (okio: NIO — `ATOMIC_MOVE+REPLACE_EXISTING`;
- * legacy/native POSIX `rename(2)`; `FakeFileSystem`), поэтому отдельного «move с перезаписью»
- * не нужно. Если запись или move упали — исключение всплывает к вызывающему (его state не
- * тронут: коммит полей идёт после persist), а tmp подчищается, чтобы не оставлять на диске
- * осиротевшую копию секретов.
+ * Atomic UTF-8 file rewrite, shared by [FileVault], [FileSecurityLog] and
+ * [FileBioArtifactStore]: text is written to a temp file next to the target, then
+ * [FileSystem.atomicMove] replaces the target (NIO `ATOMIC_MOVE+REPLACE_EXISTING`; legacy/native
+ * POSIX `rename(2)`; `FakeFileSystem`). If the write or move fails, the exception propagates to
+ * the caller (its state is untouched, since field commit happens after persist) and the tmp file
+ * is cleaned up so no orphaned copy of secrets is left on disk.
  *
- * [harden] зовётся на tmp ДО move: права (0600 на POSIX) получает сам файл секретов ещё до
- * подмены цели — у готового файла нет окна с правами по umask. По умолчанию no-op (тесты на
- * `FakeFileSystem`, Android — filesDir приватен для UID); desktop передаёт `PrivateConfig.harden`.
+ * [harden] runs on the tmp file before the move: the secrets file gets its final permissions
+ * (0600 on POSIX) before it replaces the target, so there is no umask-permission window. Defaults
+ * to no-op (tests on `FakeFileSystem`, Android's filesDir is private to the UID); desktop passes
+ * `PrivateConfig.harden`.
  */
 internal fun atomicWriteUtf8(
     fileSystem: FileSystem,
@@ -30,7 +30,7 @@ internal fun atomicWriteUtf8(
         harden(tmp)
         fileSystem.atomicMove(tmp, path)
     } catch (e: Throwable) {
-        runCatching { fileSystem.delete(tmp, mustExist = false) } // не оставлять осиротевший tmp
+        runCatching { fileSystem.delete(tmp, mustExist = false) } // don't leave an orphaned tmp file
         throw e
     }
 }

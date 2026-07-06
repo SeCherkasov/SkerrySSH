@@ -5,17 +5,17 @@ import app.skerry.shared.files.FileItemType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Чистая логика мобильного экрана Files: режим экрана, мета/иконки строк, путь-крошка. */
+/** Pure logic for the mobile Files screen: screen mode, row meta/icons, path breadcrumb. */
 class MobileFilesTest {
 
     private fun item(name: String, type: FileItemType, size: Long = 0): FileItem =
         FileItem(name = name, path = "/var/www/$name", type = type, size = size, modifiedEpochSeconds = 0)
 
-    // Режим экрана по состоянию сессий
+    // Screen mode from session state
 
     @Test
     fun files_mode_picks_preview_when_no_session_manager() {
-        // Путь превью/офскрин без бэкенда.
+        // Preview/offscreen path with no backend.
         assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = false, connecting = false))
         assertEquals(MobileFilesMode.Preview, mobileFilesMode(hasSessions = false, connected = true, connecting = false))
     }
@@ -27,7 +27,7 @@ class MobileFilesTest {
 
     @Test
     fun files_mode_shows_connecting_while_session_opens() {
-        // Открытая сессия ещё подключается — показываем «Connecting…», а не мигаем «No active session».
+        // Session is open but still connecting; show "Connecting..." instead of flashing "No active session".
         assertEquals(
             MobileFilesMode.Connecting,
             mobileFilesMode(hasSessions = true, connected = false, connecting = true),
@@ -36,32 +36,32 @@ class MobileFilesTest {
 
     @Test
     fun files_mode_is_no_session_when_inactive_or_failed() {
-        // Нет активной сессии, либо она в форме/ошибке (ни connected, ни connecting) — листать нечего.
+        // No active session, or it's in form/error state (neither connected nor connecting): nothing to browse.
         assertEquals(MobileFilesMode.NoSession, mobileFilesMode(hasSessions = true, connected = false, connecting = false))
     }
 
-    // Мета-подпись строки (честная проекция на FileItem)
+    // Row meta caption (direct projection of FileItem)
 
     @Test
     fun row_meta_shows_human_size_for_files_and_empty_for_dirs() {
         assertEquals("3.0 KB", mobileFileRowMeta(item("nginx.conf", FileItemType.File, size = 3072)))
         assertEquals("112 B", mobileFileRowMeta(item("robots.txt", FileItemType.File, size = 112)))
-        // У каталога в модели нет ни прав, ни числа элементов — мета пустая (без выдумок).
+        // The model has no permissions or item count for directories; meta stays empty.
         assertEquals("", mobileFileRowMeta(item("html", FileItemType.Directory)))
     }
 
-    // Ведущая иконка строки
+    // Row leading icon
 
     @Test
     fun leading_icon_maps_by_type_and_script_extension() {
         assertEquals("folder", mobileFileIcon(item("html", FileItemType.Directory)))
         assertEquals("link", mobileFileIcon(item("current", FileItemType.Symlink)))
         assertEquals("description", mobileFileIcon(item("nginx.conf", FileItemType.File)))
-        // Шелл-скрипт — иконка terminal.
+        // Shell script: terminal icon.
         assertEquals("terminal", mobileFileIcon(item("deploy.sh", FileItemType.File)))
     }
 
-    // Завершающая иконка строки (видимое действие макета)
+    // Row trailing icon (the action shown by the layout)
 
     @Test
     fun trailing_icon_is_chevron_for_dirs_and_share_for_files() {
@@ -70,7 +70,7 @@ class MobileFilesTest {
         assertEquals("ios_share", mobileFileTrailingIcon(FileItemType.Symlink))
     }
 
-    // Строка пути (крошка под переключателем)
+    // Path row (breadcrumb under the switcher)
 
     @Test
     fun breadcrumb_joins_label_and_path() {

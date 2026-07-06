@@ -8,8 +8,8 @@ import app.skerry.shared.snippet.Snippet
 import app.skerry.shared.snippet.SnippetStore
 
 /**
- * Редактируемые поля сниппета без [Snippet.id]: форма создания/правки оперирует черновиком, а
- * идентичность присваивает [SnippetManager]. [id] == null — создаётся новый сниппет.
+ * Editable snippet fields without [Snippet.id]: the create/edit form works on a draft, and
+ * [SnippetManager] assigns identity. [id] == null creates a new snippet.
  */
 data class SnippetDraft(
     val id: String? = null,
@@ -19,7 +19,7 @@ data class SnippetDraft(
     val shortcut: String? = null,
 )
 
-/** Одна строка списка сниппетов: сохранённый [snippet], обновляется через [SnippetManager.save]. */
+/** One row of the snippet list: the saved [snippet], updated via [SnippetManager.save]. */
 @Stable
 class SnippetEntry internal constructor(snippet: Snippet) {
     var snippet: Snippet by mutableStateOf(snippet)
@@ -29,10 +29,10 @@ class SnippetEntry internal constructor(snippet: Snippet) {
 }
 
 /**
- * Менеджер сохранённых сниппетов (модель Termius): сниппет — самостоятельный объект в [SnippetStore],
- * а не часть открытой сессии. Чистый CRUD над библиотекой плюс [run] — формирование командной строки
- * для отправки в активный терминал. Терминал менеджеру не известен: вызывающий передаёт [send],
- * чтобы менеджер тестировался без живой сессии (как [app.skerry.ui.tunnel.TunnelManager] с `resolve`).
+ * Manager of saved snippets: a snippet is a standalone object in [SnippetStore], not part of an open
+ * session. CRUD over the library plus [run] — building the command line to send to the active
+ * terminal. The terminal is unknown to the manager: the caller passes [send] so it can be tested
+ * without a live session.
  */
 @Stable
 class SnippetManager(
@@ -43,8 +43,8 @@ class SnippetManager(
         private set
 
     /**
-     * Перечитать список из стора. Нужно после записей в обход менеджера и при разблокировке vault:
-     * на старте vault залочен и [store] (поверх vault) отдаёт пусто, после unlock сниппеты появляются.
+     * Reload the list from the store. Needed after writes that bypass the manager and on vault unlock:
+     * at startup the vault is locked and [store] returns empty; snippets appear after unlock.
      */
     fun reload() {
         snippets = store.all().map { SnippetEntry(it) }
@@ -53,10 +53,9 @@ class SnippetManager(
     fun find(id: String?): SnippetEntry? = id?.let { wanted -> snippets.firstOrNull { it.id == wanted } }
 
     /**
-     * Сниппет с заданной горячей клавишей [shortcut] (каноничная форма, см. [Snippet.shortcut]) или
-     * `null`. Используется глобальным обработчиком хоткеев. Пустой/`null` запрос — всегда `null`
-     * (не матчим сниппеты без назначенного хоткея). При коллизии берём первый — UI не даёт назначить
-     * один хоткей дважды, но на чтении не полагаемся на это.
+     * Snippet with the given hotkey [shortcut] (canonical form, see [Snippet.shortcut]) or `null`.
+     * Used by the global hotkey handler. An empty/`null` query is always `null`. On a collision the
+     * first is returned — the UI prevents assigning one hotkey twice, but reads don't rely on it.
      */
     fun forShortcut(shortcut: String?): SnippetEntry? {
         if (shortcut.isNullOrBlank()) return null
@@ -64,10 +63,10 @@ class SnippetManager(
     }
 
     /**
-     * Другой сниппет, уже занявший горячую клавишу [shortcut], или `null`. [excludingId] — id
-     * редактируемого сниппета (его собственный хоткей коллизией не считаем). Пустой/`null` хоткей —
-     * всегда `null` (нечему конфликтовать). Используется редактором, чтобы не дать назначить один
-     * аккорд дважды (иначе [forShortcut] молча взял бы первый).
+     * Another snippet already holding hotkey [shortcut], or `null`. [excludingId] is the edited
+     * snippet's id (its own hotkey isn't a collision). An empty/`null` hotkey is always `null`. Used
+     * by the editor to prevent assigning one chord twice (else [forShortcut] would silently take the
+     * first).
      */
     fun shortcutConflict(shortcut: String?, excludingId: String?): SnippetEntry? {
         if (shortcut.isNullOrBlank()) return null
@@ -75,8 +74,8 @@ class SnippetManager(
     }
 
     /**
-     * Создать (если [SnippetDraft.id] == null) или обновить сниппет и записать в стор. Возвращает
-     * назначенный id. Правка существующего обновляет строку на месте.
+     * Create (if [SnippetDraft.id] == null) or update a snippet and write it to the store. Returns the
+     * assigned id. Editing an existing one updates its row in place.
      */
     fun save(draft: SnippetDraft): String {
         val id = draft.id ?: newId()
@@ -93,16 +92,16 @@ class SnippetManager(
         return id
     }
 
-    /** Удалить сниппет: убрать из стора и списка. */
+    /** Delete a snippet: remove it from the store and the list. */
     fun delete(id: String) {
         store.remove(id)
         snippets = snippets.filterNot { it.id == id }
     }
 
     /**
-     * Запустить сниппет: отправить его команду с переводом строки в [send] (вызывающий привязывает
-     * [send] к активному терминалу). Неизвестный id — no-op. Команда исполняется как есть, без
-     * экранирования — это сохранённый пользователем текст, а не недоверенный ввод.
+     * Run a snippet: send its command plus a newline to [send] (the caller binds [send] to the active
+     * terminal). Unknown id is a no-op. The command runs as-is, unescaped — it's user-saved text, not
+     * untrusted input.
      */
     fun run(id: String, send: (String) -> Unit) {
         val snippet = find(id)?.snippet ?: return

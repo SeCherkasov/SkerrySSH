@@ -39,12 +39,12 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.D
 import app.skerry.ui.design.Txt
 
-// Диалоги Create/Rename group листа New connection — на общем каркасе [MobileCenteredDialog].
+// Create/Rename group dialogs for the New connection sheet, built on [MobileCenteredDialog].
 
 /**
- * Каркас маленького центрированного модального диалога: полноэкранный скрим (тап мимо закрывает),
- * карточка по центру; сама карточка гасит клик, чтобы не закрываться. Над клавиатурой карточка
- * оказывается сама: корневой `safeDrawing` ужимает область над IME, и `Center` центрирует в остатке.
+ * Frame for a small centered modal dialog: full-screen scrim (tap outside dismisses), centered
+ * card that consumes its own clicks. Stays above the keyboard because the root `safeDrawing`
+ * shrinks the area above the IME and `Center` centers within what's left.
  */
 @Composable
 internal fun MobileCenteredDialog(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
@@ -70,10 +70,9 @@ internal fun MobileCenteredDialog(onDismiss: () -> Unit, content: @Composable Co
 }
 
 /**
- * Маленький модальный диалог создания новой группы — полноэкранный оверлей на корне листа (не в
- * скролле формы), центрируется над клавиатурой: поле имени + Cancel/Create.
- * Пустое имя не создаёт (кнопка неактивна). Имя только проставляется в форму — папка появится в
- * каталоге при сохранении хоста.
+ * Modal dialog for creating a new group: full-screen overlay at the sheet root (not in the form's
+ * scroll), centered above the keyboard, name field + Cancel/Create. Empty name disables Create.
+ * The name is only set on the form; the folder appears in the catalog once the host is saved.
  */
 @Composable
 internal fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
@@ -113,10 +112,9 @@ internal fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -
 }
 
 /**
- * Диалог «Rename group» (карандаш у заголовка папки) — полноэкранный оверлей на корне над
- * клавиатурой. Поле имени предзаполнено [initialName]; «Save» переименовывает
- * (хосты переезжают с группой), «Delete group» — разгруппировывает (профили целы).
- * Пустое/неизменное имя оставляет «Save» неактивной.
+ * "Rename group" dialog (pencil icon on the folder header): full-screen overlay above the
+ * keyboard. Name field pre-filled with [initialName]; "Save" renames (hosts move with the group),
+ * "Delete group" ungroups (profiles are kept). Empty/unchanged name disables "Save".
  */
 @Composable
 internal fun MobileGroupRenameDialog(
@@ -127,10 +125,10 @@ internal fun MobileGroupRenameDialog(
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     val canSave = name.isNotBlank() && name.trim() != initialName
-    // Триммим здесь, чтобы и контроллер (Host.group), и синхронизация collapsedGroups получили
-    // одинаковый канонический ключ — иначе свёрнутость папки разъедется на хвостовом пробеле.
+    // Trim here so the controller (Host.group) and collapsedGroups sync see the same canonical
+    // key; otherwise a trailing space would desync the folder's collapsed state.
     val submit = { if (canSave) onSave(name.trim()) }
-    // Системный «назад»/жест закрывает диалог (как тап по затемнению), перехватывая back до навигации каркаса.
+    // System back/gesture dismisses the dialog (like tapping the scrim), intercepted before frame navigation.
     PlatformBackHandler(onBack = onDismiss)
     MobileCenteredDialog(onDismiss = onDismiss) {
         Txt(stringResource(Res.string.conn_group_rename_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)

@@ -15,7 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Тесты общего прогона стримингового AI-запроса (жизненный цикл провайдера и колбэки). */
+/** Tests for the shared streaming AI request runner (provider lifecycle and callbacks). */
 class AiStreamRunnerTest {
 
     private class ScriptedProvider(

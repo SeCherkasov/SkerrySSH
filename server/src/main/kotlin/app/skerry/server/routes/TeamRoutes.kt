@@ -36,18 +36,19 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 
-/** Синкуемые в team-scope типы: секреты и структура, без SETTINGS/KNOWN_HOST (они per-account). */
+/** Types synced in team scope: secrets and structure, excluding SETTINGS/KNOWN_HOST (per-account). */
 private val TEAM_ALLOWED_TYPES = setOf("HOST", "GROUP", "IDENTITY", "CREDENTIAL", "SNIPPET", "TUNNEL")
 
-/** Публичный X25519-ключ — ровно 32 байта; конверт crypto_box_seal — 48 байт оверхеда + payload. */
+/** Public X25519 key is exactly 32 bytes; a crypto_box_seal envelope is 48 bytes overhead + payload. */
 private const val PUBLIC_KEY_BYTES = 32
 private const val MAX_ENVELOPE_BYTES = 4096
 
 /**
- * Teams: ключи аккаунтов, состав команд и team-scoped записи. Zero-knowledge: сервер хранит
- * только метаданные (состав, роли) и шифроблобы (конверты приглашений, записи под teamKey).
- * ACL (гранулярные роли owner>admin>editor>viewer, см. [TeamRoles]): owner удаляет команду;
- * owner/admin управляют составом и ролями; owner/admin/editor пишут записи; читают все активные.
+ * Teams: account keys, team membership, and team-scoped records. Zero-knowledge: the server
+ * stores only metadata (membership, roles) and ciphertext (invite envelopes, records under
+ * teamKey). ACL (granular roles owner>admin>editor>viewer, see [TeamRoles]): owner deletes the
+ * team; owner/admin manage membership and roles; owner/admin/editor write records; all active
+ * members read.
  */
 fun Route.teamRoutes(services: Services) {
     put("/account/key") {
@@ -108,7 +109,7 @@ fun Route.teamRoutes(services: Services) {
         ) ?: return@delete
         services.teams.deleteTeam(teamId)
         services.activity.record(principal.accountId, "team.delete", teamId, teamId = teamId)
-        // Всем бывшим участникам: состав изменился — пусть перечитают список команд.
+        // Notify all former members that membership changed so they re-read the team list.
         members.forEach { services.notifier.publishMembership(it.accountId) }
         call.respond(HttpStatusCode.OK)
     }
@@ -133,7 +134,7 @@ fun Route.teamRoutes(services: Services) {
         val membership = call.requireActiveMember(
             services, teamId, principal.accountId, TeamRoles::canManageMembers, "manage-members role required",
         ) ?: return@post
-        // Анти-эскалация: нельзя пригласить с ролью выше собственных прав (напр. admin→admin/owner).
+        // Anti-escalation: can't invite with a role above the actor's own rights (e.g. admin -> admin/owner).
         if (!TeamRoles.canAssign(membership.role, req.role)) {
             call.respond(HttpStatusCode.Forbidden, ErrorResponse("cannot assign role '${req.role}'"))
             return@post
@@ -164,7 +165,7 @@ fun Route.teamRoutes(services: Services) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("no such member"))
             return@put
         }
-        // Анти-эскалация: актор должен иметь право трогать текущую роль цели И назначать новую.
+        // Anti-escalation: the actor must have rights over both the target's current role and the new one.
         if (!TeamRoles.canModifyMember(actor.role, targetMember.role) || !TeamRoles.canAssign(actor.role, req.role)) {
             call.respond(HttpStatusCode.Forbidden, ErrorResponse("cannot set role '${req.role}'"))
             return@put
@@ -182,8 +183,8 @@ fun Route.teamRoutes(services: Services) {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@delete
         val target = call.requiredPathId("accountId") ?: return@delete
-        // Удалить может сам участник себя (выход/отклонение приглашения) или управляющий с правом
-        // трогать роль цели (owner — любого; admin — только editor/viewer).
+        // A member can remove themselves (leave/decline invite), or a manager with rights over the
+        // target's role can remove them (owner: anyone; admin: only editor/viewer).
         if (target != principal.accountId) {
             val actor = call.requireActiveMember(
                 services, teamId, principal.accountId, TeamRoles::canManageMembers, "manage-members role required",
@@ -221,14 +222,14 @@ fun Route.teamRoutes(services: Services) {
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
         val delta = services.teamRecords.delta(teamId, since)
         val cursor = delta.lastOrNull()?.serverSeq ?: since
-        // Team-scope без compactedIds: тромбстоуны чистятся по возрасту, повторная доставка идемпотентна.
+        // Team scope has no compactedIds: tombstones are cleaned up by age, redelivery is idempotent.
         call.respond(RecordsResponse(delta.map { it.toDto() }, cursor, emptyList()))
     }
 
     put("/teams/{id}/records") {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@put
-        // Запись гейтится ролью: viewer активен, но canWrite=false → 403.
+        // Write is gated by role: viewer is active but canWrite=false -> 403.
         call.requireActiveMember(
             services, teamId, principal.accountId, TeamRoles::canWrite, "write role required",
         ) ?: return@put
@@ -259,9 +260,9 @@ fun Route.teamRoutes(services: Services) {
 }
 
 /**
- * Возвращает членство [accountId] в команде, если он активный участник и (при заданной [capability])
- * его роль проходит проверку; иначе отправляет 404 (не участник — не раскрываем команду) / 403 и
- * возвращает null. Владелец команды тоже проходит capability-проверки (см. [TeamRoles]).
+ * Returns [accountId]'s membership in the team if they're an active member and (when [capability]
+ * is given) their role passes the check; otherwise responds 404 (not a member, don't reveal the
+ * team) / 403 and returns null. The team owner also goes through capability checks (see [TeamRoles]).
  */
 private suspend fun ApplicationCall.requireActiveMember(
     services: Services,

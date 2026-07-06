@@ -14,16 +14,16 @@ import app.skerry.ui.design.D
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 
-// Общие виджеты секций настроек (используются несколькими *Section.kt этого пакета).
+// Shared settings-section widgets (used by several *Section.kt files in this package).
 
-/** Заголовок секции настроек: название + приглушённый подзаголовок с отступом до контента. */
+/** Settings section header: title plus a dimmed subtitle, spaced above the content. */
 @Composable
 internal fun SectionTitle(title: String, subtitle: String) {
     Txt(title, color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
     Txt(subtitle, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 18.dp))
 }
 
-/** Строка «настройка-тумблер»: название + описание слева, [Toggle] справа. */
+/** A toggle-setting row: title and description on the left, [Toggle] on the right. */
 @Composable
 internal fun SettingToggleRow(title: String, desc: String, on: Boolean, onToggle: () -> Unit) {
     Row(

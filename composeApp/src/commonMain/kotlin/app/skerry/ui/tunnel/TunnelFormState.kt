@@ -7,14 +7,14 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.tunnel.TunnelDirection
 
 /**
- * Состояние формы создания/правки туннеля: редактируемые поля как Compose-state (по образцу
- * [app.skerry.ui.host.NewConnectionFormState]). Общее для desktop-редактора (`TunnelEditor` в
- * [TunnelsView]) и мобильного листа (`MobileTunnelEditorSheet`) — одна точка правды по seed'у
- * полей и сборке черновика, чтобы формы не разъезжались.
+ * State for the tunnel create/edit form: editable fields as Compose state, mirroring
+ * [app.skerry.ui.host.NewConnectionFormState]. Shared between the desktop editor (`TunnelEditor`
+ * in [TunnelsView]) and the mobile sheet (`MobileTunnelEditorSheet`) as the single source for
+ * field seeding and draft assembly.
  *
- * Идентичность правимого туннеля ([editingId]) фиксируется при создании формы ([fromEntry]) и
- * уходит в [draft]; поля — изолированный буфер правки (мутации `entry.tunnel` в обход сюда
- * намеренно не долетают — приоритет у незавершённых правок пользователя, см. вызывающие вью:
+ * The edited tunnel's identity ([editingId]) is fixed at form creation ([fromEntry]) and flows
+ * into [draft]; fields are an isolated edit buffer — external `entry.tunnel` mutations do not
+ * propagate here, since in-progress user edits take priority (see call sites:
  * `remember(editingId) { TunnelFormState.fromEntry(existing) }`).
  */
 @Stable
@@ -27,17 +27,17 @@ class TunnelFormState private constructor(private val editingId: String?) {
     var destHost: String by mutableStateOf("")
     var destPort: String by mutableStateOf("")
 
-    /** SOCKS (`-D`): назначения нет — форма прячет поля destination. */
+    /** SOCKS (`-D`) has no destination; the form hides the destination fields. */
     val isDynamic: Boolean get() = direction == TunnelDirection.Dynamic
 
-    /** Валидный черновик для [TunnelManager.save] или `null`, пока ввод неполон (см. [buildTunnelDraft]). */
+    /** Valid draft for [TunnelManager.save], or `null` while input is incomplete (see [buildTunnelDraft]). */
     val draft: TunnelDraft?
         get() = buildTunnelDraft(editingId, label, hostId, direction, bindHost, bindPort, destHost, destPort)
 
     companion object {
         /**
-         * Форма, предзаполненная из [entry] (правка), либо пустая с дефолтами (создание,
-         * `entry == null`): тип `-L`, bind-адрес loopback, порты пустые.
+         * Form pre-filled from [entry] (edit), or empty with defaults (create, `entry == null`):
+         * type `-L`, loopback bind host, empty ports.
          */
         fun fromEntry(entry: TunnelEntry?): TunnelFormState {
             val seed = entry?.tunnel

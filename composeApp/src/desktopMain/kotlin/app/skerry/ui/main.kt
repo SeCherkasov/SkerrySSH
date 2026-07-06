@@ -76,9 +76,9 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Каталог конфигурации Skerry. По умолчанию `~/.config/skerry`; уважает XDG_CONFIG_HOME.
- * Создаётся с правами 0700 (и апгрейдится, если со старой установки остался 0755), чтобы UI-префы
- * и конфиг-файлы внутри не были доступны другим локальным пользователям независимо от их прав.
+ * Skerry config directory. Defaults to `~/.config/skerry`; honors XDG_CONFIG_HOME. Created with
+ * mode 0700 (and upgraded if an old install left 0755), so UI prefs and config files inside are
+ * not accessible to other local users regardless of their permissions.
  */
 private fun configDir(): Path {
     val xdg = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }
@@ -87,9 +87,9 @@ private fun configDir(): Path {
 }
 
 /**
- * Каталог данных Skerry (не конфиг): большие артефакты — скачанные GGUF-модели локального AI.
- * По умолчанию `~/.local/share/skerry`; уважает XDG_DATA_HOME (в Flatpak-песочнице это
- * каталог данных приложения). Модели — публичные веса, hardening 0600 не требуется.
+ * Skerry data directory (not config): large artifacts such as downloaded local-AI GGUF models.
+ * Defaults to `~/.local/share/skerry`; honors XDG_DATA_HOME (the app data dir inside a Flatpak
+ * sandbox). Models are public weights, so 0600 hardening is not required.
  */
 private fun dataDir(): Path {
     val xdg = System.getenv("XDG_DATA_HOME")?.takeIf { it.isNotBlank() }
@@ -98,8 +98,8 @@ private fun dataDir(): Path {
 }
 
 /**
- * Стабильный идентификатор устройства для записей vault (provenance + LWW будущего sync).
- * Генерируется один раз и персистится в `device_id`, чтобы переживать перезапуски.
+ * Stable device identifier for vault records (provenance + sync LWW). Generated once and
+ * persisted to `device_id` so it survives restarts.
  */
 private fun deviceId(dir: Path): String {
     val file = dir.resolve("device_id")
@@ -110,22 +110,22 @@ private fun deviceId(dir: Path): String {
     return id
 }
 
-// Чтение UI-префов с валидацией диапазона/каталога опций — дефолт при невалидном значении
-// (сам ввод-вывод и дефолты при нечитаемости — в FilePrefs).
+// Reads UI prefs with range/option validation, falling back to the default on an invalid value
+// (I/O and unreadable-file defaults live in FilePrefs).
 
-/** Кегль шрифта терминала, px: вне [TERMINAL_FONT_SIZE_RANGE] → дефолт. */
+/** Terminal font size, px: falls back to default outside [TERMINAL_FONT_SIZE_RANGE]. */
 private fun readTerminalFontSize(prefs: FilePrefs): Int =
     prefs.int("terminal_font_size", DEFAULT_TERMINAL_FONT_SIZE)
         .takeIf { it in TERMINAL_FONT_SIZE_RANGE } ?: DEFAULT_TERMINAL_FONT_SIZE
 
-/** Глубина scrollback новой сессии: вне пресетов [TERMINAL_SCROLLBACK_OPTIONS] → дефолт (10 000). */
+/** Scrollback depth for a new session: falls back to default (10,000) outside [TERMINAL_SCROLLBACK_OPTIONS]. */
 private fun readTerminalScrollback(prefs: FilePrefs): Int =
     prefs.int("terminal_scrollback", DEFAULT_TERMINAL_SCROLLBACK)
         .takeIf { it in TERMINAL_SCROLLBACK_OPTIONS } ?: DEFAULT_TERMINAL_SCROLLBACK
 
 /**
- * Живой граф зависимостей desktop-приложения, собранный до `application {}` — обычной функцией,
- * без чтения Compose-состояния: vault/транспорты/менеджеры/sync/AI и колбэки жизненного цикла vault.
+ * Live dependency graph for the desktop app, built before `application {}` by a plain function
+ * with no Compose state reads: vault/transports/managers/sync/AI and vault lifecycle callbacks.
  */
 private class DesktopGraph(
     val deps: AppDependencies,
@@ -138,83 +138,84 @@ private class DesktopGraph(
 )
 
 private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
-    // Локальный зашифрованный vault создаётся ПЕРВЫМ: всё рабочее пространство (хосты/группы/
-    // сниппеты/туннели/known-hosts) живёт его записями (Phase A) и E2E-синкается. Гейт мастер-пароля
-    // (App → VaultGate) закрывает им весь UI, поэтому к моменту коннекта/чтения vault разблокирован.
+    // Local encrypted vault is created FIRST: the whole workspace (hosts/groups/snippets/tunnels/
+    // known-hosts) lives in its records and E2E-syncs. The master-password gate (App -> VaultGate)
+    // blocks the whole UI, so by the time anything connects to or reads it the vault is unlocked.
     val vault = FileVault(
         dir.resolve("vault.json").toString().toPath(),
         IonspinVaultCrypto(),
         deviceId(dir),
         FileSystem.SYSTEM,
         now = { Instant.now().toString() },
-        // Сам файл главных секретов — 0600, а не только каталог (как security_events.json ниже):
-        // защита не должна быть однослойной на случай копирования/бэкапа с сохранением прав.
+        // The main secrets file itself is 0600, not just the directory (unlike security_events.json
+        // below): protection should not be single-layered in case of a permission-preserving copy/backup.
         harden = { PrivateConfig.harden(Path.of(it.toString())) },
     )
-    // Локальный (не синкаемый) журнал событий безопасности: смена мастер-пароля, биометрия,
-    // разблокировка. Пишется контроллером за гейтом; раздел Settings → Безопасность читает его.
+    // Local (non-synced) security event log: master password change, biometrics, unlock. Written
+    // by the controller behind the gate; read by Settings -> Security.
     val securityLog = FileSecurityLog(
         dir.resolve("security_events.json").toString().toPath(),
         FileSystem.SYSTEM,
         harden = { PrivateConfig.harden(Path.of(it.toString())) },
     ) { Instant.now().toString() }
-    // TOFU: первый ключ хоста запоминается в vault (RecordType.KNOWN_HOST — синкается между
-    // устройствами, как в Termius), при смене ключа — отказ + запись события в локальный (НЕ
-    // синкаемый) known_hosts_mismatches, чтобы менеджер мог показать предупреждение и дать
-    // принять/отклонить. Часы штампуют firstSeen/observedAt.
+    // TOFU: a host's first key is remembered in the vault (RecordType.KNOWN_HOST, synced across
+    // devices); on key change, the connection is refused and an event is recorded to the local
+    // (non-synced) known_hosts_mismatches store so the manager can warn and offer accept/reject.
+    // The clock stamps firstSeen/observedAt.
     val knownHostsStore = VaultKnownHostsStore(vault)
     val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches"))
-    // Живой транспорт сессий: маршрутизатор по типу подключения (SSH/Telnet/Serial). SSH несёт
-    // TOFU-verifier/known-hosts; Telnet/Serial без состояния (создаются внутри по умолчанию).
+    // Live session transport: routes by connection type (SSH/Telnet/Serial). SSH carries the TOFU
+    // verifier/known-hosts; Telnet/Serial are stateless (created internally with defaults).
     val transport = RoutingTransport(
         ssh = SshjTransport(
             TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
         ),
     )
-    // «Test connection» из формы — отдельный транспорт с read-only verifier: проба пускает
-    // совпавший доверенный ключ, отвергает смену ключа у известного хоста, а новый хост принимает
-    // БЕЗ записи в known_hosts. Постоянное доверие фиксирует только реальный коннект (TOFU выше).
+    // "Test connection" from the form uses a separate transport with a read-only verifier: it
+    // accepts a matching trusted key, rejects a key change on a known host, and accepts a new host
+    // WITHOUT writing to known-hosts. Only a real connection (TOFU above) establishes trust.
     val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
     val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
-    // Менеджер хостов: профили — записи HOST в vault, порядок дерева — в записи-макете
-    // ([VaultHostStore]/[WorkspaceLayout]). На старте vault залочен (список пуст), после unlock
-    // контроллер перечитывает через reload(). id — случайный UUID.
+    // Host manager: profiles are HOST records in the vault, tree order lives in the layout record
+    // ([VaultHostStore]/[WorkspaceLayout]). The vault starts locked (empty list); the controller
+    // reloads via reload() after unlock. id is a random UUID.
     val hostStore = VaultHostStore(vault)
     val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
-    // Макет рабочего пространства в vault (Phase A): пустые папки (и порядок дерева) синкаются как
-    // одна запись. Пустые папки читаем после unlock (vault залочен на старте) и пишем при изменении.
+    // Workspace layout in the vault: empty folders (and tree order) sync as a single record. Read
+    // after unlock (vault starts locked) and written on change.
     val workspaceLayout = WorkspaceLayoutStore(vault)
-    // Одноуровневая модель vault: keychain-секреты (записи CREDENTIAL). Хост ссылается на секрет
-    // напрямую через credentialId.
+    // Flat vault model: keychain secrets are CREDENTIAL records; a host references a secret
+    // directly via credentialId.
     val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
-    // Self-hosted sync (Phase 2): координатор связывает сетевой клиент (Ktor+SRP), крипту и
-    // локальный vault. Привязка к серверу персистится в sync.json (0600) — несекретное
-    // (URL/accountId/deviceId) + опц. refresh-токен ЗАПЕЧАТАННЫЙ под dataKey (keep-connected).
-    // deviceId переиспользуем стабильный. Курсор синка пока в памяти (re-pull при старте, LWW идемпотентен).
-    // Перечитать менеджеры списков после синка/unlock. Отложенный var: tunnels/snippets создаются
-    // ниже, а sync ссылается на reload через этот var (вызывается уже после полной инициализации).
+    // Self-hosted sync: coordinator ties together the network client (Ktor+SRP), crypto, and the
+    // local vault. The server binding persists to sync.json (0600): non-secret data
+    // (URL/accountId/deviceId) plus an optional refresh token sealed under dataKey (keep-connected).
+    // deviceId is the stable one reused elsewhere. The sync cursor is in-memory for now (re-pull on
+    // start; LWW is idempotent). Reloading list managers after sync/unlock is deferred via a var:
+    // tunnels/snippets are created below, and sync references reload through this var (called only
+    // after full initialization).
     var reloadManagers: () -> Unit = {}
-    // Teams-координатор создаётся ниже (ему нужна сессия sync), но onSynced должен его дёргать:
-    // ключ команды доезжает записью TEAM обычным аккаунтным синком. Поздняя привязка через var.
+    // The teams coordinator is created below (it needs the sync session), but onSynced must call
+    // it: the team key arrives as a TEAM record via the regular account sync. Wired late via a var.
     var teamsForSync: app.skerry.ui.teams.TeamsCoordinator? = null
     val sync = SyncCoordinator(
         clientFactory = { url -> KtorSyncClient(url) },
         crypto = IonspinVaultCrypto(),
         vault = vault,
         configStore = FileSyncConfigStore(dir.resolve("sync.json")),
-        // Персистентный курсор дельта-синка: переживает перезапуск, иначе каждый старт — full re-pull since 0.
+        // Persistent delta-sync cursor: survives restarts, otherwise every start would be a full re-pull since 0.
         syncState = FileSyncStateStore(dir.resolve("sync-cursor.json")),
         deviceIdProvider = { deviceId(dir) },
         deviceName = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Skerry desktop",
-        // Синк подтянул записи прямо в vault → обновить менеджеры, иначе данные не видны до перезахода.
+        // Sync pulled records directly into the vault; refresh managers or the data stays invisible until re-entry.
         onSynced = {
             reloadManagers()
             teamsForSync?.onAccountSynced()
         },
     )
-    // Teams (шеринг записей между аккаунтами, zero-knowledge): координатор поверх той же сессии
-    // sync. Per-team vault'ы в config/teams/ (dataKey = teamKey из записи TEAM аккаунтного vault),
-    // курсоры team-синка — в своём файле. Командные WS-сигналы приходят через onTeamSignal.
+    // Teams (zero-knowledge record sharing between accounts): coordinator layered on the same sync
+    // session. Per-team vaults live in config/teams/ (dataKey = teamKey from the account vault's
+    // TEAM record); team-sync cursors are in their own file. Team WS signals arrive via onTeamSignal.
     val teams = app.skerry.ui.teams.TeamsCoordinator(
         session = { sync.currentSession() },
         client = { sync.currentTeamClient() },
@@ -233,17 +234,17 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         onTeamsChanged = { reloadManagers() },
     )
     teamsForSync = teams
-    // Потерянный ключ команды (пропущен дельта-синком старого клиента) чинится только полным re-pull.
+    // A missing team key (skipped by an older client's delta sync) is only fixed by a full re-pull.
     teams.onKeyMissing = { sync.recoverFullPull() }
     sync.onTeamSignal = teams::onSignal
-    // Генерация SSH-ключей в разделе Vault: BouncyCastle поверх sshj-формата (тот же, что читает транспорт).
+    // SSH key generation in the Vault section: BouncyCastle over the sshj format (the same one the transport reads).
     val keyGenerator = BouncyCastleSshKeyGenerator()
-    // Разбор импортированных SSH-сертификатов (раздел Vault → Certificates) — sshj поверх ssh-wire.
+    // Parses imported SSH certificates (Vault -> Certificates section) via sshj over the ssh-wire format.
     val certificateInspector = SshjCertificateInspector()
-    // Глобальные туннели: сохранённые пробросы в tunnels.json. Активация ходит
-    // через ОТДЕЛЬНЫЙ probe-транспорт (read-only verifier): включить можно только уже доверенный
-    // хост — туннель открывается без терминала, поэтому тихого TOFU тут быть не должно. Резолв
-    // хоста/секрета — через граф (hosts + credentials в открытом vault). Scope живёт всё приложение.
+    // Global tunnels: saved forwards in tunnels.json. Activation uses a SEPARATE probe transport
+    // (read-only verifier): only an already-trusted host can be enabled — a tunnel opens without a
+    // terminal, so silent TOFU must not happen here. Host/secret resolution goes through the graph
+    // (hosts + credentials in the unlocked vault). Scope lives for the app's lifetime.
     val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
     val tunnelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val tunnels = TunnelManager(
@@ -252,13 +253,13 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
         scope = tunnelScope,
     ) { UUID.randomUUID().toString() }
-    // Сохранённые сниппеты: библиотека команд — записи SNIPPET в vault (команды могут содержать
-    // inline-креды, поэтому под общим шифрованием и E2E-синком). Запуск идёт в активный терминал.
+    // Saved snippets: the command library is SNIPPET records in the vault (commands may contain
+    // inline credentials, so they share encryption and E2E sync). Run targets the active terminal.
     val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
-    // AI-ассистент: настройки (провайдер/BYOK/локальная модель) — зашифрованная запись SETTINGS
-    // в vault; запрос маршрутизируется в облако либо в локальный рантайм (Llamatik/llama.cpp).
-    // Локальный AI: GGUF-модели в ~/.local/share/skerry/models (XDG), закачка с докачкой и sha256.
-    // На старте vault залочен (settings = дефолт), после unlock контроллер перечитывает настройки.
+    // AI assistant: settings (provider/BYOK/local model) are an encrypted SETTINGS record in the
+    // vault; a request routes to the cloud or to the local runtime (Llamatik/llama.cpp). Local AI:
+    // GGUF models under ~/.local/share/skerry/models (XDG), downloaded with resume and sha256
+    // verification. The vault starts locked (settings default); the controller reloads settings after unlock.
     val aiSettingsStore = AiSettingsStore(vault)
     val localModelStore = LocalModelStore(FileSystem.SYSTEM, dataDir().resolve("models").toString().toPath())
     val localAi = LocalAiDeps(
@@ -275,56 +276,59 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         localInstalled = localAi::installed,
         models = localAi.modelsController(tunnelScope),
     )
-    // Миграция секретов в vault (IDENTITY → CREDENTIAL, хост → прямой credentialId) при
-    // разблокировке — идемпотентна. После — перечитываем менеджеры и бесшумно восстанавливаем
-    // sync-сессию. Переноса старого локального workspace (hosts/snippets/tunnels.json) больше нет:
-    // рабочее пространство живёт записями vault, до первого прод-релиза миграции не делаем.
-    // Теперь все менеджеры существуют — подключаем reload (используется и из onSynced, и при unlock).
+    // Secret migration into the vault (IDENTITY -> CREDENTIAL, host -> direct credentialId) on
+    // unlock is idempotent. Afterward, managers are reloaded and the sync session is silently
+    // restored. There is no more migration of the old local workspace (hosts/snippets/tunnels.json):
+    // the workspace lives in vault records.
+    // All managers now exist, so reload is wired up (used both from onSynced and on unlock).
     reloadManagers = {
         hosts.reload()
         snippets.reload()
         tunnels.reload()
         knownHosts.refresh()
-        // BYOK-настройки AI (ключ/модель) — тоже запись SETTINGS в vault: перечитываем и здесь,
-        // чтобы правка, прилетевшая живым синком с другого устройства (onSynced зовёт reloadManagers),
-        // сразу отражалась в UI, а не только после перезахода.
+        // AI BYOK settings (key/model) are also a SETTINGS vault record, so they're reread here too:
+        // an edit that arrives via live sync from another device (onSynced calls reloadManagers)
+        // reflects in the UI immediately instead of only after a re-login.
         ai.refresh()
     }
     val onVaultUnlocked: () -> Unit = {
-        // Миграция идемпотентна и безопасно повторяется на следующем unlock — но её сбой не должен
-        // исчезать бесследно (частично мигрированный vault: хосты без перепривязки credentialId).
+        // Migration is idempotent and safely retried on the next unlock, but a failure shouldn't
+        // vanish silently (partially migrated vault: hosts without a rebound credentialId).
         runCatching { VaultMigration(vault, hostStore).migrate() }
             .onFailure { System.err.println("vault migration failed (retries on next unlock): ${it.message}") }
-        // Vault открыт → перечитать менеджеры (включая BYOK-настройки AI) из расшифрованных записей.
+        // Vault opened, so reload managers (including AI BYOK settings) from decrypted records.
         reloadManagers()
-        // keep-connected: vault открыт → есть dataKey, можно бесшумно восстановить sync-сессию.
+        // keep-connected: vault opened means a dataKey exists, so the sync session can be silently restored.
         sync.restoreSession()
     }
-    // Внешняя чистка при безвозвратном сбросе vault (забытый пароль / битый файл). Файл vault уже
-    // стёрт контроллером (Vault.reset) и теперь заблокирован, поэтому credentials.reload() здесь НЕ
-    // зовём (он требует открытого vault) — список секретов перечитается при создании нового vault.
-    // Сброс vault (забытый пароль / битый файл). Phase A: хосты/сниппеты/туннели — записи vault,
-    // поэтому Vault.reset() уже стёр их вместе с секретами (zero-knowledge: без мастер-пароля их не
-    // восстановить — «только секреты, профили оставить» технически невозможно). Здесь чистим лишь
-    // данные ВНЕ vault и отражаем опустевший vault в менеджерах. Vault на этот момент заблокирован.
+    // External cleanup on an irreversible vault reset (forgotten password / corrupted file). The
+    // vault file is already erased by the controller (Vault.reset) and now locked, so
+    // credentials.reload() is NOT called here (it requires an open vault); the secret list rereads
+    // when a new vault is created.
+    // Vault reset (forgotten password / corrupted file). Hosts/snippets/tunnels are vault records,
+    // so Vault.reset() already erased them along with the secrets (zero-knowledge: they can't be
+    // recovered without the master password — "keep profiles, wipe only secrets" is technically
+    // impossible). This only cleans data OUTSIDE the vault and reflects the emptied vault in the
+    // managers. The vault is locked at this point.
     val onVaultReset: (ResetScope) -> Unit = { resetScope ->
         tunnels.closeAll()
-        // Ключи команд жили в стёртом vault — локальные team-vault'ы больше не открыть; лочим их.
+        // Team keys lived in the erased vault, so local team vaults can no longer be opened; lock them.
         teams.lock()
-        // Журнал событий безопасности относится к стёртому vault (смена пароля/биометрия/паринг) —
-        // при любом сбросе он становится неактуальным и может выдать имена устройств; чистим всегда.
+        // The security log refers to the erased vault (password change/biometrics/pairing); on any
+        // reset it becomes stale and could leak device names, so it's always cleared.
         securityLog.clear()
-        // Сброс стёр dataKey → sealed refresh-токен sync обёрнут под мёртвым ключом. Рвём привязку
-        // к серверу, иначе настройки висели бы «Linked» без возможности войти. (Биометрии на desktop
-        // нет — deps.biometrics=null.) Чистый старт: заново создать vault и подключить sync.
+        // The reset erased the dataKey, so the sealed sync refresh token is wrapped under a dead key.
+        // Disconnects from the server, otherwise settings would show "Linked" with no way to log in.
+        // (No biometrics on desktop: deps.biometrics=null.) Clean start: create a new vault and
+        // reconnect sync.
         sync.disconnect()
-        // Хосты/группы стёрты вместе с vault при ЛЮБОМ сбросе → чистим и их локальные UI-следы
-        // (недавние, свёрнутость, пустые папки): иначе в открытом виде остались бы имена групп и
-        // UUID хостов, которых уже нет (security L1/I1).
+        // Hosts/groups are erased along with the vault on any reset, so their local UI traces
+        // (recents, collapse state, empty folders) are cleared too: otherwise group names and host
+        // UUIDs that no longer exist would remain visible.
         prefs.setLines("recent_connections", emptyList())
         prefs.setLines("collapsed_groups", emptyList())
         prefs.setLines("custom_groups", emptyList())
-        // Заводской сброс: дополнительно сносим доверенные ключи (не-vault) и настройки терминала.
+        // Factory reset: also wipes trusted keys (non-vault) and terminal settings.
         if (resetScope == ResetScope.Everything) {
             knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
             knownHosts.entries.toList().forEach { knownHosts.forget(it) }
@@ -355,22 +359,24 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
 }
 
 fun main() {
-    // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
-    // на старте desktop делаем это блокирующе, чтобы граф зависимостей строился уже готовым.
+    // libsodium (ionspin) requires async init before the first VaultCrypto call; on desktop startup
+    // this is done blocking so the dependency graph is already built and ready.
     runBlocking { initializeVaultCrypto() }
-    // Граф зависимостей строится до application{} обычной функцией: Compose-состояние внутри не
-    // читается, а сборка не попадает в композицию (и не пересобралась бы при рекомпозиции корня).
+    // The dependency graph is built before application{} by a plain function: no Compose state is
+    // read inside it, and the build isn't part of composition (so it wouldn't rebuild on root recomposition).
     val dir = configDir()
     val prefs = FilePrefs(dir)
     val graph = buildDesktopGraph(dir, prefs)
     application {
         val deps = graph.deps
         val workspaceLayout = graph.workspaceLayout
-        // Размер окна подбираем под доступную область экрана (без таскбара): ~90% экрана в рамках
-        // MIN_WINDOW…MAX_WINDOW, не больше самого экрана. maximumWindowBounds учитывает панели ОС.
-        // Язык интерфейса живёт в корне: провайдер локали над темой должен реагировать на смену из
-        // настроек и рекомпозировать всё дерево. onUiLanguageChange (из DesktopDesignState) обновляет
-        // это состояние и пишет персист; DesktopDesignState держит копию для отображения в дропдауне.
+        // Window size is fit to the available screen area (excluding the taskbar): ~90% of the
+        // screen within MIN_WINDOW..MAX_WINDOW, never larger than the screen itself.
+        // maximumWindowBounds accounts for OS panels.
+        // The UI language lives at the root: the locale provider above the theme must react to
+        // changes from settings and recompose the whole tree. onUiLanguageChange (from
+        // DesktopDesignState) updates this state and persists it; DesktopDesignState keeps a copy
+        // for the dropdown display.
         val currentUiLanguage = remember { mutableStateOf(prefs.id("ui_language", UiLanguage.DEFAULT, UiLanguage::fromId)) }
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
         val windowState = rememberWindowState(
@@ -382,9 +388,9 @@ fun main() {
             state = windowState,
             title = "Skerry",
         ) {
-            // Живой vault + хосты + сессии + known-hosts подключены: chrome закрыт гейтом мастер-пароля,
-            // клик по хосту открывает живой SSH-терминал во вкладке (transport+identities из `deps`),
-            // менеджер known-hosts работает поверх своих сторов (knownHosts из `deps`).
+            // Live vault + hosts + sessions + known-hosts are wired up: chrome is behind the master
+            // password gate, clicking a host opens a live SSH terminal in a tab (transport+identities
+            // from `deps`), and the known-hosts manager runs over its own stores (knownHosts from `deps`).
             AppLocaleProvider(currentUiLanguage.value) {
               app.skerry.ui.theme.SkerryTheme {
                 app.skerry.ui.desktop.DesktopDesignApp(
@@ -394,8 +400,8 @@ fun main() {
                     onCollapsedGroupsChange = { prefs.setLines("collapsed_groups", it.toList()) },
                     initialRecentHostIds = prefs.lines("recent_connections"),
                     onRecentHostIdsChange = { prefs.setLines("recent_connections", it) },
-                    // Пустые папки синкаются в vault: стартуем пусто (vault залочен), читаем через
-                    // customGroupsProvider после unlock, пишем изменения в запись-макет.
+                    // Empty folders sync via the vault: starts empty (vault is locked), reads through
+                    // customGroupsProvider after unlock, writes changes to the layout record.
                     initialCustomGroups = emptyList(),
                     onCustomGroupsChange = { groups -> workspaceLayout.write(workspaceLayout.read().copy(groups = groups)) },
                     customGroupsProvider = { workspaceLayout.read().groups },

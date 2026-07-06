@@ -15,38 +15,38 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
 
 /**
- * Граф зависимостей приложения, собираемый платформенной точкой входа (desktop `main`) и подаваемый
- * в корневой composable (`DesktopDesignApp`/`MobileDesignApp`).
+ * App dependency graph, assembled by the platform entry point (desktop `main`) and supplied to the
+ * root composable (`DesktopDesignApp`/`MobileDesignApp`).
  *
- * Единый держатель вместо россыпи nullable-аргументов: новая подсистема — это поле здесь,
- * а не ещё один параметр корневого composable. `null` означает «подсистема ещё не реализована на
- * этой платформе» (паритет): desktop собирает полный граф (sshj-транспорт, файловый менеджер
- * хостов, файловый vault), мобильные таргеты пока подают пустой граф и показывают плейсхолдер.
+ * A single holder instead of a pile of nullable parameters: a new subsystem is a field here, not
+ * another root-composable parameter. `null` means the subsystem isn't implemented on this platform
+ * yet: desktop assembles the full graph (sshj transport, file-backed host manager, file-backed
+ * vault); mobile targets currently supply an empty graph and show a placeholder.
  */
 data class AppDependencies(
     val transport: SshTransport? = null,
     val hosts: HostManagerController? = null,
     val vault: Vault? = null,
-    /** Менеджер keychain-секретов (ключи/пароли/сертификаты); `null` — подсистема не подключена. */
+    /** Manager for keychain secrets (keys/passwords/certificates); `null` if not wired up. */
     val credentials: CredentialManagerController? = null,
-    /** Менеджер known-hosts (доверенные ключи + события смены ключа); `null` — подсистема не подключена. */
+    /** Known-hosts manager (trusted keys + key-change events); `null` if not wired up. */
     val knownHosts: KnownHostsController? = null,
-    /** Генератор/инспектор SSH-ключей (раздел Vault); `null` — платформа без крипты ключей. */
+    /** SSH key generator/inspector (Vault section); `null` on a platform without key crypto. */
     val keyGenerator: SshKeyGenerator? = null,
-    /** Инспектор SSH-сертификатов (раздел Vault → Certificates); `null` — платформа без разбора cert. */
+    /** SSH certificate inspector (Vault → Certificates); `null` on a platform without cert parsing. */
     val certificateInspector: SshCertificateInspector? = null,
-    /** Менеджер глобальных сохранённых туннелей (раздел Tunnels); `null` — подсистема не подключена. */
+    /** Manager for globally saved tunnels (Tunnels section); `null` if not wired up. */
     val tunnels: TunnelManager? = null,
-    /** Менеджер сохранённых сниппетов (раздел Snippets); `null` — подсистема не подключена. */
+    /** Manager for saved snippets (Snippets section); `null` if not wired up. */
     val snippets: SnippetManager? = null,
-    /** Биометрическая разблокировка vault; `null` — платформа без биометрии (desktop MVP). */
+    /** Biometric vault unlock; `null` on a platform without biometrics. */
     val biometrics: VaultBiometrics? = null,
-    /** Координатор self-hosted синхронизации (Phase 2); `null` — sync не подключён на платформе. */
+    /** Self-hosted sync coordinator; `null` if sync isn't wired up on this platform. */
     val sync: SyncCoordinator? = null,
-    /** Teams (шеринг хостов/секретов/сниппетов между аккаунтами); `null` — подсистема не подключена. */
+    /** Teams (sharing hosts/secrets/snippets between accounts); `null` if not wired up. */
     val teams: app.skerry.ui.teams.TeamsCoordinator? = null,
-    /** Локальный журнал событий безопасности (Settings → Безопасность); `null` — журнал не ведётся. */
+    /** Local security event log (Settings → Security); `null` if not logging. */
     val securityLog: SecurityLog? = null,
-    /** Локальный AI (Phase 3): стор моделей + загрузчик + рантайм; `null` — превью/мок без подсистемы. */
+    /** Local AI: model store + downloader + runtime; `null` for preview/mock without the subsystem. */
     val localAi: LocalAiDeps? = null,
 )

@@ -10,10 +10,10 @@ import app.skerry.shared.ssh.HostKeyMismatchStore
 import app.skerry.shared.ssh.KnownHost
 import app.skerry.shared.ssh.KnownHostsStore
 
-/** Статус доверенного ключа в таблице known-hosts. */
+/** Status of a trusted key in the known-hosts table. */
 enum class KnownHostStatus { Verified, Changed }
 
-/** Строка таблицы known-hosts: доверенный ключ + статус (Changed, если по нему есть незакрытая смена ключа). */
+/** Known-hosts table row: a trusted key plus status (Changed if it has a pending key change). */
 @Immutable
 data class KnownHostEntry(
     val host: KnownHost,
@@ -21,19 +21,20 @@ data class KnownHostEntry(
 )
 
 /**
- * Состояние менеджера known-hosts поверх [KnownHostsStore] (доверенные ключи) и
- * [HostKeyMismatchStore] (незакрытые события смены ключа). Держит обе проекции как Compose-state и
- * сводит мутации к сторам, перечитывая [entries]/[mismatches] после каждой — тем же приёмом, что
+ * Known-hosts manager state over [KnownHostsStore] (trusted keys) and [HostKeyMismatchStore]
+ * (pending key-change events). Holds both projections as Compose state and reduces mutations to
+ * the stores, reloading [entries]/[mismatches] after each, mirroring
  * [app.skerry.ui.host.HostManagerController].
  *
- * Источник истины — сторы: их же пишет [app.skerry.shared.ssh.TofuHostKeyVerifier] из потока sshj при
- * подключении. Контроллер перечитывает их на refresh, поэтому смена ключа, замеченная во время сессии,
- * проявится при следующем построении view.
+ * Source of truth is the stores: [app.skerry.shared.ssh.TofuHostKeyVerifier] writes to them from
+ * the sshj thread on connect. The controller reloads them on refresh, so a key change noticed
+ * during a session shows up on the next view build.
  *
- * Мутации синхронны (пишут в файловые сторы прямо из UI-обработчиков) — как [HostManagerController]:
- * они редки (принять/отклонить/забыть ключ), поэтому контроллер не держит корутинную scope.
+ * Mutations are synchronous (write to file-backed stores directly from UI handlers), like
+ * [HostManagerController]: they are rare (accept/reject/forget a key), so the controller holds no
+ * coroutine scope.
  *
- * [now] штампует [KnownHost.firstSeen] при принятии нового ключа (ISO-8601); по умолчанию пусто.
+ * [now] stamps [KnownHost.firstSeen] when accepting a new key (ISO-8601); empty by default.
  */
 @Stable
 class KnownHostsController(
@@ -51,27 +52,27 @@ class KnownHostsController(
     }
 
     /**
-     * Принять новый ключ: заменить доверенный отпечаток на предъявленный (с новой отметкой времени)
-     * и снять событие. После этого хост снова Verified — с актуальным ключом.
+     * Accepts a new key: replaces the trusted fingerprint with the offered one (new timestamp)
+     * and clears the event. The host becomes Verified again with the current key.
      */
     fun acceptNewKey(mismatch: HostKeyMismatch) {
-        // Атомарная замена (не remove+add): иначе между ними поток sshj мог бы увидеть отсутствие
-        // записи и пере-TOFU'ить произвольный предъявленный ключ как новый доверенный.
+        // Atomic replace, not remove+add: otherwise the sshj thread could observe a missing entry
+        // between the two and re-TOFU an arbitrary offered key as newly trusted.
         store.replace(KnownHost(mismatch.host, mismatch.port, mismatch.keyType, mismatch.offeredFingerprint, now()))
         mismatchStore.clear(mismatch.host, mismatch.port, mismatch.keyType)
         refresh()
     }
 
     /**
-     * Отклонить новый ключ (Reject & block / Dismiss): снять событие, оставив доверенным прежний ключ.
-     * Предъявленный ключ так и не доверен — будущие подключения с ним продолжат отклоняться.
+     * Rejects a new key (Reject & block / Dismiss): clears the event, keeping the previous key
+     * trusted. The offered key stays untrusted; future connections offering it keep being rejected.
      */
     fun reject(mismatch: HostKeyMismatch) {
         mismatchStore.clear(mismatch.host, mismatch.port, mismatch.keyType)
         refresh()
     }
 
-    /** Забыть доверенный ключ целиком (и связанное событие смены, если есть). */
+    /** Forgets a trusted key entirely (and its associated change event, if any). */
     fun forget(entry: KnownHostEntry) {
         val host = entry.host
         store.remove(host.host, host.port, host.keyType)
@@ -80,9 +81,10 @@ class KnownHostsController(
     }
 
     /**
-     * Перечитать обе проекции из сторов. Вызывается при открытии экрана known-hosts: TOFU-верификатор
-     * пишет новые/изменившиеся ключи в тот же стор из потока sshj во время сессии, а контроллер живёт
-     * дольше экрана — без явного refresh такие записи проявились бы только при перезапуске приложения.
+     * Reloads both projections from the stores. Called when the known-hosts screen opens: the
+     * TOFU verifier writes new/changed keys to the same store from the sshj thread during a
+     * session, and the controller outlives the screen, so such records would otherwise surface
+     * only on app restart.
      */
     fun refresh() {
         val pending = mismatchStore.all()
@@ -97,8 +99,8 @@ class KnownHostsController(
 }
 
 /**
- * Короткий вид отпечатка для таблицы: без префикса `SHA256:`, первые 10 символов … последние 4
- * (как в макете `8c3F1a2bQz…pK9R`). Короткие значения отдаются как есть.
+ * Short fingerprint form for the table: strips the `SHA256:` prefix, keeps the first 10 and last
+ * 4 characters (e.g. `8c3F1a2bQz…pK9R`). Short values are returned as-is.
  */
 fun shortFingerprint(fingerprint: String): String {
     val body = fingerprint.removePrefix("SHA256:")

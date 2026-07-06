@@ -67,7 +67,7 @@ class TerminalSessionTest {
         val channel = FakeShellChannel()
         val session = ShellTerminalSession(channel, scope)
 
-        // Баннер шелла приходит ДО того, как UI успел подписаться (реальный first-connect).
+        // Shell banner arrives before the UI subscribes (real first-connect).
         channel.emit("banner\r\n".encodeToByteArray())
 
         val received = mutableListOf<ByteArray>()
@@ -120,11 +120,11 @@ class TerminalSessionTest {
         val scope = CoroutineScope(dispatcher)
         val channel = FakeShellChannel()
         val session = ShellTerminalSession(channel, scope)
-        scope.launch { session.output.collect {} } // сбор канала стартует по подписке
+        scope.launch { session.output.collect {} } // channel collection starts on subscription
 
-        channel.eof() // штатный EOF (shell сделал `exit`)
+        channel.eof() // clean EOF (shell ran `exit`)
 
-        // Штатный выход shell → cleanExit=true: вызывающий закроет сессию, не реконнектя.
+        // Clean shell exit → cleanExit=true: caller closes the session without reconnecting.
         assertEquals(TerminalState.Closed(cleanExit = true), session.state.value)
         scope.cancel()
     }
@@ -139,7 +139,7 @@ class TerminalSessionTest {
         session.close()
 
         assertTrue(channel.closed)
-        // Наше закрытие — не штатный выход shell: cleanExit=false.
+        // Our close is not a clean shell exit: cleanExit=false.
         assertEquals(TerminalState.Closed(cleanExit = false), session.state.value)
         scope.cancel()
     }
@@ -150,12 +150,12 @@ class TerminalSessionTest {
         val scope = CoroutineScope(dispatcher)
         val channel = ThrowingShellChannel()
         val session = ShellTerminalSession(channel, scope)
-        scope.launch { session.output.collect {} } // сбор канала стартует по подписке
+        scope.launch { session.output.collect {} } // channel collection starts on subscription
 
-        // Сбор вывода стартует с подпиской; обрыв транспорта (не отмена) должен перевести
-        // сессию в Closed (без cleanExit — это обрыв, кандидат на реконнект), но не уронить scope.
+        // Output collection starts on subscription; a transport error (not cancellation) must
+        // move the session to Closed (without cleanExit — a reconnect candidate) without killing scope.
         assertEquals(TerminalState.Closed(cleanExit = false), session.state.value)
-        assertTrue(scope.isActive, "обрыв транспорта не должен отменять scope")
+        assertTrue(scope.isActive, "a transport error must not cancel the scope")
         scope.cancel()
     }
 
@@ -175,7 +175,7 @@ class TerminalSessionTest {
     }
 }
 
-/** Управляемый вручную фейк-канал: эмиссия и EOF под контролем теста. */
+/** Manually driven fake channel: emission and EOF controlled by the test. */
 private class FakeShellChannel : ShellChannel {
     val writes = mutableListOf<ByteArray>()
     val resizes = mutableListOf<PtySize>()
@@ -199,7 +199,7 @@ private class FakeShellChannel : ShellChannel {
         emissions.send(chunk)
     }
 
-    /** Штатный EOF канала (сервер закрыл shell сам — `exit`): помечаем endedWithEof перед закрытием. */
+    /** Clean channel EOF (server closed the shell itself via `exit`): sets endedWithEof before closing. */
     fun eof() {
         eof = true
         emissions.close()
@@ -220,7 +220,7 @@ private class FakeShellChannel : ShellChannel {
     }
 }
 
-/** Канал, чей вывод сразу падает с ошибкой транспорта — имитирует обрыв соединения. */
+/** Channel whose output immediately fails with a transport error — simulates a dropped connection. */
 private class ThrowingShellChannel : ShellChannel {
     override val isOpen: Boolean get() = false
     override val output: Flow<ByteArray> = flow { throw SshConnectionException("transport down") }

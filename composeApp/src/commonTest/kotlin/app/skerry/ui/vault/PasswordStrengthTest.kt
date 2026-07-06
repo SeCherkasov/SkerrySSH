@@ -18,7 +18,7 @@ class PasswordStrengthTest {
 
     @Test
     fun short_password_is_weak_regardless_of_variety() {
-        // < 8 символов — всегда Weak, даже со всеми классами символов.
+        // < 8 chars is always Weak, even with every character class present.
         assertEquals(PasswordStrength.Weak, passwordStrength("aB1!"))
         assertEquals(PasswordStrength.Weak, passwordStrength("abcdefg"))
     }

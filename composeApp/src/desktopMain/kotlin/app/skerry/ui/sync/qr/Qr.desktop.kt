@@ -4,8 +4,8 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.google.zxing.qrcode.encoder.Encoder
 
 /**
- * ZXing-генерация QR-матрицы на desktop (тот же чистый Java-API, что на Android). Низкоуровневый
- * [Encoder.encode] отдаёт сырую `ByteMatrix` модулей — тихую зону и масштаб добавляет [QrImage].
+ * QR matrix generation via ZXing (same pure-Java API as Android). Low-level [Encoder.encode]
+ * returns the raw module `ByteMatrix`; quiet zone and scaling are added by [QrImage].
  */
 actual fun encodeQrMatrix(text: String): QrMatrix? = runCatching {
     val qr = Encoder.encode(text, ErrorCorrectionLevel.M, null)

@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Точечные тесты чистого API [CharMetrics]; поведение в сетке покрыто через TerminalEmulatorTest. */
+/** Focused tests of the pure [CharMetrics] API; grid behavior is covered via TerminalEmulatorTest. */
 class CharMetricsTest {
 
     @Test
@@ -25,7 +25,7 @@ class CharMetricsTest {
     @Test
     fun `codePointToString handles BMP, astral and invalid`() {
         assertEquals("A", CharMetrics.codePointToString(0x41))
-        assertEquals("😀", CharMetrics.codePointToString(0x1F600)) // суррогатная пара
-        assertEquals("�", CharMetrics.codePointToString(0xD800))  // одиночный суррогат — невалиден
+        assertEquals("😀", CharMetrics.codePointToString(0x1F600)) // surrogate pair
+        assertEquals("�", CharMetrics.codePointToString(0xD800))  // lone surrogate — invalid
     }
 }

@@ -1,26 +1,27 @@
 package app.skerry.shared.ssh
 
 /**
- * Контракт проброса портов поверх установленной SSH-сессии. Открывается из
- * [SshConnection.forwardLocal]/[SshConnection.forwardRemote]; платформенная реализация — sshj на
- * desktop/Android (jvmShared), как и сам транспорт.
+ * Port forwarding contract over an established SSH session. Opened from
+ * [SshConnection.forwardLocal]/[SshConnection.forwardRemote]; platform implementation is sshj on
+ * desktop/Android (jvmShared), same as the transport itself.
  *
- * Каркас MVP — два направления:
- * - локальный (`-L`, [LocalForwardSpec]): слушатель поднимается на этой машине, исходящие
- *   соединения туннелируются и открываются сервером к адресу назначения;
- * - обратный (`-R`, [RemoteForwardSpec]): слушатель поднимает сервер, входящие соединения приходят
- *   по туннелю и открываются нами к локальному адресу назначения.
+ * Two directions:
+ * - local (`-L`, [LocalForwardSpec]): listener runs on this machine, outbound connections are
+ *   tunneled and opened by the server to the destination address;
+ * - remote (`-R`, [RemoteForwardSpec]): listener runs on the server, inbound connections arrive
+ *   over the tunnel and are opened by us to the local destination address.
  *
- * Динамический (`-D`, [DynamicForwardSpec]): на этой машине поднимается SOCKS5-прокси; адрес
- *   назначения каждый клиент SOCKS сообщает сам, и под него открывается отдельный туннель к серверу
- *   (sshj штатного SOCKS-форвардера не даёт — слушатель и протокол реализуем сами).
+ * Dynamic (`-D`, [DynamicForwardSpec]): a SOCKS5 proxy runs on this machine; each SOCKS client
+ *   supplies its own destination address, and a separate tunnel to the server is opened per
+ *   connection (sshj has no built-in SOCKS forwarder, so the listener and protocol are implemented
+ *   here).
  */
 
 /**
- * Локальный проброс (`-L`). Слушатель поднимается на [bindHost]:[bindPort] этой машины; каждое
- * принятое соединение туннелируется через SSH, а сервер открывает его к [destHost]:[destPort]
- * (адрес назначения разрешается со стороны сервера). [bindPort] `0` — пусть свободный порт выберет
- * ОС (фактический порт — в [PortForward.boundPort]). По умолчанию слушаем только loopback.
+ * Local forward (`-L`). Listener runs on [bindHost]:[bindPort] of this machine; each accepted
+ * connection is tunneled over SSH and opened by the server to [destHost]:[destPort] (destination
+ * resolved server-side). [bindPort] `0` lets the OS choose a free port (actual port in
+ * [PortForward.boundPort]). Listens on loopback only by default.
  */
 data class LocalForwardSpec(
     val bindHost: String = "127.0.0.1",
@@ -30,10 +31,10 @@ data class LocalForwardSpec(
 )
 
 /**
- * Обратный проброс (`-R`). Слушатель поднимает сервер на [bindHost]:[bindPort] у себя; входящие
- * соединения приходят к нам по туннелю, а мы открываем их к [destHost]:[destPort] (адрес назначения
- * разрешается локально). [bindPort] `0` — пусть сервер сам выберет свободный порт (назначенный порт —
- * в [PortForward.boundPort]). [bindHost] `""` означает «все интерфейсы сервера» по семантике RFC 4254.
+ * Remote forward (`-R`). Listener runs on the server at [bindHost]:[bindPort]; inbound connections
+ * arrive over the tunnel and are opened by us to [destHost]:[destPort] (destination resolved
+ * locally). [bindPort] `0` lets the server choose a free port (assigned port in
+ * [PortForward.boundPort]). [bindHost] `""` means "all server interfaces" per RFC 4254.
  */
 data class RemoteForwardSpec(
     val bindHost: String = "127.0.0.1",
@@ -43,11 +44,11 @@ data class RemoteForwardSpec(
 )
 
 /**
- * Динамический проброс (`-D`). На [bindHost]:[bindPort] этой машины поднимается SOCKS5-прокси; адрес
- * назначения сообщает сам клиент SOCKS в момент соединения, и под каждое открывается отдельный туннель
- * (сервер разрешает адрес у себя, как и при `-L`). [bindPort] `0` — порт выберет ОС (фактический —
- * в [PortForward.boundPort]). По умолчанию слушаем только loopback. Адреса назначения здесь нет — он
- * динамический, поэтому spec несёт лишь параметры слушателя.
+ * Dynamic forward (`-D`). A SOCKS5 proxy runs on [bindHost]:[bindPort] of this machine; the SOCKS
+ * client supplies the destination address per connection, and a separate tunnel is opened for each
+ * (destination resolved server-side, as with `-L`). [bindPort] `0` lets the OS choose a port
+ * (actual port in [PortForward.boundPort]). Listens on loopback only by default. No destination
+ * address here — it's dynamic, so the spec only carries listener parameters.
  */
 data class DynamicForwardSpec(
     val bindHost: String = "127.0.0.1",
@@ -55,44 +56,45 @@ data class DynamicForwardSpec(
 )
 
 /**
- * Живой проброс портов. Активен с момента открытия и пока [isActive]; [close] снимает слушатель и
- * закрывает уже установленные туннелированные соединения. SSH-соединение при этом остаётся открытым.
+ * A live port forward. Active from open until [isActive] flips; [close] tears down the listener and
+ * closes already-established tunneled connections. The SSH connection itself stays open.
  *
- * Несёт собственную телеметрию ([bytesUp]/[bytesDown]) и поддерживает паузу ([pause]/[resume]):
- * на паузе слушатель остаётся на своём порту, но новые соединения не туннелируются (принимаются и
- * сразу закрываются), уже открытые туннели доживают сами. Скорость (байт/с) считает потребитель по
- * дельте счётчиков во времени — сам проброс отдаёт лишь монотонные суммы.
+ * Carries its own telemetry ([bytesUp]/[bytesDown]) and supports pausing ([pause]/[resume]): while
+ * paused the listener keeps its port but new connections aren't tunneled (accepted and immediately
+ * closed); already-open tunnels run to completion. Throughput (bytes/s) is computed by the consumer
+ * from the delta of the counters over time — the forward itself only reports monotonic totals.
  */
 interface PortForward {
     val isActive: Boolean
 
-    /** Проброс на паузе: слушатель держит порт, но новые соединения не туннелируются. */
+    /** Forward is paused: listener holds the port but new connections aren't tunneled. */
     val isPaused: Boolean
 
     /**
-     * Фактический порт слушателя. Для локального проброса — порт на этой машине; для обратного —
-     * порт на сервере. Если в spec было запрошено `0`, здесь — реально назначенный порт.
+     * Actual listener port. For a local forward, the port on this machine; for a remote forward,
+     * the port on the server. If the spec requested `0`, this is the actually assigned port.
      */
     val boundPort: Int
 
     /**
-     * Суммарно байт, ушедших в SSH-канал (к серверу) по всем соединениям этого проброса. Монотонно
-     * растёт за время жизни проброса; пауза/закрытие отдельных туннелей счётчик не сбрасывают.
+     * Total bytes sent into the SSH channel (to the server) across all connections of this forward.
+     * Monotonically increasing over the forward's lifetime; pausing or closing individual tunnels
+     * doesn't reset it.
      */
     val bytesUp: Long
 
-    /** Суммарно байт, пришедших из SSH-канала (от сервера). Монотонно; не сбрасывается. */
+    /** Total bytes received from the SSH channel (from the server). Monotonic; never reset. */
     val bytesDown: Long
 
-    /** Приостановить туннелирование новых соединений. Идемпотентно; порт остаётся занят. */
+    /** Pause tunneling of new connections. Idempotent; the port stays held. */
     suspend fun pause()
 
-    /** Возобновить туннелирование после [pause]. Идемпотентно. */
+    /** Resume tunneling after [pause]. Idempotent. */
     suspend fun resume()
 
-    /** Снять проброс. Идемпотентно. */
+    /** Tear down the forward. Idempotent. */
     suspend fun close()
 }
 
-/** Ошибка проброса портов: слушатель не поднялся, сервер отверг запрос или обрыв канала. */
+/** Port forwarding error: listener failed to start, server rejected the request, or channel broke. */
 class PortForwardException(message: String, cause: Throwable? = null) : SshException(message, cause)

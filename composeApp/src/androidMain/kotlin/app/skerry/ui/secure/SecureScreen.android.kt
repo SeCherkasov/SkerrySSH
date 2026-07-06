@@ -6,8 +6,8 @@ import android.view.WindowManager
 import java.lang.ref.WeakReference
 
 /**
- * Слабая ссылка на окно Activity для применения FLAG_SECURE из общего UI-кода. install зовётся в
- * MainActivity.onCreate (как SafBridge). Слабая ссылка — чтобы не держать Activity после пересоздания.
+ * Weak reference to the Activity's window for applying FLAG_SECURE from shared UI code. install is
+ * called from MainActivity.onCreate. Weak reference avoids holding the Activity after recreation.
  */
 object WindowBridge {
     private var windowRef: WeakReference<Window>? = null
@@ -22,8 +22,8 @@ object WindowBridge {
 actual fun applyPlatformSecureFlag(secure: Boolean) {
     val window = WindowBridge.window()
     if (window == null) {
-        // install() не вызван (или Activity нет окна) — защита молча не применится. Логируем,
-        // чтобы пропущенная проводка (напр. новая Activity без WindowBridge.install) была видна.
+        // install() wasn't called (or the Activity has no window) — the flag silently won't apply. Logged
+        // so missing wiring (e.g. a new Activity without WindowBridge.install) is visible.
         if (secure) Log.e("SecureScreen", "WindowBridge has no window — FLAG_SECURE not applied")
         return
     }

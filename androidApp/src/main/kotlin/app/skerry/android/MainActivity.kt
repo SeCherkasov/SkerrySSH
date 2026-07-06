@@ -69,26 +69,22 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Точка входа Android. [FragmentActivity] (а не `ComponentActivity`) обязателен для
- * `androidx.biometric.BiometricPrompt`. Граф зависимостей строится здесь по образцу desktop
- * `main.kt`: локальный зашифрованный vault в приватном `filesDir`, та же кросс-платформенная
- * крипта (ionspin) и okio-стор. SSH-транспорт на Android пока не подключён (паритет в работе),
- * поэтому за гейтом — настройки vault (биометрия + lock) до прихода полноценного мобильного UI.
+ * Android entry point. [FragmentActivity] (not `ComponentActivity`) is required by
+ * `androidx.biometric.BiometricPrompt`. Builds the dependency graph: local encrypted vault in the
+ * private `filesDir`, cross-platform crypto (ionspin), okio-backed store.
  */
 class MainActivity : FragmentActivity() {
-    // Scope менеджера туннелей: живёт на время Activity. Отменяется в onDestroy, чтобы при
-    // пересоздании (поворот и т.п.) старый scope с поллингом не оставался орфаном. Активные туннели
-    // при этом сбрасываются — приемлемо для текущего этапа (полное сохранение поверх пересоздания —
-    // отдельная задача через retained-холдер/ViewModel).
+    // Tunnel manager scope, tied to Activity lifetime. Cancelled in onDestroy so a recreate (rotation)
+    // doesn't leave the old polling scope orphaned; active tunnels are dropped in that case.
     private var tunnelScope: CoroutineScope? = null
 
-    // Внешняя чистка при безвозвратном сбросе vault (забытый пароль / битый файл). Vault уже стёрт
-    // контроллером и заблокирован, поэтому здесь чистим только данные ВНЕ vault (профили хостов,
-    // known_hosts, туннели). Заполняется в [buildDependencies]; передаётся в [MobileDesignApp].
+    // External cleanup on irrecoverable vault reset. The vault itself is already wiped and locked by
+    // the controller, so this only clears data outside the vault (host profiles, known_hosts, tunnels).
+    // Set in [buildDependencies]; passed to [MobileDesignApp].
     private var onVaultReset: (ResetScope) -> Unit = {}
 
-    // Разовый перенос локального рабочего пространства в vault + миграция секретов при unlock. Поле,
-    // т.к. ссылается на граф зависимостей; заполняется в [buildDependencies], зовётся из [MobileDesignApp].
+    // One-time secret migration on unlock. Field because it references the dependency graph; set in
+    // [buildDependencies], invoked from [MobileDesignApp].
     private var onVaultUnlocked: () -> Unit = {}
 
     override fun onDestroy() {
@@ -101,21 +97,21 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Окно отдаётся в WindowBridge, чтобы общий UI мог включать FLAG_SECURE точечно на экранах
-        // с секретами (vault, ввод мастер-пароля) — см. SecureScreen. Слабая ссылка, без утечки Activity.
+        // Window handed to WindowBridge so the shared UI can toggle FLAG_SECURE on screens with
+        // secrets (vault, master password entry); see SecureScreen. Weak reference, no Activity leak.
         WindowBridge.install(window)
 
-        // Контекст для проверки keyguard: авто-лок при уходе в фон должен срабатывать только при
-        // реально заблокированном устройстве, а не при открытии системного пикера (см. deviceMandatesAutoLock).
+        // Context for keyguard checks: auto-lock on background should trigger only when the device is
+        // actually locked, not when a system picker is open (see deviceMandatesAutoLock).
         AndroidLockContext.appContext = applicationContext
 
-        // Контекст для USB-OTG serial: статичный SerialSystem берёт его отсюда (enumerate + permission).
+        // Context for USB-OTG serial: the static SerialSystem reads it from here (enumerate + permission).
         app.skerry.shared.serial.SerialUsbBridge.install(applicationContext)
 
-        // SAF-пикеры SFTP: launcher'ы регистрируем в onCreate (требование ActivityResult API — до
-        // STARTED) и отдаём в SafBridge как лямбды запуска, чтобы общий UI-код не зависел от Activity.
-        // octet-stream — нейтральный MIME для произвольного бинарного скачивания; text/plain — для
-        // экспорта ключа/сертификата .pub (верная иконка/обработчик в файловом менеджере); "*/*" — любой upload.
+        // SFTP SAF pickers: launchers are registered in onCreate (ActivityResult API requires
+        // registration before STARTED) and handed to SafBridge as launch lambdas so the shared UI code
+        // stays Activity-independent. octet-stream for arbitrary binary downloads; text/plain for
+        // key/certificate .pub export; "*/*" for any upload.
         val createDocument = registerForActivityResult(
             ActivityResultContracts.CreateDocument("application/octet-stream"),
         ) { uri -> SafBridge.onCreateResult(uri) }
@@ -132,19 +128,18 @@ class MainActivity : FragmentActivity() {
             launchOpen = { openDocument.launch(arrayOf("*/*")) },
         )
 
-        // libsodium (ionspin) требует асинхронной инициализации до первого вызова VaultCrypto;
-        // на старте делаем это блокирующе, как desktop, чтобы граф строился уже готовым.
+        // libsodium (ionspin) needs async init before the first VaultCrypto call; done blocking at
+        // startup so the dependency graph is ready when built.
         runBlocking { initializeVaultCrypto() }
 
         val deps = buildDependencies()
-        // Состояние макета с персистом свёрнутых папок хостов (как desktop `main.kt` через
-        // DesktopDesignState): набор имён переживает перезапуск. Создаётся один раз здесь и
-        // удерживается composition (переживание поворота берёт на себя файл-персист).
+        // Layout state with persisted collapsed host groups: the set of names survives restart.
+        // Created once here and held by composition.
         val dir = filesDir
         setContent {
-            // Язык интерфейса живёт в корне: провайдер локали над MobileDesignApp реагирует на смену
-            // из настроек и рекомпозирует всё дерево. onUiLanguageChange (из MobileDesignState)
-            // обновляет это состояние и пишет персист; MobileDesignState держит копию для дропдауна.
+            // UI language lives at the root: a locale provider above MobileDesignApp reacts to
+            // settings changes and recomposes the tree. onUiLanguageChange (from MobileDesignState)
+            // updates this state and persists it; MobileDesignState keeps a copy for its dropdown.
             val currentUiLanguage = remember { mutableStateOf(readUiLanguage(dir)) }
             val designState = remember {
                 MobileDesignState(
@@ -165,7 +160,7 @@ class MainActivity : FragmentActivity() {
                     deps,
                     state = designState,
                     onVaultReset = onVaultReset,
-                    // Перенос workspace в vault + миграция секретов + reload + восстановление sync-сессии.
+                    // Secret migration + reload + sync session restore.
                     onVaultUnlocked = onVaultUnlocked,
                 )
             }
@@ -173,17 +168,16 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Свёрнутые папки хостов, переживающие перезапуск: имена групп в файле `collapsed_groups` по
-     * одному на строку рядом с прочим состоянием (зеркало desktop). Отсутствует/нечитаем → пусто (все
-     * папки развёрнуты). Запись best-effort: сбой персиста не роняет UI.
+     * Collapsed host groups, persisted across restarts: group names in `collapsed_groups`, one per
+     * line. Missing/unreadable → empty (all groups expanded). Write is best-effort.
      */
     private fun readCollapsedGroups(dir: File): Set<String> = runCatching {
         File(dir, "collapsed_groups").readLines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     }.getOrDefault(emptySet())
 
     private fun writeCollapsedGroups(dir: File, groups: Set<String>) {
-        // Имена с переносами строк не хранимы построчно — исключаем, чтобы файл не «расщепился».
-        // Снимок берём синхронно (до ухода в IO), запись — вне UI-потока (иначе StrictMode/джанк).
+        // Names containing newlines can't be stored one-per-line; excluded to avoid splitting the file.
+        // Snapshot taken synchronously; write happens off the UI thread.
         val snapshot = groups.filterNot { it.contains('\n') || it.contains('\r') }.joinToString("\n")
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "collapsed_groups").writeText(snapshot) }
@@ -191,9 +185,9 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Шрифт терминала (More → Appearance → Font), переживающий перезапуск: стабильный id
-     * ([TerminalFont.id]) в файле `terminal_font` (зеркало desktop `main.kt`). Отсутствует/нечитаем/
-     * неизвестен → дефолт ([TerminalFont.DEFAULT] = Hack). Запись best-effort вне UI-потока.
+     * Terminal font (More → Appearance → Font), persisted across restarts as a stable id
+     * ([TerminalFont.id]) in `terminal_font`. Missing/unreadable/unknown → [TerminalFont.DEFAULT].
+     * Write is best-effort, off the UI thread.
      */
     private fun readTerminalFont(dir: File): TerminalFont = runCatching {
         TerminalFont.fromId(File(dir, "terminal_font").readText().trim())
@@ -207,8 +201,8 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Порог автоблокировки по простою (More → Security): стабильный [AutoLockDuration.id] в файле
-     * `auto_lock`. Отсутствует/нечитаем/неизвестен → дефолт (5 минут). Запись best-effort вне UI-потока.
+     * Auto-lock idle threshold (More → Security): stable [AutoLockDuration.id] in `auto_lock`.
+     * Missing/unreadable/unknown → default (5 minutes). Write is best-effort, off the UI thread.
      */
     private fun readAutoLock(dir: File): AutoLockDuration = runCatching {
         AutoLockDuration.fromId(File(dir, "auto_lock").readText().trim())
@@ -222,8 +216,8 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Кегль шрифта терминала, px (More → Appearance → Font size): число в файле `terminal_font_size`.
-     * Отсутствует/нечитаем/вне [TERMINAL_FONT_SIZE_RANGE] → дефолт ([DEFAULT_TERMINAL_FONT_SIZE]).
+     * Terminal font size, px (More → Appearance → Font size): a number in `terminal_font_size`.
+     * Missing/unreadable/outside [TERMINAL_FONT_SIZE_RANGE] → [DEFAULT_TERMINAL_FONT_SIZE].
      */
     private fun readTerminalFontSize(dir: File): Int {
         val px = runCatching { File(dir, "terminal_font_size").readText().trim().toInt() }
@@ -238,9 +232,9 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Язык интерфейса (More → Appearance → Language): стабильный id ([UiLanguage.id]) в файле
-     * `ui_language` (зеркало desktop `main.kt`). Отсутствует/нечитаем/неизвестен → дефолт
-     * ([UiLanguage.DEFAULT] = System — автоопределение по локали ОС). Запись best-effort вне UI-потока.
+     * UI language (More → Appearance → Language): stable id ([UiLanguage.id]) in `ui_language`.
+     * Missing/unreadable/unknown → [UiLanguage.DEFAULT] (System, follows OS locale). Write is
+     * best-effort, off the UI thread.
      */
     private fun readUiLanguage(dir: File): UiLanguage = runCatching {
         UiLanguage.fromId(File(dir, "ui_language").readText().trim())
@@ -254,7 +248,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun buildDependencies(): AppDependencies {
-        val dir = filesDir // приватный каталог приложения
+        val dir = filesDir
         val crypto = IonspinVaultCrypto()
         val vault = FileVault(
             dir.resolve("vault.json").absolutePath.toPath(),
@@ -262,36 +256,36 @@ class MainActivity : FragmentActivity() {
             deviceId(dir),
             FileSystem.SYSTEM,
         ) { System.currentTimeMillis().toString() }
-        // Локальный (не синкаемый) журнал событий безопасности: смена мастер-пароля, биометрия,
-        // разблокировка. Пишется контроллером за гейтом; раздел More → Security читает его. Часы —
-        // ISO-инстант, чтобы securityMoment корректно разобрал время (System.currentTimeMillis не парсится).
+        // Local (non-synced) security event log: master password changes, biometrics, unlocks. Written
+        // by the controller behind the gate; read by the More → Security section. ISO instant clock so
+        // securityMoment parses correctly.
         val securityLog = FileSecurityLog(
             dir.resolve("security_events.json").absolutePath.toPath(),
             FileSystem.SYSTEM,
-            // File(...).toPath() (API 26), а не Path.of (требует API 34) — совместимо с minSdk 26.
+            // File(...).toPath() (API 26) instead of Path.of (needs API 34) — compatible with minSdk 26.
             harden = { app.skerry.shared.io.PrivateConfig.harden(java.io.File(it.toString()).toPath()) },
         ) { Instant.now().toString() }
         val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
-        // SSH-транспорт (sshj, общий JVM source set). TOFU: первый ключ хоста запоминается в vault
-        // (RecordType.KNOWN_HOST — синкается между устройствами, как в Termius), при смене ключа —
-        // отказ + запись события в локальный (НЕ синкаемый) known_hosts_mismatches, чтобы менеджер
-        // known-hosts мог показать предупреждение и дать принять/отклонить новый ключ.
+        // SSH transport (sshj, shared JVM source set). TOFU: a host's first key is remembered in the
+        // vault (RecordType.KNOWN_HOST, synced across devices); a key change is rejected and logged to
+        // the local (non-synced) known_hosts_mismatches so the known-hosts manager can warn and let the
+        // user accept or reject the new key.
         val knownHostsStore = VaultKnownHostsStore(vault)
         val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches").toPath())
-        // Живой транспорт сессий: маршрутизатор по типу подключения (SSH/Telnet/Serial). SSH несёт
-        // TOFU-verifier/known-hosts; Telnet/Serial без состояния (serial на Android пока unsupported).
+        // Live session transport: routes by connection type (SSH/Telnet/Serial). SSH carries the
+        // TOFU verifier/known-hosts; Telnet/Serial are stateless (serial unsupported on Android).
         val transport = RoutingTransport(
             ssh = SshjTransport(
                 TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
             ),
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
-        // Профили — записи HOST в vault (Phase A), порядок дерева — в записи-макете. На старте vault
-        // залочен (список пуст), после unlock контроллер перечитывает через reload().
+        // Host profiles are HOST records in the vault; tree order lives in a layout record. The vault
+        // is locked at startup (list is empty); the controller reloads on unlock via reload().
         val hostStore = VaultHostStore(vault)
         val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
-        // Биометрия: ключ в AndroidKeyStore, промпт хостит эта Activity. Слабая ссылка — стор не
-        // удерживает Activity и при пересоздании отдаёт null, а не уничтоженную (промпт тогда NoActivity).
+        // Biometrics: key in AndroidKeyStore, prompt hosted by this Activity. Weak reference so the
+        // store doesn't hold the Activity and returns null instead of a destroyed instance after recreate.
         val activityRef = WeakReference(this)
         val biometrics = VaultBiometrics(
             vault = vault,
@@ -299,9 +293,9 @@ class MainActivity : FragmentActivity() {
             artifacts = FileBioArtifactStore(dir.resolve("vault.bio").absolutePath.toPath(), FileSystem.SYSTEM),
             deviceId = deviceId(dir),
         )
-        // Глобальные туннели (модель Termius): сохранённые пробросы в tunnels.json. Активация — через
-        // ОТДЕЛЬНЫЙ probe-транспорт (read-only verifier): включить можно только уже доверенный хост,
-        // тихого TOFU тут быть не должно. Резолв хоста/секрета — через граф (hosts + credentials).
+        // Global tunnels: saved forwards. Activated via a separate probe transport (read-only verifier)
+        // so only an already-trusted host can be enabled, no silent TOFU here. Host/secret resolution
+        // goes through the graph (hosts + credentials).
         val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
         val tunnels = TunnelManager(
@@ -310,37 +304,36 @@ class MainActivity : FragmentActivity() {
             resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
             scope = scope,
         ) { UUID.randomUUID().toString() }
-        // Сохранённые сниппеты (модель Termius): библиотека команд — записи SNIPPET в vault (команды
-        // могут содержать inline-креды, поэтому под общим шифрованием и E2E-синком). Запуск в терминал.
+        // Saved command snippets: SNIPPET records in the vault (commands may contain inline
+        // credentials, hence shared encryption and E2E sync). Run into the terminal.
         val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
-        // Self-hosted sync (Phase 2): координатор связывает сетевой клиент (Ktor+SRP), крипту и vault.
-        // Привязка к серверу персистится в sync.json (НЕсекретное: URL/accountId/deviceId); токены и
-        // пароль не храним (переавторизация по мастер-паролю). deviceId — стабильный (как у записей
-        // vault). Курсор синка персистится в sync-cursor.json (инкрементальный pull после перезапуска).
-        // Teams-координатор создаётся ПОСЛЕ sync (ему нужна сессия), но onSynced должен его дёргать:
-        // ключ команды доезжает записью TEAM обычным аккаунтным синком. Поздняя привязка через var.
+        // Self-hosted sync: coordinator ties together the network client (Ktor+SRP), crypto, and vault.
+        // Server binding is persisted in sync.json (non-secret: URL/accountId/deviceId); tokens and
+        // password are not stored (re-auth via master password). deviceId is stable across records.
+        // Sync cursor persists in sync-cursor.json (incremental pull after restart).
+        // The teams coordinator is created after sync (it needs the session), but onSynced must call
+        // it: the team key arrives via a TEAM record over the regular account sync. Late binding via var.
         var teamsForSync: app.skerry.ui.teams.TeamsCoordinator? = null
         val sync = SyncCoordinator(
             clientFactory = { url -> KtorSyncClient(url) },
             crypto = crypto,
             vault = vault,
             configStore = AndroidSyncConfigStore(File(dir, "sync.json")),
-            // Персистентный курсор дельта-синка: переживает перезапуск, иначе каждый старт — full re-pull since 0.
+            // Persistent delta-sync cursor: survives restart, otherwise every start would be a full re-pull since 0.
             syncState = FileSyncStateStore(File(dir, "sync-cursor.json").toPath()),
             deviceIdProvider = { deviceId(dir) },
             deviceName = android.os.Build.MODEL?.takeIf { it.isNotBlank() } ?: "Skerry Android",
-            // При входе принят ключ аккаунта (dataKey vault сменился) → биометрия обёрнута под старым
-            // ключом и дала бы неверный ключ при разблокировке отпечатком (синканутые записи не
-            // расшифровались бы). Сбрасываем — пользователь включит отпечаток заново уже с новым ключом.
-            // Возвращаем, БЫЛА ли биометрия включена: тогда координатор попросит UI перерегистрировать
-            // отпечаток (вне онбординга сброс иначе прошёл бы молча).
+            // On sign-in the account's dataKey changes; biometrics wrapped under the old key would
+            // unlock to the wrong key (synced records would fail to decrypt). Disable it here; the user
+            // re-enables it under the new key. Return whether biometrics was enabled, so the coordinator
+            // can prompt the UI to re-register it.
             onDataKeyAdopted = {
                 val wasEnabled = biometrics.isEnabled()
                 biometrics.disable()
                 wasEnabled
             },
-            // Синк подтянул записи прямо в vault → перечитать менеджеры на главном потоке, иначе
-            // синканутые данные не появятся на экране до перезахода.
+            // Sync pulled records directly into the vault; reload managers on the main thread so
+            // synced data appears without requiring a re-visit.
             onSynced = {
                 lifecycleScope.launch(Dispatchers.Main) {
                     hosts.reload(); snippets.reload(); tunnels.reload(); knownHosts.refresh()
@@ -348,9 +341,9 @@ class MainActivity : FragmentActivity() {
                 teamsForSync?.onAccountSynced()
             },
         )
-        // Teams (шеринг записей между аккаунтами, zero-knowledge) — паритет desktop main.kt:
-        // координатор поверх той же sync-сессии, per-team vault'ы в filesDir/teams
-        // (dataKey = teamKey из записи TEAM аккаунтного vault), курсоры team-синка — в своём файле.
+        // Teams (zero-knowledge record sharing between accounts): coordinator on top of the same sync
+        // session, per-team vaults in filesDir/teams (dataKey = teamKey from the account vault's TEAM
+        // record), team-sync cursors in their own file.
         val teams = app.skerry.ui.teams.TeamsCoordinator(
             session = { sync.currentSession() },
             client = { sync.currentTeamClient() },
@@ -361,7 +354,7 @@ class MainActivity : FragmentActivity() {
                 crypto = IonspinVaultCrypto(),
                 deviceId = deviceId(dir),
                 fileSystem = FileSystem.SYSTEM,
-                // File(...).toPath() (API 26), а не Path.of (API 34) — совместимо с minSdk 26.
+                // File(...).toPath() (API 26) instead of Path.of (API 34) — compatible with minSdk 26.
                 harden = { app.skerry.shared.io.PrivateConfig.harden(java.io.File(it.toString()).toPath()) },
                 now = { Instant.now().toString() },
             ),
@@ -374,15 +367,14 @@ class MainActivity : FragmentActivity() {
             },
         )
         teamsForSync = teams
-        // Потерянный ключ команды (пропущен дельта-синком старого клиента) чинится только полным re-pull.
+        // A missing team key (dropped by an older client's delta sync) is only fixed by a full re-pull.
         teams.onKeyMissing = { sync.recoverFullPull() }
         sync.onTeamSignal = teams::onSignal
-        // Миграция секретов в vault (IDENTITY → CREDENTIAL) при разблокировке — идемпотентна.
-        // После — reload менеджеров и восстановление sync-сессии. Переноса старого локального
-        // workspace больше нет: рабочее пространство живёт записями vault, до прод-релиза миграций нет.
+        // Secret migration in the vault (IDENTITY → CREDENTIAL) on unlock is idempotent, followed by
+        // manager reload and sync session restore.
         onVaultUnlocked = {
-            // Миграция — перешифровка записей: уводим с main-потока (StrictMode/джанк),
-            // reload Compose-state возвращаем на Main. restoreSession сам уходит в свой scope.
+            // Migration re-encrypts records; run off the main thread, return reload to Main.
+            // restoreSession manages its own scope.
             lifecycleScope.launch(Dispatchers.IO) {
                 runCatching { VaultMigration(vault, hostStore).migrate() }
                 withContext(Dispatchers.Main) {
@@ -394,28 +386,26 @@ class MainActivity : FragmentActivity() {
                 sync.restoreSession()
             }
         }
-        // Чистка данных вне vault при сбросе (паритет desktop `main.kt`). Файл vault уже стёрт и
-        // заблокирован — секреты перечитаются при создании нового vault, поэтому credentials тут не трогаем.
-        // Phase A: хосты/сниппеты/туннели — записи vault, поэтому Vault.reset() уже стёр их вместе с
-        // секретами (zero-knowledge: без мастер-пароля их не восстановить). Чистим лишь данные ВНЕ vault
-        // и отражаем опустевший vault в менеджерах. Vault на этот момент заблокирован.
+        // Clears data outside the vault on reset. The vault file is already wiped and locked, so
+        // credentials aren't touched here (secrets reload when a new vault is created). Host
+        // profiles/snippets/tunnels are vault records, already wiped by Vault.reset(); this only
+        // clears non-vault data and reflects the now-empty vault in the managers.
         onVaultReset = { resetScope ->
             tunnels.closeAll()
-            // Ключи команд жили в стёртом vault — team-vault'ы больше не открыть, лочим их след в памяти.
+            // Team keys lived in the wiped vault; team vaults can no longer be opened, so lock their in-memory trace.
             teams.lock()
-            // Сброс стёр dataKey → биом-артефакт (`vault.bio`) обёрнут под мёртвым ключом, а sealed
-            // refresh-токен sync — тоже. Снимаем биометрию и рвём привязку к серверу, иначе после
-            // сброса отпечаток вёл бы к несуществующему ключу, а настройки висели бы «Linked» без
-            // возможности войти. Чистый старт: заново создать vault, подключить sync, включить отпечаток.
+            // Reset wiped the dataKey, so the biometric artifact (`vault.bio`) and the sealed sync
+            // refresh token are wrapped under a dead key. Disable biometrics and disconnect sync so the
+            // fingerprint doesn't point at a nonexistent key and settings don't show "Linked" with no
+            // way to sign in.
             biometrics.disable()
             sync.disconnect()
-            // Журнал событий безопасности относится к стёртому vault — при любом сбросе неактуален
-            // (метка «последняя смена» и события указывали бы на несуществующий vault); чистим всегда.
+            // The security event log belongs to the wiped vault; always clear it on reset.
             securityLog.clear()
-            // Хосты/группы стёрты вместе с vault при любом сбросе → чистим и их локальный UI-след
-            // (свёрнутость папок), иначе в открытом виде остались бы имена групп, которых уже нет (L1).
+            // Hosts/groups are wiped with the vault on any reset; clear their local UI trace
+            // (collapsed state) too, or stale group names would remain visible.
             writeCollapsedGroups(dir, emptySet())
-            // Заводской сброс: дополнительно доверенные ключи (не-vault) и настройки терминала.
+            // Factory reset: additionally clears trusted keys (non-vault) and terminal settings.
             if (resetScope == ResetScope.Everything) {
                 knownHosts.mismatches.toList().forEach { knownHosts.reject(it) }
                 knownHosts.entries.toList().forEach { knownHosts.forget(it) }
@@ -428,9 +418,9 @@ class MainActivity : FragmentActivity() {
             snippets.reload()
             tunnels.reload()
         }
-        // Локальный AI (Phase 3): GGUF-модели в приватном filesDir/models (allowBackup=false —
-        // гигабайтные веса не ломают облачный бэкап), инференс — Llamatik/llama.cpp arm64.
-        // ctx 2048: KV-кэш на телефоне (8 ГБ RAM S24) должен оставаться в сотне-другой МиБ.
+        // Local AI: GGUF models in the private filesDir/models (allowBackup=false so gigabyte-sized
+        // weights don't break cloud backup); inference via Llamatik/llama.cpp arm64. ctx 2048 keeps the
+        // KV cache within a few hundred MiB on phone-class RAM.
         val localModelStore = LocalModelStore(FileSystem.SYSTEM, dir.resolve("models").absolutePath.toPath())
         val localAi = LocalAiDeps(
             store = localModelStore,
@@ -443,9 +433,9 @@ class MainActivity : FragmentActivity() {
             vault = vault,
             credentials = credentials,
             knownHosts = knownHosts,
-            // Инспектор/генератор SSH-ключей (BouncyCastle, общий JVM source set) — отпечатки/генерация в табе Vault.
+            // SSH key inspector/generator (BouncyCastle, shared JVM source set): fingerprints/generation in the Vault tab.
             keyGenerator = BouncyCastleSshKeyGenerator(),
-            // Инспектор SSH-сертификатов (sshj) — раздел Vault → Certificates: разбор *-cert.pub.
+            // SSH certificate inspector (sshj): Vault → Certificates parses *-cert.pub.
             certificateInspector = SshjCertificateInspector(),
             biometrics = biometrics,
             tunnels = tunnels,
@@ -457,7 +447,7 @@ class MainActivity : FragmentActivity() {
         )
     }
 
-    /** Стабильный идентификатор устройства для записей vault (provenance + LWW будущего sync). */
+    /** Stable device identifier for vault records (provenance + sync LWW). */
     private fun deviceId(dir: File): String {
         val file = File(dir, "device_id")
         if (file.exists()) return file.readText().trim()

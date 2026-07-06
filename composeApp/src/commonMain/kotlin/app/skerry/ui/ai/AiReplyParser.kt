@@ -1,34 +1,31 @@
 package app.skerry.ui.ai
 
 /**
- * Чистый разбор ответа модели терминального AI-бара ([TerminalAiController.commandPrompt]) в
- * предложение команды или сообщение. Security-критичный слой: [sanitizeCommand]/[isSafeInputChar]
- * гарантируют, что подтверждаемая пользователем команда — одна строка без управляющих и
- * bidi/zero-width символов (инвариант «подтверждение перед выполнением»). Вынесен в объект без
- * состояния, чтобы тестироваться напрямую, без контроллера/провайдера.
+ * Pure parser turning the terminal AI bar's model reply ([TerminalAiController.commandPrompt]) into
+ * a command suggestion or a message. Security-critical: [sanitizeCommand]/[isSafeInputChar] ensure
+ * the command a user confirms is a single line with no control or bidi/zero-width characters.
  */
 internal object AiReplyParser {
 
-    /** Результат разбора ответа модели. */
+    /** Result of parsing a model reply. */
     sealed interface Reply {
-        /** Есть команда к подтверждению; [info] — краткое пояснение (может отсутствовать). */
+        /** A command awaiting confirmation; [info] is an optional short description. */
         data class Command(val command: String, val info: String?) : Reply
 
-        /** Уточнение/отказ (ASK-строка или `#`-комментарий); `null` [text] — просить уточнить запрос. */
+        /** A clarification/refusal (ASK line or `#` comment); `null` [text] means ask the user to clarify. */
         data class Ask(val text: String?) : Reply
 
-        /** Ответ — проза без маркеров (не команда); показать сообщением. */
+        /** A plain-prose reply (not a command); shown as a message. */
         data class Prose(val text: String) : Reply
 
-        /** Модель не вернула ничего пригодного. */
+        /** The model returned nothing usable. */
         data object NoCommand : Reply
     }
 
     /**
-     * Разобрать ответ модели: либо `CMD:`+`INFO:` (команда), либо `ASK:` (уточнение/отказ — НЕ
-     * команда). Если маркеров нет — толерантный фолбэк: первая строка как команда, но если она
-     * похожа на прозу (кириллица/вопрос/фраза-уточнение) — это тоже сообщение, а не команда (иначе
-     * «уточните запрос…» попадало бы в слот с кнопкой Run).
+     * Parses a model reply: either `CMD:`+`INFO:` (a command) or `ASK:` (a clarification/refusal,
+     * not a command). Without markers, falls back to treating the first line as a command unless
+     * it reads like prose (Cyrillic/question/clarifying phrase), in which case it's a message.
      */
     fun parse(raw: String): Reply {
         val cmdLine = lineAfter(raw, "CMD:")
@@ -51,22 +48,20 @@ internal object AiReplyParser {
     }
 
     /**
-     * Привести сырой вывод модели к ОДНОЙ строке ввода без управляющих символов и markdown-обёрток.
-     * Критично для инварианта «подтверждение перед выполнением»: вставляемая по confirm команда
-     * физически не может нести перевод строки (иначе `send` авто-исполнил бы её), даже если модель
-     * вернула многострочный текст или CR/LF-инъекцию.
+     * Reduces raw model output to a single input line with no control characters or markdown
+     * fences. The confirmed command can never carry a newline (otherwise `send` would auto-execute
+     * it), even if the model returned multiline text or a CR/LF injection.
      *
-     * Шаги: снимаем ```-заборчик (с возможным языковым тегом), берём первую непустую строку, режем
-     * control-байты (кроме таба), затем срезаем одиночные inline-бэктики вокруг команды — иначе bash
-     * воспримет `` `free -h` `` как подстановку команды (выполнит и попробует запустить её вывод).
-     * `null` — команды нет.
+     * Strips a ```-fence (with an optional language tag), takes the first non-blank line, filters
+     * control bytes (except tab), then trims surrounding inline backticks — otherwise bash would
+     * treat `` `free -h` `` as command substitution. Returns `null` if there is no command.
      */
     fun sanitizeCommand(raw: String): String? {
         var text = raw.trim()
         if (text.startsWith("```") && text.endsWith("```") && text.length > 6) {
             text = text.substring(3, text.length - 3)
             val firstTok = text.substringBefore('\n').trim()
-            // ```bash / ```sh — языковой тег на первой строке заборчика, отбрасываем.
+            // ```bash / ```sh — language tag on the fence's first line, dropped.
             if (firstTok.isNotEmpty() && firstTok.none { it.isWhitespace() } &&
                 firstTok.all { it.isLetterOrDigit() || it == '-' }
             ) {
@@ -79,11 +74,10 @@ internal object AiReplyParser {
     }
 
     /**
-     * Разрешён ли символ в команде/пояснении. Кроме control-байтов (< 0x20, кроме таба) режем ещё и
-     * Unicode-форматные/двунаправленные символы: RTL/LTR-override и isolate, zero-width, BOM, soft
-     * hyphen. Иначе (Trojan-Source) ответ модели с `U+202E` мог бы отрисоваться в баре подтверждения
-     * одной последовательностью, а уйти в PTY — другой: пользователь подтвердил бы не то, что видит.
-     * Бар подтверждения — единственный гейт безопасности AI-фичи, поэтому чистим агрессивно.
+     * Whether a character is allowed in a command/description. Beyond control bytes (< 0x20 except
+     * tab), also strips Unicode bidi/format characters (RTL/LTR override and isolate, zero-width,
+     * BOM, soft hyphen) — otherwise a Trojan-Source string could render one way in the confirm bar
+     * and execute differently in the PTY.
      */
     fun isSafeInputChar(c: Char): Boolean {
         if (c != '\t' && c.code < 0x20) return false
@@ -100,8 +94,8 @@ internal object AiReplyParser {
     }
 
     /**
-     * Вторая непустая строка ответа модели — краткое пояснение, что делает команда. Снимаем маркеры
-     * списков/`#`/бэктики, режем до 120 символов. `null` — пояснения нет.
+     * Second non-blank line of the reply: a short description of what the command does, with
+     * list/`#`/backtick markers stripped, capped at 120 chars. `null` if there is no description.
      */
     fun extractDescription(raw: String): String? {
         val lines = raw.trim().lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
@@ -112,8 +106,9 @@ internal object AiReplyParser {
     }
 
     /**
-     * Похоже ли на естественный язык (уточнение/отказ), а не на shell-команду. Эвристика-предохранитель
-     * на случай, когда модель не проставила `ASK:`: кириллица, финальный «?» или типичные фразы-уточнения.
+     * Whether a string reads like natural language (a clarification/refusal) rather than a shell
+     * command: Cyrillic, a trailing "?", or common clarifying phrases. Fallback for when the model
+     * omits `ASK:`.
      */
     fun looksLikeProse(s: String): Boolean {
         if (s.endsWith("?")) return true
@@ -122,7 +117,7 @@ internal object AiReplyParser {
         return PROSE_STARTERS.any { lower.startsWith(it) }
     }
 
-    /** Первая строка, начинающаяся на [prefix] (регистронезависимо); возвращает остаток; `null` — нет. */
+    /** First line starting with [prefix] (case-insensitive); returns the remainder, or `null` if none. */
     private fun lineAfter(raw: String, prefix: String): String? {
         raw.lineSequence().forEach { line ->
             val t = line.trim()
@@ -133,7 +128,7 @@ internal object AiReplyParser {
         return null
     }
 
-    /** Вычистить служебную строку (INFO/ASK): бэктики, маркеры списков, control-байты; до 160 символов. */
+    /** Cleans an INFO/ASK line: backticks, list markers, control bytes; capped at 160 chars. */
     private fun cleanLine(s: String): String? {
         val c = s.trim().trim('`').trimStart('#', '-', '*', '•', '>').trim()
             .filter { isSafeInputChar(it) }.trim()

@@ -1,9 +1,9 @@
 package app.skerry.shared.vault
 
 /**
- * Алгоритм генерируемой пары ключей. [label] — отображаемая метка типа (бейдж в менеджере vault).
- * Набор намеренно узкий: современный по умолчанию
- * ([ED25519]) и совместимый «legacy» RSA ([RSA_4096]) — других вариантов в UI нет.
+ * Algorithm of a generated key pair. [label] is the display badge in the vault manager.
+ * Deliberately narrow: modern default ([ED25519]) and legacy-compatible RSA ([RSA_4096]) — no
+ * other options in the UI.
  */
 enum class SshKeyType(val label: String) {
     ED25519("ED25519"),
@@ -11,10 +11,10 @@ enum class SshKeyType(val label: String) {
 }
 
 /**
- * Открытые (не секретные) метаданные пары ключей для отображения: строка публичного ключа в формате
- * `authorized_keys` ([publicKeyOpenSsh]), отпечаток OpenSSH ([fingerprintSha256], `SHA256:`+base64 без
- * паддинга) и метка типа ([keyTypeLabel], как [SshKeyType.label]). Всё это вычисляется из публичной
- * части — секрет не нужен и здесь не лежит.
+ * Public (non-secret) key pair metadata for display: `authorized_keys`-format public key string
+ * ([publicKeyOpenSsh]), OpenSSH fingerprint ([fingerprintSha256], `SHA256:`+base64, no padding),
+ * and type label ([keyTypeLabel], as in [SshKeyType.label]). Computed from the public part —
+ * no secret needed or held here.
  */
 data class SshPublicKeyInfo(
     val publicKeyOpenSsh: String,
@@ -23,35 +23,35 @@ data class SshPublicKeyInfo(
 )
 
 /**
- * Сгенерированная пара: приватный ключ в PEM ([privateKeyPem], формат `OPENSSH PRIVATE KEY`, без
- * passphrase — at-rest шифрует сам vault) и публичные метаданные ([info]). [privateKeyPem] — секрет,
- * кладётся в [CredentialSecret.PrivateKey] внутрь зашифрованного payload записи vault.
+ * A generated key pair: PEM private key ([privateKeyPem], `OPENSSH PRIVATE KEY` format, no
+ * passphrase — the vault encrypts it at rest) and public metadata ([info]). [privateKeyPem] is
+ * a secret, stored in [CredentialSecret.PrivateKey] inside the vault record's encrypted payload.
  */
 data class GeneratedSshKey(
     val privateKeyPem: String,
     val info: SshPublicKeyInfo,
 ) {
-    // Приватный ключ не должен утечь в логи/исключения (как [CredentialSecret.PrivateKey]).
+    // Private key must never leak into logs/exceptions (as with [CredentialSecret.PrivateKey]).
     override fun toString(): String = "GeneratedSshKey(redacted, fingerprint=${info.fingerprintSha256})"
 }
 
 /**
- * Генератор/инспектор SSH-ключей. Платформенная реализация подставляется снаружи (desktop —
- * BouncyCastle поверх sshj-формата), UI обращается только к этому контракту. Чистый интерфейс без
- * корутин: генерация синхронна и редка (по действию пользователя).
+ * SSH key generator/inspector. Platform implementation is injected (desktop — BouncyCastle over
+ * the sshj format); the UI only depends on this contract. Coroutine-free: generation is
+ * synchronous and rare (triggered by user action).
  */
 interface SshKeyGenerator {
     /**
-     * Сгенерировать новую пару [type]. [comment] добавляется в хвост строки публичного ключа
-     * (как `user@host` у `ssh-keygen`); пустой — без комментария.
+     * Generate a new pair of [type]. [comment] is appended to the public key string (like
+     * `user@host` in `ssh-keygen`); empty means no comment.
      */
     fun generate(type: SshKeyType, comment: String = ""): GeneratedSshKey
 
     /**
-     * Извлечь публичные метаданные из приватного ключа [privateKeyPem] (для показа отпечатка/типа
-     * уже сохранённых identity). [passphrase] расшифровывает ключ, если он зашифрован. Возвращает
-     * `null`, если ключ не разобрать (битый PEM / неверная passphrase / неподдерживаемый тип) —
-     * битый ключ не должен валить список.
+     * Extract public metadata from private key [privateKeyPem] (to show fingerprint/type for an
+     * already-stored identity). [passphrase] decrypts the key if it's encrypted. Returns `null`
+     * if the key can't be parsed (malformed PEM / wrong passphrase / unsupported type) — a
+     * corrupt key must not crash the list.
      */
     fun inspect(privateKeyPem: String, passphrase: String? = null): SshPublicKeyInfo?
 }

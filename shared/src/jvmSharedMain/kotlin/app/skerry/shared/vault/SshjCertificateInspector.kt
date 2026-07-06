@@ -12,18 +12,18 @@ import java.util.Base64
 import java.util.Date
 
 /**
- * JVM-инспектор SSH-сертификатов на sshj (общий desktop+Android, как [BouncyCastleSshKeyGenerator]).
- * Строка `*-cert.pub` разбирается ssh-wire-декодером sshj: для cert-типа [Buffer.readPublicKey]
- * возвращает [Certificate], откуда и берутся открытые метаданные. Обычный (не-cert) публичный ключ
- * декодируется в простой `PublicKey` — такой ввод отвергается (`null`), как и любая нечитаемая строка.
+ * JVM SSH certificate inspector on sshj (shared desktop+Android, like [BouncyCastleSshKeyGenerator]).
+ * A `*-cert.pub` line is parsed by sshj's ssh-wire decoder: for a cert type [Buffer.readPublicKey]
+ * returns a [Certificate], the source of the public metadata. A plain (non-cert) public key decodes
+ * to a bare `PublicKey`; such input is rejected (`null`), as is any unreadable line.
  */
 class SshjCertificateInspector : SshCertificateInspector {
 
     override fun inspect(certificate: String): SshCertificateInfo? = runCatching {
-        // На Android урезанный системный BouncyCastle ломает разбор ключа сертификата — регистрируем
-        // полный провайдер до декодирования (idempotent, no-op на desktop), как генератор/транспорт.
+        // Android's stripped-down system BouncyCastle breaks certificate key parsing; register the
+        // full provider before decoding (idempotent, no-op on desktop), same as the generator/transport.
         ensureCryptoProvider()
-        // Формат authorized_keys: "<type> <base64> [comment]" — берём второе поле как тело сертификата.
+        // authorized_keys format: "<type> <base64> [comment]"; take the second field as the cert body.
         val blob = certificate.trim().split(Regex("\\s+")).getOrNull(1)?.let { Base64.getDecoder().decode(it) }
             ?: return null
         val cert = Buffer.PlainBuffer(blob).readPublicKey() as? Certificate<*> ?: return null
@@ -35,13 +35,13 @@ class SshjCertificateInspector : SshCertificateInspector {
             validFrom = formatDate(cert.validAfter),
             validUntil = if (isForever(cert.validBefore)) SshCertificateInfo.FOREVER else formatDate(cert.validBefore),
             expired = !isForever(cert.validBefore) && cert.validBefore.before(Date()),
-            // cert.signatureKey — ssh-wire-кодировка публичного ключа CA (та же, по которой OpenSSH
-            // строит отпечаток), поэтому SHA256 от неё совпадает с `ssh-keygen -l` по ключу CA.
+            // cert.signatureKey is the ssh-wire encoding of the CA public key (matching OpenSSH's
+            // fingerprint encoding), so its SHA256 matches `ssh-keygen -l` on the CA key.
             caFingerprintSha256 = fingerprint(cert.signatureKey),
         )
     }.getOrNull()
 
-    /** Метка несущего ключа: RSA — с реальной разрядностью, прочее — по wire-имени (как у генератора). */
+    /** Label for the carrier key: RSA shows actual bit length, otherwise the wire name (as in the generator). */
     private fun displayLabel(key: PublicKey): String = when {
         key is RSAPublicKey -> "RSA-${key.modulus.bitLength()}"
         KeyType.fromKey(key) == KeyType.ED25519 -> "ED25519"
@@ -50,9 +50,9 @@ class SshjCertificateInspector : SshCertificateInspector {
 
     private fun formatDate(date: Date): String = DATE_FORMAT.format(date.toInstant())
 
-    // OpenSSH «бессрочный» сертификат: validBefore == uint64-максимум. После *1000 при сборке Date
-    // это переполняет signed long в большое отрицательное (time <= 0); на всякий случай ловим и
-    // запредельный год. Легитимный cert «до 1970» нереалистичен, ложное срабатывание ничтожно.
+    // An OpenSSH "forever" certificate has validBefore == uint64 max, which overflows a signed long
+    // to a large negative value (time <= 0) once multiplied by 1000 for Date; also catch an
+    // out-of-range year as a fallback. A legitimate cert expiring before 1970 is not realistic.
     private fun isForever(validBefore: Date): Boolean = validBefore.time <= 0L || yearOf(validBefore) > 9999
 
     private fun yearOf(date: Date): Int = date.toInstant().atZone(ZoneOffset.UTC).year
@@ -63,8 +63,8 @@ class SshjCertificateInspector : SshCertificateInspector {
     }
 
     private companion object {
-        // DateTimeFormatter иммутабелен и потокобезопасен (в отличие от SimpleDateFormat) — инспектор
-        // может вызываться из разных мест (список vault + валидация в диалоге импорта).
+        // DateTimeFormatter is immutable and thread-safe (unlike SimpleDateFormat); the inspector
+        // is called from multiple places (vault list + import dialog validation).
         val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC)
     }
 }

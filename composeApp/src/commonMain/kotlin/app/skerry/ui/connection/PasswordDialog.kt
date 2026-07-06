@@ -50,9 +50,9 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
 /**
- * Диалог ввода пароля при подключении к хосту без привязанной identity (паритет с мобильным
- * `PasswordSheet`). Пароль не сохраняется: уходит прямиком в [onConnect] как разовый секрет сессии.
- * Стиль — скрим + карточка макета, как [NewConnectionModal].
+ * Password-entry dialog for connecting to a host with no bound identity (parity with the mobile
+ * `PasswordSheet`). The password isn't saved: it goes straight into [onConnect] as a one-shot
+ * session secret. Style — scrim + card layout, like [NewConnectionModal].
  */
 @Composable
 fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String) -> Unit) {

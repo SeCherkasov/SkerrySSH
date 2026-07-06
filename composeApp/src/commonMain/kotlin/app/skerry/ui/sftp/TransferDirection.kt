@@ -1,4 +1,4 @@
 package app.skerry.ui.sftp
 
-/** Направление передачи файла. */
+/** File transfer direction. */
 enum class TransferDirection { Download, Upload }

@@ -4,26 +4,27 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Секрет аутентификации в keychain — сырой материал (ключ/пароль/сертификат), хранимый в
- * [Credential]. Полиморфно сериализуется внутрь зашифрованного payload записи vault; `@SerialName`
- * фиксирует стабильное wire-имя в дискриминаторе, чтобы рефакторинг/переименование пакета или
- * минификация (R8) не сделали уже записанные блобы нечитаемыми. Имена дискриминатора
- * («password»/«private_key»/«certificate») унаследованы от прежнего `IdentityAuth`, поэтому секреты,
- * записанные до разделения keychain/учётки, читаются без миграции payload-а.
+ * Authentication secret in the keychain — raw material (key/password/certificate) held by
+ * [Credential]. Polymorphically serialized inside a vault record's encrypted payload; `@SerialName`
+ * fixes a stable wire name in the discriminator so package renames or minification (R8) don't
+ * make already-written blobs unreadable. The discriminator names ("password"/"private_key"/
+ * "certificate") are inherited from the former `IdentityAuth`, so secrets written before the
+ * keychain/host split read without a payload migration.
  *
- * `toString` редактится — секрет не должен утечь в логи/краш-репорты. Секреты держатся как `String`:
- * на JVM их нельзя обнулить (живут в куче до GC); это принятое ограничение текущего этапа.
+ * `toString` is redacted — the secret must not leak into logs/crash reports. Secrets are held as
+ * `String`: on the JVM they can't be zeroed (they live on the heap until GC); an accepted
+ * limitation.
  */
 @Serializable
 sealed interface CredentialSecret {
-    /** Пароль пользователя. */
+    /** User password. */
     @Serializable
     @SerialName("password")
     data class Password(val password: String) : CredentialSecret {
         override fun toString(): String = "Password(redacted)"
     }
 
-    /** Приватный ключ в PEM (OpenSSH/PKCS) и необязательная passphrase для его расшифровки. */
+    /** Private key in PEM (OpenSSH/PKCS) and an optional passphrase to decrypt it. */
     @Serializable
     @SerialName("private_key")
     data class PrivateKey(val privateKeyPem: String, val passphrase: String? = null) : CredentialSecret {
@@ -31,11 +32,12 @@ sealed interface CredentialSecret {
     }
 
     /**
-     * SSH-сертификат: приватный ключ ([privateKeyPem]) плюс выданный CA сертификат ([certificate],
-     * строка `*-cert.pub` вида `ssh-…-cert-v01@openssh.com <base64> [comment]`). При аутентификации
-     * клиент предъявляет сертификат, а доказывает владение приватным ключом — поэтому оба хранятся
-     * вместе. [passphrase] расшифровывает приватный ключ, если он зашифрован. Сертификат публичен,
-     * но приватный ключ/passphrase — секрет, потому `toString` редактится целиком.
+     * SSH certificate: private key ([privateKeyPem]) plus a CA-issued certificate ([certificate],
+     * a `*-cert.pub` string like `ssh-…-cert-v01@openssh.com <base64> [comment]`). During
+     * authentication the client presents the certificate and proves possession of the private
+     * key, so both are stored together. [passphrase] decrypts the private key if encrypted. The
+     * certificate is public, but the private key/passphrase are secret, so `toString` redacts
+     * the whole thing.
      */
     @Serializable
     @SerialName("certificate")
@@ -49,11 +51,12 @@ sealed interface CredentialSecret {
 }
 
 /**
- * Запись keychain — переиспользуемый секрет (ключ/пароль/сертификат). На неё ссылаются хосты
- * напрямую ([app.skerry.shared.host.Host.credentialId]): один секрет может обслуживать несколько хостов.
- * Целиком — включая [label] — лежит в зашифрованном payload записи [RecordType.CREDENTIAL]: открытые
- * метаданные [VaultRecord] не должны раскрывать имена и типы ключей (zero-knowledge). По той же
- * причине `toString` редактит [label] и [secret], оставляя только [id] (он и так открыт в метаданных).
+ * A keychain record — a reusable secret (key/password/certificate). Hosts reference it directly
+ * ([app.skerry.shared.host.Host.credentialId]): one secret can serve multiple hosts. The whole
+ * thing — including [label] — lives in the encrypted payload of a [RecordType.CREDENTIAL] record:
+ * [VaultRecord]'s plaintext metadata must not reveal key names or types (zero-knowledge). For the
+ * same reason `toString` redacts [label] and [secret], leaving only [id] (already plaintext in
+ * the metadata).
  */
 @Serializable
 data class Credential(

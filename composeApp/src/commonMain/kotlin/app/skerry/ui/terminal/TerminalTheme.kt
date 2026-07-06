@@ -5,14 +5,12 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
- * Цветовая тема терминала (Appearance → выбор темы): фон, базовый цвет текста, акцент курсора и
- * палитра ANSI 0..15. Всё, что рендер [TerminalScreen] раньше брал захардкоженным из «night sea»,
- * теперь читается отсюда через [LocalTerminalTheme], поэтому смена темы перекрашивает уже открытые
- * сессии на лету. Индексы 16..255 (xterm-куб + grayscale) от темы не зависят — они стандартны.
+ * Terminal color theme (Appearance → theme picker): background, base text color, cursor accent,
+ * and ANSI 0..15 palette. Read via [LocalTerminalTheme] so a theme switch recolors already-open
+ * sessions live. Indices 16..255 (xterm cube + grayscale) are theme-independent, fixed by the standard.
  *
- * [cursorText] и [selection] выведены из акцента, чтобы у каждой темы был согласованный контраст:
- * символ под курсором-блоком совпадает с фоном, а подсветка выделения — тот же акцент с прозрачностью
- * (историческое поведение «night sea»: cursor=cyan, selection=cyan·0.3, cursorFg=terminalBg).
+ * [cursorText] and [selection] derive from the accent for consistent contrast per theme: the glyph
+ * under a block cursor matches the background, and selection highlight is the accent with alpha.
  */
 @Immutable
 data class TerminalTheme(
@@ -21,12 +19,11 @@ data class TerminalTheme(
     val background: Color,
     val foreground: Color,
     val cursor: Color,
-    /** ANSI-палитра: ровно 16 цветов — 0..7 обычные, 8..15 яркие. */
+    /** ANSI palette: exactly 16 colors — 0..7 normal, 8..15 bright. */
     val ansi: List<Color>,
     /**
-     * Подсветка выделения (рисуется ПОД глифами — текст остаётся поверх, см. [TerminalScreen]).
-     * По умолчанию — акцент курсора с прозрачностью (поведение «night sea»), но светлым темам это
-     * даёт мутно-серую заливку, «топящую» и без того бледный текст — там задаём светлый оттенок явно.
+     * Selection highlight, drawn below glyphs (text stays on top, see [TerminalScreen]). Defaults
+     * to the cursor accent with alpha; light themes override with an explicit light shade instead.
      */
     val selection: Color = cursor.copy(alpha = 0.3f),
 ) {
@@ -34,14 +31,14 @@ data class TerminalTheme(
         require(ansi.size == 16) { "ANSI-палитра терминала должна содержать ровно 16 цветов, было ${ansi.size}" }
     }
 
-    /** Цвет символа под курсором-блоком (контраст поверх [cursor]). */
+    /** Glyph color under a block cursor (contrast against [cursor]). */
     val cursorText: Color get() = background
 }
 
-/** Встроенный каталог тем терминала. Порядок = порядок карточек в Appearance. */
+/** Built-in terminal theme catalog. Order matches the Appearance card order. */
 object TerminalThemes {
 
-    /** Дефолт Skerry — «night sea», 1:1 с прежней захардкоженной палитрой рендера. */
+    /** Skerry default — "night sea". */
     val NightSea = TerminalTheme(
         id = "night-sea",
         displayName = "Night Sea",
@@ -56,7 +53,7 @@ object TerminalThemes {
         ),
     )
 
-    /** Tokyo Night — популярная тёмно-синяя палитра. */
+    /** Tokyo Night — dark blue palette. */
     val TokyoNight = TerminalTheme(
         id = "tokyo-night",
         displayName = "Tokyo Night",
@@ -71,7 +68,7 @@ object TerminalThemes {
         ),
     )
 
-    /** Gruvbox Dark — тёплая ретро-палитра. */
+    /** Gruvbox Dark — warm retro palette. */
     val GruvboxDark = TerminalTheme(
         id = "gruvbox-dark",
         displayName = "Gruvbox Dark",
@@ -87,9 +84,8 @@ object TerminalThemes {
     )
 
     /**
-     * Solarized Light — единственная светлая тема (проверяет светлый путь рендера). Тело текста берём
-     * тёмным base01 (#586E75) вместо канонического бледного base00, иначе на кремовом фоне контраст
-     * проваливается; выделение — светлый base2 (#EEE8D5) поверх фона (глифы рисуются сверху).
+     * Solarized Light. Uses dark base01 (#586E75) for body text instead of the canonical pale
+     * base00, since the pale value loses contrast on the cream background; selection is base2.
      */
     val SolarizedLight = TerminalTheme(
         id = "solarized-light",
@@ -106,7 +102,7 @@ object TerminalThemes {
         selection = Color(0xFFEEE8D5),
     )
 
-    /** Catppuccin Mocha — мягкая тёмно-фиолетовая пастель (Base #1E1E2E / Text #CDD6F4). */
+    /** Catppuccin Mocha — soft dark-purple pastel (Base #1E1E2E / Text #CDD6F4). */
     val CatppuccinMocha = TerminalTheme(
         id = "catppuccin-mocha",
         displayName = "Catppuccin Mocha",
@@ -121,7 +117,7 @@ object TerminalThemes {
         ),
     )
 
-    /** Dracula — фирменная тёмная палитра с яркими неоновыми акцентами (#282A36 / #F8F8F2). */
+    /** Dracula — dark palette with bright neon accents (#282A36 / #F8F8F2). */
     val Dracula = TerminalTheme(
         id = "dracula",
         displayName = "Dracula",
@@ -137,8 +133,8 @@ object TerminalThemes {
     )
 
     /**
-     * Tokyo Day — светлый вариант Tokyo Night (folke tokyonight «day»). Вторая светлая тема; выделение
-     * задаём светло-голубым явно, чтобы не топить и без того нежный текст полупрозрачным акцентом.
+     * Tokyo Day — light variant of Tokyo Night (folke tokyonight "day"). Selection is set to an
+     * explicit light blue rather than a translucent accent, which would wash out the pale text.
      */
     val TokyoDay = TerminalTheme(
         id = "tokyo-day",
@@ -155,19 +151,19 @@ object TerminalThemes {
         selection = Color(0xFFB7C1E3),
     )
 
-    /** Все темы в порядке карточек Appearance. */
+    /** All themes in Appearance card order. */
     val all: List<TerminalTheme> = listOf(
         NightSea, TokyoNight, TokyoDay, CatppuccinMocha, GruvboxDark, Dracula, SolarizedLight,
     )
 
     val DEFAULT: TerminalTheme = NightSea
 
-    /** Тема по стабильному [TerminalTheme.id]; неизвестный/`null`/пустой id → [DEFAULT]. */
+    /** Theme by stable [TerminalTheme.id]; unknown/`null`/empty id falls back to [DEFAULT]. */
     fun fromId(id: String?): TerminalTheme = all.firstOrNull { it.id == id } ?: DEFAULT
 }
 
 /**
- * Активная тема терминала. Дефолт (там, где провайдер не выставлен — мобильный/превью/экран
- * подключения) — [TerminalThemes.DEFAULT]. Провайдер ставит [app.skerry.ui.desktop.DesktopDesignApp].
+ * Active terminal theme. Defaults to [TerminalThemes.DEFAULT] where no provider is set (mobile,
+ * preview, connection screen). Set by [app.skerry.ui.desktop.DesktopDesignApp].
  */
 val LocalTerminalTheme = staticCompositionLocalOf { TerminalThemes.DEFAULT }

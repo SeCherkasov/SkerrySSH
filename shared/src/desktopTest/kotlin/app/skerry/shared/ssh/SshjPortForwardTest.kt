@@ -23,9 +23,9 @@ private const val PASSWORD = "correct horse battery staple"
 private val acceptAllKeys = HostKeyVerifier { _, _, _, _ -> true }
 
 /**
- * Интеграционные тесты проброса портов против встроенного Apache MINA SSHD. Назначение туннеля —
- * локальный однопоточный echo-сервер, поднятый в этом же процессе; форвардинг сервер пропускает
- * через [AcceptAllForwardingFilter].
+ * Integration tests for port forwarding against an embedded Apache MINA SSHD. The tunnel
+ * destination is a local single-threaded echo server started in this process; the server allows
+ * forwarding via [AcceptAllForwardingFilter].
  */
 class SshjPortForwardTest {
 
@@ -64,7 +64,7 @@ class SshjPortForwardTest {
                 )
                 try {
                     assertTrue(forward.isActive)
-                    assertTrue(forward.boundPort > 0, "слушатель должен получить порт от ОС")
+                    assertTrue(forward.boundPort > 0, "the listener should get a port from the OS")
                     assertEquals("ping", roundTrip("127.0.0.1", forward.boundPort, "ping"))
                 } finally {
                     forward.close()
@@ -85,9 +85,9 @@ class SshjPortForwardTest {
                     RemoteForwardSpec(bindPort = 0, destHost = "127.0.0.1", destPort = echo.port),
                 )
                 try {
-                    assertTrue(forward.boundPort > 0, "сервер должен назначить порт")
-                    // Слушатель на стороне сервера (127.0.0.1 — тот же хост в тесте); коннект к нему
-                    // туннелируется обратно к нашему echo.
+                    assertTrue(forward.boundPort > 0, "the server should assign a port")
+                    // Listener on the server side (127.0.0.1 — same host in this test); connecting
+                    // to it tunnels back to our echo server.
                     assertEquals("pong", roundTrip("127.0.0.1", forward.boundPort, "pong"))
                 } finally {
                     forward.close()
@@ -107,8 +107,8 @@ class SshjPortForwardTest {
                 val forward = connection.forwardDynamic(DynamicForwardSpec(bindPort = 0))
                 try {
                     assertTrue(forward.isActive)
-                    assertTrue(forward.boundPort > 0, "SOCKS-слушатель должен получить порт от ОС")
-                    // Клиент SOCKS5 сам сообщает адрес назначения (наш echo), туннель идёт через сервер.
+                    assertTrue(forward.boundPort > 0, "the SOCKS listener should get a port from the OS")
+                    // The SOCKS5 client reports the destination address (our echo); the tunnel runs through the server.
                     assertEquals("socks", socksRoundTrip(forward.boundPort, "127.0.0.1", echo.port, "socks"))
                 } finally {
                     forward.close()
@@ -130,8 +130,8 @@ class SshjPortForwardTest {
                 )
                 try {
                     assertEquals("ping", roundTrip("127.0.0.1", forward.boundPort, "ping"))
-                    assertTrue(forward.bytesUp >= 4, "ушедшие байты должны быть посчитаны: ${forward.bytesUp}")
-                    assertTrue(forward.bytesDown >= 4, "пришедшие байты должны быть посчитаны: ${forward.bytesDown}")
+                    assertTrue(forward.bytesUp >= 4, "outbound bytes should be counted: ${forward.bytesUp}")
+                    assertTrue(forward.bytesDown >= 4, "inbound bytes should be counted: ${forward.bytesDown}")
                 } finally {
                     forward.close()
                 }
@@ -149,8 +149,8 @@ class SshjPortForwardTest {
                 val forward = connection.forwardDynamic(DynamicForwardSpec(bindPort = 0))
                 try {
                     assertEquals("socks", socksRoundTrip(forward.boundPort, "127.0.0.1", echo.port, "socks"))
-                    assertTrue(forward.bytesUp >= 5, "ушедшие байты должны быть посчитаны: ${forward.bytesUp}")
-                    assertTrue(forward.bytesDown >= 5, "пришедшие байты должны быть посчитаны: ${forward.bytesDown}")
+                    assertTrue(forward.bytesUp >= 5, "outbound bytes should be counted: ${forward.bytesUp}")
+                    assertTrue(forward.bytesDown >= 5, "inbound bytes should be counted: ${forward.bytesDown}")
                 } finally {
                     forward.close()
                 }
@@ -170,8 +170,8 @@ class SshjPortForwardTest {
                 )
                 try {
                     assertEquals("pong", roundTrip("127.0.0.1", forward.boundPort, "pong"))
-                    assertTrue(forward.bytesUp >= 4, "ушедшие байты должны быть посчитаны: ${forward.bytesUp}")
-                    assertTrue(forward.bytesDown >= 4, "пришедшие байты должны быть посчитаны: ${forward.bytesDown}")
+                    assertTrue(forward.bytesUp >= 4, "outbound bytes should be counted: ${forward.bytesUp}")
+                    assertTrue(forward.bytesDown >= 4, "inbound bytes should be counted: ${forward.bytesDown}")
                 } finally {
                     forward.close()
                 }
@@ -192,7 +192,7 @@ class SshjPortForwardTest {
                 try {
                     forward.pause()
                     assertTrue(forward.isPaused)
-                    // На паузе соединение принимается и сразу рвётся — туннеля к echo нет, ответ пуст.
+                    // While paused, the connection is accepted then immediately dropped — no tunnel to echo, empty response.
                     assertEquals("", roundTrip("127.0.0.1", forward.boundPort, "ping"))
 
                     forward.resume()
@@ -229,7 +229,7 @@ class SshjPortForwardTest {
     }
 }
 
-/** Отправляет [message] на [host]:[port], возвращает эхо-ответ. */
+/** Sends [message] to [host]:[port], returns the echo response. */
 private fun roundTrip(host: String, port: Int, message: String): String =
     Socket(host, port).use { socket ->
         socket.getOutputStream().apply {
@@ -247,25 +247,25 @@ private fun roundTrip(host: String, port: Int, message: String): String =
     }
 
 /**
- * Прокидывает [message] на [targetHost]:[targetPort] через локальный SOCKS5-прокси на
- * 127.0.0.1:[proxyPort] и возвращает эхо-ответ. Реализует клиентскую сторону SOCKS5 (no-auth +
- * CONNECT, IPv4) — встречно к серверной части в [Socks5].
+ * Proxies [message] to [targetHost]:[targetPort] through a local SOCKS5 proxy at
+ * 127.0.0.1:[proxyPort] and returns the echo response. Implements the SOCKS5 client side
+ * (no-auth + CONNECT, IPv4) — the counterpart to the server side in [Socks5].
  */
 private fun socksRoundTrip(proxyPort: Int, targetHost: String, targetPort: Int, message: String): String =
     Socket("127.0.0.1", proxyPort).use { socket ->
         val out = socket.getOutputStream()
         val input = socket.getInputStream()
-        // Приветствие: VER=5, NMETHODS=1, METHOD=0(no-auth). Сервер должен выбрать no-auth.
+        // Greeting: VER=5, NMETHODS=1, METHOD=0(no-auth). Server must select no-auth.
         out.write(byteArrayOf(5, 1, 0)); out.flush()
         val method = readFully(input, 2)
-        require(method[0].toInt() == 5 && method[1].toInt() == 0) { "SOCKS5: сервер не выбрал no-auth" }
-        // Запрос: CONNECT(1), ATYP=IPv4(1), адрес, порт (big-endian).
+        require(method[0].toInt() == 5 && method[1].toInt() == 0) { "SOCKS5: server didn't choose no-auth" }
+        // Request: CONNECT(1), ATYP=IPv4(1), address, port (big-endian).
         val addr = targetHost.split(".").map { it.toInt().toByte() }.toByteArray()
         out.write(byteArrayOf(5, 1, 0, 1) + addr + byteArrayOf((targetPort shr 8).toByte(), targetPort.toByte()))
         out.flush()
         val reply = readFully(input, 10)
-        require(reply[1].toInt() == 0) { "SOCKS5: CONNECT отклонён, REP=${reply[1]}" }
-        // Туннель установлен — гоняем эхо.
+        require(reply[1].toInt() == 0) { "SOCKS5: CONNECT rejected, REP=${reply[1]}" }
+        // Tunnel established — exchange echo.
         out.write(message.encodeToByteArray()); out.flush()
         val buffer = ByteArray(message.length)
         var read = 0
@@ -288,7 +288,7 @@ private fun readFully(input: java.io.InputStream, n: Int): ByteArray {
     return buf
 }
 
-/** Однопоточный echo-сервер на свободном loopback-порту; читает запрос и шлёт его обратно. */
+/** Single-threaded echo server on a free loopback port; reads a request and writes it back. */
 private class EchoServer : Closeable {
     private val socket = ServerSocket().apply { bind(InetSocketAddress("127.0.0.1", 0)) }
     val port: Int get() = socket.localPort
@@ -302,9 +302,9 @@ private class EchoServer : Closeable {
             }
             thread(isDaemon = true, name = "echo-conn") {
                 client.use {
-                    // Потоковое эхо: возвращаем каждый прочитанный кусок сразу, не дожидаясь EOF —
-                    // иначе клиент, держащий сокет открытым в ожидании ответа, и сервер, читающий до
-                    // EOF, заклинивают друг друга.
+                    // Streaming echo: returns each chunk read immediately, without waiting for EOF —
+                    // otherwise a client holding the socket open waiting for a reply and a server
+                    // reading until EOF would deadlock each other.
                     val input = it.getInputStream()
                     val output = it.getOutputStream()
                     val buffer = ByteArray(4096)

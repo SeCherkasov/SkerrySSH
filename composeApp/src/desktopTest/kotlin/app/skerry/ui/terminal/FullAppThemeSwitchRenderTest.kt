@@ -43,11 +43,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.awaitCancellation
 
 /**
- * Регрессия бага смены темы на ПОЛНОМ приложении: [DesktopDesignApp] с живым [SessionsController]
- * поверх фейкового транспорта (как офскрин-харнес design/Screenshot.kt), терминал открыт и показывает
- * вывод с ANSI-фоном (SGR 44). Меняем тему через [DesktopDesignState.chooseTerminalTheme] — ровно так
- * делает клик по карточке Appearance — и проверяем, что НИ ОДНОГО пикселя старой палитры не осталось.
- * Скан всего кадра — без привязки к координатам раскладки.
+ * Regression test for theme switching in the full app: [DesktopDesignApp] with a live
+ * [SessionsController] over a fake transport (like the offscreen harness in design/Screenshot.kt),
+ * terminal open and showing output with an ANSI background (SGR 44). Switches theme via
+ * [DesktopDesignState.chooseTerminalTheme] (same as clicking the Appearance card) and checks that no
+ * pixel of the old palette remains, scanning the whole frame.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class FullAppThemeSwitchRenderTest {
@@ -74,11 +74,11 @@ class FullAppThemeSwitchRenderTest {
                     Snapshot.sendApplyNotifications()
                     timeNanos += 16_666_667L
                     val img = scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
-                    Thread.sleep(16) // асинхронные шрифты/фейковое соединение — как в Screenshot.kt
+                    Thread.sleep(16) // async fonts/fake connection, as in Screenshot.kt
                     return img
                 }
 
-                // Ждём живой терминал с ночной палитрой: должна появиться заливка SGR 44 (зелёный Night Sea).
+                // Wait for a live terminal with the Night Sea palette (SGR 44 fill).
                 var pixels = frame()
                 var attempts = 0
                 while (!pixels.hasColor(NIGHT_SEA_ANSI_BLUE) && attempts < 120) {
@@ -87,11 +87,11 @@ class FullAppThemeSwitchRenderTest {
                 }
                 assertTrue(
                     pixels.hasColor(NIGHT_SEA_ANSI_BLUE),
-                    "не дождались живого терминала с заливкой SGR 44 в палитре Night Sea",
+                    "did not see a live terminal with SGR 44 fill in the Night Sea palette",
                 )
 
-                // Точный путь пользователя: открыть Settings → Appearance ПОВЕРХ терминала, кликнуть
-                // карточку темы, закрыть настройки — терминал всё это время остаётся в композиции.
+                // Exact user path: open Settings -> Appearance over the terminal, click the theme
+                // card, close settings; the terminal stays in composition the whole time.
                 state.openSettings()
                 state.showSettingsTab(app.skerry.ui.app.SettingsTab.Appearance)
                 repeat(3) { pixels = frame() }
@@ -102,14 +102,14 @@ class FullAppThemeSwitchRenderTest {
 
                 assertTrue(
                     pixels.hasColor(SOLARIZED_BG),
-                    "фон терминала должен перекраситься в Solarized Light",
+                    "terminal background should recolor to Solarized Light",
                 )
                 assertTrue(
                     pixels.hasColor(SOLARIZED_ANSI_BLUE),
-                    "заливка SGR 44 должна перекраситься в синий Solarized",
+                    "SGR 44 fill should recolor to Solarized blue",
                 )
                 if (pixels.hasColor(NIGHT_SEA_ANSI_BLUE)) {
-                    fail("остались пиксели синего Night Sea (ANSI 4) — терминал не перерисован после смены темы")
+                    fail("Night Sea blue pixels (ANSI 4) remain: terminal was not repainted after theme switch")
                 }
             }
         } finally {
@@ -160,7 +160,7 @@ class FullAppThemeSwitchRenderTest {
         override suspend fun disconnect() {}
     }
 
-    /** Shell: баннер + строка с заливкой SGR 44 (пробелы — чистый цвет без глифов), затем висит. */
+    /** Shell: banner + a line with SGR 44 fill (spaces, pure color without glyphs), then hangs. */
     private class FakeChannel : ShellChannel {
         override val isOpen: Boolean = true
         override val output: Flow<ByteArray> = flow {

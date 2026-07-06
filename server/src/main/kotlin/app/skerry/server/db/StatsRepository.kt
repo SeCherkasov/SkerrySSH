@@ -5,7 +5,7 @@ import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
-/** Агрегаты для админ-консоли. Только счётчики и суммарный размер шифроблобов — содержимого нет. */
+/** Aggregates for the admin console: counts and total ciphertext size only, no content. */
 class StatsRepository(private val db: Database) {
     data class Counts(
         val accounts: Long,
@@ -21,9 +21,9 @@ class StatsRepository(private val db: Database) {
             devices = Devices.selectAll().count(),
             records = Records.selectAll().count(),
             pairingSessions = Pairing.selectAll().count(),
-            // Суммарный размер шифроблобов в байтах. `LENGTH(blob)` считается на стороне БД
-            // (переносимо между SQLite и PostgreSQL — для bytea LENGTH тоже отдаёт число байт),
-            // блобы в память не грузим. Лишь размер-агрегат метаданных, к содержимому доступа нет.
+            // Total ciphertext size in bytes. `LENGTH(blob)` is computed DB-side (portable between
+            // SQLite and PostgreSQL — bytea LENGTH also returns byte count); blobs aren't loaded
+            // into memory.
             storageBytes = exec("SELECT COALESCE(SUM(LENGTH(blob)), 0) AS total FROM records") { rs ->
                 if (rs.next()) rs.getLong("total") else 0L
             } ?: 0L,

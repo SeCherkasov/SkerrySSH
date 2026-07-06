@@ -83,13 +83,13 @@ import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
 import org.jetbrains.compose.resources.stringResource
 
-// Lock-экраны (мобильный визуал) — вынос из MobileDesignApp, чистый перенос.
+// Lock screens (mobile visual).
 
 /**
- * Живая форма разблокировки (режим master-password): логотип, заголовок,
- * поле пароля, кнопка Unlock на всю ширину, строка биометрии и футер. PIN-режим макета отложен
- * (нет бэкенда passcode) — см. бэклог нового дизайна. Пароль уходит в [onUnlock] как [CharArray]
- * и затирается контроллером; кнопка/строка биометрии видна только при [canUseBiometric].
+ * Live unlock form (master-password mode): logo, title, password field, full-width Unlock
+ * button, biometric row and footer. PIN mode is deferred (no passcode backend). Password goes
+ * to [onUnlock] as a [CharArray] and is wiped by the controller; the biometric row is shown
+ * only when [canUseBiometric].
  */
 @Composable
 fun MobileUnlockScreen(
@@ -101,7 +101,7 @@ fun MobileUnlockScreen(
 ) {
     var pwd by remember { mutableStateOf("") }
     val submit = { if (pwd.isNotEmpty()) onUnlock(pwd.toCharArray()) }
-    // Защита ввода мастер-пароля от снимков экрана/превью в Recent Apps (Android; desktop — no-op).
+    // Blocks screenshots/Recent Apps preview of the master password field (Android; no-op on desktop).
     SecureScreen()
     MobileLockScaffold(title = stringResource(Res.string.shell_lock_title), subtitle = stringResource(Res.string.shell_unlock_subtitle_mobile), error = error) {
         MobileLockField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Done, onSubmit = submit)
@@ -118,7 +118,7 @@ fun MobileUnlockScreen(
                 Txt(stringResource(Res.string.shell_use_biometrics), color = D.dim, size = 14.sp)
             }
         }
-        // Тупик забытого пароля расшивается только сбросом (zero-knowledge); ведёт на [MobileResetScreen].
+        // Forgot-password dead end is resolved only by reset (zero-knowledge); leads to [MobileResetScreen].
         Spacer(Modifier.height(18.dp))
         Txt(
             stringResource(Res.string.shell_forgot_password),
@@ -130,14 +130,14 @@ fun MobileUnlockScreen(
 }
 
 /**
- * Живая форма создания мастер-пароля при первом запуске (мобильный визуал): два поля + кнопка
- * на всю ширину. Валидация (длина/совпадение) — в `VaultGateController`; оба буфера уходят как
- * [CharArray] и затираются там же.
+ * Live master-password creation form on first run (mobile visual): two fields + full-width button.
+ * Validation (length/match) lives in `VaultGateController`; both buffers go out as [CharArray]
+ * and are wiped there.
  *
- * Если платформа провела sync ([sync] != null и [onPairingComplete] != null), под формой появляется
- * аффорданс «у меня есть код связывания» (быстрый паринг, вариант B): он открывает [PairingJoinScreen],
- * где пароль вводится ОДИН раз — координатор сам создаёт vault под ним и принимает ключ аккаунта, после
- * чего [onPairingComplete] уводит гейт к предложению биометрии (повторного ввода пароля нет).
+ * If sync is wired up ([sync] != null and [onPairingComplete] != null), an "I have a pairing code"
+ * affordance appears below the form (quick pairing, variant B): it opens [PairingJoinScreen], where
+ * the password is entered ONCE — the coordinator creates the vault under it and accepts the account
+ * key, then [onPairingComplete] moves the gate to the biometric offer (no second password entry).
  */
 @Composable
 fun MobileCreateScreen(
@@ -150,7 +150,7 @@ fun MobileCreateScreen(
     var confirm by remember { mutableStateOf("") }
     var joining by remember { mutableStateOf(false) }
     val submit = { if (pwd.isNotEmpty() && confirm.isNotEmpty()) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
-    // Защита ввода мастер-пароля от снимков экрана/превью в Recent Apps (Android; desktop — no-op).
+    // Blocks screenshots/Recent Apps preview of the master password fields (Android; no-op on desktop).
     SecureScreen()
 
     if (joining && sync != null && onPairingComplete != null) {
@@ -180,9 +180,10 @@ fun MobileCreateScreen(
 }
 
 /**
- * Разовое предложение включить биометрию сразу после создания vault (мобильный визуал). Vault уже
- * открыт — шаг необязательный: «Use biometrics» запускает системный промпт, «Not now» пускает в
- * приложение. Кнопки гаснут на время промпта ([inFlight]). Биометрию всегда можно настроить позже в More.
+ * One-time offer to enable biometrics right after vault creation (mobile visual). The vault is
+ * already open, so the step is optional: "Use biometrics" launches the system prompt, "Not now"
+ * proceeds into the app. Buttons are disabled while the prompt is in flight ([inFlight]).
+ * Biometrics can always be configured later in More.
  */
 @Composable
 fun MobileBiometricOfferScreen(inFlight: Boolean, onEnable: () -> Unit, onSkip: () -> Unit) {
@@ -203,8 +204,9 @@ fun MobileBiometricOfferScreen(inFlight: Boolean, onEnable: () -> Unit, onSkip: 
 }
 
 /**
- * Экран повреждённого файла vault (мобильный визуал, паритет [DesktopCorruptedScreen]). Файл не
- * читается → пароль ввести нельзя; единственное действие — уйти на подтверждение сброса ([onReset]).
+ * Corrupted vault file screen (mobile visual, parity with [DesktopCorruptedScreen]). The file
+ * can't be read, so no password entry is possible; the only action is to go to reset confirmation
+ * ([onReset]).
  */
 @Composable
 fun MobileCorruptedScreen(onReset: () -> Unit) {
@@ -218,9 +220,10 @@ fun MobileCorruptedScreen(onReset: () -> Unit) {
 }
 
 /**
- * Экран подтверждения безвозвратного сброса (мобильный визуал, паритет [DesktopResetScreen]): выбор
- * объёма ([ResetScope]) + type-to-confirm — danger-кнопка активна только когда вписано
- * [RESET_CONFIRM_WORD]. Удаление необратимо (zero-knowledge), поэтому барьер от случайного тапа жёсткий.
+ * Irreversible-reset confirmation screen (mobile visual, parity with [DesktopResetScreen]): scope
+ * selection ([ResetScope]) plus type-to-confirm — the danger button is enabled only once
+ * [RESET_CONFIRM_WORD] is typed. Deletion is irreversible (zero-knowledge), hence the strict
+ * accidental-tap barrier.
  */
 @Composable
 fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
@@ -258,8 +261,8 @@ fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
             enabled = canConfirm,
         )
         Spacer(Modifier.height(16.dp))
-        // Единственный выход из необратимого экрана — тап-зона на всю ширину (паритет desktop),
-        // иначе промах пальцем оставляет на danger-экране без очевидного отступления.
+        // Only exit from this irreversible screen is a full-width tap zone (parity with desktop);
+        // otherwise a mis-tap leaves the user on the danger screen with no obvious way back.
         Txt(
             stringResource(Res.string.shell_cancel),
             color = D.dim,
@@ -273,7 +276,7 @@ fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
     }
 }
 
-/** Строка выбора объёма сброса (мобильный визуал): радио-точка + заголовок/подзаголовок, кликабельна целиком. */
+/** Reset-scope selection row (mobile visual): radio dot + title/subtitle, whole row is clickable. */
 @Composable
 private fun MobileResetScopeRow(selected: Boolean, title: String, subtitle: String, onSelect: () -> Unit) {
     Row(
@@ -300,7 +303,7 @@ private fun MobileResetScopeRow(selected: Boolean, title: String, subtitle: Stri
     }
 }
 
-/** Каркас lock-экрана: радиальный фон, логотип 64dp, заголовок, [fields], футер. */
+/** Lock-screen scaffold: radial background, 64dp logo, title, [fields], footer. */
 @Composable
 private fun MobileLockScaffold(
     title: String,
@@ -345,7 +348,7 @@ private fun MobileLockScaffold(
     }
 }
 
-/** Поле мастер-пароля макета: иконка-замок + скрытый ввод; Enter (Done) вызывает [onSubmit]. */
+/** Master-password field: lock icon + masked input; Enter (Done) calls [onSubmit]. */
 @Composable
 private fun MobileLockField(
     value: String,
@@ -354,7 +357,7 @@ private fun MobileLockField(
     imeAction: ImeAction,
     onSubmit: () -> Unit = {},
 ) {
-    // Рамка/иконка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    // Border/icon live in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -386,7 +389,7 @@ private fun MobileLockField(
     )
 }
 
-/** Плоское поле ввода макета (без маскирования/иконки) — для type-to-confirm на экране сброса. */
+/** Plain input field (no masking/icon) — for type-to-confirm on the reset screen. */
 @Composable
 private fun MobileLockPlainField(
     value: String,
@@ -401,8 +404,8 @@ private fun MobileLockPlainField(
         singleLine = true,
         textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
         cursorBrush = SolidColor(D.cyan),
-        // Слово подтверждения — заглавное (RESET): глушим автокоррекцию (иначе IME перепишет в «Reset»
-        // и сравнение никогда не совпадёт) и сразу включаем верхний регистр.
+        // Confirm word is uppercase (RESET): disable autocorrect (otherwise the IME rewrites it to
+        // "Reset" and the comparison never matches) and force uppercase capitalization.
         keyboardOptions = KeyboardOptions(
             imeAction = imeAction,
             autoCorrectEnabled = false,
@@ -430,9 +433,9 @@ private fun MobileLockPlainField(
 }
 
 /**
- * Primary-кнопка на всю ширину (по умолчанию cyan-фон, тёмный текст, радиус 13) — стиль кнопок
- * мобильного макета. [bg]/[fg]/[enabled] переопределяются для danger-варианта (сброс vault): пока
- * не вписано слово подтверждения, кнопка приглушена и не кликается.
+ * Full-width primary button (default cyan background, dark text, 13dp radius) in the mobile
+ * button style. [bg]/[fg]/[enabled] are overridden for the danger variant (vault reset): until
+ * the confirm word is typed, the button is dimmed and not clickable.
  */
 @Composable
 private fun MobileWideButton(

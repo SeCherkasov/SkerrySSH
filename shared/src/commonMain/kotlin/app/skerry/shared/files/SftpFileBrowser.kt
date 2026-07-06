@@ -6,11 +6,11 @@ import app.skerry.shared.sftp.SftpEntryType
 import app.skerry.shared.sftp.SftpException
 
 /**
- * Адаптер удалённого [SftpClient] к общему [FileBrowser]: навигация/CRUD пробрасываются как есть
- * (sshj-реализация уже уводит I/O на `Dispatchers.IO`), [SftpEntry] маппится в нейтральный
- * [FileItem], а [SftpException] — в [FileBrowserException], чтобы панель не зависела от SFTP-типов.
- * Передачу файлов адаптер не покрывает: она идёт через `SftpClient.download`/`upload` в координаторе
- * двухпанельного экрана. [label] — имя хоста для заголовка панели.
+ * Adapter from a remote [SftpClient] to the common [FileBrowser]: navigation/CRUD is passed through
+ * as-is (the sshj implementation already runs I/O on `Dispatchers.IO`), [SftpEntry] maps to the
+ * neutral [FileItem], and [SftpException] maps to [FileBrowserException] so the panel doesn't depend
+ * on SFTP-specific types. File transfer isn't covered here: it goes through `SftpClient.download`/
+ * `upload` in the dual-pane screen coordinator. [label] is the host name for the panel header.
  */
 class SftpFileBrowser(
     private val sftp: SftpClient,
@@ -25,22 +25,22 @@ class SftpFileBrowser(
     override suspend fun mkdir(path: String): Unit = guard { sftp.mkdir(path) }
 
     /**
-     * Рекурсивное удаление: каталог сначала очищается изнутри (содержимое снимается тем же
-     * [deleteTree]), затем снимается пустым `rmdir`; файл/симлинк/прочее — `remove` (`SSH_FXP_REMOVE`
-     * убирает сам линк, не цель — в каталог-цель симлинка не заходим). Протокол SFTP сам по себе
-     * непустой каталог снять не умеет, поэтому обход — на клиенте. Глубину дерева не ограничиваем:
-     * патологически глубокие деревья (тысячи уровней) теоретически переполнят стек — приемлемо для MVP.
+     * Recursive delete: a directory is emptied first (contents removed by the same [deleteTree]),
+     * then removed with `rmdir`; a file/symlink/other uses `remove` (`SSH_FXP_REMOVE` removes the
+     * link itself, not its target — a symlink's target directory is not entered). SFTP has no
+     * protocol-level recursive delete, so the traversal is client-side. Tree depth is unbounded:
+     * pathologically deep trees could in theory overflow the stack.
      */
     override suspend fun delete(item: FileItem): Unit = guard {
         deleteTree(item.path, item.type == FileItemType.Directory)
     }
 
     /**
-     * Воркер обхода [delete]. Вызывается ТОЛЬКО из [delete] и опирается на его [guard]: все
-     * SFTP-вызовы здесь бросают [SftpException], которую заворачивает внешний [guard] (вся рекурсия
-     * исполняется внутри одного его try). Перед спуском к ребёнку проверяем, что его путь реально
-     * вложен в [path] — иначе сервер, вернувший в листинге путь вне каталога (по ошибке или злонамеренно),
-     * заставил бы удалить не то, что выбрал пользователь.
+     * Traversal worker for [delete]. Called only from [delete] and relies on its [guard]: all SFTP
+     * calls here throw [SftpException], caught by the outer [guard] (the whole recursion runs inside
+     * its single try). Before descending into a child, verifies its path is actually nested under
+     * [path] — otherwise a server returning a listing entry outside the directory (by bug or by
+     * intent) could cause deletion of something the user didn't select.
      */
     private suspend fun deleteTree(path: String, isDirectory: Boolean) {
         if (!isDirectory) {
@@ -50,7 +50,7 @@ class SftpFileBrowser(
         val prefix = if (path.endsWith("/")) path else "$path/"
         sftp.list(path).forEach { child ->
             if (!child.path.startsWith(prefix)) {
-                throw SftpException("Листинг $path вернул путь вне каталога: ${child.path}")
+                throw SftpException("Listing $path returned a path outside the directory: ${child.path}")
             }
             deleteTree(child.path, child.type == SftpEntryType.Directory)
         }
@@ -63,7 +63,7 @@ class SftpFileBrowser(
         try {
             block()
         } catch (e: SftpException) {
-            throw FileBrowserException(e.message ?: "Ошибка SFTP", e)
+            throw FileBrowserException(e.message ?: "SFTP error", e)
         }
 }
 

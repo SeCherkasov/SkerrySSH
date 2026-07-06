@@ -19,10 +19,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Telnet-транспорт (RFC 854) поверх обычного TCP-сокета. Живёт в общем JVM-узле (desktop + Android),
- * как и sshj. Аутентификации у Telnet нет: [SshAuth] игнорируется, логин/пароль вводятся в самом
- * терминале как обычный поток данных. Возможности SSH, которых у Telnet нет (SFTP, проброс портов,
- * exec, метрики шифра), помечены как неподдерживаемые и бросают [UnsupportedOperationException].
+ * Telnet transport (RFC 854) over a plain TCP socket. Lives in the shared JVM node (desktop +
+ * Android), same as sshj. Telnet has no authentication: [SshAuth] is ignored, login/password are
+ * entered in the terminal itself as ordinary data stream. SSH capabilities Telnet lacks (SFTP,
+ * port forwarding, exec, cipher metrics) are marked unsupported and throw
+ * [UnsupportedOperationException].
  */
 class TelnetTransport(
     private val connectTimeoutMillis: Int = 15_000,
@@ -33,18 +34,18 @@ class TelnetTransport(
             val socket = Socket()
             try {
                 socket.connect(InetSocketAddress(target.host, target.port), connectTimeoutMillis)
-                socket.tcpNoDelay = true // интерактивный терминал: без Nagle, посимвольная отзывчивость
+                socket.tcpNoDelay = true // interactive terminal: no Nagle, per-character responsiveness
             } catch (e: IOException) {
                 runCatching { socket.close() }
-                throw SshConnectionException("Не удалось подключиться к ${target.host}:${target.port}", e)
+                throw SshConnectionException("Failed to connect to ${target.host}:${target.port}", e)
             }
             TelnetConnection(socket)
         }
 }
 
 /**
- * Соединение поверх одного TCP-сокета: единственный интерактивный поток (shell), без под-каналов.
- * Отсутствующие у Telnet возможности SSH (exec, SFTP, пробросы) бросает база [StreamOnlyConnection].
+ * Connection over a single TCP socket: one interactive stream (shell), no sub-channels. SSH
+ * capabilities Telnet lacks (exec, SFTP, forwarding) are thrown by the base [StreamOnlyConnection].
  */
 private class TelnetConnection(private val socket: Socket) : StreamOnlyConnection("Telnet") {
 
@@ -54,7 +55,7 @@ private class TelnetConnection(private val socket: Socket) : StreamOnlyConnectio
         get() = socket.isConnected && !socket.isClosed
 
     override suspend fun openShell(size: PtySize, term: String): ShellChannel {
-        check(shellOpened.compareAndSet(false, true)) { "Telnet-соединение уже открыло свой поток" }
+        check(shellOpened.compareAndSet(false, true)) { "Telnet connection already opened its stream" }
         return TelnetShellChannel(socket, TelnetCodec(termType = term, cols = size.cols, rows = size.rows))
     }
 
@@ -64,12 +65,13 @@ private class TelnetConnection(private val socket: Socket) : StreamOnlyConnectio
 }
 
 /**
- * Интерактивный поток Telnet: читает сокет, прогоняет через [TelnetCodec] (снимает IAC-неготиацию,
- * шлёт ответы обратно в сокет — [transform]), эмитит прикладные байты в output. Запись пользователя
- * удваивает литеральный 0xFF ([TelnetCodec.encode]). Записи ответов неготиации и пользователя
- * сериализованы [writeLock], чтобы не переплести байты в общем выходном потоке сокета.
- * Каркас read-цикла/close — в базе [StreamShellChannel]; read сырого сокета не реагирует на
- * Thread.interrupt, поэтому unblockReadOnCancel = true (отмена сбора закрывает сокет).
+ * Interactive Telnet stream: reads the socket, runs it through [TelnetCodec] (strips IAC
+ * negotiation, sends replies back on the socket — [transform]), emits application bytes to
+ * output. User writes double literal 0xFF bytes ([TelnetCodec.encode]). Negotiation-reply and
+ * user writes are serialized via [writeLock] so bytes don't interleave on the socket's shared
+ * output stream. The read-loop/close scaffolding lives in [StreamShellChannel]; a raw socket read
+ * doesn't respond to Thread.interrupt, so unblockReadOnCancel = true (cancelling the collector
+ * closes the socket).
  */
 private class TelnetShellChannel(
     private val socket: Socket,
@@ -81,7 +83,8 @@ private class TelnetShellChannel(
     override val isOpen: Boolean
         get() = socket.isConnected && !socket.isClosed
 
-    // Сервер сейчас не эхоит ввод (WONT ECHO) — верхний слой не пишет набранное в историю (пароли).
+    // Server isn't currently echoing input (WONT ECHO) — the upper layer must not write what was
+    // typed into history (passwords).
     override val echoSuppressed: Boolean get() = !codec.serverEchoEnabled
 
     override fun readBlocking(buffer: ByteArray): Int = socket.getInputStream().read(buffer)
@@ -102,13 +105,14 @@ private class TelnetShellChannel(
     }
 
     override suspend fun resize(size: PtySize) {
-        // Всегда запоминаем размер в кодеке; но SB NAWS шлём ТОЛЬКО если сервер его согласовал
-        // (DO NAWS) — незапрошенное под-сообщение строгий telnet-сервер может воспринять как ошибку
-        // и закрыть соединение.
+        // Always remember the size in the codec; but send SB NAWS ONLY if the server negotiated
+        // it (DO NAWS) — an unrequested sub-message may be treated as an error by a strict telnet
+        // server and close the connection.
         val naws = codec.windowSize(size.cols, size.rows)
         if (codec.nawsNegotiated) {
-            // Обрыв при отправке NAWS не критичен (размер уже запомнен в кодеке) — глотаем только
-            // ошибку записи; CancellationException должна пройти наружу, это отмена, а не сбой.
+            // A drop while sending NAWS isn't critical (the size is already remembered in the
+            // codec) — swallow only the write error; CancellationException must propagate, that's
+            // cancellation, not a failure.
             try {
                 writeRaw(naws)
             } catch (_: SshConnectionException) {
@@ -123,7 +127,7 @@ private class TelnetShellChannel(
                 out.write(bytes)
                 out.flush()
             } catch (e: IOException) {
-                throw SshConnectionException("Запись в Telnet-поток не удалась", e)
+                throw SshConnectionException("Failed to write to Telnet stream", e)
             }
         }
     }

@@ -58,10 +58,10 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_create
 import org.jetbrains.compose.resources.stringResource
 
-/** Элемент пикера шеринга (хост или сниппет своего vault): [detail] — вторая строка (адрес/команда). */
+/** Share-picker item (a host or snippet from the own vault): [detail] is the second line (address/command). */
 data class ShareItem(val id: String, val label: String, val detail: String)
 
-/** Карточка диалога Teams — тот же визуальный язык, что [app.skerry.ui.design.ConfirmActionDialog]. */
+/** Teams dialog card — same visual language as [app.skerry.ui.design.ConfirmActionDialog]. */
 @Composable
 internal fun TeamsDialogCard(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     ModalScrim(onDismiss = onDismiss) {
@@ -79,7 +79,7 @@ internal fun TeamsDialogCard(onDismiss: () -> Unit, content: @Composable () -> U
     }
 }
 
-/** Рукописное поле диалога: рамка в decorationBox + fillMaxWidth (клик по всей площади ставит каретку). */
+/** Hand-rolled dialog field: border in decorationBox + fillMaxWidth (a click anywhere places the caret). */
 @Composable
 private fun TeamsTextField(
     value: String,
@@ -124,7 +124,7 @@ internal fun CancelButton(onDismiss: () -> Unit) {
     }
 }
 
-/** Создание команды: одно поле имени; ключ команды генерируется локально (подпись напоминает об этом). */
+/** Create team: a single name field; the team key is generated locally (the caption notes this). */
 @Composable
 fun CreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
@@ -149,9 +149,9 @@ fun CreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
 }
 
 /**
- * Приглашение в два шага: ввод accountId → [onLookup] тянет опубликованный ключ; когда [preview]
- * пришёл — показываем фингерпринт для сверки по доверенному каналу и только тогда даём отправить.
- * Смена введённого id обнуляет превью через [onEdited] (нельзя отправить на несверенный ключ).
+ * Two-step invite: enter accountId → [onLookup] fetches the published key; once [preview] arrives,
+ * show the fingerprint for verification over a trusted channel and only then allow sending. Changing
+ * the entered id clears the preview via [onEdited] (can't send to an unverified key).
  */
 @Composable
 fun InviteMemberDialog(
@@ -165,7 +165,7 @@ fun InviteMemberDialog(
     onDismiss: () -> Unit,
 ) {
     var accountId by remember { mutableStateOf("") }
-    // Least-privilege по умолчанию: младшая из назначаемых ролей (обычно VIEWER).
+    // Least-privilege by default: the lowest assignable role (usually VIEWER).
     var role by remember { mutableStateOf(assignableRoles.lastOrNull() ?: TeamRole.VIEWER) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -217,7 +217,7 @@ fun InviteMemberDialog(
     }
 }
 
-/** Пикер записи своего vault для шеринга с командой: уже общие записи вызывающий отфильтровал. */
+/** Picker of an own-vault record to share with a team: already-shared records are filtered by the caller. */
 @Composable
 fun SharePickerDialog(
     title: String,

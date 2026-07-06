@@ -10,19 +10,16 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 import org.jetbrains.exposed.sql.update
 
 /**
- * Устройства аккаунта: регистрация при входе, список, отзыв, отметка активности. Все операции
- * жёстко скоупятся по `accountId` — deviceId уникален лишь в пределах аккаунта (см. составной PK
- * в [Devices] и security-ревью H2).
+ * Account devices: registration on login, listing, revocation, activity tracking. All operations
+ * are scoped by `accountId` — deviceId is unique only within an account (see the composite PK in
+ * [Devices]).
  */
 class DeviceRepository(private val db: Database) {
 
     /**
-     * Идемпотентно в пределах аккаунта: повторный вход того же устройства обновляет имя/активность
-     * и **снимает отзыв** (`revoked=false`). Повторная аутентификация (этот метод зовётся из
-     * register и srp/verify) доказывает знание мастер-пароля = владение аккаунтом, поэтому
-     * переотзывать устройство нельзя — иначе отозванное устройство с верным паролем оставалось бы
-     * запертым навсегда (register→409, а каждый sync-запрос→401 по [isRevoked]). Revoke в этой модели
-     * гасит текущие токены до следующего входа, а не банит устройство; постоянный бан = ротация пароля.
+     * Idempotent within an account: re-registering the same device updates name/activity and
+     * **clears revocation** (`revoked=false`) — re-authentication proves master password
+     * knowledge, so a revoked device with the correct password must not stay locked out permanently.
      */
     suspend fun register(
         accountId: String,
@@ -31,11 +28,11 @@ class DeviceRepository(private val db: Database) {
         platform: String? = null,
         now: Long = System.currentTimeMillis(),
     ): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
-        // Кап под varchar(64): клиентское поле, длинное значение иначе валит запись в 500
-        // (truncation в SQLite, исключение в PostgreSQL) вместо тихого усечения (kotlin-ревью L).
+        // Cap to varchar(64): a longer client value would otherwise fail the insert with a 500
+        // instead of silently truncating.
         val plat = platform?.take(64)
-        // name — text-колонка, но всё равно клиентский ввод: режем до разумного предела, чтобы
-        // нельзя было раздуть строку и админ-консоль произвольно длинным именем (kotlin-ревью L).
+        // name is a text column but still client input: cap it to a reasonable length to
+        // prevent an arbitrarily long name.
         val safeName = name.take(128)
         val existing = Devices.selectAll()
             .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }
@@ -55,13 +52,12 @@ class DeviceRepository(private val db: Database) {
             val wasRevoked = existing[Devices.revoked]
             Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
                 it[Devices.name] = safeName
-                // platform пишем только когда клиент его прислал — иначе не затираем известное значение.
+                // Only write platform when the client sent one, so we don't overwrite a known value.
                 if (plat != null) it[Devices.platform] = plat
                 it[lastSeenAt] = now
-                it[revoked] = false // повторная аутентификация переактивирует устройство (см. KDoc)
+                it[revoked] = false // re-authentication reactivates the device
             }
-            // true ⇒ устройство было отозвано и сейчас переактивировано — сигнал для аудита (consoleadmin
-            // видит «revoked» красным, но без этого события не узнал бы о возврате с верным паролем).
+            // true means the device was revoked and is now reactivated — signal for the audit log.
             wasRevoked
         }
     }
@@ -71,9 +67,9 @@ class DeviceRepository(private val db: Database) {
     }
 
     /**
-     * Устройства инстанса для админ-консоли (zero-knowledge: только метаданные). Самые активные
-     * первыми и с верхней границей [limit] — устройства не удаляются (только отзываются), поэтому
-     * без лимита список и JSON-ответ росли бы безгранично (kotlin-ревью L).
+     * Instance-wide devices for the admin console (zero-knowledge: metadata only). Most recently
+     * active first, capped at [limit] — devices are never deleted, only revoked, so an unbounded
+     * list would grow indefinitely.
      */
     suspend fun listAll(limit: Int = 200): List<DeviceRow> = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.selectAll()
@@ -82,7 +78,7 @@ class DeviceRepository(private val db: Database) {
             .map { it.toDeviceRow() }
     }
 
-    /** Всего устройств на инстансе — для честного «N из M» в консоли. */
+    /** Total devices on the instance, for an accurate "N of M" in the console. */
     suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.selectAll().count()
     }
@@ -101,8 +97,8 @@ class DeviceRepository(private val db: Database) {
     }
 
     /**
-     * Отмечает активность. Если передан [syncVersion] (курсор после pull/push), фиксирует, до
-     * какого состояния устройство дочиталось/дописалось — открытый счётчик для админ-консоли.
+     * Records activity. If [syncVersion] (the cursor after a pull/push) is given, records how
+     * far the device has synced — an open counter for the admin console.
      */
     suspend fun touch(
         accountId: String,
@@ -117,9 +113,8 @@ class DeviceRepository(private val db: Database) {
     }
 
     /**
-     * Отозвано ли устройство. Неизвестное (отсутствующее) устройство считается отозванным —
-     * JWT от устройства, которого нет в таблице (напр. после ручной чистки), отклоняется
-     * (kotlin-ревью L2).
+     * Whether the device is revoked. An unknown (missing) device counts as revoked, so a JWT for
+     * a device no longer in the table is rejected.
      */
     suspend fun isRevoked(accountId: String, deviceId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
         Devices.selectAll()

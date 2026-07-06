@@ -1,17 +1,16 @@
 package app.skerry.shared.snippet
 
 /**
- * Персистентное хранилище сохранённых сниппетов. Платформенная реализация — файловая (jvmShared),
- * как у [app.skerry.shared.tunnel.TunnelStore]. Контракт синхронный: мутации редки и инициируются из
- * UI. Реализации обязаны быть потокобезопасными.
+ * Persistent store for saved snippets. The synchronous contract assumes rare, UI-initiated
+ * mutations. Implementations must be thread-safe.
  */
 interface SnippetStore {
-    /** Все сниппеты в порядке вставки/обновления. */
+    /** All snippets in insertion/update order. */
     fun all(): List<Snippet>
 
-    /** Создать новую запись или заменить существующую с тем же [Snippet.id] (upsert). */
+    /** Creates a new record or replaces the existing one with the same [Snippet.id] (upsert). */
     fun put(snippet: Snippet)
 
-    /** Удалить запись по id; отсутствующий id — no-op. */
+    /** Removes the record by id; missing id is a no-op. */
     fun remove(id: String)
 }

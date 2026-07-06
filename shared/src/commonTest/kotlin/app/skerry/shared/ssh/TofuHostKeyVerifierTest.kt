@@ -28,7 +28,7 @@ class TofuHostKeyVerifierTest {
         verifier.verify("example.com", 22, ed25519, fpA)
 
         assertTrue(verifier.verify("example.com", 22, ed25519, fpA))
-        // Не дублируем уже известную запись.
+        // Does not duplicate an already known entry.
         assertEquals(1, store.all().size)
     }
 
@@ -39,7 +39,7 @@ class TofuHostKeyVerifierTest {
         verifier.verify("example.com", 22, ed25519, fpA)
 
         assertFalse(verifier.verify("example.com", 22, ed25519, fpB))
-        // Отказ не перезаписывает доверенный ключ.
+        // A rejection does not overwrite the trusted key.
         assertEquals(listOf(KnownHost("example.com", 22, ed25519, fpA)), store.all())
     }
 
@@ -101,7 +101,7 @@ class TofuHostKeyVerifierTest {
     }
 }
 
-/** Хранилище в памяти для тестов TOFU-логики. */
+/** In-memory store for TOFU logic tests. */
 private class InMemoryKnownHostsStore : KnownHostsStore {
     private val entries = mutableListOf<KnownHost>()
     override fun all(): List<KnownHost> = entries.toList()
@@ -119,7 +119,7 @@ private class InMemoryKnownHostsStore : KnownHostsStore {
     }
 }
 
-/** Журнал смены ключей в памяти для тестов. */
+/** In-memory key-change log for tests. */
 private class InMemoryHostKeyMismatchStore : HostKeyMismatchStore {
     private val entries = mutableListOf<HostKeyMismatch>()
     override fun all(): List<HostKeyMismatch> = entries.toList()

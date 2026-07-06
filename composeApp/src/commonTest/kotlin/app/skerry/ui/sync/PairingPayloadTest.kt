@@ -11,7 +11,7 @@ class PairingPayloadTest {
     fun `round-trips through encode and decode`() {
         val original = PairingPayload(
             serverUrl = "https://sync.example.com:8443/base",
-            code = "abc-123_XYZ", // claim-код url-safe base64 (с -/_)
+            code = "abc-123_XYZ", // claim code, url-safe base64 (with -/_)
             transferKey = ByteArray(32) { it.toByte() },
         )
 
@@ -29,17 +29,17 @@ class PairingPayloadTest {
 
     @Test
     fun `decode rejects foreign or malformed strings`() {
-        assertNull(PairingPayload.decode("just some text"))          // не наш формат
-        assertNull(PairingPayload.decode("sk1.onlytwo"))              // мало полей
-        assertNull(PairingPayload.decode("sk9.a.b.c"))               // чужой префикс/версия
-        assertNull(PairingPayload.decode("sk1.@@@.@@@.@@@"))         // не base64
+        assertNull(PairingPayload.decode("just some text"))          // not our format
+        assertNull(PairingPayload.decode("sk1.onlytwo"))              // too few fields
+        assertNull(PairingPayload.decode("sk9.a.b.c"))               // wrong prefix/version
+        assertNull(PairingPayload.decode("sk1.@@@.@@@.@@@"))         // not base64
         assertNull(PairingPayload.decode(""))
     }
 
     @Test
     fun `decode rejects a wrong-length transfer key before any network call`() {
-        // Обрезанный QR: код структурно валиден, но ключ короче 32 байт — должен быть null (иначе
-        // claimPairing сжёг бы одноразовый код). Собираем строку с 16-байтным ключом.
+        // Truncated QR: the code is structurally valid but the key is shorter than 32 bytes — must
+        // be null (otherwise claimPairing would burn the one-time code). Build a string with a 16-byte key.
         val truncated = PairingPayload("https://h", "code", ByteArray(16) { 1 }).encode()
         assertNull(PairingPayload.decode(truncated))
     }

@@ -53,7 +53,7 @@ class DesktopShortcutsTest {
 
     @Test
     fun `plain Ctrl plus letter is left to the terminal`() {
-        // Ctrl+L очистка экрана, Ctrl+D EOF, Ctrl+N — не должны перехватываться.
+        // Ctrl+L clear screen, Ctrl+D EOF, Ctrl+N — must not be intercepted.
         assertNull(match(ctrl = true, key = Key.L))
         assertNull(match(ctrl = true, key = Key.D))
         assertNull(match(ctrl = true, key = Key.N))

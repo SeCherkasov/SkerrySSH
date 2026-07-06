@@ -4,13 +4,13 @@ import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
 
-/** Где хранится курсор дельта-синхронизации (`lastSyncVersion`) на устройство/аккаунт. */
+/** Where the delta sync cursor (`lastSyncVersion`) is stored, per device/account. */
 interface SyncStateStore {
     fun cursor(accountId: String): Long
     fun setCursor(accountId: String, cursor: Long)
 }
 
-/** In-memory курсор (тесты / эфемерные сессии). Файловая персистентность — отдельной реализацией. */
+/** In-memory cursor (tests / ephemeral sessions). File persistence is a separate implementation. */
 class InMemorySyncStateStore : SyncStateStore {
     private val cursors = mutableMapOf<String, Long>()
     override fun cursor(accountId: String): Long = cursors[accountId] ?: 0L
@@ -19,28 +19,27 @@ class InMemorySyncStateStore : SyncStateStore {
     }
 }
 
-/** Итог одного цикла синхронизации. */
+/** Outcome of one sync cycle. */
 data class SyncOutcome(val pulled: Int, val pushed: Int, val cursor: Long)
 
 /**
- * Клиентский движок синхронизации (`docs/skerry-sync-design.md` §3). Гоняет дельту между
- * локальным [Vault] и сервером через [SyncClient], разрешая конфликты LWW внутри
- * [Vault.mergeRemote]. Работает на шифроблобах — payload не расшифровывает (zero-knowledge);
- * курсор хранит [SyncStateStore].
+ * Client-side sync engine (`docs/skerry-sync-design.md` §3). Runs deltas between the local [Vault]
+ * and the server via [SyncClient], resolving LWW conflicts inside [Vault.mergeRemote]. Operates on
+ * ciphertext blobs — never decrypts the payload (zero-knowledge); the cursor is held by [SyncStateStore].
  *
- * Один цикл [sync]: pull дельты → merge в vault → push всех локальных записей → повторный pull
- * (забрать только что запушенное и параллельные чужие изменения, чтобы курсор не перепрыгнул их).
- * Требует разблокированного vault.
+ * One [sync] cycle: pull delta -> merge into vault -> push all local records -> pull again (to
+ * pick up what was just pushed plus any concurrent remote changes, so the cursor doesn't skip
+ * them). Requires an unlocked vault.
  */
 class SyncEngine(
     private val client: SyncClient,
     private val vault: Vault,
     private val state: SyncStateStore = InMemorySyncStateStore(),
     /**
-     * Текущие настройки «что синхронизировать» (уровень аккаунта). Читается ЛЕНИВО на каждый цикл, и
-     * заново ПОСЛЕ применения входящей записи [RecordType.SETTINGS] в [drainPull] — поэтому выключение,
-     * прилетевшее с другого устройства, действует уже в этом же цикле. По умолчанию синкаем всё
-     * (тесты/конфигурации без фичи). См. [SyncSettings].
+     * Current "what to sync" settings (account level). Read lazily each cycle, and re-read after
+     * an incoming [RecordType.SETTINGS] record is applied in [drainPull], so a disable from
+     * another device takes effect within the same cycle. Defaults to syncing everything (tests/
+     * configs without the feature). See [SyncSettings].
      */
     private val settings: () -> SyncSettings = { SyncSettings() },
 ) {
@@ -51,38 +50,38 @@ class SyncEngine(
 
         cursor = drainPull(session, cursor) { pulled += it }
 
-        // Пушим локальные записи РАЗРЕШЁННЫХ типов (фильтр «что синхронизировать», уровень аккаунта):
-        // отключённый тип не уезжает на сервер, но локально остаётся. Запись настроек синкается всегда
-        // (shouldSync), иначе выключение не долетело бы до других устройств. Push-all по типам прост и
-        // корректен для размеров vault MVP; точечный dirty-трекинг — оптимизация на будущее.
+        // Push local records of allowed types (account-level "what to sync" filter): a disabled
+        // type stays local and never reaches the server. The settings record itself always syncs
+        // (shouldSync), otherwise a disable would never reach other devices. Push-all by type is
+        // simple and correct at current vault sizes; fine-grained dirty tracking is a future optimization.
         val filter = settings()
         val local = vault.records().filter { filter.shouldSync(it.type) }.map { it.toRemote() }
         if (local.isNotEmpty()) client.push(session, local)
 
-        // Повторный pull: вытягивает наши же запушенные записи (merge идемпотентен) и любые
-        // чужие изменения с serverSeq между первым pull и push — иначе курсор бы их проскочил.
+        // Pull again: picks up our own just-pushed records (merge is idempotent) and any remote
+        // changes with a serverSeq between the first pull and the push, so the cursor doesn't skip them.
         cursor = drainPull(session, cursor) { pulled += it }
 
         state.setCursor(session.accountId, cursor)
         return SyncOutcome(pulled = pulled, pushed = local.size, cursor = cursor)
     }
 
-    /** Тянет дельту до опустошения (на случай будущей пагинации), сливая каждую страницу в vault. */
+    /** Pulls delta pages until exhausted (for future pagination), merging each page into the vault. */
     private suspend fun drainPull(session: SyncSession, from: Long, onMerged: (Int) -> Unit): Long {
         var cursor = from
-        // Фильтр читаем один раз на drainPull и перечитываем ТОЛЬКО после применения входящей записи
-        // SETTINGS (она singleton и меняется редко) — не на каждой странице (vault.records()+AEAD дорого).
+        // Filter is read once per drainPull and re-read only after an incoming SETTINGS record is
+        // applied (it's a singleton, changes rarely) — not on every page (vault.records()+AEAD is costly).
         var filter = settings()
         while (true) {
             val page = client.pull(session, cursor)
             if (page.records.isNotEmpty()) {
                 val incoming = page.records.mapNotNull { it.toVaultRecord() }
-                // Записи настроек применяем ПЕРВЫМИ и без фильтра (они управляют фильтром): на свежем
-                // устройстве выключение «Snippets» должно сработать до того, как сниппеты из этой же
-                // страницы успеют примениться. После их merge перечитываем фильтр.
-                // Известный нюанс: если выключение прилетело в ОДНОЙ странице с записью этого же типа,
-                // что была запушена ДО выключения, она будет отброшена (её serverSeq уже за курсором).
-                // Edge-case; повторное включение типа делает полный re-pull и подтягивает пропущенное.
+                // Settings records are applied first and unfiltered (they control the filter): on
+                // a fresh device, a "Snippets" disable must take effect before snippets from the
+                // same page get applied. The filter is re-read after merging them.
+                // Known edge case: if a disable arrives in the same page as a record of that type
+                // pushed before the disable, that record is dropped (its serverSeq is past the
+                // cursor). Re-enabling the type triggers a full re-pull that recovers it.
                 val settingsRecords = incoming.filter { it.type == RecordType.SETTINGS }
                 var merged = 0
                 if (settingsRecords.isNotEmpty()) {
@@ -93,11 +92,12 @@ class SyncEngine(
                 if (rest.isNotEmpty()) merged += vault.mergeRemote(rest).size
                 onMerged(merged)
             }
-            // Компактим ПОСЛЕ merge: иначе только что слитый тромбстоун из этой же страницы тут же
-            // вернулся бы в vault. Идемпотентно — список приходит на каждый pull, пока надгробие живо.
+            // Compact after merge: otherwise a tombstone just merged from this same page would
+            // immediately reappear in the vault. Idempotent — the list arrives on every pull while
+            // the tombstone is still alive.
             if (page.compactedIds.isNotEmpty()) vault.compact(page.compactedIds)
             if (page.records.isEmpty()) return cursor
-            if (page.cursor <= cursor) return page.cursor // защита от зацикливания, если курсор не растёт
+            if (page.cursor <= cursor) return page.cursor // guard against looping if the cursor doesn't advance
             cursor = page.cursor
         }
     }
@@ -105,7 +105,7 @@ class SyncEngine(
     private fun VaultRecord.toRemote() =
         RemoteRecord(id, type.name, version, updatedAt, deviceId, deleted, blob)
 
-    /** `null` — незнакомый сервер-тип (пропускаем; сервер их валидирует, но клиент устойчив). */
+    /** `null` for an unrecognized server type (skipped; the server validates them, client stays resilient). */
     private fun RemoteRecord.toVaultRecord(): VaultRecord? {
         val recordType = RecordType.entries.firstOrNull { it.name == type } ?: return null
         return VaultRecord(id, recordType, version, updatedAt, deviceId, deleted, blob)

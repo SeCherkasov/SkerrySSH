@@ -7,8 +7,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Подбор размеров окна desktop под доступную область экрана: ~90% экрана, но в рамках
- * [MIN_WINDOW]…[MAX_WINDOW] и никогда не больше самого экрана (для маленьких дисплеев — сжатие).
+ * Computes the desktop window size for the available screen: ~90% of the screen, clamped to
+ * [MIN_WINDOW]..[MAX_WINDOW], never larger than the screen itself (shrinks on small displays).
  */
 class WindowSizingTest {
 
@@ -20,7 +20,7 @@ class WindowSizingTest {
     @Test
     fun fullhd_caps_width_keeps_proportional_height() {
         val size = optimalWindowSize(DpSize(1920.dp, 1080.dp))
-        // 0.9*1920=1728 > max → ширина прижата к максимуму; высота 0.9*1080 в допустимом диапазоне.
+        // 0.9*1920=1728 > max, so width clamps to max; 0.9*1080 height stays within range.
         assertEquals(MAX_WINDOW.width, size.width)
         assertTrue(size.height in MIN_WINDOW.height..MAX_WINDOW.height)
         assertTrue(size.height < 1080.dp)
@@ -30,7 +30,7 @@ class WindowSizingTest {
     fun small_screen_shrinks_to_fit_and_never_exceeds_screen() {
         val screen = DpSize(1024.dp, 768.dp)
         val size = optimalWindowSize(screen)
-        // Окно не должно вылезать за экран, даже если это меньше «минимума».
+        // Window must not exceed the screen, even if that's below the minimum.
         assertTrue(size.width <= screen.width)
         assertTrue(size.height <= screen.height)
         assertEquals(1024.dp, size.width)

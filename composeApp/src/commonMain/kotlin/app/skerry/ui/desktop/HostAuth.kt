@@ -7,25 +7,25 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.identity.CredentialManagerController
 
 /**
- * Результат резолва аутентификации хоста перед подключением: либо готовый [SshAuth], либо
- * SSH-хост без привязанного keychain-секрета — UI должен спросить пароль у пользователя.
+ * Result of resolving a host's authentication before connecting: either a ready [SshAuth], or an
+ * SSH host with no bound keychain secret — the UI must ask the user for a password.
  */
 sealed interface HostAuthResolution {
-    /** Аутентификация определена без участия пользователя. */
+    /** Authentication resolved without user involvement. */
     data class Resolved(val auth: SshAuth) : HostAuthResolution
 
-    /** SSH-хост без привязанного секрета — перед подключением нужен ввод пароля. */
+    /** SSH host with no bound secret — a password prompt is needed before connecting. */
     data object NeedsPassword : HostAuthResolution
 }
 
 /**
- * Одноуровневый резолв «хост → способ аутентификации», общий для подключения в новую вкладку,
- * split-панель и «Run snippet on host»: Telnet/Serial аутентификации не требуют (auth игнорируется —
- * пустой пароль-заглушка); SSH-хост с привязанным секретом → [app.skerry.shared.vault.Credential] из
- * keychain разворачивается в [SshAuth]; SSH-хост без привязки → [HostAuthResolution.NeedsPassword].
+ * Single-level "host → auth method" resolution, shared by connecting to a new tab, a split pane,
+ * and "Run snippet on host": Telnet/Serial need no auth (auth is ignored — an empty password
+ * placeholder); an SSH host with a bound secret has its [app.skerry.shared.vault.Credential] from
+ * the keychain expanded into [SshAuth]; an SSH host with no binding → [HostAuthResolution.NeedsPassword].
  */
 fun resolveHostAuth(host: Host, credentials: CredentialManagerController?): HostAuthResolution = when {
-    // Telnet/Serial без аутентификации — коннектим сразу, без запроса пароля (auth игнорируется).
+    // Telnet/Serial need no auth — connect right away, no password prompt (auth is ignored).
     host.connectionType != ConnectionType.SSH -> HostAuthResolution.Resolved(SshAuth.Password(""))
     else ->
         credentials?.find(host.credentialId)?.let { HostAuthResolution.Resolved(it.toSshAuth()) }

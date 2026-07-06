@@ -15,11 +15,11 @@ import app.skerry.server.db.TeamRepository
 import app.skerry.server.sync.ChangeNotifier
 import org.jetbrains.exposed.sql.Database
 
-/** Собранные зависимости одного инстанса сервера. Создаётся один раз в [module]. */
+/** Wired dependencies for one server instance. Created once in [module]. */
 class Services(val config: ServerConfig, private val database: Database) {
     val accounts = AccountRepository(database)
     val devices = DeviceRepository(database)
-    // На PostgreSQL сериализуем upsert'ы блокировкой строки аккаунта; на SQLite (pool=1) не нужно.
+    // On PostgreSQL, serialize upserts with an account-row lock; not needed on SQLite (pool=1).
     val records = RecordRepository(database, lockAccountRow = config.isPostgres)
     val pairing = PairingRepository(database)
     val teams = TeamRepository(database)

@@ -12,11 +12,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Тесты оркестрации биометрии [VaultBiometrics] на настоящем [FileVault] + [IonspinVaultCrypto] +
- * [FakeFileSystem] (как [FileVaultTest]), но с [FakeBiometricKeyStore] вместо железа. Проверяем
- * поведение, видимое снаружи: end-to-end разблокировка тем же `dataKey` (запись, положенная до
- * включения, читается после биометрической разблокировки на свежем инстансе), развязку от смены
- * пароля, мягкие откаты и инвалидацию. Реальные `actual` (Keystore/Keychain) — ручная проверка.
+ * Tests [VaultBiometrics] orchestration against a real [FileVault] + [IonspinVaultCrypto] +
+ * [FakeFileSystem] (as in [FileVaultTest]), with [FakeBiometricKeyStore] standing in for hardware.
+ * Covers externally visible behavior: end-to-end unlock with the same `dataKey` (a record written
+ * before enabling reads back after a biometric unlock on a fresh instance), independence from
+ * password changes, graceful fallback, and invalidation. Real `actual` implementations
+ * (Keystore/Keychain) are verified manually.
  */
 class VaultBiometricsTest {
 
@@ -39,7 +40,7 @@ class VaultBiometricsTest {
 
     @Test
     fun `bio artifact write hardens the tmp file before the move`() = bioTest {
-        // harden-хук должен быть вызван на tmp-файле ДО atomicMove (0600 без окна с правами umask).
+        // The harden hook must run on the tmp file before atomicMove, closing the umask permission window.
         val hardened = mutableListOf<String>()
         val store = FileBioArtifactStore(bioPath, fs, harden = { hardened += it.toString() })
 
@@ -47,22 +48,22 @@ class VaultBiometricsTest {
 
         assertEquals(listOf("/vault.bio.tmp"), hardened)
         assertTrue(fs.exists(bioPath))
-        assertFalse(fs.exists("/vault.bio.tmp".toPath()), "tmp должен быть переименован в цель")
+        assertFalse(fs.exists("/vault.bio.tmp".toPath()), "tmp should be renamed to the target")
     }
 
     @Test
     fun `enable then biometric unlock on a fresh vault opens the same record`() = bioTest {
         val keyStore = FakeBiometricKeyStore()
-        // Создаём vault, кладём секрет, включаем биометрию.
+        // Create the vault, store a secret, enable biometrics.
         run {
             val v = vault()
             v.create("master-pass".toCharArray())
             v.put("id-1", RecordType.IDENTITY, secret)
             assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
         }
-        assertTrue(artifacts().exists(), "vault.bio должен появиться")
+        assertTrue(artifacts().exists(), "vault.bio should appear")
 
-        // Холодный старт: новый инстанс, разблокируем биометрией, читаем секрет.
+        // Cold start: new instance, unlock via biometrics, read the secret.
         val fresh = vault()
         assertFalse(fresh.isUnlocked)
         assertEquals(BiometricUnlockResult.Unlocked, biometrics(fresh, keyStore).unlock(prompt))
@@ -75,18 +76,18 @@ class VaultBiometricsTest {
         val keyStore = FakeBiometricKeyStore()
         val v = vault()
         v.create("master-pass".toCharArray())
-        val exported = v.exportDataKey()!!.bytes // для сравнения; затрём ниже
+        val exported = v.exportDataKey()!!.bytes // for comparison; zeroed below
         biometrics(v, keyStore).enable(prompt)
 
         val wrapped = artifacts().read()!!.wrappedBio
-        assertFalse(wrapped.contentEquals(exported), "на диск должна уходить обёртка, а не сам dataKey")
+        assertFalse(wrapped.contentEquals(exported), "the wrap should go to disk, not the dataKey itself")
         exported.fill(0)
     }
 
     @Test
     fun `enable while vault is locked reports VaultLocked and writes nothing`() = bioTest {
         val keyStore = FakeBiometricKeyStore()
-        vault().create("master-pass".toCharArray()) // файл есть, но этот инстанс заблокирован
+        vault().create("master-pass".toCharArray()) // file exists, but this instance is locked
         val locked = vault()
 
         assertEquals(BiometricEnableResult.VaultLocked, biometrics(locked, keyStore).enable(prompt))
@@ -146,7 +147,7 @@ class VaultBiometricsTest {
         val fresh = vault()
         assertEquals(BiometricUnlockResult.Invalidated, biometrics(fresh, keyStore).unlock(prompt))
         assertFalse(fresh.isUnlocked)
-        assertFalse(artifacts().exists(), "инвалидация должна снять биометрию")
+        assertFalse(artifacts().exists(), "invalidation should disable biometrics")
     }
 
     @Test
@@ -159,7 +160,7 @@ class VaultBiometricsTest {
             assertTrue(v.changePassword("master-pass".toCharArray(), "brand-new-pass".toCharArray()))
         }
 
-        // vault.bio не трогался сменой пароля — биометрия открывает тот же dataKey и запись.
+        // vault.bio is untouched by the password change; biometrics unlocks the same dataKey and record.
         val fresh = vault()
         assertEquals(BiometricUnlockResult.Unlocked, biometrics(fresh, keyStore).unlock(prompt))
         assertContentEquals(secret, fresh.openPayload("id-1"))
@@ -172,7 +173,7 @@ class VaultBiometricsTest {
             val v = vault().also { it.create("master-pass".toCharArray()) }
             biometrics(v, keyStore).enable(prompt)
         }
-        // Биометрия развернёт ключ, но сам vault.json уже битый.
+        // Biometrics will unwrap the key fine, but vault.json itself is corrupt.
         fs.write(vaultPath) { writeUtf8("{ not valid vault json") }
 
         val fresh = vault()
@@ -187,7 +188,7 @@ class VaultBiometricsTest {
             val v = vault().also { it.create("master-pass".toCharArray()) }
             biometrics(v, keyStore).enable(prompt)
         }
-        // Подменяем deviceId в vault.bio на чужой — оркестратор не должен ему доверять.
+        // Swap deviceId in vault.bio for a foreign one; the orchestrator must not trust it.
         val tampered = artifacts().read()!!.copy(deviceId = "other-device")
         artifacts().write(tampered)
 
@@ -204,10 +205,10 @@ class VaultBiometricsTest {
             biometrics(v, keyStore).enable(prompt)
         }
 
-        // Свежий (заблокированный) инстанс: confirm доказывает присутствие, но vault не открывает.
+        // Fresh (locked) instance: confirm proves presence but does not unlock the vault.
         val fresh = vault()
         assertEquals(BiometricConfirmResult.Confirmed, biometrics(fresh, keyStore).confirm(prompt))
-        assertFalse(fresh.isUnlocked, "confirm не должен разблокировать vault")
+        assertFalse(fresh.isUnlocked, "confirm should not unlock the vault")
     }
 
     @Test
@@ -241,7 +242,7 @@ class VaultBiometricsTest {
         keyStore.nextUnwrap = BiometricOutcome.Invalidated
 
         assertEquals(BiometricConfirmResult.Invalidated, biometrics(vault(), keyStore).confirm(prompt))
-        assertFalse(artifacts().exists(), "инвалидация должна снять биометрию")
+        assertFalse(artifacts().exists(), "invalidation should disable biometrics")
     }
 
     @Test
@@ -267,9 +268,9 @@ class VaultBiometricsTest {
         v.create("master-pass".toCharArray())
         val a = v.exportDataKey()!!.bytes
         val b = v.exportDataKey()!!.bytes
-        assertContentEquals(a, b, "копии равны по содержимому")
+        assertContentEquals(a, b, "copies are equal by content")
         a.fill(0)
-        assertFalse(a.contentEquals(b), "это независимые копии — затирание одной не трогает другую")
+        assertFalse(a.contentEquals(b), "these are independent copies — wiping one doesn't touch the other")
         b.fill(0)
     }
 }

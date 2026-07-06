@@ -18,13 +18,13 @@ import kotlinx.coroutines.withTimeout
 private const val TIMEOUT_MS = 15_000L
 
 /**
- * Тесты Serial-транспорта через подставной [SerialPortHandle] (пайпы в памяти) — без реального
- * железа. Проверяют проброс байтов в обе стороны, обработку недоступности порта и завершение
- * [output] при закрытии.
+ * Serial transport tests use a stand-in [SerialPortHandle] (in-memory pipes) — no real hardware.
+ * Covers byte forwarding in both directions, handling port unavailability, and [output]
+ * completing on close.
  */
 class SerialTransportTest {
 
-    /** Fake-порт: чтение из пайпа (в него пишет «устройство»), запись копится в буфер. */
+    /** Fake port: reads from a pipe (the "device" writes into it), writes accumulate in a buffer. */
     private class FakeHandle : SerialPortHandle {
         val deviceToApp = PipedOutputStream()
         private val appReads = PipedInputStream(deviceToApp)
@@ -78,13 +78,13 @@ class SerialTransportTest {
             handle.close()
             shell.output.collect { }
         }
-        assertTrue(true) // дошли сюда — flow завершился, а не завис
+        assertTrue(true) // reaching here means the flow completed instead of hanging
         conn.disconnect()
     }
 
     @Test
     fun `unavailable port surfaces as a connection exception`() = runBlocking<Unit> {
-        val transport = SerialTransport(openPort = { throw SerialUnavailableException("нет порта") })
+        val transport = SerialTransport(openPort = { throw SerialUnavailableException("no port") })
         assertFailsWith<SshConnectionException> {
             transport.connect(SshTarget(host = "/dev/ttyZZZ", port = 9600, username = ""), SshAuth.Password(""))
         }

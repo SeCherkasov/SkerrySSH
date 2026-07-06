@@ -7,53 +7,53 @@ import java.math.BigInteger
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Серверная сторона SRP-6a (`docs/skerry-sync-design.md` §1, §3). Сервер хранит только
- * соль `s` и верификатор `v` (см. [app.skerry.server.db.Accounts]); пароль/authKey клиента
- * никогда не передаётся. Вход — двухшаговый: challenge выдаёт эфемерный `B`, verify проверяет
- * доказательство `M1` клиента и возвращает встречное `M2`.
+ * Server side of SRP-6a (`docs/skerry-sync-design.md` §1, §3). The server stores only salt `s`
+ * and verifier `v` (see [app.skerry.server.db.Accounts]); the client's password/authKey is never
+ * sent. Login is two steps: challenge issues an ephemeral `B`, verify checks the client's proof
+ * `M1` and returns the counter-proof `M2`.
  *
- * Между двумя HTTP-запросами серверная сессия Nimbus (с приватным `b`) держится в памяти под
- * одноразовым [challengeId] с TTL — модель одиночного self-hosted инстанса.
+ * Between the two HTTP requests, the Nimbus server session (with private `b`) is held in memory
+ * under a one-shot [challengeId] with a TTL; this models a single self-hosted instance.
  */
 class SrpService(
     private val clock: () -> Long = System::currentTimeMillis,
     private val challengeTtlMillis: Long = 120_000,
-    /** Жёсткий предел незавершённых challenge — страховка от OOM при флуде /auth/srp/challenge. */
+    /** Hard cap on pending challenges; safety net against OOM under /auth/srp/challenge flooding. */
     private val maxPending: Int = 10_000,
-    /** Сколько одновременных незавершённых challenge допускается на один accountId. */
+    /** Max concurrent pending challenges allowed per accountId. */
     private val maxPerAccount: Int = 3,
     private val randomId: () -> String = { java.util.UUID.randomUUID().toString() },
 ) {
-    /** Стандартные параметры: 2048-битная группа RFC 5054, хеш SHA-256. */
+    /** Standard params: 2048-bit RFC 5054 group, SHA-256 hash. */
     val params: SRP6CryptoParams = SRP6CryptoParams.getInstance(2048, "SHA-256")
 
     private data class Pending(val session: SRP6ServerSession, val accountId: String, val createdAt: Long)
 
     private val pending = ConcurrentHashMap<String, Pending>()
 
-    /** Монитор для compound-операций над [pending] (эвикция + кап считаются и применяются одним проходом). */
+    /** Guards compound operations on [pending] (eviction + cap applied atomically in one pass). */
     private val lock = Any()
 
     data class Challenge(val challengeId: String, val salt: String, val b: String)
 
-    /** Шаг 1: по соли/верификатору аккаунта порождает эфемерный `B` и регистрирует challenge. */
+    /** Step 1: derives an ephemeral `B` from the account's salt/verifier and registers a challenge. */
     fun startChallenge(accountId: String, salt: String, verifier: String): Challenge {
-        // Дорогой modexp считаем вне монитора — под локом только учёт записей.
+        // The expensive modexp runs outside the lock; only bookkeeping is guarded.
         val session = SRP6ServerSession(params)
         val b = session.step1(accountId, BigInteger(salt, 16), BigInteger(verifier, 16))
         val challengeId = randomId()
         synchronized(lock) {
             val now = clock()
-            // 1) TTL-эвикция и глобальный кап — одним проходом, атомарно относительно других стартов.
+            // 1) TTL eviction and the global cap in one pass, atomic with respect to other starts.
             pending.entries.removeIf { now - it.value.createdAt > challengeTtlMillis }
             if (pending.size >= maxPending) {
                 pending.entries.sortedBy { it.value.createdAt }
                     .take(pending.size - maxPending + 1)
                     .forEach { pending.remove(it.key) }
             }
-            // 2) Per-account кап: оставляем максимум (maxPerAccount-1) старых challenge этого аккаунта,
-            //    самые старые сбрасываем, чтобы освободить слот под новый (флуд одного аккаунта не
-            //    вытесняет challenge остальных и не растёт без предела).
+            // 2) Per-account cap: keep at most (maxPerAccount-1) older challenges for this account,
+            //    dropping the oldest to free a slot, so one account flooding doesn't starve others
+            //    or grow unbounded.
             val mine = pending.entries.filter { it.value.accountId == accountId }
                 .sortedBy { it.value.createdAt }
             val overflow = mine.size - (maxPerAccount - 1)
@@ -64,9 +64,9 @@ class SrpService(
     }
 
     /**
-     * Шаг 2: проверяет доказательство клиента `M1` и возвращает встречное `M2` (hex) с
-     * accountId, либо `null` при неверном пароле/просроченном или неизвестном challenge.
-     * Challenge одноразовый — снимается при любом исходе.
+     * Step 2: checks the client's proof `M1` and returns the counter-proof `M2` (hex) with the
+     * accountId, or `null` on a wrong password or an expired/unknown challenge. The challenge is
+     * one-shot: it is removed regardless of outcome.
      */
     fun verify(challengeId: String, a: String, m1: String): Verified? {
         evictExpired()

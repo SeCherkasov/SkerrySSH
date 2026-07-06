@@ -10,15 +10,15 @@ import kotlinx.coroutines.flow.flow
 import okio.Path
 
 /**
- * [AiProvider] поверх локальной модели: тот же контракт, что у облачного BYOK-провайдера,
- * поэтому контроллеры (`AiStreamRunner`, ассистент, терминальный бар) не знают, где считается
- * ответ. Промпт не покидает устройство; вывод модели всё равно недоверенный источник —
- * политика подтверждения команд выше по стеку не меняется.
+ * [AiProvider] over a local model: same contract as the cloud BYOK provider, so controllers
+ * (`AiStreamRunner`, assistant, terminal bar) don't know where the response is computed. The
+ * prompt never leaves the device; model output is still an untrusted source — the command
+ * confirmation policy further up the stack is unchanged.
  *
- * Провайдер добавляет модель-специфичный [LocalModel.extraSystem] (напр. `/no_think` Qwen3)
- * и режет лидирующий `<think>`-блок из стрима ([ThinkTagFilter]) — парсер CMD/INFO получает
- * чистый ответ. [close] — no-op: [runtime] разделяется процессом (модель остаётся загруженной),
- * по образцу pooled-клиента OpenAiProvider.
+ * The provider appends the model-specific [LocalModel.extraSystem] (e.g. Qwen3's `/no_think`)
+ * and strips a leading `<think>` block from the stream ([ThinkTagFilter]), so the CMD/INFO parser
+ * gets a clean response. [close] is a no-op: [runtime] is shared per process (model stays loaded),
+ * same pattern as OpenAiProvider's pooled client.
  */
 class LocalAiProvider(
     private val model: LocalModel,
@@ -27,7 +27,7 @@ class LocalAiProvider(
 ) : AiProvider {
 
     override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
-        val filter = ThinkTagFilter() // на каждую коллекцию свой — flow можно собирать повторно
+        val filter = ThinkTagFilter() // fresh per collection — the flow can be collected repeatedly
         runtime.generate(modelPath, request.copy(messages = withExtraSystem(request.messages))).collect { delta ->
             val out = filter.feed(delta.text)
             if (out.isNotEmpty()) emit(AiDelta(out))
@@ -36,9 +36,9 @@ class LocalAiProvider(
         if (tail.isNotEmpty()) emit(AiDelta(tail))
     }
 
-    override suspend fun close() {} // рантайм — общий на процесс, живёт дольше провайдера
+    override suspend fun close() {} // runtime is shared per process, outlives the provider
 
-    /** Дописать [LocalModel.extraSystem] в системное сообщение (или создать его, если нет). */
+    /** Appends [LocalModel.extraSystem] to the system message (or creates one if absent). */
     private fun withExtraSystem(messages: List<AiMessage>): List<AiMessage> {
         val extra = model.extraSystem ?: return messages
         val system = messages.firstOrNull { it.role == AiRole.SYSTEM }

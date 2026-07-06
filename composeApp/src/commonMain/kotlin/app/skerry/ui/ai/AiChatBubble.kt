@@ -24,9 +24,8 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
 /**
- * Кликабельный заголовок сворачиваемого quick-chat (настройки AI, desktop и mobile): название,
- * подпись и шеврон. Чат по умолчанию свёрнут — служебный инструмент проверки связи не должен
- * постоянно занимать форму.
+ * Clickable header for the collapsible quick-chat (AI settings, desktop and mobile): title,
+ * subtitle, and chevron. Collapsed by default.
  */
 @Composable
 internal fun AiQuickChatHeader(title: String, desc: String, open: Boolean, onToggle: () -> Unit) {
@@ -42,10 +41,7 @@ internal fun AiQuickChatHeader(title: String, desc: String, open: Boolean, onTog
     }
 }
 
-/**
- * Пузырь реплики quick-chat в настройках AI: user — справа с cyan-тоном, assistant — слева
- * приглушённый. Один на desktop-секцию и мобильный экран (раньше жил двумя копиями).
- */
+/** Chat bubble for a quick-chat turn: user aligned right in cyan, assistant aligned left, muted. */
 @Composable
 internal fun AiChatBubble(role: AiRole, text: String) {
     val mine = role == AiRole.USER

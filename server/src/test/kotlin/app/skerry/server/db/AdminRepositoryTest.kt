@@ -86,12 +86,12 @@ class AdminRepositoryTest {
         records.upsert("alice@example.com", listOf(rec("r1", 1), rec("r2", 1)))
         records.upsert("alice@example.com", listOf(rec("r1", 2, deleted = true))) // tombstone at serverSeq 3
 
-        // Курсор устройства = 2: tombstone (seq 3) ещё не дочитан → не чистим (иначе воскреснет).
+        // Device cursor = 2: the tombstone (seq 3) hasn't been read yet, so it isn't purged (it would resurrect).
         devices.touch("alice@example.com", "devA", syncVersion = 2)
         assertEquals(0, admin.purgeTombstones("alice@example.com"))
         assertEquals(1, admin.accountSummaries().single().tombstones)
 
-        // Курсор догнал tombstone → теперь безопасно чистить.
+        // Cursor caught up to the tombstone, so it's now safe to purge.
         devices.touch("alice@example.com", "devA", syncVersion = 3)
         assertEquals(1, admin.purgeTombstones("alice@example.com"))
         assertEquals(0, admin.accountSummaries().single().tombstones)
@@ -105,15 +105,15 @@ class AdminRepositoryTest {
         val records = RecordRepository(db)
         val admin = AdminRepository(db)
 
-        // alice: одно устройство с курсором, второе без курсора (null) → watermark 0 → не чистим.
+        // alice: one device has a cursor, the other has none (null), so watermark is 0 and nothing is purged.
         devices.register("alice@example.com", "devA", "Laptop")
-        devices.register("alice@example.com", "devB", "Phone") // никогда не синхронизировалось
+        devices.register("alice@example.com", "devB", "Phone") // never synced
         records.upsert("alice@example.com", listOf(rec("r1", 1)))
         records.upsert("alice@example.com", listOf(rec("r1", 2, deleted = true)))
         devices.touch("alice@example.com", "devA", syncVersion = 99)
         assertEquals(0, admin.purgeTombstones("alice@example.com"))
 
-        // ghost: записи без единого устройства → воскрешать некому → чистим всё.
+        // ghost: records with no devices at all, so nothing can resurrect them; purge everything.
         records.upsert("ghost@example.com", listOf(rec("g1", 1)))
         records.upsert("ghost@example.com", listOf(rec("g1", 2, deleted = true)))
         assertEquals(1, admin.purgeTombstones("ghost@example.com"))
@@ -130,12 +130,12 @@ class AdminRepositoryTest {
         records.upsert("alice@example.com", listOf(rec("r1", 1), rec("r2", 1)))
         records.upsert("alice@example.com", listOf(rec("r1", 2, deleted = true))) // tombstone at serverSeq 3
 
-        // devB отстаёт (курсор 2 < seq 3 надгробия) → надгробие ещё не у всех → не компактим.
+        // devB lags behind (cursor 2 < tombstone seq 3), so the tombstone isn't read by all devices yet; don't compact.
         devices.touch("alice@example.com", "devA", syncVersion = 3)
         devices.touch("alice@example.com", "devB", syncVersion = 2)
         assertTrue(records.compactedTombstoneIds("alice@example.com").isEmpty())
 
-        // Оба устройства дочитали надгробие → отдаём его id на компакцию.
+        // Both devices have read the tombstone, so its id is returned for compaction.
         devices.touch("alice@example.com", "devB", syncVersion = 3)
         assertContentEquals(listOf("r1"), records.compactedTombstoneIds("alice@example.com"))
     }
@@ -152,18 +152,18 @@ class AdminRepositoryTest {
         devices.register("alice@example.com", "devA", "Laptop")
         records.upsert("alice@example.com", listOf(rec("r1", 1)))
         pairing.create("code1", "alice@example.com", byteArrayOf(9), expiresAt = Long.MAX_VALUE)
-        // соседний аккаунт не должен пострадать
+        // a sibling account should be unaffected
         devices.register("bob@example.com", "devC", "Desktop")
         records.upsert("bob@example.com", listOf(rec("b1", 1, deviceId = "devC")))
 
         assertTrue(admin.deleteAccount("alice@example.com"))
-        assertFalse(admin.deleteAccount("alice@example.com")) // уже нет
+        assertFalse(admin.deleteAccount("alice@example.com")) // already gone
 
         assertEquals(null, AccountRepository(db).find("alice@example.com"))
         assertTrue(devices.list("alice@example.com").isEmpty())
         assertTrue(records.delta("alice@example.com", 0).isEmpty())
 
-        // bob цел
+        // bob is untouched
         val remaining = admin.accountSummaries()
         assertContentEquals(listOf("bob@example.com"), remaining.map { it.id })
         assertEquals(1, remaining.single().devices)

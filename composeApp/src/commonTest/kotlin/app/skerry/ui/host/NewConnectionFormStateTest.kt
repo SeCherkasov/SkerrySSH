@@ -15,7 +15,7 @@ class NewConnectionFormStateTest {
     fun defaults_port_22_and_blank_rest() {
         val f = NewConnectionFormState()
         assertEquals("22", f.port)
-        assertFalse(f.canSave) // name/address/username пустые
+        assertFalse(f.canSave) // name/address/username blank
     }
 
     @Test
@@ -69,11 +69,11 @@ class NewConnectionFormStateTest {
         assertNull(f.toDraft().credentialId)
     }
 
-    // Аутентификация
+    // Authentication
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
 
-    // Колбэк-ловушка: saveCredential возвращает id секрета и захватывает черновик.
+    // Capture helper: saveCredential returns the secret id and captures the draft.
     private class Captures {
         var credentialDraft: CredentialDraft? = null
         val saveCredential: (CredentialDraft) -> String? = { credentialDraft = it; "cred-id" }
@@ -83,43 +83,43 @@ class NewConnectionFormStateTest {
     fun default_auth_is_ask_and_resolves_to_null_without_saving() {
         val f = validBase()
         assertEquals(AuthMode.ASK, f.authMode)
-        assertTrue(f.canSave) // ASK не требует секрета
+        assertTrue(f.canSave) // ASK does not require a secret
         val cap = Captures()
         val id = f.resolveCredentialId(cap.saveCredential)
         assertNull(id)
-        assertNull(cap.credentialDraft) // секрет не создаётся
+        assertNull(cap.credentialDraft) // secret not created
     }
 
     @Test
     fun existing_credential_requires_selection_and_resolves_to_its_id() {
         val f = validBase().apply { authMode = AuthMode.EXISTING }
-        assertFalse(f.canSave) // ничего не выбрано
+        assertFalse(f.canSave) // nothing selected
         f.existingCredentialId = "saved-1"
         assertTrue(f.canSave)
         val cap = Captures()
         assertEquals("saved-1", f.resolveCredentialId(cap.saveCredential))
-        assertNull(cap.credentialDraft) // существующий не пересоздаём
+        assertNull(cap.credentialDraft) // existing credential is not recreated
     }
 
     @Test
     fun new_password_requires_value_and_creates_credential() {
         val f = validBase().apply { authMode = AuthMode.NEW_PASSWORD; username = "root"; address = "10.0.0.1" }
-        assertFalse(f.canSave) // пароль пуст
+        assertFalse(f.canSave) // password blank
         f.password = "s3cr3t"
         assertTrue(f.canSave)
         val cap = Captures()
         val id = f.resolveCredentialId(cap.saveCredential)
-        assertEquals("cred-id", id) // возвращается id созданного секрета
+        assertEquals("cred-id", id) // returns the id of the created secret
         assertEquals(CredentialKind.PASSWORD, cap.credentialDraft?.kind)
         assertEquals("s3cr3t", cap.credentialDraft?.password)
         assertEquals("root@10.0.0.1", cap.credentialDraft?.label)
-        assertNull(cap.credentialDraft?.id) // создаётся новый
+        assertNull(cap.credentialDraft?.id) // creates a new one
     }
 
     @Test
     fun new_key_requires_pem_and_creates_credential() {
         val f = validBase().apply { authMode = AuthMode.NEW_KEY; username = "ci"; address = "build.host" }
-        assertFalse(f.canSave) // PEM пуст
+        assertFalse(f.canSave) // PEM blank
         f.privateKeyPem = "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"
         f.passphrase = "pp"
         assertTrue(f.canSave)
@@ -135,11 +135,11 @@ class NewConnectionFormStateTest {
     @Test
     fun new_password_with_failed_credential_save_resolves_to_null() {
         val f = validBase().apply { authMode = AuthMode.NEW_PASSWORD; password = "s3cr3t" }
-        val id = f.resolveCredentialId(saveCredential = { null }) // секрет не сохранился (например, без vault)
+        val id = f.resolveCredentialId(saveCredential = { null }) // secret not saved (e.g. no vault)
         assertNull(id)
     }
 
-    // Правка существующего хоста: fromHost предзаполняет форму
+    // Editing an existing host: fromHost prefills the form
 
     @Test
     fun fromHost_prefills_fields_and_round_trips_via_draft() {
@@ -153,11 +153,11 @@ class NewConnectionFormStateTest {
         assertEquals("2222", f.port)
         assertEquals("root", f.username)
         assertEquals("Production", f.group)
-        // привязан секрет → режим EXISTING с тем же id; форма сразу валидна
+        // bound secret -> EXISTING mode with the same id; form is valid immediately
         assertEquals(AuthMode.EXISTING, f.authMode)
         assertEquals("cred-9", f.existingCredentialId)
         assertTrue(f.canSave)
-        // Сохранение правки удерживает id хоста и привязку, не пересоздавая секрет.
+        // Saving an edit keeps the host id and binding without recreating the secret.
         val credentialId = f.resolveCredentialId { error("existing credential must not be re-saved") }
         val draft = f.toDraft(id = host.id, credentialId = credentialId)
         assertEquals("h1", draft.id)
@@ -175,14 +175,14 @@ class NewConnectionFormStateTest {
         assertNull(f.resolveCredentialId { error("ask must not save a credential") })
     }
 
-    // Теги (канонизация одиночного тега — в app.skerry.shared.host.HostTagsTest)
+    // Tags (single-tag canonicalization is in app.skerry.shared.host.HostTagsTest)
 
     @Test
     fun addTag_normalizes_dedupes_and_keeps_order() {
         val f = NewConnectionFormState()
         f.addTag("#Prod")
         f.addTag("docker")
-        f.addTag("PROD") // дубль после нормализации — игнор
+        f.addTag("PROD") // duplicate after normalization is ignored
         assertEquals(listOf("prod", "docker"), f.tags)
     }
 

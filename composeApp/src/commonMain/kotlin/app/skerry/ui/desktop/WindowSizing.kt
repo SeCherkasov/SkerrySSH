@@ -3,26 +3,18 @@ package app.skerry.ui.desktop
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 
-/**
- * Минимум, ниже которого окно не складывается на нормальных дисплеях: rail + сайдбар хостов +
- * терминал/панели остаются читаемыми. На совсем маленьких экранах
- * окно может оказаться уже минимума — оно подгоняется под экран, чтобы не вылезать за края.
- */
+/** Minimum window size keeping the rail, hosts sidebar, and terminal/panels readable. */
 val MIN_WINDOW: DpSize = DpSize(1100.dp, 720.dp)
 
-/**
- * Потолок: на 4K/ультравайде окно не должно растягиваться во весь экран — макет рассчитан на
- * «рабочий» размер, дальше только пустые поля. Базовый дизайн снимается в 1280×820.
- */
+/** Maximum window size; the layout targets a working size, not a fullscreen 4K/ultrawide stretch. */
 val MAX_WINDOW: DpSize = DpSize(1680.dp, 1050.dp)
 
-/** Доля доступной области экрана, которую окно занимает по умолчанию. */
+/** Default fraction of the available screen area the window occupies. */
 private const val SCREEN_FRACTION = 0.9f
 
 /**
- * Подбирает размер окна под доступную область экрана [screen] (без таскбара): целится в
- * [SCREEN_FRACTION] экрана, зажимает в диапазон [MIN_WINDOW]…[MAX_WINDOW], но никогда не превышает
- * сам экран — на маленьких дисплеях окно сжимается, чтобы помещаться целиком.
+ * Computes a window size for the available [screen] area: targets [SCREEN_FRACTION] of the screen,
+ * clamped to [MIN_WINDOW]..[MAX_WINDOW], never exceeding the screen itself.
  */
 fun optimalWindowSize(screen: DpSize): DpSize = DpSize(
     width = (screen.width * SCREEN_FRACTION)

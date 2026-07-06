@@ -9,8 +9,8 @@ import app.skerry.ui.host.filterHosts
 import app.skerry.ui.host.hostTagChips
 
 /**
- * Готовый к рендеру список Hosts: лента фильтр-[chips] (`All` + теги) и отфильтрованные [sections]
- * (папки по группам в порядке первого появления). Секции — те же [HostFolder], что у desktop-сайдбара.
+ * Render-ready Hosts list: filter [chips] row (`All` + tags) and filtered [sections] (folders by
+ * group, in first-seen order). Sections are the same [HostFolder] as the desktop sidebar.
  */
 @Immutable
 data class MobileHostList(
@@ -19,10 +19,10 @@ data class MobileHostList(
 )
 
 /**
- * Свести живой каталог [hosts] к виду списка макета. Чипсы — теги хостов ([hostTagChips]),
- * [activeChip] (≠`All`) сужает до хостов с этим тегом, [query] дополнительно фильтрует (AND).
- * Папки отфильтрованного — общим [groupHostsByFolder] по [Host.group] (безгруппные → «Ungrouped»).
- * Логика чипсов/фильтра — общая с desktop-сайдбаром ([filterHosts]).
+ * Reduces the live [hosts] catalog to the mobile list shape. Chips are host tags ([hostTagChips]);
+ * [activeChip] (≠ `All`) narrows to hosts with that tag, [query] filters further (AND). Folders
+ * over the filtered result via [groupHostsByFolder] on [Host.group] (ungrouped → "Ungrouped").
+ * Chip/filter logic is shared with the desktop sidebar ([filterHosts]).
  */
 fun buildMobileHostList(
     hosts: List<Host>,

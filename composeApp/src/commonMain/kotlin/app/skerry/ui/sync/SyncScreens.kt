@@ -91,38 +91,37 @@ import kotlinx.coroutines.flow.first
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Шаг онбординга сразу после создания vault, ДО enroll биометрии
- * (см. [app.skerry.ui.vault.VaultGateState.OfferSync]). Сначала спрашиваем, КАК хранить данные:
- * локально (только это устройство) или через self-hosted sync — и лишь во втором случае показываем
- * форму параметров сервера. Выбор «локально» сразу завершает шаг ([onDone]); подключение sync может
- * принять dataKey аккаунта, поэтому оборачивать биометрию надо уже под финальным ключом — успех
- * ([SyncStatus.Online]) тоже ведёт в [onDone], данные с сервера подтягиваются тут же. Общий экран для
- * обеих платформ (template-fidelity для sync отменён — держим только цветовую схему).
+ * Onboarding step right after vault creation, before biometric enroll
+ * (see [app.skerry.ui.vault.VaultGateState.OfferSync]). First ask how to store data: locally (this
+ * device only) or via self-hosted sync — and only in the second case show the server params form.
+ * Choosing "local" finishes the step ([onDone]); connecting sync may adopt the account dataKey, so
+ * biometrics must be wrapped under the final key — success ([SyncStatus.Online]) also leads to
+ * [onDone], with server data pulled right there. Shared screen for both platforms.
  */
 @Composable
 fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
-    // collectAsState (не ...WithLifecycle): этот экран — commonMain (desktop тоже), а lifecycle-aware
-    // сбор есть только на Android. Сбор в STOPPED тут безвреден: auto-lock на ON_STOP запирает vault →
-    // controller.state уходит в NeedsUnlock → key(state) рушит этот subtree и отменяет сбор.
+    // collectAsState (not ...WithLifecycle): this screen is commonMain (desktop too), and lifecycle-aware
+    // collection exists only on Android. Collecting in STOPPED is harmless here: auto-lock on ON_STOP
+    // locks the vault → controller.state goes to NeedsUnlock → key(state) tears down this subtree and cancels collection.
     val status by sync.status.collectAsState()
     val currentOnDone by rememberUpdatedState(onDone)
 
-    // Успешное подключение завершает онбординг-шаг. dropWhile + first: ждём ПЕРЕХОД в Online, а не
-    // устаревшее значение (после reset координатор гасит сессию асинхронно — на входе ещё мог стоять
-    // Online). Один выстрел: Online — data class с меняющимися lastPushed/lastPulled, повторный runSync
-    // не должен дёрнуть onDone дважды. Менеджеры списков уже перечитаны координатором (onSynced).
+    // A successful connection finishes the onboarding step. dropWhile + first: wait for the transition
+    // into Online, not a stale value (after a reset the coordinator kills the session asynchronously —
+    // Online could still be set on entry). One-shot: Online is a data class with changing
+    // lastPushed/lastPulled, a repeat runSync must not fire onDone twice. List managers are already reread (onSynced).
     LaunchedEffect(Unit) {
         sync.status.dropWhile { it is SyncStatus.Online }.first { it is SyncStatus.Online }
         currentOnDone()
     }
 
-    // Если у привязки уже есть сохранённый сервер (Configured / после рестарта — нужен лишь пароль),
-    // выбор «локально/sync» уже не имеет смысла: пропускаем развилку и сразу открываем форму.
+    // If the link already has a saved server (Configured / after restart — only a password needed), the
+    // "local/sync" choice is moot: skip the fork and open the form directly.
     var showSyncForm by remember { mutableStateOf(sync.savedConfig != null) }
 
-    // fillMaxSize-скролл-контейнер по фону; контент центрируем по вертикали и ограничиваем по ширине.
-    // Center (а не TopCenter): когда форма короче экрана — она по центру (desktop с большим окном и
-    // телефон), длиннее (клавиатура) — скроллится. verticalScroll меряет колонку по её высоте.
+    // fillMaxSize scroll container over the background; content centered vertically and width-constrained.
+    // Center (not TopCenter): when the form is shorter than the screen it's centered (large desktop
+    // window, phone), longer (keyboard) it scrolls. verticalScroll measures the column by its height.
     Box(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 460.dp).fillMaxWidth().padding(horizontal = 22.dp, vertical = 32.dp)) {
             if (!showSyncForm) {
@@ -131,8 +130,8 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
                     onSync = { showSyncForm = true },
                 )
             } else {
-                // Back ведёт обратно к развилке — это и есть путь «передумал»: на развилке выбор
-                // «Local encrypted storage» завершает онбординг, поэтому отдельная кнопка Skip не нужна.
+                // Back leads to the fork — the "changed my mind" path: on the fork "Local encrypted
+                // storage" finishes onboarding, so a separate Skip button isn't needed.
                 Row(
                     Modifier.clip(RoundedCornerShape(8.dp)).clickable { showSyncForm = false }
                         .padding(vertical = 4.dp, horizontal = 2.dp),
@@ -164,9 +163,9 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
 }
 
 /**
- * Развилка хранения в онбординге: две карточки-кнопки. «Local encrypted storage» завершает шаг
- * ([onLocal]); «Self-hosted sync server» раскрывает форму параметров ([onSync]). Способ можно сменить
- * позже в настройках — оба варианта обратимы, поэтому выбор здесь ни к чему не обязывает.
+ * Storage fork in onboarding: two card buttons. "Local encrypted storage" finishes the step
+ * ([onLocal]); "Self-hosted sync server" expands the params form ([onSync]). The choice can be changed
+ * later in settings — both options are reversible, so this doesn't commit anything.
  */
 @Composable
 private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit) {
@@ -205,7 +204,7 @@ private fun SyncStorageChoice(onLocal: () -> Unit, onSync: () -> Unit) {
     }
 }
 
-/** Карточка выбора в развилке хранения: иконка в плашке, заголовок/подзаголовок, шеврон-аффорданс. */
+/** Storage-fork choice card: icon in a panel, title/subtitle, chevron affordance. */
 @Composable
 private fun SyncChoiceCard(
     icon: String,
@@ -235,15 +234,15 @@ private fun SyncChoiceCard(
 }
 
 /**
- * Форма подключения к sync-серверу (сервер + accountId + мастер-пароль + keep connected). Общая для
- * онбординга и экрана Sync: пароль уходит в [SyncCoordinator] CharArray-ом и затирается там.
+ * Sync server connection form (server + accountId + master password + keep connected). Shared by
+ * onboarding and the Sync screen: the password goes to [SyncCoordinator] as a CharArray and is wiped there.
  */
 @Composable
 internal fun SyncSetupBody(
     sync: SyncCoordinator,
     errorMessage: String?,
 ) {
-    // Предзаполнение из сохранённой привязки (Configured после перезапуска): нужен только пароль.
+    // Prefill from the saved link (Configured after restart): only the password is needed.
     val saved = remember { sync.savedConfig }
     var serverUrl by remember { mutableStateOf(saved?.serverUrl ?: "") }
     var account by remember { mutableStateOf(saved?.accountId ?: "") }
@@ -279,7 +278,7 @@ internal fun SyncSetupBody(
         }
     }
 
-    // http:// разрешён (локальный тест/LAN без TLS-прокси), но беззащитен перед MITM — предупреждаем явно.
+    // http:// is allowed (local test/LAN without a TLS proxy) but defenseless against MITM — warn explicitly.
     if (form.isInsecureUrl) {
         Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("warning", size = 14.sp, color = D.sunset)
@@ -298,13 +297,13 @@ internal fun SyncSetupBody(
         stringResource(Res.string.sync_connect),
         onClick = {
             if (!canSubmit) return@PrimaryButton
-            val pw = password.toCharArray() // координатор затрёт массив
+            val pw = password.toCharArray() // the coordinator wipes the array
             password = ""
             val url = form.normalizedServerUrl
             val acc = form.normalizedAccountId
-            // Запуск держит сам координатор (свой scope) — форма уйдёт из композиции на Busy,
-            // привязывать к ней корутину нельзя (иначе отмена на полпути). Один вызов: координатор
-            // сам решит регистрировать новый аккаунт или входить в существующий.
+            // The coordinator owns the launch (its own scope) — the form leaves composition on Busy, so
+            // a coroutine can't be tied to it (else it cancels mid-flight). One call: the coordinator
+            // decides register vs login.
             sync.connect(url, acc, pw, keepConnected)
         },
         modifier = Modifier.padding(top = 18.dp),
@@ -319,31 +318,30 @@ internal fun SyncSetupBody(
 }
 
 /**
- * Экран связывания этого устройства по коду (быстрый паринг, вариант B) — показывается с экрана
- * СОЗДАНИЯ vault ([app.skerry.ui.vault.VaultGateState.NeedsCreate]), а не после него. Пароль здесь
- * вводится ОДИН раз: [SyncCoordinator.claimPairing] сам создаёт локальный vault под ним и принимает
- * ключ аккаунта, поэтому повторного ввода и рассинхрона паролей нет. Общий экран для desktop+mobile
- * (template-fidelity для sync отменён — держим лишь цветовую схему). [onBack] возвращает к форме
- * создания, успех ([SyncStatus.Online]) ведёт в [onDone] (гейт уходит к предложению биометрии).
+ * Screen to link this device by code (quick pairing, variant B) — shown from the vault creation screen
+ * ([app.skerry.ui.vault.VaultGateState.NeedsCreate]). The password is entered once:
+ * [SyncCoordinator.claimPairing] creates the local vault under it and adopts the account key, so
+ * there's no re-entry or password desync. Shared screen for desktop+mobile. [onBack] returns to the
+ * creation form; success ([SyncStatus.Online]) leads to [onDone] (the gate moves to the biometrics offer).
  */
 @Composable
 fun PairingJoinScreen(sync: SyncCoordinator, onBack: () -> Unit, onDone: () -> Unit) {
     val status by sync.status.collectAsState()
-    // onDone создаётся инлайн в гейте (новый инстанс на рекомпозицию) — держим свежую ссылку, чтобы
-    // долгоживущий LaunchedEffect(Unit) не звал устаревшую лямбду.
+    // onDone is created inline in the gate (a new instance per recomposition) — keep a fresh ref so the
+    // long-lived LaunchedEffect(Unit) doesn't call a stale lambda.
     val currentOnDone by rememberUpdatedState(onDone)
 
-    // Здесь вводится мастер-пароль — защищаем экран от снимков Recent Apps сами, не полагаясь на
-    // вызывающего (на desktop SecureScreen — no-op).
+    // The master password is entered here — protect the screen from Recent Apps snapshots ourselves,
+    // not relying on the caller (on desktop SecureScreen is a no-op).
     SecureScreen()
-    // Системный «назад» = визуальная стрелка Back: вернуться к форме создания, а не закрыть приложение.
+    // System "back" = the visual Back arrow: return to the creation form, don't close the app.
     PlatformBackHandler(onBack = onBack)
 
-    // Завершаем шаг лишь при ПЕРЕХОДЕ в Online, а не на устаревшем значении. status — StateFlow, и после
-    // сброса vault координатор гасит сессию асинхронно (disconnect в scope.launch): войдя сюда сразу
-    // после reset, мы могли бы увидеть ещё не погашенный Online и дёрнуть onDone до того, как claimPairing
-    // вообще пересоздаст vault. dropWhile отбрасывает ведущие Online; ждём Online уже ПОСЛЕ нашего claim
-    // (он синхронно ставит Busy). Один выстрел: Online — data class со счётчиками, повтор не нужен.
+    // Finish the step only on the transition into Online, not a stale value. status is a StateFlow, and
+    // after a vault reset the coordinator kills the session asynchronously (disconnect in scope.launch):
+    // entering here right after a reset we might see a not-yet-killed Online and fire onDone before
+    // claimPairing even recreates the vault. dropWhile drops leading Online; wait for Online after our
+    // claim (it sets Busy synchronously). One-shot: Online is a data class with counters, no repeat needed.
     LaunchedEffect(Unit) {
         sync.status.dropWhile { it is SyncStatus.Online }.first { it is SyncStatus.Online }
         currentOnDone()
@@ -372,11 +370,11 @@ fun PairingJoinScreen(sync: SyncCoordinator, onBack: () -> Unit, onDone: () -> U
 }
 
 /**
- * Поля связывания устройства по коду: код (вставка вручную) + опциональный скан QR камерой (только
- * где [qrScannerAvailable]) + пароль, которым [SyncCoordinator.claimPairing] создаст локальный vault
- * и обернёт под него принятый ключ аккаунта. Пароль выбирается здесь впервые (vault ещё нет), поэтому
- * к нему тот же минимум длины, что и при обычном создании. Завершение — общий `status.first { Online }`
- * в [PairingJoinScreen] → onDone.
+ * Fields to link a device by code: code (manual paste) + optional QR camera scan (only where
+ * [qrScannerAvailable]) + a password with which [SyncCoordinator.claimPairing] creates the local vault
+ * and wraps the adopted account key under it. The password is chosen here for the first time (no vault
+ * yet), so it has the same minimum length as normal creation. Completion — the shared
+ * `status.first { Online }` in [PairingJoinScreen] → onDone.
  */
 @Composable
 private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
@@ -394,8 +392,8 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
         return
     }
 
-    // Пароль создаёт НОВЫЙ vault и невосстановим — требуем подтверждения (как обычная форма создания),
-    // иначе опечатка заперла бы устройство, а одноразовый код уже сгорел.
+    // The password creates a new vault and is unrecoverable — require confirmation (like the normal
+    // creation form), else a typo would lock the device while the one-time code has already burned.
     val passwordsMatch = password == confirm
     val canSubmit = code.isNotBlank() && password.length >= MIN_MASTER_PASSWORD_LENGTH && passwordsMatch
 
@@ -461,7 +459,7 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     }
 }
 
-/** Статус-карточка sync-флоу (иконка + заголовок/подзаголовок) — общая для онбординга и экрана Sync. */
+/** Sync-flow status card (icon + title/subtitle) — shared by onboarding and the Sync screen. */
 @Composable
 internal fun SyncStatusNotice(icon: String, iconColor: Color, title: String, subtitle: String) {
     Row(

@@ -8,16 +8,16 @@ import kotlinx.serialization.json.jsonObject
 private val json = Json { ignoreUnknownKeys = true }
 
 /**
- * Поля payload'а хоста, теряющие смысл в team-scope: `group` — личная структура папок,
- * `credentialId`/`identityId` — ссылки на записи ЛИЧНОГО vault'а владельца (секреты не шарятся,
- * у участников ссылки повисли бы; каждый подключается своим секретом).
+ * Host payload fields that lose meaning in team scope: `group` is a personal folder structure;
+ * `credentialId`/`identityId` reference records in the owner's PERSONAL vault (secrets aren't
+ * shared — members' references would dangle; each member connects with their own secret).
  */
 val HOST_SHARE_STRIP: Set<String> = setOf("group", "credentialId", "identityId")
 
 /**
- * Убрать из JSON-payload'а поля, не имеющие смысла в team-scope (например, `group` хоста —
- * ссылку на личную папку). Не-JSON или битый payload возвращается как есть: шеринг не должен
- * падать из-за формата, приёмная сторона всё равно валидирует записи своим декодером.
+ * Strips fields with no meaning in team scope (e.g. a host's `group`, a personal-folder
+ * reference) from a JSON payload. A non-JSON or malformed payload is returned as-is: sharing
+ * must not fail on format — the receiving side validates records with its own decoder anyway.
  */
 fun stripShareFields(payload: ByteArray, fields: Set<String>): ByteArray {
     if (fields.isEmpty()) return payload

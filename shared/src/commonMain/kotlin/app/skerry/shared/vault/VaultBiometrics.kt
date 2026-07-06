@@ -1,90 +1,91 @@
 package app.skerry.shared.vault
 
-/** Исход включения биометрии для vault. */
+/** Outcome of enabling biometrics for a vault. */
 enum class BiometricEnableResult {
-    /** Биометрия включена: `vault.bio` записан. */
+    /** Biometrics enabled: `vault.bio` written. */
     Enabled,
 
-    /** Vault заблокирован — нечего оборачивать; сперва разблокировать паролем. */
+    /** Vault is locked — nothing to wrap; unlock with password first. */
     VaultLocked,
 
-    /** Биометрия недоступна (нет железа/не зачислена/залочена) — тумблер не должен был дойти сюда. */
+    /** Biometrics unavailable (no hardware/not enrolled/locked out) — toggle shouldn't reach here. */
     Unavailable,
 
-    /** Пользователь отменил промпт. */
+    /** User dismissed the prompt. */
     Cancelled,
 
-    /** Сбой биометрии/железа — не включили. */
+    /** Biometric/hardware failure — not enabled. */
     Failed,
 }
 
-/** Исход разблокировки vault биометрией. */
+/** Outcome of unlocking the vault with biometrics. */
 sealed interface BiometricUnlockResult {
-    /** Vault разблокирован тем же `dataKey`. */
+    /** Vault unlocked with the same `dataKey`. */
     data object Unlocked : BiometricUnlockResult
 
-    /** Биометрия для этого vault не включена (`vault.bio` нет) — показать форму пароля. */
+    /** Biometrics not enabled for this vault (no `vault.bio`) — show the password form. */
     data object NotEnabled : BiometricUnlockResult
 
-    /** Биометрия недоступна сейчас (нет железа/залочена) — форма пароля. */
+    /** Biometrics unavailable right now (no hardware/locked out) — password form. */
     data object Unavailable : BiometricUnlockResult
 
-    /** Пользователь отменил промпт — остаться на форме пароля. */
+    /** User dismissed the prompt — stay on the password form. */
     data object Cancelled : BiometricUnlockResult
 
-    /** Сбой биометрии — форма пароля. */
+    /** Biometric failure — password form. */
     data object Failed : BiometricUnlockResult
 
     /**
-     * `bioKey` инвалидирован (новый отпечаток/лицо). Биометрия **выключена** (артефакт удалён) —
-     * пользователь обязан войти мастер-паролем и при желании включить биометрию заново.
+     * `bioKey` invalidated (new fingerprint/face). Biometrics is disabled (artifact removed) —
+     * the user must sign in with the master password and re-enable biometrics if desired.
      */
     data object Invalidated : BiometricUnlockResult
 
-    /** Файл vault не читается — биометрия развернула ключ, но данные битые. */
+    /** Vault file unreadable — biometrics unwrapped the key but the data is corrupt. */
     data object Corrupted : BiometricUnlockResult
 }
 
 /**
- * Исход биометрического подтверждения личности перед чувствительным действием в открытом vault
- * (копирование пароля). В отличие от [BiometricUnlockResult] не открывает vault — лишь доказывает
- * присутствие владельца через тот же `bioKey`.
+ * Outcome of biometrically confirming identity before a sensitive action in an unlocked vault
+ * (copying a password). Unlike [BiometricUnlockResult], this does not unlock the vault — it only
+ * proves the owner's presence via the same `bioKey`.
  */
 sealed interface BiometricConfirmResult {
-    /** Биометрия пройдена — действие можно выполнять. */
+    /** Biometrics passed — the action may proceed. */
     data object Confirmed : BiometricConfirmResult
 
-    /** Биометрия для этого vault не включена (`vault.bio` нет) — вызывающий просит мастер-пароль. */
+    /** Biometrics not enabled for this vault (no `vault.bio`) — caller falls back to the password. */
     data object NotEnabled : BiometricConfirmResult
 
-    /** Биометрия недоступна сейчас (нет железа/залочена) — откат на мастер-пароль. */
+    /** Biometrics unavailable right now (no hardware/locked out) — fall back to the password. */
     data object Unavailable : BiometricConfirmResult
 
-    /** Пользователь отменил промпт — действие не выполняем. */
+    /** User dismissed the prompt — action is not performed. */
     data object Cancelled : BiometricConfirmResult
 
-    /** Сбой биометрии — действие не выполняем. */
+    /** Biometric failure — action is not performed. */
     data object Failed : BiometricConfirmResult
 
     /**
-     * `bioKey` инвалидирован (новый отпечаток/лицо). Биометрия **выключена** (как в [unlock]) —
-     * вызывающий откатывается на мастер-пароль.
+     * `bioKey` invalidated (new fingerprint/face). Biometrics is disabled (as in [unlock]) —
+     * caller falls back to the master password.
      */
     data object Invalidated : BiometricConfirmResult
 }
 
 /**
- * Оркестрация биометрической разблокировки поверх [Vault] + [BiometricKeyStore] + [BioArtifactStore].
- * Платформо-независима (контракт — `commonMain`), поэтому покрыта TDD на фейках без железа.
+ * Orchestrates biometric unlock on top of [Vault] + [BiometricKeyStore] + [BioArtifactStore].
+ * Platform-independent (contract lives in `commonMain`), covered by TDD on fakes without hardware.
  *
- * Инвариант zero-knowledge: `dataKey` достаётся из vault только через [Vault.exportDataKey]
- * (копия, затирается здесь же после обёртки) и возвращается через [Vault.unlockWithDataKey] — в
- * открытом виде наружу из `shared` не выходит. Оборачивается именно `dataKey`, поэтому смена
- * мастер-пароля ([Vault.changePassword]) **не трогает** `vault.bio` — биометрия продолжает
- * работать без перенастройки (развязка, см. дизайн-док §2).
+ * Zero-knowledge invariant: `dataKey` is obtained from the vault only via [Vault.exportDataKey]
+ * (a copy, zeroized here after wrapping) and returned via [Vault.unlockWithDataKey] — it never
+ * leaves `shared` in the open. Because `dataKey` itself is wrapped, changing the master password
+ * ([Vault.changePassword]) does not touch `vault.bio` — biometrics keeps working without
+ * reconfiguration (see design doc section 2).
  *
- * `alias` детерминирован по [deviceId] — один `bioKey` на устройство. `wrap`/`unwrap` зовутся
- * вне vault-локи (это `suspend`-промпты), что корректно: vault синхронизируется внутри себя.
+ * `alias` is deterministic from [deviceId] — one `bioKey` per device. `wrap`/`unwrap` are called
+ * outside the vault lock (they are `suspend` prompts); this is fine since the vault synchronizes
+ * internally.
  */
 class VaultBiometrics(
     private val vault: Vault,
@@ -94,15 +95,15 @@ class VaultBiometrics(
     private val alias: String = "skerry.vault.bio.$deviceId",
 ) {
 
-    /** Доступность биометрии на устройстве — для показа/скрытия тумблера и кнопки. */
+    /** Biometric availability on this device — to show/hide the toggle and button. */
     fun availability(): BiometricAvailability = keyStore.availability()
 
-    /** Включена ли биометрия для этого vault (есть ли `vault.bio`). */
+    /** Whether biometrics is enabled for this vault (`vault.bio` exists). */
     fun isEnabled(): Boolean = artifacts.exists()
 
     /**
-     * Включить биометрию: vault должен быть разблокирован. Оборачивает текущий `dataKey` под
-     * `bioKey` и сохраняет `vault.bio`. Экспортированную копию ключа затирает в `finally`.
+     * Enable biometrics: the vault must be unlocked. Wraps the current `dataKey` under `bioKey`
+     * and saves `vault.bio`. Zeroizes the exported key copy in `finally`.
      */
     suspend fun enable(prompt: BiometricPrompt): BiometricEnableResult {
         if (keyStore.availability() != BiometricAvailability.Available) return BiometricEnableResult.Unavailable
@@ -117,7 +118,7 @@ class VaultBiometrics(
                 BiometricResult.Cancelled -> BiometricEnableResult.Cancelled
                 BiometricResult.Failed -> BiometricEnableResult.Failed
                 BiometricResult.KeyInvalidated -> {
-                    keyStore.deleteKey(alias) // свежесозданный ключ уже инвалидирован — не оставлять
+                    keyStore.deleteKey(alias) // freshly created key already invalidated — don't leave it
                     BiometricEnableResult.Failed
                 }
             }
@@ -126,30 +127,30 @@ class VaultBiometrics(
         }
     }
 
-    /** Выключить биометрию: удалить `bioKey` и `vault.bio`. Идемпотентно. */
+    /** Disable biometrics: remove `bioKey` and `vault.bio`. Idempotent. */
     fun disable() {
         keyStore.deleteKey(alias)
         artifacts.clear()
     }
 
     /**
-     * Разблокировать vault биометрией (холодный старт). Любой неуспех — мягкий откат на форму
-     * мастер-пароля; при инвалидации ключа биометрия выключается. `dataKey` из [unwrap] передаётся
-     * во [Vault.unlockWithDataKey], который им владеет (а на `Corrupted` — затирает).
+     * Unlock the vault via biometrics (cold start). Any failure falls back softly to the
+     * password form; key invalidation disables biometrics. The `dataKey` from [unwrap] is handed
+     * to [Vault.unlockWithDataKey], which takes ownership (and zeroizes it on `Corrupted`).
      */
     suspend fun unlock(prompt: BiometricPrompt): BiometricUnlockResult = when (val auth = authenticate(prompt)) {
         is BioAuth.Success -> {
-            val dataKey = DataKey(auth.key) // владение передаём vault (он же затирает на Corrupted)
+            val dataKey = DataKey(auth.key) // ownership passes to the vault (it zeroizes on Corrupted)
             try {
                 when (vault.unlockWithDataKey(dataKey)) {
                     UnlockResult.Success -> BiometricUnlockResult.Unlocked
                     UnlockResult.Corrupted -> BiometricUnlockResult.Corrupted
-                    // unlockWithDataKey не выводит мастер-ключ и по контракту не возвращает WrongPassword;
-                    // явная ветка вместо else — чтобы новая ветка UnlockResult не утекла молча.
-                    UnlockResult.WrongPassword -> error("unlockWithDataKey не сверяет пароль — WrongPassword недостижим")
+                    // unlockWithDataKey never checks a password and by contract never returns
+                    // WrongPassword; explicit branch instead of else so a new UnlockResult case fails loudly.
+                    UnlockResult.WrongPassword -> error("unlockWithDataKey does not check a password — WrongPassword is unreachable")
                 }
             } catch (e: Throwable) {
-                dataKey.bytes.fill(0) // нештатный путь: не оставить развёрнутый ключ в памяти
+                dataKey.bytes.fill(0) // exceptional path: don't leave the unwrapped key in memory
                 throw e
             }
         }
@@ -161,16 +162,17 @@ class VaultBiometrics(
     }
 
     /**
-     * Подтвердить личность владельца биометрией **без разблокировки** vault — для повторной
-     * аутентификации перед чувствительным действием в уже открытой сессии (копирование пароля).
-     * Тот же путь, что [unlock] (читает `vault.bio`, сверяет alias/deviceId, разворачивает через
-     * [BiometricKeyStore.unwrap] с системным промптом), но развёрнутый ключ не присваивается vault,
-     * а сразу затирается: нужен лишь факт успешной аутентификации. Инвалидация ключа выключает
-     * биометрию (как в [unlock]) — вызывающий откатится на мастер-пароль. Vault не трогается.
+     * Confirm the owner's identity via biometrics without unlocking the vault — for
+     * re-authentication before a sensitive action in an already-open session (copying a
+     * password). Same path as [unlock] (reads `vault.bio`, checks alias/deviceId, unwraps via
+     * [BiometricKeyStore.unwrap] with a system prompt), but the unwrapped key is not assigned to
+     * the vault and is zeroized immediately — only the fact of successful authentication
+     * matters. Key invalidation disables biometrics (as in [unlock]) — caller falls back to the
+     * master password. The vault itself is untouched.
      */
     suspend fun confirm(prompt: BiometricPrompt): BiometricConfirmResult = when (val auth = authenticate(prompt)) {
         is BioAuth.Success -> {
-            auth.key.fill(0) // ключ не нужен — нужен лишь факт успешной аутентификации
+            auth.key.fill(0) // key itself is not needed — only the successful authentication matters
             BiometricConfirmResult.Confirmed
         }
         BioAuth.NotEnabled -> BiometricConfirmResult.NotEnabled
@@ -181,10 +183,10 @@ class VaultBiometrics(
     }
 
     /**
-     * Прочитать и провалидировать `vault.bio`. Артефакт с диска недоверенный: формат/alias/deviceId
-     * должны совпасть с ожидаемыми. Иначе это файл другого устройства, подмена или иной формат —
-     * `null` (мягкий откат на пароль), артефакт не удаляем (это не инвалидация ключа). Сверка alias
-     * заодно убирает асимметрию с [disable].
+     * Read and validate `vault.bio`. The on-disk artifact is untrusted: format/alias/deviceId
+     * must match expectations. Otherwise it's another device's file, tampering, or a different
+     * format — `null` (soft fallback to password), the artifact is not deleted (this isn't a key
+     * invalidation). Checking alias also keeps this symmetric with [disable].
      */
     private fun readValidArtifact(): BioArtifact? {
         val artifact = artifacts.read() ?: return null
@@ -195,10 +197,11 @@ class VaultBiometrics(
     }
 
     /**
-     * Общий шаг [unlock]/[confirm]: валидный артефакт + доступность + системный промпт с разворотом
-     * `bioKey`. [BioAuth.Success] несёт развёрнутый dataKey — владение переходит вызывающему
-     * (unlock передаёт его vault, confirm сразу затирает). Инвалидация ключа (новый отпечаток/лицо)
-     * выключает биометрию здесь же — вызывающий откатывается на мастер-пароль.
+     * Shared step for [unlock]/[confirm]: valid artifact + availability + system prompt that
+     * unwraps `bioKey`. [BioAuth.Success] carries the unwrapped dataKey — ownership passes to the
+     * caller (unlock hands it to the vault, confirm zeroizes it immediately). Key invalidation
+     * (new fingerprint/face) disables biometrics right here — caller falls back to the master
+     * password.
      */
     private suspend fun authenticate(prompt: BiometricPrompt): BioAuth {
         val artifact = readValidArtifact() ?: return BioAuth.NotEnabled
@@ -208,13 +211,13 @@ class VaultBiometrics(
             BiometricResult.Cancelled -> BioAuth.Cancelled
             BiometricResult.Failed -> BioAuth.Failed
             BiometricResult.KeyInvalidated -> {
-                disable() // биометрия скомпрометирована сменой набора — снять и потребовать пароль
+                disable() // biometrics compromised by an enrollment change — disable and require password
                 BioAuth.Invalidated
             }
         }
     }
 
-    /** Внутренний исход [authenticate]; наружу мапится в Unlock-/Confirm-результаты 1:1. */
+    /** Internal outcome of [authenticate]; mapped 1:1 to Unlock/Confirm results. */
     private sealed interface BioAuth {
         class Success(val key: ByteArray) : BioAuth
         data object NotEnabled : BioAuth

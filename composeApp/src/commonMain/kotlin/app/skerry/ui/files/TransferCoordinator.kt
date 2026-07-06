@@ -23,14 +23,14 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 
-/** Состояние пакетной передачи между панелями для нижней полосы переноса. */
+/** Cross-pane batch transfer state, for the bottom transfer bar. */
 sealed interface TransferState {
-    /** Передачи нет. */
+    /** No transfer in progress. */
     data object Idle : TransferState
 
     /**
-     * Идёт передача файла [name] ([fileIndex] из [fileCount] в пакете), [transferred] из [total]
-     * байт ([total] = 0, если размер неизвестен).
+     * Transferring file [name] ([fileIndex] of [fileCount] in the batch), [transferred] of [total]
+     * bytes ([total] = 0 if unknown).
      */
     data class Active(
         val name: String,
@@ -41,26 +41,24 @@ sealed interface TransferState {
         val total: Long,
     ) : TransferState
 
-    /** Передача [name] не удалась; [message] для показа пользователю. */
+    /** Transfer of [name] failed; [message] is user-facing. */
     data class Failed(val name: String, val message: String) : TransferState
 }
 
 /**
- * Ожидающий подтверждения конфликт перезаписи. [names] — имена объектов в каталоге-приёмнике, которые
- * будут перезаписаны; [proceed] запускает отложенную передачу, если пользователь подтвердил.
+ * Overwrite conflict awaiting confirmation. [names] are entries in the destination directory that
+ * would be overwritten; [proceed] runs the deferred transfer once the user confirms.
  */
 class OverwriteConflict(val names: List<String>, val proceed: () -> Unit)
 
 /**
- * Координатор передачи файлов между [local]- и [remote]-панелями поверх одного удалённого
- * [SftpClient]. В двухпанельном режиме передача всегда идёт между локальной ФС и SFTP, что ложится
- * на готовые `SftpClient.download`/`upload` — отдельный транспорт не нужен. Координатор берёт
- * выделение панели-источника, гонит файлы по очереди в текущий каталог панели-приёмника, обновляет
- * [transfer] для прогресс-полосы, по завершении перечитывает приёмник и снимает выделение источника.
- * При загрузке (upload) каталоги в выделении пропускаются; при скачивании (download) каталог берётся
- * рекурсивно — дерево обходится через [sftp], локальные подкаталоги воссоздаются через [localBrowser]
- * (паритет с поведением «скачать папку» в Termius). Одновременно идёт не более одной передачи
- * (сериализация флагом [busy]).
+ * Coordinates file transfer between the [local] and [remote] panes over a single [SftpClient].
+ * Transfer is always local-FS-to-SFTP, so it maps directly onto `SftpClient.download`/`upload`.
+ * Takes the source pane's selection, transfers files in order into the destination pane's current
+ * directory, updates [transfer] for the progress bar, then reloads the destination and clears the
+ * source selection. On upload, directories in the selection are skipped; on download, a directory
+ * is transferred recursively (tree walked via [sftp], local subdirectories recreated via
+ * [localBrowser]). At most one transfer runs at a time (serialized via [busy]).
  */
 @Stable
 class TransferCoordinator(
@@ -75,25 +73,24 @@ class TransferCoordinator(
         private set
 
     /**
-     * Ожидающий подтверждения конфликт перезаписи: в каталоге-приёмнике уже есть объекты с именами
-     * [OverwriteConflict.names]. Пока не `null`, UI показывает диалог «Overwrite?»; [resolveOverwrite]
-     * либо запускает отложенную передачу, либо отменяет её. `null` — конфликта нет.
+     * Overwrite conflict awaiting confirmation: the destination directory already has entries
+     * named [OverwriteConflict.names]. While non-null, the UI shows an "Overwrite?" dialog;
+     * [resolveOverwrite] either runs the deferred transfer or cancels it.
      */
     var overwrite: OverwriteConflict? by mutableStateOf(null)
         private set
 
     /**
-     * Сериализует передачи: проверка-и-взведение [busy] не атомарны, но безопасны — `uploadSelection`/
-     * `downloadSelection` зовутся из UI-обработчиков на главном потоке, а `scope` панели наследует тот
-     * же главный диспетчер, так что повторный тап в том же фрейме увидит уже взведённый флаг (как в
-     * [FilePaneController]).
+     * Serializes transfers: the check-and-set on [busy] isn't atomic, but is safe since
+     * `uploadSelection`/`downloadSelection` are called from UI handlers on the main thread, same
+     * as [FilePaneController].
      */
     private var busy = false
 
     /**
-     * Залить выделенные локальные объекты в текущий каталог удалённой панели. Файлы заливаются как есть,
-     * каталоги — рекурсивно (поддерево воссоздаётся на хосте), симметрично скачиванию. Симлинки/прочее
-     * пропускаются. Прогресс/ошибка идут в [transfer]; сериализуется [busy].
+     * Uploads the local pane's selection into the remote pane's current directory. Files are
+     * uploaded as-is; directories recursively (subtree recreated on the host), symmetric with
+     * download. Symlinks/other are skipped. Progress/error go to [transfer]; serialized via [busy].
      */
     fun uploadSelection() {
         val items = local.selectedItems()
@@ -108,17 +105,17 @@ class TransferCoordinator(
     }
 
     /**
-     * Скачать выделенные удалённые объекты в текущий каталог локальной панели. Файлы качаются как есть,
-     * каталоги — рекурсивно: сначала строится план обхода дерева ([buildDownloadPlan]), затем
-     * воссоздаются локальные подкаталоги ([ensureDir]) и по очереди качаются файлы дерева с общим
-     * счётчиком прогресса. Симлинки/прочее пропускаются (за линком в цель не идём). Прогресс/ошибка
-     * идут в [transfer]; сериализуется [busy].
+     * Downloads the remote pane's selection into the local pane's current directory. Files are
+     * downloaded as-is; directories recursively: a tree-walk plan is built first
+     * ([buildDownloadPlan]), local subdirectories are recreated ([ensureDir]), then files are
+     * downloaded in order with a shared progress counter. Symlinks/other are skipped (never
+     * followed). Progress/error go to [transfer]; serialized via [busy].
      */
     fun downloadSelection() {
         val items = remote.selectedItems()
         if (items.isEmpty()) return
-        // Снимок каталога-источника в момент запроса: пока открыт диалог Overwrite, навигация
-        // remote-панели не должна уводить источники скачивания в другой каталог.
+        // Snapshot of the source directory at request time: while the Overwrite dialog is open,
+        // pane navigation must not move the download sources to a different directory.
         val sourceDir = remote.path
         confirmOverwrite(items, local) { destDir ->
             launchExclusive {
@@ -130,11 +127,11 @@ class TransferCoordinator(
     }
 
     /**
-     * F6 Move: скопировать выделение активной панели в каталог другой и удалить источники ПОСЛЕ
-     * успешной передачи (между разными ФС перемещение = copy + delete, как в mc). [fromLocal] —
-     * активна локальная панель (заливаем на хост) или удалённая (качаем на локаль). Удаление идёт
-     * только при успехе передачи: ошибка оставляет источники нетронутыми (catch до delete). Источники
-     * снимаются рекурсивно (каталог — со всем содержимым). Подтверждение — на стороне UI.
+     * F6 Move: copies the active pane's selection to the other pane's directory and deletes the
+     * sources after a successful transfer (cross-filesystem move = copy + delete). [fromLocal]
+     * selects the direction: local pane active (upload to host) or remote (download to local).
+     * Deletion runs only after a successful transfer; a transfer error leaves sources untouched.
+     * Sources are removed recursively. Confirmation is the UI's responsibility.
      */
     fun moveSelection(fromLocal: Boolean) {
         if (fromLocal) {
@@ -152,16 +149,16 @@ class TransferCoordinator(
         } else {
             val items = remote.selectedItems()
             if (items.isEmpty()) return
-            // Снимок каталога-источника В МОМЕНТ ЗАПРОСА (до диалога Overwrite и до любых suspend):
-            // навигация панели (open/goUp) идёт на том же scope и могла бы сменить remote.path между
-            // подтверждением/скачиванием и удалением — тогда удалили бы из чужого каталога. Один и
-            // тот же снимок идёт и в runDownload, и в пересборку пути удаления.
+            // Snapshot of the source directory at request time (before the Overwrite dialog and
+            // any suspend point): pane navigation could otherwise change remote.path between
+            // confirmation/download and deletion. The same snapshot feeds runDownload and the
+            // deletion path rebuild.
             val remoteDir = remote.path
             confirmOverwrite(items, local) { destDir ->
                 launchExclusive {
                     runDownload(items, destDir, remoteDir)
-                    // Удаляем источник по пути, пересобранному из снимка каталога + проверенного имени, а не из
-                    // server-controlled item.path — иначе вредоносный листинг увёл бы rmdir/remove из каталога.
+                    // Deletes via a path rebuilt from the directory snapshot + a validated name, not
+                    // server-controlled item.path.
                     val failed = deleteSources(items) { remoteBrowser.delete(it.copy(path = safeRemoteChild(it.name, remoteDir))) }
                     local.refresh()
                     remote.refresh()
@@ -172,10 +169,10 @@ class TransferCoordinator(
     }
 
     /**
-     * Удалить источники [items] после успешного переноса. Передача уже прошла (файлы на приёмнике), так
-     * что сбой удаления не теряет данные, но оставляет частично перенесённое состояние — возвращаем
-     * [TransferState.Failed] с именем КОНКРЕТНОГО сбойного объекта (а не дефолтным «файл», т.к. к этому
-     * моменту [transfer] уже Idle). null — все источники удалены. [CancellationException] пробрасывается.
+     * Deletes source [items] after a successful transfer. A deletion failure doesn't lose data
+     * (files already reached the destination) but leaves a partially-moved state; returns
+     * [TransferState.Failed] naming the specific failed item ([transfer] is already Idle by this
+     * point). Null means all sources were deleted. [CancellationException] propagates.
      */
     private suspend fun deleteSources(items: List<FileItem>, delete: suspend (FileItem) -> Unit): TransferState.Failed? {
         for (item in items) {
@@ -189,14 +186,13 @@ class TransferCoordinator(
     }
 
     /**
-     * Скачать удалённый файл [item] в выбранную нативным пикером цель [target] (на Android — SAF-документ
-     * «Save to…», на desktop — выбранный путь). SFTP пишет байты в `target.stagingPath`; по успеху —
-     * `target.finalize()` (копирование staging→Uri), при ошибке/отмене — `target.discard()`. В отличие
-     * от [downloadSelection] цель не привязана к локальной панели — это путь скачивания мобильного экрана
-     * Files наружу из песочницы. Прогресс/ошибка идут в [transfer]; сериализуется тем же [busy]
-     * (через [launchExclusive]). Каталоги игнорируются (рекурсивная передача — позже). `discard()`
-     * под [runCatching], чтобы сбой очистки не подменил исходную ошибку (она уходит дальше в
-     * [launchExclusive] и станет [TransferState.Failed] с именем цели из активного шага).
+     * Downloads remote file [item] into a native-picker target [target] (Android: SAF "Save to..."
+     * document; desktop: chosen path). SFTP writes bytes to `target.stagingPath`; on success,
+     * `target.finalize()` copies staging to the Uri; on error/cancel, `target.discard()`. Unlike
+     * [downloadSelection], the target isn't tied to the local pane — this is the mobile Files
+     * screen's download-out-of-sandbox path. Progress/error go to [transfer]; serialized via the
+     * same [busy] (through [launchExclusive]). Directories are ignored (no recursive transfer here).
+     * `discard()` is wrapped in [runCatching] so a cleanup failure doesn't mask the original error.
      */
     fun downloadToTarget(item: FileItem, target: DownloadTarget) {
         if (item.type != FileItemType.File) return
@@ -208,7 +204,7 @@ class TransferCoordinator(
                 }
                 target.finalize()
                 transfer = TransferState.Idle
-            } catch (e: Exception) { // включая CancellationException — staging чистим в обоих случаях
+            } catch (e: Exception) { // Includes CancellationException — staging is cleaned up either way.
                 runCatching { target.discard() }
                 throw e
             }
@@ -216,15 +212,16 @@ class TransferCoordinator(
     }
 
     /**
-     * Fallback-загрузка: залить произвольный локальный [source] (из нативного пикера) в текущий каталог
-     * remote-панели — на случай, когда в локальной панели нечего выделить. Имя на сервере — `source.name`.
-     * Прогресс/ошибка идут в [transfer]; по завершении (успех/ошибка) вызывается `source.cleanup()` и
-     * remote-панель перечитывается. Сериализуется тем же [busy], что и передачи по выделению.
+     * Fallback upload: uploads an arbitrary local [source] (from a native picker) into the remote
+     * pane's current directory, for when the local pane has nothing selected. Remote name is
+     * `source.name`. Progress/error go to [transfer]; `source.cleanup()` runs on completion
+     * (success or error) and the remote pane reloads. Serialized via the same [busy] as
+     * selection-based transfers.
      */
     fun uploadSource(source: UploadSource) {
         if (busy) return
-        // Снимок каталога-приёмника в момент запроса: навигация remote-панели при открытом
-        // диалоге Overwrite не должна уводить заливку в другой каталог (TOCTOU).
+        // Snapshot of the destination directory at request time: pane navigation while the
+        // Overwrite dialog is open must not redirect the upload to a different directory (TOCTOU).
         val destDir = remote.path
         if (source.name in remote.currentEntryNames()) {
             overwrite = OverwriteConflict(listOf(source.name)) { runUploadSource(source, destDir) }
@@ -245,22 +242,21 @@ class TransferCoordinator(
         }
     }
 
-    /** Закрыть полосу передачи (сбросить в [TransferState.Idle]); идущую передачу не трогает. */
+    /** Closes the transfer bar (resets to [TransferState.Idle]); doesn't touch an active transfer. */
     fun clearTransfer() {
         if (transfer !is TransferState.Active) transfer = TransferState.Idle
     }
 
     /**
-     * Проверить конфликт имён верхнего уровня [items] с каталогом-приёмником [dest] ПЕРЕД запуском
-     * передачи. Нет пересечений — сразу [proceed]. Есть — взводим [overwrite]-диалог, отложив [proceed]
-     * до подтверждения ([resolveOverwrite]). Проверяем только верхний уровень (то, что видно в панели):
-     * это перекрывает основной сценарий «перетащил файл туда, где такой уже есть»; слияние вложенных
-     * деревьев здесь не разбираем. Если передача уже идёт ([busy]) — молча выходим, как раньше.
+     * Checks top-level name conflicts between [items] and destination [dest] before starting a
+     * transfer. No overlap: proceeds immediately. Overlap: raises the [overwrite] dialog, deferring
+     * [proceed] until confirmed ([resolveOverwrite]). Only the top level is checked (nested-tree
+     * merges aren't handled here). Silently no-ops if a transfer is already running ([busy]).
      *
-     * В [proceed] передаётся СНИМОК каталога-приёмника, снятый здесь же (в момент показа диалога):
-     * пока диалог открыт, панель-приёмник можно навигировать, и чтение `dest.path` в момент
-     * подтверждения увело бы перезапись в другой каталог (TOCTOU) — а конфликт имён считался ещё
-     * для старого.
+     * [proceed] receives a snapshot of the destination directory taken here (when the dialog is
+     * shown): the destination pane can be navigated while the dialog is open, so reading
+     * `dest.path` at confirmation time would redirect the write elsewhere (TOCTOU) while the
+     * conflict check still applied to the old directory.
      */
     private fun confirmOverwrite(items: List<FileItem>, dest: FilePaneController, proceed: (destDir: String) -> Unit) {
         if (busy) return
@@ -270,7 +266,7 @@ class TransferCoordinator(
         if (clash.isEmpty()) proceed(destDir) else overwrite = OverwriteConflict(clash) { proceed(destDir) }
     }
 
-    /** Ответ пользователя на диалог перезаписи: [overwrite]=true запускает отложенную передачу, иначе отмена. */
+    /** User's answer to the overwrite dialog: true runs the deferred transfer, else cancels it. */
     fun resolveOverwrite(overwrite: Boolean) {
         val pending = this.overwrite ?: return
         this.overwrite = null
@@ -278,13 +274,11 @@ class TransferCoordinator(
     }
 
     /**
-     * Запустить передачу, сериализуя её флагом [busy]: пока идёт одна, новые игнорируются. Любая
-     * ошибка переводит полосу в [TransferState.Failed] (имя берём из текущего активного шага),
-     * [CancellationException] пробрасывается. Пустую/no-op работу [block] отсеивает сам (ранний
-     * return внутри). [onFinally] — хук завершения (успех/ошибка/отмена) для очистки ресурсов
-     * вызывающего (staging-файлы и т.п.); выполняется до снятия [busy], сбои глотать — забота
-     * вызывающего (обернуть в [runCatching]). Колбэки прогресса приходят синхронно из передачи;
-     * запись snapshot-стейта потокобезопасна.
+     * Runs a transfer, serialized via [busy]: while one is active, new calls are ignored. Any
+     * error moves the bar to [TransferState.Failed] (name taken from the current active step);
+     * [CancellationException] propagates. [onFinally] is a completion hook (success/error/cancel)
+     * for the caller's resource cleanup (staging files, etc.); runs before [busy] is cleared —
+     * swallowing its own failures is the caller's responsibility (wrap in [runCatching]).
      */
     private fun launchExclusive(onFinally: suspend () -> Unit = {}, block: suspend () -> Unit) {
         if (busy) return
@@ -305,13 +299,14 @@ class TransferCoordinator(
     }
 
     /**
-     * Залить [items] (файлы как есть, каталоги рекурсивно — [buildUploadPlan]) в удалённый [remoteDir],
-     * воссоздавая поддерево на хосте ([ensureDir]); по завершении — [TransferState.Idle]. Без
-     * сериализации/пост-действий: вызывается внутри уже взведённого [launchExclusive]-блока.
+     * Uploads [items] (files as-is, directories recursively via [buildUploadPlan]) into remote
+     * [remoteDir], recreating the subtree on the host ([ensureDir]); ends in
+     * [TransferState.Idle]. No serialization/post-actions — called inside an already-armed
+     * [launchExclusive] block.
      */
     private suspend fun runUpload(items: List<FileItem>, remoteDir: String) {
         val plan = buildUploadPlan(items, remoteDir)
-        // Каталоги создаём в порядке обхода (pre-order): родитель всегда раньше детей.
+        // Directories are created in pre-order: parent always before children.
         plan.dirs.forEach { ensureDir(remoteBrowser, it) }
         plan.files.forEachIndexed { index, task ->
             transfer = TransferState.Active(task.name, TransferDirection.Upload, index + 1, plan.files.size, 0, task.size)
@@ -323,13 +318,14 @@ class TransferCoordinator(
     }
 
     /**
-     * Скачать [items] (файлы как есть, каталоги рекурсивно — [buildDownloadPlan]) из удалённого [remoteDir]
-     * в локальный [localDir], воссоздавая поддерево ([ensureDir]); по завершении — [TransferState.Idle].
-     * Без сериализации/пост-действий: вызывается внутри уже взведённого [launchExclusive]-блока.
+     * Downloads [items] (files as-is, directories recursively via [buildDownloadPlan]) from remote
+     * [remoteDir] into local [localDir], recreating the subtree ([ensureDir]); ends in
+     * [TransferState.Idle]. No serialization/post-actions — called inside an already-armed
+     * [launchExclusive] block.
      */
     private suspend fun runDownload(items: List<FileItem>, localDir: String, remoteDir: String) {
         val plan = buildDownloadPlan(items, localDir, remoteDir)
-        // Каталоги создаём в порядке обхода (pre-order): родитель всегда раньше детей.
+        // Directories are created in pre-order: parent always before children.
         plan.dirs.forEach { ensureDir(localBrowser, it) }
         plan.files.forEachIndexed { index, task ->
             transfer = TransferState.Active(task.name, TransferDirection.Download, index + 1, plan.files.size, 0, task.size)
@@ -340,19 +336,19 @@ class TransferCoordinator(
         transfer = TransferState.Idle
     }
 
-    /** Один файл к скачиванию: [name] для прогресс-полосы, удалённый [remotePath] → локальный [localPath]. */
+    /** One download task: [name] for the progress bar, remote [remotePath] to local [localPath]. */
     private data class DownloadTask(val name: String, val remotePath: String, val localPath: String, val size: Long)
 
-    /** План рекурсивного скачивания: [dirs] — локальные каталоги в порядке создания, [files] — файлы. */
+    /** Recursive download plan: [dirs] are local directories in creation order, [files] are the files. */
     private class DownloadPlan {
         val dirs = mutableListOf<String>()
         val files = mutableListOf<DownloadTask>()
     }
 
     /**
-     * Построить план скачивания [items] (верхнего уровня) из удалённого [remoteDir] в локальный
-     * [localDir]. Удалённый путь верхнего уровня собираем сами ([childPath] от [remoteDir] + имени), а
-     * НЕ доверяем `item.path` из листинга — так же, как для детей в [walkDownload] (имя проверяется там).
+     * Builds the download plan for top-level [items] from remote [remoteDir] into local
+     * [localDir]. The top-level remote path is rebuilt ourselves ([childPath] from [remoteDir] +
+     * name), not trusted from the listing's `item.path` — same as for children in [walkDownload].
      */
     private suspend fun buildDownloadPlan(items: List<FileItem>, localDir: String, remoteDir: String): DownloadPlan {
         val plan = DownloadPlan()
@@ -361,14 +357,13 @@ class TransferCoordinator(
     }
 
     /**
-     * Обойти объект удалённого дерева, наполняя [plan]. Файл — задача скачивания; каталог — локальный
-     * подкаталог + рекурсия по содержимому; симлинк/прочее — пропуск (за линком в цель не идём).
+     * Walks a remote tree entry, filling [plan]. A file becomes a download task; a directory adds
+     * a local subdirectory and recurses; symlinks/other are skipped.
      *
-     * Защита от выхода за пределы цели (path traversal от недоверенного сервера): [name] обязан быть
-     * простым именем — без разделителей пути `/` и `\` (последний — сепаратор на Windows-таргете), не
-     * `.`/`..` и не пустым. Удалённые пути детей мы строим сами от родителя + проверенного имени
-     * ([childPath]) и НЕ доверяем `child.path` из листинга — иначе сервер увёл бы обход (и запись) в
-     * чужой каталог. Так оба пути — локальный и удалённый — структурно остаются внутри своих корней.
+     * Path-traversal guard against an untrusted server: [name] must be a plain name (no `/`/`\`
+     * separators, not `.`/`..`, not empty). Child remote paths are rebuilt from the parent + a
+     * validated name ([childPath]), never trusted from the listing's `child.path` — otherwise the
+     * server could redirect the walk (and writes) outside the target tree.
      */
     private suspend fun walkDownload(
         name: String,
@@ -395,10 +390,10 @@ class TransferCoordinator(
     }
 
     /**
-     * Создать каталог [path] в [browser] (локальном или удалённом), если его ещё нет. `mkdir` без `-p`
-     * бросает на уже существующем каталоге — это нормально при повторной передаче: проверяем листингом,
-     * что каталог реально есть, и только тогда игнорируем ошибку; иначе (нет прав/это файл)
-     * пробрасываем исходную ошибку mkdir.
+     * Creates directory [path] in [browser] (local or remote) if missing. `mkdir` without `-p`
+     * throws on an already-existing directory, which is normal on a repeat transfer: a listing
+     * check confirms the directory exists before the error is ignored; otherwise (no permission/
+     * it's a file) the original mkdir error is rethrown.
      */
     private suspend fun ensureDir(browser: FileBrowser, path: String) {
         try {
@@ -412,16 +407,16 @@ class TransferCoordinator(
         }
     }
 
-    /** Один файл к заливке: [name] для прогресс-полосы, локальный [localPath] → удалённый [remotePath]. */
+    /** One upload task: [name] for the progress bar, local [localPath] to remote [remotePath]. */
     private data class UploadTask(val name: String, val localPath: String, val remotePath: String, val size: Long)
 
-    /** План рекурсивной заливки: [dirs] — удалённые каталоги в порядке создания, [files] — файлы. */
+    /** Recursive upload plan: [dirs] are remote directories in creation order, [files] are the files. */
     private class UploadPlan {
         val dirs = mutableListOf<String>()
         val files = mutableListOf<UploadTask>()
     }
 
-    /** Построить план заливки [items] (верхнего уровня) в удалённый каталог [remoteDir]. */
+    /** Builds the upload plan for top-level [items] into remote directory [remoteDir]. */
     private suspend fun buildUploadPlan(items: List<FileItem>, remoteDir: String): UploadPlan {
         val plan = UploadPlan()
         items.forEach { walkUpload(it.name, it.path, it.type, it.size, remoteDir, plan) }
@@ -429,10 +424,10 @@ class TransferCoordinator(
     }
 
     /**
-     * Обойти объект локального дерева, наполняя [plan] (зеркало [walkDownload]). Файл — задача заливки;
-     * каталог — удалённый подкаталог + рекурсия по содержимому ([localBrowser] листит локальную ФС);
-     * симлинк/прочее — пропуск. Удалённые пути строим сами от [remoteDir] + проверенного имени (без
-     * разделителей/`.`/`..`), а локальные пути берём из доверенного локального листинга.
+     * Walks a local tree entry, filling [plan] (mirrors [walkDownload]). A file becomes an upload
+     * task; a directory adds a remote subdirectory and recurses ([localBrowser] lists the local
+     * FS); symlinks/other are skipped. Remote paths are rebuilt from [remoteDir] + a validated
+     * name; local paths come from the trusted local listing.
      */
     private suspend fun walkUpload(
         name: String,
@@ -459,9 +454,9 @@ class TransferCoordinator(
     }
 
     /**
-     * Безопасный путь удалённого объекта [name] в каталоге [remoteDir] для операций удаления: проверяем,
-     * что [name] — простое имя (без разделителей/`.`/`..`), и строим путь сами от [remoteDir] (снимок
-     * каталога панели), не доверяя server-controlled `item.path`.
+     * Safe remote path of [name] under [remoteDir] for delete operations: validates that [name]
+     * is a plain name, then rebuilds the path from [remoteDir] (a pane directory snapshot),
+     * never trusting server-controlled `item.path`.
      */
     private fun safeRemoteChild(name: String, remoteDir: String): String {
         if (isUnsafeListingName(name)) {
@@ -471,7 +466,7 @@ class TransferCoordinator(
     }
 }
 
-/** Маппинг типа SFTP-записи в нейтральный [FileItemType] (для обхода дерева при скачивании). */
+/** Maps an SFTP entry type to the neutral [FileItemType] (for the download tree walk). */
 private fun SftpEntryType.toItemType(): FileItemType = when (this) {
     SftpEntryType.File -> FileItemType.File
     SftpEntryType.Directory -> FileItemType.Directory

@@ -14,7 +14,7 @@ class FilePrefsTest {
     @Test
     fun boolRoundTripsAndDefaultsWhenMissing() {
         val prefs = FilePrefs(temp())
-        // Файла нет → дефолт как есть.
+        // No file yet, so the default is returned as-is.
         assertTrue(prefs.bool("info_panel", true))
         assertFalse(prefs.bool("terminal_show_title", false))
         prefs.set("info_panel", false)
@@ -28,8 +28,8 @@ class FilePrefsTest {
         val dir = temp()
         val prefs = FilePrefs(dir)
         Files.writeString(dir.resolve("flag"), "garbage")
-        // Прежняя семантика read*: default=true читает `!= "0"` (мусор → true),
-        // default=false читает `== "1"` (мусор → false).
+        // Legacy read* semantics: default=true reads `!= "0"` (garbage -> true),
+        // default=false reads `== "1"` (garbage -> false).
         assertTrue(prefs.bool("flag", true))
         assertFalse(prefs.bool("flag", false))
     }
@@ -50,7 +50,7 @@ class FilePrefsTest {
         val prefs = FilePrefs(temp())
         prefs.set("auto_lock", "5m")
         assertEquals("5m", prefs.id("auto_lock", "1m") { it })
-        // Файла нет → дефолт; parse бросает → дефолт.
+        // No file -> default; parse throws -> default.
         assertEquals("1m", prefs.id("missing", "1m") { it })
         prefs.set("auto_lock", "junk")
         assertEquals("1m", prefs.id("auto_lock", "1m") { if (it == "junk") error("unknown") else it })
@@ -77,10 +77,10 @@ class FilePrefsTest {
     fun writesCreateDirectoryAndSwallowFailures() {
         val dir = temp().resolve("nested")
         val prefs = FilePrefs(dir)
-        prefs.set("info_panel", true) // каталога ещё нет — создаётся сам
+        prefs.set("info_panel", true) // directory doesn't exist yet, gets created
         assertTrue(prefs.bool("info_panel", false))
-        // Запись поверх нечитаемого пути не бросает (best-effort).
-        val filePrefs = FilePrefs(dir.resolve("info_panel")) // «каталог» — существующий файл
+        // Writing over an unreadable path doesn't throw (best-effort).
+        val filePrefs = FilePrefs(dir.resolve("info_panel")) // "directory" is actually an existing file
         filePrefs.set("x", 1)
         assertEquals(7, filePrefs.int("x", 7))
     }

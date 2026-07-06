@@ -1,30 +1,30 @@
 package app.skerry.shared.host
 
 /**
- * Персистентное хранилище профилей хостов менеджера. Платформенная реализация —
- * файловая (desktop), как и у [app.skerry.shared.ssh.KnownHostsStore]. Контракт
- * синхронный: мутации редки и инициируются из UI, шифрования пока нет.
+ * Persistent storage for host manager profiles. Platform implementation is file-based (desktop),
+ * like [app.skerry.shared.ssh.KnownHostsStore]. The contract is synchronous: mutations are rare and
+ * UI-initiated, no encryption yet.
  *
- * Реализации обязаны быть потокобезопасными: фоновых вызовов как у верификатора ключей
- * тут нет, но контракт не запрещает обращения из нескольких потоков.
+ * Implementations must be thread-safe: there are no background callers like the key verifier, but
+ * the contract doesn't forbid multi-threaded access.
  */
 interface HostStore {
-    /** Все профили в порядке вставки/обновления. */
+    /** All profiles in insertion/update order. */
     fun all(): List<Host>
 
-    /** Создать новую запись или заменить существующую с тем же [Host.id] (upsert). */
+    /** Create a new record or replace an existing one with the same [Host.id] (upsert). */
     fun put(host: Host)
 
-    /** Удалить запись по id; отсутствующий id — no-op. */
+    /** Remove the record by id; missing id is a no-op. */
     fun remove(id: String)
 
     /**
-     * Атомарная перестановка: [transform] получает актуальный список профилей и возвращает новый
-     * порядок (при переносе между папками — с обновлённым [Host.group]). Чтение, вычисление и запись
-     * проходят под одной блокировкой — иначе перестановка, посчитанная по устаревшему снимку, могла бы
-     * затереть конкурентную запись (например, перенаправление [Host.credentialId] миграцией vault).
-     * Состав id менять нельзя: реализация обязана отклонить результат с иным набором id (потеря/дубль
-     * профиля — это потеря привязки к секретам). Сообщение об ошибке не должно содержать сами [Host].
+     * Atomic reorder: [transform] receives the current profile list and returns the new order
+     * (with updated [Host.group] when moving between folders). Read, compute, and write happen
+     * under one lock — otherwise a reorder computed from a stale snapshot could clobber a concurrent
+     * write (e.g. a vault migration redirecting [Host.credentialId]). The id set must not change:
+     * implementations must reject a result with a different id set (a lost/duplicated profile means
+     * a lost secret reference). The error message must not include the [Host] values themselves.
      */
     fun reorder(transform: (List<Host>) -> List<Host>)
 }

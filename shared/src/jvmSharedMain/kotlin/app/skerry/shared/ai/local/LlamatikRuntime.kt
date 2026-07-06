@@ -18,20 +18,21 @@ import kotlinx.coroutines.withContext
 import okio.Path
 
 /**
- * [LocalLlmRuntime] поверх Llamatik (llama.cpp, GGUF) — одна реализация на desktop и Android
- * (KMP-артефакт несёт нативы обоих). `LlamaBridge` — глобальный синглтон нативной библиотеки
- * с ОДНОЙ загруженной моделью и глобальной генерацией, поэтому:
- * - экземпляр рантайма должен быть один на процесс (модель остаётся в памяти между запросами,
- *   перезагружается только при смене файла);
- * - конкурентные генерации сериализуются [mutex] — второй запрос ждёт, а не мешает первому;
- * - отмена коллектора гасит генерацию через `nativeCancelGenerate` при следующей дельте
- *   (JNI-вызов блокирующий, прервать его снаружи нельзя).
+ * [LocalLlmRuntime] over Llamatik (llama.cpp, GGUF), one implementation shared by desktop and
+ * Android (the KMP artifact bundles both natives). `LlamaBridge` is a global singleton native
+ * library with a single loaded model and global generation state, so:
+ * - one runtime instance per process (the model stays resident between requests, reloaded only
+ *   on file change);
+ * - concurrent generations are serialized by [mutex], a second request waits rather than
+ *   interfering with the first;
+ * - cancelling the collector stops generation via `nativeCancelGenerate` on the next delta
+ *   (the JNI call is blocking and cannot be interrupted from outside).
  *
- * Блокирующая работа (загрузка GGUF, инференс) идёт на [Dispatchers.IO]; дельты уходят в канал
- * `channelFlow` — колбэк Llamatik зовётся синхронно на том же IO-потоке.
+ * Blocking work (GGUF load, inference) runs on [Dispatchers.IO]; deltas go through a
+ * `channelFlow`, the Llamatik callback fires synchronously on that same IO thread.
  *
- * [contextLength] платформа задаёт при сборке графа: desktop 4096, Android 2048 (KV-кэш 4B-модели
- * на большом контексте — сотни МиБ, на телефоне это OOM).
+ * [contextLength] is set per platform at graph build time: desktop 4096, Android 2048 (a 4B
+ * model's KV cache at large context is hundreds of MiB, which OOMs on phones).
  */
 class LlamatikRuntime(
     private val contextLength: Int,
@@ -52,7 +53,7 @@ class LlamatikRuntime(
                         prompt,
                         object : GenStream {
                             override fun onDelta(text: String) {
-                                // Коллектор ушёл (отмена) — канал закрыт: просим натив остановиться.
+                                // Collector gone (cancelled): channel is closed, ask the native side to stop.
                                 if (trySendBlocking(AiDelta(text)).isClosed) LlamaBridge.nativeCancelGenerate()
                             }
 
@@ -75,10 +76,10 @@ class LlamatikRuntime(
         }
     }
 
-    /** Загрузить модель, если ещё не загружена (или загружена другая). */
+    /** Load the model if it isn't already loaded (or a different one is). */
     private fun ensureLoaded(path: Path) {
         if (loadedPath == path) return
-        // initGenerateModel сам заменяет ранее загруженную модель — отдельного unload у API нет.
+        // initGenerateModel replaces any previously loaded model; the API has no separate unload.
         if (!LlamaBridge.initGenerateModel(path.toString())) {
             loadedPath = null
             throw AiException(AiException.Kind.INVALID_REQUEST, "Failed to load local model at $path")
@@ -87,9 +88,9 @@ class LlamatikRuntime(
     }
 
     /**
-     * Параметры генерации — перед КАЖДЫМ запросом: temperature/maxOutputTokens приходят из
-     * [AiChatRequest] (терминальный бар просит низкую температуру — команда должна быть
-     * детерминированной, не творческой; чат живёт на дефолте). Вызов дешёвый (сеттер в нативе).
+     * Generation params, applied before every request: temperature/maxOutputTokens come from
+     * [AiChatRequest] (the terminal bar asks for low temperature since a command should be
+     * deterministic, not creative; chat uses the default). The call is cheap, a native setter.
      */
     private fun applyParams(request: AiChatRequest) {
         LlamaBridge.updateGenerateParams(
@@ -100,16 +101,16 @@ class LlamatikRuntime(
             repeatPenalty = 1.1f,
             contextLength = contextLength,
             numThreads = threads(),
-            useMmap = true, // GGUF мапится, а не читается в кучу — старт быстрее, RAM ниже
+            useMmap = true, // GGUF is mmapped rather than read onto the heap: faster start, lower RAM
             flashAttention = false,
             batchSize = 256,
-            gpuLayers = 0, // прекомпилированные нативы Llamatik: CPU (Metal только на macOS arm64)
+            gpuLayers = 0, // Llamatik's prebuilt natives are CPU-only (Metal only on macOS arm64)
         )
     }
 
     /**
-     * Промпт по chat-шаблону из самого GGUF; модель без шаблона — ChatML-fallback
-     * (родной формат Qwen/Phi из каталога).
+     * Renders the prompt using the chat template embedded in the GGUF; falls back to ChatML
+     * (the native format of the catalog's Qwen/Phi models) when there is no template.
      */
     private fun renderPrompt(messages: List<AiMessage>): String =
         LlamaBridge.applyChatTemplate(messages.map { it.role.wire to it.content }, addAssistantPrefix = true)
@@ -121,11 +122,11 @@ class LlamatikRuntime(
                 append("<|im_start|>assistant\n")
             }
 
-    /** Потоки инференса: физические ядра без гипертрединга обычно ~cores/2; минимум 2. */
+    /** Inference thread count: physical cores without hyperthreading is roughly cores/2, min 2. */
     private fun threads(): Int = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2)
 
     private companion object {
         const val DEFAULT_TEMPERATURE = 0.7f
-        const val DEFAULT_MAX_TOKENS = 1024 // ответы ассистента короткие (CMD/INFO, компактные объяснения)
+        const val DEFAULT_MAX_TOKENS = 1024 // assistant replies are short (CMD/INFO, compact explanations)
     }
 }

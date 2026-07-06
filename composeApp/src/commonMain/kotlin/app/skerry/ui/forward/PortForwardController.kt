@@ -18,25 +18,24 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 
-/** Направление проброса: локальный (`-L`), обратный (`-R`) или динамический SOCKS (`-D`). */
+/** Forward direction: local (`-L`), remote (`-R`), or dynamic SOCKS (`-D`). */
 enum class ForwardDirection { Local, Remote, Dynamic }
 
-/** Состояние одного проброса в списке. */
+/** State of a single forward in the list. */
 sealed interface ForwardStatus {
-    /** Слушатель поднимается. */
+    /** Listener is starting. */
     data object Starting : ForwardStatus
 
-    /** Проброс активен; [boundPort] — фактический порт слушателя (для запроса `0` — назначенный). */
+    /** Forward is active; [boundPort] is the actual listener port (assigned if requested as `0`). */
     data class Active(val boundPort: Int) : ForwardStatus
 
-    /** Поднять не удалось; [message] для показа пользователю. */
+    /** Failed to start; [message] is user-facing. */
     data class Failed(val message: String) : ForwardStatus
 }
 
 /**
- * Одна строка списка пробросов. Параметры неизменны; [status] — наблюдаемый Compose-стейт,
- * меняется контроллером. [handle] держит живой [PortForward] для последующего закрытия (наружу не
- * отдаётся).
+ * One row of the forward list. Parameters are immutable; [status] is observable Compose state,
+ * mutated by the controller. [handle] holds the live [PortForward] for closing later.
  */
 @Stable
 class ForwardEntry internal constructor(
@@ -51,44 +50,43 @@ class ForwardEntry internal constructor(
         internal set
 
     /**
-     * На паузе ли проброс (тумблер ACTIVE снят, но порт держится). Меняется через
+     * Whether the forward is paused (ACTIVE toggle off, port still held). Changed via
      * [PortForwardController.pause]/[resume].
      */
     var paused: Boolean by mutableStateOf(false)
         internal set
 
-    /** Суммарно байт, ушедших к серверу — снимок последнего опроса телеметрии. */
+    /** Total bytes sent to the server, snapshot from the last telemetry poll. */
     var bytesUp: Long by mutableStateOf(0)
         internal set
 
-    /** Суммарно байт, пришедших от сервера — снимок последнего опроса телеметрии. */
+    /** Total bytes received from the server, snapshot from the last telemetry poll. */
     var bytesDown: Long by mutableStateOf(0)
         internal set
 
-    /** Текущая скорость отдачи (байт/с) по дельте между опросами. */
+    /** Current send rate (bytes/s), by delta between polls. */
     var upRate: Long by mutableStateOf(0)
         internal set
 
-    /** Текущая скорость приёма (байт/с) по дельте между опросами. */
+    /** Current receive rate (bytes/s), by delta between polls. */
     var downRate: Long by mutableStateOf(0)
         internal set
 
     internal var handle: PortForward? = null
 
-    // Предыдущий снимок счётчиков — для расчёта скорости в опросе (наружу не отдаётся).
+    // Previous counter snapshot, for rate calculation during polling.
     internal var prevUp: Long = 0
     internal var prevDown: Long = 0
 }
 
 /**
- * Контроллер списка пробросов портов поверх живого [SshConnection]. По образцу
- * [app.skerry.ui.sftp.SftpController]: операции `SshConnection` — `suspend`, поэтому контроллер
- * держит [scope] и поднимает/снимает пробросы через [launch].
+ * Controller for the port forward list over a live [SshConnection]. `SshConnection` operations
+ * are `suspend`, so the controller holds [scope] and starts/stops forwards via [launch].
  *
- * Каждый проброс живёт своей строкой [ForwardEntry] и не блокирует другие — несколько пробросов
- * могут стартовать параллельно. Ошибка поднятия переводит строку в [ForwardStatus.Failed], не роняя
- * контроллер и не трогая остальные. Владение [SshConnection] — снаружи; контроллер закрывает только
- * сами пробросы ([remove]/[closeAll]), но не соединение.
+ * Each forward lives in its own [ForwardEntry] row and doesn't block the others; several forwards
+ * can start in parallel. A start failure moves that row to [ForwardStatus.Failed] without affecting
+ * others. Ownership of [SshConnection] is external; the controller only closes forwards
+ * ([remove]/[closeAll]), not the connection.
  */
 @Stable
 class PortForwardController(
@@ -102,9 +100,8 @@ class PortForwardController(
     private var nextId = 0L
 
     init {
-        // Опрос телеметрии живёт на scope сессии: пока сессия жива, по каждому активному пробросу
-        // снимаем счётчики байт и считаем скорость (байт/с) по дельте за интервал. Отмену scope
-        // (disconnect) цикл не глотает — выходит по isActive.
+        // Telemetry polling runs on the session scope: for each active forward, samples byte
+        // counters and derives rate (bytes/s) from the delta. Exits via isActive on scope cancel.
         scope.launch {
             while (isActive) {
                 delay(pollIntervalMillis)
@@ -127,17 +124,17 @@ class PortForwardController(
         }
     }
 
-    /** Поднять локальный проброс (`-L`). [bindPort] `0` — порт выберет ОС. */
+    /** Starts a local forward (`-L`). [bindPort] `0` means the OS picks the port. */
     fun addLocal(bindPort: Int, destHost: String, destPort: Int, bindHost: String = "127.0.0.1") =
         add(ForwardDirection.Local, bindHost, bindPort, destHost, destPort)
 
-    /** Поднять обратный проброс (`-R`). [bindPort] `0` — порт назначит сервер. */
+    /** Starts a remote forward (`-R`). [bindPort] `0` means the server picks the port. */
     fun addRemote(bindPort: Int, destHost: String, destPort: Int, bindHost: String = "127.0.0.1") =
         add(ForwardDirection.Remote, bindHost, bindPort, destHost, destPort)
 
     /**
-     * Поднять динамический проброс (`-D`, SOCKS5-прокси). Адрес назначения динамический, поэтому
-     * параметров назначения нет; [bindPort] `0` — порт выберет ОС.
+     * Starts a dynamic forward (`-D`, SOCKS5 proxy). No destination parameters, since the
+     * destination is dynamic; [bindPort] `0` means the OS picks the port.
      */
     fun addDynamic(bindPort: Int, bindHost: String = "127.0.0.1") =
         add(ForwardDirection.Dynamic, bindHost, bindPort, destHost = "", destPort = 0)
@@ -166,17 +163,17 @@ class PortForwardController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Ожидаемая ошибка — PortForwardException; ловим шире, чтобы нежданное исключение из
-                // sshj не уронило общий scope сессии (его делит SFTP), а осело в строке как Failed.
+                // Caught broadly (not just the expected PortForwardException) so an unexpected sshj
+                // exception doesn't crash the shared session scope; it lands on the row as Failed.
                 entry.status = ForwardStatus.Failed(e.message ?: getString(Res.string.ptail_forward_raise_failed))
             }
         }
     }
 
     /**
-     * Приостановить проброс [entry]: слушатель держит порт, но новые соединения не туннелируются.
-     * Флаг [ForwardEntry.paused] обновляется сразу (для отзывчивого тумблера), сама пауза слушателя —
-     * на [scope]. Действует только на активный проброс.
+     * Pauses forward [entry]: the listener keeps the port but stops tunneling new connections.
+     * [ForwardEntry.paused] updates immediately; the actual pause runs on [scope]. Only applies to
+     * an active forward.
      */
     fun pause(entry: ForwardEntry) {
         if (entry.status !is ForwardStatus.Active) return
@@ -184,20 +181,20 @@ class PortForwardController(
         scope.launch { runCatching { entry.handle?.pause() } }
     }
 
-    /** Возобновить ранее приостановленный проброс [entry]. */
+    /** Resumes a previously paused forward [entry]. */
     fun resume(entry: ForwardEntry) {
         if (entry.status !is ForwardStatus.Active) return
         entry.paused = false
         scope.launch { runCatching { entry.handle?.resume() } }
     }
 
-    /** Снять проброс [entry]: убрать из списка и закрыть слушатель (если уже поднялся). */
+    /** Removes forward [entry] from the list and closes its listener, if started. */
     fun remove(entry: ForwardEntry) {
         forwards = forwards - entry
         scope.launch { runCatching { entry.handle?.close() } }
     }
 
-    /** Снять все пробросы (при закрытии панели/сессии). Соединение остаётся открытым. */
+    /** Removes all forwards (panel/session close). The connection stays open. */
     fun closeAll() {
         val current = forwards
         forwards = emptyList()

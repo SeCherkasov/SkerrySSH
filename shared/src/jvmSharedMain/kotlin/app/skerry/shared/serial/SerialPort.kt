@@ -1,15 +1,14 @@
 package app.skerry.shared.serial
 
-/** Чётность последовательного порта. */
+/** Serial port parity. */
 enum class SerialParity { NONE, ODD, EVEN, MARK, SPACE }
 
-/** Число стоп-битов. */
+/** Number of stop bits. */
 enum class SerialStopBits { ONE, ONE_POINT_FIVE, TWO }
 
 /**
- * Параметры открытия последовательного порта. [portName] — системное имя устройства
- * (`/dev/ttyUSB0`, `COM3`); [baudRate] — скорость; [dataBits]/[stopBits]/[parity] — формат кадра
- * (по умолчанию классический `8N1`).
+ * Serial port open parameters. [portName] is the system device name (`/dev/ttyUSB0`, `COM3`);
+ * [baudRate] is the speed; [dataBits]/[stopBits]/[parity] form the frame format (default `8N1`).
  */
 data class SerialConfig(
     val portName: String,
@@ -19,17 +18,17 @@ data class SerialConfig(
     val parity: SerialParity = SerialParity.NONE,
 )
 
-/** Обнаруженный на системе последовательный порт (для списка выбора). */
+/** A serial port discovered on the system (for selection lists). */
 data class SerialPortInfo(
     val systemName: String,
     val description: String,
 )
 
 /**
- * Открытый последовательный порт — минимальный блокирующий контракт байтового IO. Реализуется
- * платформенно ([SerialSystem]): desktop — нативный порт (jSerialComm), Android — USB-OTG (позже).
- * [read] блокирует до появления данных и возвращает число прочитанных байтов либо `-1`, если порт
- * закрыт/пропал (устройство отключили).
+ * An open serial port — minimal blocking byte-IO contract. Implemented per platform
+ * ([SerialSystem]): desktop via native port (jSerialComm), Android via USB-OTG (later).
+ * [read] blocks until data arrives, returning the byte count read or `-1` if the port is
+ * closed or gone (device unplugged).
  */
 interface SerialPortHandle {
     val isOpen: Boolean
@@ -39,21 +38,21 @@ interface SerialPortHandle {
 }
 
 /**
- * Платформенный доступ к последовательным портам. Живёт в JVM-узле (desktop + Android); actual на
- * desktop использует jSerialComm, на Android пока сообщает об отсутствии поддержки (USB-OTG требует
- * выбора устройства и runtime-разрешения — отдельный шаг). [SerialUnavailableException] отражает
- * платформенную недоступность (нет нативной библиотеки / не реализовано).
+ * Platform access to serial ports. Lives in the JVM node (desktop + Android); the desktop actual
+ * uses jSerialComm, Android currently reports no support (USB-OTG needs device selection and a
+ * runtime permission — separate work). [SerialUnavailableException] signals platform
+ * unavailability (no native library / not implemented).
  */
 expect object SerialSystem {
-    /** Список доступных портов (пустой, если платформа не поддерживает serial). */
+    /** Available ports (empty if the platform has no serial support). */
     fun listPorts(): List<SerialPortInfo>
 
     /**
-     * Открыть порт по [config].
-     * @throws SerialUnavailableException порт недоступен/платформа не поддерживает serial
+     * Open a port with [config].
+     * @throws SerialUnavailableException port unavailable / platform has no serial support
      */
     fun open(config: SerialConfig): SerialPortHandle
 }
 
-/** Порт недоступен: платформа не поддерживает serial или устройство нельзя открыть. */
+/** Port unavailable: platform has no serial support, or the device could not be opened. */
 class SerialUnavailableException(message: String, cause: Throwable? = null) : Exception(message, cause)

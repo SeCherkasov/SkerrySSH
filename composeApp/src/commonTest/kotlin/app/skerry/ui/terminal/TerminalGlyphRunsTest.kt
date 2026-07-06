@@ -7,10 +7,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Сегментация строки на раны глифов для рендера. Ключевое требование (баг рамок mc): подряд идущие
- * ASCII-клетки схлопываются в один `drawText` (моноширинность гарантирована), а каждый НЕ-ASCII глиф
- * (box-drawing `─│┌`, CJK, символы) рисуется в свою колонку отдельно — иначе fallback-шрифт даёт
- * не-cellWidth-овые advance, ран накапливает дрейф и сетка разъезжается.
+ * Segmenting a row into glyph runs for rendering. Key requirement: consecutive ASCII cells
+ * collapse into a single `drawText` call (monospace is guaranteed), while each non-ASCII glyph
+ * (box-drawing `─│┌`, CJK, symbols) is drawn in its own single-column run — otherwise the fallback
+ * font's non-cellWidth advance accumulates drift and the grid goes out of alignment.
  */
 class TerminalGlyphRunsTest {
 
@@ -37,7 +37,7 @@ class TerminalGlyphRunsTest {
 
     @Test
     fun `each box-drawing glyph is its own single-column run`() {
-        // ─── (U+2500 ×3): НЕ должно склеиться в один ран — иначе горизонталь рамки дрейфует.
+        // ─── (U+2500 x3): must not merge into one run, or the border line drifts.
         val dash = '─'
         val runs = glyphRuns(row(TermCell(dash), TermCell(dash), TermCell(dash)))
         assertEquals(3, runs.size)
@@ -50,7 +50,7 @@ class TerminalGlyphRunsTest {
 
     @Test
     fun `box-drawing splits surrounding ascii runs`() {
-        // "│ a" — вертикаль рамки U+2502, потом ASCII-хвост; каждый отдельным сегментом по колонке.
+        // "│ a": border vertical U+2502 followed by an ASCII tail; each its own column segment.
         val bar = '│'
         val runs = glyphRuns(row(TermCell(bar), TermCell(' '), TermCell('a')))
         assertEquals(2, runs.size)

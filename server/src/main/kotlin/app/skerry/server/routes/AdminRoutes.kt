@@ -32,22 +32,23 @@ import io.ktor.server.routing.route
 import java.security.MessageDigest
 
 /**
- * Админ-эндпоинты для self-hosted консоли. `/admin/health` открыт (liveness); остальное поддерево
- * `/admin` закрыто статическим [app.skerry.server.config.ServerConfig.adminToken] — отдельная
- * admin-роль (`docs/skerry-sync-design.md` §3), проверяется одним route-scoped интерцептором.
- * Zero-knowledge сохраняется: отдаются только метаданные (счётчики, список устройств), к
- * содержимому записей доступа нет по определению.
+ * Admin endpoints for the self-hosted console. `/admin/health` is open (liveness); the rest of
+ * the `/admin` subtree is gated by the static [app.skerry.server.config.ServerConfig.adminToken]
+ * (a separate admin role, `docs/skerry-sync-design.md` §3), checked by one route-scoped
+ * interceptor. Zero-knowledge holds: only metadata (counts, device list) is served, no access to
+ * record content.
  */
 fun Route.adminRoutes(services: Services) {
     get("/admin/health") {
         call.respond(HealthResponse("ok", SERVER_VERSION))
     }
 
-    // Guard — на прозрачном дочернем узле (как у authenticate {}): роутинг мержит одинаковые
-    // селекторы, и плагин прямо на route("/admin") накрыл бы и открытый /admin/health выше.
+    // Guard on a transparent child node (like authenticate {}): routing merges identical
+    // selectors, so a plugin installed directly on route("/admin") would also cover the open
+    // /admin/health above.
     val guarded = route("/admin") {}.createChild(AdminGuardSelector())
-    // Единая route-scoped проверка admin-токена на всё поддерево: при провале плагин сам
-    // отвечает 401 и обрывает pipeline — до обработчиков маршрутов запрос не доходит.
+    // Single route-scoped admin-token check for the whole subtree: on failure the plugin
+    // responds 401 itself and aborts the pipeline before any route handler runs.
     guarded.install(AdminAuth) { token = services.config.adminToken }
 
     with(guarded) {
@@ -155,7 +156,7 @@ fun Route.adminRoutes(services: Services) {
     }
 }
 
-/** Прозрачный селектор (не ест сегменты пути) — отдельный узел под guard внутри /admin. */
+/** Transparent selector (consumes no path segments); a separate guard node inside /admin. */
 private class AdminGuardSelector : RouteSelector() {
     override suspend fun evaluate(context: RoutingResolveContext, segmentIndex: Int): RouteSelectorEvaluation =
         RouteSelectorEvaluation.Transparent
@@ -168,8 +169,8 @@ private class AdminAuthConfig {
 }
 
 /**
- * Хук с доступом к PipelineContext: в отличие от `onCall`, позволяет `finish()` — иначе после 401
- * обработчик маршрута всё равно выполнился бы (и, например, удалил аккаунт без токена).
+ * Hook with PipelineContext access: unlike `onCall`, allows `finish()` — otherwise the route
+ * handler would still run after a 401 (e.g. deleting an account without a token).
  */
 private object AdminAuthHook : Hook<suspend (ApplicationCall) -> Boolean> {
     override fun install(pipeline: ApplicationCallPipeline, handler: suspend (ApplicationCall) -> Boolean) {
@@ -179,16 +180,16 @@ private object AdminAuthHook : Hook<suspend (ApplicationCall) -> Boolean> {
     }
 }
 
-/** Route-scoped guard поддерева `/admin`: статический токен из [AdminAuthConfig.token]. */
+/** Route-scoped guard for the `/admin` subtree: static token from [AdminAuthConfig.token]. */
 private val AdminAuth = createRouteScopedPlugin("AdminAuth", ::AdminAuthConfig) {
     val token = pluginConfig.token
     on(AdminAuthHook) { call -> call.adminAuthorized(token) }
 }
 
 /**
- * Constant-time проверка статического admin-токена. При отсутствии/несовпадении сразу отвечает
- * 401 и возвращает false — вызывающий хук делает `finish()`. Сравнение постоянного времени:
- * не даём по таймингу побайтно подобрать долгоживущий токен.
+ * Constant-time check of the static admin token. Missing/mismatched token responds 401 and
+ * returns false; the calling hook does `finish()`. Constant-time comparison prevents a byte-by-
+ * byte timing attack against the long-lived token.
  */
 private suspend fun ApplicationCall.adminAuthorized(token: String): Boolean {
     val provided = request.headers["X-Admin-Token"]
@@ -198,13 +199,13 @@ private suspend fun ApplicationCall.adminAuthorized(token: String): Boolean {
 }
 
 /**
- * Сравнение постоянного времени. Сначала хэшируем оба значения SHA-256 до фиксированных 32 байт,
- * потом сверяем — иначе [MessageDigest.isEqual] на разной длине выходит раньше и по таймингу выдаёт
- * длину токена (security-ревью M1).
+ * Constant-time comparison. Both values are hashed to a fixed 32 bytes with SHA-256 first, then
+ * compared — otherwise [MessageDigest.isEqual] on differing lengths returns early and leaks the
+ * token length via timing.
  */
 private fun constantTimeEquals(a: String, b: String): Boolean {
     val md = MessageDigest.getInstance("SHA-256")
     val ha = md.digest(a.toByteArray(Charsets.UTF_8))
-    val hb = md.digest(b.toByteArray(Charsets.UTF_8)) // digest() сбрасывает состояние md
+    val hb = md.digest(b.toByteArray(Charsets.UTF_8)) // digest() resets md's state
     return MessageDigest.isEqual(ha, hb)
 }

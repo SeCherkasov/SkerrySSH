@@ -86,9 +86,9 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
 /**
- * Оверлей блокировки (мок-путь): радиальный фон, крупный логотип,
- * поле мастер-пароля и кнопки. Разблокировка здесь — заглушка ([DesktopDesignState.unlock]);
- * живой гейт поверх `VaultGateController` рендерит [DesktopUnlockScreen]/[DesktopCreateScreen].
+ * Lock overlay (mock path): radial background, large logo, master password field and buttons. Unlock
+ * here is a stub ([DesktopDesignState.unlock]); the live gate over `VaultGateController` renders
+ * [DesktopUnlockScreen]/[DesktopCreateScreen].
  */
 @Composable
 fun LockScreen(state: DesktopDesignState) {
@@ -106,10 +106,10 @@ fun LockScreen(state: DesktopDesignState) {
 }
 
 /**
- * Живая форма разблокировки: тот же визуал, что у [LockScreen], но поверх [VaultGateController]
- * (через слот `unlockForm` в [app.skerry.ui.vault.VaultGate]). На сабмите пароль уходит в
- * [onUnlock] как [CharArray] и затирается контроллером; [error] локализуется
- * [vaultGateErrorMessage]. Кнопка биометрии видна только при [canUseBiometric].
+ * Live unlock form: same visuals as [LockScreen] but over [VaultGateController] (via the `unlockForm`
+ * slot in [app.skerry.ui.vault.VaultGate]). On submit the password goes to [onUnlock] as a [CharArray]
+ * and is wiped by the controller; [error] is localized by [vaultGateErrorMessage]. The biometric button
+ * shows only when [canUseBiometric].
  */
 @Composable
 fun DesktopUnlockScreen(
@@ -121,8 +121,8 @@ fun DesktopUnlockScreen(
 ) {
     var pwd by remember { mutableStateOf("") }
     val submit = { if (pwd.isNotEmpty()) onUnlock(pwd.toCharArray()) }
-    // Биометрия включена — вызываем системный промпт сразу при входе на форму (один раз),
-    // как делала Material-форма; кнопка отпечатка остаётся для повторной попытки.
+    // Biometrics enabled — trigger the system prompt right on entering the form (once); the fingerprint
+    // button remains for a retry.
     if (canUseBiometric) {
         LaunchedEffect(Unit) { onBiometric() }
     }
@@ -136,8 +136,8 @@ fun DesktopUnlockScreen(
             PrimaryButton(stringResource(Res.string.shell_unlock), onClick = submit, modifier = Modifier.weight(1f))
             if (canUseBiometric) BiometricButton(onClick = onBiometric)
         }
-        // Тупик забытого пароля расшивается только сбросом (zero-knowledge): ненавязчивая ссылка
-        // под кнопкой ведёт на экран подтверждения.
+        // A forgotten password can only be resolved by a reset (zero-knowledge): an unobtrusive link
+        // under the button leads to the confirmation screen.
         Txt(
             stringResource(Res.string.shell_forgot_password),
             color = D.faint,
@@ -151,8 +151,8 @@ fun DesktopUnlockScreen(
 }
 
 /**
- * Экран повреждённого файла vault (стиль макета). Файл не читается → пароль ввести нельзя; единственное
- * действие — уйти на подтверждение сброса ([onReset]). Иконка-предупреждение amber (lighthouse-момент).
+ * Corrupted vault file screen. The file can't be read → no password entry; the only action is to go to
+ * reset confirmation ([onReset]). Amber warning icon.
  */
 @Composable
 fun DesktopCorruptedScreen(onReset: () -> Unit) {
@@ -165,9 +165,9 @@ fun DesktopCorruptedScreen(onReset: () -> Unit) {
 }
 
 /**
- * Экран подтверждения безвозвратного сброса (стиль макета): выбор объёма ([ResetScope]) +
- * type-to-confirm — кнопка сброса активна только когда вписано [RESET_CONFIRM_WORD]. Удаление
- * необратимо (модель Bitwarden/1Password), поэтому барьер от случайного клика жёсткий.
+ * Confirmation screen for an irreversible reset: scope choice ([ResetScope]) + type-to-confirm — the
+ * reset button is enabled only when [RESET_CONFIRM_WORD] is typed. Deletion is irreversible, so the
+ * barrier against an accidental click is strict.
  */
 @Composable
 fun DesktopResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
@@ -214,7 +214,7 @@ fun DesktopResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
     }
 }
 
-/** Строка выбора объёма сброса: радио-точка + заголовок/подзаголовок, кликабельна целиком. */
+/** Reset scope row: radio dot + title/subtitle, clickable as a whole. */
 @Composable
 private fun ResetScopeRow(selected: Boolean, title: String, subtitle: String, onSelect: () -> Unit) {
     Row(
@@ -242,14 +242,14 @@ private fun ResetScopeRow(selected: Boolean, title: String, subtitle: String, on
 }
 
 /**
- * Живая форма создания мастер-пароля при первом запуске (слот `createForm`): два поля + кнопка,
- * валидация (длина/совпадение) — в [VaultGateController]; сюда оба буфера уходят как [CharArray]
- * и затираются там же. Тот же «night sea»-визуал, что у [DesktopUnlockScreen].
+ * Live master-password creation form on first launch (`createForm` slot): two fields + a button,
+ * validation (length/match) in [VaultGateController]; both buffers go here as [CharArray] and are wiped
+ * there. Same "night sea" visuals as [DesktopUnlockScreen].
  *
- * Если платформа провела sync ([sync] != null и [onPairingComplete] != null), под формой появляется
- * аффорданс «у меня есть код связывания» (быстрый паринг, вариант B): он открывает [PairingJoinScreen],
- * где пароль вводится ОДИН раз — координатор сам создаёт vault под ним и принимает ключ аккаунта, после
- * чего [onPairingComplete] уводит гейт к предложению биометрии/в приложение (повторного ввода нет).
+ * If the platform wired sync ([sync] != null and [onPairingComplete] != null), an "I have a pairing
+ * code" affordance appears under the form (quick pairing, variant B): it opens [PairingJoinScreen]
+ * where the password is entered once — the coordinator creates the vault under it and adopts the
+ * account key, after which [onPairingComplete] moves the gate to the biometrics offer / into the app.
  */
 @Composable
 fun DesktopCreateScreen(
@@ -260,11 +260,11 @@ fun DesktopCreateScreen(
 ) {
     var pwd by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    // Утрата мастер-пароля = безвозвратная утрата vault (zero-knowledge): требуем явного признания
-    // этого до создания, чтобы «нет восстановления» не осталось незамеченным мелким текстом.
+    // Losing the master password = irreversibly losing the vault (zero-knowledge): require explicit
+    // acknowledgement before creation so "no recovery" isn't missed as fine print.
     var acknowledged by remember { mutableStateOf(false) }
     var joining by remember { mutableStateOf(false) }
-    // Минимум длины — тот же, что форсирует VaultGateController, чтобы кнопка не была активна до отказа.
+    // Minimum length matches what VaultGateController enforces, so the button isn't enabled before rejection.
     val canCreate = pwd.length >= MIN_MASTER_PASSWORD_LENGTH && confirm.isNotEmpty() && acknowledged
     val submit = { if (canCreate) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
 
@@ -300,7 +300,7 @@ fun DesktopCreateScreen(
     }
 }
 
-/** Полоска силы мастер-пароля (4 сегмента) + подпись; цвет по [PasswordStrength]. */
+/** Master-password strength bar (4 segments) + label; color by [PasswordStrength]. */
 @Composable
 private fun PasswordStrengthMeter(strength: PasswordStrength) {
     val (filled, color, label) = when (strength) {
@@ -322,7 +322,7 @@ private fun PasswordStrengthMeter(strength: PasswordStrength) {
     }
 }
 
-/** Чекбокс-подтверждение «пароль невосстановим», гейтит создание vault. */
+/** "Password is unrecoverable" acknowledgement checkbox, gates vault creation. */
 @Composable
 private fun NoRecoveryAcknowledge(checked: Boolean, onToggle: () -> Unit) {
     Row(
@@ -347,9 +347,9 @@ private fun NoRecoveryAcknowledge(checked: Boolean, onToggle: () -> Unit) {
     }
 }
 
-// Общий каркас экранов блокировки.
+// Shared scaffold for lock screens.
 
-/** Общий каркас экрана блокировки: радиальный фон, логотип, заголовок/подзаголовок, [fields], футер. */
+/** Shared lock-screen scaffold: radial background, logo, title/subtitle, [fields], footer. */
 @Composable
 private fun LockScaffold(
     title: String,
@@ -398,7 +398,7 @@ private fun LockScaffold(
     }
 }
 
-/** Поле мастер-пароля макета: иконка-замок + скрытый ввод; Enter (Done) вызывает [onSubmit]. */
+/** Master-password field: lock icon + masked input; Enter (Done) calls [onSubmit]. */
 @Composable
 private fun LockPasswordField(
     value: String,
@@ -408,13 +408,13 @@ private fun LockPasswordField(
     onSubmit: () -> Unit = {},
     autoFocus: Boolean = false,
 ) {
-    // Автофокус на старте экрана (запрос пользователя): курсор сразу в поле пароля без клика.
+    // Autofocus on screen entry: the cursor lands in the password field without a click.
     val focusRequester = remember { FocusRequester() }
     if (autoFocus) {
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
     }
-    // Рамка/паддинг/иконка живут в decorationBox самого поля, поэтому зона ввода покрывает
-    // всю видимую рамку целиком — клик в любую её точку (паддинги, край, иконка) ставит каретку.
+    // Border/padding/icon live in the field's own decorationBox, so the input area covers the entire
+    // visible border — a click anywhere in it (padding, edge, icon) places the caret.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -445,7 +445,7 @@ private fun LockPasswordField(
     )
 }
 
-/** Плоское текстовое поле макета (без маскирования) — для type-to-confirm на экране сброса. */
+/** Flat text field (no masking) — for type-to-confirm on the reset screen. */
 @Composable
 private fun LockTextField(
     value: String,
@@ -481,7 +481,7 @@ private fun LockTextField(
     )
 }
 
-/** Контурная квадратная кнопка биометрии (отпечаток). */
+/** Outlined square biometric (fingerprint) button. */
 @Composable
 private fun BiometricButton(onClick: () -> Unit) {
     Row(

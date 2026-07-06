@@ -11,10 +11,10 @@ import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransacti
 import org.jetbrains.exposed.sql.update
 
 /**
- * Запись, пришедшая от клиента (ещё без серверного курсора).
+ * A record received from the client, not yet assigned a server cursor.
  *
- * equals/hashCode переопределены вручную: автогенерация data-класса сравнивала бы [blob] по
- * ссылке, из-за чего две структурно одинаковые записи считались бы разными (security/kotlin-ревью).
+ * equals/hashCode are overridden manually: the data-class default would compare [blob] by
+ * reference, making two structurally identical records compare unequal.
  */
 class IncomingRecord(
     val id: String,
@@ -46,32 +46,32 @@ class IncomingRecord(
 }
 
 /**
- * Результат batch-upsert: победившие записи (в порядке входа) + новый курсор аккаунта. [changed] —
- * хоть одна запись выиграла LWW и курсор продвинулся; по нему PUT решает, слать ли WS-сигнал
- * (no-op push сигнал НЕ публикует, иначе live-sync уходит в петлю push→WS→push).
+ * Result of a batch upsert: winning records (input order) plus the new account cursor. [changed]
+ * is true if any record won LWW and the cursor advanced; PUT uses it to decide whether to send a
+ * WS signal (a no-op push does not publish, to avoid a push -> WS -> push loop).
  */
 data class UpsertResult(val records: List<StoredRecord>, val cursor: Long, val changed: Boolean)
 
 /**
- * Зашифрованные записи vault. Содержит ядро разрешения конфликтов LWW
- * (`docs/skerry-sync-design.md` §3) и дельта-выборку по серверному курсору.
+ * Encrypted vault records. Implements LWW conflict resolution (`docs/skerry-sync-design.md` §3)
+ * and delta selection by server cursor.
  *
- * [lockAccountRow] = true (PostgreSQL) берёт `SELECT … FOR UPDATE` на строку аккаунта, сериализуя
- * конкурентные upsert'ы и не давая двум транзакциям присвоить одинаковый `serverSeq`. Для SQLite
- * (pool=1, единственный писатель) блокировка не нужна.
+ * [lockAccountRow] = true (PostgreSQL) takes `SELECT ... FOR UPDATE` on the account row, serializing
+ * concurrent upserts so two transactions can't assign the same `serverSeq`. Not needed for SQLite
+ * (pool=1, single writer).
  */
 class RecordRepository(private val db: Database, private val lockAccountRow: Boolean = false) {
 
     /**
-     * Batch upsert с LWW. Для каждой входящей записи принимается бóльшая по
-     * (`version`, затем лексикографически `deviceId`); иначе остаётся серверная версия.
-     * Возвращает победившее состояние каждой записи (с присвоенным `serverSeq`) и финальный
-     * курсор — клиент по записям узнаёт, какие его изменения отвергнуты, по курсору двигает `since`.
+     * Batch upsert with LWW. For each incoming record, the larger of (`version`, then `deviceId`
+     * lexicographically) wins; otherwise the server version is kept. Returns each record's winning
+     * state (with assigned `serverSeq`) and the final cursor, so the client can tell which of its
+     * changes were rejected and advance `since` from the cursor.
      */
     suspend fun upsert(accountId: String, incoming: List<IncomingRecord>): UpsertResult = newSuspendedTransaction(Dispatchers.IO, db) {
         val accountQuery = Accounts.selectAll().where { Accounts.id eq accountId }
-        // Курсор сравниваем с локально снятым seqBefore, НЕ с повторным чтением из БД: при
-        // READ COMMITTED повторный SELECT увидел бы коммит конкурента и регрессировал курсор.
+        // Compare against the locally captured seqBefore, not a re-read from the DB: under
+        // READ COMMITTED a re-SELECT would see a concurrent commit and regress the cursor.
         val seqBefore = (if (lockAccountRow) accountQuery.forUpdate() else accountQuery).single()[Accounts.syncSeq]
         var seq = seqBefore
 
@@ -124,10 +124,10 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
     }
 
     /**
-     * id надгробий аккаунта, уже распространённых на ВСЕ устройства — общий критерий
-     * [propagatedTombstones] по [tombstoneWatermark] (тот же, что у [AdminRepository.purgeTombstones]).
-     * Клиент по этому списку физически забывает тромбстоуны ([app.skerry.shared.vault.Vault.compact])
-     * и перестаёт их пушить — иначе re-push воскрешал бы их на сервере после purge ("крот").
+     * IDs of the account's tombstones already propagated to all devices, via [propagatedTombstones]
+     * against [tombstoneWatermark] (shared with [AdminRepository.purgeTombstones]). Clients use this
+     * list to physically forget tombstones ([app.skerry.shared.vault.Vault.compact]) and stop
+     * pushing them, so a re-push can't resurrect them on the server after a purge.
      */
     suspend fun compactedTombstoneIds(accountId: String): List<String> = newSuspendedTransaction(Dispatchers.IO, db) {
         Records.selectAll()
@@ -135,7 +135,7 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
             .map { it[Records.recordId] }
     }
 
-    /** Дельта: записи с `serverSeq > since`, по возрастанию курсора. */
+    /** Delta: records with `serverSeq > since`, ordered by ascending cursor. */
     suspend fun delta(accountId: String, since: Long): List<StoredRecord> = newSuspendedTransaction(Dispatchers.IO, db) {
         Records.selectAll()
             .where { (Records.accountId eq accountId) and (Records.serverSeq greater since) }

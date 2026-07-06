@@ -1,13 +1,13 @@
 package app.skerry.shared.files
 
-/** Тип объекта в файловой панели; «прочее» — устройства, сокеты, FIFO и т.п. */
+/** Object type in the file panel; Other covers devices, sockets, FIFOs, etc. */
 enum class FileItemType { File, Directory, Symlink, Other }
 
 /**
- * Метаданные объекта в файловой панели — нейтральны к источнику (локальная ФС или удалённый SFTP),
- * чтобы один и тот же UI-список и контроллер обслуживали обе панели Total-Commander-режима.
- * [path] — абсолютный путь в пространстве своего источника; [size] в байтах; [modifiedEpochSeconds]
- * — mtime (Unix-секунды, `0`, если источник его не сообщил). Для симлинка атрибуты — самого линка.
+ * File panel object metadata, source-neutral (local filesystem or remote SFTP) so the same UI list
+ * and controller serve both panes of the dual-pane view. [path] is an absolute path in the source's
+ * own namespace; [size] in bytes; [modifiedEpochSeconds] is mtime (Unix seconds, `0` if unreported).
+ * For a symlink, attributes describe the link itself.
  */
 data class FileItem(
     val name: String,
@@ -18,52 +18,51 @@ data class FileItem(
 )
 
 /**
- * Навигация и операции над каталогами одного файлового источника — общий контракт локальной ФС
- * ([LocalFileBrowser]) и удалённого SFTP (адаптер поверх [app.skerry.shared.sftp.SftpClient]).
- * Передачу файлов контракт НЕ описывает: в двухпанельном режиме она всегда идёт между локальной ФС
- * и SFTP и выражается готовыми `SftpClient.download`/`upload`, поэтому живёт в координаторе экрана,
- * а не в браузере. Все методы suspend: I/O уводится с вызывающего потока. Пути — абсолютные,
- * POSIX-семантика (разделитель `/`).
+ * Navigation and directory operations for a single file source — shared contract for the local
+ * filesystem ([LocalFileBrowser]) and remote SFTP (adapter over [app.skerry.shared.sftp.SftpClient]).
+ * File transfer is out of scope: in dual-pane mode it always goes between local filesystem and SFTP
+ * via `SftpClient.download`/`upload`, so it lives in the screen coordinator, not the browser. All
+ * methods are suspend (I/O off the caller's thread). Paths are absolute, POSIX semantics (`/` separator).
  */
 interface FileBrowser {
 
-    /** Короткая метка источника для заголовка панели («This Mac», имя хоста). */
+    /** Short source label for the panel header ("This Mac", host name). */
     val label: String
 
     /**
-     * Канонический абсолютный путь для [path] (разворачивает `.`, `..`). Передать `.` — получить
-     * стартовый каталог источника (домашний локально, рабочий каталог сессии у SFTP). Разворот
-     * симлинков НЕ гарантируется и зависит от источника: SFTP разрешает их на сервере
-     * (`SSH_FXP_REALPATH`), локальная реализация нормализует путь лишь лексически.
-     * @throws FileBrowserException путь не разрешается
+     * Canonical absolute path for [path] (resolves `.`, `..`). Pass `.` to get the source's starting
+     * directory (home locally, session working directory for SFTP). Symlink resolution is not
+     * guaranteed and depends on the source: SFTP resolves them server-side (`SSH_FXP_REALPATH`), the
+     * local implementation only normalizes the path lexically.
+     * @throws FileBrowserException if the path cannot be resolved
      */
     suspend fun realpath(path: String): String
 
     /**
-     * Содержимое каталога [path] без `.` и `..`; порядок не гарантируется (панель сортирует сама).
-     * @throws FileBrowserException путь не существует, это не каталог или нет прав
+     * Contents of directory [path], excluding `.` and `..`; order is not guaranteed (the panel sorts).
+     * @throws FileBrowserException if the path doesn't exist, isn't a directory, or access is denied
      */
     suspend fun list(path: String): List<FileItem>
 
     /**
-     * Создать каталог [path]. Родитель должен существовать (без `-p`).
-     * @throws FileBrowserException путь занят или нет прав
+     * Create directory [path]. Parent must already exist (no `-p`).
+     * @throws FileBrowserException if the path is occupied or access is denied
      */
     suspend fun mkdir(path: String)
 
     /**
-     * Удалить [item]. Каталог удаляется РЕКУРСИВНО (вместе с содержимым); файл/симлинк — как сам
-     * объект (по симлинку в цель не заходим). Подтверждение — на стороне UI.
-     * @throws FileBrowserException пути нет или нет прав
+     * Delete [item]. A directory is deleted recursively (with its contents); a file/symlink is
+     * deleted as itself (a symlink's target is not followed). Confirmation is the UI's responsibility.
+     * @throws FileBrowserException if the path is missing or access is denied
      */
     suspend fun delete(item: FileItem)
 
     /**
-     * Переименовать/переместить [from] в [to] в пределах источника.
-     * @throws FileBrowserException источника нет, цель занята или нет прав
+     * Rename/move [from] to [to] within the source.
+     * @throws FileBrowserException if the source is missing, the target is occupied, or access is denied
      */
     suspend fun rename(from: String, to: String)
 }
 
-/** Ошибка операции файлового браузера: нет пути/прав, неверный тип объекта или обрыв источника. */
+/** File browser operation error: missing path/access, wrong object type, or source disconnect. */
 class FileBrowserException(message: String, cause: Throwable? = null) : Exception(message, cause)

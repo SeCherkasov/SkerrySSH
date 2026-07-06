@@ -3,23 +3,22 @@ package app.skerry.ui.host
 import app.skerry.shared.host.Host
 
 /**
- * Чистые перестановки плоского списка профилей для ручной сортировки сайдбара (drag-and-drop).
+ * Pure reorderings of the flat profile list for manual sidebar sorting (drag-and-drop).
  *
- * Источник правды по порядку — сам порядок списка хостов (как в [app.skerry.shared.host.HostStore]):
- * отдельного поля сортировки в [Host] нет, чтобы не плодить миграцию и не ломать паритет крипто/sync.
- * Папки сайдбара выводятся из [Host.group] по первому появлению ([groupHostsByFolder]); эти функции
- * держат инвариант «хосты одной группы идут непрерывным блоком», поэтому результат всегда уплощается
- * через корзины групп. Зафиксированы [app.skerry.ui.host.HostReorderingTest].
+ * Order's source of truth is the host list order itself (as in [app.skerry.shared.host.HostStore]):
+ * there is no separate sort field on [Host]. Sidebar folders are derived from [Host.group] by first
+ * appearance ([groupHostsByFolder]); these functions preserve the invariant that hosts of one group
+ * form a contiguous block, so the result is always flattened through group buckets.
  */
 
 /**
- * Канонический ключ группы: пустая/`null`-группа сводятся к `null`, как в [groupHostsByFolder]
- * (одна папка «Ungrouped»). Иначе `null` и `""` дали бы две корзины, и перестановка «Ungrouped»
- * сдвинула бы только часть её хостов.
+ * Canonical group key: blank/`null` group collapses to `null`, matching [groupHostsByFolder]
+ * (a single "Ungrouped" folder). Otherwise `null` and `""` would produce two buckets, and reordering
+ * "Ungrouped" would move only part of its hosts.
  */
 private fun String?.canonicalGroup(): String? = this?.takeIf { it.isNotBlank() }
 
-/** Корзины «группа → хосты» в порядке первого появления группы (null-группа — отдельный ключ). */
+/** "Group -> hosts" buckets in order of the group's first appearance (null-group is its own key). */
 private fun bucketize(hosts: List<Host>): LinkedHashMap<String?, MutableList<Host>> {
     val buckets = LinkedHashMap<String?, MutableList<Host>>()
     for (host in hosts) buckets.getOrPut(host.group.canonicalGroup()) { mutableListOf() }.add(host)
@@ -27,10 +26,10 @@ private fun bucketize(hosts: List<Host>): LinkedHashMap<String?, MutableList<Hos
 }
 
 /**
- * Переставить хост [hostId] в группу [targetGroup] на позицию [targetIndexInGroup] среди её хостов.
- * Покрывает оба drag-сценария: переупорядочивание внутри папки ([targetGroup] == текущая группа) и
- * перенос в другую папку (с переписыванием [Host.group]). Индекс зажимается в допустимый диапазон;
- * опустевшая исходная группа исчезает. Неизвестный [hostId] — список без изменений.
+ * Move host [hostId] into group [targetGroup] at [targetIndexInGroup] among its hosts. Covers both
+ * drag scenarios: reordering within a folder ([targetGroup] == current group) and moving to another
+ * (rewriting [Host.group]). Index is clamped to a valid range; an emptied source group disappears.
+ * Unknown [hostId] leaves the list unchanged.
  */
 fun moveHostToGroup(
     hosts: List<Host>,
@@ -51,12 +50,12 @@ fun moveHostToGroup(
 }
 
 /**
- * Переименовать группу [oldName] → [newName] во всех профилях. Сопоставление по канону группы
- * (пустое/`null` сводится к `null`); пустой/`null` [newName] разгруппировывает хосты (`Host.group`=
- * `null`) — этим же путём «удаляется» группа: её хосты переезжают в Ungrouped, сами профили остаются.
- * Результат уплощается через корзины групп — как [moveGroup]/[moveHostToGroup], чтобы сохранить
- * инвариант «хосты одной группы идут непрерывным блоком» даже при слиянии в существующую группу.
- * Неизвестная/пустая [oldName] или совпадение old==new — список без изменений (порядок и id целы).
+ * Rename group [oldName] to [newName] across all profiles. Matching uses the canonical group key
+ * (blank/`null` collapses to `null`); a blank/`null` [newName] ungroups the hosts (`Host.group` =
+ * `null`) — the same path used to "delete" a group, moving its hosts to Ungrouped while keeping the
+ * profiles. Result is flattened through group buckets, like [moveGroup]/[moveHostToGroup], to
+ * preserve the contiguous-block invariant even when merging into an existing group. Unknown/blank
+ * [oldName] or old==new leaves the list unchanged.
  */
 fun renameHostGroup(hosts: List<Host>, oldName: String?, newName: String?): List<Host> {
     val from = oldName.canonicalGroup() ?: return hosts
@@ -67,8 +66,8 @@ fun renameHostGroup(hosts: List<Host>, oldName: String?, newName: String?): List
 }
 
 /**
- * Переставить целую папку [group] на позицию [targetGroupIndex] среди папок (порядок хостов внутри
- * сохраняется). Индекс зажимается; неизвестная [group] — список без изменений.
+ * Move folder [group] as a whole to [targetGroupIndex] among folders (host order within it is
+ * preserved). Index is clamped; unknown [group] leaves the list unchanged.
  */
 fun moveGroup(hosts: List<Host>, group: String?, targetGroupIndex: Int): List<Host> {
     val canonical = group.canonicalGroup()

@@ -1,7 +1,4 @@
 package app.skerry.ui.vault
 
-/**
- * Desktop: аналога keyguard нет, поэтому при уходе окна в фон запираем vault как и раньше —
- * консервативно по безопасности.
- */
+/** Desktop has no keyguard equivalent, so the vault locks when the window goes to the background. */
 actual fun deviceMandatesAutoLock(): Boolean = true

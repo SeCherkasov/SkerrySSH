@@ -13,9 +13,9 @@ class TeamRoleTest {
         assertEquals(TeamRole.ADMIN, TeamRole.fromWire("admin"))
         assertEquals(TeamRole.EDITOR, TeamRole.fromWire("editor"))
         assertEquals(TeamRole.VIEWER, TeamRole.fromWire("viewer"))
-        // legacy до гранулярных ролей: member мог писать записи → editor
+        // legacy role from before granular roles: member could write records -> editor
         assertEquals(TeamRole.EDITOR, TeamRole.fromWire("member"))
-        // неизвестное — least privilege
+        // unknown role: least privilege
         assertEquals(TeamRole.VIEWER, TeamRole.fromWire("superadmin"))
         assertEquals(TeamRole.VIEWER, TeamRole.fromWire(""))
     }

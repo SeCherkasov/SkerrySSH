@@ -37,7 +37,7 @@ class ConnectionTestTest {
         val conn = ProbeConnection(roundTrip = 12L)
         val status = runConnectionTest(ProbeTransport(conn), target, auth)
         assertEquals(ConnectionTestStatus.Success(12L), status)
-        assertTrue(conn.disconnected) // временное соединение закрыто
+        assertTrue(conn.disconnected) // the temporary connection is closed
     }
 
     @Test
@@ -51,7 +51,7 @@ class ConnectionTestTest {
     fun `disconnects even when round trip probe throws`() = runTest {
         val conn = ProbeConnection(roundTripError = IllegalStateException("boom"))
         val status = runConnectionTest(ProbeTransport(conn), target, auth)
-        assertEquals(ConnectionTestStatus.Success(null), status) // сбой пинга ≠ сбой теста
+        assertEquals(ConnectionTestStatus.Success(null), status) // a ping failure isn't a test failure
         assertTrue(conn.disconnected)
     }
 
@@ -69,7 +69,7 @@ class ConnectionTestTest {
 
     @Test
     fun `connection error maps to generic message without leaking transport detail`() = runTest {
-        // Сырой текст исключения (адрес/внутренности библиотеки) в UI не выносим — только generic.
+        // Raw exception text (address/library internals) is never surfaced in the UI — generic only.
         val status = runConnectionTest(ProbeTransport(error = SshConnectionException("no route to 10.0.0.1:22")), target, auth)
         assertEquals(ConnectionTestStatus.Failure("Connection failed"), status)
     }
@@ -80,7 +80,7 @@ class ConnectionTestTest {
         assertEquals(ConnectionTestStatus.Failure("Connection failed"), status)
     }
 
-    // Контроллер: переходы статуса
+    // Controller: status transitions
 
     @Test
     fun `controller goes Checking then Success`() = runTest {

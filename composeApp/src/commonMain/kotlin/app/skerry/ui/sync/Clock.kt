@@ -1,7 +1,7 @@
 package app.skerry.ui.sync
 
 /**
- * Текущее wall-clock время (epoch ms) — для обратного отсчёта до протухания кода паринга
- * ([PairingOffer.expiresAt]). Платформенное: оба таргета JVM (`System.currentTimeMillis`).
+ * Current wall-clock time (epoch ms), used for the pairing code expiry countdown
+ * ([PairingOffer.expiresAt]). Platform-specific; both targets are JVM (`System.currentTimeMillis`).
  */
 expect fun nowMillis(): Long

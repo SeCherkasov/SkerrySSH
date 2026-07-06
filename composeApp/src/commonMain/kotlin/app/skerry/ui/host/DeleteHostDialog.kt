@@ -35,11 +35,9 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 
 /**
- * Диалог подтверждения удаления профиля хоста (вызывается из контекстного меню сайдбара). Удаляется
- * только сама запись каталога; привязанный keychain-секрет ([Host.credentialId]) остаётся в vault —
- * он переиспользуемый (один ключ/пароль на несколько хостов) и управляется во вкладке Vault, поэтому
- * каскадного удаления секрета здесь нет (в отличие от обратного направления в `VaultView`). Стиль —
- * скрим + карточка макета, как [DesktopPasswordDialog].
+ * Confirmation dialog for deleting a host profile (from the sidebar context menu). Only the
+ * directory entry is removed; the linked keychain secret ([Host.credentialId]) stays in the vault,
+ * since it's reusable across hosts and managed from the Vault tab.
  */
 @Composable
 fun DesktopDeleteHostDialog(host: Host, onDismiss: () -> Unit, onConfirm: () -> Unit) {

@@ -3,9 +3,9 @@ package app.skerry.shared.serial
 import com.fazecast.jSerialComm.SerialPort as NativePort
 
 /**
- * Desktop-реализация доступа к последовательным портам через jSerialComm (Linux/Windows/macOS).
- * Чтение — SEMI_BLOCKING (блокирует до появления хотя бы одного байта, `-1` при закрытии/ошибке),
- * что ровно ложится на контракт [SerialPortHandle.read] и цикл [output] канала.
+ * Desktop serial port access via jSerialComm (Linux/Windows/macOS). Reads are SEMI_BLOCKING
+ * (blocks until at least one byte arrives, returns `-1` on close/error), matching the
+ * [SerialPortHandle.read] contract and the channel's [output] loop.
  */
 actual object SerialSystem {
 
@@ -20,20 +20,20 @@ actual object SerialSystem {
         val port = try {
             NativePort.getCommPort(config.portName)
         } catch (e: Exception) {
-            throw SerialUnavailableException("Порт ${config.portName} не найден", e)
+            throw SerialUnavailableException("Port ${config.portName} not found", e)
         }
-        // Всё от настройки параметров до захвата потоков — под единым try: любая ошибка (неверная
-        // скорость/формат, сбой драйвера, бросок в getInputStream) закрывает уже открытый порт (не
-        // течёт) и превращается в SerialUnavailableException, как обещает контракт [SerialSystem.open].
+        // Everything from parameter setup to stream acquisition is under one try: any failure
+        // (invalid baud/format, driver failure, throw in getInputStream) closes the already-open
+        // port (no leak) and becomes a SerialUnavailableException, per the [SerialSystem.open] contract.
         return try {
             port.setBaudRate(config.baudRate)
             port.setNumDataBits(config.dataBits)
             port.setNumStopBits(config.stopBits.toNative())
             port.setParity(config.parity.toNative())
-            // SEMI_BLOCKING + readTimeout 0: read блокирует до первого байта; при закрытии порта → -1.
+            // SEMI_BLOCKING + readTimeout 0: read blocks until the first byte; -1 when the port closes.
             port.setComPortTimeouts(NativePort.TIMEOUT_READ_SEMI_BLOCKING, 0, 0)
             if (!port.openPort()) {
-                throw SerialUnavailableException("Не удалось открыть порт ${config.portName}")
+                throw SerialUnavailableException("Failed to open port ${config.portName}")
             }
             NativeSerialPortHandle(port)
         } catch (e: SerialUnavailableException) {
@@ -41,7 +41,7 @@ actual object SerialSystem {
             throw e
         } catch (e: Exception) {
             runCatching { port.closePort() }
-            throw SerialUnavailableException("Не удалось настроить порт ${config.portName}", e)
+            throw SerialUnavailableException("Failed to configure port ${config.portName}", e)
         }
     }
 
@@ -61,9 +61,9 @@ actual object SerialSystem {
 }
 
 /**
- * Обёртка над нативным портом через его [java.io.InputStream]/[java.io.OutputStream] — стабильный API
- * jSerialComm между версиями (в отличие от `readBytes`, чья сигнатура Int/Long менялась). В режиме
- * SEMI_BLOCKING `read` блокирует до первого байта и возвращает `-1` при закрытии порта.
+ * Wraps the native port via its [java.io.InputStream]/[java.io.OutputStream] — a stable jSerialComm
+ * API across versions (unlike `readBytes`, whose Int/Long signature has changed). In SEMI_BLOCKING
+ * mode, `read` blocks until the first byte and returns `-1` when the port closes.
  */
 private class NativeSerialPortHandle(private val port: NativePort) : SerialPortHandle {
     private val input = port.inputStream
@@ -75,6 +75,6 @@ private class NativeSerialPortHandle(private val port: NativePort) : SerialPortH
         output.flush()
     }
     override fun close() {
-        port.closePort() // закрывает и потоки → read вернёт -1
+        port.closePort() // closes the streams too => read returns -1
     }
 }

@@ -22,7 +22,7 @@ import java.util.Base64
 
 private val rng = SecureRandom()
 
-/** Случайный URL-safe код паринга (capability) — 18 байт энтропии. */
+/** Random URL-safe pairing code (capability token), 18 bytes of entropy. */
 private fun newCode(): String {
     val bytes = ByteArray(18)
     rng.nextBytes(bytes)
@@ -30,8 +30,8 @@ private fun newCode(): String {
 }
 
 /**
- * Старт паринга (вариант B): вошедшее устройство A кладёт dataKey, зашифрованный одноразовым
- * transferKey (transferKey уходит только в QR, не на сервер), и получает код с TTL.
+ * Start pairing (variant B): the logged-in device A uploads dataKey encrypted with a one-time
+ * transferKey (transferKey goes only into the QR code, never to the server) and gets a code with a TTL.
  */
 fun Route.pairingStartRoute(services: Services) {
     post("/pairing/start") {
@@ -46,15 +46,15 @@ fun Route.pairingStartRoute(services: Services) {
 }
 
 /**
- * Claim паринга устройством B (ещё не вошло): по коду получает зашифрованный dataKey и токены.
- * Код одноразовый и с TTL; сервер видит только шифротекст dataKey.
+ * Claim pairing from device B (not yet logged in): exchanges the code for the encrypted dataKey
+ * and tokens. The code is one-time with a TTL; the server sees only dataKey ciphertext.
  */
 fun Route.pairingClaimRoute(services: Services) {
     rateLimit(RateLimits.PAIRING_CLAIM) {
         post("/pairing/claim") {
             val req = call.receive<PairingClaimRequest>()
-            // Валидация ДО consume: невалидный запрос не должен сжигать одноразовый код, а
-            // сверхдлинный deviceId на PostgreSQL валил бы insert в varchar-колонку 500-й.
+            // Validate before consume: an invalid request must not burn the one-time code, and an
+            // oversized deviceId would fail the insert into a varchar column on PostgreSQL with a 500.
             if (anyTooLong(req.code, req.deviceId)) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
                 return@post

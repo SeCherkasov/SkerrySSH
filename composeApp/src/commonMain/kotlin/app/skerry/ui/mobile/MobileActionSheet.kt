@@ -32,7 +32,7 @@ import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
-/** Одно действие нижнего листа-меню: подпись + опц. иконка; [danger] красит в коралл (деструктивное). */
+/** One bottom-sheet menu action: label plus an optional icon; [danger] colors it coral (destructive). */
 data class MobileSheetAction(
     val label: String,
     val onClick: () -> Unit,
@@ -40,7 +40,7 @@ data class MobileSheetAction(
     val danger: Boolean = false,
 )
 
-/** Кладёт лист в левый-верхний угол окна — контент сам растягивается на весь экран. */
+/** Places the sheet at the window's top-left corner; the content stretches to fill the screen itself. */
 private val FullWindowPosition = object : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -51,15 +51,17 @@ private val FullWindowPosition = object : PopupPositionProvider {
 }
 
 /**
- * Единый нижний лист-меню контекстных действий (Forget key / Edit-Remove / Disconnect и т. п.) в той
- * же идиоме, что листы New connection / Vault: затемнение на весь экран, панель снизу с хватом-полоской
- * и drag-to-dismiss ([MobileBottomSheet]). Действия рендерятся полноширинными кнопками
- * ([MobileSheetButton]) — как кнопки Copy/Delete листа Vault, а не плоскими строками: первое
- * недеструктивное действие залито cyan (primary), остальные — контурные, деструктивные — коралловый контур.
+ * Shared bottom-sheet menu for contextual actions (Forget key / Edit-Remove / Disconnect, etc.) in
+ * the same idiom as the New connection / Vault sheets: full-screen scrim, bottom panel with a
+ * grab handle, drag-to-dismiss ([MobileBottomSheet]). Actions render as full-width buttons
+ * ([MobileSheetButton]), like the Vault sheet's Copy/Delete buttons rather than flat rows: the
+ * first non-destructive action is filled cyan (primary), the rest are outlined, destructive ones
+ * with a coral outline.
  *
- * Обёрнут в полноэкранный [Popup], поэтому вставляется как `target?.let { MobileActionSheet(...) }` в
- * любом месте дерева — затемнение всегда кроет весь экран, а не только строку-источник. Тап по кнопке
- * закрывает лист и затем выполняет [MobileSheetAction.onClick]; тап мимо/свайп вниз/Back — [onDismiss].
+ * Wrapped in a full-screen [Popup], so it can be inserted as `target?.let { MobileActionSheet(...) }`
+ * anywhere in the tree — the scrim always covers the whole screen, not just the source row. Tapping
+ * a button closes the sheet then runs [MobileSheetAction.onClick]; tapping outside/swipe down/Back
+ * runs [onDismiss].
  */
 @Composable
 fun MobileActionSheet(
@@ -68,7 +70,7 @@ fun MobileActionSheet(
     onDismiss: () -> Unit,
     subtitle: String? = null,
 ) {
-    // Первое недеструктивное действие — primary (залитая кнопка); danger никогда не заливаем.
+    // First non-destructive action is primary (filled button); danger actions are never filled.
     val primaryIndex = actions.indexOfFirst { !it.danger }
     Popup(
         popupPositionProvider = FullWindowPosition,
@@ -98,10 +100,11 @@ fun MobileActionSheet(
 }
 
 /**
- * Кнопка действий нижнего листа в мобильной метрике (паритет с [MobileNewConnectionSheet]): 12-dp
- * скругление, vertical 13-dp, 15-sp — крупный тач-таргет, а не desktop-[PrimaryButton] (8-dp/12-sp),
- * который на телефоне выглядел мелким. [filled] — залитая cyan; иначе контурная. [danger] красит
- * контур/текст в [D.sunset] (удаление). Общая для листов Vault и [MobileActionSheet].
+ * Bottom-sheet action button at mobile scale (parity with [MobileNewConnectionSheet]): 12-dp
+ * corner radius, 13-dp vertical padding, 15-sp text — a large touch target rather than the
+ * desktop [PrimaryButton] (8-dp/12-sp), which looked small on a phone. [filled] gives a solid
+ * cyan button; otherwise outlined. [danger] colors the outline/text [D.sunset] (deletion). Shared
+ * by the Vault sheets and [MobileActionSheet].
  */
 @Composable
 internal fun MobileSheetButton(

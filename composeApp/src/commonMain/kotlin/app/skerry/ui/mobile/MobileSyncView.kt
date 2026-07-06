@@ -90,11 +90,11 @@ import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 
 /**
- * Push-экран More → «Синхронизация»: self-hosted синхронизация (Phase 2). В мобильном идиоме
- * (отступление от макета, как Appearance) форма настройки — inline на самом экране, а не модалка.
- * Подключён — статус + «Sync now»/«Disconnect»; не подключён/ошибка — форма (сервер + accountId +
- * мастер-пароль, одно действие «Connect»). Zero-knowledge: пароль уходит в [SyncCoordinator]
- * CharArray-ом и затирается там; здесь держим строкой до отправки и обнуляем сразу после.
+ * More -> Sync push screen: self-hosted sync. Mobile idiom (like Appearance): the setup form is
+ * inline on the screen rather than a modal. Connected shows status + Sync now/Disconnect;
+ * disconnected/error shows the form (server + accountId + master password, single Connect action).
+ * Zero-knowledge: the password goes into [SyncCoordinator] as a CharArray and is wiped there; here
+ * it's held as a String until send and cleared right after.
  */
 @Composable
 fun MobileSyncScreen(state: MobileDesignState) {
@@ -117,11 +117,11 @@ fun MobileSyncScreen(state: MobileDesignState) {
 }
 
 /**
- * Приглашение перерегистрировать отпечаток после того, как подключение к аккаунту приняло его ключ
- * и сбросило включённую биометрию (см. [SyncCoordinator.biometricResetNeeded]). Видно только когда
- * флаг поднят И на устройстве есть биометрия; «Re-enable» запускает системный промпт и оборачивает
- * dataKey уже под НОВЫМ ключом, «Not now» просто гасит приглашение. Если биометрии на устройстве нет
- * — перерегистрировать нечего, флаг гасим тихо.
+ * Prompt to re-enroll biometrics after the account connection accepted its key and reset enabled
+ * biometrics (see [SyncCoordinator.biometricResetNeeded]). Shown only when the flag is set and the
+ * device has biometrics; Re-enable runs the system prompt and re-wraps dataKey under the new key,
+ * Not now just dismisses the prompt. If the device has no biometrics, there's nothing to re-enroll,
+ * so the flag is cleared silently.
  */
 @Composable
 private fun BiometricReenrollCard(sync: SyncCoordinator) {
@@ -136,8 +136,8 @@ private fun BiometricReenrollCard(sync: SyncCoordinator) {
         return
     }
     val scope = rememberCoroutineScope()
-    // Строки промпта резолвим в composable-scope (stringResource нельзя в onClick-лямбде) и держим готовый
-    // объект для передачи в enableBiometric.
+    // Prompt strings are resolved in composable scope (stringResource can't be called in an
+    // onClick lambda) and held ready for passing into enableBiometric.
     val reenrollPrompt = BiometricPrompt(
         title = stringResource(Res.string.stail_reenroll_prompt_title),
         cancelLabel = stringResource(Res.string.stail_reenroll_prompt_cancel),
@@ -165,8 +165,8 @@ private fun BiometricReenrollCard(sync: SyncCoordinator) {
                 enabled = !controller.biometricInFlight,
                 onClick = {
                     if (controller.biometricInFlight) return@PrimaryButton
-                    // enable оборачивает dataKey под новым ключом; флаг гасим в любом исходе (включил
-                    // или отменил промпт) — повторно покажем лишь после следующего принятия ключа.
+                    // enable re-wraps dataKey under the new key; the flag is cleared either way
+                    // (enabled or dismissed the prompt) - shown again only after the next key acceptance.
                     scope.launch {
                         controller.enableBiometric(reenrollPrompt)
                         sync.acknowledgeBiometricReset()
@@ -185,12 +185,12 @@ private fun SyncBody(sync: SyncCoordinator) {
     when (val status = sync.status.collectAsState().value) {
         is SyncStatus.Online -> {
             SyncStatusNotice("cloud_done", D.moss, stringResource(Res.string.sync_connected_title, status.accountId), stringResource(Res.string.sync_session_stats, status.lastPushed, status.lastPulled))
-            // Идентификаторы для Teams-приглашений (accountId + отпечаток ключа шеринга) — mobile
-            // объединяет Account+Sync в один экран, поэтому блок живёт здесь (desktop — вкладка Account).
+            // Identifiers for Teams invites (accountId + share-key fingerprint) - mobile merges
+            // Account+Sync into one screen, so this block lives here (desktop has a separate Account tab).
             AccountIdentityBlock(status.accountId, Modifier.padding(top = 12.dp))
-            // Кнопки в том же стиле, что на desktop (ghost, не залитый primary) — паритет платформ.
-            // Mobile объединяет вкладки Account+Sync desktop в один экран, поэтому Sync now и
-            // Disconnect живут рядом (на desktop они разнесены по вкладкам).
+            // Same style as desktop (ghost, not filled primary) for platform parity.
+            // Mobile merges the desktop Account+Sync tabs into one screen, so Sync now and
+            // Disconnect sit next to each other (separated by tabs on desktop).
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 GhostButton(stringResource(Res.string.sync_sync_now), onClick = { sync.syncNow() })
                 GhostButton(stringResource(Res.string.sync_disconnect), onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
@@ -211,17 +211,17 @@ private fun SyncBody(sync: SyncCoordinator) {
 }
 
 /**
- * Что синхронизируется — паритет с desktop (Settings → Sync, секция WHAT SYNCS). Живые тумблеры
- * уровня аккаунта: пишут [SyncSettings] в vault через координатор, изменение уезжает тем же live-push.
- * «SSH keys» и «Terminal history» из макета убраны сознательно (как на desktop): ключи синкаются
- * всегда вместе с «Hosts & groups», а истории терминала как фичи ещё нет.
+ * What syncs, matching desktop (Settings -> Sync, WHAT SYNCS section). Live account-level toggles:
+ * write [SyncSettings] to the vault via the coordinator, change ships out through the same live-push.
+ * "SSH keys" and "Terminal history" from the mockup are deliberately omitted (as on desktop): keys
+ * always sync together with "Hosts & groups", and terminal history isn't a feature yet.
  */
 @Composable
 private fun MobileWhatSyncs(sync: SyncCoordinator) {
     val settings = sync.syncSettings.collectAsState().value
     LaunchedEffect(Unit) { sync.refreshSyncSettings() }
     Txt(stringResource(Res.string.sync_what_syncs), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 4.dp))
-    // onToggle читает актуальное значение из flow, не снимок композиции (stale-closure write-write).
+    // onToggle reads the current value from the flow, not a composition snapshot (stale-closure write-write).
     MobileSyncToggleRow(stringResource(Res.string.sync_what_hosts), null, on = settings.syncHosts) {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncHosts = !current.syncHosts))
@@ -233,8 +233,8 @@ private fun MobileWhatSyncs(sync: SyncCoordinator) {
 }
 
 /**
- * Mobile-секция «Link a device» (вошедшее устройство): кнопка раскрывает inline-карточку с QR/кодом
- * быстрого паринга (общий [PairingOfferContent]). Inline, а не диалог — мобильный идиом экрана Sync.
+ * Mobile "Link a device" section: the button expands an inline card with the pairing QR/code (shared
+ * [PairingOfferContent]). Inline rather than a dialog — the mobile idiom of the Sync screen.
  */
 @Composable
 private fun MobileLinkDeviceSection(sync: SyncCoordinator) {
@@ -275,10 +275,10 @@ private fun MobileSyncToggleRow(label: String, sub: String?, on: Boolean, onTogg
 }
 
 /**
- * Реальные устройства аккаунта — паритет с desktop (Settings → Account, LINKED DEVICES). На активной
- * сессии сервер всегда возвращает хотя бы текущее устройство, поэтому пустой список = listDevices
- * проглотил ошибку: честно говорим, а не «только вы». Revoke отзывает чужое (с подтверждением вторым
- * кликом) и перечитывает список.
+ * Real account devices — parity with desktop (Settings → Account, LINKED DEVICES). On an active
+ * session the server always returns at least the current device, so an empty list means listDevices
+ * swallowed an error: report that honestly, not "only you". Revoke removes another device (confirmed
+ * on a second click) and rereads the list.
  */
 @Composable
 private fun MobileLinkedDevices(sync: SyncCoordinator) {
@@ -288,8 +288,8 @@ private fun MobileLinkedDevices(sync: SyncCoordinator) {
     var reload by remember { mutableStateOf(0) }
     LaunchedEffect(sync, reload) {
         loading = true
-        // Отозванные устройства больше не привязаны — не показываем (сервер хранит строку с revoked=true).
-        // Текущее устройство всегда первым (sortedByDescending стабилен — порядок прочих сохраняется).
+        // Revoked devices are no longer linked — don't show them (the server keeps a row with revoked=true).
+        // Current device first (sortedByDescending is stable — order of the rest is preserved).
         devices = sync.listDevices().filter { !it.revoked }.sortedByDescending { it.current }
         loading = false
     }
@@ -312,7 +312,7 @@ private fun MobileLinkedDevices(sync: SyncCoordinator) {
 
 @Composable
 private fun MobileDeviceRow(device: RemoteDevice, onRevoke: (() -> Unit)?) {
-    // Отзыв необратим из UI (устройство переподключается мастер-паролем) — подтверждаем вторым кликом.
+    // Revoke is irreversible from the UI (the device reconnects with the master password) — confirm on a second click.
     var confirming by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().padding(vertical = 9.dp),

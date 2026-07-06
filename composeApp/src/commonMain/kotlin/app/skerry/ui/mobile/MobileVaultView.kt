@@ -108,12 +108,12 @@ import app.skerry.ui.vault.rememberKeyInfo
 import app.skerry.ui.vault.unbindCredential
 
 /**
- * Корневой таб Vault: три keychain-категории (SSH keys/Passwords/Certificates) переключаются
- * пилюлями, генерация ключа/добавление пароля/импорт сертификата, тап по секрету открывает лист
- * деталей (публичный ключ/отпечаток/principals, used-by-хосты) с Copy/Export/Delete.
+ * Vault root tab: three keychain categories (SSH keys/Passwords/Certificates) switched by pills, plus
+ * key generation / add password / import certificate. Tapping a secret opens a detail sheet (public
+ * key/fingerprint/principals, used-by hosts) with Copy/Export/Delete.
  *
- * Живой путь ([LocalCredentials] != null) рисует реальный открытый keychain; превью/офскрин без
- * keychain ([LocalCredentials] == null) — статичная заглушка.
+ * Live path ([LocalCredentials] != null) renders the real unlocked keychain; preview/offscreen without
+ * a keychain ([LocalCredentials] == null) is a static mock.
  */
 @Composable
 fun MobileVaultScreen(state: MobileDesignState) {
@@ -123,7 +123,7 @@ fun MobileVaultScreen(state: MobileDesignState) {
     }
 }
 
-// Живой путь.
+// Live path.
 
 @Composable
 private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialManagerController) {
@@ -134,7 +134,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     val hosts = hostsController?.hosts ?: emptyList()
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
-    // Повторная аутентификация перед копированием пароля: биометрия, если включена, иначе мастер-пароль.
+    // Re-authentication before copying a password: biometrics if enabled, else the master password.
     val vault = LocalVault.current
     val biometrics = LocalVaultBiometrics.current
     val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }
@@ -149,17 +149,17 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     val credItems = VaultPresentation.credentialsIn(category, allCreds)
     val selectedCred = credItems.firstOrNull { it.id == selectedId }
 
-    // Любой открытый оверлей (диалоги создания/удаления + лист деталей) прячет таб-бар: иначе он
-    // плавает поверх центрированного диалога и перекрывает нижние поля ввода над клавиатурой.
-    // LaunchedEffect пишет флаг только при смене значения (не на каждой рекомпозиции списка);
-    // DisposableEffect снимает его при уходе с таба, чтобы таб-бар не остался скрытым.
+    // Any open overlay (create/delete dialogs + detail sheet) hides the tab bar: otherwise it floats
+    // over the centered dialog and covers the bottom input fields above the keyboard. LaunchedEffect
+    // writes the flag only on value change (not every list recomposition); DisposableEffect clears it
+    // on leaving the tab so the tab bar isn't left hidden.
     val modalOpen = showGenerate || showAddPassword || showImportCert || pendingDelete != null ||
         selectedCred != null || copyAuth.passwordPromptVisible
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
 
-    // Пока таб Vault в композиции (вкл. диалоги и лист деталей секрета внутри него) — защита окна
-    // от снимков экрана и превью в Recent Apps. Снимается автоматически при уходе с таба.
+    // While the Vault tab is composed (including its dialogs and secret detail sheet) — protect the
+    // window from screenshots and Recent Apps previews. Cleared automatically on leaving the tab.
     SecureScreen()
 
     Box(Modifier.fillMaxSize()) {
@@ -203,7 +203,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 onCreate = { name, type ->
                     showGenerate = false
                     category = VaultCategoryKind.SSH_KEYS
-                    // Генерация (особенно RSA-4096) дорогая — уводим с main-потока; save трогает state.
+                    // Generation (especially RSA-4096) is expensive — move it off the main thread; save touches state.
                     scope.launch {
                         val key = withContext(Dispatchers.Default) { generator.generate(type, comment = name) }
                         selectedId = credentials.save(
@@ -249,8 +249,8 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 boundHostCount = bound.size,
                 onDismiss = { pendingDelete = null },
                 onConfirm = {
-                    // Каскад целостен только при живом hostsController (за гейтом он всегда есть): сперва
-                    // развязываем хосты, чтобы они не ссылались на удалённый секрет, затем удаляем секрет.
+                    // The cascade is consistent only with a live hostsController (always present behind the
+                    // gate): first unbind hosts so they don't reference the deleted secret, then delete it.
                     val hc = hostsController
                     if (hc != null) {
                         bound.forEach { host -> hc.save(host.unbindCredential()) }
@@ -269,8 +269,8 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 onCopy = { copyTextToClipboard(it) },
                 onCopyPassword = { pwd -> copyAuth.authorize { copyPasswordToClipboard(pwd) } },
                 onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
-                // Закрываем лист деталей перед показом диалога подтверждения: иначе шторка (рисуется
-                // поверх) перекрыла бы центрированный DeleteSecretDialog, и виден был лишь его край.
+                // Close the detail sheet before showing the confirm dialog: otherwise the sheet (drawn
+                // on top) would cover the centered DeleteSecretDialog, leaving only its edge visible.
                 onDelete = {
                     selectedId = null
                     pendingDelete = credential
@@ -289,7 +289,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     }
 }
 
-// Шапка, категории, действие.
+// Header, categories, action.
 
 @Composable
 private fun MobileVaultBanner() {
@@ -306,7 +306,7 @@ private fun MobileVaultBanner() {
     }
 }
 
-/** Пилюли-переключатели keychain-категорий с живыми счётчиками. */
+/** Keychain category switch pills with live counts. */
 @Composable
 private fun MobileCategoryPills(active: VaultCategoryKind, credentials: List<Credential>, onSelect: (VaultCategoryKind) -> Unit) {
     Row(
@@ -333,7 +333,7 @@ private fun MobileCategoryPills(active: VaultCategoryKind, credentials: List<Cre
     }
 }
 
-/** Контекстная кнопка действия категории — генерация ключа / добавить пароль / импорт сертификата. */
+/** Context action button per category — generate key / add password / import certificate. */
 @Composable
 private fun MobileVaultAction(
     category: VaultCategoryKind,
@@ -352,16 +352,16 @@ private fun MobileVaultAction(
     }
 }
 
-// Карточка секрета.
+// Secret card.
 
-/** Карточка keychain-секрета (ключ/пароль/сертификат) в списке категории. */
+/** Keychain secret card (key/password/certificate) in the category list. */
 @Composable
 private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: FontFamily, onClick: () -> Unit) {
     val generator = LocalSshKeyGenerator.current
     val inspector = LocalSshCertificateInspector.current
     val usedBy = VaultPresentation.usedByLabel(usedByCount)
-    // Считаем метаданные ОДИН раз на карточку (каждый хелпер — отдельный produceState-слот, поэтому
-    // повторный вызов завёл бы второй разбор того же секрета). null для неподходящего типа — без работы.
+    // Compute metadata once per card (each helper is a separate produceState slot, so a repeat call
+    // would parse the same secret twice). null for a mismatched type — no work.
     val keyInfo = rememberKeyInfo(credential, generator)
     val certInfo = rememberCertInfo(credential, inspector)
     val (icon, iconColor) = VaultPresentation.secretStyle(credential.secret)
@@ -422,13 +422,12 @@ private fun MobileVaultEmpty(category: VaultCategoryKind) {
     }
 }
 
-// Лист деталей секрета.
+// Secret detail sheet.
 
 /**
- * Нижний лист деталей выбранного секрета: шапка (иконка/имя/подтип), публичный ключ + отпечаток
- * (ключ) либо тело сертификата, used-by-хосты, кнопки Copy/Export/Delete. Наружу отдаём только
- * публичный материал (открытый ключ/cert), приватный ключ/пароль — лишь в Copy/Export по явному
- * действию пользователя.
+ * Bottom detail sheet for the selected secret: header (icon/name/subtype), public key + fingerprint
+ * (key) or certificate body, used-by hosts, Copy/Export/Delete buttons. Only public material (public
+ * key/cert) is exposed; the private key/password only via Copy/Export on an explicit user action.
  */
 @Composable
 private fun MobileSecretDetailSheet(
@@ -452,12 +451,12 @@ private fun MobileSecretDetailSheet(
         is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: stringResource(Res.string.vault_subtitle_private_key)
         is CredentialSecret.Password -> stringResource(Res.string.vault_subtitle_password)
     }
-    // Скрим на весь экран; тап мимо листа закрывает. Сам лист гасит клик, чтобы не закрываться.
-    // Лист подгоняется под содержимое (короткий пароль ⇒ невысокая шторка), но не выше 85% экрана —
-    // тогда контент скроллится. Фиксированная высота раздувала бы пустую шторку для секрета без тела.
+    // Full-screen scrim; a tap outside the sheet closes it. The sheet swallows clicks so it doesn't
+    // close. It fits its content (a short password ⇒ short sheet) but not above 85% of the screen —
+    // then content scrolls. A fixed height would inflate an empty sheet for a bodiless secret.
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.85f) {
-        // weight(fill = false): при коротком содержимом колонка обнимает контент, при длинном —
-        // упирается в остаток высоты шторки и скроллится (а не вылезает за край).
+        // weight(fill = false): with short content the column hugs it; with long content it fills the
+        // remaining sheet height and scrolls (rather than overflowing the edge).
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                     SecretIcon(icon, tinted = tinted, color = color, size = 40)
@@ -496,9 +495,10 @@ private fun MobileSecretDetailSheet(
                             }
                         }
                         is CredentialSecret.Password -> {
-                            // Пароль — чувствительный: копирование требует повторной аутентификации
-                            // (биометрия/мастер-пароль, см. onCopyPassword) и идёт платформенным путём
-                            // (Android: sensitive-клип + автоочистка), а не обычным буфером, как cert/публичный ключ.
+                            // The password is sensitive: copying requires re-authentication
+                            // (biometrics/master password, see onCopyPassword) and goes through the
+                            // platform path (Android: sensitive clip + auto-clear), not the normal
+                            // clipboard like cert/public key.
                             MobileSheetButton(stringResource(Res.string.vault_copy_password), onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
                             MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
                         }
@@ -509,9 +509,9 @@ private fun MobileSecretDetailSheet(
         }
 }
 
-// Превью (макет).
+// Preview (mock).
 
-/** Статичная заглушка таба Vault (офскрин/превью без открытого keychain). */
+/** Static mock of the Vault tab (offscreen/preview without an unlocked keychain). */
 @Composable
 private fun MobileVaultMock() {
     val mono = LocalFonts.current.mono

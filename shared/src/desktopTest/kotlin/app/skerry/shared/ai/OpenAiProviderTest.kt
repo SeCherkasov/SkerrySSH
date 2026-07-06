@@ -42,7 +42,7 @@ class OpenAiProviderTest {
             )
         })
 
-    /** Строит SSE-поток chat-completions: один `data:`-кадр на дельту, завершается `[DONE]`. */
+    /** Builds a chat-completions SSE stream: one `data:` frame per delta, ends with `[DONE]`. */
     private fun sse(vararg deltas: String): String {
         val frames = deltas.joinToString("") { chunk ->
             val quoted = Json.encodeToString(String.serializer(), chunk)

@@ -3,11 +3,10 @@ package app.skerry.sync.wire
 import kotlinx.serialization.Serializable
 
 /**
- * JSON-контракт «на проводе» клиент⇆sync-сервер (`docs/skerry-sync-design.md` §3) — единственный
- * источник для обеих сторон (`server` и `shared/sync`), ручного зеркала DTO больше нет. Шифроблобы
- * передаются как base64-строки (`blob`, `wrappedDataKey`, `encryptedDataKey`) — сервер их не
- * расшифровывает. Серверные admin-DTO (консоль видит только метаданные) остаются в
- * `server/.../model/Dto.kt`: клиент про них не знает.
+ * Wire JSON contract between client and sync server (`docs/skerry-sync-design.md` §3); the single
+ * source for both sides (`server` and `shared/sync`). Ciphertext travels as base64 strings (`blob`,
+ * `wrappedDataKey`, `encryptedDataKey`); the server never decrypts them. Server admin DTOs (console
+ * sees metadata only) stay in `server/.../model/Dto.kt`, unknown to the client.
  */
 
 // --- auth ---
@@ -20,7 +19,7 @@ data class RegisterRequest(
     val wrappedDataKey: String,
     val deviceId: String,
     val deviceName: String,
-    // Опционально (default null): старые клиенты без поля остаются совместимыми по wire.
+    // Optional (default null): older clients without this field stay wire-compatible.
     val platform: String? = null,
 )
 
@@ -66,10 +65,10 @@ data class RecordDto(
 )
 
 /**
- * Дельта: записи + новый курсор синхронизации, который клиент сохраняет как `lastSyncVersion`.
- * [compactedIds] — id надгробий, полностью распространённых на все устройства (serverSeq ≤ watermark):
- * клиент по ним физически забывает тромбстоуны и перестаёт их пушить (иначе re-push воскрешал бы их
- * после purge). Поле с дефолтом — старый клиент его игнорирует.
+ * Delta: records plus the new sync cursor, which the client stores as `lastSyncVersion`.
+ * [compactedIds] are tombstone ids fully propagated to all devices (serverSeq <= watermark); the
+ * client physically forgets these tombstones and stops pushing them, otherwise a re-push would
+ * resurrect them after purge. Field has a default so old clients ignore it.
  */
 @Serializable
 data class RecordsResponse(
@@ -81,7 +80,7 @@ data class RecordsResponse(
 @Serializable
 data class PushRequest(val records: List<RecordDto>)
 
-/** Победившее по LWW состояние каждой посланной записи + новый курсор. */
+/** LWW-winning state of each pushed record, plus the new cursor. */
 @Serializable
 data class PushResponse(val records: List<RecordDto>, val cursor: Long)
 
@@ -100,7 +99,7 @@ data class DeviceDto(
 @Serializable
 data class DevicesResponse(val devices: List<DeviceDto>)
 
-// --- pairing (вариант B) ---
+// --- pairing (variant B) ---
 
 @Serializable
 data class PairingStartRequest(val encryptedDataKey: String, val ttlSeconds: Long? = null)

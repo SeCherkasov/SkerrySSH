@@ -23,13 +23,13 @@ import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
-// Общий chrome мобильных экранов: шапка push-экрана, заголовок корневого таба, FAB.
+// Shared mobile screen chrome: push-screen header, root-tab title, FAB.
 
 /**
- * Шапка push-экрана: chevron_left (назад) + заголовок 18sp Bold. [plainBack] = true гасит
- * indication на стрелке (interactionSource + indication = null) — исторический вариант части
- * экранов (Ports/Known/HostDetail); false — обычный clickable. Параметр сохраняет прежнее
- * поведение каждого места без визуальных изменений.
+ * Push-screen header: chevron_left (back) + 18sp Bold title. [plainBack] = true suppresses the
+ * arrow's click indication (interactionSource + indication = null), the historical variant used
+ * by some screens (Ports/Known/HostDetail); false is a plain clickable. The parameter preserves
+ * each call site's prior behavior without visual changes.
  */
 @Composable
 internal fun MobilePushHeader(title: String, onBack: () -> Unit, plainBack: Boolean = false) {
@@ -52,16 +52,16 @@ internal fun MobilePushHeader(title: String, onBack: () -> Unit, plainBack: Bool
     }
 }
 
-/** Заголовок корневого таба (28sp Bold, letterSpacing −0.5) — Hosts/Snippets/Vault/More/Files. */
+/** Root-tab title (28sp Bold, letterSpacing -0.5) — Hosts/Snippets/Vault/More/Files. */
 @Composable
 internal fun MobileScreenTitle(text: String) {
     Txt(text, color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
 }
 
 /**
- * Круглая FAB мобильных табов (cyan 56dp, радиус 18, тёмная иконка). [onClick] == null — инертная
- * (мок-путь превью). [icon]/[iconSize] параметризованы: Files переключает «+»/«×» и рисует иконку
- * 26sp, Hosts/Snippets — «+» 28sp (исторические метрики мест сохранены).
+ * Round mobile-tab FAB (cyan 56dp, radius 18, dark icon). [onClick] == null makes it inert (the
+ * mock preview path). [icon]/[iconSize] are parameterized: Files toggles "+"/"x" at 26sp,
+ * Hosts/Snippets use "+" at 28sp (each site's historical metrics preserved).
  */
 @Composable
 internal fun MobileFabButton(

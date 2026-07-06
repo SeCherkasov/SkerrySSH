@@ -89,20 +89,19 @@ import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 
 /**
- * Push-экран Port forwarding: шапка-назад + карточки сохранённых туннелей + кнопка New tunnel.
- * Туннели — ГЛОБАЛЬНЫЙ раздел: список и включение/выключение идут через [TunnelManager]
- * ([LocalTunnels]), без привязки к открытой сессии — каждый туннель сам открывает соединение к
- * своему хосту. Тумблер карточки = on/off, long-press → Edit/Remove, New tunnel/Edit открывают
- * лист-редактор. Без менеджера (превью/офскрин) — заглушка.
+ * Push screen for Port forwarding: back header + saved tunnel cards + New tunnel button.
+ * Tunnels are a global section: listing and toggling go through [TunnelManager] ([LocalTunnels]),
+ * independent of the connected session — each tunnel opens its own connection to its host. Card
+ * toggle = on/off, long-press opens Edit/Remove, New tunnel/Edit open the editor sheet. Falls back
+ * to a mock body without a manager (preview/offscreen).
  */
 @Composable
 fun MobilePortsScreen(state: MobileDesignState) {
     val mono = LocalFonts.current.mono
     val manager = LocalTunnels.current
     val hosts = LocalHosts.current
-    // Открытый редактор: null — закрыт, иначе id правимого туннеля либо "" для нового. Держим на уровне
-    // экрана: лист — полноэкранный оверлей в корневом Box.
-    // Без ключа: сброс — только явный onDismiss/onEdit, не смена идентичности менеджера.
+    // Open editor: null when closed, else the edited tunnel's id or "" for a new one. Kept at
+    // screen level since the sheet is a full-screen overlay in the root Box.
     var editorFor by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize().background(D.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -131,7 +130,7 @@ fun MobilePortsScreen(state: MobileDesignState) {
     }
 }
 
-// Живой путь.
+// Live path.
 
 @Composable
 private fun LiveMobilePortsBody(
@@ -151,12 +150,12 @@ private fun LiveMobilePortsBody(
             MobileEmptyTunnels()
         } else {
             tunnels.forEach { entry ->
-                // key по id: forEach переиспользует слоты позиционно — без ключа открытое контекстное
-                // меню «переехало» бы на соседнюю карточку при добавлении/снятии туннеля.
+                // Keyed by id: forEach reuses slots positionally, so an open context menu would
+                // otherwise jump to a neighboring card when a tunnel is added or removed.
                 key(entry.id) {
-                    // Лямбды стабилизируем по id: телеметрия активных туннелей тикает раз в секунду и
-                    // без remember пересоздавала бы их, перерисовывая все карточки. entry.status —
-                    // snapshot-стейт, читается в момент клика, поэтому захват entry безопасен.
+                    // Lambdas stabilized by id to avoid recreation on the once-per-second active
+                    // tunnel telemetry tick; entry.status is snapshot state read at click time, so
+                    // capturing entry is safe.
                     val onToggle = remember(entry.id, manager) {
                         {
                             if (entry.status is TunnelStatus.Active) manager.deactivate(entry.id)
@@ -182,8 +181,8 @@ private fun LiveMobilePortsBody(
 }
 
 /**
- * Карточка сохранённого туннеля: бейдж типа + «via host» + тумблер on/off, строка source→dest.
- * Long-press → меню Edit/Remove (видимых якорей правки/удаления нет — прячем в контекстное меню).
+ * Saved tunnel card: type badge + "via host" + on/off toggle, source→dest row. Long-press opens
+ * the Edit/Remove menu (no visible edit/delete affordances otherwise).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -238,7 +237,7 @@ private fun LiveTunnelCard(
     }
 }
 
-/** Правый контрол карточки по статусу: активный — тумблер вкл, подъём — часы, иначе — тумблер выкл. */
+/** Card's right-side control by status: active shows the on toggle, connecting shows an hourglass, otherwise the off toggle. */
 @Composable
 private fun TunnelStatusControl(entry: TunnelEntry, onToggle: () -> Unit) {
     when (entry.status) {
@@ -248,7 +247,7 @@ private fun TunnelStatusControl(entry: TunnelEntry, onToggle: () -> Unit) {
     }
 }
 
-/** Пустое состояние (туннелей ещё нет) — добавляются кнопкой New tunnel ниже. */
+/** Empty state (no tunnels yet); added via the New tunnel button below. */
 @Composable
 private fun MobileEmptyTunnels() {
     Box(Modifier.fillMaxWidth().padding(top = 50.dp), contentAlignment = Alignment.Center) {
@@ -260,12 +259,13 @@ private fun MobileEmptyTunnels() {
     }
 }
 
-// Tunnel editor (лист).
+// Tunnel editor (sheet).
 
 /**
- * Нижний лист создания/правки туннеля в идиоме листа New connection (sheet): имя, тип, via-host (пикер
- * сохранённых хостов), bind и dest. Save собирает [TunnelFormState.draft] и пишет через [TunnelManager];
- * для существующего показан Remove. Поля сидируются из [existing] при открытии.
+ * Bottom sheet for creating/editing a tunnel, matching the New connection sheet idiom: name, type,
+ * via-host (saved host picker), bind and dest. Save collects [TunnelFormState.draft] and writes
+ * through [TunnelManager]; Remove is shown for an existing tunnel. Fields are seeded from [existing]
+ * on open.
  */
 @Composable
 private fun MobileTunnelEditorSheet(
@@ -276,8 +276,8 @@ private fun MobileTunnelEditorSheet(
     onDismiss: () -> Unit,
 ) {
     val editingId = existing?.id
-    // Ключ = editingId: форма — изолированный буфер правки, заполняется один раз на выбранный туннель.
-    // Мутации entry.tunnel в обход (save из другого места для того же id) сюда намеренно НЕ долетают.
+    // Keyed by editingId: the form is an isolated edit buffer, populated once per selected tunnel.
+    // Out-of-band mutations to entry.tunnel (a save elsewhere for the same id) do not propagate here.
     val form = remember(editingId) { TunnelFormState.fromEntry(existing) }
 
     val draft = form.draft
@@ -342,8 +342,8 @@ private fun MobileTunnelEditorSheet(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                // Правка активного туннеля сохраняется, но проброс уже поднят — новые параметры
-                // подхватятся при следующем включении (save не перезапускает соединение).
+                // Editing an active tunnel saves, but the forward is already up; new params apply
+                // on next activation since save does not restart the connection.
                 Txt(stringResource(Res.string.ports_changes_apply_after_restart), color = D.faint, size = 12.sp, lineHeight = 16.sp)
             }
             Spacer(Modifier.height(22.dp))
@@ -379,7 +379,7 @@ private fun MobileTunnelEditorSheet(
         }
 }
 
-/** Пикер хоста в листе: меню всплывает строго ПОД триггером и по его ширине (через [AnchoredDropdown]). */
+/** Host picker in the sheet: menu opens directly below the trigger, matching its width (via [AnchoredDropdown]). */
 @Composable
 private fun MobileHostPicker(current: String, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -412,11 +412,11 @@ private fun MobileHostPicker(current: String, options: List<Pair<String, String>
     )
 }
 
-/** Подпись поля (капс) + содержимое — идиома полей листа New connection. */
+/** Field label + content, matching the New connection sheet's field idiom. */
 @Composable
 private fun PortInput(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily, keyboardType: KeyboardType = KeyboardType.Text) {
     val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 15.sp, fontFamily = mono) }
-    // Рамка — в decorationBox, чтобы клик по всей площади поля ставил каретку.
+    // Border lives in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -436,7 +436,7 @@ private fun PortInput(value: String, onValueChange: (String) -> Unit, placeholde
     )
 }
 
-/** Селект типа туннеля: меню `-L`/`-R`/`-D` всплывает ПОД триггером и по его ширине (через [AnchoredDropdown]). */
+/** Tunnel type select: `-L`/`-R`/`-D` menu opens directly below the trigger, matching its width (via [AnchoredDropdown]). */
 @Composable
 private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection) -> Unit) {
     var open by remember { mutableStateOf(false) }
@@ -472,7 +472,7 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
 
 // New tunnel button.
 
-/** Дашед-кнопка «New tunnel» (cyan-рамка, иконка add). */
+/** Dashed "New tunnel" button (cyan border, add icon). */
 @Composable
 private fun MobileNewTunnelButton(onClick: () -> Unit) {
     Row(
@@ -490,7 +490,7 @@ private fun MobileNewTunnelButton(onClick: () -> Unit) {
     }
 }
 
-/** Строка скорости в листе-редакторе: стрелка + бар + текст. */
+/** Throughput row in the editor sheet: arrow + bar + text. */
 @Composable
 private fun MobileThroughputRow(icon: String, color: Color, fraction: Float, value: String, mono: FontFamily) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -502,11 +502,11 @@ private fun MobileThroughputRow(icon: String, color: Color, fraction: Float, val
     }
 }
 
-// Мок (превью/офскрин).
+// Mock (preview/offscreen).
 
 private data class MockTunnel(val type: String, val bg: Color, val fg: Color, val via: String, val source: String, val arrow: String, val dest: String, val destDim: Boolean, val on: Boolean)
 
-/** Статичные туннели для превью/офскрин. */
+/** Static tunnels for preview/offscreen. */
 private val MOCK_TUNNELS = listOf(
     MockTunnel("LOCAL", D.cyan.copy(alpha = 0.12f), D.cyanBright, "via prod-web-01", "127.0.0.1:8080", "arrow_forward", "10.0.0.5:80", false, true),
     MockTunnel("REMOTE", D.amber.copy(alpha = 0.14f), D.amber, "via homelab-pi", "0.0.0.0:9000", "arrow_forward", "localhost:3000", false, true),

@@ -15,11 +15,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Парольный путь [SecretCopyAuthorizer] (biometrics == null — как desktop, и мобильный путь без
- * включённой биометрии): запрос показывает форму пароля, копирование происходит только после
- * верной сверки через [Vault.verifyPassword]. Сверка идёт в корутине (off-thread KDF), поэтому
- * тесты продвигают виртуальное время. Биометрический путь покрыт на уровне ядра
- * (`VaultBiometricsTest.confirm…`), здесь не дублируется.
+ * Password path of [SecretCopyAuthorizer] (biometrics == null, as on desktop or mobile without
+ * biometrics enabled): the request shows a password form, and copy only runs after a successful
+ * check via [Vault.verifyPassword]. The check runs in a coroutine (off-thread KDF), so tests
+ * advance virtual time. The biometric path is covered at the core level
+ * (`VaultBiometricsTest.confirm…`) and isn't duplicated here.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SecretCopyAuthorizerTest {
@@ -57,7 +57,7 @@ class SecretCopyAuthorizerTest {
 
         assertTrue(auth.passwordPromptVisible)
         assertFalse(auth.passwordError)
-        assertFalse(copied, "копирование откладывается до подтверждения паролем")
+        assertFalse(copied, "copying is deferred until password confirmation")
     }
 
     @Test
@@ -92,9 +92,9 @@ class SecretCopyAuthorizerTest {
 
         assertFalse(copied)
         assertTrue(auth.passwordError)
-        assertTrue(auth.passwordPromptVisible, "форма остаётся открытой для повторной попытки")
+        assertTrue(auth.passwordPromptVisible, "the form stays open for a retry")
 
-        // Повторная верная попытка после ошибки всё-таки копирует.
+        // A subsequent correct attempt after an error still copies.
         auth.submitPassword("master")
         advanceUntilIdle()
         assertTrue(copied)
@@ -113,7 +113,7 @@ class SecretCopyAuthorizerTest {
         auth.dismiss()
 
         assertFalse(auth.passwordPromptVisible)
-        // После отмены даже верный пароль ничего не копирует — действие сброшено.
+        // After dismiss, even the correct password copies nothing — the action was dropped.
         auth.submitPassword("master")
         advanceUntilIdle()
         assertFalse(copied)

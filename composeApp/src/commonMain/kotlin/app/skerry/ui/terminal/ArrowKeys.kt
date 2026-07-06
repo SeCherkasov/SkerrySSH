@@ -1,16 +1,15 @@
 package app.skerry.ui.terminal
 
-/** Клавиша-стрелка клавишной панели терминала; [finalByte] — финальный символ её escape-кода. */
+/** Arrow key on the terminal keyboard bar; [finalByte] is the final character of its escape code. */
 enum class ArrowKey(val finalByte: Char) { Up('A'), Down('B'), Right('C'), Left('D') }
 
-/** ESC (0x1B) — задан кодом, чтобы не быть невидимым управляющим байтом в исходнике (Read/grep). */
+/** ESC (0x1B), given as a code point so it isn't an invisible control byte in the source (Read/grep). */
 private val ESC: String = 27.toChar().toString()
 
 /**
- * Escape-последовательность клавиши-стрелки для PTY с учётом DECCKM (application-cursor-keys,
- * [app.skerry.ui.terminal.TerminalScreenState.applicationCursorKeys]). В нормальном режиме —
- * CSI (`ESC[A`); когда полноэкранная программа (vim/less) включила application-режим через `ESC[?1h` —
- * SS3 (`ESC O A`). Чистая и тестируемая: панель читает текущий режим сессии и зовёт эту функцию.
+ * Arrow key escape sequence for the PTY, honoring DECCKM (application-cursor-keys,
+ * [app.skerry.ui.terminal.TerminalScreenState.applicationCursorKeys]): CSI (`ESC[A`) normally, or SS3
+ * (`ESC O A`) once a fullscreen program (vim/less) enables application mode via `ESC[?1h`.
  */
 fun arrowSequence(key: ArrowKey, applicationCursor: Boolean): String =
     (if (applicationCursor) ESC + "O" else ESC + "[") + key.finalByte

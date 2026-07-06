@@ -39,7 +39,7 @@ class SecretRedactorTest {
 
     @Test
     fun `masks secrets in underscore and hyphen joined identifiers`() {
-        // Регрессия: `\b` не срабатывал на составных ключах (подчёркивание — словесный символ).
+        // Regression: `\b` didn't fire on compound keys (underscore is a word character).
         listOf("DB_PASSWORD=hunter2", "client_secret: abc123", "api-key=xyz789", "MY_TOKEN=zzz").forEach { line ->
             val out = SecretRedactor.redact("connect $line now")
             assertTrue(out.contains(SecretRedactor.MASK), "should redact: $line")
@@ -51,8 +51,8 @@ class SecretRedactorTest {
 
     @Test
     fun `masks a multi-word unquoted secret value to the end of the line`() {
-        // Регрессия: незакавыченное значение бралось как один токен (\S+) — «my» маскировалось,
-        // а «long passphrase» утекало. Значение должно скрываться до конца строки.
+        // Regression: an unquoted value was taken as a single token (\S+) — "my" got masked while
+        // "long passphrase" leaked. The value must be masked to the end of the line.
         val out = SecretRedactor.redact("secret = my long passphrase")
         assertFalse(out.contains("passphrase"), "trailing words of the secret must be masked")
         assertTrue(out.contains("secret"))
@@ -61,15 +61,15 @@ class SecretRedactorTest {
 
     @Test
     fun `masks a two-word Authorization Basic credential whole`() {
-        // Регрессия: `Authorization: Basic <base64>` маскировал только слово-схему «Basic»,
-        // оставляя сам base64-секрет открытым.
+        // Regression: `Authorization: Basic <base64>` masked only the scheme word "Basic",
+        // leaving the base64 secret itself exposed.
         val out = SecretRedactor.redact("curl -H \"Authorization: Basic dXNlcjpwYXNzd29yZA==\" https://api.example.com")
         assertFalse(out.contains("dXNlcjpwYXNzd29yZA=="), "the base64 credential must not leak")
     }
 
     @Test
     fun `does not mask a plain word followed by another word`() {
-        // Разделитель строго :/= — «password for prod» не должно маскировать «for».
+        // Separator is strictly :/= — "password for prod" must not mask "for".
         val out = SecretRedactor.redact("the password for prod is set")
         assertEquals("the password for prod is set", out)
     }

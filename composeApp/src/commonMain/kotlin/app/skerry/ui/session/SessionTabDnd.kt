@@ -12,45 +12,45 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 
 /**
- * Индекс вставки перетаскиваемой вкладки среди ОСТАЛЬНЫХ вкладок (центры по X в порядке списка) для
- * позиции указателя [pointerX]: число вкладок, чей центр левее указателя. Результат — в координатах
- * списка БЕЗ перетаскиваемой, что и есть целевой `toIndex` для [app.skerry.ui.session.SessionsController.moveTab]
- * (он переставляет removeAt→add в той же модели). Чистая и тестируемая отдельно от Compose.
+ * Insertion index for the dragged tab among the other tabs (X centers in list order) at pointer
+ * position [pointerX]: the count of tabs whose center is left of the pointer. The result is in
+ * coordinates excluding the dragged tab, which is the `toIndex` expected by
+ * [app.skerry.ui.session.SessionsController.moveTab] (removeAt→add in the same list).
  */
 fun tabInsertIndex(otherCentersX: List<Float>, pointerX: Float): Int = otherCentersX.count { it < pointerX }
 
 /**
- * Состояние drag-reorder вкладок titlebar. Геометрию чипов в
- * координатах окна собирает [tabBoundsAnchor]; жест [draggableTab] ведёт указатель и на отпускании
- * считает целевой индекс чистой [tabInsertIndex]. Что переставить — решает вызывающий через onDrop
- * (обычно [app.skerry.ui.session.SessionsController.moveTab]).
+ * State for titlebar tab drag-reorder. [tabBoundsAnchor] collects chip geometry in window
+ * coordinates; the [draggableTab] gesture tracks the pointer and computes the target index via
+ * [tabInsertIndex] on release. The caller decides what to reorder via onDrop (usually
+ * [app.skerry.ui.session.SessionsController.moveTab]).
  */
 @Stable
 class TabDragState {
-    /** id перетаскиваемой вкладки (или null). */
+    /** Id of the dragged tab (or null). */
     var draggingTabId by mutableStateOf<String?>(null)
         private set
 
     /**
-     * Позиция линии вставки в координатах ПОЛНОГО списка (0..size): перед вкладкой с этим индексом
-     * (size — линия в самом конце). null — drag не идёт. Учитывает, что перетаскиваемый чип всё ещё
-     * отрисован в ряду (см. [refresh]).
+     * Insert-line position in coordinates of the full list (0..size): before the tab at this index
+     * (size = line at the very end). `null` means no drag in progress. Accounts for the dragged chip
+     * still being rendered in the row (see [refresh]).
      */
     var insertLineIndex by mutableStateOf<Int?>(null)
         private set
 
-    // Горизонтальная позиция указателя в координатах окна, ведётся по ходу жеста.
+    // Horizontal pointer position in window coordinates, tracked over the course of the gesture.
     private var pointerX = 0f
 
-    // Bounds чипов в координатах окна — пишутся при layout, читаются из жестов. Обычная HashMap (не
-    // snapshot): composition их не читает. Все обращения на Main-потоке (layout + колбэки жестов).
+    // Chip bounds in window coordinates, written on layout, read from gestures. A plain HashMap (not
+    // snapshot state) since composition never reads it. All access happens on the main thread.
     private val bounds = HashMap<String, Rect>()
 
     val isDragging: Boolean get() = draggingTabId != null
 
     fun setBounds(id: String, rect: Rect) { bounds[id] = rect }
 
-    /** Забыть геометрию закрытой вкладки — иначе bounds копились бы по выбывшим id. */
+    /** Forget geometry for a closed tab, so bounds don't accumulate for stale ids. */
     fun clearBounds(id: String) { bounds.remove(id) }
 
     fun start(id: String, localOffsetX: Float) {
@@ -60,7 +60,7 @@ class TabDragState {
 
     fun dragBy(deltaX: Float) { pointerX += deltaX }
 
-    /** Целевой `toIndex` (в списке без перетаскиваемой) для текущей позиции указателя. */
+    /** Target `toIndex` (in the list excluding the dragged tab) for the current pointer position. */
     fun currentDropIndex(ids: List<String>): Int =
         tabInsertIndex(otherCenters(ids), pointerX)
 
@@ -69,10 +69,10 @@ class TabDragState {
         .mapNotNull { bounds[it]?.let { b -> (b.left + b.right) / 2f } }
 
     /**
-     * Пересчитать линию вставки. [insertLineIndex] — в координатах полного ряда: drop-индекс `d`
-     * (без перетаскиваемой) маппится с поправкой на позицию перетаскиваемого `p` (он всё ещё в ряду):
-     * линия перед `d`, либо перед `d+1`, если цель правее исходной позиции. Пишем только при смене —
-     * иначе каждое движение указателя перерисовывало бы titlebar.
+     * Recompute the insert line. [insertLineIndex] is in full-row coordinates: the drop index `d`
+     * (excluding the dragged tab) is mapped against the dragged tab's position `p` (still in the
+     * row): the line goes before `d`, or before `d+1` if the target is right of the original
+     * position. Written only on change to avoid redrawing the titlebar on every pointer move.
      */
     fun refresh(ids: List<String>) {
         val dragId = draggingTabId ?: return
@@ -88,14 +88,14 @@ class TabDragState {
     }
 }
 
-/** Записывает bounds чипа вкладки в координатах окна — drag-жест читает их на отпускании. */
+/** Records a tab chip's bounds in window coordinates; the drag gesture reads them on release. */
 fun Modifier.tabBoundsAnchor(state: TabDragState, tabId: String): Modifier =
     onGloballyPositioned { state.setBounds(tabId, it.boundsInWindow()) }
 
 /**
- * Делает чип вкладки перетаскиваемым. [ids] читается лениво (на момент жеста — свежий порядок),
- * [onDrop] получает (fromIndex, toIndex) и переставляет вкладку через контроллер. Тапы проходят мимо
- * (detectDragGestures срабатывает только на реальном перетаскивании) к [clickable] чипа.
+ * Makes a tab chip draggable. [ids] is read lazily (fresh order at gesture time); [onDrop] gets
+ * (fromIndex, toIndex) and reorders the tab via the controller. Taps pass through to the chip's
+ * [clickable] since detectDragGestures only fires on an actual drag.
  */
 fun Modifier.draggableTab(
     state: TabDragState,

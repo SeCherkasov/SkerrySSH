@@ -5,9 +5,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Чистая логика подсказок для формы коннекта: существующие группы и теги, собранные из каталога
- * хостов, чтобы поля «Group»/«Tags» предлагали уже созданные значения (а не только свободный ввод).
- * Группы хранятся как введены ([Host.group], trim), теги — в канонической форме ([Host.tags]).
+ * Suggestion logic for the connection form: groups and tags collected from the host catalog so the
+ * Group/Tags fields suggest existing values. Groups are stored as entered ([Host.group], trimmed);
+ * tags are canonical ([Host.tags]).
  */
 class ConnectionFormSuggestionsTest {
 
@@ -22,9 +22,9 @@ class ConnectionFormSuggestionsTest {
         val hosts = listOf(
             host("1", group = "Production"),
             host("2", group = "Staging"),
-            host("3", group = "Production"), // дубль не повторяется
-            host("4", group = null), // без группы — не предлагается
-            host("5", group = "   "), // пустая после trim — не предлагается
+            host("3", group = "Production"), // duplicate is not repeated
+            host("4", group = null), // no group: not suggested
+            host("5", group = "   "), // blank after trim: not suggested
         )
         assertEquals(listOf("Production", "Staging"), groupSuggestions(hosts))
     }
@@ -49,9 +49,9 @@ class ConnectionFormSuggestionsTest {
     @Test
     fun tag_suggestions_filtered_by_canonicalized_query() {
         val hosts = listOf(host("1", tags = listOf("prod", "web", "docker")))
-        // ввод канонизируется как тег: «#DOC» → «doc» → подстрока «docker»
+        // input is canonicalized as a tag: "#DOC" -> "doc" -> substring of "docker"
         assertEquals(listOf("docker"), tagSuggestions(hosts, selected = emptyList(), query = "#DOC"))
-        // пустой/мусорный ввод — без фильтра
+        // blank/garbage input: no filter
         assertEquals(listOf("prod", "web", "docker"), tagSuggestions(hosts, selected = emptyList(), query = "#"))
     }
 }

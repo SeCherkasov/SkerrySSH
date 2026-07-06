@@ -23,10 +23,10 @@ private const val LHOME = "/local/home"
 private const val RHOME = "/remote/app"
 
 /**
- * Тесты координатора передачи. Локальная панель — над «локальным» [FakeSftpClient] (имитация ФС,
- * передачу видит только через своё дерево), удалённая и сам канал передачи — над «удалённым»
- * [FakeSftpClient]. Так upload реально создаёт файл в удалённом фейке (его `upload` сеет файл), и
- * перечитанная удалённая панель его показывает.
+ * Transfer coordinator tests. The local pane runs over a "local" [FakeSftpClient] (an FS stand-in
+ * that only sees transfers through its own tree); the remote pane and the transfer channel run
+ * over a "remote" [FakeSftpClient]. An upload actually creates the file in the remote fake (its
+ * `upload` seeds the file), and the re-listed remote pane shows it.
  */
 class TransferCoordinatorTest {
 
@@ -90,11 +90,11 @@ class TransferCoordinatorTest {
         r.coordinator.uploadSelection()
         advanceUntilIdle()
 
-        // Удалённый каталог воссоздан вместе с вложенным файлом.
+        // Remote directory is recreated along with the nested file.
         val remoteTop = r.remoteFake.list(RHOME).map { it.name }
-        assertTrue("sub" in remoteTop, "ожидали remote-каталог sub, есть: $remoteTop")
+        assertTrue("sub" in remoteTop, "expected remote directory sub, have: $remoteTop")
         val remoteSub = r.remoteFake.list("$RHOME/sub").map { it.name }
-        assertTrue("inner.txt" in remoteSub, "ожидали remote sub/inner.txt, есть: $remoteSub")
+        assertTrue("inner.txt" in remoteSub, "expected remote sub/inner.txt, have: $remoteSub")
         assertEquals("$LHOME/sub/inner.txt" to "$RHOME/sub/inner.txt", r.remoteFake.lastUpload)
         assertTrue(r.local.selection.isEmpty())
     }
@@ -126,13 +126,13 @@ class TransferCoordinatorTest {
         r.coordinator.downloadSelection()
         advanceUntilIdle()
 
-        // Локальные подкаталоги воссозданы.
+        // Local subdirectories are recreated.
         val localTop = r.localFake.list(LHOME).map { it.name }
-        assertTrue("proj" in localTop, "ожидали локальный каталог proj, есть: $localTop")
+        assertTrue("proj" in localTop, "expected local directory proj, have: $localTop")
         val localNested = r.localFake.list("$LHOME/proj").map { it.name }
-        assertTrue("nested" in localNested, "ожидали локальный каталог proj/nested, есть: $localNested")
+        assertTrue("nested" in localNested, "expected local directory proj/nested, have: $localNested")
 
-        // Оба файла дерева скачаны в соответствующие локальные пути.
+        // Both files in the tree are downloaded to their local paths.
         assertTrue("$RHOME/proj/top.txt" to "$LHOME/proj/top.txt" in r.remoteFake.downloads)
         assertTrue("$RHOME/proj/nested/deep.txt" to "$LHOME/proj/nested/deep.txt" in r.remoteFake.downloads)
 
@@ -156,7 +156,7 @@ class TransferCoordinatorTest {
 
     @Test
     fun `downloadSelection rejects a malicious listing name that escapes the local directory`() = runTest {
-        // Недоверенный сервер вернул в листинге имя с разделителем пути Windows — попытка traversal.
+        // Untrusted server returns a listing name containing a Windows path separator: path traversal attempt.
         val remote = remoteFake().apply {
             seedDir("$RHOME/proj")
             seedFile("$RHOME/proj/..\\evil.txt", size = 9)
@@ -171,7 +171,7 @@ class TransferCoordinatorTest {
         assertTrue(r.remoteFake.downloads.none { it.first.endsWith("evil.txt") })
     }
 
-    /** Тест-цель скачивания «Save to…»: фиксирует staging-путь и финализацию/откат. */
+    /** Test target for "Save to..." downloads: records the staging path and finalize/discard. */
     private class FakeDownloadTarget(
         override val displayName: String,
         override val stagingPath: String,
@@ -202,7 +202,7 @@ class TransferCoordinatorTest {
     @Test
     fun `downloadToTarget discards the target and reports Failed when finalize fails`() = runTest {
         val r = rig()
-        val target = FakeDownloadTarget("r.txt", "/staging/r.txt", finalizeError = "нет места")
+        val target = FakeDownloadTarget("r.txt", "/staging/r.txt", finalizeError = "no space")
 
         r.coordinator.downloadToTarget(r.remote.entry("r.txt"), target)
         advanceUntilIdle()
@@ -234,7 +234,7 @@ class TransferCoordinatorTest {
         r.local.toggle(r.local.entry("b.txt"))
 
         r.coordinator.uploadSelection()
-        advanceUntilIdle() // дойдёт до шлюза на первом файле
+        advanceUntilIdle() // blocks on the gate at the first file
 
         val active = assertIs<TransferState.Active>(r.coordinator.transfer)
         assertEquals(TransferDirection.Upload, active.direction)
@@ -283,9 +283,9 @@ class TransferCoordinatorTest {
         advanceUntilIdle()
 
         val remoteNames = (r.remote.state as FilePaneState.Loaded).entries.map { it.name }
-        assertTrue("a.txt" in remoteNames && "b.txt" in remoteNames, "ожидали на remote, есть: $remoteNames")
+        assertTrue("a.txt" in remoteNames && "b.txt" in remoteNames, "expected on remote, have: $remoteNames")
         val localNames = (r.local.state as FilePaneState.Loaded).entries.map { it.name }
-        assertTrue("a.txt" !in localNames && "b.txt" !in localNames, "ожидали удаления с local, есть: $localNames")
+        assertTrue("a.txt" !in localNames && "b.txt" !in localNames, "expected deletion from local, have: $localNames")
         assertEquals(TransferState.Idle, r.coordinator.transfer)
         assertTrue(r.local.selection.isEmpty())
     }
@@ -314,7 +314,7 @@ class TransferCoordinatorTest {
 
         assertEquals("$RHOME/r.txt" to "$LHOME/r.txt", r.remoteFake.lastDownload)
         val remoteNames = (r.remote.state as FilePaneState.Loaded).entries.map { it.name }
-        assertTrue("r.txt" !in remoteNames, "ожидали удаления с remote, есть: $remoteNames")
+        assertTrue("r.txt" !in remoteNames, "expected deletion from remote, have: $remoteNames")
         assertEquals(TransferState.Idle, r.coordinator.transfer)
         assertTrue(r.remote.selection.isEmpty())
     }
@@ -338,7 +338,7 @@ class TransferCoordinatorTest {
 
     @Test
     fun `moveSelection keeps the source when the transfer fails`() = runTest {
-        val remote = remoteFake().apply { uploadError = "диск переполнен" }
+        val remote = remoteFake().apply { uploadError = "disk full" }
         val r = rig(remote = remote)
         r.local.toggle(r.local.entry("a.txt"))
 
@@ -351,8 +351,8 @@ class TransferCoordinatorTest {
 
     @Test
     fun `overwrite upload keeps the destination directory captured when the dialog was shown`() = runTest {
-        // TOCTOU: конфликт имён считается при показе диалога; навигация remote-панели при открытом
-        // диалоге не должна уводить перезапись в другой каталог.
+        // TOCTOU: the name conflict is computed when the dialog is shown; navigating the remote
+        // pane while it's open must not redirect the overwrite to a different directory.
         val remote = remoteFake().apply {
             seedFile("$RHOME/a.txt", size = 3)
             seedDir("$RHOME/sub")
@@ -361,9 +361,9 @@ class TransferCoordinatorTest {
         r.local.toggle(r.local.entry("a.txt"))
 
         r.coordinator.uploadSelection()
-        assertNotNull(r.coordinator.overwrite, "ожидали диалог Overwrite")
+        assertNotNull(r.coordinator.overwrite, "expected an Overwrite dialog")
 
-        // Пока диалог открыт, пользователь увёл remote-панель в подкаталог.
+        // While the dialog is open, the user navigates the remote pane into a subdirectory.
         r.remote.open(r.remote.entry("sub"))
         advanceUntilIdle()
         assertEquals("$RHOME/sub", r.remote.path)
@@ -372,7 +372,7 @@ class TransferCoordinatorTest {
         advanceUntilIdle()
 
         assertEquals("$LHOME/a.txt" to "$RHOME/a.txt", r.remoteFake.lastUpload,
-            "перезапись должна идти в каталог, для которого считался конфликт")
+            "overwrite must target the directory the conflict was computed for")
     }
 
     @Test
@@ -382,9 +382,9 @@ class TransferCoordinatorTest {
         r.remote.toggle(r.remote.entry("r.txt"))
 
         r.coordinator.downloadSelection()
-        assertNotNull(r.coordinator.overwrite, "ожидали диалог Overwrite")
+        assertNotNull(r.coordinator.overwrite, "expected an Overwrite dialog")
 
-        // Пока диалог открыт, пользователь увёл local-панель в подкаталог.
+        // While the dialog is open, the user navigates the local pane into a subdirectory.
         r.local.open(r.local.entry("sub"))
         advanceUntilIdle()
         assertEquals("$LHOME/sub", r.local.path)
@@ -393,12 +393,12 @@ class TransferCoordinatorTest {
         advanceUntilIdle()
 
         assertEquals("$RHOME/r.txt" to "$LHOME/r.txt", r.remoteFake.lastDownload,
-            "перезапись должна идти в каталог, для которого считался конфликт")
+            "overwrite must target the directory the conflict was computed for")
     }
 
     @Test
     fun `a failed transfer surfaces as Failed`() = runTest {
-        val remote = remoteFake().apply { uploadError = "диск переполнен" }
+        val remote = remoteFake().apply { uploadError = "disk full" }
         val r = rig(remote = remote)
         r.local.toggle(r.local.entry("a.txt"))
 

@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 
 class SessionTabDndTest {
 
-    // Центры трёх оставшихся вкладок по X (порядок списка).
+    // X centers of the three remaining tabs (list order).
     private val centers = listOf(50f, 150f, 250f)
 
     @Test
@@ -20,8 +20,8 @@ class SessionTabDndTest {
 
     @Test
     fun `pointer between tabs inserts at that slot`() {
-        assertEquals(1, tabInsertIndex(centers, pointerX = 100f)) // между 1-й и 2-й
-        assertEquals(2, tabInsertIndex(centers, pointerX = 200f)) // между 2-й и 3-й
+        assertEquals(1, tabInsertIndex(centers, pointerX = 100f)) // between 1st and 2nd
+        assertEquals(2, tabInsertIndex(centers, pointerX = 200f)) // between 2nd and 3rd
     }
 
     @Test

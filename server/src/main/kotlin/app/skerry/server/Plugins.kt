@@ -47,7 +47,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
 
-/** Имена rate-limit бакетов (по удалённому IP). Объявлены здесь, используются в маршрутах. */
+/** Rate-limit bucket names (keyed by remote IP). Declared here, used by the routes. */
 object RateLimits {
     val REGISTER = RateLimitName("auth-register")
     val SRP_CHALLENGE = RateLimitName("srp-challenge")
@@ -57,33 +57,32 @@ object RateLimits {
     val ADMIN = RateLimitName("admin")
 }
 
-/** Версия сервера для /healthz и админ-консоли. */
+/** Server version for /healthz and the admin console. */
 const val SERVER_VERSION = "0.1.0"
 
 val JWTPrincipal.accountId: String get() = payload.subject
 val JWTPrincipal.deviceId: String get() = payload.getClaim(TokenService.CLAIM_DEVICE).asString()
 
 /**
- * Принципал в маршруте под `authenticate("auth-jwt")`. Кидает явную ошибку вместо `!!`: при
- * случайном переносе маршрута из-под `authenticate {}` это даст понятный сбой, не молчаливый NPE
- * (kotlin-ревью).
+ * Principal for a route under `authenticate("auth-jwt")`. Throws an explicit error instead of
+ * `!!` so moving a route out from under `authenticate {}` fails loudly instead of NPEing silently.
  */
 fun ApplicationCall.jwtPrincipal(): JWTPrincipal =
     principal<JWTPrincipal>() ?: error("missing JWT principal — route must be under authenticate(\"auth-jwt\")")
 
 /**
- * Устанавливает плагины и маршруты. Вынесено из [module] отдельной функцией, чтобы тесты
- * могли поднять сервер на тестовой БД через `testApplication { application { configureServer(services) } }`.
+ * Installs plugins and routes. Split out of [module] so tests can start a server against a
+ * test DB via `testApplication { application { configureServer(services) } }`.
  */
 fun Application.configureServer(services: Services) {
-    // Forward-compat: незнакомые поля в JSON игнорируем (старый клиент ↔ новый сервер). Опечатки
-    // полей при этом не ловятся — осознанное решение для версионируемого API.
+    // Forward-compat: ignore unknown JSON fields (old client vs. new server). Field typos go
+    // undetected as a tradeoff for a versionable API.
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
     install(WebSockets) { pingPeriodMillis = 30_000 }
     install(CallLogging) { level = Level.INFO }
-    // Security-заголовки на каждый ответ. CSP заперт на 'self' (API отдаёт JSON, админ-консоль —
-    // same-origin без внешних ресурсов после удаления Google Fonts CDN); inline стиль/скрипт
-    // допущены, т.к. консоль их использует и встроена в ту же страницу.
+    // Security headers on every response. CSP is locked to 'self' (API returns JSON, admin
+    // console is same-origin with no external resources); inline style/script are allowed
+    // because the console uses them and is embedded in the same page.
     install(DefaultHeaders) {
         header("X-Content-Type-Options", "nosniff")
         header("X-Frame-Options", "DENY")
@@ -93,9 +92,9 @@ fun Application.configureServer(services: Services) {
             "default-src 'self'; font-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
         )
     }
-    // Rate-limit по удалённому IP: гасит брутфорс/флуд на регистрацию, SRP и claim паринга.
+    // Rate-limit by remote IP: throttles brute force/flooding on register, SRP, and pairing claim.
     install(RateLimit) {
-        // Все бакеты одного вида: N токенов на 60 секунд, ключ — удалённый IP.
+        // All buckets are the same shape: N tokens per 60 seconds, keyed by remote IP.
         fun perIp(name: RateLimitName, limit: Int) = register(name) {
             rateLimiter(limit = limit, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
@@ -104,18 +103,18 @@ fun Application.configureServer(services: Services) {
         perIp(RateLimits.SRP_CHALLENGE, limit = 10)
         perIp(RateLimits.SRP_VERIFY, limit = 10)
         perIp(RateLimits.PAIRING_CLAIM, limit = 10)
-        // Refresh не требует пароля — по defense-in-depth ограничиваем флуд (подпись дёшева, но публичный
-        // POST без предварительной аутентификации не должен быть единственным без лимита).
+        // Refresh needs no password; rate-limited as defense-in-depth even though the signature
+        // check is cheap, since it's a public POST with no prior authentication.
         perIp(RateLimits.REFRESH, limit = 30)
-        // Admin-консоль защищена статическим токеном со сравнением constant-time, но от перебора токена
-        // это не спасает — добавляем частотный лимит на /admin/*.
+        // The admin console uses a constant-time static token compare, which doesn't stop brute
+        // forcing the token itself, hence a rate limit on /admin/*.
         perIp(RateLimits.ADMIN, limit = 30)
     }
-    // Жёсткая верхняя граница тела запроса. По Content-Length отвергаем раздутые тела 413-м ещё до
-    // чтения. Но одного Content-Length мало: тело с Transfer-Encoding: chunked приходит БЕЗ него, и
-    // тогда проверка ниже не сработала бы, а call.receive забуферизовал бы поток любого размера в память
-    // (OOM одним неаутентифицированным запросом). Наш клиент на теле всегда шлёт Content-Length, поэтому
-    // POST/PUT без него отвергаем как 411 — это и закрывает chunked-обход.
+    // Hard upper bound on request body size. Content-Length lets us reject oversized bodies with
+    // 413 before reading. Content-Length alone isn't enough: a chunked-encoded body has none, so
+    // the check below wouldn't trigger and call.receive would buffer an unbounded stream into
+    // memory (OOM from a single unauthenticated request). Our client always sends Content-Length
+    // for bodies, so POST/PUT without one is rejected as 411, closing the chunked bypass.
     val maxBody = services.config.maxRequestBodyBytes
     intercept(ApplicationCallPipeline.Plugins) {
         val method = call.request.httpMethod
@@ -130,9 +129,9 @@ fun Application.configureServer(services: Services) {
             return@intercept finish()
         }
     }
-    // CORS нужен только браузерным клиентам; нативные приложения ему не подвержены, а админ-консоль
-    // — same-origin. Поэтому по умолчанию (пустой список) CORS не ставим; включается явным списком
-    // хостов через SKERRY_CORS_HOSTS (security-ревью M3: не оставлять anyHost).
+    // CORS matters only to browser clients; native apps aren't subject to it and the admin
+    // console is same-origin. Off by default (empty list); enabled by an explicit host list via
+    // SKERRY_CORS_HOSTS.
     if (services.config.corsHosts.isNotEmpty()) {
         install(CORS) {
             services.config.corsHosts.forEach { allowHost(it, schemes = listOf("http", "https")) }
@@ -159,7 +158,7 @@ fun Application.configureServer(services: Services) {
                 val type = credential.payload.getClaim(TokenService.CLAIM_TYPE).asString()
                 val account = credential.payload.subject
                 val did = credential.payload.getClaim(TokenService.CLAIM_DEVICE).asString()
-                // Токен валиден только если это access-токен и устройство (в рамках аккаунта) не отозвано.
+                // Valid only if this is an access token and the device (within the account) isn't revoked.
                 if (type == TokenService.TYPE_ACCESS && account != null && did != null &&
                     !services.devices.isRevoked(account, did)
                 ) {
@@ -174,16 +173,16 @@ fun Application.configureServer(services: Services) {
     routing {
         get("/healthz") { call.respondText("ok") }
 
-        // Корень ведёт на админ-консоль — чтобы открытие сервера в браузере не давало 404.
+        // Root redirects to the admin console so opening the server in a browser isn't a 404.
         get("/") { call.respondRedirect("/console/") }
 
-        // Статическая админ-консоль (self-hosted): /console -> resources/admin/index.html.
+        // Static admin console (self-hosted): /console -> resources/admin/index.html.
         staticResources("/console", "admin")
 
         authRoutes(services)
-        pairingClaimRoute(services)   // без JWT: новое устройство ещё не вошло
+        pairingClaimRoute(services)   // no JWT: the new device hasn't logged in yet
         rateLimit(RateLimits.ADMIN) {
-            adminRoutes(services)     // своя admin-аутентификация (статический токен) + лимит на перебор
+            adminRoutes(services)     // own admin auth (static token) plus a brute-force rate limit
         }
 
         authenticate("auth-jwt") {

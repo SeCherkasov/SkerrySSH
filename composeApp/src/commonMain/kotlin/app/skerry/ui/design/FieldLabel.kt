@@ -9,8 +9,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Uppercase-подпись поля формы (мелкие капсы в приглушённом цвете), с отступом [top] от предыдущего
- * блока. Общий примитив для форм настроек/диалогов (тот же вид, что лейблы sync/tunnel/snippet-форм).
+ * Uppercase form field label (small caps, dimmed color), with [top] spacing from the previous
+ * block. Shared primitive for settings/dialog forms (same look as sync/tunnel/snippet form labels).
  */
 @Composable
 fun FieldLabel(text: String, top: Dp = 12.dp) {

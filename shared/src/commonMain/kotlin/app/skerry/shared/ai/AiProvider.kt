@@ -2,10 +2,10 @@ package app.skerry.shared.ai
 
 import kotlinx.coroutines.flow.Flow
 
-/** Роль сообщения в диалоге с моделью (как в chat-completions API). */
+/** Role of a message in the model conversation (as in the chat-completions API). */
 enum class AiRole { SYSTEM, USER, ASSISTANT }
 
-/** Wire-имя роли — общее для chat-completions JSON (OpenAiProvider) и chat-шаблонов GGUF (LlamatikRuntime). */
+/** Wire name of the role, shared by chat-completions JSON (OpenAiProvider) and GGUF chat templates (LlamatikRuntime). */
 val AiRole.wire: String
     get() = when (this) {
         AiRole.SYSTEM -> "system"
@@ -13,12 +13,12 @@ val AiRole.wire: String
         AiRole.ASSISTANT -> "assistant"
     }
 
-/** Одно сообщение диалога. [content] уже собран вызывающей стороной с учётом per-host политики. */
+/** One conversation message. [content] is already assembled by the caller per per-host policy. */
 data class AiMessage(val role: AiRole, val content: String)
 
 /**
- * Запрос чат-комплишена. [model] — идентификатор модели провайдера (напр. `gpt-4o-mini`).
- * [temperature]/[maxOutputTokens] — `null` значит «оставить дефолт провайдера».
+ * Chat-completion request. [model] is the provider's model identifier (e.g. `gpt-4o-mini`).
+ * [temperature]/[maxOutputTokens] `null` means "use the provider default".
  */
 data class AiChatRequest(
     val model: String,
@@ -27,31 +27,31 @@ data class AiChatRequest(
     val maxOutputTokens: Int? = null,
 )
 
-/** Приращение стримингового ответа: очередной кусок текста ассистента. */
+/** One increment of a streamed response: the next chunk of assistant text. */
 data class AiDelta(val text: String)
 
 /**
- * Сырое подключение к внешней LLM (BYOK). Контракт в ядре, реализация платформенная
- * (JVM: Ktor). Это НЕ ассистент: провайдер не знает про per-host политику и не собирает
- * контекст — он лишь гоняет запрос к модели. Политику и подтверждение выполнения применяет
- * слой выше (контроллеры `ui/ai`); вывод модели всегда считается недоверенным источником.
+ * Raw connection to an external LLM (BYOK). Contract in the core, implementation is platform-specific
+ * (JVM: Ktor). This is NOT an assistant: the provider doesn't know about per-host policy and doesn't
+ * assemble context — it only runs the request against the model. Policy and execution confirmation
+ * are applied by the layer above (`ui/ai` controllers); model output is always treated as untrusted.
  *
- * Ошибки сети/протокола/аутентификации сигнализируются [AiException].
+ * Network/protocol/auth errors are signaled via [AiException].
  */
 interface AiProvider {
 
     /**
-     * Стриминговый чат-комплишн: эмитит [AiDelta] по мере генерации, завершается нормально
-     * по концу ответа. Реализация может внутренне не стримить (эмитить один дельта-кусок) —
-     * контракт от этого не зависит.
+     * Streaming chat completion: emits [AiDelta] as generation proceeds, completes normally at the
+     * end of the response. An implementation may not stream internally (emit a single delta chunk) —
+     * the contract doesn't depend on it.
      */
     fun chat(request: AiChatRequest): Flow<AiDelta>
 
-    /** Освобождает сетевые ресурсы (HTTP-клиент). */
+    /** Releases network resources (HTTP client). */
     suspend fun close()
 }
 
-/** Ошибка AI-провайдера: сеть, аутентификация, лимиты, некорректный запрос или протокол. */
+/** AI provider error: network, auth, rate limit, invalid request, or protocol. */
 class AiException(val kind: Kind, message: String, cause: Throwable? = null) : Exception(message, cause) {
     enum class Kind { NETWORK, UNAUTHORIZED, RATE_LIMITED, INVALID_REQUEST, PROTOCOL }
 }

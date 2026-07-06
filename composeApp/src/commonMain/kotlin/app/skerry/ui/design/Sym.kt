@@ -13,7 +13,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 
-/** Набор шрифтов макета, прокидываемый через [LocalFonts] — UI, моно и иконочный. */
+/** Layout font set provided via [LocalFonts]: UI, monospace, and icon fonts. */
 @Immutable
 data class DesignFonts(
     val ui: FontFamily,
@@ -26,8 +26,8 @@ val LocalFonts: ProvidableCompositionLocal<DesignFonts> = staticCompositionLocal
 }
 
 /**
- * Иконка Material Symbols Outlined: имя ([name], напр. `folder_open`) рендерится как лигатура
- * иконочного шрифта в [BasicText]. Размер/цвет — как в инлайн-стилях прототипа (`font-size`).
+ * Material Symbols Outlined icon: [name] (e.g. `folder_open`) renders as an icon-font ligature
+ * in [BasicText]. Size/color mirror the prototype's inline styles (`font-size`).
  */
 @Composable
 fun Sym(

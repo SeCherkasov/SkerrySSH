@@ -9,9 +9,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Поллер скорости терминального канала: по дельте счётчиков байт за период считает байт/с.
- * Время виртуальное (testScheduler): `advanceTimeBy(period)` + `runCurrent()` запускает ровно
- * один опрос (задача delay назначена на конец периода — её выполняет runCurrent).
+ * Terminal channel throughput poller: computes bytes/sec from the byte-counter delta over the
+ * period. Time is virtual (testScheduler): `advanceTimeBy(period)` + `runCurrent()` triggers
+ * exactly one poll (the delay task lands at the end of the period; runCurrent runs it).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ThroughputControllerTest {
@@ -23,7 +23,7 @@ class ThroughputControllerTest {
         var down = 0L
         val c = ThroughputController({ up }, { down }, scope, pollIntervalMillis = 1000)
 
-        c.start() // снимает базис 0/0
+        c.start() // captures the 0/0 baseline
         up = 2048
         down = 8192
         testScheduler.advanceTimeBy(1000); testScheduler.runCurrent()
@@ -37,10 +37,10 @@ class ThroughputControllerTest {
     @Test
     fun rate_is_zero_without_new_bytes_and_tracks_next_delta() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        var up = 1000L // уже накоплено до старта поллера
+        var up = 1000L // already accumulated before the poller starts
         val c = ThroughputController({ up }, { 0L }, scope, pollIntervalMillis = 1000)
 
-        c.start() // базис = 1000, накопленное НЕ должно сосчитаться как скорость
+        c.start() // baseline = 1000; the prior total must not count as rate
         testScheduler.advanceTimeBy(1000); testScheduler.runCurrent()
         assertEquals(0L, c.upRate)
 
@@ -59,7 +59,7 @@ class ThroughputControllerTest {
         val c = ThroughputController({ 0L }, { down }, scope, pollIntervalMillis = 500)
 
         c.start()
-        down = 1024 // 1024 байта за полсекунды → 2048 байт/с
+        down = 1024 // 1024 bytes in half a second -> 2048 bytes/sec
         testScheduler.advanceTimeBy(500); testScheduler.runCurrent()
         assertEquals(2048L, c.downRate)
 
@@ -74,11 +74,11 @@ class ThroughputControllerTest {
         val c = ThroughputController({ polls.toLong() }, { 0L }, scope, pollIntervalMillis = 1000)
 
         c.start()
-        c.start() // второй вызов не должен поднять второй цикл
+        c.start() // second call must not spin up a second poll loop
         polls = 10
         testScheduler.advanceTimeBy(1000); testScheduler.runCurrent()
 
-        // один цикл → один прирост на период; будь циклов два, дельта удвоилась бы при общем счётчике
+        // One loop -> one increment per period; a second loop would double the delta on the shared counter.
         assertEquals(10L, c.upRate)
         c.stop()
         scope.cancel()

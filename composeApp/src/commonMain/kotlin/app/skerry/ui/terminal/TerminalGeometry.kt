@@ -7,9 +7,8 @@ import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 
 /**
- * Размеры моноширинной ячейки терминала в пикселях. Замеряются один раз на стороне UI
- * (advance моно-символа + lineHeight) и передаются сюда, чтобы перевод координат был чистой
- * тестируемой арифметикой.
+ * Monospace terminal cell size in pixels. Measured once on the UI side (mono-char advance +
+ * lineHeight) and passed in here, so coordinate conversion stays pure testable arithmetic.
  */
 data class TerminalMetrics(
     val cellWidth: Float,
@@ -17,10 +16,10 @@ data class TerminalMetrics(
 )
 
 /**
- * Сколько колонок и строк помещается во вьюпорт терминала. Из размера вьюпорта вычитаются отступы
- * с обеих сторон ([paddingPx]), остаток делится на размер ячейки (floor — частичная ячейка не в
- * счёт). Меньше 1×1 не отдаём: PTY без хотя бы одной ячейки бессмысленен. Пиксельные размеры в
- * [PtySize] — это область контента (без отступов), которую сервер может использовать для графики.
+ * Columns and rows that fit in the terminal viewport. Padding on both sides ([paddingPx]) is
+ * subtracted from the viewport size, and the remainder is divided by cell size (floored — a partial
+ * cell doesn't count). Never returns below 1×1: a PTY needs at least one cell. The pixel sizes in
+ * [PtySize] are the content area (padding excluded), usable by the server for graphics.
  */
 fun gridSizeFor(
     viewportWidthPx: Float,
@@ -36,12 +35,11 @@ fun gridSizeFor(
 }
 
 /**
- * Перевод позиции указателя в ячейку сетки. Координаты приходят уже в системе координат контента
- * терминала: `pointerInput` стоит в цепочке модификаторов после `verticalScroll` и `padding`,
- * поэтому Compose отдаёт offset относительно текста (с учётом прокрутки и без отступа) — остаётся
- * только разделить на размер ячейки. Строка/колонка берутся floor'ом; отрицательные координаты
- * поджимаются к началу. Строка сверху не ограничивается — вызывающий сопоставляет её с экраном
- * (extract сам поджимает выход за последнюю строку).
+ * Converts a pointer position into a grid cell. Coordinates already arrive in the terminal content's
+ * coordinate system: `pointerInput` sits after `verticalScroll` and `padding` in the modifier chain,
+ * so Compose gives an offset relative to the text (scroll accounted for, padding excluded) — only
+ * dividing by cell size remains. Row/column are floored; negative coordinates clamp to zero. Row isn't
+ * upper-bounded here; the caller maps it against the screen (extract clamps past the last row).
  */
 fun cellAtOffset(x: Float, y: Float, metrics: TerminalMetrics): TerminalPos {
     val col = (x / metrics.cellWidth).toInt().coerceAtLeast(0)
@@ -50,9 +48,9 @@ fun cellAtOffset(x: Float, y: Float, metrics: TerminalMetrics): TerminalPos {
 }
 
 /**
- * Прямоугольник стартовой ячейки выделения в пикселях контента — якорь для системного текстового
- * меню (`LocalTextToolbar.showMenu` ждёт rect, над которым показать «Copy»). Берётся нормализованная
- * верхняя-левая граница [TerminalSelection.start], UI мапит этот rect в координаты окна.
+ * Rect of the selection's starting cell in content pixels — anchor for the system text menu
+ * (`LocalTextToolbar.showMenu` needs a rect to show "Copy" above). Uses the normalized top-left bound
+ * of [TerminalSelection.start]; the UI maps this rect into window coordinates.
  */
 fun selectionAnchorRect(selection: TerminalSelection, metrics: TerminalMetrics): Rect {
     val s = selection.start
@@ -61,15 +59,15 @@ fun selectionAnchorRect(selection: TerminalSelection, metrics: TerminalMetrics):
     return Rect(left = left, top = top, right = left + metrics.cellWidth, bottom = top + metrics.cellHeight)
 }
 
-/** Какую границу выделения тянет тач-маркер: верхнюю-левую (start) или нижнюю-правую (end). */
+/** Which selection boundary a touch handle drags: top-left (start) or bottom-right (end). */
 enum class SelectionHandle { START, END }
 
 /**
- * Якоря двух тач-маркеров выделения в пикселях контента — точки, к которым «подвешиваются»
- * перетаскиваемые «капли» (как в мессенджерах). Берутся нижние углы нормализованных границ:
- * start — нижний-левый угол первой ячейки, end — нижний-правый край последнего символа
- * ([TerminalSelection.end] эксклюзивен, поэтому его колонка и есть правая грань). UI рисует «каплю»
- * под якорем и мапит координату в окно с учётом прокрутки.
+ * Anchor points of the two selection touch handles in content pixels — where the draggable "drop"
+ * handles (messenger-style) attach. Uses the bottom corners of the normalized bounds: start — bottom-
+ * left of the first cell, end — bottom-right of the last character ([TerminalSelection.end] is
+ * exclusive, so its column is the right edge). The UI draws the handle below the anchor and maps the
+ * coordinate into the window accounting for scroll.
  */
 fun selectionHandleAnchors(selection: TerminalSelection, metrics: TerminalMetrics): Pair<Offset, Offset> {
     val s = selection.start
@@ -80,9 +78,9 @@ fun selectionHandleAnchors(selection: TerminalSelection, metrics: TerminalMetric
 }
 
 /**
- * Попал ли палец в один из тач-маркеров выделения. Сравнивает [point] (координаты контента) с
- * якорями ручек ([selectionHandleAnchors]) в радиусе [radiusPx]; если в радиусе обе — возвращает
- * ближайшую, иначе ту, что в радиусе, иначе `null` (жест уходит в long-press/прокрутку).
+ * Whether a finger hit one of the selection touch handles. Compares [point] (content coordinates) to
+ * the handle anchors ([selectionHandleAnchors]) within [radiusPx]; if both are within range, returns
+ * the closer one; otherwise the one in range, or `null` (gesture falls through to long-press/scroll).
  */
 fun hitTestSelectionHandle(
     point: Offset,

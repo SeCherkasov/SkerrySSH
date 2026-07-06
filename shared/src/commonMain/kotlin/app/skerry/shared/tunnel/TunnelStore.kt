@@ -1,17 +1,17 @@
 package app.skerry.shared.tunnel
 
 /**
- * Персистентное хранилище сохранённых туннелей (port forwarding). Платформенная реализация —
- * файловая (jvmShared), как у [app.skerry.shared.host.HostStore]. Контракт синхронный: мутации редки
- * и инициируются из UI. Реализации обязаны быть потокобезопасными.
+ * Persistent store for saved tunnels (port forwarding). The platform implementation is
+ * file-backed (jvmShared), like [app.skerry.shared.host.HostStore]. The contract is synchronous:
+ * mutations are rare and UI-initiated. Implementations must be thread-safe.
  */
 interface TunnelStore {
-    /** Все туннели в порядке вставки/обновления. */
+    /** All tunnels in insertion/update order. */
     fun all(): List<Tunnel>
 
-    /** Создать новую запись или заменить существующую с тем же [Tunnel.id] (upsert). */
+    /** Create a new record or replace an existing one with the same [Tunnel.id] (upsert). */
     fun put(tunnel: Tunnel)
 
-    /** Удалить запись по id; отсутствующий id — no-op. */
+    /** Remove the record by id; missing id is a no-op. */
     fun remove(id: String)
 }

@@ -1,7 +1,7 @@
 package app.skerry.ui.terminal
 
-/** В Android нет PRIMARY-выделения — вставка средней кнопкой откатывается на обычный буфер обмена. */
+/** Android has no PRIMARY selection; middle-click paste falls back to the regular clipboard. */
 internal actual fun readPrimarySelectionText(): String? = null
 
-/** В Android нет PRIMARY-выделения — запись не нужна (no-op). */
+/** Android has no PRIMARY selection; no-op. */
 internal actual fun writePrimarySelectionText(text: String) = Unit

@@ -3,24 +3,24 @@ package app.skerry.shared.ssh
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Транспортный контракт SSH-ядра. Платформенные реализации подставляются снаружи:
- * на desktop — sshj (JVM), на мобильных — своя реализация позже.
+ * Transport contract for the SSH core. Platform implementations are supplied externally: sshj (JVM)
+ * on desktop, own implementation on mobile later.
  */
 interface SshTransport {
     /**
-     * @throws SshConnectionException сетевая ошибка или обрыв транспорта
-     * @throws SshHostKeyRejectedException ключ хоста отвергнут [HostKeyVerifier]
-     * @throws SshAuthenticationException сервер не принял учётные данные
+     * @throws SshConnectionException network error or transport dropped
+     * @throws SshHostKeyRejectedException host key rejected by [HostKeyVerifier]
+     * @throws SshAuthenticationException server rejected the credentials
      */
     suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection
 }
 
 /**
- * Цель подключения. [connectionType] выбирает транспорт ([RoutingTransport] диспетчеризует по нему):
- * для [ConnectionType.SSH] значимы все поля; для [ConnectionType.TELNET] — только [host]/[port]
- * ([username]/auth не используются); для [ConnectionType.SERIAL] [host] несёт имя устройства
- * (`/dev/ttyUSB0`, `COM3`), а [port] — скорость (baud). Дефолт [ConnectionType.SSH] сохраняет
- * поведение всех прежних вызовов, строящих таргет без указания типа.
+ * Connection target. [connectionType] selects the transport ([RoutingTransport] dispatches on it):
+ * for [ConnectionType.SSH] all fields matter; for [ConnectionType.TELNET] only [host]/[port] are
+ * used ([username]/auth ignored); for [ConnectionType.SERIAL] [host] carries the device name
+ * (`/dev/ttyUSB0`, `COM3`) and [port] the baud rate. Default [ConnectionType.SSH] preserves the
+ * behavior of prior call sites that built a target without specifying a type.
  */
 data class SshTarget(
     val host: String,
@@ -30,14 +30,14 @@ data class SshTarget(
 )
 
 sealed interface SshAuth {
-    // Секрет как String: на JVM не обнуляется, переход на затираемый буфер — отдельный шаг.
+    // Secret as String: not zeroed on JVM; switching to a wipeable buffer is a separate step.
     data class Password(val secret: String) : SshAuth {
         override fun toString(): String = "Password(redacted)"
     }
 
     /**
-     * Аутентификация по приватному ключу: [privateKeyPem] — содержимое PEM (OpenSSH/PKCS),
-     * [passphrase] расшифровывает ключ (null — ключ без passphrase). Секрет берётся из vault
+     * Private key authentication: [privateKeyPem] is PEM content (OpenSSH/PKCS), [passphrase]
+     * decrypts the key (null for a passphrase-less key). Secret comes from the vault
      * ([app.skerry.shared.vault.CredentialSecret.PrivateKey]).
      */
     data class PublicKey(val privateKeyPem: String, val passphrase: String? = null) : SshAuth {
@@ -45,9 +45,9 @@ sealed interface SshAuth {
     }
 
     /**
-     * Аутентификация по SSH-сертификату: клиент предъявляет [certificate] (строка `*-cert.pub`,
-     * выданная CA) и доказывает владение приватным ключом [privateKeyPem] (PEM, [passphrase]
-     * расшифровывает его при необходимости). Секрет берётся из vault
+     * SSH certificate authentication: the client presents [certificate] (a CA-issued `*-cert.pub`
+     * string) and proves possession of the private key [privateKeyPem] (PEM, [passphrase] decrypts
+     * it if needed). Secret comes from the vault
      * ([app.skerry.shared.vault.CredentialSecret.Certificate]).
      */
     data class Certificate(
@@ -60,10 +60,8 @@ sealed interface SshAuth {
 }
 
 /**
- * Решение о доверии ключу хоста. Fingerprint — в формате OpenSSH
- * (`SHA256:` + base64 без паддинга), keyType — идентификатор алгоритма
- * (`ssh-ed25519`, `rsa-sha2-512`, …). Персистентный known-hosts появится
- * вместе с менеджером хостов.
+ * Trust decision for a host key. Fingerprint uses OpenSSH format (`SHA256:` + unpadded base64),
+ * keyType is the algorithm identifier (`ssh-ed25519`, `rsa-sha2-512`, …).
  */
 fun interface HostKeyVerifier {
     fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean
@@ -73,70 +71,70 @@ interface SshConnection {
     val isConnected: Boolean
 
     /**
-     * Согласованный при установке соединения симметричный шифр (направление client→server) в нотации
-     * SSH (`chacha20-poly1305@openssh.com`, `aes256-gcm@openssh.com`, `aes256-ctr`, …), либо `null`,
-     * если транспорт его не сообщает. Статичен на всё время жизни соединения. Реализация по умолчанию —
-     * `null` (фейки/тесты), реальный транспорт перекрывает.
+     * Symmetric cipher negotiated at connection setup (client→server direction) in SSH notation
+     * (`chacha20-poly1305@openssh.com`, `aes256-gcm@openssh.com`, `aes256-ctr`, …), or `null` if the
+     * transport doesn't report it. Static for the connection's lifetime. Default `null`
+     * (fakes/tests); real transports override.
      */
     val cipher: String? get() = null
 
     /**
-     * Идентификационная строка сервера (remote ident) в полной форме `SSH-2.0-<software>`, напр.
-     * `SSH-2.0-OpenSSH_8.9p1`, либо `null`, если транспорт её не сообщает. Статична на всё время
-     * жизни соединения. Реализация по умолчанию — `null` (фейки/тесты), реальный транспорт перекрывает.
+     * Server identification string (remote ident) in full form `SSH-2.0-<software>`, e.g.
+     * `SSH-2.0-OpenSSH_8.9p1`, or `null` if the transport doesn't report it. Static for the
+     * connection's lifetime. Default `null` (fakes/tests); real transports override.
      */
     val serverVersion: String? get() = null
 
     /**
-     * Замерить round-trip до сервера (мс): шлёт keep-alive-запрос с ожиданием ответа и возвращает
-     * время до отклика, либо `null`, если соединение мертво/ответ не пришёл в разумный срок. Каждый
-     * вызов — один round-trip (попутно держит соединение живым). Реализация по умолчанию — `null`
-     * (фейки/тесты), реальный транспорт перекрывает. Периодичность задаёт вызывающий (поллер UI).
+     * Measure round-trip time to the server (ms): sends a keep-alive request and waits for a
+     * response, returning `null` if the connection is dead or no reply arrives in a reasonable time.
+     * Each call is one round-trip (and incidentally keeps the connection alive). Default `null`
+     * (fakes/tests); real transports override. Polling cadence is up to the caller (UI poller).
      */
     suspend fun measureRoundTrip(): Long? = null
 
-    /** Одноразовый exec-канал для неинтерактивных команд. */
+    /** One-shot exec channel for non-interactive commands. */
     suspend fun exec(command: String): ExecResult
 
     /**
-     * Интерактивный shell с PTY.
-     * @throws SshConnectionException канал открыть не удалось
+     * Interactive shell with a PTY.
+     * @throws SshConnectionException channel failed to open
      */
     suspend fun openShell(size: PtySize = PtySize(), term: String = "xterm-256color"): ShellChannel
 
     /**
-     * Открыть SFTP-подсистему поверх этого соединения. Каждый вызов — отдельный канал;
-     * закрывать через [app.skerry.shared.sftp.SftpClient.close]. Соединение остаётся открытым.
-     * @throws SshConnectionException SFTP-подсистему открыть не удалось
+     * Open an SFTP subsystem over this connection. Each call is a separate channel; close via
+     * [app.skerry.shared.sftp.SftpClient.close]. The connection stays open.
+     * @throws SshConnectionException SFTP subsystem failed to open
      */
     suspend fun openSftp(): app.skerry.shared.sftp.SftpClient
 
     /**
-     * Поднять локальный проброс портов (`-L`) поверх этого соединения. Слушатель живёт, пока не
-     * вызван [PortForward.close]; соединение остаётся открытым. См. [LocalForwardSpec].
-     * @throws PortForwardException слушатель не поднялся (порт занят) или обрыв канала
+     * Start a local port forward (`-L`) over this connection. The listener lives until
+     * [PortForward.close] is called; the connection stays open. See [LocalForwardSpec].
+     * @throws PortForwardException listener failed to start (port in use) or channel broke
      */
     suspend fun forwardLocal(spec: LocalForwardSpec): PortForward
 
     /**
-     * Поднять обратный проброс портов (`-R`) поверх этого соединения. Сервер слушает у себя, пока не
-     * вызван [PortForward.close]; соединение остаётся открытым. См. [RemoteForwardSpec].
-     * @throws PortForwardException сервер отверг запрос или обрыв канала
+     * Start a remote port forward (`-R`) over this connection. The server listens on its side until
+     * [PortForward.close] is called; the connection stays open. See [RemoteForwardSpec].
+     * @throws PortForwardException server rejected the request or channel broke
      */
     suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward
 
     /**
-     * Поднять динамический проброс (`-D`) поверх этого соединения: на нашей машине запускается
-     * SOCKS5-прокси, а адрес назначения каждый клиент задаёт сам. Слушатель живёт, пока не вызван
-     * [PortForward.close]; соединение остаётся открытым. См. [DynamicForwardSpec].
-     * @throws PortForwardException слушатель не поднялся (порт занят)
+     * Start a dynamic forward (`-D`) over this connection: a SOCKS5 proxy runs on our machine, and
+     * each client supplies its own destination address. The listener lives until [PortForward.close]
+     * is called; the connection stays open. See [DynamicForwardSpec].
+     * @throws PortForwardException listener failed to start (port in use)
      */
     suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward
 
     suspend fun disconnect()
 }
 
-/** Размер PTY; пиксельные размеры опциональны (0 — не сообщать). */
+/** PTY size; pixel dimensions are optional (0 means not reported). */
 data class PtySize(
     val cols: Int = 80,
     val rows: Int = 24,
@@ -148,40 +146,39 @@ interface ShellChannel {
     val isOpen: Boolean
 
     /**
-     * Суммарно записано в PTY (ввод/отчёты) и прочитано из PTY (вывод) за время жизни канала, в байтах.
-     * Монотонно растут. Нужны для индикатора скорости в статус-баре (дельту/период считает
-     * `ThroughputController` в UI-слое; ссылкой не сошлёшься — модуль shared про UI не знает).
-     * Реализация по умолчанию — `0` (фейки/тесты).
+     * Total bytes written to the PTY (input/reports) and read from the PTY (output) over the
+     * channel's lifetime. Monotonically increasing. Used for the status bar throughput indicator
+     * (delta/period computed by `ThroughputController` in the UI layer; not linked here since
+     * `shared` doesn't know about UI). Default `0` (fakes/tests).
      */
     val bytesUp: Long get() = 0L
     val bytesDown: Long get() = 0L
 
     /**
-     * Сырой вывод PTY (stdout и stderr слиты, как в реальном терминале).
-     * Холодный flow с единственным разрешённым сборщиком: повторный collect
-     * бросает [IllegalStateException]. Завершается на EOF канала.
+     * Raw PTY output (stdout and stderr merged, as in a real terminal). Cold flow with a single
+     * allowed collector: a second collect throws [IllegalStateException]. Completes on channel EOF.
      */
     val output: Flow<ByteArray>
 
     /**
-     * После завершения [output]: true, если канал дошёл до штатного EOF (сервер закрыл shell сам —
-     * например, по команде `exit`), false — если [output] оборвался ошибкой транспорта либо канал
-     * закрыли через [close]. До завершения [output] значение не определено. По умолчанию false
-     * (фейки/тесты, не сообщающие причину закрытия). Нужно, чтобы отличать штатный выход (→ закрыть
-     * сессию) от обрыва (→ авто-реконнект); см. [app.skerry.shared.terminal.TerminalState.Closed].
+     * After [output] completes: true if the channel reached a clean EOF (the server closed the shell
+     * itself, e.g. via `exit`), false if [output] ended due to a transport error or [close] was
+     * called. Undefined before [output] completes. Default false (fakes/tests that don't report the
+     * close reason). Used to distinguish a clean exit (→ close the session) from a drop (→
+     * auto-reconnect); see [app.skerry.shared.terminal.TerminalState.Closed].
      */
     val endedWithEof: Boolean get() = false
 
     /**
-     * Подавлен ли эхо-ответ сервера прямо сейчас (ввод пароля / line-mode): по нему верхний слой
-     * НЕ отслеживает набранную строку и не пишет её в историю автодополнения, чтобы секреты не
-     * оседали в памяти/подсказках. По умолчанию `false` (эхо есть): SSH-транспорт не сообщает
-     * termios-состояние, поэтому у него всегда `false` (остаточный риск для in-session паролей задокументирован),
-     * а Telnet перекрывает по согласованной опции ECHO.
+     * Whether the server's echo is currently suppressed (password entry / line-mode): when true, the
+     * upper layer does not track the typed line or write it into autocomplete history, so secrets
+     * don't linger in memory/suggestions. Default `false` (echo on): the SSH transport doesn't report
+     * termios state, so it's always `false` here (residual risk for in-session passwords); Telnet
+     * overrides based on the negotiated ECHO option.
      */
     val echoSuppressed: Boolean get() = false
 
-    /** @throws SshConnectionException канал закрыт или обрыв транспорта */
+    /** @throws SshConnectionException channel closed or transport dropped */
     suspend fun write(data: ByteArray)
 
     suspend fun resize(size: PtySize)
@@ -190,7 +187,7 @@ interface ShellChannel {
 }
 
 data class ExecResult(
-    /** null, если сервер закрыл канал без статуса. */
+    /** null if the server closed the channel without a status. */
     val exitCode: Int?,
     val stdout: String,
     val stderr: String,

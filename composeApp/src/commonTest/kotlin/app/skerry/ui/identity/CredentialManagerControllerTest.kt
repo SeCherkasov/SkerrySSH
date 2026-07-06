@@ -100,7 +100,7 @@ class CredentialManagerControllerTest {
     }
 }
 
-/** In-memory [Vault] с хранением записей (put/openPayload/records/remove, tombstone) для тестов. */
+/** In-memory [Vault] storing records (put/openPayload/records/remove, tombstone) for tests. */
 private class FakeCredVault : Vault {
     private val payloads = mutableMapOf<String, ByteArray>()
     private val records = mutableMapOf<String, VaultRecord>()

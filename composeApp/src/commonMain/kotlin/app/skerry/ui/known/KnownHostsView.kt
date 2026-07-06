@@ -80,11 +80,11 @@ private val KNOWN = listOf(
 )
 
 /**
- * Known hosts view. С живым [KnownHostsController] ([LocalKnownHosts]) рисует доверенные ключи из
- * стора (host/тип/отпечаток/первое доверие/статус), предупреждения о смене ключа и рабочую панель
- * сравнения отпечатков (Accept new key / Reject & block); забыть ключ — кнопкой «Forget key», которая
- * проявляется в строке при наведении мыши (desktop). Без контроллера (офскрин-рендер/превью)
- * показывается статичный макет [KNOWN].
+ * Known hosts view. With a live [KnownHostsController] ([LocalKnownHosts]) renders trusted keys
+ * from the store (host/type/fingerprint/first-seen/status), key-change warnings, and a
+ * fingerprint comparison panel (Accept new key / Reject & block); forgetting a key uses the
+ * "Forget key" button revealed on row hover (desktop). Without a controller (offscreen
+ * render/preview) shows the static [KNOWN] mock data.
  */
 @Composable
 fun KnownHostsView() {
@@ -116,18 +116,18 @@ private fun KnownHostsTableHeader() {
     }
 }
 
-// Живой путь: таблица доверенных ключей + предупреждения/панель смены ключа поверх контроллера.
+// Live path: trusted-keys table plus warnings/key-change panel driven by the controller.
 
 @Composable
 private fun LiveKnownHostsView(controller: KnownHostsController) {
-    // Экран мог открыться после того, как реконнект записал новый ключ в общий стор — перечитываем.
+    // The screen may open after a reconnect wrote a new key to the shared store — reload.
     LaunchedEffect(Unit) { controller.refresh() }
     val mono = LocalFonts.current.mono
     val entries = controller.entries
     val mismatches = controller.mismatches
 
-    // Выбранное событие смены ключа для правой панели: по умолчанию первое незакрытое. После
-    // принятия/отклонения оно покидает список — выбор сам падает на следующее (или исчезает).
+    // Selected key-change event for the right panel: defaults to the first pending one. After
+    // accept/reject it leaves the list — the selection falls to the next one (or disappears).
     var selectedKey by remember { mutableStateOf<Triple<String, Int, String>?>(null) }
     val selected = mismatches.firstOrNull { it.identity() == selectedKey } ?: mismatches.firstOrNull()
 
@@ -190,8 +190,8 @@ private fun MismatchBanner(mismatch: HostKeyMismatch, onReview: () -> Unit, onDi
             )
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ClickableSmallButton(stringResource(Res.string.lib_known_review_fingerprint), D.sunset, D.sunset.copy(alpha = 0.4f), bold = true, onClick = onReview)
-                // «Dismiss» здесь = reject (баннер прячется, ключ блокируется). Честная подпись, чтобы
-                // пользователь не блокировал легитимную смену ключа, думая, что лишь скрывает уведомление.
+                // "Dismiss" here means reject (the banner hides, the key stays blocked); the label
+                // is honest so users don't block a legitimate key change thinking it just hides the notice.
                 ClickableSmallButton(stringResource(Res.string.lib_known_reject_block), D.dim, D.cyan14, onClick = onDismiss)
             }
         }
@@ -202,8 +202,8 @@ private fun MismatchBanner(mismatch: HostKeyMismatch, onReview: () -> Unit, onDi
 private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -> Unit) {
     val host = entry.host
     val changed = entry.status == KnownHostStatus.Changed
-    // Forget — действие в строке, проявляется при наведении мыши (desktop): в покое таблица читается
-    // как в макете, на hover строка подсвечивается и в правом конце выезжает кнопка «Forget key».
+    // Forget is a row action revealed on mouse hover (desktop): at rest the table reads like the
+    // mock, on hover the row highlights and a "Forget key" button slides in at the right end.
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     Box(
@@ -221,7 +221,7 @@ private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -
             Txt(displayKeyType(host.keyType), color = D.dim, size = 12.sp, modifier = Modifier.width(90.dp))
             Txt(shortFingerprint(host.fingerprint), color = if (changed) D.sunset else D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1.4f))
             Txt(displayFirstSeen(host.firstSeen), color = D.faint, size = 12.sp, modifier = Modifier.width(100.dp))
-            // Статус прячется на hover, уступая место кнопке Forget (она перекрывает его правый край).
+            // Status hides on hover, making room for the Forget button (which overlaps its right edge).
             Row(Modifier.width(80.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (!hovered) {
                     if (changed) {
@@ -282,9 +282,9 @@ private fun LiveMismatchPanel(mismatch: HostKeyMismatch, mono: FontFamily, onAcc
             Sym("info", size = 15.sp, color = D.sunset)
             Txt(stringResource(Res.string.lib_known_reinstall_note), color = D.dim, size = 11.sp, lineHeight = 16.sp)
         }
-        // Безопасный выбор — primary и первым: при возможном перехвате пользователь рефлекторно жмёт
-        // верхнюю/привычную кнопку, поэтому ею должен быть «Reject & block», а не «Accept». Принятие
-        // нового ключа — опасное действие, оформлено danger-стилем (sunset) вторым.
+        // The safe choice is primary and first: under a possible interception, the user reflexively
+        // hits the top/familiar button, so that must be "Reject & block", not "Accept". Accepting a
+        // new key is the dangerous action, styled second in the danger (sunset) style.
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PrimaryButton(stringResource(Res.string.lib_known_reject_block), onClick = onReject, modifier = Modifier.fillMaxWidth())
             Box(
@@ -297,15 +297,15 @@ private fun LiveMismatchPanel(mismatch: HostKeyMismatch, mono: FontFamily, onAcc
     }
 }
 
-/** Тип ключа в виде из макета: без префикса `ssh-` (ed25519, rsa, …). */
+/** Key type as shown in the mock: strips the `ssh-` prefix (ed25519, rsa, …). */
 private fun displayKeyType(keyType: String): String = keyType.removePrefix("ssh-")
 
-/** Дата первого доверия из ISO-8601 (только дата); пусто → «—». */
+/** First-trust date from ISO-8601 (date part only); empty falls back to "—". */
 private fun displayFirstSeen(firstSeen: String): String = firstSeen.substringBefore('T').ifEmpty { "—" }
 
-// Мок-путь (офскрин-рендер/превью): статичная таблица + панель сравнения отпечатков из макета.
+// Mock path (offscreen render/preview): static table plus the fingerprint comparison panel from the mock.
 
-/** Known hosts view (мок): заголовок + предупреждение о смене ключа + таблица + панель сравнения. */
+/** Known hosts view (mock): header, key-change warning, table, comparison panel. */
 @Composable
 private fun MockKnownHostsView() {
     val mono = LocalFonts.current.mono
@@ -391,7 +391,7 @@ private fun MismatchPanel(mono: FontFamily) {
             Sym("info", size = 15.sp, color = D.sunset)
             Txt(stringResource(Res.string.lib_known_reinstall_note), color = D.dim, size = 11.sp, lineHeight = 16.sp)
         }
-        // Зеркалит безопасный порядок live-панели (см. LiveMismatchPanel): Reject — primary первой.
+        // Mirrors the safe ordering of the live panel (see LiveMismatchPanel): Reject is primary and first.
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PrimaryButton(stringResource(Res.string.lib_known_reject_block), onClick = {}, modifier = Modifier.fillMaxWidth())
             Box(
@@ -418,7 +418,7 @@ private fun SmallButton(label: String, fg: Color, border: Color, bold: Boolean =
     }
 }
 
-/** [SmallButton] с обработчиком — для живых баннеров (Review fingerprint / Dismiss). */
+/** [SmallButton] with a click handler, for live banners (Review fingerprint / Dismiss). */
 @Composable
 private fun ClickableSmallButton(label: String, fg: Color, border: Color, bold: Boolean = false, onClick: () -> Unit) {
     Box(Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, border, RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp)) {

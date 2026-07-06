@@ -4,13 +4,12 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 
 /**
- * Общий низ vault-backed сторов: записи типа [type], чей payload — JSON-сериализация [T]
- * (единый `Json { ignoreUnknownKeys = true }`, байты на диске идентичны прежним пер-сторовым
- * кодекам). Кодек НЕ решает политику залоченного vault — гейт `isUnlocked` остаётся на сторе
- * (у одних чтение на залоченном — пустой список/дефолт, у других — бросок из самого [Vault]).
+ * Shared base for vault-backed stores: records of [type] whose payload is JSON-serialized [T]
+ * (single `Json { ignoreUnknownKeys = true }`). The codec does not enforce locked-vault policy —
+ * the `isUnlocked` gate stays on the store.
  *
- * Битый/нерасшифровавшийся payload декодируется в `null` и молча пропускается — одна
- * повреждённая запись не валит список (общее правило всех сторов).
+ * Corrupt/undecryptable payload decodes to `null` and is skipped — one bad record doesn't fail the
+ * list.
  */
 internal class VaultRecordCodec<T>(
     private val vault: Vault,
@@ -18,13 +17,13 @@ internal class VaultRecordCodec<T>(
     private val serializer: KSerializer<T>,
 ) {
 
-    /** Все живые записи типа (tombstone и чужие типы отброшены); битый payload пропущен. */
+    /** All live records of the type (tombstones and other types dropped); corrupt payload skipped. */
     fun list(): List<T> =
         vault.records()
             .filter { it.type == type && !it.deleted }
             .mapNotNull { decode(vault.openPayload(it.id)) }
 
-    /** Значение по [id] или `null`, если записи нет, она удалена или payload не читается. */
+    /** Value for [id], or `null` if the record is absent, deleted, or its payload can't be read. */
     fun get(id: String): T? {
         val record = vault.records()
             .firstOrNull { it.id == id && it.type == type && !it.deleted }
@@ -32,12 +31,12 @@ internal class VaultRecordCodec<T>(
         return decode(vault.openPayload(record.id))
     }
 
-    /** Создать/обновить запись (upsert по [id]). */
+    /** Create or update a record (upsert by [id]). */
     fun put(id: String, value: T) {
         vault.put(id, type, encode(value))
     }
 
-    /** Мягко удалить запись (tombstone) — делегат [Vault.remove]. */
+    /** Soft-delete a record (tombstone) — delegates to [Vault.remove]. */
     fun remove(id: String) {
         vault.remove(id)
     }
@@ -48,16 +47,15 @@ internal class VaultRecordCodec<T>(
         payload?.let { runCatching { json.decodeFromString(serializer, it.decodeToString()) }.getOrNull() }
 
     internal companion object {
-        // Единый Json всех vault-сторов: незнакомые поля игнорируются (записи новых версий читаемы).
+        // Shared Json for all vault stores: unknown fields ignored (newer-version records stay readable).
         internal val json = Json { ignoreUnknownKeys = true }
     }
 }
 
 /**
- * Singleton-запись в vault (настройки/макет): фиксированный [id] + [type], значение — JSON [T].
- * [load] на залоченном vault, при отсутствии записи, битом payload или броске из
- * [Vault.openPayload] отдаёт [default] — вспомогательное значение не должно ронять вызывающего
- * (например, цикл sync). [save] требует разблокированного vault ([Vault.put]).
+ * Singleton vault record (settings/layout): fixed [id] + [type], value is JSON [T]. [load] returns
+ * [default] on a locked vault, a missing record, corrupt payload, or a throw from [Vault.openPayload]
+ * — this helper must not crash its caller (e.g. the sync loop). [save] requires an unlocked vault.
  */
 internal class VaultSingletonStore<T>(
     private val vault: Vault,
@@ -73,8 +71,8 @@ internal class VaultSingletonStore<T>(
         if (!vault.isUnlocked) return default()
         val record = vault.records().firstOrNull { it.id == id && it.type == type && !it.deleted }
             ?: return default()
-        // openPayload оборачиваем: даже если реализация бросит на I/O/AEAD (а не вернёт null),
-        // вызывающий должен получить дефолт, а не падение (drainPull синка это бы прервало).
+        // Wrap openPayload: even if the impl throws on I/O/AEAD (rather than returning null), the
+        // caller must get the default, not a crash (it would abort the sync drainPull).
         return codec.decode(runCatching { vault.openPayload(record.id) }.getOrNull()) ?: default()
     }
 

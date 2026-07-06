@@ -45,14 +45,13 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 
 /**
- * Мобильный редактор тегов с type-ahead: пилюли `#tag` с крестиком + инлайн-ввод нового тега
- * (Enter/запятая фиксирует пилюлю — логика фиксации у вызывающего через [onDraftChange]/[onCommit]).
- * При фокусе поля под ним раскрывается список [suggestions]; тап по подсказке вызывает [onPick].
- * Меню через [AnchoredDropdown] с `focusable = false`, чтобы не отнимать фокус и не прерывать набор.
+ * Mobile tag editor with type-ahead: `#tag` pills with a close button + inline entry for a new tag
+ * (Enter/comma commits the pill — commit logic is the caller's via [onDraftChange]/[onCommit]). When
+ * the field is focused, [suggestions] expand below it; tapping a suggestion calls [onPick]. The menu
+ * uses [AnchoredDropdown] with `focusable = false` so it doesn't steal focus or interrupt typing.
  *
- * Общий для листов New connection (теги хоста) и Snippets (теги сниппета): параметризованы только
- * источник подсказок, плейсхолдер и фон меню ([menuBackground] — листы исторически используют
- * SheetPanel и D.surface2 соответственно; пиксели каждого места сохранены).
+ * Shared by the New connection (host tags) and Snippets (snippet tags) sheets; only the suggestion
+ * source, placeholder, and menu background ([menuBackground]) are parameterized.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -73,7 +72,7 @@ internal fun MobileTagsEditor(
     AnchoredDropdown(
         expanded = focused && suggestions.isNotEmpty(),
         onDismiss = { focused = false },
-        focusable = false, // не красть фокус у поля ввода тега
+        focusable = false, // don't steal focus from the tag input field
         trigger = {
             FlowRow(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
@@ -126,7 +125,7 @@ internal fun MobileTagsEditor(
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
             ) {
-                // Тап добавляет тег; фокус остаётся на поле — меню пересчитается без только что добавленного.
+                // Tap adds the tag; focus stays on the field so the menu recomputes without it.
                 suggestions.forEach { tag ->
                     key(tag) {
                         Box(

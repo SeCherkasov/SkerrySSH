@@ -45,7 +45,7 @@ class VaultHostStoreTest {
             put(host("a")); put(host("b")); put(host("c"))
             reorder { listOf(it[2], it[0], it[1]) } // c, a, b
         }
-        // Новый стор-инстанс над тем же vault видит сохранённый порядок (макет в записи vault).
+        // A fresh store instance over the same vault sees the persisted order (layout record in the vault).
         assertEquals(listOf("c", "a", "b"), VaultHostStore(vault).all().map { it.id })
     }
 
@@ -86,7 +86,7 @@ class VaultHostStoreTest {
         val before = vault.records().filter { it.type == RecordType.HOST }.associate { it.id to it.version }
         store.reorder { it.reversed() }
         val after = vault.records().filter { it.type == RecordType.HOST }.associate { it.id to it.version }
-        assertEquals(before, after) // только запись-макет бампается, профили не трогаются
+        assertEquals(before, after) // only the layout record is bumped, host records are untouched
     }
 
     @Test
@@ -95,7 +95,7 @@ class VaultHostStoreTest {
         assertTrue(store.all().isEmpty())
     }
 
-    /** Залоченный vault: чтения отдают пусто, мутаторы бросают (как реальный [FileVault]). */
+    /** Locked vault: reads return empty, mutators throw (matches the real [FileVault]). */
     private object LockedVault : Vault {
         override fun exists() = true
         override val isUnlocked = false

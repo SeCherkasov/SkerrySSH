@@ -9,24 +9,21 @@ import app.skerry.ui.generated.resources.stail_sync_paused
 import app.skerry.ui.generated.resources.stail_sync_error
 import org.jetbrains.compose.resources.stringResource
 
-/** Семантический уровень индикатора синхронизации (UI красит: OK→moss, WARN→amber, ERROR→sunset). */
+/** Semantic level of the sync indicator (UI colors: OK→moss, WARN→amber, ERROR→sunset). */
 enum class SyncIndicatorLevel { OK, WARN, ERROR }
 
-/** Что показать в индикаторе sync (status-bar desktop / шапка mobile). null = скрыть. */
+/** What to show in the sync indicator (desktop status bar / mobile header). null = hide. */
 data class SyncIndicator(val icon: String, val label: String, val level: SyncIndicatorLevel)
 
 /**
- * Чистая (тестируемая) проекция состояния sync на статус-индикатор. Раньше индикатор показывал ТОЛЬКО
- * доступность сервера по health-пингу ([ServerReachable]) и потому врал «Sync online», когда у ЭТОГО
- * устройства нет рабочей сессии (отозвано/только привязано/после рестарта). Теперь ведущий сигнал —
- * статус сессии ([SyncStatus]); доступность лишь различает online/offline в активном состоянии.
+ * Testable projection of sync state onto the status indicator. The lead signal is session status
+ * ([SyncStatus]); server reachability only distinguishes online/offline while a session is active.
  *
- * - [SyncStatus.Online] + REACHABLE → «Sync online» (OK); + UNREACHABLE → «Sync offline» (ERROR).
- * - [SyncStatus.Busy] → «Syncing…» (WARN).
- * - [SyncStatus.Configured] → «Sync paused» (WARN): привязка есть, но сессии нет (заперто/после
- *   рестарта/отозвано после неудачного refresh) — НЕ «online».
- * - [SyncStatus.Failed] → «Sync error» (ERROR).
- * - Не настроен / ещё не пинговали ([SyncStatus.Disabled] / [ServerReachable.UNKNOWN]) → скрыть.
+ * - [SyncStatus.Online] + REACHABLE → "Sync online" (OK); + UNREACHABLE → "Sync offline" (ERROR).
+ * - [SyncStatus.Busy] → "Syncing…" (WARN).
+ * - [SyncStatus.Configured] → "Sync paused" (WARN): linked but no session — not "online".
+ * - [SyncStatus.Failed] → "Sync error" (ERROR).
+ * - Not configured / not yet pinged ([SyncStatus.Disabled] / [ServerReachable.UNKNOWN]) → hide.
  */
 fun syncIndicator(status: SyncStatus?, reachable: ServerReachable): SyncIndicator? {
     if (status == null || status == SyncStatus.Disabled || reachable == ServerReachable.UNKNOWN) return null
@@ -37,14 +34,13 @@ fun syncIndicator(status: SyncStatus?, reachable: ServerReachable): SyncIndicato
         SyncStatus.Busy -> SyncIndicator("sync", "Syncing…", SyncIndicatorLevel.WARN)
         is SyncStatus.Configured -> SyncIndicator("cloud_off", "Sync paused", SyncIndicatorLevel.WARN)
         is SyncStatus.Failed -> SyncIndicator("cloud_off", "Sync error", SyncIndicatorLevel.ERROR)
-        SyncStatus.Disabled -> null // покрыто ранним возвратом; ветка для исчерпывающего when
+        SyncStatus.Disabled -> null // covered by the early return; branch for exhaustive when
     }
 }
 
 /**
- * UI-обёртка [syncIndicator] с локализованной подписью. Иконка/уровень берутся из чистой (тестируемой)
- * проекции, а [SyncIndicator.label] резолвится через [stringResource] по тому же статусу. Чистая версия
- * оставлена для тестов и любого не-composable кода; здесь мы лишь подменяем англоязычный label.
+ * UI wrapper of [syncIndicator] with a localized label. Icon/level come from the testable projection;
+ * only [SyncIndicator.label] is resolved via [stringResource] for the same status.
  */
 @Composable
 fun syncIndicatorLocalized(status: SyncStatus?, reachable: ServerReachable): SyncIndicator? {
@@ -56,7 +52,7 @@ fun syncIndicatorLocalized(status: SyncStatus?, reachable: ServerReachable): Syn
         SyncStatus.Busy -> stringResource(Res.string.stail_syncing)
         is SyncStatus.Configured -> stringResource(Res.string.stail_sync_paused)
         is SyncStatus.Failed -> stringResource(Res.string.stail_sync_error)
-        // base != null исключает Disabled/null — но when по статусу должен быть исчерпывающим.
+        // base != null rules out Disabled/null, but the when on status must be exhaustive.
         null, SyncStatus.Disabled -> base.label
     }
     return base.copy(label = label)

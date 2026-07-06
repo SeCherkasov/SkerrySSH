@@ -5,18 +5,18 @@ import app.skerry.shared.files.FileItemType
 import app.skerry.ui.sftp.humanSize
 
 /**
- * Режим мобильного экрана Files (single-pane):
- * - [Preview] — нет менеджера сессий (офскрин-рендер/превью без бэкенда) → статичный мок;
- * - [Live] — есть активная подключённая сессия → живой листинг поверх [app.skerry.ui.files.TransferCoordinator];
- * - [Connecting] — активная сессия ещё подключается (после тапа SFTP/Connect) → «Connecting…»,
- *   чтобы не мигать «No active session» на время сетевого хендшейка/аутентификации;
- * - [NoSession] — менеджер есть, но активной сессии нет (или она в форме/ошибке) → уведомление «нет сессии».
+ * Mode of the mobile Files screen (single-pane):
+ * - [Preview] — no session manager (offscreen render/preview without a backend) → static mock;
+ * - [Live] — an active connected session → live listing over [app.skerry.ui.files.TransferCoordinator];
+ * - [Connecting] — the active session is still connecting (after tapping SFTP/Connect) → shows
+ *   "Connecting…" instead of flashing "No active session" during the handshake/auth;
+ * - [NoSession] — a session manager exists but there's no active session (or it's in a form/error state).
  */
 enum class MobileFilesMode { Preview, NoSession, Connecting, Live }
 
 /**
- * Выбрать режим экрана Files по наличию менеджера сессий и состоянию активной сессии. [connecting] —
- * активная сессия в процессе подключения (приоритет ниже [connected], чтобы готовая сразу шла в Live).
+ * Picks the Files screen mode from session manager presence and active session state. [connecting]
+ * has lower priority than [connected] so a session that finished connecting goes straight to Live.
  */
 fun mobileFilesMode(hasSessions: Boolean, connected: Boolean, connecting: Boolean): MobileFilesMode = when {
     !hasSessions -> MobileFilesMode.Preview
@@ -26,16 +26,16 @@ fun mobileFilesMode(hasSessions: Boolean, connected: Boolean, connecting: Boolea
 }
 
 /**
- * Мета-подпись строки списка — честная проекция на [FileItem]: для файла человекочитаемый размер,
- * для каталога пусто. В макете у каталога стоят права + число элементов, но модель их не несёт —
- * не выдумываем (как пустая мета каталога в desktop-`SftpView`).
+ * Row subtitle, a direct projection of [FileItem]: human-readable size for a file, empty for a
+ * directory (the model doesn't carry permissions/item count, unlike the empty directory subtitle
+ * in desktop `SftpView`).
  */
 fun mobileFileRowMeta(item: FileItem): String =
     if (item.type == FileItemType.File) humanSize(item.size) else ""
 
 /**
- * Ведущая иконка строки (лигатура [Sym]): каталог → `folder`, симлинк → `link`, шелл-скрипт → `terminal`
- * (как `deploy.sh` в макете), прочий файл → `description`.
+ * Leading row icon ([Sym] ligature): directory → `folder`, symlink → `link`, shell script →
+ * `terminal`, other file → `description`.
  */
 fun mobileFileIcon(item: FileItem): String = when (item.type) {
     FileItemType.Directory -> "folder"
@@ -44,11 +44,11 @@ fun mobileFileIcon(item: FileItem): String = when (item.type) {
 }
 
 /**
- * Завершающая иконка строки = видимое действие макета: у каталога `chevron_right` (войти), у файла
- * `ios_share` (передать — скачать с remote-панели / залить с local-панели).
+ * Trailing row icon: directory → `chevron_right` (enter), file → `ios_share` (transfer: download
+ * from the remote pane / upload from the local pane).
  */
 fun mobileFileTrailingIcon(type: FileItemType): String =
     if (type == FileItemType.Directory) "chevron_right" else "ios_share"
 
-/** Строка-крошка под переключателем: метка источника + текущий путь («prod-web-01 : /var/www»). */
+/** Breadcrumb row: source label + current path ("prod-web-01 : /var/www"). */
 fun mobileFilesBreadcrumb(label: String, path: String): String = "$label : $path"

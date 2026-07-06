@@ -12,33 +12,32 @@ import app.skerry.ui.tunnel.TunnelEntry
 import app.skerry.ui.tunnel.TunnelStatus
 import org.jetbrains.compose.resources.stringResource
 
-/** Иконка-стрелка карточки туннеля: динамический (`-D`) → `all_inclusive`, иначе `arrow_forward`. */
+/** Tunnel card arrow icon: dynamic (`-D`) maps to `all_inclusive`, otherwise `arrow_forward`. */
 fun mobileTunnelArrow(direction: TunnelDirection): String =
     if (direction == TunnelDirection.Dynamic) "all_inclusive" else "arrow_forward"
 
 /**
- * Текст назначения карточки: явный `host:port` либо `dynamic proxy` для `-D` (у SOCKS фиксированного
- * назначения нет — его задаёт клиент), как в макете.
+ * Card destination text: explicit `host:port`, or `dynamic proxy` for `-D` (SOCKS has no fixed
+ * destination — the client sets it).
  */
 @Composable
 fun mobileTunnelDest(tunnel: Tunnel): String =
     if (tunnel.direction == TunnelDirection.Dynamic) stringResource(Res.string.ptail_dynamic_proxy)
     else "${tunnel.destHost}:${tunnel.destPort}"
 
-/** Число активных (включённых) сохранённых туннелей — для подзаголовка строки Port forwarding в More. */
+/** Count of active (enabled) saved tunnels, for the Port forwarding row subtitle in More. */
 fun mobileActiveTunnelCount(tunnels: List<TunnelEntry>): Int =
     tunnels.count { it.status is TunnelStatus.Active }
 
 /**
- * Подзаголовок строки Port forwarding в More: число активных туннелей подключённой сессии, либо
- * пустая строка, если активной сессии нет ([count]=null) — нечего считать (честная проекция,
- * в отличие от статичного «2 active» макета).
+ * Subtitle for the Port forwarding row in More: active tunnel count of the connected session, or
+ * empty string if there is no active session ([count]=null).
  */
 @Composable
 fun mobileMorePortsSubtitle(count: Int?): String =
     if (count == null) "" else stringResource(Res.string.ptail_ports_active, count)
 
-/** Подзаголовок строки Known hosts в More: число незакрытых смен ключа, либо «All verified», если их нет. */
+/** Subtitle for the Known hosts row in More: count of unresolved key changes, or "All verified" if none. */
 @Composable
 fun mobileMoreKnownSubtitle(changed: Int): String =
     if (changed == 0) stringResource(Res.string.ptail_all_verified)

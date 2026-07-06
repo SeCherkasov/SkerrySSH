@@ -56,13 +56,13 @@ import app.skerry.ui.sync.accountCardModelLocalized
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
-// Секция Account: карточка профиля sync-аккаунта + привязанные устройства.
+// Account section: sync account profile card + linked devices.
 
 @Composable
 internal fun AccountSection(state: DesktopDesignState) {
     SectionTitle(stringResource(Res.string.settings_account_title), stringResource(Res.string.settings_account_subtitle))
-    // Реальная модель — self-hosted zero-knowledge sync (без биллинга/PRO): карточка отражает живое
-    // состояние из координатора. Превью/офскрин (нет бэкенда) — локальный vault с «Set up sync».
+    // The card reflects live state from the sync coordinator; without a backend, it shows a local
+    // vault with "Set up sync".
     val sync = LocalSync.current
     if (sync == null) {
         AccountCard(accountCardModelLocalized(null), sync = null, state = state)
@@ -71,20 +71,20 @@ internal fun AccountSection(state: DesktopDesignState) {
     }
 }
 
-/** Живая карточка аккаунта: безусловный collectAsState внутри своего composable. */
+/** Live account card: unconditional collectAsState inside its own composable. */
 @Composable
 private fun LiveAccountSection(sync: app.skerry.ui.sync.SyncCoordinator, state: DesktopDesignState) {
     val status = sync.status.collectAsState().value
     val model = accountCardModelLocalized(status, sync.savedConfig?.serverUrl)
     AccountCard(model, sync, state)
-    // Идентификаторы для Teams-приглашений (accountId + отпечаток ключа шеринга): при активной сессии
-    // model.title == accountId. Здесь, а не на вкладке Sync — это свойство аккаунта, не движка синка.
+    // Identifiers for Teams invites (accountId + sharing-key fingerprint); model.title == accountId
+    // while a session is active. Lives here (account property), not on the Sync tab (sync engine).
     if (model.connected) AccountIdentityBlock(model.title, Modifier.padding(top = 12.dp))
-    // Список устройств серверу известен только при активной сессии (Online) — иначе нечем спрашивать.
+    // The device list is only known server-side while a session is active (Online).
     if (model.connected) LinkedDevices(sync, onLink = state::openPairing)
 }
 
-/** Карточка профиля: аватар + заголовок/подпись + действия по состоянию (set up / reconnect / sync·disconnect). */
+/** Profile card: avatar + title/subtitle + state-dependent actions (set up / reconnect / disconnect). */
 @Composable
 private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCoordinator?, state: DesktopDesignState) {
     Row(
@@ -99,8 +99,8 @@ private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCo
             Txt(model.title, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
             Txt(model.subtitle, color = D.faint, size = 11.5.sp)
         }
-        // Account владеет жизненным циклом ПОДКЛЮЧЕНИЯ (set up / reconnect / disconnect). Действие
-        // «Sync now» здесь НЕ дублируем — оно про движок синка и живёт во вкладке Sync.
+        // Account owns the connection lifecycle (set up / reconnect / disconnect); "Sync now" is
+        // not duplicated here, it belongs to the Sync tab.
         when {
             model.connected && sync != null -> GhostButton(stringResource(Res.string.settings_disconnect), onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
             model.linked -> PrimaryButton(stringResource(Res.string.settings_reconnect), onClick = state::openSyncSetup, icon = "cloud_sync")
@@ -109,18 +109,18 @@ private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCo
     }
 }
 
-/** Реальные устройства аккаунта ([SyncCoordinator.listDevices]); Revoke отзывает чужое и перечитывает список. */
+/** Account's real devices ([SyncCoordinator.listDevices]); Revoke revokes and reloads the list. */
 @Composable
 private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -> Unit) {
     val scope = rememberCoroutineScope()
     var devices by remember { mutableStateOf<List<app.skerry.shared.sync.RemoteDevice>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-    // reload++ заставляет LaunchedEffect перечитать список после отзыва устройства.
+    // reload++ makes LaunchedEffect reload the list after a device is revoked.
     var reload by remember { mutableStateOf(0) }
     LaunchedEffect(sync, reload) {
         loading = true
-        // Отозванные устройства больше не привязаны — не показываем (сервер хранит строку с revoked=true).
-        // Текущее устройство всегда первым (sortedByDescending стабилен — порядок прочих сохраняется).
+        // Revoked devices are hidden (server keeps the row with revoked=true); current device first
+        // (sortedByDescending is stable, so the rest keep their order).
         devices = sync.listDevices().filter { !it.revoked }.sortedByDescending { it.current }
         loading = false
     }
@@ -128,8 +128,8 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -
     Txt(stringResource(Res.string.settings_linked_devices), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
     when {
         loading -> Txt(stringResource(Res.string.settings_loading_devices), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
-        // На активной сессии сервер всегда возвращает хотя бы текущее устройство; пустой список =
-        // listDevices проглотил ошибку (нет связи/протух токен) — честно говорим, а не «только вы».
+        // An active session always returns at least the current device; an empty list means
+        // listDevices swallowed an error, so report that rather than "only you".
         devices.isEmpty() -> Txt(stringResource(Res.string.settings_devices_load_failed), color = D.amber, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
         devices.size == 1 && devices.first().current -> Txt(stringResource(Res.string.settings_only_this_device), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
         else -> devices.forEach { d ->
@@ -144,14 +144,14 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -
             )
         }
     }
-    // Быстрый паринг: показать новому устройству QR/код, чтобы привязать его без мастер-пароля аккаунта.
+    // Quick pairing: show a new device a QR/code to link it without the account's master password.
     GhostButton(stringResource(Res.string.settings_link_device), onClick = onLink, icon = "qr_code", modifier = Modifier.padding(top = 12.dp))
 }
 
 @Composable
 private fun DeviceRow(icon: String, name: String, sub: String, onRevoke: (() -> Unit)? = null, thisDevice: Boolean = false) {
-    // Отзыв необратим из UI (устройство переподключается мастер-паролем) — требуем подтверждение
-    // вторым кликом, чтобы случайный промах по списку не разлогинил рабочее устройство.
+    // Revoke is irreversible from the UI, so require a second-click confirmation to guard against
+    // an accidental misclick logging out a working device.
     var confirming by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),

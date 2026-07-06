@@ -53,17 +53,17 @@ import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.matches
 import org.jetbrains.compose.resources.stringResource
 
-// Палитра сниппетов: быстрый запуск сохранённой команды в активный терминал прямо из тулбара.
+// Snippet palette: quickly run a saved command in the active terminal directly from the toolbar.
 
 @Composable
 internal fun SnippetPaletteButton(active: Session?) {
     val manager = LocalSnippets.current
     val terminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-    // Ключ active: при переключении вкладок палитра не должна оставаться открытой над чужим тулбаром.
+    // Keyed on active: switching tabs must not leave the palette open over a different toolbar.
     var open by remember(active) { mutableStateOf(false) }
     if (manager == null) return
     Box {
-        // Без подключённой сессии бежать некуда — кнопка приглушена и не открывается.
+        // Nowhere to run without a connected session — the button is dimmed and doesn't open.
         IconBtn("bolt", onClick = { if (terminal != null) open = !open }, tint = if (terminal != null) D.dim else D.faint)
         if (open && terminal != null) {
             Popup(
@@ -86,7 +86,7 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
     var query by remember { mutableStateOf("") }
     val all = manager.snippets
     val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
-    // Автофокус строки поиска при открытии — палитра задумана для запуска с клавиатуры.
+    // Autofocus the search field on open — the palette is meant to be driven from the keyboard.
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { searchFocus.requestFocus() }
     Column(

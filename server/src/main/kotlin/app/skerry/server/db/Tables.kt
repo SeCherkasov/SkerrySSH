@@ -3,24 +3,23 @@ package app.skerry.server.db
 import org.jetbrains.exposed.sql.Table
 
 /**
- * Схема хранилища sync-сервера. Сервер zero-knowledge: всё, что относится к содержимому
- * пользователя ([Records.blob], [Pairing.encryptedDataKey], [Accounts.wrappedDataKey]) —
- * шифротекст, ключ к которому сервер не видит. Открыто хранятся только метаданные
- * синхронизации (`docs/skerry-sync-design.md` §2).
+ * Sync server storage schema. The server is zero-knowledge: everything related to user content
+ * ([Records.blob], [Pairing.encryptedDataKey], [Accounts.wrappedDataKey]) is ciphertext the server
+ * has no key for. Only sync metadata is stored in the clear (`docs/skerry-sync-design.md` §2).
  *
- * Типы выбраны портируемо между SQLite и PostgreSQL: текстовые идентификаторы, `long` для
- * счётчиков, `blob` для шифроблоков (BLOB в SQLite, bytea в PostgreSQL).
+ * Types are chosen to be portable between SQLite and PostgreSQL: text identifiers, `long` for
+ * counters, `blob` for ciphertext (BLOB in SQLite, bytea in PostgreSQL).
  */
 object Accounts : Table("accounts") {
-    /** accountId (он же соль Argon2id на клиенте и identity SRP). */
+    /** accountId (also the client-side Argon2id salt and SRP identity). */
     val id = varchar("id", 320)
-    /** Соль SRP `s` (hex) — отдельная от Argon2id-соли. */
+    /** SRP salt `s` (hex), separate from the Argon2id salt. */
     val srpSalt = text("srp_salt")
-    /** SRP-верификатор `v` (hex). По нему сервер проверяет вход, не зная пароля. */
+    /** SRP verifier `v` (hex); the server checks login against it without knowing the password. */
     val srpVerifier = text("srp_verifier")
-    /** Обёртка dataKey под masterKey — сервер хранит только шифротекст. */
+    /** dataKey wrapped under masterKey; the server stores only ciphertext. */
     val wrappedDataKey = blob("wrapped_data_key")
-    /** Монотонный per-account курсор синхронизации (watermark для дельты). */
+    /** Monotonic per-account sync cursor (delta watermark). */
     val syncSeq = long("sync_seq").default(0)
     val createdAt = long("created_at")
 
@@ -31,23 +30,23 @@ object Devices : Table("devices") {
     val id = varchar("id", 64)
     val accountId = varchar("account_id", 320).references(Accounts.id)
     val name = text("name")
-    /** Платформа устройства (напр. «Android 34», «Linux»). Открытая метка, как и name. */
+    /** Device platform (e.g. "Android 34", "Linux"), a plaintext label like name. */
     val platform = varchar("platform", 64).nullable()
     val createdAt = long("created_at")
     val lastSeenAt = long("last_seen_at")
-    /** Курсор синхронизации, до которого устройство дочиталось/дописалось (открытый счётчик). */
+    /** Sync cursor the device has read/written up to (plaintext counter). */
     val lastSyncVersion = long("last_sync_version").nullable()
     val revoked = bool("revoked").default(false)
 
-    // PK по (accountId, id): deviceId уникален в рамках аккаунта, а не глобально — иначе
-    // клиент, подставив чужой deviceId, мог бы перехватить/сделать неотзываемой чужую запись
-    // устройства (security-ревью H2).
+    // PK on (accountId, id): deviceId is unique per account, not globally — otherwise a client
+    // supplying another account's deviceId could hijack or make un-revocable someone else's
+    // device record.
     override val primaryKey = PrimaryKey(accountId, id)
 }
 
 /**
- * Зашифрованные записи vault. LWW по ([version], затем `deviceId`); [serverSeq] — отдельная
- * ось: монотонный per-account курсор, по которому клиент делает дельта-выборку (`since`).
+ * Encrypted vault records. LWW by ([version], then `deviceId`); [serverSeq] is a separate axis:
+ * a monotonic per-account cursor clients use for delta selection.
  */
 object Records : Table("records") {
     val accountId = varchar("account_id", 320).references(Accounts.id)
@@ -58,7 +57,7 @@ object Records : Table("records") {
     val deviceId = varchar("device_id", 64)
     val deleted = bool("deleted")
     val blob = blob("blob")
-    /** Присваивается сервером при каждой принятой записи; растёт монотонно в рамках аккаунта. */
+    /** Assigned by the server on each accepted record; monotonically increasing per account. */
     val serverSeq = long("server_seq")
 
     override val primaryKey = PrimaryKey(accountId, recordId)
@@ -69,10 +68,10 @@ object Records : Table("records") {
 }
 
 /**
- * Аудит-лог метаданных для админ-консоли (`docs/skerry-sync-prototype.html` → Recent activity).
- * Append-only, zero-knowledge: пишем только событие, устройство и человекочитаемую сводку
- * ([detail] — счётчики/курсоры, никогда содержимое записей). Без FK на [Accounts]: лог
- * переживает удаление аккаунта и допускает события до его создания. Удержание — [ActivityRepository].
+ * Metadata audit log for the admin console (`docs/skerry-sync-prototype.html` -> Recent activity).
+ * Append-only, zero-knowledge: stores only the event, device, and a human-readable summary
+ * ([detail] — counters/cursors, never record content). No FK to [Accounts]: the log survives
+ * account deletion and allows events before account creation. Retention is [ActivityRepository].
  */
 object ActivityLog : Table("activity_log") {
     val seq = long("seq").autoIncrement()
@@ -80,7 +79,7 @@ object ActivityLog : Table("activity_log") {
     val deviceId = varchar("device_id", 64).nullable()
     val event = varchar("event", 32)
     val detail = text("detail")
-    /** Команда, к которой относится событие (для team-scoped истории); null — аккаунтные события. */
+    /** Team the event belongs to (for team-scoped history); null for account-level events. */
     val teamId = varchar("team_id", 64).nullable()
     val createdAt = long("created_at")
 
@@ -92,9 +91,9 @@ object ActivityLog : Table("activity_log") {
 }
 
 /**
- * Публичные X25519-ключи аккаунтов для Teams-приглашений. Публичный ключ — не секрет;
- * подмена ключа сервером обнаруживается сверкой фингерпринта участниками (см.
- * `docs/skerry-sync-design.md`, раздел Teams).
+ * Public X25519 account keys for Teams invitations. The public key isn't secret; server
+ * substitution is detected by members comparing fingerprints (see `docs/skerry-sync-design.md`,
+ * Teams section).
  */
 object AccountKeys : Table("account_keys") {
     val accountId = varchar("account_id", 320).references(Accounts.id)
@@ -105,9 +104,9 @@ object AccountKeys : Table("account_keys") {
 }
 
 /**
- * Команды (шеринг записей между аккаунтами). Zero-knowledge: сервер знает только состав и
- * роли; имя команды и содержимое записей зашифрованы teamKey, которого у сервера нет.
- * [teamSeq] — монотонный per-team курсор дельты (аналог [Accounts.syncSeq]).
+ * Teams (record sharing between accounts). Zero-knowledge: the server knows only membership and
+ * roles; the team name and record content are encrypted with teamKey, which the server never has.
+ * [teamSeq] is a monotonic per-team delta cursor (analogous to [Accounts.syncSeq]).
  */
 object Teams : Table("teams") {
     val id = varchar("id", 64)
@@ -119,9 +118,9 @@ object Teams : Table("teams") {
 }
 
 /**
- * Участники команд. [envelope] — sealed-конверт (crypto_box_seal) с teamKey и именем команды,
- * запечатанный на публичный ключ приглашённого: сервер доставляет, но не читает.
- * Статусы: `invited` → `active`; удаление участника = удаление строки (ACL-отзыв).
+ * Team members. [envelope] is a sealed box (crypto_box_seal) containing teamKey and the team name,
+ * sealed to the invitee's public key: the server delivers it but can't read it.
+ * Statuses: `invited` -> `active`; removing a member deletes the row (ACL revocation).
  */
 object TeamMembers : Table("team_members") {
     val teamId = varchar("team_id", 64).references(Teams.id)
@@ -138,9 +137,9 @@ object TeamMembers : Table("team_members") {
 }
 
 /**
- * Зашифрованные записи команд — модель [Records], но в team-scope: LWW по (version, deviceId),
- * [teamSeq] — курсор дельты. Тромбстоуны не компактятся watermark'ом (участники приходят и
- * уходят — watermark нестабилен); их чистит периодическая уборка по возрасту.
+ * Encrypted team records — same model as [Records] but team-scoped: LWW by (version, deviceId),
+ * [teamSeq] as the delta cursor. Tombstones aren't watermark-compacted (membership churns, making
+ * the watermark unstable); periodic age-based cleanup purges them instead.
  */
 object TeamRecords : Table("team_records") {
     val teamId = varchar("team_id", 64).references(Teams.id)
@@ -160,11 +159,11 @@ object TeamRecords : Table("team_records") {
     }
 }
 
-/** Одноразовые pairing-сессии (вариант B): dataKey, зашифрованный transferKey, с TTL. */
+/** One-time pairing sessions (variant B): dataKey encrypted with a transferKey, with a TTL. */
 object Pairing : Table("pairing") {
     val code = varchar("code", 64)
     val accountId = varchar("account_id", 320).references(Accounts.id)
-    /** dataKey, зашифрованный одноразовым transferKey — сервер видит только шифротекст. */
+    /** dataKey encrypted with a one-time transferKey; the server sees only ciphertext. */
     val encryptedDataKey = blob("encrypted_data_key")
     val expiresAt = long("expires_at")
     val consumed = bool("consumed").default(false)

@@ -20,16 +20,17 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * JVM-реализация [AiProvider] для OpenAI-совместимого chat-completions API (desktop + Android),
- * на Ktor. BYOK: ключ уходит только в заголовок `Authorization` этого запроса и нигде не логируется.
+ * JVM [AiProvider] for an OpenAI-compatible chat-completions API (desktop + Android), on Ktor.
+ * BYOK: the key only goes into this request's `Authorization` header and is never logged.
  *
- * Слайс 1b — настоящий SSE: запрос идёт с `stream=true`, ответ читается построчно из канала и
- * каждая дельта модели эмитится отдельным [AiDelta] по мере генерации. Ошибочный HTTP-статус
- * проверяется до чтения тела; служебные строки SSE (`:`-комментарии, пустые, `[DONE]`) пропускаются.
+ * Real SSE streaming: the request sends `stream=true`, the response is read line by line from
+ * the channel, and each model delta is emitted as a separate [AiDelta] as it's generated. The
+ * HTTP status is checked before reading the body; SSE control lines (`:` comments, blank, `[DONE]`)
+ * are skipped.
  *
- * Допущение парсинга: каждый `data:`-кадр — самостоятельный компактный JSON (как шлёт OpenAI).
- * Многострочные `data:`-поля SSE-спеки (склейка через `\n` до пустой строки) НЕ поддерживаются —
- * OpenAI-совместимый endpoint, дробящий один chunk на несколько `data:`-строк, даст PROTOCOL.
+ * Parsing assumption: each `data:` frame is a self-contained compact JSON object (as OpenAI sends).
+ * Multi-line `data:` fields per the SSE spec (joined by `\n` until a blank line) are NOT supported —
+ * an OpenAI-compatible endpoint that splits one chunk across multiple `data:` lines yields PROTOCOL.
  */
 class OpenAiProvider private constructor(
     private val config: OpenAiConfig,
@@ -37,10 +38,10 @@ class OpenAiProvider private constructor(
     private val ownsHttp: Boolean,
 ) : AiProvider {
 
-    /** Общий (внешний) HttpClient — [close] его НЕ закрывает: владелец клиента — вызывающий. */
+    /** Shared (external) HttpClient — [close] does NOT close it; the caller owns the client. */
     constructor(config: OpenAiConfig, http: HttpClient) : this(config, http, ownsHttp = false)
 
-    /** Создаёт и владеет собственным CIO-клиентом — [close] его закрывает. */
+    /** Creates and owns its own CIO client — [close] closes it. */
     constructor(config: OpenAiConfig) : this(config, defaultHttpClient(), ownsHttp = true)
 
     override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
@@ -57,9 +58,9 @@ class OpenAiProvider private constructor(
             setBody(json.encodeToString(ChatReqWire.serializer(), wire))
         }
         try {
-            // emit() внутри execute-блока безопасен, пока блок выполняется на вызывающей корутине.
-            // На JVM это дефолт Ktor <4.0 (без io.ktor.client.statement.useEngineDispatcher). В Ktor 4.0
-            // переключение диспетчера станет дефолтным — тогда стриминг тут надо унести в channelFlow.
+            // emit() inside the execute block is safe as long as the block runs on the calling coroutine.
+            // On JVM that's the Ktor <4.0 default (without io.ktor.client.statement.useEngineDispatcher).
+            // Ktor 4.0 makes dispatcher switching the default — streaming here will then need channelFlow.
             statement.execute { response ->
                 if (!response.status.isSuccess()) throw errorFor(response.status)
                 val channel = response.bodyAsChannel()
@@ -70,20 +71,20 @@ class OpenAiProvider private constructor(
                 }
             }
         } catch (e: CancellationException) {
-            throw e // отмена корутины — не сбой провайдера, глотать/переупаковывать её нельзя
+            throw e // coroutine cancellation is not a provider failure — never swallow or rewrap it
         } catch (e: AiException) {
             throw e
         } catch (e: Exception) {
-            // Не только IOException: Ktor CIO кидает и UnresolvedAddressException (не-IO) на кривой
-            // хост — любой прочий сбой тоже NETWORK (по образцу KtorSyncClient.request).
+            // Not just IOException: Ktor CIO also throws UnresolvedAddressException (non-IO) for a
+            // bad host — any other failure is also NETWORK (mirrors KtorSyncClient.request).
             throw AiException(AiException.Kind.NETWORK, "AI request failed: ${e.message}", e)
         }
     }
 
     /**
-     * Извлекает текстовую дельту из одной строки SSE. Возвращает `null` для служебных строк
-     * (`:`-комментарии/keep-alive, пустые, не-`data:`, `[DONE]`). Кидает [AiException.Kind.PROTOCOL]
-     * на невалидный JSON-кадр.
+     * Extracts the text delta from one SSE line. Returns `null` for control lines
+     * (`:` comments/keep-alive, blank, non-`data:`, `[DONE]`). Throws [AiException.Kind.PROTOCOL]
+     * on an invalid JSON frame.
      */
     private fun contentDelta(line: String): String? {
         if (!line.startsWith("data:")) return null
@@ -109,7 +110,7 @@ class OpenAiProvider private constructor(
     }
 
     companion object {
-        /** Провайдер поверх общего процесс-широкого HttpClient (CIO-движок не пересоздаётся на запрос). */
+        /** Provider over a shared process-wide HttpClient (the CIO engine isn't recreated per request). */
         fun pooled(config: OpenAiConfig): OpenAiProvider = OpenAiProvider(config, shared)
 
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
@@ -130,7 +131,7 @@ private data class ChatReqWire(
 @Serializable
 private data class MsgWire(val role: String, val content: String)
 
-/** Один SSE-кадр стриминга: `choices[].delta.content` несёт очередной кусок текста. */
+/** One SSE streaming frame: `choices[].delta.content` carries the next chunk of text. */
 @Serializable
 private data class ChatChunkWire(val choices: List<ChunkChoiceWire> = emptyList())
 

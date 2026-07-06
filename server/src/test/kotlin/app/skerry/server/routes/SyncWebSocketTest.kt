@@ -17,7 +17,7 @@ import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Одна WS-сессия держит три подписки notifier: аккаунтный канал, команды, членство. */
+/** A single WS session holds three notifier subscriptions: account channel, teams, membership. */
 private const val WS_SUBSCRIPTIONS = 3
 
 class SyncWebSocketTest {
@@ -36,7 +36,7 @@ class SyncWebSocketTest {
         val tokens: TokenResponse = client.registerAccount(accountId, password)
 
         client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
-            // Дожидаемся регистрации всех серверных подписок, затем проверяем сам push-канал.
+            // Wait for all server subscriptions to register, then verify the push channel itself.
             withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
             services.notifier.publish(accountId, 7)
             val frame = withTimeout(2_000) { incoming.receive() } as Frame.Text
@@ -44,8 +44,7 @@ class SyncWebSocketTest {
             close(CloseReason(CloseReason.Codes.NORMAL, "done"))
         }
 
-        // Раньше хендлер не читал incoming: Close клиента не обрабатывался и collect висел
-        // до следующего publish. Подписка обязана освободиться сразу после закрытия.
+        // The subscription must release immediately after close, not linger until the next publish.
         withTimeout(2_000) { services.notifier.subscriptions.first { it == 0 } }
     }
 
@@ -61,8 +60,8 @@ class SyncWebSocketTest {
 
         client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
             withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
-            // JWT проверяется только на рукопожатии — отзыв после подключения обязан
-            // перепроверяться на каждом уведомлении и закрывать сессию, а не слать push дальше.
+            // JWT is checked only at handshake; revocation after connect must be rechecked on
+            // every notification and close the session instead of pushing further.
             services.devices.revoke(accountId, "devA")
             services.notifier.publish(accountId, 1)
             val reason = withTimeout(2_000) { closeReason.await() }

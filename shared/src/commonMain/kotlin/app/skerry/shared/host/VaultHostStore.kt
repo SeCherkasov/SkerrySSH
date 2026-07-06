@@ -6,16 +6,16 @@ import app.skerry.shared.vault.VaultRecordCodec
 import app.skerry.shared.vault.WorkspaceLayoutStore
 
 /**
- * [HostStore] поверх зашифрованного [Vault]: каждый профиль — запись [RecordType.HOST], чей payload —
- * JSON-сериализация [Host] (адрес/логин/группа/теги внутри зашифрованного blob). Порядок дерева
- * хранится отдельно в [WorkspaceLayout] (одна запись), чтобы переживать LWW-синк детерминированно —
- * полагаться на порядок [Vault.records] нельзя (put существующей записи не перемещает её, а merge
- * приходит в порядке server_seq). По образцу [app.skerry.shared.vault.CredentialStore].
+ * [HostStore] over the encrypted [Vault]: each profile is a [RecordType.HOST] record whose payload
+ * is the JSON serialization of [Host] (address/login/group/tags inside the encrypted blob). Tree
+ * order is stored separately in [WorkspaceLayout] (a single record) to survive LWW sync
+ * deterministically — [Vault.records] order can't be relied on (putting an existing record doesn't
+ * move it, and merge arrives in server_seq order). Modeled on [app.skerry.shared.vault.CredentialStore].
  *
- * Требует разблокированного vault для мутаций (как [CredentialStore]). Чтение [all] на залоченном
- * vault безопасно отдаёт пустой список: контроллер строится до ввода мастер-пароля и перечитывает
- * данные через `reload()` уже после unlock. Битый/непарсящийся профиль молча пропускается — одна
- * повреждённая запись не валит список.
+ * Requires an unlocked vault for mutations (like [CredentialStore]). Reading [all] on a locked vault
+ * safely returns an empty list: the controller is built before the master password is entered and
+ * reloads via `reload()` after unlock. A corrupt/unparseable profile is silently skipped — one bad
+ * record doesn't break the whole list.
  */
 class VaultHostStore(
     private val vault: Vault,
@@ -29,14 +29,15 @@ class VaultHostStore(
         val hosts = codec.list()
         val order = layout.read().hostOrder
         val rank = order.withIndex().associate { (i, id) -> id to i }
-        // Стабильная сортировка: хосты вне порядка (новые/синканутые) сохраняют относительный
-        // порядок records() и дорисовываются в конце.
+        // Stable sort: hosts outside the order (new/synced) keep records()' relative order and are
+        // appended at the end.
         return hosts.sortedBy { rank[it.id] ?: Int.MAX_VALUE }
     }
 
     override fun put(host: Host) = vault.transaction {
-        // Профиль и read-modify-write макета — под одной блокировкой vault (как [reorder]): иначе
-        // конкурентный mergeRemote из фонового sync, попавший между read() и write(), был бы затёрт.
+        // Profile write and layout read-modify-write under one vault lock (like [reorder]):
+        // otherwise a concurrent mergeRemote from background sync landing between read() and write()
+        // would be clobbered.
         codec.put(host.id, host)
         val current = layout.read()
         if (host.id !in current.hostOrder) {
@@ -45,7 +46,7 @@ class VaultHostStore(
     }
 
     override fun remove(id: String) = vault.transaction {
-        // См. [put]: обновление макета атомарно с удалением записи.
+        // See [put]: layout update is atomic with the record removal.
         codec.remove(id)
         val current = layout.read()
         if (id in current.hostOrder) {
@@ -54,17 +55,18 @@ class VaultHostStore(
     }
 
     override fun reorder(transform: (List<Host>) -> List<Host>) = vault.transaction {
-        // Всё чтение-вычисление-запись под одной блокировкой vault: иначе конкурентный mergeRemote из
-        // фонового sync, попавший между снимком all() и записью ниже, был бы затёрт устаревшим порядком.
+        // Read-compute-write under one vault lock: otherwise a concurrent mergeRemote from
+        // background sync landing between the all() snapshot and the write below would be clobbered
+        // with a stale order.
         val current = all()
         val updated = transform(current)
-        // Размер + множество id: одно равенство множеств пропустило бы дубликат (например [A,B,C,A]),
-        // который затем испортил бы hostOrder и порядок дерева (associate берёт последний индекс id).
+        // Size + id set: a set-equality check alone would miss a duplicate (e.g. [A,B,C,A]), which
+        // would corrupt hostOrder and tree order (associate keeps the last index for a duplicate id).
         require(updated.size == current.size && updated.map { it.id }.toSet() == current.map { it.id }.toSet()) {
             "reorder must preserve the id set (had ${current.size}, got ${updated.size})"
         }
-        // Переписываем только профили с изменившимся содержимым (например, group при moveHostToGroup/
-        // renameGroup) — чистая перестановка не должна бампать version каждой записи (лишний синк-трафик).
+        // Only rewrite profiles whose content actually changed (e.g. group via moveHostToGroup/
+        // renameGroup) — a pure reorder shouldn't bump every record's version (extra sync traffic).
         val byId = current.associateBy { it.id }
         for (host in updated) {
             if (byId[host.id] != host) codec.put(host.id, host)

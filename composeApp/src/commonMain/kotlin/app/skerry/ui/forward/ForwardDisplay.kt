@@ -8,12 +8,11 @@ import app.skerry.ui.generated.resources.ptail_type_socks
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Чистые хелперы представления одного проброса в виде колонок таблицы туннелей нового дизайна
- * (`TunnelsView`): таблица desktop показывает source и destination раздельными ячейками. Общий
- * источник правды — чтобы формат не разъезжался между представлениями.
+ * Pure helpers rendering a single forward as table columns for `TunnelsView` (source/destination
+ * as separate cells). Shared source of truth so the format stays consistent across views.
  */
 
-/** Метка типа проброса для бейджа таблицы: `-L`→LOCAL, `-R`→REMOTE, `-D`→SOCKS. */
+/** Forward type label for the table badge: `-L`->LOCAL, `-R`->REMOTE, `-D`->SOCKS. */
 @Composable
 fun forwardTypeLabel(direction: ForwardDirection): String = when (direction) {
     ForwardDirection.Local -> stringResource(Res.string.ptail_type_local)
@@ -22,15 +21,15 @@ fun forwardTypeLabel(direction: ForwardDirection): String = when (direction) {
 }
 
 /**
- * Порт слушателя: фактический ([ForwardStatus.Active.boundPort]) после поднятия, иначе запрошенный
- * ([ForwardEntry.requestedPort]) — пока статус Starting/Failed (реального порта ещё нет).
+ * Listener port: actual ([ForwardStatus.Active.boundPort]) once up, otherwise the requested port
+ * ([ForwardEntry.requestedPort]) while Starting/Failed.
  */
 fun forwardListenPort(entry: ForwardEntry): Int =
     (entry.status as? ForwardStatus.Active)?.boundPort ?: entry.requestedPort
 
 /**
- * Адрес-источник (сторона слушателя). Для `-L`/`-D` слушатель на этой машине ([ForwardEntry.bindHost]);
- * для `-R` слушатель поднимает сервер, поэтому хост показываем как `server`.
+ * Source address (listener side). For `-L`/`-D` the listener is local ([ForwardEntry.bindHost]);
+ * for `-R` the server owns the listener, so the host is shown as `server`.
  */
 fun forwardSourceText(entry: ForwardEntry): String {
     val port = forwardListenPort(entry)
@@ -41,8 +40,8 @@ fun forwardSourceText(entry: ForwardEntry): String {
 }
 
 /**
- * Адрес назначения для ячейки DESTINATION, или `null` для динамического (`-D`) проброса — у него
- * назначение задаёт клиент SOCKS в момент соединения, фиксированного destination нет.
+ * Destination address for the DESTINATION cell, or `null` for a dynamic (`-D`) forward, which has
+ * no fixed destination (the SOCKS client supplies it per connection).
  */
 fun forwardDestText(entry: ForwardEntry): String? = when (entry.direction) {
     ForwardDirection.Dynamic -> null
@@ -50,8 +49,8 @@ fun forwardDestText(entry: ForwardEntry): String? = when (entry.direction) {
 }
 
 /**
- * Человекочитаемая скорость для метки throughput: `B/s` < 1 KiB, целые `KB/s` < 1 MiB, иначе `MB/s`
- * с одной десятичной. База — 1024 (как принято для сетевых индикаторов в этом UI).
+ * Human-readable throughput label: `B/s` below 1 KiB, whole `KB/s` below 1 MiB, otherwise `MB/s`
+ * with one decimal. Base 1024.
  */
 fun humanRate(bytesPerSec: Long): String {
     if (bytesPerSec < 1024) return "$bytesPerSec B/s"
@@ -61,9 +60,6 @@ fun humanRate(bytesPerSec: Long): String {
     return "${mbTenths / 10}.${mbTenths % 10} MB/s"
 }
 
-/**
- * Доля заполнения throughput-метра (0..1) по скорости: линейная шкала с насыщением на 1 MiB/с —
- * этого достаточно как визуальный индикатор интенсивности (точное значение даёт [humanRate]).
- */
+/** Fill fraction (0..1) of the throughput meter, linear and saturating at 1 MiB/s. */
 fun rateFraction(bytesPerSec: Long): Float =
     (bytesPerSec.toFloat() / (1024f * 1024f)).coerceIn(0f, 1f)

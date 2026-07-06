@@ -10,9 +10,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Поллер RTT поверх suspend-замера соединения. Первый замер — сразу при [PingController.start]
- * (как [app.skerry.ui.metrics.HostMetricsController]); сбой/неудача замера держит последнее удачное
- * значение, а не сбрасывает индикатор. Время виртуальное (testScheduler).
+ * RTT poller on top of a suspend connection measurement. The first measurement happens right at
+ * [PingController.start] (like [app.skerry.ui.metrics.HostMetricsController]); a failed measurement
+ * keeps the last successful value instead of resetting the indicator. Time is virtual (testScheduler).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PingControllerTest {
@@ -40,10 +40,10 @@ class PingControllerTest {
             pollIntervalMillis = 5000,
         )
 
-        c.start() // первый замер → 10
+        c.start() // first measurement → 10
         assertEquals(10L, c.rttMs)
-        testScheduler.advanceTimeBy(5000); testScheduler.runCurrent() // второй замер бросает
-        assertEquals(10L, c.rttMs) // держим последнее удачное
+        testScheduler.advanceTimeBy(5000); testScheduler.runCurrent() // second measurement throws
+        assertEquals(10L, c.rttMs) // last successful value is kept
 
         c.stop()
         scope.cancel()
@@ -54,7 +54,7 @@ class PingControllerTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         var calls = 0
         val c = PingController(
-            measure = { calls++; if (calls == 1) 7L else null }, // мёртвый round-trip → null
+            measure = { calls++; if (calls == 1) 7L else null }, // dead round-trip → null
             scope = scope,
             pollIntervalMillis = 5000,
         )
@@ -76,7 +76,7 @@ class PingControllerTest {
 
         c.start()
         val afterFirst = calls
-        c.start() // второй цикл не поднимается
+        c.start() // second cycle doesn't spin up
         assertEquals(afterFirst, calls)
 
         c.stop()

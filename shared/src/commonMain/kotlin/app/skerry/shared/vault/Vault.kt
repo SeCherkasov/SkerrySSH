@@ -3,7 +3,7 @@ package app.skerry.shared.vault
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
-/** Результат разблокировки [Vault]: успех, неверный пароль или нечитаемый файл. */
+/** Result of unlocking a [Vault]: success, wrong password, or an unreadable file. */
 sealed interface UnlockResult {
     data object Success : UnlockResult
     data object WrongPassword : UnlockResult
@@ -11,176 +11,179 @@ sealed interface UnlockResult {
 }
 
 /**
- * Открытый материал аутентификации для self-hosted sync: соль деривации masterKey и обёртка
- * dataKey. Не секреты по отдельности (соль публична, обёртка — шифротекст), но позволяют другому
- * устройству по мастер-паролю вывести тот же masterKey и развернуть dataKey
- * (`docs/skerry-sync-design.md` §1). Байты — копии; вызывающий волен их затирать.
+ * Plaintext authentication material for self-hosted sync: the masterKey derivation salt and the
+ * dataKey wrapper. Not secrets individually (the salt is public, the wrapper is ciphertext), but
+ * they let another device derive the same masterKey from the master password and unwrap the
+ * dataKey (`docs/skerry-sync-design.md` §1). Bytes are copies; the caller is free to wipe them.
  */
 class SyncMeta internal constructor(val kdfSalt: ByteArray, val wrappedDataKey: ByteArray)
 
 /**
- * Локальное зашифрованное хранилище записей (хосты/ключи/identity). Иерархия ключей и формат
- * — `docs/skerry-sync-design.md` (Argon2id → masterKey → dataKey, XChaCha20-Poly1305), крипто
- * за [VaultCrypto]. В отличие от [app.skerry.shared.host.HostStore], у vault есть жизненный
- * цикл: пока он заблокирован, `dataKey` не в памяти и любой CRUD бросает [IllegalStateException].
+ * Local encrypted record store (hosts/keys/identity). Key hierarchy and format are in
+ * `docs/skerry-sync-design.md` (Argon2id → masterKey → dataKey, XChaCha20-Poly1305), crypto behind
+ * [VaultCrypto]. Unlike [app.skerry.shared.host.HostStore], the vault has a lifecycle: while
+ * locked, `dataKey` isn't in memory and any CRUD call throws [IllegalStateException].
  *
- * `dataKey` наружу не отдаётся: CRUD работает с открытым payload, шифрование/расшифровка с
- * привязкой AAD к `id‖type` происходят внутри. Платформенная реализация — файловая
- * ([app.skerry.shared.vault.FileVault] на desktop). Переданные пароли реализация затирает.
+ * `dataKey` is never exposed: CRUD works with plaintext payloads, encryption/decryption with AAD
+ * bound to `id‖type` happens internally. The platform implementation is file-based
+ * ([app.skerry.shared.vault.FileVault] on desktop). The implementation wipes passwords passed in.
  */
 interface Vault {
 
     /**
-     * Выполнить [block] под внутренней блокировкой vault как единую атомарную транзакцию: составная
-     * операция read-modify-write (например, reorder хостов) не перемежается с конкурентным
-     * [mergeRemote] из фонового sync, иначе перестановка, посчитанная по устаревшему снимку, затёрла
-     * бы только что слитое обновление. Блокировка реентрантна — вложенные вызовы CRUD внутри [block]
-     * берут её повторно. По умолчанию (фейки/однопоточные тесты) — просто вызвать [block].
+     * Runs [block] under the vault's internal lock as a single atomic transaction: a composite
+     * read-modify-write operation (e.g. reordering hosts) won't interleave with a concurrent
+     * [mergeRemote] from background sync, which would otherwise let a reorder computed from a stale
+     * snapshot overwrite a just-merged update. The lock is reentrant — nested CRUD calls inside
+     * [block] re-acquire it. Default (fakes/single-threaded tests) just calls [block].
      */
     fun <T> transaction(block: () -> T): T = block()
 
-    /** Существует ли уже файл vault (для выбора экрана «создать» против «разблокировать»). */
+    /** Whether the vault file already exists (to choose "create" vs "unlock" screen). */
     fun exists(): Boolean
 
-    /** Разблокирован ли vault (`dataKey` в памяти). */
+    /** Whether the vault is unlocked (`dataKey` in memory). */
     val isUnlocked: Boolean
 
     /**
-     * Создать новый vault с нуля (salt + случайный dataKey + обёртка под мастер-паролем),
-     * записать пустой файл. После вызова vault разблокирован. Перезаписывает существующий
-     * файл — вызывающий проверяет [exists] заранее.
+     * Creates a new vault from scratch (salt + random dataKey + wrapper under the master
+     * password), writes an empty file. The vault is unlocked after the call. Overwrites an
+     * existing file — the caller checks [exists] beforehand.
      */
     fun create(password: CharArray)
 
     /**
-     * Создать vault с ЗАДАННЫМ `dataKey` (team-vault Teams: dataKey = teamKey, он хранится записью
-     * [RecordType.TEAM] в аккаунтном vault, а не обёрткой в meta этого файла). После вызова vault
-     * разблокирован; открывать в дальнейшем через [unlockWithDataKey]. Реализация присваивает
-     * переданный ключ (вызывающий его не затирает — контракт [unlockWithDataKey]).
-     * Дефолт бросает: парольным vault'ам метод не нужен.
+     * Creates a vault with a GIVEN `dataKey` (Teams team-vault: dataKey = teamKey, stored as a
+     * [RecordType.TEAM] record in the account vault, not wrapped in this file's meta). The vault is
+     * unlocked after the call; open it later via [unlockWithDataKey]. The implementation takes
+     * ownership of the given key (the caller doesn't wipe it — same contract as [unlockWithDataKey]).
+     * The default throws: password vaults don't need this method.
      */
     fun createWithDataKey(dataKey: DataKey): Unit =
         throw UnsupportedOperationException("createWithDataKey is only supported by file vaults")
 
-    /** Разблокировать существующий vault; см. [UnlockResult]. */
+    /** Unlocks an existing vault; see [UnlockResult]. */
     fun unlock(password: CharArray): UnlockResult
 
     /**
-     * Разблокировать тем же `dataKey`, минуя мастер-пароль — путь биометрии. `dataKey` обычно
-     * приходит из [BiometricKeyStore.unwrap] (обёртка `vault.bio`), обёрнутый под `bioKey`
-     * устройства. Реализация **присваивает** переданный [dataKey] (вызывающий его не затирает) и
-     * грузит записи из файла; [UnlockResult.Corrupted], если файл не читается. Метод намеренно
-     * не проверяет, что `dataKey` верен (нет мастер-ключа для сверки): неверный ключ просто не
-     * откроет записи (AEAD-провал в [openPayload]). Использовать только из доверенного пути
-     * биометрии — см. `docs/skerry-biometric-design.md` §4.
+     * Unlocks with the same `dataKey`, bypassing the master password — the biometrics path.
+     * `dataKey` typically comes from [BiometricKeyStore.unwrap] (the `vault.bio` wrapper), wrapped
+     * under the device's `bioKey`. The implementation **takes ownership** of the given [dataKey]
+     * (the caller doesn't wipe it) and loads records from the file; [UnlockResult.Corrupted] if the
+     * file can't be read. The method deliberately doesn't verify that `dataKey` is correct (there's
+     * no master key to check against): a wrong key simply fails to open records (AEAD failure in
+     * [openPayload]). Use only from the trusted biometrics path — see
+     * `docs/skerry-biometric-design.md` §4.
      */
     fun unlockWithDataKey(dataKey: DataKey): UnlockResult
 
     /**
-     * Выгрузить **копию** текущего `dataKey` для включения биометрии (его обернут под `bioKey` и
-     * сохранят в `vault.bio`). `null`, если vault заблокирован. Возвращается [DataKey], чьи байты
-     * `internal` — UI их не прочитает; копия, чтобы вызывающий мог затереть её после обёртки, не
-     * затронув живой ключ. Единственный санкционированный способ достать `dataKey` наружу; держать
-     * результат минимально и сразу затирать (`bytes.fill(0)` доступен только коду `shared`).
+     * Exports a **copy** of the current `dataKey` to enable biometrics (it gets wrapped under
+     * `bioKey` and stored in `vault.bio`). `null` if the vault is locked. Returns a [DataKey] whose
+     * bytes are `internal` — the UI can't read them; a copy so the caller can wipe it after
+     * wrapping without touching the live key. The only sanctioned way to get `dataKey` out; keep the
+     * result minimal and wipe it immediately (`bytes.fill(0)` is only accessible to `shared` code).
      */
     fun exportDataKey(): DataKey?
 
     /**
-     * Принять ключ аккаунта на диск (Phase A sync «как Termius»): если [newDataKey] отличается от
-     * текущего, переобернуть его под [password] (свежая соль) и переписать метаданные+файл — после
-     * этого устройство разблокирует vault этим паролем и читает синканутые записи даже после
-     * перезапуска, без повторного входа. Если ключ совпадает с текущим (основное устройство
-     * переподключается своим же ключом) — **no-op**: метаданные и пароль не трогаем, чтобы случайно
-     * не сменить пароль vault. Существующие записи остаются как есть (под старым ключом они станут
-     * нечитаемы — это локальные данные присоединяющегося устройства; синканутые придут заново через
-     * pull). Требует разблокированного vault. Реализация затирает [password] и забирает владение
-     * [newDataKey]. Возвращает `true`, если ключ был принят (сменился), иначе `false`.
+     * Adopts the account key onto disk (Phase A sync, Termius-style): if [newDataKey] differs from
+     * the current one, rewraps it under [password] (fresh salt) and rewrites the metadata+file — the
+     * device then unlocks the vault with this password and reads synced records even after a
+     * restart, without signing in again. If the key matches the current one (the primary device
+     * reconnecting with its own key) it's a **no-op**: metadata and password are left untouched to
+     * avoid accidentally changing the vault password. Existing records are left as-is (they become
+     * unreadable under the old key — this is local data of the joining device; synced records arrive
+     * again via pull). Requires an unlocked vault. The implementation wipes [password] and takes
+     * ownership of [newDataKey]. Returns `true` if the key was adopted (changed), `false` otherwise.
      */
     fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean
 
-    /** Заблокировать: затереть `dataKey` из памяти. После — [isUnlocked] == false. */
+    /** Locks: wipes `dataKey` from memory. After this, [isUnlocked] == false. */
     fun lock()
 
     /**
-     * Безвозвратно сбросить vault: затереть `dataKey`/метаданные/записи из памяти и **удалить файл**
-     * с диска. После вызова [exists] == false и [isUnlocked] == false — vault возвращается в исходное
-     * состояние «ещё не создан».
+     * Irreversibly resets the vault: wipes `dataKey`/metadata/records from memory and **deletes the
+     * file** from disk. After the call, [exists] == false and [isUnlocked] == false — the vault
+     * returns to its initial "not yet created" state.
      *
-     * Это аварийный выход для забытого мастер-пароля или повреждённого файла: zero-knowledge не
-     * допускает восстановления, поэтому единственная альтернатива тупику — стереть всё и начать заново
-     * (модель Bitwarden/1Password; удаление необратимо, бэкап не оставляется). Сохранённые секреты
-     * теряются; внешние данные, не входящие в файл vault (профили хостов, known_hosts), за пределами
-     * этого контракта — их чистит вызывающий. Биометрию (`vault.bio`) тоже снимает вызывающий: vault
-     * про неё не знает. Идемпотентно: повторный вызов / отсутствие файла — no-op.
+     * This is the emergency exit for a forgotten master password or a corrupted file: zero-knowledge
+     * doesn't allow recovery, so the only alternative to a dead end is wiping everything and
+     * starting over (Bitwarden/1Password model; deletion is irreversible, no backup is kept). Stored
+     * secrets are lost; external data outside the vault file (host profiles, known_hosts) is outside
+     * this contract — the caller cleans it up. Biometrics (`vault.bio`) is also removed by the
+     * caller: the vault doesn't know about it. Idempotent: calling again / no file present is a no-op.
      */
     fun reset()
 
     /**
-     * Поток уведомлений о ЛОКАЛЬНЫХ мутациях vault ([put]/[remove]) — без содержимого, лишь сигнал
-     * «пользователь что-то изменил». Координатор синка подписывается, дебаунсит и пушит изменение на
-     * сервер (live-sync «как Termius»: правка на одном устройстве сама долетает до других). НЕ
-     * эмитится при [mergeRemote]/[compact]: это входящие/служебные операции, и их повторный push был
-     * бы лишним (LWW его всё равно отверг бы) — а так цепочка pull→merge не зацикливала бы push.
-     * По умолчанию пустой поток (фейки/реализации без sync); файловый vault переопределяет.
+     * Stream of notifications about LOCAL vault mutations ([put]/[remove]) — no content, just a
+     * "user changed something" signal. The sync coordinator subscribes, debounces, and pushes the
+     * change to the server (Termius-style live-sync: an edit on one device reaches others on its
+     * own). NOT emitted on [mergeRemote]/[compact]: these are incoming/maintenance operations, and
+     * re-pushing them would be redundant (LWW would reject it anyway) — this way a pull→merge chain
+     * doesn't loop back into a push. Empty by default (fakes/implementations without sync); the file
+     * vault overrides it.
      */
     val localChanges: Flow<Unit> get() = emptyFlow()
 
-    /** Метаданные всех записей, включая tombstone (`deleted=true`); вызывающий фильтрует сам. */
+    /** Metadata for all records, including tombstones (`deleted=true`); the caller filters. */
     fun records(): List<VaultRecord>
 
     /**
-     * Соль деривации masterKey и обёртка dataKey для аутентификации в sync. `null`, если vault
-     * заблокирован. Из них вызывающий (зная мастер-пароль) выводит authKey/SRP-верификатор и может
-     * развернуть dataKey на новом устройстве — см. [SyncMeta] и `docs/skerry-sync-design.md` §1.
+     * The masterKey derivation salt and dataKey wrapper for sync authentication. `null` if the
+     * vault is locked. From these the caller (knowing the master password) derives the
+     * authKey/SRP verifier and can unwrap the dataKey on a new device — see [SyncMeta] and
+     * `docs/skerry-sync-design.md` §1.
      */
     fun syncMeta(): SyncMeta?
 
     /**
-     * Слить пришедшие с sync записи по правилу LWW (`docs/skerry-sync-design.md` §3): для каждой
-     * принимается бóльшая по (`version`, затем лексикографически `deviceId`); иначе локальная
-     * остаётся. Записи кладутся **как есть** (blob/version/deviceId/deleted verbatim) — version не
-     * бампится, payload не перешифровывается, поэтому Lamport-счётчики остаются согласованы между
-     * устройствами. Требует разблокированного vault (нужны метаданные для атомарной записи).
-     * Возвращает применённые (победившие) записи.
+     * Merges records from sync using the LWW rule (`docs/skerry-sync-design.md` §3): for each, the
+     * one with the greater (`version`, then lexicographic `deviceId`) wins; otherwise the local one
+     * stays. Records are stored **as-is** (blob/version/deviceId/deleted verbatim) — version isn't
+     * bumped, the payload isn't re-encrypted, so Lamport counters stay consistent across devices.
+     * Requires an unlocked vault (metadata is needed for the atomic write). Returns the applied
+     * (winning) records.
      */
     fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord>
 
-    /** Расшифрованный payload записи; `null` если записи нет, она удалена (tombstone) или blob не проходит AEAD. */
+    /** Decrypted record payload; `null` if the record doesn't exist, is deleted (tombstone), or the blob fails AEAD. */
     fun openPayload(id: String): ByteArray?
 
     /**
-     * Upsert: запечатать [payload] под `dataKey` (AAD = `id‖type`) и сохранить запись с этим
-     * [id]/[type], увеличив `version` и обновив `updatedAt`.
+     * Upsert: seals [payload] under `dataKey` (AAD = `id‖type`) and stores a record with this
+     * [id]/[type], bumping `version` and updating `updatedAt`.
      */
     fun put(id: String, type: RecordType, payload: ByteArray)
 
-    /** Мягко удалить запись (tombstone): `deleted=true`, `version++`. Неизвестный id — no-op. */
+    /** Soft-deletes a record (tombstone): `deleted=true`, `version++`. Unknown id is a no-op. */
     fun remove(id: String)
 
     /**
-     * Физически забыть НАДГРОБИЯ по id (компакция) — удалить их из хранилища насовсем, без нового
-     * tombstone и без бампа `version`, в отличие от [remove]. Зовётся синком для тромбстоунов,
-     * которые сервер пометил полностью распространёнными (все устройства аккаунта их дочитали):
-     * иначе клиент вечно пере-пушил бы старые надгробия и они воскресали бы на сервере после purge.
-     * Удаляет ТОЛЬКО записи с `deleted=true`: если локально по тому же id уже лежит живая (более
-     * новая, ещё не отправленная) версия — её НЕ трогаем, иначе потеряли бы непротолкнутые данные.
-     * Неизвестный id — no-op. По умолчанию no-op (фейки/реализации без sync); файловый vault
-     * переопределяет. Требует разблокированного vault.
+     * Physically forgets TOMBSTONES by id (compaction) — removes them from storage for good, without
+     * a new tombstone and without bumping `version`, unlike [remove]. Called by sync for tombstones
+     * the server has marked fully propagated (every device on the account has read them): otherwise
+     * the client would keep re-pushing old tombstones forever and they'd resurrect on the server after
+     * purge. Removes ONLY records with `deleted=true`: if a live (newer, not yet sent) version exists
+     * locally for the same id, it's left untouched, or un-pushed data would be lost. Unknown id is a
+     * no-op. No-op by default (fakes/implementations without sync); the file vault overrides it.
+     * Requires an unlocked vault.
      */
     fun compact(ids: List<String>) {}
 
     /**
-     * Сменить мастер-пароль: переобернуть тот же `dataKey` под новым паролем (записи не
-     * перешифровываются). `false`, если [oldPassword] неверен. Требует разблокированного vault.
+     * Changes the master password: rewraps the same `dataKey` under the new password (records aren't
+     * re-encrypted). `false` if [oldPassword] is wrong. Requires an unlocked vault.
      */
     fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean
 
     /**
-     * Проверить мастер-пароль, **не меняя состояние**: вывести masterKey из текущего salt и
-     * развернуть `wrappedDataKey`. `true` — пароль верен. Сессию не трогает (`dataKey` не
-     * перевыдаётся, записи не перечитываются), на заблокированном vault — `false` (нет метаданных
-     * для сверки). Нужен для повторного подтверждения личности перед чувствительным действием —
-     * копированием пароля в буфер — без разблокировки заново. Пароль затирается.
+     * Verifies the master password **without changing state**: derives masterKey from the current
+     * salt and unwraps `wrappedDataKey`. `true` means the password is correct. Doesn't touch the
+     * session (`dataKey` isn't reissued, records aren't reread); on a locked vault, `false` (no
+     * metadata to check against). Used to re-confirm identity before a sensitive action — copying a
+     * password to the clipboard — without unlocking again. The password is wiped.
      */
     fun verifyPassword(password: CharArray): Boolean
 }

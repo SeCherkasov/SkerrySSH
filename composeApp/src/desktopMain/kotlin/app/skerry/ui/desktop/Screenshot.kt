@@ -79,15 +79,15 @@ import app.skerry.ui.design.rememberMono
 import app.skerry.ui.design.rememberSpaceGrotesk
 
 /**
- * Офскрин-рендер десктопного дизайна в PNG для визуальной проверки без окна/композитора.
- * Управляется системным свойством `skerry.screenshot.*`: out — путь PNG, view/overlay — что показать,
- * `live=true` — подать засеянные [HostManagerController] + [SessionsController] (живой сайдбар,
- * вкладки, терминал поверх фейкового транспорта с заготовленным выводом). Не часть приложения;
- * запускается Gradle-задачей `screenshotDesign`.
+ * Offscreen render of the desktop design to PNG for visual review without a window/compositor.
+ * Controlled by system properties `skerry.screenshot.*`: out is the PNG path, view/overlay pick
+ * what to show, `live=true` feeds seeded [HostManagerController] + [SessionsController] (live
+ * sidebar, tabs, terminal over a fake transport with canned output). Not part of the app; run via
+ * the Gradle task `screenshotDesign`.
  *
- * Оверлеи `create`/`unlock` рендерят живые экраны гейта мастер-пароля ([DesktopCreateScreen]/
- * [DesktopUnlockScreen]) standalone (без `VaultGateController`/lifecycle) — проверка визуала; их
- * проводка к [app.skerry.ui.vault.VaultGate] покрыта тестами контроллера и компиляцией.
+ * The `create`/`unlock` overlays render the live master password gate screens ([DesktopCreateScreen]/
+ * [DesktopUnlockScreen]) standalone (without `VaultGateController`/lifecycle) for visual review; their
+ * wiring to [app.skerry.ui.vault.VaultGate] is covered by controller tests and compilation.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
@@ -96,21 +96,21 @@ fun main() {
     val overlay = System.getProperty("skerry.screenshot.overlay", "")
     val live = System.getProperty("skerry.screenshot.live", "false").toBoolean()
 
-    // Мобильный вариант: рендерим MobileDesignApp в узкой сцене. view=MobileTab (по умолчанию Hosts).
+    // Mobile variant: renders MobileDesignApp in a narrow scene. view=MobileTab (default Hosts).
     if (System.getProperty("skerry.screenshot.device", "desktop") == "mobile") {
         renderMobile(out, viewName, overlay, live); return
     }
 
     val state = DesktopDesignState()
     runCatching { state.showView(DesktopView.valueOf(viewName)) }
-    // Тема терминала для визуальной проверки: -Dskerry.screenshot.termTheme=<id> (напр. tokyo-night).
+    // Terminal theme for visual review: -Dskerry.screenshot.termTheme=<id> (e.g. tokyo-night).
     System.getProperty("skerry.screenshot.termTheme")?.let { state.chooseTerminalTheme(TerminalThemes.fromId(it)) }
     when (overlay) {
         "lock" -> state.lock()
         "modal" -> state.openModal()
         "settings" -> {
             state.openSettings()
-            // Вкладка настроек для рендера: -Dskerry.screenshot.settingsTab=Appearance.
+            // Settings tab to render: -Dskerry.screenshot.settingsTab=Appearance.
             System.getProperty("skerry.screenshot.settingsTab")?.let { tab ->
                 runCatching { state.showSettingsTab(SettingsTab.valueOf(tab)) }
             }
@@ -119,8 +119,8 @@ fun main() {
 
     val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
     val certificateInspector = if (live) SshjCertificateInspector() else null
-    // Одноуровневая модель: keychain-секреты ([CredentialManagerController]) поверх in-memory vault,
-    // чтобы раздел Vault отрисовался живыми компонентами; хосты ссылаются на секрет по credentialId.
+    // One-level model: keychain secrets ([CredentialManagerController]) over an in-memory vault, so
+    // the Vault section renders with live components; hosts reference a secret by credentialId.
     val credentials = if (live && keyGenerator != null) seededVault(keyGenerator) else null
     val boundCredentialId = credentials?.credentials?.firstOrNull()?.id
     val hosts = if (live) seededHosts(boundCredentialId = boundCredentialId) else null
@@ -139,8 +139,8 @@ fun main() {
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
         SkerryTheme { content() }
     }
-    // Пампим кадры с реальной паузой, чтобы compose-resources успели подгрузить шрифты (async IO)
-    // и фейковая сессия успела отдать вывод в терминал.
+    // Pumps frames with a real pause so compose-resources can load fonts (async IO) and the fake
+    // session can flush its output to the terminal.
     var img = scene.render(0)
     for (i in 1..80) {
         img = scene.render(i * 16_000_000L)
@@ -149,39 +149,39 @@ fun main() {
     val data = img.encodeToData() ?: error("encode failed")
     File(out).writeBytes(data.bytes)
     scene.close()
-    sessions?.disconnectAll() // снять коллекторы фейковых сессий перед выходом
+    sessions?.disconnectAll() // detach fake session collectors before exit
     println("screenshot → $out (${File(out).length()} bytes)")
 }
 
 /**
- * Офскрин-рендер мобильного варианта ([MobileDesignApp]) в узкой сцене 390×844 (density 2). `view` —
- * имя [MobileTab] (по умолчанию Hosts); `live=true` подаёт засеянный каталог [seededHosts], иначе
- * экран берёт встроенные превью-данные. Запускается той же задачей
- * `screenshotDesign` со свойством `skerry.screenshot.device=mobile`.
+ * Offscreen render of the mobile variant ([MobileDesignApp]) in a narrow 390x844 (density 2) scene.
+ * `view` is a [MobileTab] name (default Hosts); `live=true` feeds the seeded [seededHosts] catalog,
+ * otherwise the screen uses its built-in preview data. Run via the same `screenshotDesign` task
+ * with `skerry.screenshot.device=mobile`.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 private fun renderMobile(out: String, viewName: String, overlay: String, live: Boolean) {
     val state = MobileDesignState()
     val hosts = if (live) seededHosts() else null
-    // Живой AI-контроллер (фейковый провайдер) — чтобы экран More → AI & privacy рендерился
-    // реальной формой, а не пустым заголовком (без контроллера экран рисует только хедер).
+    // Live AI controller (fake provider) so the More -> AI & privacy screen renders its real form
+    // instead of an empty header (without a controller the screen draws only the header).
     val ai = if (live) seededAi() else null
-    // Менеджер known-hosts засеваем только в live-режиме — иначе экран Known берёт встроенный мок.
+    // Known-hosts manager is seeded only in live mode; otherwise the Known screen uses a built-in mock.
     val knownHosts = if (live) seededKnownHosts() else null
-    // Keychain засеваем для оверлея sheet (live) — чтобы пикер аутентификации показал сохранённые секреты.
+    // Keychain is seeded for the sheet overlay (live) so the auth picker shows saved secrets.
     val credentials = if (live) seededVault(BouncyCastleSshKeyGenerator()) else null
-    // Генератор/инспектор ключей — таб Vault считает им отпечатки засеянных ключей в live-режиме.
+    // Key generator/inspector: the Vault tab uses it to compute fingerprints of seeded keys in live mode.
     val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
     val deps = if (hosts != null) {
         AppDependencies(hosts = hosts, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator)
     } else {
         AppDependencies()
     }
-    // Засеянные сессии (фейковый транспорт) для живого терминала; подаём в
-    // MobileDesignApp внешним менеджером, чтобы офскрин показал реальный TerminalScreen без сети.
+    // Seeded sessions (fake transport) for a live terminal; fed into MobileDesignApp as an external
+    // manager so the offscreen render shows a real TerminalScreen without a network.
     val sessions = if (live && hosts != null) seededSessions(hosts) else null
-    // view — имя MobileTab (корневой) либо MobileRoute (push-экран). HostDetail открывается на первом
-    // хосте каталога, Terminal — на активной засеянной сессии, чтобы офскрин показал живой экран.
+    // view is a MobileTab (root) or MobileRoute (push screen) name. HostDetail opens on the catalog's
+    // first host, Terminal on the active seeded session, so the offscreen render shows a live screen.
     val tab = runCatching { MobileTab.valueOf(viewName) }.getOrNull()
     if (tab != null) {
         state.select(tab)
@@ -194,8 +194,8 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
             }
         }
     }
-    if (overlay == "sheet") state.openNewConn() // лист New connection поверх текущего таба
-    // ширина/высота сцены — в ПИКСЕЛЯХ: 780×1688 при density 2 = логические 390×844dp (телефон).
+    if (overlay == "sheet") state.openNewConn() // New connection sheet over the current tab
+    // Scene width/height are in pixels: 780x1688 at density 2 = logical 390x844dp (phone).
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
         SkerryTheme { MobileDesignApp(deps = deps, state = state, sessions = sessions, aiOverride = ai) }
     }
@@ -207,11 +207,11 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     val data = img.encodeToData() ?: error("encode failed")
     File(out).writeBytes(data.bytes)
     scene.close()
-    sessions?.disconnectAll() // снять коллекторы фейковых сессий перед выходом
+    sessions?.disconnectAll() // detach fake session collectors before exit
     println("screenshot(mobile) → $out (${File(out).length()} bytes)")
 }
 
-/** Поставщик дизайн-шрифтов для standalone-рендера экранов, минуя [DesktopDesignApp]. */
+/** Design font provider for standalone screen renders, bypassing [DesktopDesignApp]. */
 @Composable
 private fun GateScreenPreview(body: @Composable () -> Unit) {
     val fonts = DesignFonts(
@@ -223,8 +223,8 @@ private fun GateScreenPreview(body: @Composable () -> Unit) {
 }
 
 /**
- * In-memory каталог хостов с демо-профилями — только для офскрин-рендера живого сайдбара.
- * [boundCredentialId] (если задан) привязывается к паре хостов, чтобы раздел Vault показал «Used by hosts».
+ * In-memory host catalog with demo profiles, for the offscreen render of a live sidebar only.
+ * [boundCredentialId] (if given) is attached to a pair of hosts so Vault shows "Used by hosts".
  */
 private fun seededHosts(boundCredentialId: String? = null): HostManagerController {
     val store = object : HostStore {
@@ -249,10 +249,10 @@ private fun seededHosts(boundCredentialId: String? = null): HostManagerControlle
 }
 
 /**
- * Посев vault keychain-секретами ([CredentialManagerController]) поверх in-memory vault — чтобы
- * офскрин-рендер показал живой раздел Vault (карточки ключа/пароля/сертификата, used-by-hosts)
- * реальными компонентами без файлов/мастер-пароля. Один ed25519-ключ генерируется настоящим
- * [SshKeyGenerator]; первый секрет привязывается к демо-хостам по credentialId.
+ * Seeds the vault with keychain secrets ([CredentialManagerController]) over an in-memory vault so
+ * the offscreen render shows a live Vault section (key/password/certificate cards, used-by-hosts)
+ * with real components and no files/master password. One ed25519 key is generated by a real
+ * [SshKeyGenerator]; the first secret is attached to the demo hosts by credentialId.
  */
 private fun seededVault(keyGenerator: SshKeyGenerator): CredentialManagerController {
     val vault = InMemoryVault()
@@ -269,12 +269,12 @@ private fun seededVault(keyGenerator: SshKeyGenerator): CredentialManagerControl
     return credentials
 }
 
-// NOT_A_SECRET: учебный ed25519-ключ, сгенерирован для офскрин-посева тестов; не используется в
-// продакшн-сборке (только desktopMain Screenshot), не даёт доступа ни к чему. Маркер — чтобы
-// gitleaks/trufflehog не давали ложных срабатываний.
-// Учебный ed25519-сертификат (CA-подписанный, principals alice/deploy) — только для офскрин-посева
-// раздела Vault → Certificates реальными компонентами без файлов/мастер-пароля. Те же значения, что
-// в CertificateFixtures (shared/desktopTest) — источник правды там; при регенерации обновить оба.
+// NOT_A_SECRET: a throwaway ed25519 key generated for offscreen test seeding; not used in the
+// production build (desktopMain Screenshot only), grants access to nothing. Marker so
+// gitleaks/trufflehog don't false-positive on it.
+// Throwaway ed25519 certificate (CA-signed, principals alice/deploy), only for seeding the offscreen
+// render of Vault -> Certificates with real components, no files/master password. Same values as
+// CertificateFixtures (shared/desktopTest), which is the source of truth; update both if regenerated.
 private val SEED_CERT_KEY = """
     -----BEGIN OPENSSH PRIVATE KEY-----
     b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
@@ -288,7 +288,7 @@ private val SEED_CERT_KEY = """
 private const val SEED_CERT =
     "ssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIJ/XTmChh23PUo43PsVebZVnBUh9yVb7r8UgCo6MD2XGAAAAIIeYr544sT/dKZMQfPaZB6tRNa4rXSDbJewJ5GaoGEMnAAAAAAAAACoAAAABAAAAE3NrZXJyeS10ZXN0QGVkMjU1MTkAAAATAAAABWFsaWNlAAAABmRlcGxveQAAAABlkgCAAAAAAHhh+AAAAAAAAAAAggAAABVwZXJtaXQtWDExLWZvcndhcmRpbmcAAAAAAAAAF3Blcm1pdC1hZ2VudC1mb3J3YXJkaW5nAAAAAAAAABZwZXJtaXQtcG9ydC1mb3J3YXJkaW5nAAAAAAAAAApwZXJtaXQtcHR5AAAAAAAAAA5wZXJtaXQtdXNlci1yYwAAAAAAAAAAAAAAMwAAAAtzc2gtZWQyNTUxOQAAACDGkIM6oT/mc8hunaUIY1avJGKsnfJB6yboLBsENiQ0kAAAAFMAAAALc3NoLWVkMjU1MTkAAABAwycZAnZtpvGb6wZDhWCcA6sa4Lz7sieexLCRkC7VNcZj23iiqej1B135atUIc0G7yR/g/TIzACfk2G3DHOYLAA== alice@skerry"
 
-/** Тривиальный незашифрованный vault в памяти — только для офскрин-посева identity (не для приложения). */
+/** Trivial unencrypted in-memory vault, for offscreen identity seeding only (not for the app). */
 private class InMemoryVault : Vault {
     private val records = LinkedHashMap<String, VaultRecord>()
     private val payloads = LinkedHashMap<String, ByteArray>()
@@ -319,9 +319,9 @@ private class InMemoryVault : Vault {
 }
 
 /**
- * Менеджер known-hosts с демо-ключами и одним незакрытым событием смены ключа — чтобы офскрин-рендер
- * показал живую таблицу (firstSeen/Verified), предупреждение и панель сравнения отпечатков реальными
- * компонентами ([KnownHostsController]→[KnownHostsView]). In-memory, без файлов.
+ * Known-hosts manager with demo keys and one unresolved key-change event, so the offscreen render
+ * shows a live table (firstSeen/Verified), a warning, and a fingerprint comparison panel with real
+ * components ([KnownHostsController] -> [KnownHostsView]). In-memory, no files.
  */
 private fun seededKnownHosts(): KnownHostsController {
     val ed = "ssh-ed25519"
@@ -359,10 +359,10 @@ private fun seededKnownHosts(): KnownHostsController {
 }
 
 /**
- * Живой AI-контроллер для офскрин-рендера настроек AI (desktop-таб и мобильный экран): фейковый
- * провайдер с заготовленным ответом, первая модель каталога «установлена», BYOK-ключ заполнен,
- * quick-chat засеян одним обменом. Провайдер по умолчанию — `-Dskerry.screenshot.aiProvider`
- * (CLOUD/DEVICE/OFF; по умолчанию CLOUD) — OFF рендерит состояние «AI выключен».
+ * Live AI controller for offscreen renders of AI settings (desktop tab and mobile screen): a fake
+ * provider with a canned reply, the first catalog model marked "installed", a BYOK key filled in,
+ * quick-chat seeded with one exchange. Provider is set via `-Dskerry.screenshot.aiProvider`
+ * (CLOUD/DEVICE/OFF, default CLOUD); OFF renders the "AI disabled" state.
  */
 private fun seededAi(): app.skerry.ui.ai.AiAssistantController {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -396,26 +396,26 @@ private fun seededAi(): app.skerry.ui.ai.AiAssistantController {
 }
 
 /**
- * Менеджер сессий поверх фейкового транспорта ([fakeTransport]) с одной открытой вкладкой к первому
- * хосту — чтобы офскрин-рендер показал живой терминал/тулбар/вкладки реальными компонентами
- * ([SessionsController]→[ConnectionController]→[TerminalScreen]) без сети.
+ * Session manager over a fake transport ([fakeTransport]) with one open tab to the first host, so
+ * the offscreen render shows a live terminal/toolbar/tabs with real components
+ * ([SessionsController] -> [ConnectionController] -> [TerminalScreen]), no network.
  */
 private fun seededSessions(hosts: HostManagerController): SessionsController {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     var n = 0
     val sessions = SessionsController(newId = { "s${n++}" }, controllerFactory = { ConnectionController(fakeTransport(), scope) })
-    // Пустой пароль: фейковый транспорт auth игнорирует (см. FakeConnection) — реального хендшейка нет.
+    // Empty password: the fake transport ignores auth (see FakeConnection); there's no real handshake.
     val h = hosts.hosts.first()
     sessions.open(h.id, h.label, h.connectionSubtitle(), h.toTarget(), SshAuth.Password(""))
     hosts.hosts.getOrNull(1)?.let { h2 -> sessions.open(h2.id, h2.label, h2.connectionSubtitle(), h2.toTarget(), SshAuth.Password("")) }
     sessions.activate(sessions.sessions.first().id)
-    // Засеять пробросы на активной сессии для живого скриншота вкладки Tunnels: ждём, пока fake-
-    // соединение поднимется (connect идёт асинхронно), затем поднимаем -L/-R/-D тем же путём, что и
-    // UI (PortForwardController). Фейковый форвард сразу Active.
+    // Seeds port forwards on the active session for a live Tunnels tab screenshot: waits for the
+    // fake connection to come up (connect is async), then raises -L/-R/-D the same way the UI does
+    // (PortForwardController). The fake forward is Active immediately.
     val ctrl = sessions.sessions.first().controller
     scope.launch {
-        // uiState — Compose snapshot-стейт; ждём перехода в Connected через snapshotFlow (а не
-        // busy-spin), чтобы корректно подписаться на снапшот-систему и не крутить CPU.
+        // uiState is Compose snapshot state; waits for the transition to Connected via snapshotFlow
+        // (not a busy-spin) to properly subscribe to the snapshot system without spinning the CPU.
         snapshotFlow { ctrl.uiState }.first { it is ConnectionUiState.Connected }
         val pf = ctrl.openPortForwards()
         pf.addLocal(bindPort = 0, destHost = "10.0.0.5", destPort = 80)
@@ -425,7 +425,7 @@ private fun seededSessions(hosts: HostManagerController): SessionsController {
     return sessions
 }
 
-/** Фейковый SSH-транспорт: shell отдаёт заготовленный баннер+листинг, затем висит до отмены. */
+/** Fake SSH transport: the shell emits a canned banner+listing, then hangs until cancelled. */
 private fun fakeTransport(): SshTransport = object : SshTransport {
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection = FakeConnection(target)
 }
@@ -434,8 +434,8 @@ private class FakeConnection(private val target: SshTarget) : SshConnection {
     override val isConnected: Boolean = true
     override val cipher: String? = "chacha20-poly1305@openssh.com"
 
-    // Реалистичный вывод METRICS_COMMAND, чтобы офскрин-рендер info-панели показал живые
-    // метрики и факты хоста (CPU/память/диск/аптайм/load/ОС/ядро/CPU), а не плейсхолдеры «…».
+    // Realistic METRICS_COMMAND output so the offscreen render of the info panel shows live
+    // metrics and host facts (CPU/memory/disk/uptime/load/OS/kernel/CPU) instead of "..." placeholders.
     override suspend fun exec(command: String): ExecResult = ExecResult(
         exitCode = 0,
         stdout = """
@@ -466,7 +466,7 @@ private class FakeConnection(private val target: SshTarget) : SshConnection {
     override suspend fun disconnect() {}
 }
 
-/** Фейковый проброс: сразу «активен», порт echo'ится из spec — для офскрин-рендера таблицы туннелей. */
+/** Fake forward: immediately "active", port echoed from the spec, for the offscreen tunnels table. */
 private class FakePortForward(override val boundPort: Int) : PortForward {
     override val isActive: Boolean = true
     override var isPaused: Boolean = false
@@ -503,7 +503,7 @@ private class FakeChannel(target: SshTarget) : ShellChannel {
     override suspend fun close() {}
 }
 
-/** Фейковый SFTP-клиент с заготовленным листингом `/var/www` — для офскрин-рендера живой панели. */
+/** Fake SFTP client with a canned `/var/www` listing, for the offscreen render of a live panel. */
 private class FakeSftpClient : SftpClient {
     private val listing = listOf(
         SftpEntry("html", "/var/www/html", SftpEntryType.Directory, 4096, 0, 0b111_101_101),

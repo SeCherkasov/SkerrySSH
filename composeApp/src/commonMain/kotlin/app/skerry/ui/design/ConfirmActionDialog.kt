@@ -24,10 +24,10 @@ import app.skerry.ui.generated.resources.shell_cancel
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Универсальный диалог подтверждения деструктивного действия (разрыв сессии, закрытие split-панели,
- * удаление туннеля): скрим + карточка макета, заголовок + пояснение + Cancel/[confirmLabel]. Тот же
- * визуальный язык, что [DesktopDeleteHostDialog]/[DesktopPasswordDialog]; кнопка подтверждения по
- * умолчанию в [D.sunset] (опасное действие). [onDismiss] также срабатывает по клику вне карточки.
+ * Confirmation dialog for a destructive action (disconnect session, close split panel, delete
+ * tunnel): scrim + card, title + message + Cancel/[confirmLabel]. Same visual language as
+ * [DesktopDeleteHostDialog]/[DesktopPasswordDialog]; confirm button defaults to [D.sunset].
+ * [onDismiss] also fires on click outside the card.
  */
 @Composable
 fun ConfirmActionDialog(
