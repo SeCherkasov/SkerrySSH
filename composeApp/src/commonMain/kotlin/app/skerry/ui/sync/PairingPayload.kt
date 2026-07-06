@@ -4,7 +4,7 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 /**
- * Quick-pairing payload (variant B, `docs/skerry-sync-design.md` §3): a signed-in device shows it
+ * Quick-pairing payload (variant B): a signed-in device shows it
  * as a QR/code, a new device reads it via camera or manual entry. Carries exactly what the new
  * device needs to claim the session and decrypt the account key bypassing the server:
  *

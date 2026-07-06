@@ -5,7 +5,7 @@ import org.jetbrains.exposed.sql.Table
 /**
  * Sync server storage schema. The server is zero-knowledge: everything related to user content
  * ([Records.blob], [Pairing.encryptedDataKey], [Accounts.wrappedDataKey]) is ciphertext the server
- * has no key for. Only sync metadata is stored in the clear (`docs/skerry-sync-design.md` §2).
+ * has no key for. Only sync metadata is stored in the clear.
  *
  * Types are chosen to be portable between SQLite and PostgreSQL: text identifiers, `long` for
  * counters, `blob` for ciphertext (BLOB in SQLite, bytea in PostgreSQL).
@@ -68,7 +68,7 @@ object Records : Table("records") {
 }
 
 /**
- * Metadata audit log for the admin console (`docs/skerry-sync-prototype.html` -> Recent activity).
+ * Metadata audit log for the admin console (Recent activity).
  * Append-only, zero-knowledge: stores only the event, device, and a human-readable summary
  * ([detail] — counters/cursors, never record content). No FK to [Accounts]: the log survives
  * account deletion and allows events before account creation. Retention is [ActivityRepository].
@@ -92,8 +92,7 @@ object ActivityLog : Table("activity_log") {
 
 /**
  * Public X25519 account keys for Teams invitations. The public key isn't secret; server
- * substitution is detected by members comparing fingerprints (see `docs/skerry-sync-design.md`,
- * Teams section).
+ * substitution is detected by members comparing fingerprints (Teams section).
  */
 object AccountKeys : Table("account_keys") {
     val accountId = varchar("account_id", 320).references(Accounts.id)

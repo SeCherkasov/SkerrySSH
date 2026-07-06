@@ -21,7 +21,7 @@ class MasterKey internal constructor(internal val bytes: ByteArray) {
 /**
  * 256-bit random data key. Encrypts every vault record (XChaCha20-Poly1305) and is itself stored
  * only wrapped under [MasterKey]. Changing the master password rewraps this key without
- * re-encrypting records — see `docs/skerry-sync-design.md` §1.
+ * re-encrypting records.
  */
 class DataKey internal constructor(internal val bytes: ByteArray) {
     /**
@@ -57,7 +57,7 @@ interface VaultCrypto {
 
     /**
      * Deterministic masterKey derivation salt for self-hosted sync — derived from [accountId]
-     * (`docs/skerry-sync-design.md` §1: "salt = accountId"). The same on every device, not a secret;
+     * (salt = accountId). The same on every device, not a secret;
      * lets a new device derive the same masterKey from one master password and unwrap the server's
      * dataKey wrapper without fetching a salt from the server. Length matches [newSalt].
      */
@@ -75,15 +75,14 @@ interface VaultCrypto {
 
     /**
      * Deterministically derives a 256-bit authKey from [masterKey] for self-hosted sync
-     * authentication (`docs/skerry-sync-design.md` §1: HKDF branch masterKey → authKey → SRP
+     * authentication (HKDF branch masterKey → authKey → SRP
      * verifier). A separate derivation domain from the dataKey wrapper; the server never sees
      * authKey, only the SRP verifier. Deterministic for a given [masterKey].
      */
     fun deriveAuthKey(masterKey: MasterKey): ByteArray
 
     /**
-     * New one-time transfer key for quick device pairing (variant B,
-     * `docs/skerry-sync-design.md` §3): 32 random bytes (AEAD key length). Goes **only** into the
+     * New one-time transfer key for quick device pairing (variant B): 32 random bytes (AEAD key length). Goes **only** into the
      * QR/code the user transfers to the new device visually/via camera — never reaches the server,
      * so the server's dataKey ciphertext is useless without it. Returned as raw bytes (not
      * [DataKey]) because it must serialize into the pairing payload.

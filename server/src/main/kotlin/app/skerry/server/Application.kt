@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Skerry self-hosted sync server (AGPL-3.0). Zero-knowledge: stores only ciphertext and sync
- * metadata; protocol and threat model are in `docs/skerry-sync-design.md`. Configured via
+ * metadata. Configured via
  * environment variables (see [ServerConfig], `.env.example`).
  */
 fun main() {

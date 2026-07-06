@@ -13,7 +13,7 @@ import io.ktor.websocket.close
 import kotlinx.coroutines.launch
 
 /**
- * WS push (`docs/skerry-sync-design.md` §3): the server sends "changes are available, do a delta
+ * WS push: the server sends "changes are available, do a delta
  * pull" signals, no content in frames. Frame formats:
  * - `{cursor}` — account vault cursor (legacy format);
  * - `team:{teamId}:{cursor}` — team record cursor;

@@ -13,7 +13,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 
-/** Account device listing and access revocation (`docs/skerry-sync-design.md` §3). */
+/** Account device listing and access revocation. */
 fun Route.deviceRoutes(services: Services) {
     get("/devices") {
         val principal = call.jwtPrincipal()

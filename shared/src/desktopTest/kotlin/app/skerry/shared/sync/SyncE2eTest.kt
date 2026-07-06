@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
  * End-to-end zero-knowledge round-trip: a real self-hosted server (embedded) plus a real
  * [KtorSyncClient] over HTTP. Proves that a new device B, given only the master password and
  * accountId, reconstructs the dataKey from the server-side wrapper and decrypts a record
- * created by device A, while the server sees only ciphertext (`docs/skerry-sync-design.md` §1, §4).
+ * created by device A, while the server sees only ciphertext.
  */
 class SyncE2eTest {
 

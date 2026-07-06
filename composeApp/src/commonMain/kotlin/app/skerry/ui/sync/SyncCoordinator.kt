@@ -128,7 +128,7 @@ fun interface SyncRunner {
 }
 
 /**
- * App-level glue for self-hosted sync (`docs/skerry-sync-design.md`): ties [SyncClient], [VaultCrypto]
+ * App-level glue for self-hosted sync: ties [SyncClient], [VaultCrypto]
  * and the local [Vault] into register/login/sync operations for the UI. Zero-knowledge — master
  * password and dataKey never leave the device; only the SRP verifier and ciphertext go to the server.
  *

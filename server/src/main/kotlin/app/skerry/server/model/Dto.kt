@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Server-only DTOs: admin console, stats, errors. The client<->server wire contract
- * (auth/vault/devices/pairing, `docs/skerry-sync-design.md` §3) lives in the `:sync-wire`
+ * (auth/vault/devices/pairing) lives in the `:sync-wire`
  * module (`app.skerry.sync.wire`), the single source shared by both sides.
  */
 

@@ -65,7 +65,7 @@ with no network and no master password. Re-run to refresh: `scripts/gen-screensh
 
 **Teams (sharing, optional)**
 - E2E zero-knowledge sharing of hosts and snippets within a team, on top of sealed-envelope
-  invitations; owner/member roles, ACL revocation. Schema — [docs/skerry-sync-design.md](docs/skerry-sync-design.md) §6
+  invitations; owner/member roles, ACL revocation
 
 **Snippets and AI**
 - Command library with snippet type-ahead in the terminal
@@ -76,8 +76,6 @@ with no network and no master password. Re-run to refresh: `scripts/gen-screensh
 **Localization**
 - Strings in compose-resources (`composeApp/src/commonMain/composeResources/values*`);
   a language switcher (`LocalAppLocale`) for the UI and for the AI assistant's reply language (INFO/ASK)
-
-For the full rationale behind decisions and phases, see [docs/skerry-product-brief.md](docs/skerry-product-brief.md).
 
 ## Tech stack
 
@@ -98,12 +96,11 @@ shared/       # KMP core: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ (+ai
 composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
 androidApp/   # Android app (MainActivity, manifest); applicationId app.skerry
 server/       # self-hosted sync server (Ktor, AGPL-3.0)
-docs/         # HTML prototypes (source of truth for UX) and design documents
+docs/         # HTML design prototypes (source of truth for UX) under docs/design/
 ```
 
-The prototypes in `docs/new/` (`Skerry.html`, `Skerry Mobile.html`, `Skerry Tablet.html`,
-`Skerry Sync Console.html`) open in a browser and are the source of truth for the design —
-the UI is implemented 1:1.
+The prototypes in `docs/design/` (`Skerry Tablet.html`, plus `Skerry Logo.html` for the brand
+mark) open in a browser and are the source of truth for the design — the UI is implemented 1:1.
 
 ## Build and run
 

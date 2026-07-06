@@ -38,9 +38,9 @@ docs/         # HTML prototypes (source of truth for UX) and design documents
   interface. Keep desktop⇆Android parity — a feature isn't done until it works on both.
 - **Read `docs/coding-guidelines.md` before writing code** — abstractions, decomposition, coroutine
   and security patterns, self-review checklist.
-- **Build UI 1:1 from the prototypes** in `docs/new/` (`Skerry.html`, `Skerry Mobile.html`,
-  `Skerry Tablet.html`, `Skerry Sync Console.html`). Don't invent chrome. Design tokens come from
-  their `:root` block, mirrored in the Compose theme.
+- **Build UI 1:1 from the prototype** in `docs/design/Skerry Tablet.html` (`Skerry Logo.html`
+  is the brand-mark source). Don't invent chrome. Design tokens come from its `:root` block,
+  mirrored in the Compose theme.
 - Commit messages in English; commit and push only when asked.
 
 ## Warnings
@@ -49,10 +49,3 @@ docs/         # HTML prototypes (source of truth for UX) and design documents
   stack (JNA/libsodium, okio, BouncyCastle's signed jar). See the comment in
   `composeApp/build.gradle.kts` before re-enabling.
 - Licenses: GPL-3.0 for the clients, AGPL-3.0 for `server/`.
-
-## Reference docs
-
-- `docs/skerry-product-brief.md` — decisions, phases, principles, distribution channels.
-- `docs/skerry-sync-design.md` — sync protocol, key hierarchy, `VaultRecord`, Teams sharing (§6),
-  threat model.
-- `docs/skerry-biometric-design.md` — biometric unlock design.

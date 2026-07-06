@@ -34,7 +34,7 @@ suspend fun initializeVaultCrypto() {
 
 /**
  * Single [VaultCrypto] implementation on ionspin multiplatform-crypto-libsodium-bindings — same
- * code for desktop (JVM) and Android. Follows the key hierarchy from `docs/skerry-sync-design.md`:
+ * code for desktop (JVM) and Android. Follows the key hierarchy:
  * Argon2id(m=64MiB, t=3) → masterKey; XChaCha20-Poly1305 with a 24-byte nonce prefix for the
  * dataKey wrapper and for each record.
  *
@@ -221,7 +221,7 @@ class IonspinVaultCrypto : VaultCrypto {
         val NPUB_BYTES = crypto_aead_xchacha20poly1305_ietf_NPUBBYTES // 24
         val ABYTES = crypto_aead_xchacha20poly1305_ietf_ABYTES        // 16 (Poly1305 tag)
 
-        // Argon2id parameters from docs/skerry-sync-design.md §1 are explicit literals, not
+        // Argon2id parameters are explicit literals, not
         // libsodium presets (INTERACTIVE/MODERATE): presets pair their own t and m, and swapping a
         // literal for a named preset would silently change the strength. Parallelism p from the
         // cryptoPwHash spec is fixed at 1 — a libsodium limitation shared by all platforms.

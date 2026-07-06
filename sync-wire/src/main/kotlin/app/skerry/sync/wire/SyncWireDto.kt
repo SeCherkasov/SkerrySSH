@@ -3,7 +3,7 @@ package app.skerry.sync.wire
 import kotlinx.serialization.Serializable
 
 /**
- * Wire JSON contract between client and sync server (`docs/skerry-sync-design.md` §3); the single
+ * Wire JSON contract between client and sync server; the single
  * source for both sides (`server` and `shared/sync`). Ciphertext travels as base64 strings (`blob`,
  * `wrappedDataKey`, `encryptedDataKey`); the server never decrypts them. Server admin DTOs (console
  * sees metadata only) stay in `server/.../model/Dto.kt`, unknown to the client.

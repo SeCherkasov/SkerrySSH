@@ -3,7 +3,7 @@ package app.skerry.shared.ai
 import kotlinx.serialization.Serializable
 
 /**
- * Per-host AI policy ("AI under policy" principle, `docs/skerry-product-brief.md`). Model output is
+ * Per-host AI policy ("AI under policy" principle). Model output is
  * an untrusted source; the policy decides whether context can go to the cloud and whether secrets
  * must be scrubbed. Confirmation before command execution is always required regardless of policy
  * (separate UI invariant).
