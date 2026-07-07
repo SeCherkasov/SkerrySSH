@@ -79,7 +79,8 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Dmg)
             packageName = "Skerry"
-            packageVersion = "0.1.0"
+            // Version from the single source (gradle.properties); the release workflow overrides it.
+            packageVersion = providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0"
             // App icons per platform, rasterized from icons/skerry.svg (canonical mark, docs/design/Skerry Logo.html).
             linux { iconFile.set(project.file("icons/skerry.png")) }
             windows { iconFile.set(project.file("icons/skerry.ico")) }

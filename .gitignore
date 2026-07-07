@@ -22,6 +22,11 @@ DerivedData/
 .DS_Store
 Thumbs.db
 
+# Signing secrets — never commit (the release keystore comes from GH Secrets)
+*.jks
+*.keystore
+keystore.properties
+
 # Логи и временные файлы
 *.log
 *.hprof
