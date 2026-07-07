@@ -38,8 +38,8 @@ fun Application.module(config: ServerConfig = ServerConfig.fromEnv()) {
 private fun guardConfig(config: ServerConfig, env: Map<String, String> = System.getenv()) {
     if (config.usesDefaultJwtSecret && env["SKERRY_DEV"] != "1") {
         error(
-            "SKERRY_JWT_SECRET не задан (используется небезопасный дефолт). Задайте устойчивый " +
-                "секрет (openssl rand -base64 48) либо SKERRY_DEV=1 для локальной разработки.",
+            "SKERRY_JWT_SECRET is not set (an insecure default is in use). Provide a strong " +
+                "secret (openssl rand -base64 48) or set SKERRY_DEV=1 for local development.",
         )
     }
 }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Фон адаптивной иконки — радиальный «night sea» из docs/new/Skerry Logo.html
+<!-- Adaptive icon background — the radial "night sea" from docs/new/Skerry Logo.html
      (radial-gradient 125% at 28% 18%, #142634 → #0a141b → #05090d). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"

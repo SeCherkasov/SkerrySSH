@@ -8,7 +8,7 @@ plugins {
 dependencies {
     implementation(projects.composeApp)
     implementation(libs.androidx.activity.compose)
-    // FragmentActivity — хост биометрического промпта (androidx.biometric)
+    // FragmentActivity — host of the biometric prompt (androidx.biometric)
     implementation(libs.androidx.fragment)
 }
 
@@ -24,16 +24,16 @@ android {
         // Version from the single source (gradle.properties); the release workflow overrides it.
         versionCode = (providers.gradleProperty("skerry.versionCode").orNull ?: "1").toInt()
         versionName = providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0"
-        // Локальный AI (Llamatik/llama.cpp): AAR несёт нативы четырёх ABI (~52 МБ распакованных).
-        // Реальные Android-устройства проекта — arm64; остальные ABI — мёртвый вес в APK.
+        // Local AI (Llamatik/llama.cpp): the AAR carries natives for four ABIs (~52 MB unpacked).
+        // The project's real Android devices are arm64; the other ABIs are dead weight in the APK.
         ndk { abiFilters += "arm64-v8a" }
     }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
-        // .so льются страницами из несжатого APK (16KB-выравнивание Llamatik сохраняется),
-        // extractNativeLibs не нужен.
+        // .so files are page-mapped straight from the uncompressed APK (Llamatik's 16KB alignment is kept),
+        // extractNativeLibs is not needed.
         jniLibs { useLegacyPackaging = false }
     }
     // Release signing from properties/environment (GH Secrets → -Pskerry.* or SKERRY_* env).

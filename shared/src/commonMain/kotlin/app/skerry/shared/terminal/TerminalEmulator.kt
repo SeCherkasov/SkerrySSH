@@ -704,7 +704,7 @@ class TerminalEmulator(
             's' -> saveCursor()
             'u' -> restoreCursor()
             'n' -> deviceStatus(args.getOrNull(0) ?: 0)
-            'c' -> if ((args.getOrNull(0) ?: 0) == 0) respond("$ESC[?1;2c") // DA: VT100 с AVO
+            'c' -> if ((args.getOrNull(0) ?: 0) == 0) respond("$ESC[?1;2c") // DA: VT100 with AVO
             't' -> windowOp(args)
         }
     }

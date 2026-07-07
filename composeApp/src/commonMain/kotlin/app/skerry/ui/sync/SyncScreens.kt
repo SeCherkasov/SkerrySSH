@@ -443,7 +443,7 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
         stringResource(Res.string.sync_link_this_device),
         onClick = {
             if (!canSubmit) return@PrimaryButton
-            val pw = password.toCharArray() // координатор затрёт массив
+            val pw = password.toCharArray() // the coordinator wipes the array
             password = ""
             confirm = ""
             sync.claimPairing(code.trim(), pw, keepConnected)

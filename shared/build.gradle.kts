@@ -9,13 +9,13 @@ plugins {
 kotlin {
     jvmToolchain(21)
 
-    // expect/actual для классов/объектов (SerialSystem) пока в Beta — флаг убирает шумный warning.
+    // expect/actual for classes/objects (SerialSystem) is still Beta — the flag removes a noisy warning.
     compilerOptions {
         freeCompilerArgs.add("-Xexpect-actual-classes")
     }
 
     jvm("desktop") {
-        // kotlin("test") выбирает бэкенд по конфигурации Test-задачи: это включает JUnit 5
+        // kotlin("test") picks its backend from the Test task configuration: this enables JUnit 5
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
 
@@ -29,14 +29,14 @@ kotlin {
         }
     }
 
-    // Дефолтный шаблон иерархии + общий JVM-узел jvmShared (desktop JVM + Android) под commonMain.
-    // Кастомизация шаблона (а не ручные dependsOn) совместима с дефолтной группировкой таргетов.
+    // Default hierarchy template + a shared JVM node jvmShared (desktop JVM + Android) under commonMain.
+    // Customizing the template (rather than manual dependsOn) stays compatible with the default target grouping.
     applyDefaultHierarchyTemplate {
         common {
             group("jvmShared") {
                 withJvm()
-                // withAndroidTarget() матчит только старый KotlinAndroidTarget; target нового
-                // плагина com.android.kotlin.multiplatform.library ловим предикатом по имени.
+                // withAndroidTarget() only matches the old KotlinAndroidTarget; the target of the new
+                // com.android.kotlin.multiplatform.library plugin is caught with a predicate on its name.
                 withCompilations { it.target.name == "android" }
             }
         }
@@ -44,78 +44,78 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // api: Flow участвует в публичном контракте ssh (ShellChannel.output)
+            // api: Flow is part of the public ssh contract (ShellChannel.output)
             api(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
-            // единый VaultCrypto на всех таргетах (Argon2id + XChaCha20-Poly1305)
+            // a single VaultCrypto on all targets (Argon2id + XChaCha20-Poly1305)
             implementation(libs.ionspin.libsodium)
-            // api: okio.Path/FileSystem — в публичном конструкторе FileVault (commonMain)
+            // api: okio.Path/FileSystem appear in the public FileVault constructor (commonMain)
             api(libs.okio)
-            // мультиплатформенные локи вместо JVM-only @Synchronized (деталь реализации FileVault)
+            // multiplatform locks instead of JVM-only @Synchronized (FileVault implementation detail)
             implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
-            // in-memory FileSystem для тестов FileVault без реальной ФС
+            // in-memory FileSystem for FileVault tests without a real FS
             implementation(libs.okio.fakefilesystem)
         }
-        // Общий JVM source set (создан шаблоном выше): чистый JVM/Java API для desktop и Android —
-        // sshj-транспорт, SFTP-клиент, файловые сторы host/known-hosts.
+        // Shared JVM source set (created by the template above): pure JVM/Java API for desktop and Android —
+        // sshj transport, SFTP client, file-based host/known-hosts stores.
         val jvmSharedMain by getting {
             dependencies {
-                // Wire-контракт клиент⇆сервер (общий с server — единый источник DTO вместо зеркала).
+                // Client⇆server wire contract (shared with server — a single source of DTOs instead of a mirror).
                 implementation(project(":sync-wire"))
                 implementation(libs.sshj)
-                // sshj логирует через slf4j-api; без binding'а SLF4J печатает «No SLF4J providers
-                // were found» и уходит в NOP. Явный no-op провайдер убирает это предупреждение на
-                // обоих таргетах (desktop + Android). runtimeOnly — код на slf4j-nop не ссылается.
+                // sshj logs via slf4j-api; without a binding SLF4J prints "No SLF4J providers
+                // were found" and goes NOP. An explicit no-op provider removes that warning on
+                // both targets (desktop + Android). runtimeOnly — the code never references slf4j-nop.
                 runtimeOnly(libs.slf4j.nop)
-                // Явно: транзитивный bcprov sshj не виден на compile classpath, а SshjTransport
-                // ссылается на BouncyCastleProvider для подмены урезанного системного «BC» на Android.
+                // Explicit: sshj's transitive bcprov is not visible on the compile classpath, while SshjTransport
+                // references BouncyCastleProvider to replace the stripped-down system "BC" on Android.
                 implementation(libs.bouncycastle.prov)
-                // Sync-клиент (Phase 2): HTTP+WS к self-hosted серверу. iOS отложен — клиент
-                // живёт в общем JVM-узле (desktop + Android), как и sshj-транспорт.
+                // Sync client (Phase 2): HTTP+WS to the self-hosted server. iOS is deferred — the client
+                // lives in the shared JVM node (desktop + Android), same as the sshj transport.
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.client.cio)
                 implementation(libs.ktor.client.content.negotiation)
                 implementation(libs.ktor.client.websockets)
                 implementation(libs.ktor.serialization.kotlinx.json)
-                // SRP-6a клиентская сторона (verifier-генератор + клиентский обмен).
+                // SRP-6a client side (verifier generator + client exchange).
                 implementation(libs.nimbus.srp)
-                // Локальный AI (Phase 3): llama.cpp за KMP-биндингом — GGUF-инференс на
-                // устройстве (desktop JVM + Android arm64) без внешних вызовов. Реализация
-                // LocalLlmRuntime одна на оба таргета (LlamatikRuntime).
+                // Local AI (Phase 3): llama.cpp behind a KMP binding — on-device GGUF
+                // inference (desktop JVM + Android arm64) with no external calls. A single
+                // LocalLlmRuntime implementation for both targets (LlamatikRuntime).
                 implementation(libs.llamatik)
             }
         }
         val desktopMain by getting {
             dependencies {
-                // Нативный доступ к последовательным портам (SerialSystem actual). Только desktop —
-                // на Android serial пойдёт через USB-OTG отдельной реализацией.
+                // Native access to serial ports (SerialSystem actual). Desktop only —
+                // on Android, serial will go over USB-OTG as a separate implementation.
                 implementation(libs.jserialcomm)
             }
         }
         androidMain.dependencies {
-            // BiometricPrompt + CryptoObject для AndroidBiometricKeyStore (Keystore-огороженный ключ)
+            // BiometricPrompt + CryptoObject for AndroidBiometricKeyStore (Keystore-fenced key)
             implementation(libs.androidx.biometric)
-            // USB-OTG serial: драйверы CDC-ACM/FTDI/CP210x/CH34x поверх USB Host API (SerialSystem actual).
+            // USB-OTG serial: CDC-ACM/FTDI/CP210x/CH34x drivers on top of the USB Host API (SerialSystem actual).
             implementation(libs.usbserial)
         }
         val desktopTest by getting {
             dependencies {
                 implementation(libs.sshd.core)
-                // SFTP-подсистема встроенного сервера для интеграционных тестов SshjSftpClient
+                // SFTP subsystem of the embedded server for SshjSftpClient integration tests
                 implementation(libs.sshd.sftp)
-                // e2e sync: реальный self-hosted сервер поднимается в тесте, клиент ходит к нему
-                // по настоящему HTTP — доказательство zero-knowledge round-trip.
+                // e2e sync: a real self-hosted server is started inside the test, the client talks
+                // to it over real HTTP — proof of the zero-knowledge round-trip.
                 implementation(project(":server"))
-                // Движок Netty + ktor core нужны тесту, чтобы поднять embeddedServer (у :server
-                // это implementation-зависимости и в тест транзитивно не приходят).
+                // The Netty engine + ktor core are needed by the test to start embeddedServer (for :server
+                // these are implementation dependencies and do not reach the test transitively).
                 implementation(libs.ktor.server.core)
                 implementation(libs.ktor.server.netty)
-                // MockEngine: TDD HTTP-клиентов (OpenAiProvider) без реальной сети — проверяем
-                // запрос (url/заголовки/тело) и скармливаем каноничные ответы.
+                // MockEngine: TDD for HTTP clients (OpenAiProvider) without a real network — we verify
+                // the request (url/headers/body) and feed back canonical responses.
                 implementation(libs.ktor.client.mock)
             }
         }

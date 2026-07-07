@@ -28,7 +28,7 @@ data class TerminalTheme(
     val selection: Color = cursor.copy(alpha = 0.3f),
 ) {
     init {
-        require(ansi.size == 16) { "ANSI-палитра терминала должна содержать ровно 16 цветов, было ${ansi.size}" }
+        require(ansi.size == 16) { "Terminal ANSI palette must contain exactly 16 colors, got ${ansi.size}" }
     }
 
     /** Glyph color under a block cursor (contrast against [cursor]). */

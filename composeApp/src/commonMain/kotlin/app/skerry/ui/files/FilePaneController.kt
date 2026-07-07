@@ -137,7 +137,7 @@ class FilePaneController(
             // Deletes via a path rebuilt from [path] + a validated name, not server-controlled item.path.
             val name = item.name
             if (isUnsafeListingName(name)) {
-                throw FileBrowserException("Недопустимое имя в листинге: $name")
+                throw FileBrowserException("Illegal name in listing: $name")
             }
             browser.delete(item.copy(path = childPath(name)))
         }

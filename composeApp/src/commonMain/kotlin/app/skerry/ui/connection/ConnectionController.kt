@@ -177,7 +177,7 @@ class ConnectionController(
                 // establishSession; uiState was set to Form by disconnect() itself.
                 throw e
             } catch (e: Exception) {
-                uiState = ConnectionUiState.Error(e.message ?: "Не удалось подключиться")
+                uiState = ConnectionUiState.Error(e.message ?: "Failed to connect")
             }
         }
     }
@@ -243,7 +243,7 @@ class ConnectionController(
      * @throws IllegalStateException the session isn't connected (no live connection)
      */
     suspend fun openSftp(): SftpClient =
-        (connection ?: error("Нет активного соединения для SFTP")).openSftp()
+        (connection ?: error("No active connection for SFTP")).openSftp()
 
     /**
      * This session's port-forward controller — one per connection, created lazily and cached, so
@@ -256,7 +256,7 @@ class ConnectionController(
      */
     fun openPortForwards(): PortForwardController =
         portForwards ?: PortForwardController(
-            connection ?: error("Нет активного соединения для проброса портов"),
+            connection ?: error("No active connection for port forwarding"),
             scope,
         ).also { portForwards = it }
 
@@ -277,7 +277,7 @@ class ConnectionController(
     suspend fun openTransferCoordinator(localBrowser: FileBrowser, hostLabel: String): TransferCoordinator =
         sftpMutex.withLock {
             transferCoordinator ?: run {
-                val client = (connection ?: error("Нет активного соединения для SFTP")).openSftp()
+                val client = (connection ?: error("No active connection for SFTP")).openSftp()
                 sftpClient = client
                 val remoteBrowser = SftpFileBrowser(client, hostLabel)
                 TransferCoordinator(
@@ -302,7 +302,7 @@ class ConnectionController(
      * @throws IllegalStateException the session isn't connected (no live connection)
      */
     fun openMetrics(): HostMetricsController {
-        val conn = connection ?: error("Нет активного соединения для метрик")
+        val conn = connection ?: error("No active connection for metrics")
         return metrics ?: HostMetricsController(
             exec = { cmd -> conn.exec(cmd) },
             scope = scope,
@@ -317,7 +317,7 @@ class ConnectionController(
      * @throws IllegalStateException the session isn't connected (no live channel)
      */
     fun openThroughput(): ThroughputController {
-        val channel = shellChannel ?: error("Нет активного канала для замера скорости")
+        val channel = shellChannel ?: error("No active channel for throughput measurement")
         return throughput ?: ThroughputController(
             sampleUp = { channel.bytesUp },
             sampleDown = { channel.bytesDown },
@@ -331,7 +331,7 @@ class ConnectionController(
      * @throws IllegalStateException the session isn't connected (no live connection)
      */
     fun openPing(): PingController {
-        val conn = connection ?: error("Нет активного соединения для пинга")
+        val conn = connection ?: error("No active connection for ping")
         return ping ?: PingController(
             measure = { conn.measureRoundTrip() },
             scope = scope,

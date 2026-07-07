@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Передний план адаптивной иконки — перенос 1:1 из docs/new/Skerry Logo.html (Final mark):
-     «S»-знак (сигнал-поток) с teal-градиентом + концентрические сигнальные арки справа.
-     Исходный viewBox 120; группа масштабируется до safe-zone адаптивной иконки. -->
+<!-- Adaptive icon foreground — a 1:1 transfer from docs/new/Skerry Logo.html (Final mark):
+     the "S" mark (signal stream) with a teal gradient + concentric signal arcs on the right.
+     Source viewBox is 120; the group is scaled into the adaptive icon safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -13,7 +13,7 @@
         android:pivotY="60"
         android:scaleX="0.82"
         android:scaleY="0.82">
-        <!-- Сигнальные арки (teal, убывающая непрозрачность) -->
+        <!-- Signal arcs (teal, decreasing opacity) -->
         <path
             android:pathData="M75,40 A26,26 0 0 1 75,80"
             android:strokeColor="#34D3C0"
@@ -32,7 +32,7 @@
             android:strokeWidth="6.5"
             android:strokeLineCap="round"
             android:strokeAlpha="0.18" />
-        <!-- Основной знак «S» (градиент #7ff0e2 → #22b3a4) -->
+        <!-- The main "S" mark (gradient #7ff0e2 → #22b3a4) -->
         <path
             android:pathData="M60,44 C60,37 53,34 46,34 C36,34 31,40 31,47 C31,60 60,54 60,68 C60,77 53,81 45,81 C36,81 31,77 31,70"
             android:strokeWidth="10.5"

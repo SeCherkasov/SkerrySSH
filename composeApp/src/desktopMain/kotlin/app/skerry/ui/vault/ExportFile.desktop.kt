@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
  */
 actual suspend fun exportTextFile(suggestedName: String, content: String): Boolean {
     val path = withContext(Dispatchers.Swing) {
-        val dialog = FileDialog(null as Frame?, "Сохранить как", FileDialog.SAVE).apply {
+        val dialog = FileDialog(null as Frame?, "Save as", FileDialog.SAVE).apply {
             file = suggestedName
             isVisible = true
         }

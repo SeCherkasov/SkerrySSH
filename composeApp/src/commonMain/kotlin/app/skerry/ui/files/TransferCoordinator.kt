@@ -374,7 +374,7 @@ class TransferCoordinator(
         plan: DownloadPlan,
     ) {
         if (isUnsafeListingName(name)) {
-            throw SftpException("Недопустимое имя в листинге: $name")
+            throw SftpException("Illegal name in listing: $name")
         }
         val localPath = childPath(localDir, name)
         when (type) {
@@ -438,7 +438,7 @@ class TransferCoordinator(
         plan: UploadPlan,
     ) {
         if (isUnsafeListingName(name)) {
-            throw SftpException("Недопустимое имя в листинге: $name")
+            throw SftpException("Illegal name in listing: $name")
         }
         val remotePath = childPath(remoteDir, name)
         when (type) {
@@ -460,7 +460,7 @@ class TransferCoordinator(
      */
     private fun safeRemoteChild(name: String, remoteDir: String): String {
         if (isUnsafeListingName(name)) {
-            throw SftpException("Недопустимое имя в листинге: $name")
+            throw SftpException("Illegal name in listing: $name")
         }
         return childPath(remoteDir, name)
     }

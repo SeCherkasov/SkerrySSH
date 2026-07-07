@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Разрешаем cleartext (HTTP) для self-hosted sync-сервера: пользователь поднимает его сам, часто в
-  локальной сети без TLS. Нагрузка и так E2E-зашифрована (zero-knowledge), SRP безопасен поверх
-  cleartext, метаданные открыты по дизайну (модель Vaultwarden, docs/skerry-sync-design.md). Кто
-  настроил HTTPS — указывает https:// и получает шифрованный транспорт без изменений конфигурации.
+  Allow cleartext (HTTP) for the self-hosted sync server: the user runs it themselves, often on a
+  local network without TLS. The payload is E2E-encrypted anyway (zero-knowledge), SRP is safe over
+  cleartext, and the metadata is open by design (the Vaultwarden model, docs/skerry-sync-design.md).
+  Whoever sets up HTTPS points at https:// and gets an encrypted transport with no config changes.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />

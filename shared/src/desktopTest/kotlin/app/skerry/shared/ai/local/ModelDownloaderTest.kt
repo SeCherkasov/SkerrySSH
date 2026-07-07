@@ -86,7 +86,7 @@ class ModelDownloaderTest {
     fun `resumes a partial download with a range request`() = runTest {
         val m = model()
         fs.createDirectories("/data/models".toPath())
-        fs.write(store.partPath(m)) { write(payload, 0, 10) } // первые 10 байт уже скачаны
+        fs.write(store.partPath(m)) { write(payload, 0, 10) } // the first 10 bytes are already downloaded
 
         val downloader = ModelDownloader(http(), fs, store)
         downloader.download(m).toList()
@@ -137,7 +137,7 @@ class ModelDownloaderTest {
     @Test
     fun `server sending more bytes than the catalog size fails with INTEGRITY`() = runTest {
         val oversized = payload + "extra".encodeToByteArray()
-        val m = model() // sizeBytes = payload.size, сервер шлёт больше
+        val m = model() // sizeBytes = payload.size, the server sends more
         val downloader = ModelDownloader(http(bytes = oversized, supportRange = false), fs, store)
 
         val ex = assertFailsWith<ModelDownloadException> { downloader.download(m).toList() }

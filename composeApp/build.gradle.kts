@@ -12,7 +12,7 @@ kotlin {
     jvmToolchain(21)
 
     jvm("desktop") {
-        // kotlin("test") выбирает бэкенд по конфигурации Test-задачи: это включает JUnit 5
+        // kotlin("test") picks its backend from the Test task configuration: this enables JUnit 5
         testRuns["test"].executionTask.configure { useJUnitPlatform() }
     }
 
@@ -41,10 +41,10 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
         }
         androidMain.dependencies {
-            // androidx.activity.compose.BackHandler — перехват системного «назад» (PlatformBackHandler).
+            // androidx.activity.compose.BackHandler — intercepts the system "back" (PlatformBackHandler).
             implementation(libs.androidx.activity.compose)
-            // Быстрый паринг (вариант B): ZXing генерит QR-матрицу, CameraX даёт превью камеры,
-            // ML Kit barcode-scanning распознаёт QR в кадре on-device (без сети) — QrScannerScreen.
+            // Fast pairing (option B): ZXing generates the QR matrix, CameraX provides the camera preview,
+            // ML Kit barcode-scanning recognizes the QR in the frame on-device (no network) — QrScannerScreen.
             implementation(libs.zxing.core)
             implementation(libs.androidx.camera.core)
             implementation(libs.androidx.camera.camera2)
@@ -60,7 +60,7 @@ kotlin {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.kotlinx.coroutines.swing)
-                // ZXing генерит QR-матрицу кода связывания (desktop показывает QR для скана телефоном).
+                // ZXing generates the QR matrix of the pairing code (desktop shows a QR for the phone to scan).
                 implementation(libs.zxing.core)
             }
         }
@@ -87,19 +87,19 @@ compose.desktop {
             macOS { iconFile.set(project.file("icons/skerry.icns")) }
         }
 
-        // ProGuard для release ОТКЛЮЧЁН осознанно. Для крипто-стека этого SSH-клиента
-        // минификация давала только release-only поломки, неустранимые в рамках .pro:
-        //   1) JNA/libsodium — рефлексивный доступ из нативного кода (UnsatisfiedLinkError);
-        //   2) okio — оптимизация специализировала тип возврата → VerifyError «Bad return
-        //      type» на первом же чтении файла (выглядело как «Storage is damaged»);
-        //   3) BouncyCastle — ленивая регистрация провайдера «BC» не срабатывала → NPE;
-        //   4) BouncyCastle — bcprov это ПОДПИСАННЫЙ jar: ProGuard переписывает байткод
-        //      классов, но тащит старый META-INF с подписью → JarVerifier роняет
-        //      «SHA-256 digest error for .../BouncyCastleProvider.class». Снять подпись
-        //      чужого jar чисто через .pro нельзя (это фильтры -injars Compose-плагина).
-        // Размер дистрибутива для desktop-приложения некритичен; корректность крипты —
-        // критична. Так release ведёт себя как debug. Правила сохранены в compose-desktop.pro
-        // на случай повторного включения (тогда потребуется обработка подписи bcprov).
+        // ProGuard is DISABLED for release on purpose. For the crypto stack of this SSH client
+        // minification produced only release-only breakage, unfixable within a .pro file:
+        //   1) JNA/libsodium — reflective access from native code (UnsatisfiedLinkError);
+        //   2) okio — optimization specialized a return type → VerifyError "Bad return
+        //      type" on the very first file read (looked like "Storage is damaged");
+        //   3) BouncyCastle — lazy registration of the "BC" provider did not kick in → NPE;
+        //   4) BouncyCastle — bcprov is a SIGNED jar: ProGuard rewrites the class
+        //      bytecode but carries over the old META-INF with the signature → JarVerifier fails with
+        //      "SHA-256 digest error for .../BouncyCastleProvider.class". Stripping the signature
+        //      of a third-party jar purely via .pro is impossible (those are -injars filters of the Compose plugin).
+        // Distribution size is non-critical for a desktop app; crypto correctness is
+        // critical. This way release behaves like debug. The rules are kept in compose-desktop.pro
+        // in case it is re-enabled (which would then require handling the bcprov signature).
         buildTypes.release.proguard {
             isEnabled.set(false)
             configurationFiles.from(project.file("compose-desktop.pro"))
@@ -107,9 +107,9 @@ compose.desktop {
     }
 }
 
-// Офскрин-рендер дизайна в PNG (визуальная проверка без окна). См. design/Screenshot.kt.
-// Параметры: -Dskerry.screenshot.{out,view,overlay,live,device}. device=mobile рендерит телефонный
-// макет (MobileDesignApp); view тогда — имя MobileTab. Не входит в дистрибутив.
+// Offscreen render of the design to PNG (visual check without a window). See design/Screenshot.kt.
+// Parameters: -Dskerry.screenshot.{out,view,overlay,live,device}. device=mobile renders the phone
+// layout (MobileDesignApp); view is then a MobileTab name. Not part of the distribution.
 tasks.register<JavaExec>("screenshotDesign") {
     group = "verification"
     description = "Render Desktop/Mobile DesignApp to a PNG via ImageComposeScene"

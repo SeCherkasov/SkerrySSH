@@ -10,6 +10,6 @@ actual fun platformLocalBrowser(): FileBrowser =
     LocalFileBrowser(
         fileSystem = FileSystem.SYSTEM,
         home = System.getProperty("user.home") ?: "/",
-        label = "Этот компьютер",
+        label = "This computer",
         ioDispatcher = Dispatchers.IO,
     )

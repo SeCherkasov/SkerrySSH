@@ -45,7 +45,7 @@ actual suspend fun pickUploadSource(): UploadSource? {
         withContext(Dispatchers.IO) {
             ctx.contentResolver.openInputStream(uri)?.use { input ->
                 staging.outputStream().use { output -> input.copyTo(output) }
-            } ?: throw IOException("Не удалось открыть выбранный файл")
+            } ?: throw IOException("Failed to open the selected file")
         }
         SafUploadSource(name, staging)
     } catch (e: CancellationException) {
@@ -72,7 +72,7 @@ private class SafDownloadTarget(
         try {
             ctx.contentResolver.openOutputStream(uri)?.use { output ->
                 staging.inputStream().use { input -> input.copyTo(output) }
-            } ?: throw IOException("Не удалось открыть цель для записи")
+            } ?: throw IOException("Failed to open the write target")
         } finally {
             staging.delete()
         }

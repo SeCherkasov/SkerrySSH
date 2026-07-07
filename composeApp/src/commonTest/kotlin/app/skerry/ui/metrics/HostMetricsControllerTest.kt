@@ -62,7 +62,7 @@ class HostMetricsControllerTest {
 
         controller.start()
         val afterFirst = calls
-        controller.start() // повторный старт не должен поднять второй цикл
+        controller.start() // a repeated start must not spawn a second polling loop
 
         assertEquals(afterFirst, calls)
         controller.stop()

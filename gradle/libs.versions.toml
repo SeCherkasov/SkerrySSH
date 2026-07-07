@@ -1,67 +1,67 @@
 [versions]
 agp = "9.0.1"
-# AGP 9.0 по умолчанию требует build-tools 36.0.0, которых нет в локальном SDK
+# AGP 9.0 by default requires build-tools 36.0.0, which is absent from the local SDK
 android-buildTools = "36.1.0"
 android-compileSdk = "36"
-# minSdk 26 (Android 8.0): java.nio.file доступен с API 26 — общий JVM source set (sshj-транспорт,
-# файловые сторы) разделяется desktop/Android без переписывания на okio
+# minSdk 26 (Android 8.0): java.nio.file is available since API 26 — the shared JVM source set
+# (sshj transport, file-based stores) is shared between desktop/Android without rewriting to okio
 android-minSdk = "26"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
 androidx-lifecycle = "2.10.0"
-# биометрия Android: BiometricPrompt + CryptoObject (огороженный Keystore-ключ)
+# Android biometrics: BiometricPrompt + CryptoObject (Keystore-fenced key)
 androidx-biometric = "1.1.0"
-# FragmentActivity — требование androidx.biometric для хоста промпта
+# FragmentActivity — an androidx.biometric requirement for the prompt host
 androidx-fragment = "1.8.5"
 composeMultiplatform = "1.11.1"
 kotlin = "2.3.21"
-# material3 версионируется отдельно от CMP; стабильного релиза линейки 1.11 ещё нет
+# material3 is versioned separately from CMP; there is no stable release of the 1.11 line yet
 material3 = "1.11.0-alpha07"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.9.0"
 ktor = "3.4.3"
 logback = "1.5.18"
-# slf4j-nop: no-op провайдер SLF4J для приложения. sshj логирует через slf4j-api (2.0.17 на
-# classpath); без единого binding'а SLF4J печатает «No SLF4J providers were found» и уходит в NOP.
-# Явный nop убирает предупреждение, сохраняя текущее поведение (логи sshj и так не нужны в клиенте).
+# slf4j-nop: a no-op SLF4J provider for the app. sshj logs via slf4j-api (2.0.17 on the
+# classpath); without any binding SLF4J prints "No SLF4J providers were found" and goes NOP.
+# An explicit nop removes the warning while keeping current behavior (sshj logs are not needed in the client anyway).
 slf4j = "2.0.17"
 sshj = "0.40.0"
-# jSerialComm: нативный доступ к последовательным портам на desktop (Linux/Windows/macOS).
-# Только в desktopMain — на Android serial идёт через USB-OTG отдельной реализацией (позже).
+# jSerialComm: native access to serial ports on desktop (Linux/Windows/macOS).
+# desktopMain only — on Android serial goes over USB-OTG as a separate implementation (later).
 jserialcomm = "2.11.0"
-# usb-serial-for-android: доступ к USB-serial переходникам (CDC/FTDI/CP210x/CH34x) через USB Host API.
-# Только в androidMain — desktop использует jSerialComm.
+# usb-serial-for-android: access to USB-serial adapters (CDC/FTDI/CP210x/CH34x) via the USB Host API.
+# androidMain only — desktop uses jSerialComm.
 usbSerial = "3.9.0"
-# полный BouncyCastle: транзитив sshj (как implementation, на compile classpath не виден),
-# подключаем явно — на Android системный «BC» урезан и его подменяет SshjTransport.ensureCryptoProvider
+# full BouncyCastle: an sshj transitive (as implementation, not visible on the compile classpath),
+# added explicitly — on Android the system "BC" is stripped down and SshjTransport.ensureCryptoProvider replaces it
 bouncycastle = "1.80.2"
-# встроенный SSH-сервер только для тестов SshjTransport; 3.x ещё в milestone
+# embedded SSH server for SshjTransport tests only; 3.x is still in milestone
 sshd = "2.18.0"
-# мультиплатформенный libsodium-биндинг (KMP, Argon2id + XChaCha20-Poly1305) для единого VaultCrypto
+# multiplatform libsodium binding (KMP, Argon2id + XChaCha20-Poly1305) for a single VaultCrypto
 ionspin-libsodium = "0.9.5"
-# okio — кроссплатформенный файловый I/O за FileSystem (FileVault в commonMain, FakeFileSystem в тестах)
+# okio — cross-platform file I/O behind FileSystem (FileVault in commonMain, FakeFileSystem in tests)
 okio = "3.17.0"
-# atomicfu — мультиплатформенные локи (kotlinx.atomicfu.locks) вместо JVM-only @Synchronized
+# atomicfu — multiplatform locks (kotlinx.atomicfu.locks) instead of JVM-only @Synchronized
 atomicfu = "0.32.1"
 # --- Phase 2 sync ---
-# Exposed — типобезопасный SQL-слой сервера; SQLite по умолчанию, PostgreSQL по DB URL
+# Exposed — the server's type-safe SQL layer; SQLite by default, PostgreSQL via DB URL
 exposed = "0.58.0"
 sqlite-jdbc = "3.49.1.0"
 postgresql = "42.7.5"
 hikari = "6.3.0"
-# Nimbus SRP6a — аудированная реализация SRP-6a, используется сервером и JVM-клиентом sync
+# Nimbus SRP6a — an audited SRP-6a implementation, used by the server and the JVM sync client
 nimbus-srp = "2.1.0"
-# --- Быстрый паринг устройств (вариант B): QR-генерация + камера-сканер ---
-# ZXing core — чистая Java (работает и на desktop JVM, и на Android), генерация QR-матрицы паринга
+# --- Fast device pairing (option B): QR generation + camera scanner ---
+# ZXing core — pure Java (works on both desktop JVM and Android), generates the pairing QR matrix
 zxing = "3.5.3"
-# CameraX — превью камеры для сканера QR на Android (только androidMain)
+# CameraX — camera preview for the QR scanner on Android (androidMain only)
 camerax = "1.4.1"
-# --- Phase 3: локальный AI ---
-# Llamatik — KMP-биндинг llama.cpp (GGUF, стриминг, chat-шаблон из GGUF): единственный
-# поддерживаемый вариант с нативами и под desktop JVM (Linux/Win/macOS), и под Android arm64
-# (16KB-страницы выровнены). MIT. java-llama.cpp (kherud) мёртв с 2025-06 и не грузит Qwen3.
+# --- Phase 3: local AI ---
+# Llamatik — a KMP binding of llama.cpp (GGUF, streaming, chat template from GGUF): the only
+# maintained option with natives for both desktop JVM (Linux/Win/macOS) and Android arm64
+# (16KB pages aligned). MIT. java-llama.cpp (kherud) has been dead since 2025-06 and cannot load Qwen3.
 llamatik = "1.8.1"
-# ML Kit barcode-scanning — распознавание QR в кадре камеры (Android, on-device, без сети)
+# ML Kit barcode-scanning — QR recognition in the camera frame (Android, on-device, no network)
 mlkit-barcode = "17.3.0"
 
 [libraries]

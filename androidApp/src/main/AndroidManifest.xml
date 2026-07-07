@@ -2,12 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Скан QR-кода связывания устройств (быстрый паринг). Камера не обязательна: код можно ввести
-         текстом, поэтому required=false — не отсекаем устройства без камеры. -->
+    <!-- Scanning the device-pairing QR code (fast pairing). The camera is not mandatory: the code can
+         be entered as text, hence required=false — we do not cut off devices without a camera. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <!-- USB-OTG serial (переходники CDC/FTDI/CP210x/CH34x). Не обязателен: не отсекаем устройства
-         без USB Host — serial просто не покажет портов. -->
+    <!-- USB-OTG serial (CDC/FTDI/CP210x/CH34x adapters). Not mandatory: we do not cut off devices
+         without USB Host — serial will simply show no ports. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
 
     <application

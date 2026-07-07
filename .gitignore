@@ -27,11 +27,11 @@ Thumbs.db
 *.keystore
 keystore.properties
 
-# Логи и временные файлы
+# Logs and temporary files
 *.log
 *.hprof
 
-# Локальные SQLite-файлы sync-сервера
+# Local SQLite files of the sync server
 *.db
 *.db-journal
 .tokensave

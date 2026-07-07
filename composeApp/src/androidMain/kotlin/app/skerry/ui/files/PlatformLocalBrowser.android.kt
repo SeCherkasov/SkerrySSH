@@ -24,7 +24,7 @@ actual fun platformLocalBrowser(): FileBrowser {
     return LocalFileBrowser(
         fileSystem = FileSystem.SYSTEM,
         home = home,
-        label = "На устройстве",
+        label = "On this device",
         ioDispatcher = Dispatchers.IO,
     )
 }

@@ -31,7 +31,7 @@ class SnippetManagerTest {
         val entry = manager.snippets.single()
         assertEquals("Disk usage", entry.snippet.label)
         assertEquals(listOf("monitoring"), entry.snippet.tags)
-        assertEquals(listOf(id), store.all().map { it.id }) // долетело до стора
+        assertEquals(listOf(id), store.all().map { it.id }) // made it to the store
     }
 
     @Test

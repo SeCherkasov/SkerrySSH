@@ -537,7 +537,7 @@ class TerminalEmulatorTest {
         val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2\r\nline3"))
         emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clear
         emu.feed("$ ".encodeToByteArray())                   // prompt at the top of the screen
-        emu.resize(6, 2)                                     // уже и НИЖЕ
+        emu.resize(6, 2)                                     // narrower AND shorter
 
         assertTrue(emu.cursorRow < emu.lines.size, "cursor within the buffer")
         val visible = emu.lines.takeLast(2)
@@ -579,7 +579,7 @@ class TerminalEmulatorTest {
     fun `scrolling off the top feeds scrollback`() {
         val emu = emulate(cols = 4, rows = 3, chunks = arrayOf("a\r\nb\r\nc\r\nd"))
         assertEquals("a\nb\nc\nd", emu.asText())
-        assertEquals(4, emu.lines.size) // 1 в scrollback + 3 экранных
+        assertEquals(4, emu.lines.size) // 1 in scrollback + 3 on-screen
     }
 
     @Test

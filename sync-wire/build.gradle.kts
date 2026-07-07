@@ -11,6 +11,6 @@ kotlin {
 }
 
 dependencies {
-    // api: @Serializable-типы контракта видны потребителям вместе с сериализаторами.
+    // api: the contract's @Serializable types are visible to consumers together with their serializers.
     api(libs.kotlinx.serialization.json)
 }

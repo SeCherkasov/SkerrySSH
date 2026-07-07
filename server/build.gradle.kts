@@ -16,7 +16,7 @@ kotlin {
 }
 
 dependencies {
-    // Wire-контракт клиент⇆сервер (общий с shared/sync — единый источник DTO).
+    // Client⇆server wire contract (shared with shared/sync — a single source of DTOs).
     implementation(project(":sync-wire"))
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
@@ -28,14 +28,14 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.cors)
-    // Security-хардненинг: rate-limit (anti-flood по IP) и security-заголовки (DefaultHeaders).
+    // Security hardening: rate-limit (anti-flood per IP) and security headers (DefaultHeaders).
     implementation(libs.ktor.server.rate.limit)
     implementation(libs.ktor.server.default.headers)
     implementation(libs.logback.classic)
-    // Корутины: suspend-транзакции Exposed (newSuspendedTransaction) уводят БД с потока запроса.
+    // Coroutines: Exposed suspend transactions (newSuspendedTransaction) take DB work off the request thread.
     implementation(libs.kotlinx.coroutines.core)
 
-    // Слой хранения: Exposed + HikariCP; SQLite по умолчанию, PostgreSQL — опционально по DB URL.
+    // Storage layer: Exposed + HikariCP; SQLite by default, PostgreSQL optionally via DB URL.
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
     implementation(libs.exposed.java.time)
@@ -43,12 +43,12 @@ dependencies {
     runtimeOnly(libs.sqlite.jdbc)
     runtimeOnly(libs.postgresql)
 
-    // SRP-6a: сервер хранит только verifier, пароль/authKey клиента не передаётся.
+    // SRP-6a: the server stores only the verifier; the client's password/authKey is never transmitted.
     implementation(libs.nimbus.srp)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.content.negotiation)
-    // WS-клиент для тестов /sync: обработка Close-кадра и revoke проверяются реальным рукопожатием.
+    // WS client for /sync tests: Close-frame handling and revoke are verified with a real handshake.
     testImplementation(libs.ktor.client.websockets)
     testImplementation(kotlin("test"))
 }

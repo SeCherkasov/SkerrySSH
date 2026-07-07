@@ -243,7 +243,7 @@ fun TerminalScreen(
     // An active desktop session grabs focus immediately (physical keyboard, no click needed to type).
     // On touch ([imeInput]) focus is not requested automatically: the hidden IME field would raise the
     // soft keyboard right on connect, pushing the layout/terminal up. The keyboard appears on user tap
-    // (gesture handler below, as in mobile SSH clients); the special-key panel works without it (sends to
+    // (gesture handler below, the usual mobile SSH client behavior); the special-key panel works without it (sends to
     // the PTY directly).
     LaunchedEffect(state) { if (!closed && !imeInput) focusRequester.requestFocus() }
 
@@ -997,7 +997,7 @@ fun TerminalScreen(
                               else -> if (ch.code >= 0x20) state.reverseSearchAppend(ch.toString())
                           }
                       } else {
-                          state.typeInput(out) // питает автодополнение (софт-клавиатура), затем в PTY
+                          state.typeInput(out) // feeds autocomplete (soft keyboard), then goes to the PTY
                       }
                   }
                   imeValue = imeBaseline

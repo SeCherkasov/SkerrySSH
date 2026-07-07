@@ -22,7 +22,7 @@ data class DesignFonts(
 )
 
 val LocalFonts: ProvidableCompositionLocal<DesignFonts> = staticCompositionLocalOf {
-    error("DesignFonts не предоставлены — оберни UI в SkerryDesktopDesign{}")
+    error("DesignFonts not provided — wrap the UI in SkerryDesktopDesign{}")
 }
 
 /**

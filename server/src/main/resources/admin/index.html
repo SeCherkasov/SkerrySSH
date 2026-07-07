@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <!--
-  Skerry Sync — админ-консоль (self-hosted). Статическая страница, отдаётся самим Ktor по /console.
-  Вёрстка по прототипу sync-консоли (палитра «night sea»). Все данные
-  приходят из живых /admin-эндпоинтов; нарисованных значений нет. Zero-knowledge сохраняется:
-  консоль работает только с метаданными синхронизации и размерами шифроблобов — к содержимому
-  записей, мастер-паролю и dataKey доступа нет по определению.
+  Skerry Sync — admin console (self-hosted). A static page served by Ktor itself at /console.
+  Layout follows the sync-console prototype (the "night sea" palette). All data
+  comes from live /admin endpoints; there are no mocked-up values. Zero-knowledge is preserved:
+  the console works only with sync metadata and cipher-blob sizes — record contents,
+  the master password, and the dataKey are inaccessible by definition.
 
-  Функции: обзор инстанса · аккаунты (инспект записей / purge tombstone'ов / удаление) ·
-  устройства, сгруппированные по аккаунту (отзыв) · реальные envelope'ы записей (hex-превью
-  настоящего шифротекста — наглядное доказательство zero-knowledge) · аудит-лог метаданных.
+  Features: instance overview · accounts (record inspection / tombstone purge / deletion) ·
+  devices grouped by account (revocation) · real record envelopes (a hex preview of the
+  actual ciphertext — a visible proof of zero-knowledge) · metadata audit log.
 
-  Шрифты self-hosted (CSP заперт на font-src 'self', консоль не обращается к третьей стороне):
-  Space Grotesk (дисплейный) и JetBrains Mono (моноширинный) лежат в resources/admin/fonts/ как
-  вариативные woff2 (latin + latin-ext, ~84 КБ) и отдаются тем же Ktor по /console/fonts/.
-  Иконки — инлайновый SVG (внешнего иконочного шрифта нет).
+  Fonts are self-hosted (CSP is locked to font-src 'self'; the console never talks to a third party):
+  Space Grotesk (display) and JetBrains Mono (monospace) sit in resources/admin/fonts/ as
+  variable woff2 (latin + latin-ext, ~84 KB) and are served by the same Ktor at /console/fonts/.
+  Icons are inline SVG (there is no external icon font).
 -->
 <html lang="en">
 <head>

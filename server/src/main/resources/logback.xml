@@ -9,7 +9,7 @@
         <appender-ref ref="STDOUT"/>
     </root>
 
-    <!-- Шумные библиотеки приглушены: на INFO лог чист для оператора self-host. -->
+    <!-- Noisy libraries are muted: at INFO the log stays clean for the self-host operator. -->
     <logger name="com.zaxxer.hikari" level="WARN"/>
     <logger name="Exposed" level="WARN"/>
     <logger name="io.netty" level="WARN"/>

@@ -1,4 +1,4 @@
-# Контекст Docker-сборки sync-сервера: исключаем артефакты и кэши, оставляем исходники + wrapper.
+# Docker build context of the sync server: exclude artifacts and caches, keep sources + wrapper.
 .git
 .gradle
 .kotlin
