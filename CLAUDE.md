@@ -15,7 +15,6 @@ ANDROID_HOME=$HOME/Android/Sdk ./gradlew :androidApp:installDebug
 ./gradlew test                                              # JUnit 5
 docker compose up -d --build                                # sync server; set SKERRY_JWT_SECRET
 ./gradlew :server:run -PserverOnly                          # server-only build, no Android SDK
-scripts/gen-screenshots.sh                                  # README screenshots (offscreen render)
 ```
 
 ## Repository layout
