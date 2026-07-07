@@ -1,8 +1,11 @@
 name: Release build
 
-# Builds distributables but publishes NOTHING: artifacts stay on the run
-# (Actions → run → Artifacts). Triggered manually only. A GitHub Release will be
-# added later, as a separate decision, once we actually start shipping builds.
+# Two modes:
+#   • Manual (workflow_dispatch): builds the 4 distributables and uploads them as run
+#     artifacts only — publishes NOTHING, exactly as before.
+#   • Tag push (v*): builds with the version taken from the tag, then publishes a DRAFT
+#     GitHub Release with the packages + SHA256SUMS attached. A human reviews the draft
+#     and clicks Publish — nothing goes public automatically.
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +17,9 @@ on:
         description: "Override Android versionCode (integer). Empty — from gradle.properties."
         required: false
         type: string
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: read
@@ -23,7 +29,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Resolve the version once so all build jobs agree. On a tag push the name comes from
+  # the tag (v0.2.0 → 0.2.0); on a manual run from the dispatch input; empty → the build
+  # falls back to the gradle.properties default.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.resolve.outputs.name }}
+    steps:
+      - id: resolve
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ inputs.versionName }}" >> "$GITHUB_OUTPUT"
+          fi
+
   linux-desktop:
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +67,7 @@ jobs:
       - name: Package deb + rpm
         run: >
           ./gradlew :composeApp:packageDeb :composeApp:packageRpm --stacktrace
-          ${{ inputs.versionName && format('-Pskerry.versionName={0}', inputs.versionName) || '' }}
+          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
       - name: Upload Linux distributables
         uses: actions/upload-artifact@v4
@@ -56,6 +79,7 @@ jobs:
           if-no-files-found: error
 
   windows-desktop:
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +102,7 @@ jobs:
         shell: bash
         run: >
           ./gradlew :composeApp:packageMsi --stacktrace
-          ${{ inputs.versionName && format('-Pskerry.versionName={0}', inputs.versionName) || '' }}
+          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
       - name: Upload Windows distributable
         uses: actions/upload-artifact@v4
@@ -88,6 +112,7 @@ jobs:
           if-no-files-found: error
 
   android:
+    needs: version
     runs-on: ubuntu-latest
     env:
       # Secrets via job env so the decode step can be gated on env (secrets aren't available in if).
@@ -123,10 +148,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Assemble release APK
+        # versionCode must be a monotonic integer; the tag's semver can't map to one, so use
+        # the run number (grows every run). A dispatch input still overrides it if provided.
         run: >
           ./gradlew :androidApp:assembleRelease --stacktrace
-          ${{ inputs.versionName && format('-Pskerry.versionName={0}', inputs.versionName) || '' }}
-          ${{ inputs.versionCode && format('-Pskerry.versionCode={0}', inputs.versionCode) || '' }}
+          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
+          -Pskerry.versionCode=${{ inputs.versionCode || github.run_number }}
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
@@ -134,3 +161,30 @@ jobs:
           name: skerry-android
           path: androidApp/build/outputs/apk/release/*.apk
           if-no-files-found: error
+
+  # Publish only on tag pushes. Collects every build job's artifact, adds checksums, and
+  # creates a DRAFT release for a human to review and publish. Skipped on manual runs
+  # (then the artifacts just stay on the run, as before).
+  publish:
+    needs: [linux-desktop, windows-desktop, android]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --draft --generate-notes --title "$GITHUB_REF_NAME"
