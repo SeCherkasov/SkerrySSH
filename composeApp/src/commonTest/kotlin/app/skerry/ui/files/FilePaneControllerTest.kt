@@ -603,4 +603,59 @@ class FilePaneControllerTest {
         assertTrue(c.cursorOnParent)
         assertEquals(null, c.cursor)
     }
+
+    // Path-bar jump (goToPath): type a path to jump straight to it.
+
+    @Test
+    fun `goToPath jumps to an absolute directory and lists it`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.goToPath("$HOME/alpha")
+        advanceUntilIdle()
+        assertEquals("$HOME/alpha", c.path)
+        assertEquals(listOf("inside.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `goToPath resolves a relative path against the current directory`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.goToPath("alpha")
+        advanceUntilIdle()
+        assertEquals("$HOME/alpha", c.path)
+    }
+
+    @Test
+    fun `goToPath normalizes dotdot segments`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.open(c.entry("alpha")); advanceUntilIdle()
+        c.goToPath("..")
+        advanceUntilIdle()
+        assertEquals(HOME, c.path)
+    }
+
+    @Test
+    fun `goToPath to a missing directory surfaces Error and keeps the current directory`() = runTest {
+        val c = started()
+        c.goToPath("$HOME/nope")
+        advanceUntilIdle()
+        assertIs<FilePaneState.Error>(c.state)
+        assertEquals(HOME, c.path)
+    }
+
+    @Test
+    fun `goToPath ignores blank input`() = runTest {
+        val c = started()
+        c.goToPath("   ")
+        advanceUntilIdle()
+        assertEquals(HOME, c.path)
+        assertIs<FilePaneState.Loaded>(c.state)
+    }
+
+    @Test
+    fun `goToPath clears the selection`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.selectOnly(c.entry("readme.txt"))
+        c.goToPath("$HOME/alpha")
+        advanceUntilIdle()
+        assertTrue(c.selection.isEmpty())
+    }
 }

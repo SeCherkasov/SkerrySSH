@@ -100,6 +100,24 @@ class FilePaneController(
     /** Navigates to the parent directory. Resets selection. */
     fun goUp() = op { navigateTo(parentPath(path)) }
 
+    /**
+     * Jumps to a user-typed [target] (path-bar Enter): an absolute path as-is, a relative one
+     * resolved against the current [path]; the source's realpath canonicalizes it (normalizing
+     * "."/".."/trailing slashes, and on SFTP the server's start dir). Blank input is a no-op. A bad
+     * path surfaces as [FilePaneState.Error] while the pane stays in the current directory (so a typo
+     * doesn't throw away the listing you were browsing).
+     */
+    fun goToPath(target: String) = op {
+        val trimmed = target.trim()
+        if (trimmed.isEmpty()) return@op
+        val request = if (trimmed.startsWith("/")) trimmed else childPath(path, trimmed)
+        val resolved = browser.realpath(request)
+        when (val next = loadState(resolved)) {
+            is FilePaneState.Loaded -> commit(resolved, next)
+            else -> state = next
+        }
+    }
+
     /** Reloads the current directory. */
     fun refresh() = op { reload() }
 
@@ -290,14 +308,19 @@ class FilePaneController(
      * Until the listing arrives the pane shows the previous directory unchanged; a listing error
      * is shown under the new path.
      */
-    private suspend fun navigateTo(target: String) {
-        val next = loadState(target)
+    private suspend fun navigateTo(target: String) = commit(target, loadState(target))
+
+    /**
+     * Commits a freshly loaded [next] listing under [target] in one snapshot: path+state+selection,
+     * cursor on the first real entry (not ".."), or on ".." for an empty directory. On an [Error]
+     * [next] the pane still moves to [target] and shows the error (used by open/goUp, whose targets
+     * come from the listing and rarely fail); goToPath commits only successful listings.
+     */
+    private fun commit(target: String, next: FilePaneState) {
         path = target
         state = next
         resetSelection() // New directory: selection is empty already, nothing to prune.
-        // Cursor on the first real entry (not "..").
         cursor = (next as? FilePaneState.Loaded)?.entries?.firstOrNull()?.path
-        // Empty directory: put the cursor on ".." if available.
         cursorOnParent = cursor == null && hasParent
     }
 

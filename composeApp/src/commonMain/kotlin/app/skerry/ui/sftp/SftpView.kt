@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -48,9 +50,11 @@ import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -218,6 +222,9 @@ private fun LiveSftpView(
     var copyTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
     // F2 Rename target — a (pane, cursored row) pair at press time. null — dialog closed.
     var renameTarget by remember(controller) { mutableStateOf<Pair<FilePaneController, FileItem>?>(null) }
+    // A pane's path bar is being edited (type-to-jump). While true the Column's key handler steps aside
+    // (preview events fire parent-first) so arrows/Enter reach the focused path field, not the listing.
+    var editingPath by remember(controller) { mutableStateOf(false) }
     val localList = rememberLazyListState()
     val remoteList = rememberLazyListState()
     // Persistent show-hidden setting (Ctrl+H) — single source of truth for both panes.
@@ -285,6 +292,8 @@ private fun LiveSftpView(
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
                 if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Path bar has focus (type-to-jump): let its own handler take arrows/Enter/Esc.
+                if (editingPath) return@onPreviewKeyEvent false
                 // Ctrl+H — show/hide hidden entries (dotfiles); toggle the persistent setting, and the
                 // LaunchedEffect below applies it to both panes (single source of truth).
                 if (event.isCtrlPressed && event.key == Key.H) {
@@ -369,6 +378,8 @@ private fun LiveSftpView(
                         listState = localList,
                         active = active == ActivePane.Local,
                         onActivate = { active = ActivePane.Local; focus.requestFocus() },
+                        onEditingPath = { editingPath = it },
+                        restoreFocus = { focus.requestFocus() },
                         modifier = Modifier.weight(1f),
                     )
                     VLine(D.line)
@@ -377,6 +388,8 @@ private fun LiveSftpView(
                         listState = remoteList,
                         active = active == ActivePane.Remote,
                         onActivate = { active = ActivePane.Remote; focus.requestFocus() },
+                        onEditingPath = { editingPath = it },
+                        restoreFocus = { focus.requestFocus() },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -542,7 +555,7 @@ private fun FKeyCell(
         modifier
             .clip(RoundedCornerShape(4.dp))
             .background(D.panel)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -575,6 +588,8 @@ private fun LivePane(
     listState: LazyListState,
     active: Boolean,
     onActivate: () -> Unit,
+    onEditingPath: (Boolean) -> Unit,
+    restoreFocus: () -> Unit,
     modifier: Modifier,
 ) {
     // Keep the cursored row in view during keyboard navigation. The LazyColumn index is offset by the
@@ -594,7 +609,13 @@ private fun LivePane(
         if (visible.isEmpty() || target < first || target > last) listState.scrollToItem(target)
     }
 
-    Column(modifier.fillMaxHeight().clickable(onClick = onActivate)) {
+    // Activating a pane by clicking it must not flash a ripple over the whole pane — bare click, no
+    // indication (the highlight is the header/cursor recolor, not a Material overlay).
+    Column(
+        modifier
+            .fillMaxHeight()
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onActivate),
+    ) {
         Row(
             Modifier.fillMaxWidth().background(D.panel).padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -608,13 +629,12 @@ private fun LivePane(
                 weight = FontWeight.SemiBold,
                 letterSpacing = 0.5.sp,
             )
-            Txt(
-                pane.path,
-                color = D.textBright,
-                size = 11.5.sp,
-                font = mono,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            PathField(
+                pane = pane,
+                mono = mono,
+                onActivate = onActivate,
+                onEditingPath = onEditingPath,
+                restoreFocus = restoreFocus,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -634,6 +654,86 @@ private fun LivePane(
             }
         }
     }
+}
+
+/**
+ * Editable path bar in a pane header. Shows [pane].path as text; a click turns it into an input so a
+ * known destination can be typed and jumped to (Enter → [FilePaneController.goToPath], Esc → cancel;
+ * blurring the field also cancels). While editing, [onEditingPath] tells the screen to stand its key
+ * handler down so arrows/Enter reach this field, not the listing; on close [restoreFocus] hands the
+ * keyboard back to the panes.
+ */
+@Composable
+private fun PathField(
+    pane: FilePaneController,
+    mono: FontFamily,
+    onActivate: () -> Unit,
+    onEditingPath: (Boolean) -> Unit,
+    restoreFocus: () -> Unit,
+    modifier: Modifier,
+) {
+    var editing by remember(pane) { mutableStateOf(false) }
+    if (!editing) {
+        Txt(
+            pane.path,
+            color = D.textBright,
+            size = 11.5.sp,
+            font = mono,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = modifier.clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { onActivate(); editing = true },
+            ),
+        )
+        return
+    }
+    // Prefill with the current path, fully selected so typing replaces it outright.
+    var draft by remember { mutableStateOf(TextFieldValue(pane.path, TextRange(0, pane.path.length))) }
+    val fieldFocus = remember { FocusRequester() }
+    // Close once and restore keyboard focus to the panes (Enter/Esc/blur all route here).
+    val close = {
+        editing = false
+        onEditingPath(false)
+        restoreFocus()
+    }
+    LaunchedEffect(Unit) {
+        onEditingPath(true)
+        fieldFocus.requestFocus()
+    }
+    // Guard against the initial unfocused frame before requestFocus lands, then close on any real blur
+    // (clicking away/switching panes) so a stale editor is never left open.
+    var everFocused by remember { mutableStateOf(false) }
+    BasicTextField(
+        value = draft,
+        onValueChange = { draft = it },
+        singleLine = true,
+        textStyle = TextStyle(color = D.text, fontSize = 11.5.sp, fontFamily = mono),
+        cursorBrush = SolidColor(D.cyan),
+        modifier = modifier
+            .focusRequester(fieldFocus)
+            .onFocusChanged {
+                if (it.isFocused) everFocused = true else if (everFocused) close()
+            }
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.Enter, Key.NumPadEnter -> { pane.goToPath(draft.text); close(); true }
+                    Key.Escape -> { close(); true }
+                    else -> false
+                }
+            },
+        decorationBox = { inner ->
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(D.bg)
+                    .border(1.dp, D.lineStrong, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) { inner() }
+        },
+    )
 }
 
 @Composable
