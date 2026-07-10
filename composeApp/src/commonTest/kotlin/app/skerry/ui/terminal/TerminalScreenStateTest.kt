@@ -69,6 +69,23 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `typed input and paste bump inputVersion but programmatic sends do not`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val state = TerminalScreenState(FakeTerminalSession(), scope)
+
+        val v0 = state.inputVersion
+        state.send("ls\n")
+        state.sendBytes(byteArrayOf(0x1b))
+        assertEquals(v0, state.inputVersion)
+
+        state.typeInput("l")
+        assertEquals(v0 + 1, state.inputVersion)
+        state.paste("echo hi")
+        assertEquals(v0 + 2, state.inputVersion)
+        scope.cancel()
+    }
+
+    @Test
     fun `preloaded history feeds autosuggestion`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val state = TerminalScreenState(

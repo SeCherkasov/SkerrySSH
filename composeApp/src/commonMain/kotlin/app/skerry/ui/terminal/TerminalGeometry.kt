@@ -41,6 +41,15 @@ fun gridSizeFor(
  * dividing by cell size remains. Row/column are floored; negative coordinates clamp to zero. Row isn't
  * upper-bounded here; the caller maps it against the screen (extract clamps past the last row).
  */
+/**
+ * Whether the viewport should snap to the bottom after new output: only when the user was already
+ * at (or within [slackPx] of) the bottom *before* the content grew — scrolling up to read history
+ * must survive streaming output, like in a real terminal. [previousMax] is the scroll max before
+ * the new snapshot relaid out; [slackPx] absorbs sub-row jitter (a row or two of tolerance).
+ */
+fun shouldStickToBottom(value: Int, previousMax: Int, slackPx: Int): Boolean =
+    value >= previousMax - slackPx
+
 fun cellAtOffset(x: Float, y: Float, metrics: TerminalMetrics): TerminalPos {
     val col = (x / metrics.cellWidth).toInt().coerceAtLeast(0)
     val row = (y / metrics.cellHeight).toInt().coerceAtLeast(0)

@@ -94,6 +94,15 @@ class TerminalScreenState(
     var snapshotVersion: Int by mutableStateOf(0)
         private set
 
+    /**
+     * Monotonic counter of user-initiated input ([typeInput]/[paste]). The render layer snaps the
+     * viewport back to the bottom when this changes — typing while scrolled up in history returns
+     * to the live screen (xterm's scroll-on-keypress), while programmatic sends (mouse reports,
+     * DSR/DA responses, focus reports) don't yank the viewport.
+     */
+    var inputVersion: Int by mutableStateOf(0)
+        private set
+
     /** Current grid size (live `cols x rows` from the emulator). */
     var cols: Int by mutableStateOf(emulator.cols)
         private set
@@ -370,6 +379,7 @@ class TerminalScreenState(
      * snippet output, which must not reach the engine or the tracked line would be corrupted.
      */
     fun typeInput(text: String) {
+        inputVersion++
         // Server not echoing input (password entry / line-mode signaled by the transport): do not
         // track the line or write it to history, so a secret does not persist and surface as a
         // suggestion. SSH echo status is unavailable (always false), so a password prompt is also
@@ -572,6 +582,7 @@ class TerminalScreenState(
     /** Paste clipboard text: wraps it in markers when bracketed paste is enabled (DEC 2004). */
     fun paste(text: String) {
         if (text.isEmpty()) return
+        inputVersion++
         send(bracketedPasteWrap(text, bracketedPaste))
     }
 

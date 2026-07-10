@@ -952,6 +952,36 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `lines snapshot is immune to later feeds`() {
+        val emu = emulate(cols = 4, rows = 2, chunks = arrayOf("aa\r\nbb\r\ncc"))
+        val snap = emu.lines
+        // Overwrite the current screen row and scroll more history in.
+        emu.feed("\rXX\r\ndd\r\nee".encodeToByteArray())
+        assertEquals("aa", snap[0].joinToString("") { it.text }.trimEnd())
+        assertEquals("cc", snap[2].joinToString("") { it.text }.trimEnd())
+    }
+
+    @Test
+    fun `scrollback content stays in sync after on-the-fly trim and new output`() {
+        val emu = TerminalEmulator(cols = 8, rows = 2, maxScrollback = 100)
+        emu.feed("1\r\n2\r\n3\r\n4\r\n5".encodeToByteArray())
+        emu.applyMaxScrollback(2)
+        emu.feed("\r\n6".encodeToByteArray())
+        // History held at depth 2 while a freshly scrolled-off row replaced the oldest.
+        assertEquals("3\n4\n5\n6", emu.asText())
+    }
+
+    @Test
+    fun `lines stay consistent after resize reflow and further output`() {
+        val emu = TerminalEmulator(cols = 6, rows = 2, maxScrollback = 100)
+        emu.feed("abcd\r\nef\r\ngh".encodeToByteArray())
+        emu.resize(3, 2)
+        val before = emu.asText()
+        emu.feed("\r\nij".encodeToByteArray())
+        assertEquals("$before\nij", emu.asText())
+    }
+
+    @Test
     fun `applyMaxScrollback keeps trimming as new lines arrive`() {
         val emu = TerminalEmulator(cols = 10, rows = 2, maxScrollback = 100)
         emu.applyMaxScrollback(3)

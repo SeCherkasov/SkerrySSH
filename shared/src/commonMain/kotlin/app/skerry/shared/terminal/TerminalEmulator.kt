@@ -159,6 +159,12 @@ class TerminalEmulator(
     private var grid: MutableList<TermRow> = primaryGrid
     private val scrollback = ArrayDeque<TermRow>()
 
+    // Immutable copies of scrollback rows, kept in lockstep with [scrollback]. A row is frozen once
+    // it leaves the grid, so it's copied exactly once on entry — [lines] then reuses these instead
+    // of deep-copying the whole history per snapshot (O(history×cols) allocations per PTY chunk,
+    // which froze fast output on deep scrollback).
+    private val scrollbackView = ArrayDeque<List<TermCell>>()
+
     // Scrollback depth (the "scrollback buffer" setting). Not a val: can be changed on the fly on
     // an already-open session via [applyMaxScrollback] — shrinking trims excess old rows
     // immediately, growing just lets new rows stick around longer.
@@ -190,8 +196,8 @@ class TerminalEmulator(
      * grid's internal rows are live and mutated in place).
      */
     val lines: List<List<TermCell>>
-        get() = ArrayList<List<TermCell>>((if (altScreen) 0 else scrollback.size) + grid.size).apply {
-            if (!altScreen) scrollback.forEach { add(it.toList()) }
+        get() = ArrayList<List<TermCell>>((if (altScreen) 0 else scrollbackView.size) + grid.size).apply {
+            if (!altScreen) addAll(scrollbackView)
             grid.forEach { add(it.toList()) }
         }
 
@@ -253,7 +259,10 @@ class TerminalEmulator(
      */
     fun applyMaxScrollback(lines: Int) {
         maxScrollback = lines.coerceAtLeast(0)
-        while (scrollback.size > maxScrollback) scrollback.removeFirst()
+        while (scrollback.size > maxScrollback) {
+            scrollback.removeFirst()
+            scrollbackView.removeFirst()
+        }
     }
 
     var applicationCursorKeys: Boolean = false
@@ -898,7 +907,11 @@ class TerminalEmulator(
 
     private fun pushScrollback(row: TermRow) {
         scrollback.addLast(row)
-        while (scrollback.size > maxScrollback) scrollback.removeFirst()
+        scrollbackView.addLast(row.toList())
+        while (scrollback.size > maxScrollback) {
+            scrollback.removeFirst()
+            scrollbackView.removeFirst()
+        }
     }
 
     // --- Erase / insert / delete ------------------------------------------
@@ -1070,6 +1083,7 @@ class TerminalEmulator(
         grid = primaryGrid
         altScreen = false
         scrollback.clear()
+        scrollbackView.clear()
         cx = 0; cy = 0
         pendingWrap = false
         lastPrintedCp = null
@@ -1166,7 +1180,11 @@ class TerminalEmulator(
             trackCursor = trackCursor,
         )
         scrollback.clear()
-        result.scrollback.forEach { scrollback.addLast(it) }
+        scrollbackView.clear()
+        result.scrollback.forEach {
+            scrollback.addLast(it)
+            scrollbackView.addLast(it.toList())
+        }
         primaryGrid = result.grid
         return Pair(result.cursorRow, result.cursorCol)
     }

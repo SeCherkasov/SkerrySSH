@@ -216,7 +216,10 @@ fun TerminalScreen(
     // selection, cursor, mouse, and handles are all derived from it via col*cellWidth /
     // row*cellHeight, so everything stays consistent across fonts and system scale.
     val density = LocalDensity.current
-    val measurer = rememberTextMeasurer()
+    // A full TUI screen redraws hundreds of distinct glyph runs per frame; the default layout cache
+    // (8 entries) thrashes and re-lays-out every run every frame. Sized to hold a busy screen's runs.
+    // Color is passed at draw time (see drawGlyphText), so cache hits stay theme-safe.
+    val measurer = rememberTextMeasurer(cacheSize = 1024)
     val metrics = remember(textStyle, density) {
         // cellWidth is the font's real advance, which drawText uses to lay out ASCII runs. Measured on
         // a long string and divided by its length: size.width is an integer (rounds to ~0.5px), which
@@ -247,15 +250,28 @@ fun TerminalScreen(
     // the PTY directly).
     LaunchedEffect(state) { if (!closed && !imeInput) focusRequester.requestFocus() }
 
-    // Autoscroll to bottom on new output. Watches both snapshotVersion (new output) and
-    // scroll.maxValue: layout recomputes content height in the placement phase, after the snapshot, so
-    // reading maxValue at snapshot time would be stale. This matters especially on `clear`, where
-    // height changes sharply: scrolling by the old maxValue lands past the new bottom (stale text still
-    // visible) or into empty space. snapshotFlow re-emits once the value is recomputed, so this always
-    // lands on the actual bottom (or top, if content shrank).
-    LaunchedEffect(state) {
-        snapshotFlow { state.snapshotVersion to scroll.maxValue }
-            .collect { (_, max) -> scroll.scrollTo(max) }
+    // Autoscroll to bottom on new output — but only when the user was already at the bottom
+    // (sticky bottom, like a real terminal): scrolling up to read history must survive streaming
+    // output instead of being yanked back down on every chunk. Typing/pasting (inputVersion) always
+    // snaps back to the live screen (xterm's scroll-on-keypress). Watches both snapshotVersion and
+    // scroll.maxValue: layout recomputes content height in the placement phase, after the snapshot,
+    // so reading maxValue at snapshot time would be stale. This matters especially on `clear`, where
+    // height changes sharply: scrolling by the old maxValue lands past the new bottom (stale text
+    // still visible) or into empty space. snapshotFlow re-emits once the value is recomputed, so
+    // this always lands on the actual bottom (or top, if content shrank).
+    LaunchedEffect(state, metrics) {
+        // "At the bottom" tolerance: a couple of rows, absorbing the sub-row slack below the grid.
+        val slackPx = (2 * metrics.cellHeight).roundToInt()
+        var lastMax = scroll.maxValue
+        var lastInput = state.inputVersion
+        snapshotFlow { Triple(state.snapshotVersion, state.inputVersion, scroll.maxValue) }
+            .collect { (_, input, max) ->
+                val typed = input != lastInput
+                lastInput = input
+                val stick = typed || shouldStickToBottom(scroll.value, lastMax, slackPx)
+                lastMax = max
+                if (stick) scroll.scrollTo(max)
+            }
     }
 
     // OSC 52: the app (tmux/vim) requests writing text to the system clipboard; done on the UI thread.

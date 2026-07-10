@@ -5,7 +5,9 @@ import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class TerminalGeometryTest {
 
@@ -149,5 +151,21 @@ class TerminalGeometryTest {
         )
         assertEquals(1, size.cols)
         assertEquals(1, size.rows)
+    }
+
+    @Test
+    fun `stick to bottom at or within slack of the previous bottom`() {
+        assertTrue(shouldStickToBottom(value = 1000, previousMax = 1000, slackPx = 18))
+        assertTrue(shouldStickToBottom(value = 985, previousMax = 1000, slackPx = 18))
+    }
+
+    @Test
+    fun `do not stick to bottom when scrolled up into history`() {
+        assertFalse(shouldStickToBottom(value = 400, previousMax = 1000, slackPx = 18))
+    }
+
+    @Test
+    fun `stick to bottom while content is shorter than the viewport`() {
+        assertTrue(shouldStickToBottom(value = 0, previousMax = 0, slackPx = 18))
     }
 }
