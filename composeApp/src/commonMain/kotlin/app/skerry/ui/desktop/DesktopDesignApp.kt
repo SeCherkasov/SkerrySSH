@@ -1107,27 +1107,27 @@ private fun StatusBar() {
             StatusItem("arrow_downward", if (live) (downRate?.let { humanRate(it) } ?: "—") else "8.4 KB/s", mono = mono)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            // The sync indicator follows session status (see syncIndicator): "Sync online" only with an
-            // active session + reachable server; linked-but-not-connected → "Sync paused", etc. Hidden
-            // when sync isn't configured / not yet pinged.
+            // Server version — live ident of the active session (before connect / if the transport is silent — "—").
+            StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
+            Txt(stringResource(Res.string.shell_status_encoding), color = D.faint, size = 10.5.sp, font = mono)
+            Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
+            // The sync indicator follows session status (see syncIndicator): green only with an active
+            // session + reachable server; linked-but-not-connected → amber, etc. Hidden when sync isn't
+            // configured / not yet pinged. Rendered as a bare glyph (no label) to match the mobile header,
+            // pinned to the far right after all status texts.
             val syncC = LocalSync.current
             val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
             if (ind != null) {
-                StatusItem(
+                Sym(
                     ind.icon,
-                    ind.label,
+                    size = 13.sp,
                     color = when (ind.level) {
                         SyncIndicatorLevel.OK -> D.moss
                         SyncIndicatorLevel.WARN -> D.amber
                         SyncIndicatorLevel.ERROR -> D.sunset
                     },
-                    mono = mono,
                 )
             }
-            // Server version — live ident of the active session (before connect / if the transport is silent — "—").
-            StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
-            Txt(stringResource(Res.string.shell_status_encoding), color = D.faint, size = 10.5.sp, font = mono)
-            Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
         }
     }
 }
