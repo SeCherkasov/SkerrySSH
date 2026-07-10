@@ -70,8 +70,18 @@ class TerminalAiController(
     var busy by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
 
-    /** Reason the request was not sent (policy/not configured); `null` if not blocked. */
-    var blocked by mutableStateOf<String?>(null); private set
+    /**
+     * The reply was not a runnable command (a clarification, prose, or nothing usable). The bar shows
+     * one fixed, localized "not a command" message — the model's own text is untrusted and often
+     * off-topic, so it is never surfaced. The UI supplies the localized string.
+     */
+    var rejected by mutableStateOf(false); private set
+
+    /**
+     * Why the request was not sent (policy/not configured); `null` if not blocked. Typed so the UI
+     * localizes it (see `aiBlockedMessage`) instead of the controller hardcoding an English string.
+     */
+    var blocked by mutableStateOf<AiRoute.Reason?>(null); private set
 
     private var job: Job? = null
     // Generation of the active request. cancel()/a new ask() increments it; the finally block resets
@@ -85,6 +95,7 @@ class TerminalAiController(
         if (busy || text.isEmpty() || !decision.aiEnabled) return
         error = null
         blocked = null
+        rejected = false
         pending = null
         pendingRisk = null
         pendingInfo = null
@@ -92,7 +103,7 @@ class TerminalAiController(
         val device = LocalModelCatalog.resolve(current.localModelId)
         val route = AiRouter.route(decision, current, device, localInstalled(device))
         if (route !is AiRoute.Use) {
-            blocked = blockedMessage((route as AiRoute.Blocked).reason)
+            blocked = (route as AiRoute.Blocked).reason
             return
         }
         val outbound = if (decision.sanitizeSecrets) SecretRedactor.redact(text) else text
@@ -129,13 +140,17 @@ class TerminalAiController(
         return command
     }
 
-    /** Dispatch a parsed [AiReplyParser.parse] reply into the bar's state fields. */
+    /**
+     * Dispatch a parsed [AiReplyParser.parse] reply. Only a command is surfaced; anything else — a
+     * clarification, prose, or nothing usable — is a single [rejected] state. We deliberately drop
+     * the model's own text: small local models routinely answer greetings and small talk with
+     * off-topic prose, so a fixed "not a command" message is clearer than echoing that back.
+     */
     private fun applyReply(raw: String) {
         when (val reply = AiReplyParser.parse(raw)) {
             is AiReplyParser.Reply.Command -> setPending(reply.command, reply.info)
-            is AiReplyParser.Reply.Ask -> error = reply.text ?: NEEDS_CLARIFICATION
-            is AiReplyParser.Reply.Prose -> error = reply.text
-            AiReplyParser.Reply.NoCommand -> error = "The assistant returned no command."
+            is AiReplyParser.Reply.Ask, is AiReplyParser.Reply.Prose, AiReplyParser.Reply.NoCommand ->
+                rejected = true
         }
     }
 
@@ -152,6 +167,7 @@ class TerminalAiController(
         pendingInfo = null
         error = null
         blocked = null
+        rejected = false
     }
 
     /** Cancel the active request, if any. */
@@ -162,23 +178,9 @@ class TerminalAiController(
         streaming = null
     }
 
-    /** Human-readable explanation for why the request was blocked (maps [AiRouter] reasons). */
-    private fun blockedMessage(reason: AiRoute.Reason): String = when (reason) {
-        AiRoute.Reason.CLOUD_NOT_CONFIGURED -> NOT_CONFIGURED
-        AiRoute.Reason.DEVICE_NOT_READY -> DEVICE_NOT_READY
-        AiRoute.Reason.STRICT_NEEDS_DEVICE -> STRICT_BLOCKED
-        AiRoute.Reason.AI_DISABLED -> AI_DISABLED
-    }
-
     companion object {
         /** Command-generation temperature: near-deterministic; small local models are unreliable at higher values. */
         const val COMMAND_TEMPERATURE = 0.2
-
-        const val NOT_CONFIGURED = "Add an API key in AI settings first."
-        const val STRICT_BLOCKED = "Strict policy: download the on-device model in AI settings to use AI on this host."
-        const val DEVICE_NOT_READY = "Download the on-device model in AI settings first."
-        const val AI_DISABLED = "AI is turned off in AI settings."
-        const val NEEDS_CLARIFICATION = "Please clarify your request."
 
         /**
          * Prompt that turns a request into a command. [language] is the English name of the UI

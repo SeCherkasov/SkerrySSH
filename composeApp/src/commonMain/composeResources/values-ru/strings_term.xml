@@ -45,6 +45,11 @@
     <string name="term_ai_run_anyway">Всё равно выполнить</string>
     <string name="term_ai_confirm_run">Подтвердить запуск</string>
     <string name="term_ai_dismiss">Скрыть</string>
+    <string name="term_ai_not_a_command">Это не команда для выполнения. Опишите задачу для сервера.</string>
+    <string name="term_ai_blocked_not_configured">Сначала добавьте ключ API в настройках AI.</string>
+    <string name="term_ai_blocked_strict">Строгий режим: чтобы использовать AI на этом хосте, скачайте локальную модель в настройках AI.</string>
+    <string name="term_ai_blocked_device_not_ready">Сначала скачайте локальную модель в настройках AI.</string>
+    <string name="term_ai_blocked_disabled">AI выключен в настройках AI.</string>
     <string name="term_mobile_title_fallback">Терминал</string>
     <string name="term_mobile_open_host_connect">Откройте хост и нажмите «Подключиться».</string>
     <string name="term_ai_ask_short">Спросите Skerry…</string>

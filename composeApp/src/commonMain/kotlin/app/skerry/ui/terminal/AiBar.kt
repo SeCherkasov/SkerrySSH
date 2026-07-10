@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.CommandRisk
 import app.skerry.ui.ai.TerminalAiController
+import app.skerry.ui.ai.aiBlockedMessage
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.ChipButton
@@ -48,6 +49,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_ai_ask_placeholder
 import app.skerry.ui.generated.resources.term_ai_confirm_run
 import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_ai_not_a_command
 import app.skerry.ui.generated.resources.term_ai_run
 import app.skerry.ui.generated.resources.term_ai_run_anyway
 import app.skerry.ui.generated.resources.term_ai_thinking
@@ -145,7 +147,8 @@ internal fun AiBarInput(
                         }
                     }
                     controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = D.dim, size = 13.sp)
-                    controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    controller.blocked != null -> Txt(aiBlockedMessage(controller.blocked!!), color = D.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    controller.rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = D.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     else -> {
                         if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_placeholder), color = D.dim, size = 13.sp)
@@ -175,7 +178,7 @@ internal fun AiBarInput(
                     )
                     AiActionChip(stringResource(Res.string.term_ai_dismiss), D.faint, onClick = { controller.dismiss() })
                 }
-                controller.blocked != null || controller.error != null ->
+                controller.blocked != null || controller.error != null || controller.rejected ->
                     AiActionChip(stringResource(Res.string.term_ai_dismiss), D.faint, onClick = { controller.dismiss() })
                 else -> {
                     AiBarTag("verified_user", controller.policy.name.uppercase(), mono)

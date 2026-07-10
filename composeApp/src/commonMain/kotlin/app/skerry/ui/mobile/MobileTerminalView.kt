@@ -45,6 +45,7 @@ import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.host.Host
 import app.skerry.ui.ai.TerminalAiController
+import app.skerry.ui.ai.aiBlockedMessage
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.secure.SecureScreen
@@ -62,6 +63,7 @@ import app.skerry.ui.generated.resources.term_ai_run
 import app.skerry.ui.generated.resources.term_ai_run_anyway
 import app.skerry.ui.generated.resources.term_ai_confirm
 import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_ai_not_a_command
 import app.skerry.ui.generated.resources.term_password_label
 import app.skerry.ui.generated.resources.term_connect
 import app.skerry.ui.generated.resources.term_disconnect
@@ -271,7 +273,8 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                         }
                     }
                     controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = D.dim, size = 13.sp)
-                    controller.blocked != null -> Txt(controller.blocked!!, color = D.amber, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    controller.blocked != null -> Txt(aiBlockedMessage(controller.blocked!!), color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    controller.rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     controller.error != null -> Txt(controller.error!!, color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     else -> {
                         if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = D.dim, size = 13.sp)
@@ -296,7 +299,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                     }
                     MobileAiChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
                 }
-                controller.blocked != null || controller.error != null ->
+                controller.blocked != null || controller.error != null || controller.rejected ->
                     MobileAiChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
                 else -> {
                     Txt(controller.policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)

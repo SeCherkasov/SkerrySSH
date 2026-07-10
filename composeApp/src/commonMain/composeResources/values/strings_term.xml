@@ -45,6 +45,11 @@
     <string name="term_ai_run_anyway">Run anyway</string>
     <string name="term_ai_confirm_run">Confirm run</string>
     <string name="term_ai_dismiss">Dismiss</string>
+    <string name="term_ai_not_a_command">That is not a command to run. Describe a task for the server.</string>
+    <string name="term_ai_blocked_not_configured">Add an API key in AI settings first.</string>
+    <string name="term_ai_blocked_strict">Strict policy: download the on-device model in AI settings to use AI on this host.</string>
+    <string name="term_ai_blocked_device_not_ready">Download the on-device model in AI settings first.</string>
+    <string name="term_ai_blocked_disabled">AI is turned off in AI settings.</string>
     <string name="term_mobile_title_fallback">Terminal</string>
     <string name="term_mobile_open_host_connect">Open a host and tap Connect.</string>
     <string name="term_ai_ask_short">Ask Skerry…</string>

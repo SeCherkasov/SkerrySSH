@@ -68,7 +68,7 @@ class TerminalAiControllerTest {
         c.ask("list files")
         advanceUntilIdle()
 
-        assertEquals(TerminalAiController.AI_DISABLED, c.blocked)
+        assertEquals(app.skerry.shared.ai.AiRoute.Reason.AI_DISABLED, c.blocked)
         assertFalse(p.built)
         assertNull(c.pending)
     }
@@ -81,7 +81,7 @@ class TerminalAiControllerTest {
         c.ask("list files")
         advanceUntilIdle()
 
-        assertEquals(TerminalAiController.STRICT_BLOCKED, c.blocked)
+        assertEquals(app.skerry.shared.ai.AiRoute.Reason.STRICT_NEEDS_DEVICE, c.blocked)
         assertFalse(p.built)
         assertNull(c.pending)
     }
@@ -94,7 +94,7 @@ class TerminalAiControllerTest {
         c.ask("list files")
         advanceUntilIdle()
 
-        assertEquals(TerminalAiController.NOT_CONFIGURED, c.blocked)
+        assertEquals(app.skerry.shared.ai.AiRoute.Reason.CLOUD_NOT_CONFIGURED, c.blocked)
         assertFalse(p.built)
     }
 
@@ -162,7 +162,9 @@ class TerminalAiControllerTest {
     }
 
     @Test
-    fun `an ASK clarification is shown as a message not a runnable command`() = runTest {
+    fun `an ASK clarification is rejected, not offered as a runnable command`() = runTest {
+        // The bar only runs commands; a clarification is shown as a fixed "not a command" message
+        // (the UI localizes it), never as the model's own text.
         val p = CapturingProvider(deltas = listOf("ASK: Which directory should I search?"))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
 
@@ -170,20 +172,21 @@ class TerminalAiControllerTest {
         advanceUntilIdle()
 
         assertNull(c.pending)
-        assertEquals("Which directory should I search?", c.error)
+        assertTrue(c.rejected)
+        assertNull(c.error)
     }
 
     @Test
-    fun `a prose reply without a marker is not offered as a command`() = runTest {
-        // Regression: prose without an ASK marker must not be offered as a runnable command.
-        val p = CapturingProvider(deltas = listOf("Уточните запрос, пожалуйста."))
+    fun `a prose reply without a marker is rejected, not offered as a command`() = runTest {
+        // Greetings and small talk produce off-topic prose; it must be rejected, never run or echoed.
+        val p = CapturingProvider(deltas = listOf("Приветствую! Какой у вас вопрос?"))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
 
-        c.ask("сделай хорошо")
+        c.ask("приветствую")
         advanceUntilIdle()
 
         assertNull(c.pending)
-        assertNotNull(c.error)
+        assertTrue(c.rejected)
     }
 
     @Test
@@ -210,7 +213,7 @@ class TerminalAiControllerTest {
     }
 
     @Test
-    fun `treats a hash-prefixed refusal as an error not a runnable command`() = runTest {
+    fun `treats a hash-prefixed refusal as rejected not a runnable command`() = runTest {
         val p = CapturingProvider(deltas = listOf("# I cannot do that safely"))
         val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
 
@@ -218,8 +221,7 @@ class TerminalAiControllerTest {
         advanceUntilIdle()
 
         assertNull(c.pending)
-        assertNotNull(c.error)
-        assertTrue(c.error!!.contains("cannot", ignoreCase = true))
+        assertTrue(c.rejected)
     }
 
     @Test
@@ -351,7 +353,7 @@ class TerminalAiControllerTest {
         c.ask("list files")
         advanceUntilIdle()
 
-        assertEquals(TerminalAiController.DEVICE_NOT_READY, c.blocked)
+        assertEquals(app.skerry.shared.ai.AiRoute.Reason.DEVICE_NOT_READY, c.blocked)
         assertFalse(p.built)
     }
 
