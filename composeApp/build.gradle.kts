@@ -78,12 +78,22 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Dmg)
+            // jlink drops modules loaded reflectively (jdk.unsupported, java.naming, GSSAPI, …),
+            // so the packaged app died on startup while `./gradlew run` worked. Bundle them all.
+            includeAllModules = true
             packageName = "Skerry"
             // Version from the single source (gradle.properties); the release workflow overrides it.
             packageVersion = providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0"
             // App icons per platform, rasterized from icons/skerry.svg (canonical mark, docs/design/Skerry Logo.html).
             linux { iconFile.set(project.file("icons/skerry.png")) }
-            windows { iconFile.set(project.file("icons/skerry.ico")) }
+            windows {
+                iconFile.set(project.file("icons/skerry.ico"))
+                // Space-free install path (%LOCALAPPDATA%\Skerry): goterl/ionspin's isJarFile()
+                // throws on the space in "C:\Program Files" and then crashes libsodium init.
+                perUserInstall = true
+                menu = true
+                shortcut = true
+            }
             macOS { iconFile.set(project.file("icons/skerry.icns")) }
         }
 
