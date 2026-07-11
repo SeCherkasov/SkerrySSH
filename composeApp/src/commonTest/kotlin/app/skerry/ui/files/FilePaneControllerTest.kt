@@ -633,6 +633,64 @@ class FilePaneControllerTest {
     }
 
     @Test
+    fun `goToPath treats a Windows drive-letter path as absolute`() = runTest {
+        // The desktop local pane on Windows works with drive-letter paths; resolving them against
+        // the current directory would produce garbage like "/home/skerry/C:\Temp".
+        val base = seededBrowserWithNested()
+        var requested: String? = null
+        val capturing = object : FileBrowser {
+            override val label: String get() = base.label
+            override suspend fun realpath(path: String): String {
+                requested = path
+                return if (path == "C:\\Temp") "$HOME/alpha" else base.realpath(path)
+            }
+            override suspend fun list(path: String): List<FileItem> = base.list(path)
+            override suspend fun mkdir(path: String) = base.mkdir(path)
+            override suspend fun delete(item: FileItem) = base.delete(item)
+            override suspend fun rename(from: String, to: String) = base.rename(from, to)
+        }
+        val c = FilePaneController(capturing, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        c.start(); advanceUntilIdle()
+
+        c.goToPath("C:\\Temp")
+        advanceUntilIdle()
+
+        assertEquals("C:\\Temp", requested)
+        assertEquals("$HOME/alpha", c.path)
+    }
+
+    @Test
+    fun `goToPath does not ask the server to canonicalize a dotdot path`() = runTest {
+        // Same server constraint as goUp: some SFTP servers reject REALPATH on paths containing
+        // "..", so dot segments must be collapsed lexically before the round-trip.
+        val base = seededBrowserWithNested()
+        val noDotDot = object : FileBrowser {
+            override val label: String get() = base.label
+            override suspend fun realpath(path: String): String {
+                if (path.contains("..")) throw FileBrowserException("REALPATH with .. not supported")
+                return base.realpath(path)
+            }
+            override suspend fun list(path: String): List<FileItem> = base.list(path)
+            override suspend fun mkdir(path: String) = base.mkdir(path)
+            override suspend fun delete(item: FileItem) = base.delete(item)
+            override suspend fun rename(from: String, to: String) = base.rename(from, to)
+        }
+        val c = FilePaneController(noDotDot, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        c.start(); advanceUntilIdle()
+        c.open(c.entry("alpha")); advanceUntilIdle()
+
+        c.goToPath("..")
+        advanceUntilIdle()
+        assertEquals(HOME, c.path)
+        assertIs<FilePaneState.Loaded>(c.state)
+
+        c.goToPath("alpha/../zeta")
+        advanceUntilIdle()
+        assertEquals("$HOME/zeta", c.path)
+        assertIs<FilePaneState.Loaded>(c.state)
+    }
+
+    @Test
     fun `goToPath to a missing directory surfaces Error and keeps the current directory`() = runTest {
         val c = started()
         c.goToPath("$HOME/nope")

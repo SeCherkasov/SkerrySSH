@@ -110,8 +110,10 @@ class FilePaneController(
     fun goToPath(target: String) = op {
         val trimmed = target.trim()
         if (trimmed.isEmpty()) return@op
-        val request = if (trimmed.startsWith("/")) trimmed else childPath(path, trimmed)
-        val resolved = browser.realpath(request)
+        val request = if (isAbsolutePathInput(trimmed)) trimmed else childPath(path, trimmed)
+        // Dot segments are collapsed lexically before the round-trip for the same reason
+        // [parentPath] is lexical: some SFTP servers reject REALPATH on paths containing "..".
+        val resolved = browser.realpath(collapseDotSegments(request))
         when (val next = loadState(resolved)) {
             is FilePaneState.Loaded -> commit(resolved, next)
             else -> state = next
@@ -449,6 +451,34 @@ class FilePaneController(
         val cut = trimmed.lastIndexOf('/')
         return if (cut <= 0) "/" else trimmed.substring(0, cut)
     }
+}
+
+/**
+ * Whether path-bar input is absolute: "/" (POSIX/SFTP), a Windows drive letter ("C:\", "C:/"), or
+ * a UNC share ("\\server\...") — the desktop local pane on Windows works with such paths, and
+ * resolving them against the current directory would produce garbage like "C:\Users\me/C:\Temp".
+ */
+private fun isAbsolutePathInput(input: String): Boolean =
+    input.startsWith("/") ||
+        input.startsWith("\\\\") ||
+        (input.length >= 2 && input[0].isLetter() && input[1] == ':')
+
+/**
+ * Lexically collapses "."/".." segments of a '/'-separated absolute path ("/a/b/.." → "/a"), so
+ * [FileBrowser.realpath] never sees "..". Windows-style paths pass through untouched (the local
+ * browser resolves them itself). ".." above root stops at root.
+ */
+private fun collapseDotSegments(path: String): String {
+    if (!path.startsWith("/") || !path.contains('.')) return path
+    val out = ArrayDeque<String>()
+    for (segment in path.split('/')) {
+        when (segment) {
+            "", "." -> {}
+            ".." -> out.removeLastOrNull()
+            else -> out.addLast(segment)
+        }
+    }
+    return "/" + out.joinToString("/")
 }
 
 /** Sorts directories first, then by case-insensitive name. */
