@@ -69,6 +69,23 @@ jobs:
           ./gradlew :composeApp:packageDeb :composeApp:packageRpm --stacktrace
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
+      - name: Fetch appimagetool
+        # Pin the tool the AppImage build shells out to, so the external download is explicit
+        # here rather than hidden in the build script's fallback path.
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          echo "APPIMAGETOOL=$RUNNER_TEMP/appimagetool" >> "$GITHUB_ENV"
+
+      - name: Package AppImage
+        # createDistributable (a dependency of packageAppImage) rebuilds the app-image; the
+        # script wraps it into a portable .AppImage. CI has no FUSE — the script sets
+        # APPIMAGE_EXTRACT_AND_RUN so appimagetool and mksquashfs run without it.
+        run: >
+          ./gradlew :composeApp:packageAppImage --stacktrace
+          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
+
       - name: Upload Linux distributables
         uses: actions/upload-artifact@v7
         with:
@@ -76,6 +93,7 @@ jobs:
           path: |
             composeApp/build/compose/binaries/main/deb/*.deb
             composeApp/build/compose/binaries/main/rpm/*.rpm
+            composeApp/build/compose/binaries/main/appimage/*.AppImage
           if-no-files-found: error
 
   windows-desktop:

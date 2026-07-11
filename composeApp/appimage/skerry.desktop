@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Skerry
+GenericName=SSH Client
+Comment=Cross-platform SSH client with a single core
+Exec=Skerry
+Icon=skerry
+Terminal=false
+Categories=Network;RemoteAccess;
+Keywords=SSH;SFTP;Terminal;Remote;

@@ -1,0 +1,9 @@
+#!/bin/sh
+# AppImage entry point. Resolve the AppDir this script lives in and hand off to the
+# jpackage-generated native launcher, which finds its bundled JRE relative to itself.
+HERE="$(dirname "$(readlink -f "$0")")"
+# The AppImage runtime exports APPDIR (the mountpoint). jpackage's own launcher treats the
+# literal $APPDIR in Skerry.cfg as an internal placeholder it resolves from the executable
+# location — leaving the env var set can misdirect that resolution, so drop it.
+unset APPDIR
+exec "$HERE/bin/Skerry" "$@"

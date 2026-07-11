@@ -117,6 +117,24 @@ compose.desktop {
     }
 }
 
+// Wrap the jpackage app-image (createDistributable) into a portable Skerry.AppImage. jpackage
+// itself has no AppImage target, so a small script assembles the AppDir and runs appimagetool.
+// The version and paths mirror the other packaging tasks; the release workflow sets versionName.
+tasks.register<Exec>("packageAppImage") {
+    group = "compose desktop"
+    description = "Build a portable Linux .AppImage from the jpackage app-image"
+    dependsOn("createDistributable")
+
+    val appImageDir = layout.buildDirectory.dir("compose/binaries/main/appimage")
+    workingDir = project.projectDir
+    commandLine("bash", project.file("appimage/package-appimage.sh").absolutePath)
+    environment("APP_DIR", layout.buildDirectory.dir("compose/binaries/main/app/Skerry").get().asFile.absolutePath)
+    environment("APPIMAGE_DIR", appImageDir.get().asFile.absolutePath)
+    environment("ASSET_DIR", project.file("appimage").absolutePath)
+    environment("ICON_PNG", project.file("icons/skerry.png").absolutePath)
+    environment("VERSION", providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0")
+}
+
 // Offscreen render of the design to PNG (visual check without a window). See design/Screenshot.kt.
 // Parameters: -Dskerry.screenshot.{out,view,overlay,live,device}. device=mobile renders the phone
 // layout (MobileDesignApp); view is then a MobileTab name. Not part of the distribution.
