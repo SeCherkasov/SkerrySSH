@@ -6,6 +6,11 @@ plugins {
     alias(libs.plugins.kotlinxSerialization)
 }
 
+// desktopOnly (see settings.gradle.kts): the Flatpak build excludes :server, so the desktopTest
+// dependency on it must drop out too. Tests never run in that build, so this only affects config.
+val desktopOnly = providers.gradleProperty("desktopOnly").isPresent ||
+    System.getenv("SKERRY_DESKTOP_ONLY") == "1"
+
 kotlin {
     jvmToolchain(21)
 
@@ -108,8 +113,9 @@ kotlin {
                 // SFTP subsystem of the embedded server for SshjSftpClient integration tests
                 implementation(libs.sshd.sftp)
                 // e2e sync: a real self-hosted server is started inside the test, the client talks
-                // to it over real HTTP — proof of the zero-knowledge round-trip.
-                implementation(project(":server"))
+                // to it over real HTTP — proof of the zero-knowledge round-trip. Skipped in the
+                // desktopOnly (Flatpak) build, which excludes :server from the settings graph.
+                if (!desktopOnly) implementation(project(":server"))
                 // The Netty engine + ktor core are needed by the test to start embeddedServer (for :server
                 // these are implementation dependencies and do not reach the test transitively).
                 implementation(libs.ktor.server.core)

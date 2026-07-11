@@ -113,7 +113,13 @@ Desktop:
 ```bash
 ./gradlew :composeApp:run                                # run
 ./gradlew :composeApp:packageDistributionForCurrentOS    # .deb / .rpm / .msi / .dmg
+./gradlew :composeApp:packageAppImage                    # portable Linux .AppImage
+./gradlew :composeApp:packageFlatpak                     # single-file Linux .flatpak (needs flatpak + flatpak-builder)
 ```
+
+The Flatpak is a hermetic source build: `flatpak-builder` compiles the app inside the sandbox
+from the committed offline sources (`composeApp/flatpak/flatpak-sources.json`). Regenerate that
+list with `composeApp/flatpak/regenerate-sources.sh` whenever desktop dependencies change.
 
 ProGuard/minification is intentionally disabled for the desktop release — it broke the crypto
 stack; see the comment in `composeApp/build.gradle.kts`.

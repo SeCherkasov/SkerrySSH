@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Skerry
+GenericName=SSH Client
+Comment=Cross-platform SSH client with a single core
+Exec=skerry
+Icon=app.skerry.Skerry
+Terminal=false
+Categories=Network;RemoteAccess;
+Keywords=SSH;SFTP;Terminal;Remote;
+# jpackage names the native launcher "Skerry"; AWT derives the X11 WM class from it. Matching
+# it here lets the shell associate the running window with this entry (icon + grouping).
+StartupWMClass=Skerry

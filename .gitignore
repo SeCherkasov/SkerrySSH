@@ -35,3 +35,7 @@ keystore.properties
 *.db
 *.db-journal
 .tokensave
+
+# Flatpak build outputs (the committed inputs are the manifest + flatpak-sources.json)
+composeApp/flatpak/.build/
+composeApp/flatpak/*.flatpak

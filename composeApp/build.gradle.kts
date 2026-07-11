@@ -135,6 +135,18 @@ tasks.register<Exec>("packageAppImage") {
     environment("VERSION", providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0")
 }
 
+// Build a single-file Skerry.flatpak via flatpak-builder. Unlike the other packaging tasks this
+// does NOT depend on createDistributable: flatpak-builder compiles the app hermetically inside the
+// sandbox from the committed offline sources (composeApp/flatpak/flatpak-sources.json). The task
+// just shells out to the build script; flatpak + flatpak-builder must be on the runner.
+tasks.register<Exec>("packageFlatpak") {
+    group = "compose desktop"
+    description = "Build a single-file Linux .flatpak bundle (hermetic source build)"
+    workingDir = project.projectDir
+    commandLine("bash", project.file("flatpak/package-flatpak.sh").absolutePath)
+    environment("VERSION", providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0")
+}
+
 // Offscreen render of the design to PNG (visual check without a window). See design/Screenshot.kt.
 // Parameters: -Dskerry.screenshot.{out,view,overlay,live,device}. device=mobile renders the phone
 // layout (MobileDesignApp); view is then a MobileTab name. Not part of the distribution.

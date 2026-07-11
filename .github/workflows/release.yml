@@ -180,11 +180,46 @@ jobs:
           path: androidApp/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
+  linux-flatpak:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install flatpak + flatpak-builder + runtimes
+        # No JDK/Gradle setup: the bundle is built hermetically inside the flatpak sandbox from the
+        # committed offline sources (composeApp/flatpak/flatpak-sources.json), using the openjdk21
+        # SDK extension. Runtimes go into the --user installation (no root needed to install them).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y --user flathub \
+            org.freedesktop.Platform//24.08 \
+            org.freedesktop.Sdk//24.08 \
+            org.freedesktop.Sdk.Extension.openjdk21//24.08
+
+      - name: Set release version in gradle.properties
+        # The sandbox build reads the version from the copied gradle.properties — it can't see the
+        # -P override the other jobs pass. Rewrite it in place when a version is resolved.
+        if: needs.version.outputs.name != ''
+        run: sed -i "s/^skerry.versionName=.*/skerry.versionName=${{ needs.version.outputs.name }}/" gradle.properties
+
+      - name: Build flatpak bundle
+        run: VERSION="${{ needs.version.outputs.name || '0.1.0' }}" bash composeApp/flatpak/package-flatpak.sh
+
+      - name: Upload flatpak bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: skerry-flatpak
+          path: composeApp/flatpak/*.flatpak
+          if-no-files-found: error
+
   # Publish only on tag pushes. Collects every build job's artifact, adds checksums, and
   # creates a DRAFT release for a human to review and publish. Skipped on manual runs
   # (then the artifacts just stay on the run, as before).
   publish:
-    needs: [linux-desktop, windows-desktop, android]
+    needs: [linux-desktop, windows-desktop, android, linux-flatpak]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:

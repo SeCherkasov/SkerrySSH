@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for the Flatpak build. id matches the .desktop basename and the
+     reverse-DNS app-id used throughout (Android applicationId app.skerry). -->
+<component type="desktop-application">
+  <id>app.skerry.Skerry</id>
+
+  <name>Skerry</name>
+  <summary>Cross-platform SSH client with a single core</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <developer id="app.skerry">
+    <name>Sergey Cherkasov</name>
+  </developer>
+
+  <description>
+    <p>
+      Skerry is an open-source SSH client built on a single Kotlin Multiplatform core with
+      a Compose Multiplatform UI, sharing one codebase across Desktop and Android.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>SSH (sshj + BouncyCastle) and SSH certificates</li>
+      <li>SFTP with a dual-pane commander</li>
+      <li>Port forwarding: local (-L), remote (-R), and dynamic/SOCKS (-D)</li>
+      <li>Telnet and serial connections</li>
+      <li>Custom terminal emulation: VT line-drawing, Unicode, SGR, OSC 8/4/52, bracketed paste</li>
+      <li>Session tabs with split view, SSH auto-reconnect, and live host metrics</li>
+      <li>Zero-knowledge vault (XChaCha20-Poly1305): keys, passwords, identities, certificates</li>
+      <li>Optional self-hosted, zero-knowledge sync</li>
+      <li>Optional AI assistant with per-host policies, including a fully local on-device model</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">app.skerry.Skerry.desktop</launchable>
+
+  <url type="homepage">https://github.com/SeCherkasov/Skerry</url>
+  <url type="bugtracker">https://github.com/SeCherkasov/Skerry/issues</url>
+  <url type="vcs-browser">https://github.com/SeCherkasov/Skerry</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Terminal with host manager, session tabs, and live metrics</caption>
+      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-terminal.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Dual-pane SFTP commander</caption>
+      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-sftp.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Port forwarding manager</caption>
+      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-tunnels.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Vault: keys, passwords, certificates</caption>
+      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-vault.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>AI assistant with per-host policies</caption>
+      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-ai.png</image>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>Network</category>
+    <category>RemoteAccess</category>
+  </categories>
+
+  <keywords>
+    <keyword>SSH</keyword>
+    <keyword>SFTP</keyword>
+    <keyword>Terminal</keyword>
+    <keyword>Remote</keyword>
+  </keywords>
+
+  <!-- No sensitive content: an all-none rating advertises that to the shell/store. -->
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0" date="2026-07-11">
+      <description>
+        <p>Pre first release.</p>
+      </description>
+    </release>
+  </releases>
+</component>
