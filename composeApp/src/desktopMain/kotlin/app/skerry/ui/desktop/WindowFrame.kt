@@ -34,12 +34,16 @@ import java.awt.MouseInfo
  */
 @Composable
 fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit): WindowChrome {
+    val awtWindow = window
     return remember(state, exit) {
         val toggleMaximize = {
             state.placement =
                 if (state.placement == WindowPlacement.Maximized) WindowPlacement.Floating
                 else WindowPlacement.Maximized
         }
+        // On X11 the WM moves the window itself (smooth, compositor-driven — see NativeWindowMove);
+        // elsewhere fall back to Compose's frame-by-frame WindowDraggableArea.
+        val useNativeMove = NativeWindowMove.isAvailable()
         WindowChrome(
             isMaximized = { state.placement == WindowPlacement.Maximized },
             onMinimize = { state.isMinimized = true },
@@ -47,13 +51,39 @@ fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit)
             onClose = exit,
             dragArea = { content ->
                 val doubleClick = Modifier.onUnconsumedDoubleClick(toggleMaximize)
-                if (state.placement == WindowPlacement.Maximized) {
-                    Box(doubleClick) { content() }
-                } else {
-                    WindowDraggableArea(doubleClick) { content() }
+                when {
+                    state.placement == WindowPlacement.Maximized -> Box(doubleClick) { content() }
+                    useNativeMove -> Box(doubleClick.then(Modifier.nativeWindowDrag(awtWindow))) { content() }
+                    else -> WindowDraggableArea(doubleClick) { content() }
                 }
             },
         )
+    }
+}
+
+/**
+ * Starts a native WM drag ([NativeWindowMove]) once the pointer moves past touch-slop from the
+ * initial press — the slop threshold keeps clicks on titlebar buttons and the double-click-to-
+ * maximize gesture working, since a plain click never crosses it. Only unconsumed presses arm the
+ * drag, so buttons/tabs that consume their own press are excluded. Once handed off, the compositor
+ * owns the pointer and this gesture simply ends.
+ */
+private fun Modifier.nativeWindowDrag(window: java.awt.Window): Modifier = pointerInput(window) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = true)
+        val slop = viewConfiguration.touchSlop
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull() ?: break
+            if (!change.pressed) break // released without dragging — leave it for click/double-click
+            if ((change.position - down.position).getDistance() > slop) {
+                val mouse = MouseInfo.getPointerInfo()?.location
+                if (mouse != null && NativeWindowMove.startMove(window, mouse.x, mouse.y)) {
+                    change.consume()
+                }
+                break
+            }
+        }
     }
 }
 

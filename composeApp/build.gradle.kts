@@ -62,6 +62,10 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.swing)
                 // ZXing generates the QR matrix of the pairing code (desktop shows a QR for the phone to scan).
                 implementation(libs.zxing.core)
+                // Linux/X11 native window drag (_NET_WM_MOVERESIZE) for the undecorated window's
+                // custom titlebar — hands the move to the compositor so it stays smooth. jna core
+                // is already present transitively; jna-platform adds the X11 bindings.
+                implementation(libs.jna.platform)
             }
         }
     }

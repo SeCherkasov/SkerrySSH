@@ -63,6 +63,9 @@ camerax = "1.4.1"
 llamatik = "1.8.1"
 # ML Kit barcode-scanning — QR recognition in the camera frame (Android, on-device, no network)
 mlkit-barcode = "17.3.0"
+# JNA platform bindings — desktop-only; used for the Linux/X11 _NET_WM_MOVERESIZE native window drag
+# (the JNA core is already on the classpath transitively via the libsodium binding).
+jna = "5.18.1"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
@@ -122,6 +125,7 @@ androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.r
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkit-barcode" }
+jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 llamatik = { module = "com.llamatik:library", version.ref = "llamatik" }
 
 [plugins]
