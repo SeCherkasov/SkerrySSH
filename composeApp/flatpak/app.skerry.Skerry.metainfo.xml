@@ -35,30 +35,30 @@
 
   <launchable type="desktop-id">app.skerry.Skerry.desktop</launchable>
 
-  <url type="homepage">https://github.com/SeCherkasov/Skerry</url>
-  <url type="bugtracker">https://github.com/SeCherkasov/Skerry/issues</url>
-  <url type="vcs-browser">https://github.com/SeCherkasov/Skerry</url>
+  <url type="homepage">https://github.com/SeCherkasov/SkerrySSH</url>
+  <url type="bugtracker">https://github.com/SeCherkasov/SkerrySSH/issues</url>
+  <url type="vcs-browser">https://github.com/SeCherkasov/SkerrySSH</url>
 
   <screenshots>
     <screenshot type="default">
       <caption>Terminal with host manager, session tabs, and live metrics</caption>
-      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-terminal.png</image>
+      <image>https://raw.githubusercontent.com/SeCherkasov/SkerrySSH/main/docs/screenshots/desktop-terminal.png</image>
     </screenshot>
     <screenshot>
       <caption>Dual-pane SFTP commander</caption>
-      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-sftp.png</image>
+      <image>https://raw.githubusercontent.com/SeCherkasov/SkerrySSH/main/docs/screenshots/desktop-sftp.png</image>
     </screenshot>
     <screenshot>
       <caption>Port forwarding manager</caption>
-      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-tunnels.png</image>
+      <image>https://raw.githubusercontent.com/SeCherkasov/SkerrySSH/main/docs/screenshots/desktop-tunnels.png</image>
     </screenshot>
     <screenshot>
       <caption>Vault: keys, passwords, certificates</caption>
-      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-vault.png</image>
+      <image>https://raw.githubusercontent.com/SeCherkasov/SkerrySSH/main/docs/screenshots/desktop-vault.png</image>
     </screenshot>
     <screenshot>
       <caption>AI assistant with per-host policies</caption>
-      <image>https://raw.githubusercontent.com/SeCherkasov/Skerry/main/docs/screenshots/desktop-ai.png</image>
+      <image>https://raw.githubusercontent.com/SeCherkasov/SkerrySSH/main/docs/screenshots/desktop-ai.png</image>
     </screenshot>
   </screenshots>
 

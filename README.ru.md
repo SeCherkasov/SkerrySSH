@@ -2,7 +2,7 @@
 
 [English](README.md) · **Русский**
 
-[![CI](https://github.com/SeCherkasov/Skerry/actions/workflows/ci.yml/badge.svg)](https://github.com/SeCherkasov/Skerry/actions/workflows/ci.yml)
+[![CI](https://github.com/SeCherkasov/SkerrySSH/actions/workflows/ci.yml/badge.svg)](https://github.com/SeCherkasov/SkerrySSH/actions/workflows/ci.yml)
 [![Клиенты: GPL-3.0](https://img.shields.io/badge/clients-GPL--3.0-blue)](LICENSE)
 [![Сервер: AGPL-3.0](https://img.shields.io/badge/server-AGPL--3.0-blue)](server/LICENSE)
 
