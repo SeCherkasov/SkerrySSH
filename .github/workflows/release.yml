@@ -49,10 +49,10 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -62,7 +62,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm fakeroot
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Package deb + rpm
         run: >
@@ -70,7 +70,7 @@ jobs:
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
       - name: Upload Linux distributables
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: skerry-linux
           path: |
@@ -82,10 +82,10 @@ jobs:
     needs: version
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -96,7 +96,7 @@ jobs:
         run: choco install wixtoolset -y --no-progress
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Package msi
         shell: bash
@@ -105,7 +105,7 @@ jobs:
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
       - name: Upload Windows distributable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: skerry-windows
           path: composeApp/build/compose/binaries/main/msi/*.msi
@@ -121,16 +121,16 @@ jobs:
       SKERRY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       SKERRY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android SDK packages
         run: |
@@ -145,7 +145,7 @@ jobs:
           echo "SKERRY_KEYSTORE_FILE=$RUNNER_TEMP/skerry-release.jks" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Assemble release APK
         # versionCode must be a monotonic integer; the tag's semver can't map to one, so use
@@ -156,7 +156,7 @@ jobs:
           -Pskerry.versionCode=${{ inputs.versionCode || github.run_number }}
 
       - name: Upload Android APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: skerry-android
           path: androidApp/build/outputs/apk/release/*.apk
@@ -173,7 +173,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
