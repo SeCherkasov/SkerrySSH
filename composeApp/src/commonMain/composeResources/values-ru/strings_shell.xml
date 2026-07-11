@@ -23,6 +23,7 @@
     <string name="shell_password_strength_good">Хороший</string>
     <string name="shell_password_strength_strong">Надёжный</string>
     <string name="shell_password_min_length">Нужно не меньше %1$d символов, чтобы создать vault</string>
+    <string name="shell_password_blank">Пароль не может состоять из одних пробелов</string>
 
     <string name="shell_quick_unlock_title">Быстрая разблокировка</string>
     <string name="shell_quick_unlock_subtitle">Открывайте Skerry по отпечатку вместо мастер-пароля.</string>

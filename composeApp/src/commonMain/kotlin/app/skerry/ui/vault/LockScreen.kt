@@ -41,7 +41,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.sync.SyncCoordinator
-import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
 import app.skerry.ui.vault.RESET_CONFIRM_WORD
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGateError
@@ -75,7 +74,6 @@ import app.skerry.ui.generated.resources.shell_password_strength_weak
 import app.skerry.ui.generated.resources.shell_password_strength_fair
 import app.skerry.ui.generated.resources.shell_password_strength_good
 import app.skerry.ui.generated.resources.shell_password_strength_strong
-import app.skerry.ui.generated.resources.shell_password_min_length
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.BrandMark
 import app.skerry.ui.design.D
@@ -265,10 +263,9 @@ fun DesktopCreateScreen(
     // acknowledgement before creation so "no recovery" isn't missed as fine print.
     var acknowledged by remember { mutableStateOf(false) }
     var joining by remember { mutableStateOf(false) }
-    // "Not Weak" == long enough: passwordStrength() keys Weak to MIN_MASTER_PASSWORD_LENGTH.
     val strength = passwordStrength(pwd)
-    val strongEnough = strength != null && strength >= PasswordStrength.Fair
-    val canCreate = strongEnough && confirm.isNotEmpty() && acknowledged
+    val issue = masterPasswordIssue(pwd)
+    val canCreate = pwd.isNotEmpty() && issue == null && confirm.isNotEmpty() && acknowledged
     val submit = { if (canCreate) onCreate(pwd.toCharArray(), confirm.toCharArray()) }
 
     if (joining && sync != null && onPairingComplete != null) {
@@ -283,12 +280,7 @@ fun DesktopCreateScreen(
     ) {
         LockPasswordField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Next, autoFocus = true)
         strength?.let { PasswordStrengthMeter(it) }
-        if (strength != null && !strongEnough) {
-            Txt(
-                stringResource(Res.string.shell_password_min_length, MIN_MASTER_PASSWORD_LENGTH),
-                color = D.amber, size = 11.sp,
-            )
-        }
+        issue?.let { Txt(masterPasswordHint(it), color = D.amber, size = 11.sp) }
         LockPasswordField(confirm, { confirm = it }, stringResource(Res.string.shell_repeat_password), ImeAction.Done, onSubmit = submit)
         NoRecoveryAcknowledge(acknowledged) { acknowledged = !acknowledged }
         PrimaryButton(

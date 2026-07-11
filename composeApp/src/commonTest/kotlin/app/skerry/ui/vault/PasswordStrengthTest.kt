@@ -48,4 +48,31 @@ class PasswordStrengthTest {
     fun long_diverse_password_is_strong() {
         assertEquals(PasswordStrength.Strong, passwordStrength("P@ssw0rd!Harbor7"))
     }
+
+    // masterPasswordIssue: the shared create-screen gate and its hint reason.
+
+    @Test
+    fun empty_password_has_no_issue_yet() {
+        // Nothing typed is not an error: the hint stays hidden until the user starts typing.
+        assertNull(masterPasswordIssue(""))
+    }
+
+    @Test
+    fun short_password_reports_too_short() {
+        assertEquals(MasterPasswordIssue.TooShort, masterPasswordIssue("aB1!aB1!abc"))
+    }
+
+    @Test
+    fun blank_password_reports_blank_even_when_long_enough() {
+        // 12+ spaces satisfies the length rule, so a "use at least N characters" hint would be
+        // wrong and unfixable by adding more spaces; the reason must be Blank.
+        assertEquals(MasterPasswordIssue.Blank, masterPasswordIssue("            "))
+        assertEquals(MasterPasswordIssue.Blank, masterPasswordIssue("      "))
+    }
+
+    @Test
+    fun acceptable_password_has_no_issue() {
+        assertNull(masterPasswordIssue("aaaaaaaaaaaa"))
+        assertNull(masterPasswordIssue("correct horse battery")) // inner spaces are fine
+    }
 }
