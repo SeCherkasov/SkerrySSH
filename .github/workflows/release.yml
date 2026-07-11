@@ -173,11 +173,21 @@ jobs:
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
           -Pskerry.versionCode=${{ inputs.versionCode || github.run_number }}
 
+      - name: Rename APK to match the other artifacts
+        # jpackage names the desktop packages skerry_<version>… but AGP emits
+        # androidApp-release.apk. Rename it so every release asset shares one scheme.
+        # On a manual run without a version, fall back to the gradle.properties default.
+        run: |
+          version="${{ needs.version.outputs.name }}"
+          [ -z "$version" ] && version="$(sed -n 's/^skerry.versionName=//p' gradle.properties)"
+          mv androidApp/build/outputs/apk/release/*.apk \
+             "androidApp/build/outputs/apk/release/skerry_${version}.apk"
+
       - name: Upload Android APK
         uses: actions/upload-artifact@v7
         with:
           name: skerry-android
-          path: androidApp/build/outputs/apk/release/*.apk
+          path: androidApp/build/outputs/apk/release/skerry_*.apk
           if-no-files-found: error
 
   linux-flatpak:
