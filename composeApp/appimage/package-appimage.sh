@@ -19,11 +19,15 @@ set -euo pipefail
 VERSION="${VERSION:-0.0.0}"
 
 APPDIR="$APPIMAGE_DIR/Skerry.AppDir"
-OUTPUT="$APPIMAGE_DIR/Skerry-${VERSION}-x86_64.AppImage"
+
+# The jpackage app-image matches the build host, so the AppImage arch follows uname -m
+# (x86_64 or aarch64 — the names appimagetool and the AppImage spec use).
+ARCH="$(uname -m)"
+OUTPUT="$APPIMAGE_DIR/Skerry-${VERSION}-${ARCH}.AppImage"
 
 # appimagetool releases pin a runtime built for the oldest still-supported glibc, so the
 # resulting AppImage runs across distributions — the whole point of the format.
-APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${ARCH}.AppImage"
 
 echo "==> Assembling AppDir at $APPDIR"
 rm -rf "$APPDIR"
@@ -55,6 +59,6 @@ echo "==> Building $OUTPUT"
 mkdir -p "$APPIMAGE_DIR"
 # ARCH is required by appimagetool; APPIMAGE_EXTRACT_AND_RUN lets both appimagetool and its
 # bundled mksquashfs run in containers without FUSE (CI has no /dev/fuse).
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" "$APPDIR" "$OUTPUT"
+ARCH="$ARCH" APPIMAGE_EXTRACT_AND_RUN=1 "$tool" "$APPDIR" "$OUTPUT"
 
 echo "==> Done: $OUTPUT"

@@ -1,7 +1,7 @@
 name: Release build
 
 # Two modes:
-#   • Manual (workflow_dispatch): builds the 4 distributables and uploads them as run
+#   • Manual (workflow_dispatch): builds all distributables and uploads them as run
 #     artifacts only — publishes NOTHING, exactly as before.
 #   • Tag push (v*): builds with the version taken from the tag, then publishes a DRAFT
 #     GitHub Release with the packages + SHA256SUMS attached. A human reviews the draft
@@ -47,7 +47,14 @@ jobs:
 
   linux-desktop:
     needs: version
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
 
@@ -74,7 +81,7 @@ jobs:
         # here rather than hidden in the build script's fallback path.
         run: |
           curl -fsSL -o "$RUNNER_TEMP/appimagetool" \
-            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.arch }}.AppImage"
           chmod +x "$RUNNER_TEMP/appimagetool"
           echo "APPIMAGETOOL=$RUNNER_TEMP/appimagetool" >> "$GITHUB_ENV"
 
@@ -87,9 +94,11 @@ jobs:
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
       - name: Upload Linux distributables
+        # deb/rpm/AppImage names already carry the arch (amd64/arm64, x86_64/aarch64),
+        # so the two matrix legs can't collide in the release.
         uses: actions/upload-artifact@v7
         with:
-          name: skerry-linux
+          name: skerry-linux-${{ matrix.arch }}
           path: |
             composeApp/build/compose/binaries/main/deb/*.deb
             composeApp/build/compose/binaries/main/rpm/*.rpm
@@ -127,6 +136,49 @@ jobs:
         with:
           name: skerry-windows
           path: composeApp/build/compose/binaries/main/msi/*.msi
+          if-no-files-found: error
+
+  macos-desktop:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest    # Apple Silicon
+            arch: arm64
+          - runner: macos-15-intel  # last Intel runner; free for public repos until ~Dec 2027
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Package dmg
+        # Unsigned/un-notarized on purpose (no Apple Developer account yet) — Gatekeeper
+        # will require a manual allow in System Settings on first launch.
+        run: >
+          ./gradlew :composeApp:packageDmg --stacktrace
+          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
+
+      - name: Suffix dmg with the architecture
+        # Both matrix legs emit Skerry-<version>.dmg; disambiguate before the release
+        # step flattens everything into one directory.
+        run: |
+          cd composeApp/build/compose/binaries/main/dmg
+          for f in *.dmg; do mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg"; done
+
+      - name: Upload macOS distributable
+        uses: actions/upload-artifact@v7
+        with:
+          name: skerry-macos-${{ matrix.arch }}
+          path: composeApp/build/compose/binaries/main/dmg/*.dmg
           if-no-files-found: error
 
   android:
@@ -229,7 +281,7 @@ jobs:
   # creates a DRAFT release for a human to review and publish. Skipped on manual runs
   # (then the artifacts just stay on the run, as before).
   publish:
-    needs: [linux-desktop, windows-desktop, android, linux-flatpak]
+    needs: [linux-desktop, windows-desktop, macos-desktop, android, linux-flatpak]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
