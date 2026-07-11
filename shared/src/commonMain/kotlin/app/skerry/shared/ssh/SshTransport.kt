@@ -21,12 +21,33 @@ interface SshTransport {
  * used ([username]/auth ignored); for [ConnectionType.SERIAL] [host] carries the device name
  * (`/dev/ttyUSB0`, `COM3`) and [port] the baud rate. Default [ConnectionType.SSH] preserves the
  * behavior of prior call sites that built a target without specifying a type.
+ *
+ * [jump] is an optional ProxyJump hop: the transport first connects (and authenticates) to the
+ * hop, then reaches this target through a direct-tcpip channel over it. SSH-only; `null` means a
+ * direct connection. Carried inside the target so the whole session/reconnect/tunnel stack routes
+ * through the jump without extra plumbing (the controller drops the target together with the auth,
+ * so the hop's secret doesn't outlive the session's own).
  */
 data class SshTarget(
     val host: String,
     val port: Int = 22,
     val username: String,
     val connectionType: ConnectionType = ConnectionType.SSH,
+    val jump: SshJump? = null,
+)
+
+/**
+ * One resolved ProxyJump hop: where to connect, as whom, and with which secret. [jump] is the next
+ * hop *before* this one (multi-hop chain, resolved outermost-first like OpenSSH `-J a,b`): to reach
+ * the target through `b` which is itself behind `a`, the target's hop is `b` with `b.jump = a`.
+ * Host key verification runs for every hop under its own (host, port).
+ */
+data class SshJump(
+    val host: String,
+    val port: Int = 22,
+    val username: String,
+    val auth: SshAuth,
+    val jump: SshJump? = null,
 )
 
 sealed interface SshAuth {

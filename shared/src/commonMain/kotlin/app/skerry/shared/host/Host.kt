@@ -33,6 +33,12 @@ import kotlinx.serialization.Serializable
  * [ConnectionType.TELNET] only [address]/[port] matter (no auth/secret). For [ConnectionType.SERIAL]
  * [address] holds the device name (e.g. `/dev/ttyUSB0`, `COM3`) and [port] holds the baud rate;
  * [username]/[credentialId] are unused.
+ *
+ * [jumpHostId] is an optional ProxyJump reference to another saved SSH profile: the connection is
+ * tunneled through that host (which may itself have a jump — a multi-hop chain). SSH-only; stored
+ * by id (like [credentialId]) so renaming/re-addressing the jump host doesn't break the link. The
+ * chain is resolved at connect time (`resolveJumpChain` in the UI layer): a dangling id, a non-SSH
+ * jump, a secretless jump or a cycle fails the connect rather than silently going direct.
  */
 @Serializable
 data class Host(
@@ -47,4 +53,5 @@ data class Host(
     val tags: List<String> = emptyList(),
     val aiPolicy: AiPolicy = AiPolicy.Strict,
     val connectionType: ConnectionType = ConnectionType.SSH,
+    val jumpHostId: String? = null,
 )

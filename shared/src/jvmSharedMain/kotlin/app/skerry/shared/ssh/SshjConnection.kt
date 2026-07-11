@@ -17,11 +17,16 @@ import net.schmizz.sshj.connection.ConnectionException
 import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
 import net.schmizz.sshj.transport.TransportException
 
-/** Live sshj connection: exec/shell/SFTP/forwards over one authenticated client. */
+/**
+ * Live sshj connection: exec/shell/SFTP/forwards over one authenticated client. [upstream] holds
+ * the ProxyJump hop clients this connection is tunneled through (entry point first, empty for a
+ * direct connection); they only live to carry [client]'s traffic and are closed with it.
+ */
 internal class SshjConnection(
     private val client: SSHClient,
     override val cipher: String?,
     override val serverVersion: String?,
+    private val upstream: List<SSHClient> = emptyList(),
 ) : SshConnection {
 
     override val isConnected: Boolean
@@ -147,6 +152,13 @@ internal class SshjConnection(
         withContext(Dispatchers.IO) {
             withTimeoutOrNull(DISCONNECT_TIMEOUT_MILLIS) { runInterruptible { client.disconnect() } }
                 ?: runCatching { client.close() }
+            // ProxyJump hops die with the session: closing the target client only closes its
+            // direct-tcpip channel — each hop's own transport must be shut down too. Reverse
+            // (innermost-first) order, same hang guard per hop.
+            upstream.asReversed().forEach { hopClient ->
+                withTimeoutOrNull(DISCONNECT_TIMEOUT_MILLIS) { runInterruptible { hopClient.disconnect() } }
+                    ?: runCatching { hopClient.close() }
+            }
             Unit
         }
     }

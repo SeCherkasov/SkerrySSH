@@ -69,6 +69,23 @@ class NewConnectionFormStateTest {
         assertNull(f.toDraft().credentialId)
     }
 
+    @Test
+    fun toDraft_carries_jump_host_and_fromHost_prefills_it() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u"; jumpHostId = "bastion-1" }
+        assertEquals("bastion-1", f.toDraft().jumpHostId)
+        assertNull(NewConnectionFormState().toDraft().jumpHostId)
+
+        val host = Host(id = "h1", label = "Web", address = "web", username = "root", jumpHostId = "bastion-1")
+        assertEquals("bastion-1", NewConnectionFormState.fromHost(host).jumpHostId)
+    }
+
+    @Test
+    fun switching_away_from_ssh_drops_the_jump_host() {
+        val f = NewConnectionFormState().apply { jumpHostId = "bastion-1" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.TELNET)
+        assertNull(f.jumpHostId)
+    }
+
     // Authentication
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }

@@ -25,6 +25,7 @@ data class HostDraft(
     val tags: List<String> = emptyList(),
     val aiPolicy: AiPolicy = AiPolicy.Strict,
     val connectionType: ConnectionType = ConnectionType.SSH,
+    val jumpHostId: String? = null,
 )
 
 /**
@@ -73,6 +74,7 @@ class HostManagerController(
                 tags = draft.tags,
                 aiPolicy = draft.aiPolicy,
                 connectionType = draft.connectionType,
+                jumpHostId = draft.jumpHostId,
             ),
         )
         hosts = store.all()

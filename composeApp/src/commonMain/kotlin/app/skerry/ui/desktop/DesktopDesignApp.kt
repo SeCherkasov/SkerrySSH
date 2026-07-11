@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
@@ -72,6 +73,11 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.connection.JumpChainProblem
+import app.skerry.ui.connection.JumpChainResolution
+import app.skerry.ui.connection.JumpErrorDialog
+import app.skerry.ui.connection.jumpRouteLabel
+import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
@@ -470,14 +476,26 @@ private fun DesktopChrome(
     // in the wrong place) / snippet's "Run on host" (also remembers the command).
     var pendingAuth by remember { mutableStateOf<PendingAuth?>(null) }
 
+    // ProxyJump chain resolution failed for the clicked host — connecting would either dial
+    // forever or silently go direct, so a notice is shown instead ([JumpErrorDialog]).
+    var jumpProblem by remember { mutableStateOf<JumpChainProblem?>(null) }
+    val hostManager = LocalHosts.current
+
     // Single connect dispatcher with resolved auth already in hand: where the session goes is decided
-    // by [PendingAuth]'s type.
+    // by [PendingAuth]'s type. The ProxyJump chain is resolved here — right before the session
+    // opens — so a password prompt in between can't act on a stale chain.
     fun openResolved(target: PendingAuth, auth: SshAuth) {
+        val jump = when (
+            val chain = resolveJumpChain(target.host, { id -> hostManager?.find(id) }, { id -> credentials?.find(id) })
+        ) {
+            is JumpChainResolution.Unavailable -> { jumpProblem = chain.problem; return }
+            is JumpChainResolution.Resolved -> chain.jump
+        }
         when (target) {
-            is PendingAuth.NewTab -> openHostSession(sessions, state, target.host, auth)
-            is PendingAuth.Split -> openSplitSession(sessions, state, target.parentId, target.host, auth)
+            is PendingAuth.NewTab -> openHostSession(sessions, state, target.host, auth, jump)
+            is PendingAuth.Split -> openSplitSession(sessions, state, target.parentId, target.host, auth, jump)
             is PendingAuth.Snippet ->
-                openHostSession(sessions, state, target.host, auth) { it.send(target.command + "\n") }
+                openHostSession(sessions, state, target.host, auth, jump) { it.send(target.command + "\n") }
         }
     }
 
@@ -492,17 +510,17 @@ private fun DesktopChrome(
 
     // Stable connect lambdas: without remember they'd be recreated on every recomposition and,
     // flowing into a staticCompositionLocalOf, would invalidate all consumers of [LocalConnectHost] etc.
-    val connectHost = remember(sessions, credentials, state) {
+    val connectHost = remember(sessions, credentials, hostManager, state) {
         { host: Host -> connectOrAsk(PendingAuth.NewTab(host)) }
     }
 
     // Snippet's "Run on host": open a session to the host and run the command once connected.
-    val runSnippetOnHost = remember(sessions, credentials, state) {
+    val runSnippetOnHost = remember(sessions, credentials, hostManager, state) {
         { host: Host, command: String -> connectOrAsk(PendingAuth.Snippet(host, command)) }
     }
 
     // Same resolution, but into the active tab's split pane (a new independent secondary session).
-    val connectSplitHost = remember(sessions, credentials, state) {
+    val connectSplitHost = remember(sessions, credentials, hostManager, state) {
         { host: Host -> connectOrAsk(PendingAuth.Split(host, sessions?.activeId)) }
     }
 
@@ -599,6 +617,11 @@ private fun DesktopChrome(
                         openResolved(pending, SshAuth.Password(pw))
                     },
                 )
+            }
+            // Broken ProxyJump chain for the clicked host: explain instead of connecting (never
+            // silently direct). Set by openResolved for all three connect paths.
+            jumpProblem?.let { problem ->
+                JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
             }
             // Delete-host-profile confirmation (invoked from the sidebar's context menu). The keychain
             // secret itself stays in the vault (reusable, managed from the Vault tab).
@@ -759,12 +782,14 @@ internal fun cycleTab(delta: Int, state: DesktopDesignState, sessions: SessionsC
 /**
  * Connect to [host] with [auth]: if an empty ("+") tab is active — connect into it, otherwise a new
  * tab ([SessionsController.connect]). Then switch to the terminal (clearing the app overlay).
+ * [jump] is the host's resolved ProxyJump chain (`null` — direct).
  */
 private fun openHostSession(
     sessions: SessionsController?,
     state: DesktopDesignState,
     host: Host,
     auth: SshAuth,
+    jump: SshJump? = null,
     onConnected: ((app.skerry.ui.terminal.TerminalScreenState) -> Unit)? = null,
 ) {
     // Record the host in the sidebar's RECENT section (newest first, survives restart).
@@ -773,7 +798,7 @@ private fun openHostSession(
         hostId = host.id,
         title = host.label,
         subtitle = host.connectionSubtitle(),
-        target = host.toTarget(),
+        target = host.toTarget(jump),
         auth = auth,
         onConnected = onConnected,
     )
@@ -786,7 +811,7 @@ private fun openHostSession(
  * Connect [host] with [auth] into the active tab's split pane (a new independent secondary session).
  * No-op with no active tab. See [SessionsController.connectSplit].
  */
-private fun openSplitSession(sessions: SessionsController?, state: DesktopDesignState, parentId: String?, host: Host, auth: SshAuth) {
+private fun openSplitSession(sessions: SessionsController?, state: DesktopDesignState, parentId: String?, host: Host, auth: SshAuth, jump: SshJump? = null) {
     if (sessions == null || parentId == null) return
     // Connecting into the secondary pane is also a real connect to the host — record it in RECENT too.
     state.recordRecentHost(host.id)
@@ -795,7 +820,7 @@ private fun openSplitSession(sessions: SessionsController?, state: DesktopDesign
         hostId = host.id,
         title = host.label,
         subtitle = host.connectionSubtitle(),
-        target = host.toTarget(),
+        target = host.toTarget(jump),
         auth = auth,
     )
 }
@@ -1108,6 +1133,13 @@ private fun StatusBar() {
     // Grid size — live cols×rows of the active terminal; off-connection the mock label remains.
     val gridLabel = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)
         ?.terminal?.let { "${it.cols} × ${it.rows}" } ?: "80 × 24"
+    // ProxyJump route of the active session's profile ("outer → inner", entry hop first) — the
+    // at-a-glance "this session rides through a bastion" marker. Hidden for direct connections
+    // and in mock mode, so the prototype's bar is unchanged.
+    val statusHosts = LocalHosts.current
+    val jumpRoute = if (live) {
+        active?.hostId?.let { id -> statusHosts?.find(id) }?.let { h -> jumpRouteLabel(h) { statusHosts?.find(it) } }
+    } else null
     Row(
         Modifier
             .fillMaxWidth()
@@ -1119,6 +1151,8 @@ private fun StatusBar() {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
+            // Jump route right next to the connection status, cyan so it reads at a glance.
+            if (jumpRoute != null) StatusItem("alt_route", jumpRoute, color = D.cyan, mono = mono)
             // Live RTT ping of the active session (before the first sample — "—"); mock mode — template label.
             StatusItem("network_ping", if (live) (rttMs?.let { "$it ms" } ?: "—") else "42 ms", mono = mono)
             // Live channel throughput (before connect — "—"); mock mode (offscreen) — template labels.

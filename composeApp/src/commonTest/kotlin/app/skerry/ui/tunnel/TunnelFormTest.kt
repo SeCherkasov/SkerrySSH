@@ -94,4 +94,31 @@ class TunnelFormTest {
         )
         assertEquals("No saved credential", r.reason)
     }
+
+    @Test
+    fun `resolve routes the tunnel through the host's jump chain`() {
+        val bastion = Host("j1", "bastion", "bastion.example.com", 22, "gate", credentialId = "c2")
+        val jumped = host.copy(jumpHostId = "j1")
+        val hosts = mapOf("h1" to jumped, "j1" to bastion)
+        val creds = mapOf(
+            "c1" to credential,
+            "c2" to Credential("c2", "gate@bastion", CredentialSecret.Password("jump-pw")),
+        )
+        val r = assertIs<TunnelResolution.Ready>(
+            resolveTunnel(tunnel, findHost = { hosts[it] }, findCredential = { creds[it] }),
+        )
+        assertEquals("bastion.example.com", r.target.jump?.host)
+        assertEquals("gate", r.target.jump?.username)
+    }
+
+    @Test
+    fun `resolve reports a broken jump chain`() {
+        val bastion = Host("j1", "bastion", "bastion.example.com", 22, "gate", credentialId = null)
+        val jumped = host.copy(jumpHostId = "j1")
+        val hosts = mapOf("h1" to jumped, "j1" to bastion)
+        val r = assertIs<TunnelResolution.Unavailable>(
+            resolveTunnel(tunnel, findHost = { hosts[it] }, findCredential = { if (it == "c1") credential else null }),
+        )
+        assertEquals("Jump host has no saved credential", r.reason)
+    }
 }

@@ -24,13 +24,18 @@ import androidx.compose.ui.platform.LocalDensity
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.ai.AiSettingsStore
 import app.skerry.ui.ai.aiProviderFactory
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.JumpChainProblem
+import app.skerry.ui.connection.JumpChainResolution
+import app.skerry.ui.connection.JumpErrorDialog
 import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.identity.CredentialManagerController
@@ -278,12 +283,17 @@ private fun MobileChrome(
     // host, remember the destination (terminal/files) so entering the password navigates there.
     var pending by remember { mutableStateOf<PendingConnect?>(null) }
 
+    // ProxyJump chain resolution failed for the tapped host — show a notice instead of connecting
+    // (never silently direct). Desktop parity ([JumpErrorDialog]).
+    var jumpProblem by remember { mutableStateOf<JumpChainProblem?>(null) }
+    val hostManager = LocalHosts.current
+
     // Stable connect lambda (without remember it would be recreated and invalidate consumers of
     // [LocalConnectHost]/[LocalOpenSftp]). Reuse the host's live session; a dead/missing one is
     // reopened ([mobileConnectAction]): one session at a time on the phone, no accumulating sockets.
     // [dest] is where to go after connecting: Connect → terminal, SFTP → Files tab (same path,
     // including the password prompt, diverging only in the final navigation [navigateAfterConnect]).
-    val connect = remember(sessions, credentials, state) {
+    val connect = remember(sessions, credentials, hostManager, state) {
         { host: Host, dest: MobileConnectDest ->
             val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
             when (mobileConnectAction(existing?.controller?.uiState)) {
@@ -293,15 +303,22 @@ private fun MobileChrome(
                 }
                 MobileConnectAction.OpenFresh -> {
                     existing?.let { sessions.close(it.id) }
-                    // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
-                    val credential = credentials?.find(host.credentialId)
-                    when {
-                        // Telnet/Serial have no auth — connect immediately, no password prompt.
-                        host.connectionType != ConnectionType.SSH ->
-                            openMobileSession(sessions, state, host, SshAuth.Password(""), dest)
-                        credential != null ->
-                            openMobileSession(sessions, state, host, credential.toSshAuth(), dest)
-                        else -> pending = PendingConnect(host, dest)
+                    // ProxyJump chain first — resolved before the password prompt so a broken
+                    // chain surfaces immediately, not after the user typed a password.
+                    when (val chain = resolveJumpChain(host, { id -> hostManager?.find(id) }, { id -> credentials?.find(id) })) {
+                        is JumpChainResolution.Unavailable -> jumpProblem = chain.problem
+                        is JumpChainResolution.Resolved -> {
+                            // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
+                            val credential = credentials?.find(host.credentialId)
+                            when {
+                                // Telnet/Serial have no auth — connect immediately, no password prompt.
+                                host.connectionType != ConnectionType.SSH ->
+                                    openMobileSession(sessions, state, host, SshAuth.Password(""), chain.jump, dest)
+                                credential != null ->
+                                    openMobileSession(sessions, state, host, credential.toSshAuth(), chain.jump, dest)
+                                else -> pending = PendingConnect(host, dest, chain.jump)
+                            }
+                        }
                     }
                 }
             }
@@ -372,33 +389,41 @@ private fun MobileChrome(
                     },
                 )
             }
-            pending?.let { (host, dest) ->
+            pending?.let { (host, dest, jump) ->
                 MobilePasswordSheet(
                     host = host,
                     onDismiss = { pending = null },
-                    onConnect = { pw -> pending = null; openMobileSession(sessions, state, host, SshAuth.Password(pw), dest) },
+                    onConnect = { pw -> pending = null; openMobileSession(sessions, state, host, SshAuth.Password(pw), jump, dest) },
                 )
+            }
+            // Broken ProxyJump chain for the tapped host: explain instead of connecting.
+            jumpProblem?.let { problem ->
+                JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
             }
         }
     }
 }
 
-/** Host waiting for a password, with the destination after connecting (terminal/files). */
-private data class PendingConnect(val host: Host, val dest: MobileConnectDest)
+/**
+ * Host waiting for a password, with the destination after connecting (terminal/files) and the
+ * ProxyJump chain already resolved at tap time (a broken one never reaches the prompt).
+ */
+private data class PendingConnect(val host: Host, val dest: MobileConnectDest, val jump: SshJump? = null)
 
-/** Open a session to [host] with [auth] and navigate to the destination ([dest]): terminal or the Files push screen. */
+/** Open a session to [host] with [auth] (via the resolved [jump] chain, `null` — direct) and navigate to [dest]. */
 private fun openMobileSession(
     sessions: SessionsController?,
     state: MobileDesignState,
     host: Host,
     auth: SshAuth,
+    jump: SshJump?,
     dest: MobileConnectDest,
 ) {
     sessions?.open(
         hostId = host.id,
         title = host.label,
         subtitle = host.connectionSubtitle(),
-        target = host.toTarget(),
+        target = host.toTarget(jump),
         auth = auth,
     )
     navigateAfterConnect(state, dest)

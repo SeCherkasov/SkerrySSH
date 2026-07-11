@@ -55,7 +55,12 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.ui.connection.ConnectionTestController
 import app.skerry.ui.connection.ConnectionTestStatus
+import app.skerry.ui.connection.JumpChainResolution
+import app.skerry.ui.connection.jumpHostCandidates
+import app.skerry.ui.connection.jumpProblemText
+import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.connection.toSshAuth
+import app.skerry.ui.design.DropdownField
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.generated.resources.Res
@@ -172,9 +177,17 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
     val canTest = tester != null && form.connectionType == ConnectionType.SSH && hasTestSecret &&
         form.address.isNotBlank() && form.username.isNotBlank() && form.portOrNull != null
     // Editing connection/auth fields invalidates the previous test result, it's no longer relevant.
-    LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase) {
+    LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase, form.jumpHostId) {
         tester?.reset()
     }
+    // ProxyJump chain for "Test connection" — the probe must ride the same route as a real session,
+    // so a broken chain fails the test with the same localized message as the connect dialogs.
+    val testJump = resolveJumpChain(
+        form.jumpHostId, editHost?.id,
+        findHost = { id -> allHosts.firstOrNull { it.id == id } },
+        findCredential = { id -> credentials?.find(id) },
+    )
+    val jumpErrorText = (testJump as? JumpChainResolution.Unavailable)?.let { jumpProblemText(it.problem) }
     ModalScrim(onDismiss = state::closeModal) {
         Column(
             Modifier
@@ -232,7 +245,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 if (form.connectionType == ConnectionType.SSH) {
                     Spacer14()
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Field(stringResource(Res.string.conn_field_jump_host), Modifier.weight(1f)) { ModalSelect(stringResource(Res.string.conn_jump_none)) }
+                        Field(stringResource(Res.string.conn_field_jump_host), Modifier.weight(1f)) { JumpHostPicker(form, allHosts, editHost?.id) }
                         Field(stringResource(Res.string.conn_field_keep_alive), Modifier.weight(1f)) { ModalSelect(stringResource(Res.string.conn_keepalive_30s)) }
                     }
                 }
@@ -313,7 +326,11 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                             AuthMode.ASK -> null
                         }
                         if (canTest && auth != null) {
-                            tester.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim()), auth)
+                            when (testJump) {
+                                is JumpChainResolution.Unavailable -> tester.fail(jumpErrorText.orEmpty())
+                                is JumpChainResolution.Resolved ->
+                                    tester.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim(), jump = testJump.jump), auth)
+                            }
                         }
                     },
                     fg = if (canTest) D.text else D.faint,
@@ -566,6 +583,25 @@ private fun AuthOption(icon: String, title: String, subtitle: String, selected: 
         }
         if (selected) Sym("check", size = 15.sp, color = D.cyanBright)
     }
+}
+
+/**
+ * "Jump host" field: "None — direct" plus eligible saved SSH profiles ([jumpHostCandidates] — no
+ * self-reference, no cycle through the edited host). Stores only the id
+ * ([NewConnectionFormState.jumpHostId]); the chain itself is resolved at connect time.
+ */
+@Composable
+private fun JumpHostPicker(form: NewConnectionFormState, allHosts: List<Host>, editingId: String?) {
+    val candidates = remember(allHosts, editingId) { jumpHostCandidates(allHosts, editingId) }
+    // Selected by id over ALL hosts (not just candidates): a reference that became ineligible after
+    // other edits still shows its label instead of silently reading as "none".
+    val selected = allHosts.firstOrNull { it.id == form.jumpHostId }
+    DropdownField(
+        value = selected,
+        options = listOf<Host?>(null) + candidates,
+        label = { it?.label ?: stringResource(Res.string.conn_jump_none) },
+        onPick = { form.jumpHostId = it?.id },
+    )
 }
 
 @Composable

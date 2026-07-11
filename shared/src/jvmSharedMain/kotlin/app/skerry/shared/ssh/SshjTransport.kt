@@ -25,50 +25,95 @@ class SshjTransport(
 
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection =
         withContext(Dispatchers.IO) {
-            ensureCryptoProvider()
-            val client = SSHClient()
-            // TCP connect timeout: sshj's default is 0 = wait forever. Without this, "Test
-            // connection" to a nonexistent/firewalled address hangs with no way to cancel from the
-            // UI. (Protocol-level KEX/I-O timeout is separate, sshj default ~30s; round-trip ping
-            // is its own thing.)
-            client.connectTimeout = CONNECT_TIMEOUT_MILLIS
-            // Capture the cipher negotiated at KEX (client->server) via an algorithms verifier: in
-            // sshj 0.40 it's called synchronously on the IO thread inside connect() (after
-            // NEWKEYS, before return), while we read it after connect() — needs a thread-safe
-            // publication, hence AtomicReference. The verifier always passes (true): we don't vet
-            // ciphers here, only capture the name for the info panel; host-key checking is a
-            // separate chain (addHostKeyVerifier).
-            val negotiatedCipher = AtomicReference<String?>(null)
-            client.transport.addAlgorithmsVerifier { negotiated ->
+            // Every client dialed so far (ProxyJump hops entry-point-first, the target's own client
+            // last). On ANY failure the whole chain is closed here, in reverse dial order — the
+            // per-step helpers below don't close anything themselves.
+            val opened = mutableListOf<SSHClient>()
+            try {
+                connectChain(target, auth, opened)
+            } catch (e: Exception) {
+                opened.asReversed().forEach { runCatching { it.close() } }
+                throw e
+            }
+        }
+
+    private fun connectChain(target: SshTarget, auth: SshAuth, opened: MutableList<SSHClient>): SshConnection {
+        ensureCryptoProvider()
+        // Capture the cipher negotiated at KEX (client->server) via an algorithms verifier: in
+        // sshj 0.40 it's called synchronously on the IO thread inside connect() (after
+        // NEWKEYS, before return), while we read it after connect() — needs a thread-safe
+        // publication, hence AtomicReference. The verifier always passes (true): we don't vet
+        // ciphers here, only capture the name for the info panel; host-key checking is a
+        // separate chain (addHostKeyVerifier). Hop clients don't get one — the info panel shows
+        // the target session's cipher.
+        val negotiatedCipher = AtomicReference<String?>(null)
+        val client = dial(target.host, target.port, target.jump, opened) { c ->
+            c.transport.addAlgorithmsVerifier { negotiated ->
                 negotiatedCipher.set(negotiated.client2ServerCipherAlgorithm)
                 true
             }
-            val hostKeyRejected = installHostKeyVerifier(client)
-
-            try {
-                client.connect(target.host, target.port)
-            } catch (e: IOException) {
-                client.close()
-                // Don't put the host address in the message text (logs/crash reporters): connect
-                // metadata is sensitive in a zero-knowledge client. Diagnostic detail stays in the
-                // cause (e).
-                if (hostKeyRejected.get()) {
-                    throw SshHostKeyRejectedException("Host key rejected by verifier")
-                }
-                throw SshConnectionException("Failed to establish connection", e)
-            }
-
-            authenticate(client, target, auth)
-
-            // sshj returns the server ident without the prefix (`getServerVersion()` =
-            // serverID.substring(8)); we restore the full `SSH-2.0-<software>` form for the status
-            // bar. Read synchronously on the same IO thread after connect() — identification
-            // exchange has already finished, no race. (A defunct `SSH-1.99-` server would show as
-            // `SSH-2.0-` too — substring(8) is the same either way; cosmetic only.)
-            val serverVersion = runCatching { client.transport.serverVersion }
-                .getOrNull()?.takeIf { it.isNotBlank() }?.let { "SSH-2.0-$it" }
-            SshjConnection(client, negotiatedCipher.get(), serverVersion)
         }
+        authenticate(client, target.username, auth, hop = false)
+
+        // sshj returns the server ident without the prefix (`getServerVersion()` =
+        // serverID.substring(8)); we restore the full `SSH-2.0-<software>` form for the status
+        // bar. Read synchronously on the same IO thread after connect() — identification
+        // exchange has already finished, no race. (A defunct `SSH-1.99-` server would show as
+        // `SSH-2.0-` too — substring(8) is the same either way; cosmetic only.)
+        val serverVersion = runCatching { client.transport.serverVersion }
+            .getOrNull()?.takeIf { it.isNotBlank() }?.let { "SSH-2.0-$it" }
+        return SshjConnection(client, negotiatedCipher.get(), serverVersion, upstream = opened.dropLast(1))
+    }
+
+    /**
+     * Dial [host]:[port]: directly, or — with [jump] — through a recursively dialed and
+     * authenticated hop chain via a direct-tcpip channel ([SSHClient.connectVia]), the ProxyJump
+     * scheme. Every created client is registered in [opened] BEFORE its connect attempt, so the
+     * caller's cleanup sees half-open clients too. [configure] runs before connecting (cipher
+     * capture for the target client). Host keys are verified per hop under its own (host, port);
+     * [hop] marks a ProxyJump hop so a rejection says whose key was refused (like the auth errors).
+     */
+    private fun dial(
+        host: String,
+        port: Int,
+        jump: SshJump?,
+        opened: MutableList<SSHClient>,
+        hop: Boolean = false,
+        configure: (SSHClient) -> Unit = {},
+    ): SSHClient {
+        val upstream = jump?.let { next ->
+            dial(next.host, next.port, next.jump, opened, hop = true)
+                .also { authenticate(it, next.username, next.auth, hop = true) }
+        }
+        val client = SSHClient()
+        // TCP connect timeout: sshj's default is 0 = wait forever. Without this, "Test
+        // connection" to a nonexistent/firewalled address hangs with no way to cancel from the
+        // UI. (Protocol-level KEX/I-O timeout is separate, sshj default ~30s; round-trip ping
+        // is its own thing.) For a connectVia hop the TCP dial happened upstream; the timeout is
+        // harmless there.
+        client.connectTimeout = CONNECT_TIMEOUT_MILLIS
+        configure(client)
+        val hostKeyRejected = installHostKeyVerifier(client)
+        opened += client
+        try {
+            if (upstream == null) {
+                client.connect(host, port)
+            } else {
+                client.connectVia(upstream.newDirectConnection(host, port))
+            }
+        } catch (e: IOException) {
+            // Don't put the host address in the message text (logs/crash reporters): connect
+            // metadata is sensitive in a zero-knowledge client. Diagnostic detail stays in the
+            // cause (e).
+            if (hostKeyRejected.get()) {
+                throw SshHostKeyRejectedException(
+                    if (hop) "Jump host key rejected by verifier" else "Host key rejected by verifier",
+                )
+            }
+            throw SshConnectionException("Failed to establish connection", e)
+        }
+        return client
+    }
 
     /**
      * Attach an adapter for our [hostKeyVerifier] to [client]. The returned flag is set on
@@ -94,17 +139,21 @@ class SshjTransport(
         return hostKeyRejected
     }
 
-    /** Authenticate an already-connected [client] per [auth]; on failure closes the client and throws. */
-    private fun authenticate(client: SSHClient, target: SshTarget, auth: SshAuth) {
+    /**
+     * Authenticate an already-connected [client] per [auth]; throws on failure (closing is the
+     * connect-level cleanup's job — see `opened` there). [hop] marks a ProxyJump hop so the user
+     * can tell which side rejected the credentials (still no addresses/usernames in the text).
+     */
+    private fun authenticate(client: SSHClient, username: String, auth: SshAuth, hop: Boolean) {
         try {
             when (auth) {
-                is SshAuth.Password -> client.authPassword(target.username, auth.secret)
+                is SshAuth.Password -> client.authPassword(username, auth.secret)
                 is SshAuth.PublicKey -> {
                     // loadKeys treats the strings as key content (not a path); passphrase is a
                     // one-off PasswordFinder. sshj detects the format (OpenSSH/PKCS) itself.
                     val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
                     val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
-                    client.authPublickey(target.username, keys)
+                    client.authPublickey(username, keys)
                 }
                 is SshAuth.Certificate -> {
                     // Cert auth: possession is proven by the private key from PEM, while the
@@ -114,15 +163,15 @@ class SshjTransport(
                     // public as Certificate, type as *_CERT.
                     val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
                     val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
-                    client.authPublickey(target.username, certificateKeyProvider(keys, auth.certificate))
+                    client.authPublickey(username, certificateKeyProvider(keys, auth.certificate))
                 }
             }
         } catch (e: UserAuthException) {
-            client.close()
             // No username in the text: the message must not carry an identifier (logs/reports).
-            throw SshAuthenticationException("Server rejected the credentials", e)
+            throw SshAuthenticationException(
+                if (hop) "Jump host rejected the credentials" else "Server rejected the credentials", e,
+            )
         } catch (e: IOException) {
-            client.close()
             throw SshConnectionException("Connection dropped during authentication", e)
         }
     }

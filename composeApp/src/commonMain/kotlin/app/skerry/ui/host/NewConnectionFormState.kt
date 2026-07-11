@@ -55,15 +55,19 @@ class NewConnectionFormState {
     /**
      * Switch transport. If [port] still equals the previous type's default (user hasn't touched
      * it), substitute the new type's default: SSH->22, Telnet->23, Serial->9600 (baud). Otherwise
-     * the value is kept.
+     * the value is kept. Leaving SSH drops the jump host (ProxyJump is SSH-only).
      */
     fun chooseConnectionType(type: ConnectionType) {
         if (type == connectionType) return
         if (port.trim() == defaultPortFor(connectionType).toString()) {
             port = defaultPortFor(type).toString()
         }
+        if (type != ConnectionType.SSH) jumpHostId = null
         connectionType = type
     }
+
+    /** Saved SSH profile to tunnel through (ProxyJump), `null` — connect directly. */
+    var jumpHostId: String? by mutableStateOf(null)
 
     // Auth: mode plus fields for each kind (kept side by side so switching doesn't lose input).
     var authMode: AuthMode by mutableStateOf(AuthMode.ASK)
@@ -168,6 +172,7 @@ class NewConnectionFormState {
         tags = tags,
         aiPolicy = aiPolicy,
         connectionType = connectionType,
+        jumpHostId = jumpHostId,
     )
 
     companion object {
@@ -194,6 +199,7 @@ class NewConnectionFormState {
             group = host.group ?: ""
             tags = host.tags
             aiPolicy = host.aiPolicy
+            jumpHostId = host.jumpHostId
             if (host.credentialId != null) {
                 authMode = AuthMode.EXISTING
                 existingCredentialId = host.credentialId

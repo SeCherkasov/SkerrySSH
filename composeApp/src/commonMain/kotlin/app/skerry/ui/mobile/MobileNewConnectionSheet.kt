@@ -67,6 +67,8 @@ import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
 import app.skerry.ui.generated.resources.conn_field_group
+import app.skerry.ui.generated.resources.conn_field_jump_host
+import app.skerry.ui.generated.resources.conn_jump_none
 import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_name
 import app.skerry.ui.generated.resources.conn_field_port
@@ -103,6 +105,7 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.connection.jumpHostCandidates
 import app.skerry.ui.host.groupSuggestions
 import app.skerry.ui.i18n.label
 import app.skerry.ui.host.listSerialPorts
@@ -220,6 +223,11 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 }
                 Spacer(Modifier.height(14.dp))
                 MobileFormField(stringResource(Res.string.conn_field_authentication)) { MobileAuthPicker(form) }
+                Spacer(Modifier.height(14.dp))
+                // ProxyJump: tunnel the session through another saved SSH profile (desktop parity).
+                MobileFormField(stringResource(Res.string.conn_field_jump_host)) {
+                    MobileJumpHostPicker(form, hosts?.hosts ?: emptyList(), editHost?.id)
+                }
                 Spacer(Modifier.height(14.dp))
             } else {
                 // Telnet/Serial: no authentication; show only port/baud.
@@ -424,6 +432,60 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
             else -> {}
         }
     }
+}
+
+/**
+ * The sheet's "Jump host" field: "None — direct" plus eligible saved SSH profiles
+ * ([jumpHostCandidates] — no self-reference, no cycle through the edited host). Stores only the id
+ * ([NewConnectionFormState.jumpHostId]); the chain resolves at connect time. Same dropdown chrome
+ * as [MobileGroupPicker].
+ */
+@Composable
+private fun MobileJumpHostPicker(form: NewConnectionFormState, allHosts: List<Host>, editingId: String?) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val candidates = remember(allHosts, editingId) { jumpHostCandidates(allHosts, editingId) }
+    // Selected by id over ALL hosts: a reference that became ineligible after other edits still
+    // shows its label instead of silently reading as "none".
+    val selected = allHosts.firstOrNull { it.id == form.jumpHostId }
+    AnchoredDropdown(
+        expanded = menuOpen,
+        onDismiss = { menuOpen = false },
+        trigger = {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(D.bg)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menuOpen = !menuOpen }
+                    .padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Txt(selected?.label ?: stringResource(Res.string.conn_jump_none), color = if (selected != null) D.text else D.faint, size = 15.sp)
+                Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+            }
+        },
+        menu = { width ->
+            Column(
+                Modifier
+                    .width(width)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(SheetPanel)
+                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 4.dp),
+            ) {
+                MobileGroupOption(stringResource(Res.string.conn_jump_none), selected = selected == null) { form.jumpHostId = null; menuOpen = false }
+                candidates.forEach { host ->
+                    key(host.id) {
+                        MobileGroupOption(host.label, selected = form.jumpHostId == host.id) { form.jumpHostId = host.id; menuOpen = false }
+                    }
+                }
+            }
+        },
+    )
 }
 
 /**

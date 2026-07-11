@@ -38,6 +38,12 @@
     <string name="conn_protocol_serial">Serial</string>
 
     <string name="conn_jump_none">None — direct</string>
+    <string name="conn_jump_error_title">Jump host unavailable</string>
+    <string name="conn_jump_error_missing">The jump host referenced by this profile no longer exists. Pick another one in the profile settings.</string>
+    <string name="conn_jump_error_not_ssh">The referenced jump host is not an SSH profile, so it cannot carry a tunnel.</string>
+    <string name="conn_jump_error_no_credential">The jump host has no saved secret. Attach a password or key to it in its profile first.</string>
+    <string name="conn_jump_error_cycle">Jump host references form a loop. Fix the chain in the profile settings.</string>
+    <string name="conn_jump_error_ok">OK</string>
     <string name="conn_keepalive_30s">Every 30s</string>
 
     <string name="conn_cancel">Cancel</string>

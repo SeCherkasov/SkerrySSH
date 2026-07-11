@@ -90,6 +90,16 @@ class VaultHostStoreTest {
     }
 
     @Test
+    fun `jump host reference survives persist and reload`() {
+        val vault = FakeVault()
+        VaultHostStore(vault).put(host("web").copy(jumpHostId = "bastion"))
+        assertEquals("bastion", VaultHostStore(vault).all().single().jumpHostId)
+        // Absent in old records -> null (backward compatible default).
+        VaultHostStore(vault).put(host("plain"))
+        assertNull(VaultHostStore(vault).all().first { it.id == "plain" }.jumpHostId)
+    }
+
+    @Test
     fun `all on a locked vault is empty rather than throwing`() {
         val store = VaultHostStore(LockedVault)
         assertTrue(store.all().isEmpty())

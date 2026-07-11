@@ -2,6 +2,7 @@ package app.skerry.ui.connection
 
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
@@ -12,9 +13,14 @@ import app.skerry.shared.vault.CredentialSecret
  * (DRY), covered by shared tests without Compose.
  */
 
-/** Host profile → connection address ([SshTarget]); [Host.connectionType] picks the transport. */
-fun Host.toTarget(): SshTarget =
-    SshTarget(host = address, port = port, username = username, connectionType = connectionType)
+/**
+ * Host profile → connection address ([SshTarget]); [Host.connectionType] picks the transport.
+ * [jump] is the resolved ProxyJump chain ([resolveJumpChain]) when the profile has one — the
+ * caller resolves it (needs the host/credential stores) and must NOT pass `null` for a profile
+ * with [Host.jumpHostId] set (that would silently connect direct).
+ */
+fun Host.toTarget(jump: SshJump? = null): SshTarget =
+    SshTarget(host = address, port = port, username = username, connectionType = connectionType, jump = jump)
 
 /** `user@addr:port` string — the session's tab/title label. */
 fun Host.connectionSubtitle(): String = "$username@$address:$port"

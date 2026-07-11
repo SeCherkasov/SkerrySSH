@@ -2,6 +2,9 @@ package app.skerry.ui.tunnel
 
 import app.skerry.shared.host.Host
 import app.skerry.shared.tunnel.TunnelDirection
+import app.skerry.ui.connection.JumpChainResolution
+import app.skerry.ui.connection.jumpProblemLabel
+import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.shared.vault.Credential
@@ -48,7 +51,8 @@ fun buildTunnelDraft(
 
 /**
  * Resolves a saved tunnel to connection parameters (for the [TunnelManager] production lambda).
- * Host is looked up by [Tunnel.hostId], credential by [Host.credentialId] in the unlocked vault.
+ * Host is looked up by [Tunnel.hostId], credential by [Host.credentialId] in the unlocked vault;
+ * the host's ProxyJump chain (if any) is resolved too, so tunnels ride the same route as sessions.
  * Messages are generic constants without technical detail, per [TunnelResolution.Unavailable].
  */
 fun resolveTunnel(
@@ -59,5 +63,9 @@ fun resolveTunnel(
     val host = findHost(tunnel.hostId) ?: return TunnelResolution.Unavailable("Host not found")
     val credential = findCredential(host.credentialId)
         ?: return TunnelResolution.Unavailable("No saved credential")
-    return TunnelResolution.Ready(host.toTarget(), credential.toSshAuth())
+    val jump = when (val chain = resolveJumpChain(host, findHost, findCredential)) {
+        is JumpChainResolution.Unavailable -> return TunnelResolution.Unavailable(jumpProblemLabel(chain.problem))
+        is JumpChainResolution.Resolved -> chain.jump
+    }
+    return TunnelResolution.Ready(host.toTarget(jump), credential.toSshAuth())
 }

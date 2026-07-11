@@ -100,6 +100,15 @@ class ConnectionTestController(
         }
     }
 
+    /**
+     * Report a pre-connect failure (e.g. the profile's jump chain didn't resolve) as the test's
+     * result without dialing anything. [message] is already localized by the caller.
+     */
+    fun fail(message: String) {
+        job?.cancel()
+        status = ConnectionTestStatus.Failure(message)
+    }
+
     fun reset() {
         job?.cancel()
         status = ConnectionTestStatus.Idle
