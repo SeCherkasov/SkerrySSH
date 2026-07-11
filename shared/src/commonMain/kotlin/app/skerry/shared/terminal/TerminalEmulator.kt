@@ -157,13 +157,7 @@ class TerminalEmulator(
     private var primaryGrid: MutableList<TermRow> = freshScreen()
     private var altGrid: MutableList<TermRow>? = null
     private var grid: MutableList<TermRow> = primaryGrid
-    private val scrollback = ArrayDeque<TermRow>()
-
-    // Immutable copies of scrollback rows, kept in lockstep with [scrollback]. A row is frozen once
-    // it leaves the grid, so it's copied exactly once on entry — [lines] then reuses these instead
-    // of deep-copying the whole history per snapshot (O(history×cols) allocations per PTY chunk,
-    // which froze fast output on deep scrollback).
-    private val scrollbackView = ArrayDeque<List<TermCell>>()
+    private val scrollback = ScrollbackBuffer()
 
     // Scrollback depth (the "scrollback buffer" setting). Not a val: can be changed on the fly on
     // an already-open session via [applyMaxScrollback] — shrinking trims excess old rows
@@ -191,14 +185,16 @@ class TerminalEmulator(
     val cursorCol: Int get() = cx
 
     /**
-     * Snapshot for rendering: scrollback (main buffer only) + current screen rows. Each row is
-     * copied into an immutable list — the snapshot safely survives subsequent [feed] calls (the
-     * grid's internal rows are live and mutated in place).
+     * Snapshot for rendering: scrollback (main buffer only) + current screen rows. Screen rows are
+     * copied into immutable lists (the grid's rows are live, mutated in place); the history part
+     * reuses the [ScrollbackBuffer]'s frozen rows, shared with prior snapshots — publishing costs
+     * O(screen + history/chunk), not O(history). The snapshot safely survives subsequent [feed]
+     * calls and is safe to hand to another thread.
      */
     val lines: List<List<TermCell>>
-        get() = ArrayList<List<TermCell>>((if (altScreen) 0 else scrollbackView.size) + grid.size).apply {
-            if (!altScreen) addAll(scrollbackView)
-            grid.forEach { add(it.toList()) }
+        get() {
+            val screenRows = ArrayList<List<TermCell>>(grid.size).apply { grid.forEach { add(it.toList()) } }
+            return if (altScreen) screenRows else SnapshotLines(scrollback.frozen(), screenRows)
         }
 
     private var style = TermStyle()
@@ -259,10 +255,7 @@ class TerminalEmulator(
      */
     fun applyMaxScrollback(lines: Int) {
         maxScrollback = lines.coerceAtLeast(0)
-        while (scrollback.size > maxScrollback) {
-            scrollback.removeFirst()
-            scrollbackView.removeFirst()
-        }
+        scrollback.trimTo(maxScrollback)
     }
 
     var applicationCursorKeys: Boolean = false
@@ -906,12 +899,8 @@ class TerminalEmulator(
     }
 
     private fun pushScrollback(row: TermRow) {
-        scrollback.addLast(row)
-        scrollbackView.addLast(row.toList())
-        while (scrollback.size > maxScrollback) {
-            scrollback.removeFirst()
-            scrollbackView.removeFirst()
-        }
+        scrollback.push(row)
+        scrollback.trimTo(maxScrollback)
     }
 
     // --- Erase / insert / delete ------------------------------------------
@@ -1083,7 +1072,6 @@ class TerminalEmulator(
         grid = primaryGrid
         altScreen = false
         scrollback.clear()
-        scrollbackView.clear()
         cx = 0; cy = 0
         pendingWrap = false
         lastPrintedCp = null
@@ -1167,7 +1155,7 @@ class TerminalEmulator(
      */
     private fun reflowPrimary(nc: Int, nr: Int, trackCursor: Boolean): Pair<Int, Int> {
         val src = ArrayList<TermRow>(scrollback.size + primaryGrid.size).apply {
-            addAll(scrollback); addAll(primaryGrid)
+            addAll(scrollback.rows); addAll(primaryGrid)
         }
         val result = TerminalReflow.reflow(
             src = src,
@@ -1180,11 +1168,7 @@ class TerminalEmulator(
             trackCursor = trackCursor,
         )
         scrollback.clear()
-        scrollbackView.clear()
-        result.scrollback.forEach {
-            scrollback.addLast(it)
-            scrollbackView.addLast(it.toList())
-        }
+        result.scrollback.forEach { scrollback.push(it) } // already ≤ maxScrollback after reflow
         primaryGrid = result.grid
         return Pair(result.cursorRow, result.cursorCol)
     }
@@ -1283,4 +1267,95 @@ class TerminalEmulator(
 
         fun defaultTabStops(cols: Int) = BooleanArray(cols) { it % TAB == 0 && it != 0 }
     }
+}
+
+/** Rows per sealed chunk of frozen scrollback (see [ScrollbackBuffer]). */
+private const val SCROLLBACK_CHUNK = 256
+
+/**
+ * Scrollback storage keeping two representations in lockstep behind one API, so no call site can
+ * desync them: [rows] — the mutable [TermRow]s reflow reads — and a frozen immutable copy of each
+ * row for render snapshots (a row is copied exactly once, when it leaves the grid).
+ *
+ * Frozen rows live in sealed [SCROLLBACK_CHUNK]-sized chunks shared by reference between
+ * snapshots: [frozen] costs O(history/chunk + chunk), not O(history), per publish. A sealed chunk
+ * is never mutated again, so a snapshot stays valid — and safe for another thread after safe
+ * publication — while the emulator keeps feeding; trimming the head only advances [headOffset]
+ * until a whole chunk is dead.
+ */
+private class ScrollbackBuffer {
+    /** Mutable rows for reflow, oldest first. Read-only for callers; mutate via this class only. */
+    val rows = ArrayDeque<TermRow>()
+
+    private var sealed = ArrayDeque<List<List<TermCell>>>()
+    private var tail = ArrayList<List<TermCell>>(SCROLLBACK_CHUNK)
+    private var headOffset = 0 // rows of sealed.first() already trimmed away
+
+    val size: Int get() = rows.size
+
+    fun push(row: TermRow) {
+        rows.addLast(row)
+        tail.add(row.toList())
+        if (tail.size == SCROLLBACK_CHUNK) {
+            sealed.addLast(tail)
+            tail = ArrayList(SCROLLBACK_CHUNK)
+        }
+    }
+
+    fun trimTo(max: Int) {
+        while (rows.size > max) {
+            rows.removeFirst()
+            if (sealed.isNotEmpty()) {
+                if (++headOffset == SCROLLBACK_CHUNK) {
+                    sealed.removeFirst()
+                    headOffset = 0
+                }
+            } else {
+                // History shorter than one chunk (tiny maxScrollback): trim the tail physically.
+                tail.removeAt(0)
+            }
+        }
+    }
+
+    fun clear() {
+        rows.clear()
+        // Fresh containers, not clear(): prior snapshots may still reference the old ones.
+        sealed = ArrayDeque()
+        tail = ArrayList(SCROLLBACK_CHUNK)
+        headOffset = 0
+    }
+
+    /** Frozen history for one snapshot: sealed chunks shared by reference, the tail copied. */
+    fun frozen(): List<List<TermCell>> = FrozenRows(ArrayList(sealed), headOffset, size, ArrayList(tail))
+}
+
+/**
+ * Immutable window over frozen scrollback rows: [chunks] are sealed [SCROLLBACK_CHUNK]-sized
+ * chunks (shared, never mutated after sealing), [tail] is this snapshot's private copy of the
+ * unfinished chunk; the first [headOffset] rows of the first chunk are dead (already trimmed).
+ */
+private class FrozenRows(
+    private val chunks: List<List<List<TermCell>>>,
+    private val headOffset: Int,
+    override val size: Int,
+    private val tail: List<List<TermCell>>,
+) : AbstractList<List<TermCell>>() {
+    private val sealedCount = chunks.size * SCROLLBACK_CHUNK - headOffset
+
+    override fun get(index: Int): List<TermCell> {
+        if (index >= sealedCount) return tail[index - sealedCount]
+        val j = index + headOffset
+        return chunks[j / SCROLLBACK_CHUNK][j % SCROLLBACK_CHUNK]
+    }
+}
+
+/** Render snapshot: frozen history + this batch's screen rows, as one read-only list. */
+private class SnapshotLines(
+    private val history: List<List<TermCell>>,
+    private val screen: List<List<TermCell>>,
+) : AbstractList<List<TermCell>>() {
+    override val size: Int get() = history.size + screen.size
+
+    override fun get(index: Int): List<TermCell> =
+        if (index < history.size) history[index] else screen[index - history.size]
 }

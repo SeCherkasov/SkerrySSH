@@ -1280,4 +1280,70 @@ class TerminalEmulatorTest {
         val emu = emulate(cols = 3, rows = 3, chunks = arrayOf("ab中"))
         assertEquals("ab\n中", emu.asText())
     }
+
+    // Deep scrollback and snapshot integrity: the frozen history behind [lines] shares storage
+    // between snapshots, so ordering, trimming, and older snapshots must hold under further output.
+
+    private fun List<TermCell>.rowText(): String = joinToString("") { it.text }.trimEnd()
+
+    private fun TerminalEmulator.feedLines(range: IntRange) {
+        for (i in range) feed("line$i\r\n".encodeToByteArray())
+    }
+
+    @Test
+    fun `deep scrollback keeps every line in order`() {
+        // 700 numbered lines on a 4-row screen: 697 scroll into history (line698..700 + prompt row
+        // stay on screen). Indices probe both sides of internal chunk boundaries (256/512).
+        val emu = TerminalEmulator(cols = 20, rows = 4)
+        emu.feedLines(1..700)
+        val lines = emu.lines
+        assertEquals(697 + 4, lines.size)
+        for (k in intArrayOf(0, 255, 256, 511, 512, 696)) {
+            assertEquals("line${k + 1}", lines[k].rowText())
+        }
+        assertEquals("line700", lines[699].rowText())
+    }
+
+    @Test
+    fun `scrollback trims the oldest rows beyond the limit`() {
+        val emu = TerminalEmulator(cols = 20, rows = 4, maxScrollback = 300)
+        emu.feedLines(1..700)
+        val lines = emu.lines
+        assertEquals(300 + 4, lines.size)
+        assertEquals("line398", lines[0].rowText()) // 697 pushed, the first 397 trimmed
+        assertEquals("line697", lines[299].rowText())
+    }
+
+    @Test
+    fun `a snapshot survives later output and trimming unchanged`() {
+        val emu = TerminalEmulator(cols = 20, rows = 4, maxScrollback = 300)
+        emu.feedLines(1..400)
+        val snapshot = emu.lines // history: line98..line397 (300 rows)
+
+        emu.feedLines(401..800) // scrolls and trims far past the snapshot's window
+
+        assertEquals(304, snapshot.size)
+        assertEquals("line98", snapshot[0].rowText())
+        assertEquals("line397", snapshot[299].rowText())
+        assertEquals("line400", snapshot[302].rowText()) // old screen rows too
+    }
+
+    @Test
+    fun `shrinking maxScrollback on the fly trims history`() {
+        val emu = TerminalEmulator(cols = 20, rows = 4)
+        emu.feedLines(1..700)
+        emu.applyMaxScrollback(100)
+        val lines = emu.lines
+        assertEquals(100 + 4, lines.size)
+        assertEquals("line598", lines[0].rowText())
+    }
+
+    @Test
+    fun `full reset drops deep scrollback`() {
+        val emu = TerminalEmulator(cols = 20, rows = 4)
+        emu.feedLines(1..700)
+        emu.feed("${esc}c".encodeToByteArray()) // RIS
+        assertEquals(4, emu.lines.size)
+        assertEquals("", emu.asText())
+    }
 }
