@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "app.skerry"
-version = "0.1.0"
+version = "0.1.1"
 
 application {
     mainClass.set("app.skerry.server.ApplicationKt")
