@@ -117,8 +117,10 @@ compose.desktop {
             // Version from the single source (gradle.properties); the release workflow overrides it.
             val appVersion = providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0"
             packageVersion = appVersion
-            // CFBundleVersion for macOS: force a >=1 major (jpackage rejects a zero major there).
-            val macBuildVersion = if (appVersion.substringBefore('.') == "0" && appVersion.contains('.'))
+            // macOS-only: jpackage validates --app-version and rejects a zero major, so force
+            // the mac package version's major to >=1. The in-app About version (AppVersion.kt)
+            // stays on skerry.versionName, so only the dmg bundle metadata carries this.
+            val macVersion = if (appVersion.substringBefore('.') == "0" && appVersion.contains('.'))
                 "1${appVersion.substring(appVersion.indexOf('.'))}" else appVersion
             // App icons per platform, rasterized from icons/skerry.svg (canonical mark, docs/design/Skerry Logo.html).
             linux { iconFile.set(project.file("icons/skerry.png")) }
@@ -132,10 +134,7 @@ compose.desktop {
             }
             macOS {
                 iconFile.set(project.file("icons/skerry.icns"))
-                // jpackage rejects a CFBundleVersion whose major component is 0 (macOS-only
-                // check). Keep the visible short version (0.x) but give the opaque build
-                // version a >=1 major so the dmg packages instead of failing in jpackage.
-                packageBuildVersion = macBuildVersion
+                packageVersion = macVersion
             }
         }
 

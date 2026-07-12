@@ -2878,6 +2878,20 @@
   },
   {
     "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.18.1/jna-platform-5.18.1.jar",
+    "sha512": "77ca3355c637707840125529f6f4720434f1a115d0b27b51b6d04e10210acd2af70ebb1e58ce2f5103423a060f9e9c64e1788a0f2457be1abdc406027bc91478",
+    "dest": "offline-repository/net/java/dev/jna/jna-platform/5.18.1",
+    "dest-filename": "jna-platform-5.18.1.jar"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.18.1/jna-platform-5.18.1.pom",
+    "sha512": "4e54efc80064a5b9df328e6bd47d1ba5aefd676a57f6b64fd18cc110004d429d0fba923e9e9bfe99812a6597501021f077cba2d813f9cc81cc9577afa6d41ee9",
+    "dest": "offline-repository/net/java/dev/jna/jna-platform/5.18.1",
+    "dest-filename": "jna-platform-5.18.1.pom"
+  },
+  {
+    "type": "file",
     "url": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.6.0/jna-platform-5.6.0.jar",
     "sha512": "e55cb2eb60742d4a1de61e5d85b4c71d1a6769ef793b9cb5454ed1775ed593201e3c833e42ea033c99ee256217fde17bac5b93c8f12cbb90795c14956eb31d61",
     "dest": "offline-repository/net/java/dev/jna/jna-platform/5.6.0",
