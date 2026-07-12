@@ -131,10 +131,18 @@ jobs:
           ./gradlew :composeApp:packageMsi --stacktrace
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
+      - name: Suffix msi with the architecture
+        # jpackage emits Skerry-<version>.msi with no arch marker; every other desktop
+        # asset carries one, and a Windows ARM build would otherwise collide.
+        shell: bash
+        run: |
+          cd composeApp/build/compose/binaries/main/msi
+          for f in *.msi; do mv "$f" "${f%.msi}-x64.msi"; done
+
       - name: Upload Windows distributable
         uses: actions/upload-artifact@v7
         with:
-          name: skerry-windows
+          name: skerry-windows-x64
           path: composeApp/build/compose/binaries/main/msi/*.msi
           if-no-files-found: error
 
@@ -226,20 +234,21 @@ jobs:
           -Pskerry.versionCode=${{ inputs.versionCode || github.run_number }}
 
       - name: Rename APK to match the other artifacts
-        # jpackage names the desktop packages skerry_<version>… but AGP emits
-        # androidApp-release.apk. Rename it so every release asset shares one scheme.
+        # AGP emits androidApp-release.apk. Rename it to the Skerry-<version> scheme the
+        # msi/dmg/AppImage/flatpak assets use (deb/rpm keep the lowercase names their
+        # platform conventions dictate).
         # On a manual run without a version, fall back to the gradle.properties default.
         run: |
           version="${{ needs.version.outputs.name }}"
           [ -z "$version" ] && version="$(sed -n 's/^skerry.versionName=//p' gradle.properties)"
           mv androidApp/build/outputs/apk/release/*.apk \
-             "androidApp/build/outputs/apk/release/skerry_${version}.apk"
+             "androidApp/build/outputs/apk/release/Skerry-${version}.apk"
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v7
         with:
           name: skerry-android
-          path: androidApp/build/outputs/apk/release/skerry_*.apk
+          path: androidApp/build/outputs/apk/release/Skerry-*.apk
           if-no-files-found: error
 
   linux-flatpak:
