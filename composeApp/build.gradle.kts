@@ -76,15 +76,13 @@ compose.resources {
     packageOfResClass = "app.skerry.ui.generated.resources"
 }
 
-// AppVersion.kt is generated from gradle.properties (skerry.versionName/versionCode) so the About
-// page and the update check compare against the real release version — a hand-edited constant
-// drifted from the packaged one (2.4.0 vs 0.1.1).
+// AppVersion.kt is generated from gradle.properties (skerry.versionName) so the About page and the
+// update check compare against the real release version — a hand-edited constant drifted from the
+// packaged one (2.4.0 vs 0.1.1).
 val generateAppVersion = tasks.register("generateAppVersion") {
     val versionName = providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0"
-    val versionCode = providers.gradleProperty("skerry.versionCode").orNull ?: "1"
     val outDir = layout.buildDirectory.dir("generated/skerry/commonMain/kotlin")
     inputs.property("versionName", versionName)
-    inputs.property("versionCode", versionCode)
     outputs.dir(outDir)
     doLast {
         val file = outDir.get().file("app/skerry/ui/app/AppVersion.kt").asFile
@@ -96,7 +94,6 @@ val generateAppVersion = tasks.register("generateAppVersion") {
             /** Generated from gradle.properties by :composeApp:generateAppVersion — do not edit. */
             object AppVersion {
                 const val VERSION = "$versionName"
-                const val BUILD = "$versionCode"
             }
             """.trimIndent() + "\n",
         )

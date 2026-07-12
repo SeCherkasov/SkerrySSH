@@ -170,7 +170,7 @@
     <string name="settings_badge_soon">СКОРО</string>
 
     <!-- Раздел About -->
-    <string name="settings_about_version">Версия %1$s · сборка %2$s</string>
+    <string name="settings_about_version">Версия %1$s</string>
     <string name="settings_about_tagline">SSH-клиент с приоритетом приватности. Локальный AI, сквозное шифрование синхронизации и терминал, который бережёт ваши секреты.</string>
     <string name="settings_about_whats_new">Что нового</string>
     <string name="settings_about_documentation">Документация</string>

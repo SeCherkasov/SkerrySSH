@@ -19,21 +19,28 @@ hood, Compose Multiplatform UI on top. One core codebase and one UI across
 
 ## How Skerry compares
 
-|  | Skerry | Termius | PuTTY | Tabby |
+| Feature | Skerry | Termius | PuTTY | Tabby |
 |---|---|---|---|---|
-| Open source | GPL-3.0 (clients), AGPL-3.0 (server) | no | MIT | MIT |
-| Platforms | Linux, Windows, macOS, Android | Windows, macOS, Linux, iOS, Android | Windows, Unix | Windows, macOS, Linux |
-| First release | 2026 (v0.1.x) | 2011 | 1999 | 2017 |
-| Price | free | free tier; paid from $10/mo | free | free |
-| Works without an account | yes | partial — local use only; sync and AI need an account | yes | yes |
-| Encrypted vault | yes, always on (Argon2id + XChaCha20-Poly1305) | yes | no | optional, opt-in |
-| Sync | self-hosted server, zero-knowledge | vendor cloud, E2E (paid) | no | config sync via self-hostable Tabby Web (E2E opt-in) |
-| Team sharing | yes, E2E | paid tier | no | no |
-| SFTP | dual-pane UI | yes | command-line only (`psftp`) | built-in panel |
-| Port forwarding | local, remote, dynamic | yes | yes | yes |
-| Serial / Telnet | yes / yes | yes / yes | yes / yes | yes / yes |
-| Mosh | yes | yes | no | no |
-| AI assistant | optional: BYOK cloud or a fully local model | yes, cloud-side; account required | no | no |
+| **Open source** | ✅ GPL-3.0 · AGPL-3.0 | ❌ | ✅ MIT | ✅ MIT |
+| **Platforms** | Linux · Windows · macOS · Android | Windows · macOS · Linux · iOS · Android | Windows · Unix | Windows · macOS · Linux |
+| **First release** | 2026 (v0.1.x) | 2011 | 1999 | 2017 |
+| **Price** | free | free tier · paid from $10/mo | free | free |
+| **Works without an account** | ✅ | ⚠️ local only <sup>1</sup> | ✅ | ✅ |
+| **Encrypted vault** | ✅ always on <sup>2</sup> | ✅ | ❌ | ⚠️ opt-in |
+| **Sync** | ✅ self-hosted, zero-knowledge | ✅ vendor cloud, E2E (paid) | ❌ | ✅ self-hostable, E2E opt-in <sup>3</sup> |
+| **Team sharing** | ✅ end-to-end | ⚠️ paid tier | ❌ | ❌ |
+| **SFTP** | ✅ dual-pane UI | ✅ | ⚠️ CLI only (`psftp`) | ✅ built-in panel |
+| **Port forwarding** | ✅ local · remote · dynamic | ✅ | ✅ | ✅ |
+| **Serial / Telnet** | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
+| **Mosh** | ✅ | ✅ | ❌ | ❌ |
+| **AI assistant** | ✅ local or BYOK cloud <sup>4</sup> | ⚠️ cloud, account required | ❌ | ❌ |
+
+**Legend:** ✅ yes · ⚠️ partial / with caveats · ❌ no
+
+<sup>1</sup> sync and AI need an account &nbsp;·&nbsp;
+<sup>2</sup> Argon2id + XChaCha20-Poly1305 &nbsp;·&nbsp;
+<sup>3</sup> via self-hostable Tabby Web &nbsp;·&nbsp;
+<sup>4</sup> optional; model output treated as untrusted, actions require confirmation
 
 *Competitor data collected from the projects' official sites and repositories on 2026-07-12.
 Spotted an error? Please open a PR.*
