@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,9 +43,11 @@ fun ModalScrim(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val noop = remember { MutableInteractionSource() }
+    var token by remember { mutableStateOf(-1) }
     DisposableEffect(Unit) {
-        ModalPresence.opened()
-        onDispose { ModalPresence.closed() }
+        val t = ModalPresence.opened()
+        token = t
+        onDispose { ModalPresence.closed(t) }
     }
     // Esc handling: the scrim listens on key bubble-up (onKeyEvent), so a focused field or a
     // nested modal handles the event first. The scrim claims focus only while nothing inside the
@@ -71,31 +74,47 @@ fun ModalScrim(
     )
     // Re-keyed on focus state, not one-shot: when the focused child is disposed (a protocol
     // switch removing the field, a nested modal closing) Compose clears focus to no one, key
-    // events stop dispatching through this subtree, and Esc would go dead for good.
-    LaunchedEffect(subtreeFocused) {
-        if (subtreeFocused) return@LaunchedEffect
+    // events stop dispatching through this subtree, and Esc would go dead for good. Only the
+    // topmost modal reclaims: a sibling dialog composed above this scrim (sync setup over
+    // settings) holds focus in ITS fields, and reclaiming from under it would strip the caret
+    // on every click. isTop is read in composition, so losing/regaining the top re-runs this.
+    val isTop = token != -1 && ModalPresence.isTop(token)
+    LaunchedEffect(subtreeFocused, isTop) {
+        if (subtreeFocused || !isTop) return@LaunchedEffect
         withFrameNanos {} // let an auto-focused field inside claim focus first
         if (!subtreeFocused) runCatching { escFocus.requestFocus() }
     }
 }
 
 /**
- * Count of open [ModalScrim]s, as observable state. A scrim takes keyboard focus for Esc handling,
- * and closing the modal disposes the focused node — Compose then clears focus to no one. Widgets
- * that own the keyboard otherwise (the desktop terminal) watch for the count returning to zero to
+ * Stack of open modals, as observable state. A scrim takes keyboard focus for Esc handling, and
+ * closing the modal disposes the focused node — Compose then clears focus to no one. Widgets that
+ * own the keyboard otherwise (the desktop terminal) watch for the count returning to zero to
  * re-claim focus, since nothing else restores it.
+ *
+ * Ordered as a stack (not a plain count): only the modal on top ([isTop]) may reclaim focus. A
+ * scrim below a later-opened sibling dialog (settings under the sync setup dialog — both composed
+ * at the app root) would otherwise steal the caret from the dialog's fields on every click.
  */
 object ModalPresence {
-    var openCount by mutableStateOf(0)
-        private set
+    private val stack = mutableStateListOf<Int>()
+    private var nextToken = 0
 
-    internal fun opened() {
-        openCount++
+    val openCount: Int get() = stack.size
+
+    /** Register an opened modal; the returned token identifies it for [closed]/[isTop]. */
+    internal fun opened(): Int {
+        val token = nextToken++
+        stack.add(token)
+        return token
     }
 
-    internal fun closed() {
-        openCount--
+    internal fun closed(token: Int) {
+        stack.remove(token)
     }
+
+    /** Whether [token] is the topmost open modal (observable — reads snapshot state). */
+    internal fun isTop(token: Int): Boolean = stack.lastOrNull() == token
 }
 
 /** Consumes clicks on a modal card (no-op clickable, no indication) so taps don't reach the scrim. */

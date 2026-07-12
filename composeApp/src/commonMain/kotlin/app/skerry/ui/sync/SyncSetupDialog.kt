@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,6 +58,7 @@ import app.skerry.ui.generated.resources.sync_keep_connected_sub_long
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -67,8 +67,8 @@ import app.skerry.ui.design.Txt
  * Self-hosted sync onboarding modal: server URL + accountId + master password, one "Connect" action
  * (the coordinator registers a new account or logs into an existing one — no mode choice).
  * Zero-knowledge — the password goes to [SyncCoordinator] as a CharArray and is wiped there; here it's
- * held as a string only until submit and cleared right after. Scrim + card style, like
- * [DesktopPasswordDialog]. Closes itself when the coordinator reaches [SyncStatus.Online].
+ * held as a string only until submit and cleared right after. [ModalScrim] + card style; closes
+ * itself when the coordinator reaches [SyncStatus.Online].
  */
 @Composable
 fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
@@ -107,11 +107,11 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
         sync.connect(url, acc, pw, keepConnected)
     }
 
-    Box(
-        Modifier.fillMaxSize().background(Color(0xB3060E16))
-            .clickable(interactionSource = noop, indication = null, onClick = onDismiss),
-        contentAlignment = Alignment.Center,
-    ) {
+    // ModalScrim (not a hand-rolled Box): registers in ModalPresence so the settings scrim below
+    // (this dialog is composed as its sibling at the app root) doesn't reclaim focus and strip the
+    // caret from these fields. Esc dismisses; a stray scrim click doesn't (a half-typed master
+    // password must not be discarded) — Cancel is the explicit close.
+    ModalScrim(onDismiss = onDismiss, scrimColor = Color(0xB3060E16)) {
         Column(
             Modifier
                 .widthIn(max = 440.dp)

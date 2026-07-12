@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,6 +49,7 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -57,17 +57,14 @@ import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.vault.copyPasswordToClipboard
 
 /**
- * Desktop "Link a device" dialog (already signed-in device): scrim plus card, like
- * [SyncSetupDialog]. Content is the shared [PairingOfferContent] (QR, text code, expiry countdown).
+ * Desktop "Link a device" dialog (already signed-in device): [ModalScrim] plus card, like
+ * [SyncSetupDialog] — registered in ModalPresence so the settings scrim below doesn't reclaim
+ * focus from it. Content is the shared [PairingOfferContent] (QR, text code, expiry countdown).
  */
 @Composable
 fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
-    Box(
-        Modifier.fillMaxSize().background(Color(0xB3060E16))
-            .clickable(interactionSource = noop, indication = null, onClick = onDismiss),
-        contentAlignment = Alignment.Center,
-    ) {
+    ModalScrim(onDismiss = onDismiss, scrimColor = Color(0xB3060E16)) {
         Column(
             Modifier
                 .widthIn(max = 380.dp)
