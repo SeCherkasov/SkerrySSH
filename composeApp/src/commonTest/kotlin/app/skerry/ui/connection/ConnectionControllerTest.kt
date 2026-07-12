@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -34,6 +35,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -462,6 +465,126 @@ class ConnectionControllerTest {
         scope.cancel()
     }
 
+    // Keep-alive: SshTarget.keepAliveSeconds > 0 starts a keepalive ping loop with the session
+    // itself (not lazily from the status bar), so an idle session behind a NAT stays alive.
+    // These tests advance virtual time explicitly (advanceTimeBy) — advanceUntilIdle would never
+    // return with a periodic loop running.
+
+    @Test
+    fun `keep-alive pings from connect at the target interval`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+
+        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        assertEquals(1, conn.roundTrips) // first ping fires immediately on connect
+        advanceTimeBy(65_000) // two more cycles land at t=30s and t=60s
+        assertEquals(3, conn.roundTrips)
+        scope.cancel()
+    }
+
+    @Test
+    fun `keep-alive off never pings and openPing exposes nothing`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+
+        controller.connect(target, SshAuth.Password("pw")) // default keepAliveSeconds = 0
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        advanceTimeBy(120_000)
+        assertEquals(0, conn.roundTrips)
+        assertNull(controller.openPing()) // no poller -> no RTT for the status bar
+        scope.cancel()
+    }
+
+    @Test
+    fun `openPing exposes the running keep-alive poller with its RTT`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+
+        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
+
+        val ping = controller.openPing()
+        assertNotNull(ping)
+        assertEquals(7L, ping.rttMs) // published by the immediate first ping
+        assertSame(ping, controller.openPing())
+        scope.cancel()
+    }
+
+    @Test
+    fun `disconnect stops keep-alive pings`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
+        advanceTimeBy(35_000)
+        assertEquals(2, conn.roundTrips)
+
+        controller.disconnect()
+        advanceTimeBy(120_000)
+
+        assertEquals(2, conn.roundTrips)
+        scope.cancel()
+    }
+
+    @Test
+    fun `unanswered keep-alives force the drop path and auto-reconnect`() = runTest {
+        val ch1 = FakeShellChannel()
+        val conn1 = FakeSshConnection(ch1).apply { roundTripResult = null } // dead link from the start
+        val conn2 = FakeSshConnection(FakeShellChannel())
+        val transport = ScriptedTransport(listOf(Result.success(conn1), Result.success(conn2)))
+        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
+
+        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        // Failures at t=0/30/60s reach the death threshold: the channel is force-closed and the
+        // loss flows through the regular drop path into auto-reconnect — no waiting for a TCP
+        // timeout on a frozen terminal.
+        advanceTimeBy(65_000)
+
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+        assertEquals(2, transport.connectCalls) // reconnected to the healthy session
+        assertTrue(conn1.disconnected) // the dead connection was torn down
+        scope.cancel()
+    }
+
+    @Test
+    fun `a throwing onConnected action stops the started keep-alive`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+
+        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw")) { error("boom") }
+
+        assertIs<ConnectionUiState.Error>(controller.uiState)
+        assertTrue(conn.disconnected) // full session teardown, not just the ping loop
+        val before = conn.roundTrips
+        advanceTimeBy(120_000)
+        assertEquals(before, conn.roundTrips) // loop died with the failed session
+        assertNull(controller.openPing())
+        scope.cancel()
+    }
+
+    @Test
+    fun `auto-reconnect resumes keep-alive on the new connection`() = runTest {
+        val ch1 = FakeShellChannel()
+        val conn1 = FakeSshConnection(ch1)
+        val conn2 = FakeSshConnection(FakeShellChannel())
+        val transport = ScriptedTransport(listOf(Result.success(conn1), Result.success(conn2)))
+        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
+
+        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
+        assertEquals(1, conn1.roundTrips)
+
+        ch1.close() // drop -> zero-backoff reconnect (the interval rides in lastTarget)
+        advanceTimeBy(1_000)
+
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+        assertEquals(1, conn1.roundTrips) // old loop stopped with the old session
+        assertEquals(1, conn2.roundTrips) // new session pings immediately again
+        scope.cancel()
+    }
+
 }
 
 /**
@@ -503,8 +626,17 @@ private class FakeSshConnection(
         private set
     var openSftpCalls = 0
         private set
+    var roundTrips = 0
+        private set
+
+    /** Scripted ping outcome: `null` models a dead link (keepalives unanswered). */
+    var roundTripResult: Long? = 7L
 
     override val isConnected: Boolean get() = !disconnected
+    override suspend fun measureRoundTrip(): Long? {
+        roundTrips++
+        return roundTripResult
+    }
     override suspend fun exec(command: String): ExecResult = throw UnsupportedOperationException()
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = channel
     override suspend fun openSftp(): SftpClient {

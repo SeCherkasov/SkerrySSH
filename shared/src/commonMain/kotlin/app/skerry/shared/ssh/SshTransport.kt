@@ -27,6 +27,12 @@ interface SshTransport {
  * direct connection. Carried inside the target so the whole session/reconnect/tunnel stack routes
  * through the jump without extra plumbing (the controller drops the target together with the auth,
  * so the hop's secret doesn't outlive the session's own).
+ *
+ * [keepAliveSeconds] is the keep-alive cadence for sessions to this target (0 = none): the session
+ * layer sends a keepalive request every N seconds while connected (see
+ * [SshConnection.measureRoundTrip]). Carried inside the target (like [jump]) so auto-reconnect
+ * keeps the cadence with no extra plumbing. Default 0 preserves prior call sites: ad-hoc/probe
+ * targets spawn no background traffic unless asked to.
  */
 data class SshTarget(
     val host: String,
@@ -34,6 +40,7 @@ data class SshTarget(
     val username: String,
     val connectionType: ConnectionType = ConnectionType.SSH,
     val jump: SshJump? = null,
+    val keepAliveSeconds: Int = 0,
 )
 
 /**

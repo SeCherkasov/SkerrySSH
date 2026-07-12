@@ -44,7 +44,8 @@
     <string name="conn_jump_error_no_credential">У прыжкового хоста нет сохранённого секрета. Сначала привяжите к нему пароль или ключ в его профиле.</string>
     <string name="conn_jump_error_cycle">Ссылки прыжковых хостов образуют цикл. Исправьте цепочку в настройках профиля.</string>
     <string name="conn_jump_error_ok">ОК</string>
-    <string name="conn_keepalive_30s">Каждые 30 с</string>
+    <string name="conn_keepalive_off">Выкл.</string>
+    <string name="conn_keepalive_every">Каждые %1$d с</string>
 
     <string name="conn_cancel">Отмена</string>
     <string name="conn_test">Проверить</string>

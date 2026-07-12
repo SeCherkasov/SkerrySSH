@@ -39,6 +39,11 @@ import kotlinx.serialization.Serializable
  * by id (like [credentialId]) so renaming/re-addressing the jump host doesn't break the link. The
  * chain is resolved at connect time (`resolveJumpChain` in the UI layer): a dangling id, a non-SSH
  * jump, a secretless jump or a cycle fails the connect rather than silently going direct.
+ *
+ * [keepAliveSeconds] is the keep-alive cadence for this profile's sessions: every N seconds the
+ * client sends `keepalive@openssh.com` so NAT/firewall tables don't expire an idle connection
+ * (OpenSSH's `ServerAliveInterval`). 0 disables it. SSH-only (Telnet/Serial ignore it). Default 30
+ * also covers old saved files (field absent).
  */
 @Serializable
 data class Host(
@@ -54,4 +59,5 @@ data class Host(
     val aiPolicy: AiPolicy = AiPolicy.Strict,
     val connectionType: ConnectionType = ConnectionType.SSH,
     val jumpHostId: String? = null,
+    val keepAliveSeconds: Int = 30,
 )

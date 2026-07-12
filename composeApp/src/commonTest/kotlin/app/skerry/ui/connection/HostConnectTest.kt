@@ -25,9 +25,15 @@ class HostConnectTest {
     @Test
     fun target_maps_address_port_and_user() {
         assertEquals(
-            SshTarget(host = "example.com", port = 2222, username = "deploy"),
+            SshTarget(host = "example.com", port = 2222, username = "deploy", keepAliveSeconds = 30),
             host(address = "example.com", port = 2222, username = "deploy").toTarget(),
         )
+    }
+
+    @Test
+    fun target_carries_the_keep_alive_interval() {
+        assertEquals(120, host().copy(keepAliveSeconds = 120).toTarget().keepAliveSeconds)
+        assertEquals(0, host().copy(keepAliveSeconds = 0).toTarget().keepAliveSeconds)
     }
 
     @Test

@@ -96,7 +96,6 @@ import app.skerry.ui.generated.resources.conn_group_new
 import app.skerry.ui.generated.resources.conn_group_new_title
 import app.skerry.ui.generated.resources.conn_group_none
 import app.skerry.ui.generated.resources.conn_jump_none
-import app.skerry.ui.generated.resources.conn_keepalive_30s
 import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_ssh
 import app.skerry.ui.generated.resources.conn_protocol_telnet
@@ -140,8 +139,7 @@ import app.skerry.ui.vault.title
  * profile via [app.skerry.ui.host.HostManagerController] and highlights it in the sidebar; without
  * it (mock/preview), Save just closes the modal. In edit mode the form is prefilled from
  * [editHost] ([NewConnectionFormState.fromHost]), and saving keeps its [Host.id]. Tags are editable
- * (pills plus inline input, wired to [NewConnectionFormState]); jump/keep-alive/AI policy are still
- * visual stubs.
+ * (pills plus inline input, wired to [NewConnectionFormState]).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -246,7 +244,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     Spacer14()
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Field(stringResource(Res.string.conn_field_jump_host), Modifier.weight(1f)) { JumpHostPicker(form, allHosts, editHost?.id) }
-                        Field(stringResource(Res.string.conn_field_keep_alive), Modifier.weight(1f)) { ModalSelect(stringResource(Res.string.conn_keepalive_30s)) }
+                        Field(stringResource(Res.string.conn_field_keep_alive), Modifier.weight(1f)) { KeepAlivePicker(form) }
                     }
                 }
                 Spacer14()
@@ -604,16 +602,18 @@ private fun JumpHostPicker(form: NewConnectionFormState, allHosts: List<Host>, e
     )
 }
 
+/**
+ * "Keep-alive" field: cadence of the session's keepalive pings for this profile
+ * ([NewConnectionFormState.keepAliveSeconds], 0 = off). Fixed option list [KEEP_ALIVE_OPTIONS].
+ */
 @Composable
-private fun ModalSelect(value: String) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Txt(value, color = D.text, size = 13.sp)
-        Sym("expand_more", size = 16.sp, color = D.faint)
-    }
+private fun KeepAlivePicker(form: NewConnectionFormState) {
+    DropdownField(
+        value = form.keepAliveSeconds,
+        options = KEEP_ALIVE_OPTIONS,
+        label = { keepAliveLabel(it) },
+        onPick = { form.keepAliveSeconds = it },
+    )
 }
 
 /**

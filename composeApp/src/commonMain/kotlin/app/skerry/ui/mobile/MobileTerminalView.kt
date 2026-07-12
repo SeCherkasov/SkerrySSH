@@ -336,10 +336,11 @@ private fun MobileAiChip(label: String, color: Color, onClick: () -> Unit) {
  * metrics (RTT/throughput), `more_horiz` icon (menu with Disconnect). [onDisconnect]==null — no active
  * session, the Disconnect item is hidden. The split icon is removed on phone (split not needed).
  *
- * Metrics come from [controller] via the same pollers as the desktop status bar: RTT ping ([openPing])
- * and channel throughput ([openThroughput]). The remember is unconditional — keys (controller +
- * connected flag) recreate it on session/connection change; both methods are idempotent (cached in the
- * controller). Before the first sample / off-connection the metric is "—"; a narrow line scrolls horizontally.
+ * Metrics come from [controller] via the same pollers as the desktop status bar: the keep-alive/RTT
+ * poller ([openPing], null with the profile's keep-alive off) and channel throughput
+ * ([openThroughput]). The remember is unconditional — keys (controller + connected flag) recreate it
+ * on session/connection change; both methods are idempotent (cached in the controller). Before the
+ * first sample / off-connection the metric is "—"; a narrow line scrolls horizontally.
  */
 @Composable
 private fun MobileTerminalHeader(

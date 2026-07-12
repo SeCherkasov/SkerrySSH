@@ -84,6 +84,80 @@ class PingControllerTest {
         scope.cancel()
     }
 
+    // Dead-link detection (OpenSSH ServerAliveCountMax analog): [deadAfterFailures] consecutive
+    // failed measurements fire onDead once and end the polling loop.
+
+    @Test
+    fun onDead_fires_once_after_consecutive_failures_and_polling_ends() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        var deaths = 0
+        var calls = 0
+        val c = PingController(
+            measure = { calls++; null }, // link is dead from the start
+            scope = scope,
+            pollIntervalMillis = 5000,
+            deadAfterFailures = 3,
+            onDead = { deaths++ },
+        )
+
+        c.start() // failure #1 right away
+        assertEquals(0, deaths)
+        testScheduler.advanceTimeBy(5000); testScheduler.runCurrent() // #2
+        assertEquals(0, deaths)
+        testScheduler.advanceTimeBy(5000); testScheduler.runCurrent() // #3 -> dead
+        assertEquals(1, deaths)
+
+        val after = calls
+        testScheduler.advanceTimeBy(50_000); testScheduler.runCurrent()
+        assertEquals(after, calls) // loop ended with onDead: no more pings
+        assertEquals(1, deaths) // and no repeat firing
+        scope.cancel()
+    }
+
+    @Test
+    fun success_resets_the_failure_streak() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        // fail, fail, success, fail, fail — never 3 consecutive failures.
+        val script = listOf<Long?>(null, null, 5L, null, null)
+        var i = 0
+        var deaths = 0
+        val c = PingController(
+            measure = { script.getOrNull(i++) ?: 5L },
+            scope = scope,
+            pollIntervalMillis = 5000,
+            deadAfterFailures = 3,
+            onDead = { deaths++ },
+        )
+
+        c.start()
+        testScheduler.advanceTimeBy(30_000); testScheduler.runCurrent()
+
+        assertEquals(0, deaths)
+        assertEquals(5L, c.rttMs)
+        scope.cancel()
+    }
+
+    @Test
+    fun stop_during_the_fatal_measure_suppresses_onDead() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        // Same single-threaded stand-in as the stale-rtt test: stop() lands after the fatal
+        // measure() returned but before the loop acted on it — the death must be discarded.
+        var deaths = 0
+        var controller: PingController? = null
+        val c = PingController(
+            measure = { controller!!.stop(); null },
+            scope = scope,
+            deadAfterFailures = 1,
+            onDead = { deaths++ },
+        )
+        controller = c
+
+        c.start()
+
+        assertEquals(0, deaths)
+        scope.cancel()
+    }
+
     @Test
     fun start_is_idempotent() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))

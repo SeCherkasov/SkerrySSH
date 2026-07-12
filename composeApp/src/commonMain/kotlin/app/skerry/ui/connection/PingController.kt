@@ -13,19 +13,28 @@ import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Periodically measures RTT to the server via [measure] (one round-trip per cycle) and publishes
- * it in [rttMs] (ms) for the status bar. Runs on the session's [scope] (like
+ * it in [rttMs] (ms) for the status bar. Each cycle IS the session's keep-alive (the measurement
+ * sends `keepalive@openssh.com`), so [pollIntervalMillis] comes from the profile's keep-alive
+ * cadence ([app.skerry.shared.host.Host.keepAliveSeconds]). Runs on the session's [scope] (like
  * [app.skerry.ui.metrics.HostMetricsController]): survives tab switches and stops together with
  * the session ([stop] from [ConnectionController.disconnect]).
  *
  * A failed measurement (dropped connection, timeout — [measure] returned `null` or threw) does
  * NOT reset the indicator: [rttMs] holds the last successful value until the next successful
  * cycle. The first measurement runs immediately.
+ *
+ * Dead-link detection (OpenSSH `ServerAliveCountMax` analog): after [deadAfterFailures]
+ * CONSECUTIVE failed measurements [onDead] fires exactly once and polling ends — the handler is
+ * expected to tear the session down. A success resets the streak. `onDead = null` (default)
+ * disables detection: pure RTT/keep-alive polling.
  */
 @Stable
 class PingController(
     private val measure: suspend () -> Long?,
     private val scope: CoroutineScope,
     private val pollIntervalMillis: Long = 5000,
+    private val deadAfterFailures: Int = 3,
+    private val onDead: (() -> Unit)? = null,
 ) {
     var rttMs: Long? by mutableStateOf(null)
         private set
@@ -44,12 +53,22 @@ class PingController(
             if (job != null) return
             val gen = generation
             job = scope.launch {
+                var failureStreak = 0
                 while (isActive) {
                     val measured = runCatching { measure() }
                         .onFailure { if (it is CancellationException) throw it } // don't swallow cancellation
                         .getOrNull()
-                    // Discard a value from a cycle that was stopped while measure() was in flight.
-                    if (measured != null) synchronized(lock) { if (gen == generation) rttMs = measured }
+                    if (measured != null) {
+                        failureStreak = 0
+                        // Discard a value from a cycle that was stopped while measure() was in flight.
+                        synchronized(lock) { if (gen == generation) rttMs = measured }
+                    } else if (onDead != null && ++failureStreak >= deadAfterFailures) {
+                        // Link is dead. Same generation gate as the rtt store: a death observed by
+                        // a cycle stopped mid-measure is discarded. The loop ends either way — the
+                        // handler tears the session (and this controller) down.
+                        if (synchronized(lock) { gen == generation }) onDead.invoke()
+                        return@launch
+                    }
                     delay(pollIntervalMillis)
                 }
             }

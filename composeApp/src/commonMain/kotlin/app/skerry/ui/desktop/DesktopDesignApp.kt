@@ -1125,7 +1125,8 @@ private fun StatusBar() {
     }
     val upRate = throughput?.upRate
     val downRate = throughput?.downRate
-    // RTT ping of the active session (same approach as throughput); null before the first sample / on failure.
+    // RTT of the active session's keep-alive poller (same approach as throughput); null with the
+    // profile's keep-alive off (no pings, no RTT), before the first sample, or on failure.
     val ping = remember(active, connected) {
         if (connected) active.controller.openPing() else null
     }

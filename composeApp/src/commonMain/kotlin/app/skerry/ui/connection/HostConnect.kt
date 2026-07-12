@@ -20,7 +20,10 @@ import app.skerry.shared.vault.CredentialSecret
  * with [Host.jumpHostId] set (that would silently connect direct).
  */
 fun Host.toTarget(jump: SshJump? = null): SshTarget =
-    SshTarget(host = address, port = port, username = username, connectionType = connectionType, jump = jump)
+    SshTarget(
+        host = address, port = port, username = username, connectionType = connectionType,
+        jump = jump, keepAliveSeconds = keepAliveSeconds,
+    )
 
 /** `user@addr:port` string — the session's tab/title label. */
 fun Host.connectionSubtitle(): String = "$username@$address:$port"

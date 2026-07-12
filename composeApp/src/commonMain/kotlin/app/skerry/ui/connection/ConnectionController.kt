@@ -191,9 +191,10 @@ class ConnectionController(
     private suspend fun establishSession(target: SshTarget, auth: SshAuth) {
         var conn: SshConnection? = null
         try {
-            conn = transport.connect(target, auth)
+            val opened = transport.connect(target, auth)
+            conn = opened
             coroutineContext.ensureActive()
-            val channel = conn.openShell()
+            val channel = opened.openShell()
             coroutineContext.ensureActive()
             val sScope = newSessionScope()
             connection = conn
@@ -225,13 +226,36 @@ class ConnectionController(
                     { snapshot -> scope.launch { store.save(historyKey, snapshot) } }
                 },
             )
+            // Keep-alive per the profile's cadence (0 = off, SSH-only): pings run from the moment
+            // the session exists — not lazily from the status bar — so an idle session behind a NAT
+            // stays alive even with no UI polling it. Created BEFORE Connected (like shellChannel)
+            // so the status bar's openPing() sees it on the transition. Doubles as the RTT source.
+            if (target.connectionType == ConnectionType.SSH && target.keepAliveSeconds > 0) {
+                ping = PingController(
+                    measure = { opened.measureRoundTrip() },
+                    scope = scope,
+                    pollIntervalMillis = target.keepAliveSeconds * 1_000L,
+                    onDead = {
+                        // Dead link (consecutive keepalives unanswered): force-close the shell
+                        // channel so the loss flows through the regular drop path (Closed without
+                        // EOF -> auto-reconnect) now, not after minutes of frozen terminal
+                        // waiting out the TCP timeout. NonCancellable like the other teardown
+                        // launches: the close must not be lost if the scope dies at that moment.
+                        scope.launch(NonCancellable) { runCatching { channel.close() } }
+                    },
+                ).also { it.start() }
+            }
             uiState = ConnectionUiState.Connected(terminal)
             // One-shot action for the first connect (Run on host): taken and cleared BEFORE a
             // possible drop, so a reconnect through this same establishSession doesn't repeat it.
             pendingOnConnected?.let { action -> pendingOnConnected = null; action(terminal) }
             watchForSessionLoss(terminal, sScope)
         } catch (e: Exception) {
-            conn?.let(::closeConnectionQuietly)
+            // A throw after the session fields are published (e.g. from the onConnected action)
+            // must not leave a half-established session — keep-alive loop, session scope, open
+            // socket — behind an Error state: reuse the disconnect teardown. Before that point
+            // only the local connection exists and just needs closing.
+            if (connection != null) releaseSessionResources() else conn?.let(::closeConnectionQuietly)
             throw e
         }
     }
@@ -326,17 +350,13 @@ class ConnectionController(
     }
 
     /**
-     * This session's RTT ping controller — one per connection, lazy/cached (like [openThroughput]);
-     * measurement runs on the session's [scope]. Stopped by [disconnect].
-     * @throws IllegalStateException the session isn't connected (no live connection)
+     * This session's keep-alive/RTT poller — created together with the session when the target's
+     * keep-alive cadence is on ([SshTarget.keepAliveSeconds] > 0, SSH-only), `null` while not
+     * connected or with keep-alive off (no pings — the status bar shows no RTT). Unlike the other
+     * open* accessors it never creates anything: the loop's lifecycle belongs to the session
+     * (keep-alive must run without any UI polling). Stopped by [disconnect].
      */
-    fun openPing(): PingController {
-        val conn = connection ?: error("No active connection for ping")
-        return ping ?: PingController(
-            measure = { conn.measureRoundTrip() },
-            scope = scope,
-        ).also { it.start(); ping = it }
-    }
+    fun openPing(): PingController? = ping
 
     /** Close the session (if any) and return to the form. Cancels any active connect and auto-reconnect. */
     fun disconnect() {

@@ -100,6 +100,16 @@ class VaultHostStoreTest {
     }
 
     @Test
+    fun `keep-alive interval survives persist and reload with a 30s default`() {
+        val vault = FakeVault()
+        VaultHostStore(vault).put(host("quiet").copy(keepAliveSeconds = 0))
+        assertEquals(0, VaultHostStore(vault).all().single().keepAliveSeconds)
+        // Absent in old records -> 30 (backward compatible default, matches the pre-setting behavior).
+        VaultHostStore(vault).put(host("plain"))
+        assertEquals(30, VaultHostStore(vault).all().first { it.id == "plain" }.keepAliveSeconds)
+    }
+
+    @Test
     fun `all on a locked vault is empty rather than throwing`() {
         val store = VaultHostStore(LockedVault)
         assertTrue(store.all().isEmpty())

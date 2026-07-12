@@ -69,6 +69,18 @@ class HostManagerControllerTest {
     }
 
     @Test
+    fun `save carries the keep-alive interval through to the stored host`() {
+        val store = FakeHostStore()
+        val controller = HostManagerController(store) { "gen-id" }
+
+        controller.save(
+            HostDraft(label = "prod", address = "10.0.0.5", port = 22, username = "deploy", keepAliveSeconds = 0),
+        )
+
+        assertEquals(0, controller.hosts.single().keepAliveSeconds)
+    }
+
+    @Test
     fun `save carries tags through to the stored host`() {
         val store = FakeHostStore()
         val controller = HostManagerController(store) { "gen-id" }

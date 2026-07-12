@@ -56,6 +56,8 @@ class NewConnectionFormState {
      * Switch transport. If [port] still equals the previous type's default (user hasn't touched
      * it), substitute the new type's default: SSH->22, Telnet->23, Serial->9600 (baud). Otherwise
      * the value is kept. Leaving SSH drops the jump host (ProxyJump is SSH-only).
+     * [keepAliveSeconds] is deliberately kept: unlike a jump reference it's harmless on non-SSH
+     * profiles (the session layer gates on SSH), and the choice survives toggling back to SSH.
      */
     fun chooseConnectionType(type: ConnectionType) {
         if (type == connectionType) return
@@ -68,6 +70,9 @@ class NewConnectionFormState {
 
     /** Saved SSH profile to tunnel through (ProxyJump), `null` — connect directly. */
     var jumpHostId: String? by mutableStateOf(null)
+
+    /** Keep-alive cadence for this profile's sessions, seconds (0 = off); see [Host.keepAliveSeconds]. */
+    var keepAliveSeconds: Int by mutableStateOf(30)
 
     // Auth: mode plus fields for each kind (kept side by side so switching doesn't lose input).
     var authMode: AuthMode by mutableStateOf(AuthMode.ASK)
@@ -173,6 +178,7 @@ class NewConnectionFormState {
         aiPolicy = aiPolicy,
         connectionType = connectionType,
         jumpHostId = jumpHostId,
+        keepAliveSeconds = keepAliveSeconds,
     )
 
     companion object {
@@ -200,6 +206,7 @@ class NewConnectionFormState {
             tags = host.tags
             aiPolicy = host.aiPolicy
             jumpHostId = host.jumpHostId
+            keepAliveSeconds = host.keepAliveSeconds
             if (host.credentialId != null) {
                 authMode = AuthMode.EXISTING
                 existingCredentialId = host.credentialId

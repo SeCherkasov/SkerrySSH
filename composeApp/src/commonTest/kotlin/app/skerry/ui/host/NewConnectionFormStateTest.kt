@@ -80,6 +80,17 @@ class NewConnectionFormStateTest {
     }
 
     @Test
+    fun keep_alive_defaults_to_30_travels_the_draft_and_prefills_from_host() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
+        assertEquals(30, f.keepAliveSeconds)
+        f.keepAliveSeconds = 0
+        assertEquals(0, f.toDraft().keepAliveSeconds)
+
+        val host = Host(id = "h1", label = "Web", address = "web", username = "root", keepAliveSeconds = 120)
+        assertEquals(120, NewConnectionFormState.fromHost(host).keepAliveSeconds)
+    }
+
+    @Test
     fun switching_away_from_ssh_drops_the_jump_host() {
         val f = NewConnectionFormState().apply { jumpHostId = "bastion-1" }
         f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.TELNET)
