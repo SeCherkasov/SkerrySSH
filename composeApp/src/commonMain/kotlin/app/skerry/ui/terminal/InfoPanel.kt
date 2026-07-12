@@ -103,8 +103,7 @@ internal fun InfoPanel() {
             val jumpRoute = if (live) host?.let { h -> jumpRouteLabel(h) { id -> hosts?.find(id) } } else null
             if (jumpRoute != null) InfoRow(stringResource(Res.string.term_info_jump), jumpRoute, mono)
             // Auth = the actual kind of the bound keychain secret (password/key/certificate), or
-            // "ask on connect" for a profile with no binding. (host.identityId is the legacy
-            // pre-migration pointer — never written by current code, so it can't drive this row.)
+            // "ask on connect" for a profile with no binding.
             // No active session ⇒ "—" like the other rows, not "ask on connect".
             val authValue = when {
                 !live -> "id_ed25519"

@@ -11,6 +11,11 @@ plugins {
 kotlin {
     jvmToolchain(21)
 
+    // expect/actual for classes/objects (LocalAppLocale) is still Beta — the flag removes a noisy warning.
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     jvm("desktop") {
         // kotlin("test") picks its backend from the Test task configuration: this enables JUnit 5
         testRuns["test"].executionTask.configure { useJUnitPlatform() }

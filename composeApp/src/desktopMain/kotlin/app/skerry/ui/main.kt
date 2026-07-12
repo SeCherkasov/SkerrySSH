@@ -3,14 +3,14 @@ package app.skerry.ui
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.res.loadImageBitmap
-import androidx.compose.ui.res.useResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.skerry_icon
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.window.rememberWindowState
 import app.skerry.ui.desktop.SkerryWindowFrame
 import app.skerry.ui.desktop.optimalWindowSize
@@ -29,7 +29,6 @@ import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.CredentialStore
-import app.skerry.shared.vault.VaultMigration
 import app.skerry.shared.vault.WorkspaceLayoutStore
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
@@ -304,10 +303,6 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         updates.refresh()
     }
     val onVaultUnlocked: () -> Unit = {
-        // Migration is idempotent and safely retried on the next unlock, but a failure shouldn't
-        // vanish silently (partially migrated vault: hosts without a rebound credentialId).
-        runCatching { VaultMigration(vault, hostStore).migrate() }
-            .onFailure { System.err.println("vault migration failed (retries on next unlock): ${it.message}") }
         // Vault opened, so reload managers (including AI BYOK settings) from decrypted records.
         reloadManagers()
         // keep-connected: vault opened means a dataKey exists, so the sync session can be silently restored.
@@ -396,7 +391,7 @@ fun main() {
             size = optimalWindowSize(DpSize(screen.width.dp, screen.height.dp)),
             position = WindowPosition(Alignment.Center),
         )
-        val appIcon = remember { BitmapPainter(useResource("skerry-icon.png") { loadImageBitmap(it) }) }
+        val appIcon = painterResource(Res.drawable.skerry_icon)
         Window(
             onCloseRequest = ::exitApplication,
             state = windowState,

@@ -31,7 +31,6 @@ import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.VaultBiometrics
-import app.skerry.shared.vault.VaultMigration
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.ai.LocalAiDeps
@@ -60,7 +59,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.io.File
@@ -370,21 +368,13 @@ class MainActivity : FragmentActivity() {
         // A missing team key (dropped by an older client's delta sync) is only fixed by a full re-pull.
         teams.onKeyMissing = { sync.recoverFullPull() }
         sync.onTeamSignal = teams::onSignal
-        // Secret migration in the vault (IDENTITY → CREDENTIAL) on unlock is idempotent, followed by
-        // manager reload and sync session restore.
+        // Manager reload and sync session restore on unlock (restoreSession manages its own scope).
         onVaultUnlocked = {
-            // Migration re-encrypts records; run off the main thread, return reload to Main.
-            // restoreSession manages its own scope.
-            lifecycleScope.launch(Dispatchers.IO) {
-                runCatching { VaultMigration(vault, hostStore).migrate() }
-                withContext(Dispatchers.Main) {
-                    hosts.reload()
-                    snippets.reload()
-                    tunnels.reload()
-                    knownHosts.refresh()
-                }
-                sync.restoreSession()
-            }
+            hosts.reload()
+            snippets.reload()
+            tunnels.reload()
+            knownHosts.refresh()
+            sync.restoreSession()
         }
         // Clears data outside the vault on reset. The vault file is already wiped and locked, so
         // credentials aren't touched here (secrets reload when a new vault is created). Host

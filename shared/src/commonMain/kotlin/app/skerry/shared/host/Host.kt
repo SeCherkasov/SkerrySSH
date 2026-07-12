@@ -19,11 +19,6 @@ import kotlinx.serialization.Serializable
  * form (no `#`, lowercase, deduplicated, ≤ [MAX_TAG_LENGTH]) via [normalizeTag]; [group] (folder) and
  * [tags] (labels) are independent.
  *
- * [identityId] is a legacy pointer from the old two-tier model (host → account → secret). New code
- * never writes it; it exists only so [app.skerry.shared.vault.VaultMigration] can read old saved
- * host files (`identityId` key) and collapse them into [credentialId], after which the field is
- * cleared. TODO: remove once no old files remain.
- *
  * [aiPolicy] is the per-host AI policy ("AI under policy" principle). Default [AiPolicy.Strict] is
  * safe: for both existing hosts (field absent) and new ones, cloud is denied until the user
  * deliberately relaxes the policy. Serialized by name (backward compatible).
@@ -56,7 +51,6 @@ data class Host(
     val username: String,
     val group: String? = null,
     val credentialId: String? = null,
-    val identityId: String? = null,
     val tags: List<String> = emptyList(),
     val aiPolicy: AiPolicy = AiPolicy.Strict,
     val connectionType: ConnectionType = ConnectionType.SSH,

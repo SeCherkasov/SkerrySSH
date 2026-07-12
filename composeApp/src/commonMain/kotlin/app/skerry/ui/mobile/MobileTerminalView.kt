@@ -173,7 +173,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     // recreates it on host/policy change. The transient is drawn over the terminal bottom
                     // so its appearance doesn't resize the terminal (else a reflow jump on paste/run).
                     val liveAi = LocalAi.current
-                    val aiPolicy = active?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
+                    val aiPolicy = active.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
                     // liveAi.enabled in the key: a global OFF in settings removes/restores the bar without
                     // recreating the screen (settings is Compose-state, a change recomposes).
                     val aiController = key(liveAi, aiPolicy, liveAi?.enabled) {

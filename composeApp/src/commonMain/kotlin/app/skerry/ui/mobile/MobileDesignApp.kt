@@ -104,8 +104,8 @@ fun MobileDesignApp(
     // Update-notice controller override for offscreen renders (like [aiOverride]); null builds one
     // from the vault when present.
     updatesOverride: app.skerry.ui.update.UpdateNoticeController? = null,
-    // Data migration hook on vault unlock (parity with desktop `main`/`DesktopDesignApp`).
-    // No-op in preview/offscreen; the Android entry point wires up VaultMigration when it lands.
+    // Hook on vault unlock (parity with desktop `main`/`DesktopDesignApp`): reload managers from
+    // decrypted records, restore the sync session. No-op in preview/offscreen.
     onVaultUnlocked: () -> Unit = {},
     // External cleanup on an irreversible vault reset (hosts/known_hosts/settings by [ResetScope]).
     // Parity seam with desktop: the Android entry point wires up real cleanup (like `onVaultReset`
@@ -265,8 +265,8 @@ private fun MobileChrome(
     ai: AiAssistantController?,
     updates: app.skerry.ui.update.UpdateNoticeController?,
 ) {
-    // Keychain secrets live in the open vault — behind the master password gate, first run the data
-    // migration ([onVaultUnlocked]), then reload. [MobileChrome] composes only behind the gate and
+    // Keychain secrets live in the open vault — behind the master password gate, first fire
+    // [onVaultUnlocked], then reload. [MobileChrome] composes only behind the gate and
     // re-enters composition on every unlock, so also reload AI settings here from the now-open vault
     // (BYOK key is a SETTINGS record; at locked startup the controller saw only the default). Edits
     // synced from another device are caught by a separate effect in MobileDesignApp.

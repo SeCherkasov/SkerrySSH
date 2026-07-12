@@ -9,10 +9,10 @@ private val json = Json { ignoreUnknownKeys = true }
 
 /**
  * Host payload fields that lose meaning in team scope: `group` is a personal folder structure;
- * `credentialId`/`identityId` reference records in the owner's PERSONAL vault (secrets aren't
- * shared — members' references would dangle; each member connects with their own secret).
+ * `credentialId` references a record in the owner's PERSONAL vault (secrets aren't shared —
+ * members' references would dangle; each member connects with their own secret).
  */
-val HOST_SHARE_STRIP: Set<String> = setOf("group", "credentialId", "identityId")
+val HOST_SHARE_STRIP: Set<String> = setOf("group", "credentialId")
 
 /**
  * Strips fields with no meaning in team scope (e.g. a host's `group`, a personal-folder

@@ -180,7 +180,7 @@ fun InviteMemberDialog(
         Txt(stringResource(Res.string.lib_teams_invite_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
         Txt(stringResource(Res.string.lib_teams_invite_subtitle), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
         TeamsTextField(accountId, { accountId = it; onEdited() }, stringResource(Res.string.lib_teams_invite_account_placeholder), ::submit, focus)
-        if (ready && preview != null) {
+        if (preview != null && ready) {
             Column(
                 Modifier
                     .fillMaxWidth()

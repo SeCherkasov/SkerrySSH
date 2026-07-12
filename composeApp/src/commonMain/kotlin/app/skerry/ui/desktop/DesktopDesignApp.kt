@@ -297,11 +297,11 @@ fun DesktopDesignApp(
     // the About section hides the toggle.
     updates: app.skerry.ui.update.UpdateNoticeController? = null,
     features: FeatureFlags = FeatureFlags(),
-    // Called once after vault unlock, before list reload — a hook for data migration (collapsing the
-    // two-level model → a host references a keychain secret). No-op in mock/preview.
+    // Called once after vault unlock, before list reload — reloads managers from decrypted records
+    // and restores the sync session (supplied by desktop `main`). No-op in mock/preview.
     onVaultUnlocked: () -> Unit = {},
-    // Empty host folders sync in the vault layout record: at startup the vault is locked, so after unlock
-    // (and migration in [onVaultUnlocked]) reread them into state from here. No-op in mock/preview.
+    // Empty host folders sync in the vault layout record: at startup the vault is locked, so after
+    // unlock (and [onVaultUnlocked]) reread them into state from here. No-op in mock/preview.
     customGroupsProvider: () -> List<String> = { emptyList() },
     // External cleanup on vault reset (hosts/known_hosts/settings per [ResetScope]). Called after the
     // vault file is erased; the real implementation is supplied by desktop `main`. No-op in mock/preview.
@@ -465,8 +465,8 @@ private fun DesktopChrome(
     customGroupsProvider: () -> List<String>,
     windowChrome: WindowChrome? = null,
 ) {
-    // Keychain secrets live in the open vault — behind the master-password gate we first run the
-    // data migration ([onVaultUnlocked]), then reload (secrets + synced empty folders).
+    // Keychain secrets live in the open vault — behind the master-password gate we first fire
+    // [onVaultUnlocked], then reload (secrets + synced empty folders).
     LaunchedEffect(credentials) {
         onVaultUnlocked()
         credentials?.reload()
