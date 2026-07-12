@@ -30,6 +30,8 @@ import kotlinx.serialization.Serializable
  *
  * [connectionType] is the profile's transport (see [ConnectionType]). Default [ConnectionType.SSH]
  * preserves backward compatibility: old files without the field read as SSH. For
+ * [ConnectionType.MOSH] every SSH field applies unchanged (address/port/credential/jump name the
+ * SSH hop that launches `mosh-server`); [keepAliveSeconds] is inert (Mosh heartbeats itself). For
  * [ConnectionType.TELNET] only [address]/[port] matter (no auth/secret). For [ConnectionType.SERIAL]
  * [address] holds the device name (e.g. `/dev/ttyUSB0`, `COM3`) and [port] holds the baud rate;
  * [username]/[credentialId] are unused.

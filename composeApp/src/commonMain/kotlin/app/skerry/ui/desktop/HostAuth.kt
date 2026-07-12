@@ -1,8 +1,8 @@
 package app.skerry.ui.desktop
 
 import app.skerry.shared.host.Host
-import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.identity.CredentialManagerController
 
@@ -26,7 +26,8 @@ sealed interface HostAuthResolution {
  */
 fun resolveHostAuth(host: Host, credentials: CredentialManagerController?): HostAuthResolution = when {
     // Telnet/Serial need no auth — connect right away, no password prompt (auth is ignored).
-    host.connectionType != ConnectionType.SSH -> HostAuthResolution.Resolved(SshAuth.Password(""))
+    // SSH and Mosh both authenticate over SSH and take the credential/prompt path below.
+    !host.connectionType.usesSshAuth -> HostAuthResolution.Resolved(SshAuth.Password(""))
     else ->
         credentials?.find(host.credentialId)?.let { HostAuthResolution.Resolved(it.toSshAuth()) }
             ?: HostAuthResolution.NeedsPassword

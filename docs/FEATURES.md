@@ -9,6 +9,10 @@ The [README](../README.md) keeps a high-level summary; this is the full detail.
 - Per-host keep-alive interval (off / 30 / 60 / 120 s) with dead-link detection
 - SFTP (dual-pane commander) with type-to-jump path bars
 - Port forwarding: local (`-L`), remote (`-R`), dynamic/SOCKS (`-D`)
+- Mosh: native client implementation (AES-128-OCB datagrams, state-sync protocol) — the session
+  survives network outages, roaming and sleep; `mosh-server` is launched over the profile's SSH
+  auth (jump hosts included) and needs the `mosh` package installed on the remote host plus open
+  UDP 60000–61000; typed setup errors explain each of these server-side requirements
 - Telnet (custom IAC-negotiation codec)
 - Serial: jSerialComm on desktop; USB-OTG on Android (CDC/FTDI/CP210x/CH34x chipsets)
 

@@ -65,6 +65,7 @@ fun Txt(
     lineHeight: TextUnit = TextUnit.Unspecified,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    align: TextAlign = TextAlign.Unspecified,
 ) {
     val family = font ?: LocalFonts.current.ui
     BasicText(
@@ -79,6 +80,7 @@ fun Txt(
             fontFamily = family,
             letterSpacing = letterSpacing,
             lineHeight = lineHeight,
+            textAlign = align,
         ),
     )
 }

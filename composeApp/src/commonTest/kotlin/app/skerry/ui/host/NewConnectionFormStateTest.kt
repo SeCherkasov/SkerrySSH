@@ -97,6 +97,26 @@ class NewConnectionFormStateTest {
         assertNull(f.jumpHostId)
     }
 
+    @Test
+    fun mosh_requires_username_and_auth_like_ssh() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.MOSH)
+        assertEquals("22", f.port) // SSH and Mosh share the default port (the SSH hop's)
+        assertFalse(f.canSave) // username is required, same as SSH
+        f.username = "root"
+        assertTrue(f.canSave)
+    }
+
+    @Test
+    fun switching_to_mosh_keeps_jump_host_and_resolves_credentials() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u"; jumpHostId = "bastion-1" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.MOSH)
+        assertEquals("bastion-1", f.jumpHostId) // Mosh rides the SSH hop, the jump stays valid
+        f.authMode = AuthMode.EXISTING
+        f.existingCredentialId = "cred-1"
+        assertEquals("cred-1", f.resolveCredentialId { null })
+    }
+
     // Authentication
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }

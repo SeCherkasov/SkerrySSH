@@ -32,7 +32,7 @@ hood, Compose Multiplatform UI on top. One core codebase and one UI across
 | SFTP | dual-pane UI | yes | command-line only (`psftp`) | built-in panel |
 | Port forwarding | local, remote, dynamic | yes | yes | yes |
 | Serial / Telnet | yes / yes | yes / yes | yes / yes | yes / yes |
-| Mosh | no | yes | no | no |
+| Mosh | yes | yes | no | no |
 | AI assistant | optional: BYOK cloud or a fully local model | yes, cloud-side; account required | no | no |
 
 *Competitor data collected from the projects' official sites and repositories on 2026-07-12.

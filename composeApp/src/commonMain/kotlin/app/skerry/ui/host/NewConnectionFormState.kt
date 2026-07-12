@@ -9,6 +9,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.host.MAX_TAGS_PER_HOST
 import app.skerry.shared.host.normalizeTag
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 
@@ -54,17 +55,18 @@ class NewConnectionFormState {
 
     /**
      * Switch transport. If [port] still equals the previous type's default (user hasn't touched
-     * it), substitute the new type's default: SSH->22, Telnet->23, Serial->9600 (baud). Otherwise
-     * the value is kept. Leaving SSH drops the jump host (ProxyJump is SSH-only).
-     * [keepAliveSeconds] is deliberately kept: unlike a jump reference it's harmless on non-SSH
-     * profiles (the session layer gates on SSH), and the choice survives toggling back to SSH.
+     * it), substitute the new type's default: SSH/Mosh->22, Telnet->23, Serial->9600 (baud).
+     * Otherwise the value is kept. Leaving the SSH-auth family drops the jump host (ProxyJump
+     * needs the SSH hop). [keepAliveSeconds] is deliberately kept: unlike a jump reference it's
+     * harmless on other profiles (the session layer gates on SSH), and the choice survives
+     * toggling back to SSH.
      */
     fun chooseConnectionType(type: ConnectionType) {
         if (type == connectionType) return
         if (port.trim() == defaultPortFor(connectionType).toString()) {
             port = defaultPortFor(type).toString()
         }
-        if (type != ConnectionType.SSH) jumpHostId = null
+        if (!type.usesSshAuth) jumpHostId = null
         connectionType = type
     }
 
@@ -123,15 +125,15 @@ class NewConnectionFormState {
         }
 
     /**
-     * Whether it's savable. Common: name/address non-blank, port/speed valid. [ConnectionType.SSH]
-     * additionally needs a username and filled-in auth; Telnet/Serial don't (for Serial, [address]
-     * is the device name, [username]/auth are unused).
+     * Whether it's savable. Common: name/address non-blank, port/speed valid. SSH and Mosh
+     * additionally need a username and filled-in auth (Mosh authenticates over SSH); Telnet/Serial
+     * don't (for Serial, [address] is the device name, [username]/auth are unused).
      */
     val canSave: Boolean
         get() {
             val base = name.isNotBlank() && address.isNotBlank() && portOrNull != null
             return when (connectionType) {
-                ConnectionType.SSH -> base && username.isNotBlank() && authValid
+                ConnectionType.SSH, ConnectionType.MOSH -> base && username.isNotBlank() && authValid
                 ConnectionType.TELNET, ConnectionType.SERIAL -> base
             }
         }
@@ -147,7 +149,7 @@ class NewConnectionFormState {
      */
     fun resolveCredentialId(saveCredential: (CredentialDraft) -> String?): String? = when {
         // Telnet/Serial have no auth, no secret gets attached.
-        connectionType != ConnectionType.SSH -> null
+        !connectionType.usesSshAuth -> null
         else -> when (authMode) {
             AuthMode.ASK -> null
             AuthMode.EXISTING -> existingCredentialId
@@ -182,9 +184,9 @@ class NewConnectionFormState {
     )
 
     companion object {
-        /** Default port/speed by type: SSH->22, Telnet->23, Serial->9600 (baud). */
+        /** Default port/speed by type: SSH/Mosh->22 (the SSH hop's port), Telnet->23, Serial->9600 (baud). */
         fun defaultPortFor(type: ConnectionType): Int = when (type) {
-            ConnectionType.SSH -> 22
+            ConnectionType.SSH, ConnectionType.MOSH -> 22
             ConnectionType.TELNET -> 23
             ConnectionType.SERIAL -> 9600
         }

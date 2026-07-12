@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +33,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -44,6 +46,7 @@ import app.skerry.ui.app.LocalConnectSplit
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.connection.connectionErrorText
 import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
@@ -217,7 +220,7 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
             ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new))
             ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), active.subtitle)
             is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
-            is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), st.message, color = D.sunset)
+            is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = D.sunset)
             // Disconnected: screen is frozen at the moment of loss ([ConnectionUiState.Disconnected.terminal]),
             // shown under the disconnect banner so output isn't lost and status (reconnecting/gave up) stays visible.
             is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
@@ -277,7 +280,12 @@ private fun TerminalNotice(icon: String, title: String, subtitle: String, color:
     ) {
         Sym(icon, size = 30.sp, color = color)
         Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-        Txt(subtitle, color = D.faint, size = 12.sp, font = mono)
+        // Long texts (Mosh setup errors) must wrap into a readable centered block, not one
+        // terminal-wide line.
+        Txt(
+            subtitle, color = D.faint, size = 12.sp, font = mono, lineHeight = 18.sp,
+            align = TextAlign.Center, modifier = Modifier.widthIn(max = 480.dp),
+        )
     }
 }
 
@@ -346,7 +354,7 @@ private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignStat
                 ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_session_closed), split.subtitle)
                 ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), split.subtitle)
                 is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
-                is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), st.message, color = D.sunset)
+                is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = D.sunset)
                 is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                     TerminalScreen(st.terminal, Modifier.fillMaxSize())
                     DisconnectedBanner(st, Modifier.align(Alignment.TopCenter))

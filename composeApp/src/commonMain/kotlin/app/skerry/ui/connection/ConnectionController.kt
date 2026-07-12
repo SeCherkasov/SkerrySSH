@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
@@ -39,6 +40,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 
+/** Status-bar RTT poll cadence for Mosh sessions: reads a cached value, sends no traffic. */
+private const val MOSH_RTT_POLL_MILLIS = 3_000L
+
 /** State of the connection screen. */
 sealed interface ConnectionUiState {
     /** The connection form is shown (start, or return after disconnect/error). */
@@ -50,8 +54,18 @@ sealed interface ConnectionUiState {
     /** Session is open; [terminal] is the live terminal state. */
     data class Connected(val terminal: TerminalScreenState) : ConnectionUiState
 
-    /** Connect failed; [message] is shown to the user. */
-    data class Error(val message: String) : ConnectionUiState
+    /**
+     * Connect failed; [message] is shown to the user. [moshReason]/[moshDetail] are set when the
+     * failure is a typed Mosh setup problem — the view then renders a localized explanation
+     * (missing server package, locale, blocked UDP) instead of the raw English [message]
+     * (see `moshFailureText`); building the text here would bake in one language
+     * (same rule as [app.skerry.shared.sync.SyncFailureReason]).
+     */
+    data class Error(
+        val message: String,
+        val moshReason: MoshSetupException.Reason? = null,
+        val moshDetail: String? = null,
+    ) : ConnectionUiState
 
     /**
      * The session was established but the shell closed NOT on our initiative (EOF / transport
@@ -177,7 +191,11 @@ class ConnectionController(
                 // establishSession; uiState was set to Form by disconnect() itself.
                 throw e
             } catch (e: Exception) {
-                uiState = ConnectionUiState.Error(e.message ?: "Failed to connect")
+                uiState = ConnectionUiState.Error(
+                    message = e.message ?: "Failed to connect",
+                    moshReason = (e as? MoshSetupException)?.reason,
+                    moshDetail = (e as? MoshSetupException)?.detail,
+                )
             }
         }
     }
@@ -243,6 +261,17 @@ class ConnectionController(
                         // launches: the close must not be lost if the scope dies at that moment.
                         scope.launch(NonCancellable) { runCatching { channel.close() } }
                     },
+                ).also { it.start() }
+            }
+            if (target.connectionType == ConnectionType.MOSH) {
+                // Mosh needs no keep-alive traffic (the protocol heartbeats every 3s on its own)
+                // and must not be declared dead (it survives outages/roaming by design), so:
+                // fixed poll cadence, no onDead. measureRoundTrip() only reads the smoothed RTT
+                // mosh already measured — the poll itself sends nothing.
+                ping = PingController(
+                    measure = { opened.measureRoundTrip() },
+                    scope = scope,
+                    pollIntervalMillis = MOSH_RTT_POLL_MILLIS,
                 ).also { it.start() }
             }
             uiState = ConnectionUiState.Connected(terminal)
@@ -437,7 +466,10 @@ class ConnectionController(
         // Auto-reconnect only for SSH. It doesn't make sense for Telnet/Serial: there's no
         // authentication, and a "drop" there is usually the server closing the session or the
         // device disappearing (cable unplugged / rig stopped) — silently reconnecting is pointless;
-        // the user connects again manually.
+        // the user connects again manually. Mosh is excluded too: the protocol itself survives
+        // outages and roaming (that's its point), so its session never "drops" on network loss —
+        // reaching here means the server shut down or the socket died, and a silent re-bootstrap
+        // would open a brand-new remote session behind the user's back.
         if (target.connectionType != ConnectionType.SSH) {
             lastAuth = null
             lastTarget = null

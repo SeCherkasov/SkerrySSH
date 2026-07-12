@@ -60,4 +60,11 @@
     <string name="term_password_label">PASSWORD</string>
     <string name="term_connect">Connect</string>
     <string name="term_disconnect">Disconnect</string>
+
+    <!-- Mosh setup failures: server-side and fixable, so each message says what to do there. -->
+    <string name="mosh_err_not_installed">mosh-server is not installed on this host. Skerry ships only the Mosh client — install the mosh package on the server (Debian/Ubuntu: sudo apt install mosh, Fedora: sudo dnf install mosh, Alpine: apk add mosh) and reconnect.</string>
+    <string name="mosh_err_locale">mosh-server refused to start: the host has no UTF-8 locale. Generate one on the server (for example locale-gen en_US.UTF-8, or install the locales package) and reconnect.</string>
+    <string name="mosh_err_udp">mosh-server started, but no reply came back on UDP port %1$s. A firewall is likely blocking the Mosh UDP range 60000–61000 on the server or on the way. Note: Mosh needs a direct UDP path to the host — it does not relay through jump hosts.</string>
+    <string name="mosh_err_bootstrap">mosh-server failed to start on the host: %1$s</string>
+    <string name="mosh_err_bootstrap_no_output">mosh-server failed to start on the host (no output). Check that Mosh is installed and runnable on the server.</string>
 </resources>

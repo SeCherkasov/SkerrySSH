@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.nav.PlatformBackHandler
@@ -83,6 +84,7 @@ import app.skerry.ui.generated.resources.conn_group_none
 import app.skerry.ui.generated.resources.conn_group_rename_hint
 import app.skerry.ui.generated.resources.conn_group_rename_title
 import app.skerry.ui.generated.resources.conn_protocol_serial
+import app.skerry.ui.generated.resources.conn_protocol_mosh
 import app.skerry.ui.generated.resources.conn_protocol_ssh
 import app.skerry.ui.generated.resources.conn_protocol_telnet
 import app.skerry.ui.generated.resources.conn_save
@@ -215,7 +217,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             // Picker for discovered ports (Android USB-OTG): tap fills Device. Empty means manual entry only.
             if (serial) MobileSerialPortPicker(form)
             Spacer(Modifier.height(14.dp))
-            if (form.connectionType == ConnectionType.SSH) {
+            if (form.connectionType.usesSshAuth) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     MobileFormField(stringResource(Res.string.conn_field_username), Modifier.weight(1f)) {
                         MobileFormInput(form.username, { form.username = it }, "root")
@@ -232,9 +234,11 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     MobileJumpHostPicker(form, hosts?.hosts ?: emptyList(), editHost?.id)
                 }
                 Spacer(Modifier.height(14.dp))
-                // Keep-alive cadence for this profile's sessions (desktop parity); 0 = off.
-                MobileFormField(stringResource(Res.string.conn_field_keep_alive)) { MobileKeepAlivePicker(form) }
-                Spacer(Modifier.height(14.dp))
+                // Keep-alive cadence (desktop parity); 0 = off. SSH-only: Mosh heartbeats on its own.
+                if (form.connectionType == ConnectionType.SSH) {
+                    MobileFormField(stringResource(Res.string.conn_field_keep_alive)) { MobileKeepAlivePicker(form) }
+                    Spacer(Modifier.height(14.dp))
+                }
             } else {
                 // Telnet/Serial: no authentication; show only port/baud.
                 MobileFormField(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
@@ -332,6 +336,7 @@ private fun MobileProtocolPicker(form: NewConnectionFormState) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_ssh), form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
+        MobileProtocolSegment(stringResource(Res.string.conn_protocol_mosh), form.connectionType == ConnectionType.MOSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.MOSH) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_telnet), form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_serial), form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
     }

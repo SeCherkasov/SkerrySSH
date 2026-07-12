@@ -22,9 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import app.skerry.shared.host.Host
-import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshJump
+import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ai.AiSettingsStore
 import app.skerry.ui.ai.aiProviderFactory
 import app.skerry.ui.AppDependencies
@@ -311,8 +311,9 @@ private fun MobileChrome(
                             // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
                             val credential = credentials?.find(host.credentialId)
                             when {
-                                // Telnet/Serial have no auth — connect immediately, no password prompt.
-                                host.connectionType != ConnectionType.SSH ->
+                                // Telnet/Serial have no auth — connect immediately, no password
+                                // prompt. SSH and Mosh resolve a credential or ask for a password.
+                                !host.connectionType.usesSshAuth ->
                                     openMobileSession(sessions, state, host, SshAuth.Password(""), chain.jump, dest)
                                 credential != null ->
                                     openMobileSession(sessions, state, host, credential.toSshAuth(), chain.jump, dest)

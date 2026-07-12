@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -49,6 +51,7 @@ import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.ai.aiBlockedMessage
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.connection.connectionErrorText
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
@@ -191,7 +194,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
                 }
                 is ConnectionUiState.Error ->
-                    MobileTerminalNotice("error", stringResource(Res.string.term_connection_failed), st.message, color = D.sunset)
+                    MobileTerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = D.sunset)
                 // Drop: frozen screen at the moment of loss, no keybar (channel is dead). Header status —
                 // "disconnected" in red. Detailed mobile parity (auto-reconnect) is a separate task.
                 is ConnectionUiState.Disconnected ->
@@ -444,7 +447,12 @@ private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, 
     ) {
         Sym(icon, size = 30.sp, color = color)
         Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-        Txt(subtitle, color = D.faint, size = 12.sp, font = mono)
+        // Long texts (Mosh setup errors) must wrap into a readable centered block, not one
+        // screen-wide line.
+        Txt(
+            subtitle, color = D.faint, size = 12.sp, font = mono, lineHeight = 18.sp,
+            align = TextAlign.Center, modifier = Modifier.widthIn(max = 480.dp),
+        )
     }
 }
 

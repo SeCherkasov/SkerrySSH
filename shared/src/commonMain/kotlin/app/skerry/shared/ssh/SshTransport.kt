@@ -17,7 +17,8 @@ interface SshTransport {
 
 /**
  * Connection target. [connectionType] selects the transport ([RoutingTransport] dispatches on it):
- * for [ConnectionType.SSH] all fields matter; for [ConnectionType.TELNET] only [host]/[port] are
+ * for [ConnectionType.SSH] all fields matter; [ConnectionType.MOSH] reads them the same way (they
+ * describe the SSH hop that bootstraps `mosh-server`); for [ConnectionType.TELNET] only [host]/[port] are
  * used ([username]/auth ignored); for [ConnectionType.SERIAL] [host] carries the device name
  * (`/dev/ttyUSB0`, `COM3`) and [port] the baud rate. Default [ConnectionType.SSH] preserves the
  * behavior of prior call sites that built a target without specifying a type.

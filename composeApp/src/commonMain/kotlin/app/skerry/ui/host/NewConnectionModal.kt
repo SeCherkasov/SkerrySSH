@@ -53,6 +53,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
+import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.ui.connection.ConnectionTestController
 import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.JumpChainResolution
@@ -97,6 +98,7 @@ import app.skerry.ui.generated.resources.conn_group_new_title
 import app.skerry.ui.generated.resources.conn_group_none
 import app.skerry.ui.generated.resources.conn_jump_none
 import app.skerry.ui.generated.resources.conn_protocol_serial
+import app.skerry.ui.generated.resources.conn_protocol_mosh
 import app.skerry.ui.generated.resources.conn_protocol_ssh
 import app.skerry.ui.generated.resources.conn_protocol_telnet
 import app.skerry.ui.generated.resources.conn_save
@@ -171,8 +173,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
         AuthMode.EXISTING -> credentials?.credentials?.any { it.id == form.existingCredentialId } == true
         AuthMode.ASK -> false
     }
-    // "Test connection" is SSH-only (Telnet/Serial have no auth/cipher probe).
-    val canTest = tester != null && form.connectionType == ConnectionType.SSH && hasTestSecret &&
+    // "Test connection" needs the SSH auth path (Telnet/Serial have no auth/cipher probe).
+    // For Mosh it probes the SSH hop — the UDP leg is only exercised by a real connect.
+    val canTest = tester != null && form.connectionType.usesSshAuth && hasTestSecret &&
         form.address.isNotBlank() && form.username.isNotBlank() && form.portOrNull != null
     // Editing connection/auth fields invalidates the previous test result, it's no longer relevant.
     LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase, form.jumpHostId) {
@@ -230,9 +233,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 // Picker of discovered ports (desktop: jSerialComm, Android: USB-OTG): tapping fills
                 // the Device field. Empty (no adapter / no USB Host) means no chips, manual input remains.
                 if (serial) SerialPortPicker(form)
-                // Auth is SSH-only: Telnet enters login/password in the terminal itself,
-                // Serial has no auth at all.
-                if (form.connectionType == ConnectionType.SSH) {
+                // Auth follows the SSH path (SSH and Mosh): Telnet enters login/password in the
+                // terminal itself, Serial has no auth at all.
+                if (form.connectionType.usesSshAuth) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_username)) { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
                     Spacer14()
@@ -240,11 +243,15 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 }
                 Spacer14()
                 Field(stringResource(Res.string.conn_field_group)) { GroupPicker(form, allHosts) }
-                if (form.connectionType == ConnectionType.SSH) {
+                if (form.connectionType.usesSshAuth) {
                     Spacer14()
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Field(stringResource(Res.string.conn_field_jump_host), Modifier.weight(1f)) { JumpHostPicker(form, allHosts, editHost?.id) }
-                        Field(stringResource(Res.string.conn_field_keep_alive), Modifier.weight(1f)) { KeepAlivePicker(form) }
+                        // Keep-alive is SSH-only: Mosh heartbeats on its own every few seconds,
+                        // so a per-profile cadence would be an inert knob.
+                        if (form.connectionType == ConnectionType.SSH) {
+                            Field(stringResource(Res.string.conn_field_keep_alive), Modifier.weight(1f)) { KeepAlivePicker(form) }
+                        }
                     }
                 }
                 Spacer14()
@@ -478,6 +485,7 @@ private fun ProtocolPicker(form: NewConnectionFormState) {
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         ProtocolSegment(stringResource(Res.string.conn_protocol_ssh), "lan", form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
+        ProtocolSegment(stringResource(Res.string.conn_protocol_mosh), "bolt", form.connectionType == ConnectionType.MOSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.MOSH) }
         ProtocolSegment(stringResource(Res.string.conn_protocol_telnet), "terminal", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
         ProtocolSegment(stringResource(Res.string.conn_protocol_serial), "cable", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
     }

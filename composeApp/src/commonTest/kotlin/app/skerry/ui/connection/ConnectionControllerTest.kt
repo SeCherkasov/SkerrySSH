@@ -4,6 +4,7 @@ import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
+import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.sftp.SftpProgress
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.DynamicForwardSpec
@@ -131,6 +132,25 @@ class ConnectionControllerTest {
         val state = controller.uiState
         assertIs<ConnectionUiState.Error>(state)
         assertEquals("access denied", state.message)
+        assertNull(state.moshReason)
+        scope.cancel()
+    }
+
+    @Test
+    fun `mosh setup failure carries the typed reason into Error`() = runTest {
+        val transport = FakeSshTransport(
+            error = MoshSetupException(
+                reason = MoshSetupException.Reason.SERVER_NOT_INSTALLED,
+                message = "mosh-server was not found",
+            ),
+        )
+        val (controller, scope) = controllerWith(transport)
+
+        controller.connect(target, SshAuth.Password("pw"))
+
+        val state = controller.uiState
+        assertIs<ConnectionUiState.Error>(state)
+        assertEquals(MoshSetupException.Reason.SERVER_NOT_INSTALLED, state.moshReason)
         scope.cancel()
     }
 
