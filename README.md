@@ -3,23 +3,74 @@
 **English** · [Русский](README.ru.md)
 
 [![CI](https://github.com/SeCherkasov/SkerrySSH/actions/workflows/ci.yml/badge.svg)](https://github.com/SeCherkasov/SkerrySSH/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/SeCherkasov/SkerrySSH)](../../releases/latest)
 [![Clients: GPL-3.0](https://img.shields.io/badge/clients-GPL--3.0-blue)](LICENSE)
 [![Server: AGPL-3.0](https://img.shields.io/badge/server-AGPL--3.0-blue)](server/LICENSE)
 
 An open-source, cross-platform SSH client with a single core: Kotlin Multiplatform under the
 hood, Compose Multiplatform UI on top. One core codebase and one UI across
-**Desktop (Linux, Windows)** and **Android**, with feature parity between platforms.
+**Desktop (Linux, Windows, macOS)** and **Android**, with feature parity between platforms.
 
-Current version — `0.1.11`.
+- **Local-first** — everything works without a server or an account.
+- **Zero-knowledge** — the master password never leaves the device.
+- **AI under policy** — model output is treated as untrusted; actions require confirmation;
+  a fully local model is an option.
+- **Platform parity** — a feature isn't done until it works everywhere.
+
+## How Skerry compares
+
+|  | Skerry | Termius | PuTTY | Tabby |
+|---|---|---|---|---|
+| Open source | GPL-3.0 (clients), AGPL-3.0 (server) | no | MIT | MIT |
+| Platforms | Linux, Windows, macOS, Android | Windows, macOS, Linux, iOS, Android | Windows, Unix | Windows, macOS, Linux |
+| First release | 2026 (v0.1.x) | 2011 | 1999 | 2017 |
+| Price | free | free tier; paid from $10/mo | free | free |
+| Works without an account | yes | partial — local use only; sync and AI need an account | yes | yes |
+| Encrypted vault | yes, always on (Argon2id + XChaCha20-Poly1305) | yes | no | optional, opt-in |
+| Sync | self-hosted server, zero-knowledge | vendor cloud, E2E (paid) | no | config sync via self-hostable Tabby Web (E2E opt-in) |
+| Team sharing | yes, E2E | paid tier | no | no |
+| SFTP | dual-pane UI | yes | command-line only (`psftp`) | built-in panel |
+| Port forwarding | local, remote, dynamic | yes | yes | yes |
+| Serial / Telnet | yes / yes | yes / yes | yes / yes | yes / yes |
+| Mosh | no | yes | no | no |
+| AI assistant | optional: BYOK cloud or a fully local model | yes, cloud-side; account required | no | no |
+
+*Competitor data collected from the projects' official sites and repositories on 2026-07-12.
+Spotted an error? Please open a PR.*
 
 ## Status
 
-Actively developed for **Linux**, **Windows**, and **Android**. **macOS** and **iOS/iPadOS**
-are planned.
+Actively developed for **Linux**, **Windows**, **macOS**, and **Android**. **iOS/iPadOS** is
+planned.
+
+## Install
+
+Grab a package from the **[latest release](../../releases/latest)**:
+
+| Platform | Arch | Files |
+|---|---|---|
+| Linux | x86_64 | `.deb`, `.rpm`, `.AppImage`, `.flatpak` |
+| Linux | arm64 | `.deb`, `.rpm`, `.AppImage` |
+| Windows | x64 | `.msi` |
+| macOS | Apple Silicon | `Skerry-*-arm64.dmg` |
+| macOS | Intel | `Skerry-*-x64.dmg` |
+| Android | arm64-v8a | `.apk` (signed; sideload) |
+
+- **macOS builds are unsigned and not notarized** (no Apple Developer account yet), so
+  Gatekeeper blocks the first launch: right-click the app → Open, or allow it under
+  System Settings → Privacy & Security. The `.dmg` file name carries a `1.x.y` version —
+  it is the same `0.x` release (macOS packaging requires a major version ≥ 1).
+- The Windows `.msi` is not code-signed either; SmartScreen may warn on first run.
+- Verify downloads against the attached checksums: `sha256sum -c --ignore-missing SHA256SUMS.txt`.
+
+Building it yourself is also easy — see [Building from source](#building-from-source).
 
 ## Screenshots
 
 ![Terminal with host manager, session tabs, and live metrics panel](docs/screenshots/desktop-terminal.png)
+
+<details>
+<summary>More screenshots</summary>
 
 ![Dual-pane SFTP commander](docs/screenshots/desktop-sftp.png)
 
@@ -33,49 +84,49 @@ are planned.
 |---|---|
 | ![Host list with groups and tags](docs/screenshots/mobile-hosts.png) | ![Mobile terminal](docs/screenshots/mobile-terminal.png) |
 
+</details>
+
 ## Features
 
-**Connections**
-- SSH (sshj + BouncyCastle), SSH certificates
-- SFTP (dual-pane commander)
-- Port forwarding: local (`-L`), remote (`-R`), dynamic/SOCKS (`-D`)
-- Telnet (custom IAC-negotiation codec), serial (jSerialComm on desktop; USB-OTG on Android:
-  CDC/FTDI/CP210x/CH34x)
+- **Connections** — SSH with jump hosts (ProxyJump) and SSH certificates; SFTP (dual-pane
+  commander); port forwarding: local, remote, dynamic/SOCKS; Telnet; serial (desktop and
+  Android USB-OTG).
+- **Terminal** — custom grid emulation, session tabs with split view, SSH auto-reconnect,
+  scrollback search, live host metrics.
+- **Vault** — always-on encryption (Argon2id + XChaCha20-Poly1305) for keys, passwords,
+  identities, and certificates; biometric unlock on Android.
+- **Sync** — optional and self-hosted, zero-knowledge, live push over WebSocket, device
+  pairing via QR. See [Sync server](#sync-server).
+- **Teams** — end-to-end encrypted sharing of hosts and snippets within a team.
+- **Snippets & AI** — command library with type-ahead in the terminal; AI assistant with
+  per-host policies — bring your own OpenAI key or run a local model.
+  See [AI and privacy](#ai-and-privacy).
+- **Localization** — English and Russian UI; the assistant replies in the UI language.
 
-**Terminal**
-- Custom grid emulation: VT line-drawing, Unicode/combining characters, SGR,
-  OSC 8/4/52/104, bracketed paste
-- Session tabs with split view, SSH auto-reconnect, drag-to-reorder, live host metrics (RTT)
-- JetBrains Mono rendering, scrollback reverse-search
+The full, detailed feature list lives in **[docs/FEATURES.md](docs/FEATURES.md)**.
 
-**Vault**
-- XChaCha20-Poly1305, zero-knowledge: the master password never leaves the device
-- Biometric unlock (BiometricPrompt) with reset/recovery flow, `FLAG_SECURE` on Android
-- Keys, passwords, identities, certificates
+## AI and privacy
 
-**Sync (self-hosted, optional)**
-- Zero-knowledge sync: authKey/dataKey split, XChaCha20-Poly1305 payloads,
-  SRP-6a authentication (server stores a verifier, never the password), JWT sessions
-- Live sync: push-on-change over WebSocket, tombstone propagation, cursor persistence,
-  selective sync by record type
-- Device pairing via QR (ZXing + CameraX + ML Kit, on-device), admin console
-- See [Sync server](#sync-server) below
+The vault promise ("the master password never leaves the device") and a cloud AI assistant
+only coexist under explicit rules:
 
-**Teams (sharing, optional)**
-- E2E zero-knowledge sharing of hosts and snippets within a team, on top of sealed-envelope
-  invitations; owner/member roles, ACL revocation
-
-**Snippets & AI**
-- Command library with snippet type-ahead in the terminal
-- AI assistant (BYOK OpenAI, per-host policies Strict/Balanced/Permissive/Off) with SSE
-  streaming
-- On-device local AI: the app downloads GGUF models itself and runs them via llama.cpp
-  (catalog: Qwen3, Phi-4 Mini) — the Strict policy works fully offline
-
-**Localization**
-- Strings live in compose-resources (`composeApp/src/commonMain/composeResources/values*`);
-  a language switcher (`LocalAppLocale`) drives both the UI and the AI assistant's reply
-  language (INFO/ASK)
+- **Nothing is sent anywhere automatically.** A request contains only the text you type
+  into the AI bar or chat, plus a fixed system prompt. Terminal output, host lists, and
+  vault contents are never attached.
+- **Cloud mode is BYOK**: your own OpenAI API key; requests go directly from the app to the
+  endpoint you configured.
+- **Per-host policies** decide where a request may go:
+  - **Strict** (default for new hosts) — local model only; nothing leaves the device.
+  - **Balanced** — cloud allowed; obvious secrets (private keys, tokens, `password=…`) are
+    redacted from the prompt before sending. Redaction is best-effort pattern matching,
+    not a guarantee.
+  - **Permissive** — cloud allowed without redaction, for non-sensitive systems.
+  - **Off** — AI is hidden for this host.
+- The global quick-chat always redacts secrets, even when using the local model.
+- **Local mode**: the app downloads GGUF models (Qwen3, Phi-4 Mini) and runs them on-device
+  via llama.cpp — no data leaves the device at all.
+- **Model output is untrusted**: a suggested command never runs by itself — it requires
+  explicit confirmation, and commands classified as risky require an extra confirmation.
 
 ## Tech stack
 
@@ -103,12 +154,17 @@ docs/         # HTML prototypes (source of truth for UX) and design documents
 HTML prototypes in `docs/design/` (`Skerry Tablet.html`, `Skerry Logo.html`) are the source
 of truth for the UI, built 1:1.
 
-## Building
+## Building from source
+
+This section is for contributors — regular users should grab a package from
+[Install](#install). See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the development
+workflow, commit conventions, and packaging notes.
 
 Requires **JDK 21** (`foojay-resolver` fetches one if needed). Android additionally needs
 the Android SDK (`ANDROID_HOME`).
 
-Desktop:
+Desktop (packages are produced for the OS and CPU architecture of the machine the build
+runs on — build on macOS/ARM to get a `.dmg`/arm64 package):
 
 ```bash
 ./gradlew :composeApp:run                                # run
@@ -116,13 +172,6 @@ Desktop:
 ./gradlew :composeApp:packageAppImage                    # portable Linux .AppImage
 ./gradlew :composeApp:packageFlatpak                     # single-file Linux .flatpak (needs flatpak + flatpak-builder)
 ```
-
-The Flatpak is a hermetic source build: `flatpak-builder` compiles the app inside the sandbox
-from the committed offline sources (`composeApp/flatpak/flatpak-sources.json`). Regenerate that
-list with `composeApp/flatpak/regenerate-sources.sh` whenever desktop dependencies change.
-
-ProGuard/minification is intentionally disabled for the desktop release — it broke the crypto
-stack; see the comment in `composeApp/build.gradle.kts`.
 
 Android:
 
@@ -135,10 +184,6 @@ Tests (JUnit 5):
 ```bash
 ./gradlew test
 ```
-
-Releases: pushing a `v*` tag runs the release workflow, which builds `.deb`/`.rpm`/`.AppImage`
-(x64 + arm64), a Flatpak bundle, `.msi`, `.dmg` (arm64 + x64, unsigned), a signed `.apk`,
-and `SHA256SUMS`, and publishes them as a draft GitHub Release.
 
 ## Sync server
 
@@ -166,14 +211,18 @@ The full deployment guide — configuration reference, API endpoints, TLS termin
 (Caddy/nginx), backups, and the privacy model — lives in
 **[server/README.md](server/README.md)**.
 
-## Principles
+## Security
 
-- **Local-first** — everything works without a server.
-- **Zero-knowledge** — the master password never leaves the device.
-- **AI under policy** — model output is treated as untrusted; actions require confirmation.
-- **Platform parity** — a feature isn't done until it works everywhere.
+The security policy — how to report a vulnerability privately, supported versions, the
+threat model, and an honest note on audit status — lives in **[SECURITY.md](SECURITY.md)**.
+
+## Contributing
+
+Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** for the environment
+setup, build and test commands, module structure, commit conventions, and the PR process.
 
 ## Licenses
 
 - Clients (`shared/`, `composeApp/`, `androidApp/`) — [GPL-3.0](LICENSE)
-- Sync server (`server/`) — [AGPL-3.0](server/LICENSE)
+- Sync server (`server/`) — [AGPL-3.0](server/LICENSE). The server is AGPL so that forks
+  which host it as a service contribute their changes back to the project.
