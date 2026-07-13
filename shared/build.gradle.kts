@@ -79,6 +79,10 @@ kotlin {
                 // Explicit: sshj's transitive bcprov is not visible on the compile classpath, while SshjTransport
                 // references BouncyCastleProvider to replace the stripped-down system "BC" on Android.
                 implementation(libs.bouncycastle.prov)
+                // sshj pins bcpkix/bcutil to 1.80; without this they stay behind the bumped bcprov (1.85),
+                // and 1.80's bcpkix references OIDs that moved in 1.85 -> NoSuchFieldError at runtime.
+                // Pinning bcpkix to the same version aligns bcutil transitively.
+                runtimeOnly(libs.bouncycastle.pkix)
                 // Sync client (Phase 2): HTTP+WS to the self-hosted server. iOS is deferred — the client
                 // lives in the shared JVM node (desktop + Android), same as the sshj transport.
                 implementation(libs.ktor.client.core)
