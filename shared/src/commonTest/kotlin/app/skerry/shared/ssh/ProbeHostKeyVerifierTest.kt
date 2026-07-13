@@ -52,6 +52,19 @@ class ProbeHostKeyVerifierTest {
         assertEquals(listOf(KnownHost("example.com", 22, ed25519, fpA)), store.all())
         assertEquals(0, store.adds)
     }
+
+    @Test
+    fun `rejects any key while the store is unreadable instead of accepting as unknown`() {
+        // Same fail-closed rule as TOFU: a locked vault must not look like "host never seen".
+        val store = RecordingKnownHostsStore().apply {
+            seed(KnownHost("example.com", 22, ed25519, fpA))
+            readable = false
+        }
+        val verifier = ProbeHostKeyVerifier(store)
+
+        assertFalse(verifier.verify("example.com", 22, ed25519, fpA))
+        assertFalse(verifier.verify("other.example.com", 22, ed25519, fpB))
+    }
 }
 
 /** In-memory known-hosts store that counts [add] calls, to verify probe read-only behavior. */
@@ -59,10 +72,12 @@ private class RecordingKnownHostsStore : KnownHostsStore {
     private val entries = mutableListOf<KnownHost>()
     var adds = 0
         private set
+    var readable = true
 
     /** Seeds an entry without incrementing [adds] (pre-fills trusted state). */
     fun seed(host: KnownHost) { entries += host }
 
+    override fun allOrNull(): List<KnownHost>? = if (readable) all() else null
     override fun all(): List<KnownHost> = entries.toList()
     override fun add(host: KnownHost) { adds++; entries += host }
     override fun replace(host: KnownHost) {

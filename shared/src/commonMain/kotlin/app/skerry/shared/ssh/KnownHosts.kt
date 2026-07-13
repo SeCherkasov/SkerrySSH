@@ -26,6 +26,15 @@ data class KnownHost(
 interface KnownHostsStore {
     fun all(): List<KnownHost>
 
+    /**
+     * [all], or `null` when the backing storage is currently unreadable (vault locked, including an
+     * auto-lock firing mid-read) — as opposed to readable-but-empty. Host key verifiers use this and
+     * **fail closed** on `null`: an unreadable store must not look like "host never seen", or a
+     * changed key (the MITM signal) would be TOFU-accepted. Stores whose reads can't fail keep the
+     * default.
+     */
+    fun allOrNull(): List<KnownHost>? = all()
+
     /** Add a new record. Called only for a previously unknown (host, port, keyType) triple. */
     fun add(host: KnownHost)
 
@@ -83,6 +92,10 @@ object NoopHostKeyMismatchStore : HostKeyMismatchStore {
  * [mismatches] for the known-hosts manager to resolve. A new key type for a known host is treated as
  * a new key.
  *
+ * An unreadable store ([KnownHostsStore.allOrNull] == `null`, e.g. the vault auto-locked during the
+ * handshake) rejects the key — fail closed. Trust decisions need the trusted set; without it a
+ * changed key is indistinguishable from a first contact.
+ *
  * [now] stamps [KnownHost.firstSeen]/[HostKeyMismatch.observedAt] (ISO-8601); defaults to empty for
  * tests and graphs without a clock.
  */
@@ -92,7 +105,8 @@ class TofuHostKeyVerifier(
     private val now: () -> String = { "" },
 ) : HostKeyVerifier {
     override fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean {
-        val existing = store.all().firstOrNull {
+        val known = store.allOrNull() ?: return false
+        val existing = known.firstOrNull {
             it.host == host && it.port == port && it.keyType == keyType
         }
         return when (existing) {
@@ -119,13 +133,15 @@ class TofuHostKeyVerifier(
  * matching trusted key is accepted; a mismatch for an already-known host is rejected (MITM
  * protection); a previously unknown host is accepted but not written to [store] — a probe must not
  * leave traces in known_hosts or establish permanent trust. Permanent trust is only established on a
- * real connection ([TofuHostKeyVerifier]).
+ * real connection ([TofuHostKeyVerifier]). An unreadable store rejects — fail closed, same rule as
+ * [TofuHostKeyVerifier].
  */
 class ProbeHostKeyVerifier(
     private val store: KnownHostsStore,
 ) : HostKeyVerifier {
     override fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean {
-        val existing = store.all().firstOrNull {
+        val known = store.allOrNull() ?: return false
+        val existing = known.firstOrNull {
             it.host == host && it.port == port && it.keyType == keyType
         }
         return existing == null || existing.fingerprint == fingerprint

@@ -16,16 +16,24 @@ import app.skerry.shared.vault.VaultRecordCodec
  * is bound to id‖type, and [all] filters by type).
  *
  * Called from sshj's IO thread on connect (the vault is unlocked by then, since connect only
- * happens from an open UI). Reading a locked vault returns an empty list (safe no-op). Does not
- * store key-change events ([HostKeyMismatch]) — that's a local, non-synced signal (see the file store).
+ * happens from an open UI) — but an auto-lock timeout can fire mid-handshake. A locked vault makes
+ * the store *unreadable* ([allOrNull] == `null`), which host key verifiers treat as reject
+ * (fail closed); [all] maps it to an empty list for non-security readers (the known-hosts manager
+ * UI). Does not store key-change events ([HostKeyMismatch]) — that's a local, non-synced signal
+ * (see the file store).
  */
 class VaultKnownHostsStore(private val vault: Vault) : KnownHostsStore {
 
     private val codec = VaultRecordCodec(vault, RecordType.KNOWN_HOST, KnownHost.serializer())
 
-    override fun all(): List<KnownHost> {
-        if (!vault.isUnlocked) return emptyList()
-        return codec.list()
+    override fun all(): List<KnownHost> = allOrNull() ?: emptyList()
+
+    override fun allOrNull(): List<KnownHost>? {
+        if (!vault.isUnlocked) return null
+        // Auto-lock can still fire between the check and the read; the locked vault then throws
+        // from records()/openPayload(). That's "unreadable", not "empty" — and it must not
+        // propagate into sshj's IO thread.
+        return runCatching { codec.list() }.getOrNull()
     }
 
     override fun add(host: KnownHost) {

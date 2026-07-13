@@ -99,11 +99,37 @@ class TofuHostKeyVerifierTest {
 
         assertEquals(emptyList(), mismatches.all())
     }
+
+    @Test
+    fun `rejects any key while the store is unreadable instead of TOFU-accepting`() {
+        // Locked-vault race: an unreadable store must not look like "host never seen" — a MITM
+        // key would be silently trusted. Fail closed.
+        val store = InMemoryKnownHostsStore().apply { readable = false }
+        val verifier = TofuHostKeyVerifier(store)
+
+        assertFalse(verifier.verify("example.com", 22, ed25519, fpA))
+        assertEquals(emptyList(), store.all())
+    }
+
+    @Test
+    fun `rejects a known host too while the store is unreadable and records no mismatch`() {
+        val store = InMemoryKnownHostsStore()
+        val mismatches = InMemoryHostKeyMismatchStore()
+        val verifier = TofuHostKeyVerifier(store, mismatches)
+        verifier.verify("example.com", 22, ed25519, fpA)
+        store.readable = false
+
+        assertFalse(verifier.verify("example.com", 22, ed25519, fpA))
+        // The trusted fingerprint is unknown while unreadable — nothing meaningful to record.
+        assertEquals(emptyList(), mismatches.all())
+    }
 }
 
-/** In-memory store for TOFU logic tests. */
+/** In-memory store for TOFU logic tests. [readable] = false models a locked vault. */
 private class InMemoryKnownHostsStore : KnownHostsStore {
     private val entries = mutableListOf<KnownHost>()
+    var readable = true
+    override fun allOrNull(): List<KnownHost>? = if (readable) all() else null
     override fun all(): List<KnownHost> = entries.toList()
     override fun add(host: KnownHost) {
         entries += host
