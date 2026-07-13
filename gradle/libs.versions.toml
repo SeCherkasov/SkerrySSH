@@ -120,6 +120,7 @@ sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
 jserialcomm = { module = "com.fazecast:jSerialComm", version.ref = "jserialcomm" }
 usbserial = { module = "com.github.mik3y:usb-serial-for-android", version.ref = "usbSerial" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }
 sshd-sftp = { module = "org.apache.sshd:sshd-sftp", version.ref = "sshd" }
 ionspin-libsodium = { module = "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings", version.ref = "ionspin-libsodium" }
