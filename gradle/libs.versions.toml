@@ -14,58 +14,58 @@ androidx-biometric = "1.1.0"
 # FragmentActivity — an androidx.biometric requirement for the prompt host
 androidx-fragment = "1.8.5"
 composeMultiplatform = "1.11.1"
-kotlin = "2.3.21"
+kotlin = "2.4.0"
 # material3 is versioned separately from CMP; there is no stable release of the 1.11 line yet
-material3 = "1.11.0-alpha07"
-kotlinx-coroutines = "1.10.2"
-kotlinx-serialization = "1.9.0"
-ktor = "3.4.3"
+material3 = "1.12.0-alpha03"
+kotlinx-coroutines = "1.11.0"
+kotlinx-serialization = "1.11.0"
+ktor = "3.5.1"
 logback = "1.5.38"
 # slf4j-nop: a no-op SLF4J provider for the app. sshj logs via slf4j-api (2.0.17 on the
 # classpath); without any binding SLF4J prints "No SLF4J providers were found" and goes NOP.
 # An explicit nop removes the warning while keeping current behavior (sshj logs are not needed in the client anyway).
-slf4j = "2.0.17"
+slf4j = "2.0.18"
 sshj = "0.40.0"
 # jSerialComm: native access to serial ports on desktop (Linux/Windows/macOS).
 # desktopMain only — on Android serial goes over USB-OTG as a separate implementation (later).
-jserialcomm = "2.11.0"
+jserialcomm = "2.11.4"
 # usb-serial-for-android: access to USB-serial adapters (CDC/FTDI/CP210x/CH34x) via the USB Host API.
 # androidMain only — desktop uses jSerialComm.
-usbSerial = "3.9.0"
+usbSerial = "3.10.0"
 # full BouncyCastle: an sshj transitive (as implementation, not visible on the compile classpath),
 # added explicitly — on Android the system "BC" is stripped down and SshjTransport.ensureCryptoProvider replaces it
-bouncycastle = "1.80.2"
+bouncycastle = "1.85"
 # embedded SSH server for SshjTransport tests only; 3.x is still in milestone
-sshd = "2.18.0"
+sshd = "2.19.0"
 # multiplatform libsodium binding (KMP, Argon2id + XChaCha20-Poly1305) for a single VaultCrypto
 ionspin-libsodium = "0.9.5"
 # okio — cross-platform file I/O behind FileSystem (FileVault in commonMain, FakeFileSystem in tests)
 okio = "3.17.0"
 # atomicfu — multiplatform locks (kotlinx.atomicfu.locks) instead of JVM-only @Synchronized
-atomicfu = "0.32.1"
+atomicfu = "0.33.0"
 # --- Phase 2 sync ---
 # Exposed — the server's type-safe SQL layer; SQLite by default, PostgreSQL via DB URL
-exposed = "0.58.0"
+exposed = "1.3.1"
 sqlite-jdbc = "3.53.2.0"
 postgresql = "42.7.13"
-hikari = "6.3.0"
+hikari = "7.1.0"
 # Nimbus SRP6a — an audited SRP-6a implementation, used by the server and the JVM sync client
 nimbus-srp = "2.1.0"
 # --- Fast device pairing (option B): QR generation + camera scanner ---
 # ZXing core — pure Java (works on both desktop JVM and Android), generates the pairing QR matrix
-zxing = "3.5.3"
+zxing = "3.5.4"
 # CameraX — camera preview for the QR scanner on Android (androidMain only)
 camerax = "1.4.1"
 # --- Phase 3: local AI ---
 # Llamatik — a KMP binding of llama.cpp (GGUF, streaming, chat template from GGUF): the only
 # maintained option with natives for both desktop JVM (Linux/Win/macOS) and Android arm64
 # (16KB pages aligned). MIT. java-llama.cpp (kherud) has been dead since 2025-06 and cannot load Qwen3.
-llamatik = "1.8.1"
+llamatik = "1.9.0"
 # ML Kit barcode-scanning — QR recognition in the camera frame (Android, on-device, no network)
 mlkit-barcode = "17.3.0"
 # JNA platform bindings — desktop-only; used for the Linux/X11 _NET_WM_MOVERESIZE native window drag
 # (the JNA core is already on the classpath transitively via the libsodium binding).
-jna = "5.18.1"
+jna = "5.19.1"
 # Kover — code-coverage for the JVM/KMP test suites. Loaded via the root buildscript classpath and
 # applied conditionally (see the root build.gradle.kts) so the offline Flatpak build never resolves it.
 # 0.9.8+ is required: earlier releases can't handle the com.android.kotlin.multiplatform.library
