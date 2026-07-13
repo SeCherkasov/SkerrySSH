@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Allow cleartext (HTTP) for the self-hosted sync server: the user runs it themselves, often on a
-  local network without TLS. The payload is E2E-encrypted anyway (zero-knowledge), SRP is safe over
-  cleartext, and the metadata is open by design (the Vaultwarden model, docs/skerry-sync-design.md).
-  Whoever sets up HTTPS points at https:// and gets an encrypted transport with no config changes.
+  Cleartext (HTTP) is permitted app-wide. Why app-wide and not scoped:
+
+  The endpoints that legitimately use http:// — the self-hosted sync server and a local AI
+  endpoint — are addressed by a URL the user types at runtime (any host or bare IP, often a
+  LAN address). Android's network-security-config can only pin cleartext to specific literal
+  domains via <domain-config>; it can't allow it for "whatever the user enters" or for RFC-1918
+  ranges. So there is no <domain-config> that expresses "the server the user configured", and a
+  base-config toggle is the only mechanism that covers the feature.
+
+  Why it's acceptable: the self-hosted server follows the Vaultwarden model (the user runs it,
+  often on a trusted LAN without TLS). The sync payload is E2E-encrypted (zero-knowledge), SRP-6a
+  never transmits the password, and its M2 authenticates the server; metadata is open by design.
+  See docs/skerry-sync-design.md.
+
+  Residual risk (documented, not eliminated by this file): over plain http:// a network MITM can
+  read JWTs/metadata and hijack a session; a local AI endpoint sent secrets is likewise exposed.
+  The in-app UI is the real backstop here — it warns on every http:// URL (sync setup, pairing
+  join, AI endpoint) — and SECURITY.md § "Transport" spells out the trade-off. Whoever sets up
+  HTTPS just points at https:// and gets encrypted transport with no config change.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />

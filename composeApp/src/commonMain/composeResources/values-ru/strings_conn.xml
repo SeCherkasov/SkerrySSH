@@ -37,6 +37,7 @@
     <string name="conn_protocol_mosh">Mosh</string>
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">Serial</string>
+    <string name="conn_telnet_plaintext_warning">Telnet не шифруется — учётные данные и содержимое сессии идут открытым текстом. Предпочитайте SSH вне доверенной сети.</string>
 
     <string name="conn_jump_none">Нет — напрямую</string>
     <string name="conn_jump_error_title">Прыжковый хост недоступен</string>

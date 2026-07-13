@@ -411,6 +411,17 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     if (qrScannerAvailable) {
         GhostButton(stringResource(Res.string.sync_scan_qr), onClick = { showScanner = true }, icon = "photo_camera", modifier = Modifier.padding(top = 10.dp))
     }
+    // The server URL is inside the pairing code, not typed here — warn when it decodes to http://
+    // (same MITM exposure as the sync form's insecure-URL warning), so a QR pointing at a cleartext
+    // server isn't accepted blind. Decode is memoized on `code` so a keystroke in the password/confirm
+    // fields (which recompose this body) doesn't re-run it on the unchanged code.
+    val codeIsInsecure = remember(code) { PairingPayload.isInsecureServerUrl(code) }
+    if (codeIsInsecure) {
+        Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Sym("warning", size = 14.sp, color = D.sunset)
+            Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
+        }
+    }
     SyncFieldLabel(stringResource(Res.string.sync_field_choose_password))
     SyncTextField(password, stringResource(Res.string.sync_placeholder_min_chars, MIN_MASTER_PASSWORD_LENGTH), KeyboardType.Password, masked = true, icon = "key") { password = it }
     SyncFieldLabel(stringResource(Res.string.sync_field_repeat_password))

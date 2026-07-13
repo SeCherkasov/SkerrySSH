@@ -36,6 +36,7 @@ import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.request.contentLength
+import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
@@ -100,12 +101,23 @@ fun Application.configureServer(services: Services) {
             "default-src 'self'; font-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
         )
     }
-    // Rate-limit by remote IP: throttles brute force/flooding on register, SRP, and pairing claim.
+    // Rate-limit by client IP: throttles brute force/flooding on register, SRP, and pairing claim.
+    // Behind a reverse proxy, the key comes from X-Forwarded-For but only when the direct peer is a
+    // configured trusted proxy — otherwise a client could spoof the header to dodge limits (see
+    // [rateLimitClientKey]). We do NOT install XForwardedHeaders: that would rewrite origin.remoteHost
+    // globally and lose the direct peer we need to gate on.
+    val trustedProxies = services.config.trustedProxies.toSet()
     install(RateLimit) {
-        // All buckets are the same shape: N tokens per 60 seconds, keyed by remote IP.
+        // All buckets are the same shape: N tokens per 60 seconds, keyed by client IP.
         fun perIp(name: RateLimitName, limit: Int) = register(name) {
             rateLimiter(limit = limit, refillPeriod = 60.seconds)
-            requestKey { call -> call.request.origin.remoteHost }
+            requestKey { call ->
+                rateLimitClientKey(
+                    directPeer = call.request.origin.remoteHost,
+                    forwardedFor = call.request.header(HttpHeaders.XForwardedFor),
+                    trustedProxies = trustedProxies,
+                )
+            }
         }
         perIp(RateLimits.REGISTER, limit = 5)
         perIp(RateLimits.SRP_CHALLENGE, limit = 10)

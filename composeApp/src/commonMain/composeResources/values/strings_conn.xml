@@ -37,6 +37,7 @@
     <string name="conn_protocol_mosh">Mosh</string>
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">Serial</string>
+    <string name="conn_telnet_plaintext_warning">Telnet is unencrypted — credentials and session data travel in the clear. Prefer SSH unless on a trusted network.</string>
 
     <string name="conn_jump_none">None — direct</string>
     <string name="conn_jump_error_title">Jump host unavailable</string>

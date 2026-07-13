@@ -56,6 +56,15 @@ class PairingPayload(
         private const val TRANSFER_KEY_SIZE = 32
 
         /**
+         * True when [raw] decodes to a pairing payload whose [serverUrl] is plain `http://`. Drives the
+         * insecure-transport warning on the pairing-join screen (the server address is baked into the QR,
+         * so unlike the sync form the user never types it and can't see the scheme otherwise). Returns
+         * false for anything that doesn't decode (the "malformed code" path handles that separately).
+         */
+        fun isInsecureServerUrl(raw: String): Boolean =
+            decode(raw)?.serverUrl?.startsWith("http://") == true
+
+        /**
          * Parses a string from a QR/manual entry. Returns null for anything not ours or
          * malformed (unrelated QR, truncation, wrong prefix, non-base64); the caller shows
          * "doesn't look like a pairing code" instead of crashing. Surrounding whitespace is

@@ -1,0 +1,24 @@
+# Dependabot keeps the supply chain patched: GitHub Actions and Gradle/Maven dependencies.
+# Actions pinned to a commit SHA (e.g. android-actions/setup-android) are bumped here too —
+# Dependabot rewrites the SHA and updates the trailing "# vX" comment, so pinning stays current
+# without manual tracking. This is the ongoing half of the dependency-verification hardening;
+# see docs/dependency-verification.md for the (separate) Gradle artifact-checksum file.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      gradle-dependencies:
+        patterns: ["*"]

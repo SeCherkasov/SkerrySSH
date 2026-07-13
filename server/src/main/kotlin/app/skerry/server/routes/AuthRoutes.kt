@@ -27,9 +27,24 @@ import javax.crypto.spec.SecretKeySpec
 fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.REGISTER) {
         post("/auth/register") {
+            // Registration policy is checked before any work: a closed instance (Vaultwarden's
+            // SIGNUPS_ALLOWED=false) rejects new accounts outright; existing accounts still log in
+            // and pair new devices (those paths don't hit /auth/register).
+            if (!services.config.registrationOpen) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("registration is closed"))
+                return@post
+            }
             val req = call.receive<RegisterRequest>()
             if (tooLong(req.accountId, req.deviceId)) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
+                return@post
+            }
+            // Optional per-instance cap (backstop for an instance left open). The count/create window
+            // is a benign soft-limit race: the cap can overshoot by a few under concurrent registration,
+            // never a security boundary. create() still enforces uniqueness.
+            val cap = services.config.maxAccounts
+            if (cap > 0 && services.accounts.count() >= cap) {
+                call.respond(HttpStatusCode.Forbidden, ErrorResponse("registration limit reached"))
                 return@post
             }
             // base64-decode before writing to the DB: invalid payload -> 400, not 500.

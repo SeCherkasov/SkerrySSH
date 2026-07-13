@@ -37,6 +37,31 @@ goals verified by the project's own tests, not by a third-party audit.
 - **AI**: per-host policies control whether anything may be sent to a cloud provider;
   see [AI and privacy](README.md#ai-and-privacy) in the README.
 
+## Transport (self-hosted sync server)
+
+The sync server speaks **plain HTTP** — it has no built-in TLS. Terminate TLS with a
+reverse proxy (Caddy, nginx, Traefik) in front of it for any deployment reachable beyond
+`localhost`. `docker-compose.yml` binds the published port to `127.0.0.1` for exactly this
+reason: nothing is exposed until you put a proxy in front or deliberately widen the binding.
+
+What is and isn't protected without TLS:
+
+- **Protected regardless of transport** — the password (SRP-6a never transmits it), vault
+  contents (the server only ever holds ciphertext), and the dataKey (wrapped/sealed, never
+  sent in the clear). SRP's M2 authenticates the server to the client.
+- **Exposed over plain `http://`** — JWTs and sync metadata (record types, sizes,
+  timestamps, device ids) are readable by a network eavesdropper, and an active
+  man-in-the-middle can steal a session token. The admin token also crosses the wire in the
+  clear on the admin endpoints.
+
+Direct LAN sync over `http://` (no proxy) is a supported, deliberate mode for a home network
+you trust — the Vaultwarden model — but the clients still warn on an `http://` URL. Use
+`https://` for anything reachable from an untrusted network.
+
+If the server sits behind a reverse proxy, set `SKERRY_TRUSTED_PROXIES` to the proxy's IP so
+per-IP rate limits key on the real client address (from `X-Forwarded-For`) instead of the
+proxy's — see `server/.env.example`.
+
 ## Threat model
 
 Skerry is designed to protect against:
