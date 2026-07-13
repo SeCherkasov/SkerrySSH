@@ -31,6 +31,7 @@ import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.DataKey
+import app.skerry.shared.vault.MergeResult
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.SyncMeta
@@ -349,7 +350,7 @@ private class InMemoryVault : Vault {
     override fun reset() { records.clear(); payloads.clear() }
     override fun records(): List<VaultRecord> = records.values.filterNot { it.deleted }
     override fun syncMeta(): SyncMeta? = null
-    override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = emptyList()
+    override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
     override fun openPayload(id: String): ByteArray? = payloads[id]
     override fun put(id: String, type: RecordType, payload: ByteArray) {
         payloads[id] = payload

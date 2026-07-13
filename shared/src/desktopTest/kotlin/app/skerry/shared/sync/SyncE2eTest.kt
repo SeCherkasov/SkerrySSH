@@ -6,6 +6,7 @@ import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.initializeVaultCrypto
+import app.skerry.shared.vault.recordAad
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import kotlinx.coroutines.runBlocking
@@ -29,9 +30,6 @@ class SyncE2eTest {
 
     private val accountId = "alice@example.com"
     private val masterPassword = "correct horse battery staple"
-
-    /** Record slot AAD as in FileVault: `id` + U+001F + `type.name`. */
-    private fun aad(id: String, type: RecordType) = "$id${type.name}".encodeToByteArray()
 
     @Test
     fun `device B reconstructs data key from password and decrypts device A record`() = runBlocking {
@@ -89,7 +87,13 @@ class SyncE2eTest {
             assertFalse(hostRecord.blob.toList().windowed(payload.size).any { it == payload.toList() })
 
             // Device B decrypts device A's record with a key derived only from the password + accountId.
-            val decrypted = crypto.open(dataKeyB, hostRecord.blob, aad("h1", RecordType.HOST))
+            // AAD binds the full record metadata (see recordAad) - device B reconstructs it from
+            // the plaintext fields the server returned.
+            val decrypted = crypto.open(
+                dataKeyB,
+                hostRecord.blob,
+                recordAad("h1", RecordType.HOST, hostRecord.version, hostRecord.deviceId, deleted = false, updatedAt = hostRecord.updatedAt),
+            )
             assertContentEquals(payload, decrypted)
 
             // Both devices see the account's device list.

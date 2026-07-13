@@ -266,17 +266,157 @@ class FileVaultTest {
     }
 
     @Test
-    fun `a record with a too-short blob reads as null instead of throwing`() = vaultTest {
+    fun `mergeRemote rejects a record with a too-short blob instead of throwing`() = vaultTest {
         val v = vault()
         v.create("master".toCharArray())
         // An untrusted sync server could send a record with a blob shorter than nonce+tag —
-        // mergeRemote stores it as-is; reading must not throw (else DoS: crash on every unlock).
-        v.mergeRemote(
+        // trial-decrypt must treat it as an ordinary AEAD failure and reject the record, not throw
+        // (else DoS: crash on every sync) and not store an unreadable blob.
+        val result = v.mergeRemote(
             listOf(
                 VaultRecord("evil", RecordType.HOST, version = 99, updatedAt = TS, deviceId = "z", deleted = false, blob = ByteArray(4)),
             ),
         )
+        assertEquals(listOf("evil"), result.rejected.map { it.id })
+        assertTrue(v.records().none { it.id == "evil" })
         assertNull(v.openPayload("evil"))
+    }
+
+    @Test
+    fun `mergeRemote rejects a garbage blob with an inflated version`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("host-1", RecordType.HOST, "genuine".encodeToByteArray())
+        }
+
+        // A malicious server pushes an undecryptable blob claiming version=MAX to overwrite the record.
+        val garbage = VaultRecord("host-1", RecordType.HOST, version = Long.MAX_VALUE, updatedAt = TS, deviceId = "evil", deleted = false, blob = ByteArray(64))
+        val result = v.mergeRemote(listOf(garbage))
+
+        assertTrue(result.applied.isEmpty())
+        assertEquals(listOf("host-1"), result.rejected.map { it.id })
+        // The locally readable record survives instead of being silently replaced.
+        assertEquals(1L, v.records().first { it.id == "host-1" }.version)
+        assertContentEquals("genuine".encodeToByteArray(), v.openPayload("host-1"))
+    }
+
+    @Test
+    fun `mergeRemote rejects a replayed genuine blob with a bumped version`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("host-1", RecordType.HOST, "old-password".encodeToByteArray())
+        }
+        val genuine = v.records().first { it.id == "host-1" }
+        v.put("host-1", RecordType.HOST, "new-password".encodeToByteArray())
+
+        // Rollback attack: the server replays the authentic version-1 ciphertext claiming version 3.
+        // The AAD binds the version the blob was sealed with, so the tag check fails.
+        val replay = genuine.copy(version = 3L)
+        val result = v.mergeRemote(listOf(replay))
+
+        assertTrue(result.applied.isEmpty())
+        assertEquals(listOf("host-1"), result.rejected.map { it.id })
+        assertContentEquals("new-password".encodeToByteArray(), v.openPayload("host-1"))
+    }
+
+    @Test
+    fun `mergeRemote rejects a forged tombstone built from a live blob`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("host-1", RecordType.HOST, "data".encodeToByteArray())
+        }
+        val live = v.records().first { it.id == "host-1" }
+
+        // The server flips deleted=true on an authentic live blob to destroy the record fleet-wide.
+        val forged = live.copy(deleted = true, version = live.version + 1)
+        val result = v.mergeRemote(listOf(forged))
+
+        assertTrue(result.applied.isEmpty())
+        assertEquals(listOf("host-1"), result.rejected.map { it.id })
+        assertFalse(v.records().first { it.id == "host-1" }.deleted)
+        assertContentEquals("data".encodeToByteArray(), v.openPayload("host-1"))
+    }
+
+    @Test
+    fun `mergeRemote accepts a record sealed by another device under the same key`() = vaultTest {
+        val a = vault().apply { create("master".toCharArray()) }
+        val b = FileVault("/vault-b.json".toPath(), crypto, deviceId = "device-2", fileSystem = fs, now = { TS })
+        b.createWithDataKey(a.exportDataKey()!!)
+        b.put("r1", RecordType.HOST, "from-b".encodeToByteArray())
+
+        val result = a.mergeRemote(listOf(b.records().single()))
+
+        assertEquals(listOf("r1"), result.applied.map { it.id })
+        assertTrue(result.rejected.isEmpty())
+        assertContentEquals("from-b".encodeToByteArray(), a.openPayload("r1"))
+    }
+
+    @Test
+    fun `mergeRemote and openPayload accept legacy blobs sealed with the id-type AAD`() = vaultTest {
+        val v = vault().apply { create("master".toCharArray()) }
+        // A blob sealed before metadata binding (an old client, or a record still on the sync
+        // server): AAD covers only id‖type. It must merge and read via the legacy fallback.
+        val key = v.exportDataKey()!!
+        val blob = crypto.seal(key, "legacy-payload".encodeToByteArray(), "old-1\u001F${RecordType.HOST.name}".encodeToByteArray())
+        key.zeroize()
+        val legacy = VaultRecord("old-1", RecordType.HOST, version = 2, updatedAt = TS, deviceId = "devX", deleted = false, blob = blob)
+
+        val result = v.mergeRemote(listOf(legacy))
+
+        assertEquals(listOf("old-1"), result.applied.map { it.id })
+        assertTrue(result.rejected.isEmpty())
+        assertContentEquals("legacy-payload".encodeToByteArray(), v.openPayload("old-1"))
+    }
+
+    @Test
+    fun `tombstone from remove is authenticated on another device sharing the key`() = vaultTest {
+        val a = vault().apply {
+            create("master".toCharArray())
+            put("h", RecordType.HOST, "x".encodeToByteArray())
+        }
+        val b = FileVault("/vault-b.json".toPath(), crypto, deviceId = "device-2", fileSystem = fs, now = { TS })
+        b.createWithDataKey(a.exportDataKey()!!)
+
+        a.remove("h")
+        val tombstone = a.records().single { it.id == "h" }
+        val result = b.mergeRemote(listOf(tombstone))
+
+        // remove() re-seals the tombstone, so its bumped version and deleted=true pass trial-decrypt.
+        assertEquals(listOf("h"), result.applied.map { it.id })
+        assertTrue(b.records().single { it.id == "h" }.deleted)
+    }
+
+    @Test
+    fun `tombstone does not keep the deleted payload in its blob`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("h", RecordType.HOST, "secret".encodeToByteArray())
+        }
+
+        v.remove("h")
+
+        val tombstone = v.records().single { it.id == "h" }
+        val key = v.exportDataKey()!!
+        val opened = crypto.open(key, tombstone.blob, recordAad(tombstone))
+        key.zeroize()
+        // The re-sealed tombstone authenticates but carries no plaintext — the secret is gone.
+        assertContentEquals(ByteArray(0), opened)
+    }
+
+    @Test
+    fun `remove works even when the record blob is unreadable under the current key`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("h", RecordType.HOST, "x".encodeToByteArray())
+        }
+        // Adopting another account's key makes the old local record unreadable (documented
+        // adoptDataKey semantics); removing it must still produce a valid tombstone.
+        v.adoptDataKey(crypto.newDataKey(), "account".toCharArray())
+
+        v.remove("h")
+
+        assertTrue(v.records().single { it.id == "h" }.deleted)
+        assertNull(v.openPayload("h"))
     }
 
     @Test
@@ -535,8 +675,8 @@ class FileVaultTest {
         val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
         runCurrent()
 
-        // An incoming record from sync: merge stores it verbatim, but no push-back is needed (LWW
-        // would reject it), so localChanges is not emitted — otherwise pull->merge would loop into a push.
+        // An incoming record from sync (here it even fails trial-decrypt and is rejected): merge is
+        // an incoming operation, so localChanges is not emitted — otherwise pull->merge would loop into a push.
         val incoming = VaultRecord("r", RecordType.HOST, version = 5, updatedAt = TS, deviceId = "other", deleted = false, blob = ByteArray(8))
         v.mergeRemote(listOf(incoming))
         runCurrent()

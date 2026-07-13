@@ -220,11 +220,12 @@ class FileVault(
         SyncMeta(m.salt.copyOf(), m.wrappedDataKey.copyOf()) // copies: the caller is free to wipe them
     }
 
-    override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = synchronized(lock) {
-        requireUnlocked()
+    override fun mergeRemote(remote: List<VaultRecord>): MergeResult = synchronized(lock) {
+        val key = requireUnlocked()
         val currentMeta = session()
         val working = records.toMutableList()
         val applied = mutableListOf<VaultRecord>()
+        val rejected = mutableListOf<VaultRecord>()
         for (r in remote) {
             val index = working.indexOfFirst { it.id == r.id }
             val local = if (index >= 0) working[index] else null
@@ -232,15 +233,23 @@ class FileVault(
             val wins = local == null ||
                 r.version > local.version ||
                 (r.version == local.version && r.deviceId > local.deviceId)
-            if (wins) {
-                if (index >= 0) working[index] = r else working += r
-                applied += r
+            if (!wins) continue
+            // Trial-decrypt before storing: the AAD binds the metadata the record claims, so a
+            // compromised server can't roll a record back by replaying an old genuine ciphertext
+            // with a bumped version, forge a tombstone from a live blob, or replace a readable
+            // record with garbage. Records the current key can't authenticate are rejected, and
+            // the local record (if any) survives.
+            if (!authenticates(key, r)) {
+                rejected += r
+                continue
             }
+            if (index >= 0) working[index] = r else working += r
+            applied += r
         }
         if (applied.isNotEmpty()) {
             commit(currentMeta, working)
         }
-        applied
+        MergeResult(applied, rejected)
     }
 
     override fun openPayload(id: String): ByteArray? = synchronized(lock) {
@@ -248,16 +257,17 @@ class FileVault(
         val record = records.firstOrNull { it.id == id } ?: return@synchronized null
         // A tombstone doesn't return a payload: the deleted record's blob is kept for sync but never exposed.
         if (record.deleted) return@synchronized null
-        crypto.open(key, record.blob, aad(record.id, record.type))
+        openRecord(key, record)
     }
 
     override fun put(id: String, type: RecordType, payload: ByteArray): Unit = synchronized(lock) {
         val key = requireUnlocked()
         val currentMeta = session()
-        val blob = crypto.seal(key, payload, aad(id, type))
         val index = records.indexOfFirst { it.id == id }
         val version = if (index >= 0) records[index].version + 1 else 1L
-        val record = VaultRecord(id, type, version, now(), deviceId, deleted = false, blob = blob)
+        val at = now()
+        val blob = crypto.seal(key, payload, recordAad(id, type, version, deviceId, deleted = false, updatedAt = at))
+        val record = VaultRecord(id, type, version, at, deviceId, deleted = false, blob = blob)
         val updated = records.toMutableList().also {
             if (index >= 0) it[index] = record else it += record
         }
@@ -266,15 +276,21 @@ class FileVault(
     }
 
     override fun remove(id: String): Unit = synchronized(lock) {
-        requireUnlocked()
+        val key = requireUnlocked()
         val currentMeta = session()
         val index = records.indexOfFirst { it.id == id }
         if (index < 0) return@synchronized
         val current = records[index]
         if (current.deleted) return@synchronized
-        // blob is intentionally kept in the tombstone: LWW sync needs the ciphertext to propagate the
-        // deletion to other devices (it's never exposed in the clear anyway — see openPayload). Don't clear it.
-        val tombstone = current.copy(deleted = true, version = current.version + 1, updatedAt = now())
+        // The tombstone is re-sealed (not copied from the live blob): the AAD must cover the bumped
+        // version and deleted=true, or other devices couldn't tell this deletion from one forged by
+        // the sync server. The payload is empty — sync only needs an authenticated blob, and the
+        // deleted secret shouldn't outlive the record. Works even when the old blob is unreadable
+        // under the current key (adoptDataKey leftovers).
+        val version = current.version + 1
+        val at = now()
+        val blob = crypto.seal(key, ByteArray(0), recordAad(current.id, current.type, version, current.deviceId, deleted = true, updatedAt = at))
+        val tombstone = current.copy(deleted = true, version = version, updatedAt = at, blob = blob)
         val updated = records.toMutableList().also { it[index] = tombstone }
         commit(currentMeta, updated)
         _localChanges.tryEmit(Unit) // local delete → wake live-sync push
@@ -405,17 +421,58 @@ class FileVault(
     )
 
     /**
-     * Stable per-slot AAD: `id` + [AAD_SEP] + `type.name`. Binds the blob to its id/type so a record
-     * can't be substituted into another slot (or vice versa). The separator is a named constant with
-     * an explicit escape so it stays visible in source and isn't lost in an edit.
+     * Decrypts a record's blob against the metadata it claims ([recordAad]), falling back to the
+     * legacy pre-metadata-binding AAD ([legacyRecordAad]) for blobs sealed by older clients (or
+     * still stored on the sync server). `null` means the blob doesn't authenticate under either.
      */
-    private fun aad(id: String, type: RecordType): ByteArray =
-        "$id$AAD_SEP${type.name}".encodeToByteArray()
+    private fun openRecord(key: DataKey, record: VaultRecord): ByteArray? =
+        crypto.open(key, record.blob, recordAad(record))
+            ?: crypto.open(key, record.blob, legacyRecordAad(record.id, record.type))
+
+    /** True when [record]'s blob authenticates; the decrypted copy is wiped immediately. */
+    private fun authenticates(key: DataKey, record: VaultRecord): Boolean {
+        val plaintext = openRecord(key, record) ?: return false
+        plaintext.fill(0)
+        return true
+    }
 
     private companion object {
         const val FORMAT_VERSION = 1
-
-        /** Unit Separator (U+001F) between id and type in the AAD. Explicit escape — control byte 0x1F. */
-        const val AAD_SEP = "\u001F"
     }
 }
+
+/** Unit Separator (U+001F) between AAD fields. Explicit escape — control byte 0x1F. */
+private const val AAD_SEP = "\u001F"
+
+/**
+ * Record AAD, format 2: binds the blob to ALL plaintext metadata (`2‖id‖type‖version‖deviceId‖
+ * deleted‖updatedAt`, [AAD_SEP]-separated), so a sync server can't replay an old genuine
+ * ciphertext under a bumped version, flip `deleted`, or move a blob between slots — the AEAD tag
+ * check fails ([FileVault.mergeRemote] rejects such records). Unambiguous without escaping:
+ * honest fields never contain U+001F, so the serialized string has exactly six separators and a
+ * forged tuple with embedded separators can't collide with a genuine one. `internal` for tests.
+ */
+internal fun recordAad(
+    id: String,
+    type: RecordType,
+    version: Long,
+    deviceId: String,
+    deleted: Boolean,
+    updatedAt: String,
+): ByteArray =
+    "2$AAD_SEP$id$AAD_SEP${type.name}$AAD_SEP$version$AAD_SEP$deviceId$AAD_SEP${if (deleted) "1" else "0"}$AAD_SEP$updatedAt"
+        .encodeToByteArray()
+
+/** [recordAad] for the metadata an existing record claims. */
+internal fun recordAad(record: VaultRecord): ByteArray =
+    recordAad(record.id, record.type, record.version, record.deviceId, record.deleted, record.updatedAt)
+
+/**
+ * Legacy record AAD (pre-0.1.3): `id` + [AAD_SEP] + `type.name` — metadata wasn't covered. Kept as
+ * a read/merge fallback so existing vaults and records already on sync servers stay readable.
+ * Never used for sealing: every rewrite (put/remove) upgrades the blob to [recordAad]. Residual
+ * risk, accepted: a blob sealed under this AAD can still be replayed with tampered
+ * version/deleted until its record is next edited.
+ */
+internal fun legacyRecordAad(id: String, type: RecordType): ByteArray =
+    "$id$AAD_SEP${type.name}".encodeToByteArray()

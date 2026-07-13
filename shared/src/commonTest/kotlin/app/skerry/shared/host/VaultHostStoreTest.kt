@@ -2,6 +2,7 @@ package app.skerry.shared.host
 
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.FakeVault
+import app.skerry.shared.vault.MergeResult
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
@@ -128,7 +129,7 @@ class VaultHostStoreTest {
         override fun reset() = Unit
         override fun records(): List<VaultRecord> = error("locked")
         override fun syncMeta(): SyncMeta? = null
-        override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = emptyList()
+        override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
         override fun openPayload(id: String): ByteArray? = error("locked")
         override fun put(id: String, type: RecordType, payload: ByteArray) = error("locked")
         override fun remove(id: String) = error("locked")

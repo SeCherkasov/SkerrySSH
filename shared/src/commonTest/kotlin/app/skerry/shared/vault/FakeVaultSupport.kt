@@ -23,7 +23,7 @@ internal class FakeVault : Vault {
     override fun records(): List<VaultRecord> = entries.values.map { it.record }
 
     override fun syncMeta(): SyncMeta? = null
-    override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = emptyList()
+    override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
 
     override fun openPayload(id: String): ByteArray? =
         entries[id]?.takeIf { !it.record.deleted }?.payload

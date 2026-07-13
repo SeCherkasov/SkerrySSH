@@ -7,6 +7,7 @@ import app.skerry.shared.vault.BiometricKeyStore
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.BiometricResult
 import app.skerry.shared.vault.DataKey
+import app.skerry.shared.vault.MergeResult
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.SecurityEvent
 import app.skerry.shared.vault.SecurityEventType
@@ -637,7 +638,7 @@ private class FakeVault(
 
     override fun records(): List<VaultRecord> = emptyList()
     override fun syncMeta(): SyncMeta? = null
-    override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = emptyList()
+    override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
     override fun openPayload(id: String): ByteArray? = null
     override fun put(id: String, type: RecordType, payload: ByteArray) = Unit
     override fun remove(id: String) = Unit

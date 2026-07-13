@@ -1,5 +1,6 @@
 package app.skerry.shared.sync
 
+import app.skerry.shared.vault.MergeResult
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
@@ -19,8 +20,12 @@ class InMemorySyncStateStore : SyncStateStore {
     }
 }
 
-/** Outcome of one sync cycle. */
-data class SyncOutcome(val pulled: Int, val pushed: Int, val cursor: Long)
+/**
+ * Outcome of one sync cycle. [rejected] counts incoming LWW winners whose blob failed
+ * authentication against their claimed metadata and were NOT applied (a tampering/replay signal
+ * from the server — see [app.skerry.shared.vault.MergeResult]); local records survived.
+ */
+data class SyncOutcome(val pulled: Int, val pushed: Int, val cursor: Long, val rejected: Int = 0)
 
 /**
  * Client-side sync engine. Runs deltas between the local [Vault]
@@ -47,8 +52,13 @@ class SyncEngine(
     suspend fun sync(session: SyncSession): SyncOutcome {
         var cursor = state.cursor(session.accountId)
         var pulled = 0
+        var rejected = 0
+        val onMerged = { m: MergeResult ->
+            pulled += m.applied.size
+            rejected += m.rejected.size
+        }
 
-        cursor = drainPull(session, cursor) { pulled += it }
+        cursor = drainPull(session, cursor, onMerged)
 
         // Push local records of allowed types (account-level "what to sync" filter): a disabled
         // type stays local and never reaches the server. The settings record itself always syncs
@@ -60,14 +70,14 @@ class SyncEngine(
 
         // Pull again: picks up our own just-pushed records (merge is idempotent) and any remote
         // changes with a serverSeq between the first pull and the push, so the cursor doesn't skip them.
-        cursor = drainPull(session, cursor) { pulled += it }
+        cursor = drainPull(session, cursor, onMerged)
 
         state.setCursor(session.accountId, cursor)
-        return SyncOutcome(pulled = pulled, pushed = local.size, cursor = cursor)
+        return SyncOutcome(pulled = pulled, pushed = local.size, cursor = cursor, rejected = rejected)
     }
 
     /** Pulls delta pages until exhausted (for future pagination), merging each page into the vault. */
-    private suspend fun drainPull(session: SyncSession, from: Long, onMerged: (Int) -> Unit): Long {
+    private suspend fun drainPull(session: SyncSession, from: Long, onMerged: (MergeResult) -> Unit): Long {
         var cursor = from
         // Filter is read once per drainPull and re-read only after an incoming SETTINGS record is
         // applied (it's a singleton, changes rarely) — not on every page (vault.records()+AEAD is costly).
@@ -83,14 +93,12 @@ class SyncEngine(
                 // pushed before the disable, that record is dropped (its serverSeq is past the
                 // cursor). Re-enabling the type triggers a full re-pull that recovers it.
                 val settingsRecords = incoming.filter { it.type == RecordType.SETTINGS }
-                var merged = 0
                 if (settingsRecords.isNotEmpty()) {
-                    merged += vault.mergeRemote(settingsRecords).size
+                    onMerged(vault.mergeRemote(settingsRecords))
                     filter = settings()
                 }
                 val rest = incoming.filter { it.type != RecordType.SETTINGS && filter.shouldSync(it.type) }
-                if (rest.isNotEmpty()) merged += vault.mergeRemote(rest).size
-                onMerged(merged)
+                if (rest.isNotEmpty()) onMerged(vault.mergeRemote(rest))
             }
             // Compact after merge: otherwise a tombstone just merged from this same page would
             // immediately reappear in the vault. Idempotent — the list arrives on every pull while

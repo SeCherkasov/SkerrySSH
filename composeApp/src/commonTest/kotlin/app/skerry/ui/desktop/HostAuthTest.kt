@@ -5,6 +5,7 @@ import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.DataKey
+import app.skerry.shared.vault.MergeResult
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
@@ -78,7 +79,7 @@ private class FakeAuthVault : Vault {
 
     override fun records(): List<VaultRecord> = records.values.toList()
     override fun syncMeta(): SyncMeta? = null
-    override fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord> = emptyList()
+    override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
     override fun openPayload(id: String): ByteArray? =
         records[id]?.takeIf { !it.deleted }?.let { payloads[id] }
 

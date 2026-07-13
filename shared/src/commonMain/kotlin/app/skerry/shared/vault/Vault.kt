@@ -19,12 +19,25 @@ sealed interface UnlockResult {
 class SyncMeta internal constructor(val kdfSalt: ByteArray, val wrappedDataKey: ByteArray)
 
 /**
+ * Result of [Vault.mergeRemote]: [applied] are the LWW winners that were stored; [rejected] are
+ * LWW winners whose blob failed AEAD authentication against their claimed metadata — a tampered
+ * or replayed record from a compromised sync server (or garbage). Rejected records are NOT stored:
+ * the local record (if any) survives untouched. Kept separate from [applied] so callers can
+ * surface the rejection instead of silently dropping data.
+ */
+data class MergeResult(val applied: List<VaultRecord>, val rejected: List<VaultRecord>) {
+    companion object {
+        val EMPTY = MergeResult(emptyList(), emptyList())
+    }
+}
+
+/**
  * Local encrypted record store (hosts/keys/identity). Key hierarchy and format: Argon2id → masterKey → dataKey, XChaCha20-Poly1305; crypto behind
  * [VaultCrypto]. Unlike [app.skerry.shared.host.HostStore], the vault has a lifecycle: while
  * locked, `dataKey` isn't in memory and any CRUD call throws [IllegalStateException].
  *
  * `dataKey` is never exposed: CRUD works with plaintext payloads, encryption/decryption with AAD
- * bound to `id‖type` happens internally. The platform implementation is file-based
+ * bound to the record's metadata (see [VaultRecord]) happens internally. The platform implementation is file-based
  * ([app.skerry.shared.vault.FileVault] on desktop). The implementation wipes passwords passed in.
  */
 interface Vault {
@@ -138,23 +151,32 @@ interface Vault {
     /**
      * Merges records from sync using the LWW rule: for each, the
      * one with the greater (`version`, then lexicographic `deviceId`) wins; otherwise the local one
-     * stays. Records are stored **as-is** (blob/version/deviceId/deleted verbatim) — version isn't
-     * bumped, the payload isn't re-encrypted, so Lamport counters stay consistent across devices.
-     * Requires an unlocked vault (metadata is needed for the atomic write). Returns the applied
-     * (winning) records.
+     * stays. Before a winner is stored its blob is trial-decrypted against the metadata it claims
+     * (the AAD binds id/type/version/deviceId/deleted/updatedAt): a blob that doesn't authenticate —
+     * a replayed ciphertext with a bumped version, a forged tombstone, garbage — is rejected and the
+     * local record survives (see [MergeResult]). Winners that authenticate are stored **as-is**
+     * (blob/version/deviceId/deleted verbatim) — version isn't bumped, the payload isn't
+     * re-encrypted, so Lamport counters stay consistent across devices.
+     * Requires an unlocked vault (metadata is needed for the atomic write).
      */
-    fun mergeRemote(remote: List<VaultRecord>): List<VaultRecord>
+    fun mergeRemote(remote: List<VaultRecord>): MergeResult
 
     /** Decrypted record payload; `null` if the record doesn't exist, is deleted (tombstone), or the blob fails AEAD. */
     fun openPayload(id: String): ByteArray?
 
     /**
-     * Upsert: seals [payload] under `dataKey` (AAD = `id‖type`) and stores a record with this
-     * [id]/[type], bumping `version` and updating `updatedAt`.
+     * Upsert: seals [payload] under `dataKey` (AAD binds the full record metadata — see
+     * [VaultRecord]) and stores a record with this [id]/[type], bumping `version` and updating
+     * `updatedAt`.
      */
     fun put(id: String, type: RecordType, payload: ByteArray)
 
-    /** Soft-deletes a record (tombstone): `deleted=true`, `version++`. Unknown id is a no-op. */
+    /**
+     * Soft-deletes a record (tombstone): `deleted=true`, `version++`. The tombstone blob is
+     * re-sealed with an **empty** payload so its bumped version and `deleted=true` are covered by
+     * the AEAD tag (other devices authenticate the deletion) and the deleted secret doesn't linger
+     * in the file. Unknown id is a no-op.
+     */
     fun remove(id: String)
 
     /**
