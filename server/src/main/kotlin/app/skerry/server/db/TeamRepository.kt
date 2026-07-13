@@ -1,16 +1,16 @@
 package app.skerry.server.db
 
 import kotlinx.coroutines.Dispatchers
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.statements.api.ExposedBlob
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
-import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.statements.api.ExposedBlob
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.jdbc.update
 
 /** Outcome of [TeamRepository.rekey]: success, a lost monotonicity race / stale epoch, or a gone team. */
 enum class RekeyOutcome { OK, EPOCH_CONFLICT, NO_TEAM }
@@ -194,7 +194,7 @@ class TeamRepository(private val db: Database) {
             .map { it[TeamMembers.teamId] }
     }
 
-    private fun org.jetbrains.exposed.sql.ResultRow.toMemberRow() = TeamMemberRow(
+    private fun org.jetbrains.exposed.v1.core.ResultRow.toMemberRow() = TeamMemberRow(
         teamId = this[TeamMembers.teamId],
         accountId = this[TeamMembers.accountId],
         role = this[TeamMembers.role],
@@ -205,7 +205,7 @@ class TeamRepository(private val db: Database) {
         createdAt = this[TeamMembers.createdAt],
     )
 
-    private fun org.jetbrains.exposed.sql.ResultRow.toTeamRow() = TeamRow(
+    private fun org.jetbrains.exposed.v1.core.ResultRow.toTeamRow() = TeamRow(
         id = this[Teams.id],
         ownerAccountId = this[Teams.ownerAccountId],
         teamSeq = this[Teams.teamSeq],

@@ -19,7 +19,7 @@ class TeamRecordRepositoryTest {
         blob: ByteArray = byteArrayOf(version.toByte()),
     ) = IncomingRecord(id, "HOST", version, updatedAt, deviceId, deleted, blob)
 
-    private suspend fun seedTeam(db: org.jetbrains.exposed.sql.Database): TeamRecordRepository {
+    private suspend fun seedTeam(db: org.jetbrains.exposed.v1.jdbc.Database): TeamRecordRepository {
         seedAccount(db, alice)
         TeamRepository(db).create("team-1", alice, now = 10)
         return TeamRecordRepository(db)

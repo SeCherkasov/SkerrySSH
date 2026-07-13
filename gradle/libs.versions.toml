@@ -1,8 +1,9 @@
 [versions]
-agp = "9.0.1"
-# AGP 9.0 by default requires build-tools 36.0.0, which is absent from the local SDK
-android-buildTools = "36.1.0"
-android-compileSdk = "36"
+agp = "9.1.1"
+# compileSdk 37 pairs with build-tools 37.0.0; AGP 9.1 is the minimum that supports compiling
+# against API 37, which Compose 1.12 (material3 1.12.0-alpha03 → androidx-compose 1.12.0-beta01) demands
+android-buildTools = "37.0.0"
+android-compileSdk = "37"
 # minSdk 26 (Android 8.0): java.nio.file is available since API 26 — the shared JVM source set
 # (sshj transport, file-based stores) is shared between desktop/Android without rewriting to okio
 android-minSdk = "26"
@@ -13,9 +14,10 @@ androidx-lifecycle = "2.10.0"
 androidx-biometric = "1.1.0"
 # FragmentActivity — an androidx.biometric requirement for the prompt host
 androidx-fragment = "1.8.5"
-composeMultiplatform = "1.11.1"
+composeMultiplatform = "1.12.0-beta01"
 kotlin = "2.4.0"
-# material3 is versioned separately from CMP; there is no stable release of the 1.11 line yet
+# material3 is versioned separately from CMP; 1.12.0-alpha03 tracks CMP 1.12.0-beta01
+# (it depends on org.jetbrains.compose.foundation:1.12.0-beta01)
 material3 = "1.12.0-alpha03"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"

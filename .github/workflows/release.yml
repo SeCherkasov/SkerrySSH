@@ -236,7 +236,7 @@ jobs:
       - name: Install Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.1.0"
+          sdkmanager "platforms;android-37" "build-tools;37.0.0"
 
       - name: Decode release keystore
         # Without the secret this step is skipped → release is built unsigned (fallback in build.gradle.kts).

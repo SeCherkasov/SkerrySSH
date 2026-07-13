@@ -12,7 +12,7 @@ class TeamRepositoryTest {
     private val alice = "alice@example.com"
     private val bob = "bob@example.com"
 
-    private suspend fun seedTwoAccounts(db: org.jetbrains.exposed.sql.Database) {
+    private suspend fun seedTwoAccounts(db: org.jetbrains.exposed.v1.jdbc.Database) {
         seedAccount(db, alice)
         seedAccount(db, bob)
     }

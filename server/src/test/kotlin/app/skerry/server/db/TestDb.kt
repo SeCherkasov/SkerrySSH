@@ -1,7 +1,7 @@
 package app.skerry.server.db
 
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
 import java.nio.file.Files
 
 /**
