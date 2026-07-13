@@ -7,8 +7,9 @@ package app.skerry.ui.vault
  * password. Public material (public key, certificate) is not sensitive and uses plain
  * `LocalClipboardManager` instead.
  *
- * On desktop there is no sensitive flag or OS-level clipboard history; the text is just placed on
- * the clipboard.
+ * Desktop mirrors this best-effort: the clip is auto-cleared after [CLIPBOARD_CLEAR_SECONDS] if it
+ * still holds our password, and carries a KDE password-manager hint so Klipper keeps it out of
+ * clipboard history.
  */
 expect fun copyPasswordToClipboard(password: String)
 
