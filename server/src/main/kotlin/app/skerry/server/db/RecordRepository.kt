@@ -1,14 +1,14 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.statements.api.ExposedBlob
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
-import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greater
+import org.jetbrains.exposed.v1.core.statements.api.ExposedBlob
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 
 /**
  * A record received from the client, not yet assigned a server cursor.
@@ -68,7 +68,7 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
      * state (with assigned `serverSeq`) and the final cursor, so the client can tell which of its
      * changes were rejected and advance `since` from the cursor.
      */
-    suspend fun upsert(accountId: String, incoming: List<IncomingRecord>): UpsertResult = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun upsert(accountId: String, incoming: List<IncomingRecord>): UpsertResult = dbTransaction(db) {
         val accountQuery = Accounts.selectAll().where { Accounts.id eq accountId }
         // Compare against the locally captured seqBefore, not a re-read from the DB: under
         // READ COMMITTED a re-SELECT would see a concurrent commit and regress the cursor.
@@ -129,21 +129,21 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
      * list to physically forget tombstones ([app.skerry.shared.vault.Vault.compact]) and stop
      * pushing them, so a re-push can't resurrect them on the server after a purge.
      */
-    suspend fun compactedTombstoneIds(accountId: String): List<String> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun compactedTombstoneIds(accountId: String): List<String> = dbTransaction(db) {
         Records.selectAll()
             .where { propagatedTombstones(accountId, tombstoneWatermark(accountId)) }
             .map { it[Records.recordId] }
     }
 
     /** Delta: records with `serverSeq > since`, ordered by ascending cursor. */
-    suspend fun delta(accountId: String, since: Long): List<StoredRecord> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun delta(accountId: String, since: Long): List<StoredRecord> = dbTransaction(db) {
         Records.selectAll()
             .where { (Records.accountId eq accountId) and (Records.serverSeq greater since) }
             .orderBy(Records.serverSeq to SortOrder.ASC)
             .map { it.toStoredRecord() }
     }
 
-    private fun org.jetbrains.exposed.sql.ResultRow.toStoredRecord() = StoredRecord(
+    private fun org.jetbrains.exposed.v1.core.ResultRow.toStoredRecord() = StoredRecord(
         id = this[Records.recordId],
         type = this[Records.type],
         version = this[Records.version],

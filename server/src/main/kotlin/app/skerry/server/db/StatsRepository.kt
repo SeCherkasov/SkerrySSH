@@ -1,9 +1,7 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
 /** Aggregates for the admin console: counts and total ciphertext size only, no content. */
 class StatsRepository(private val db: Database) {
@@ -15,7 +13,7 @@ class StatsRepository(private val db: Database) {
         val storageBytes: Long,
     )
 
-    suspend fun counts(): Counts = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun counts(): Counts = dbTransaction(db) {
         Counts(
             accounts = Accounts.selectAll().count(),
             devices = Devices.selectAll().count(),

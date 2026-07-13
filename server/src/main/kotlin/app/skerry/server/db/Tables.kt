@@ -1,6 +1,6 @@
 package app.skerry.server.db
 
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.Table
 
 /**
  * Sync server storage schema. The server is zero-knowledge: everything related to user content

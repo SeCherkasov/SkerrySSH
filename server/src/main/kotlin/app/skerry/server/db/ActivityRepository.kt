@@ -1,14 +1,12 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
 /**
  * Metadata audit log for the admin console. Append-only, retains the last [maxRows] events so
@@ -24,7 +22,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
         deviceId: String? = null,
         teamId: String? = null,
         now: Long = System.currentTimeMillis(),
-    ): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
+    ): Unit = dbTransaction(db) {
         ActivityLog.insert {
             it[ActivityLog.accountId] = accountId
             it[ActivityLog.deviceId] = deviceId
@@ -37,7 +35,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
     }
 
     /** Most recent events first (descending monotonic `seq`). */
-    suspend fun recent(limit: Int = 50): List<ActivityRow> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun recent(limit: Int = 50): List<ActivityRow> = dbTransaction(db) {
         ActivityLog.selectAll()
             .orderBy(ActivityLog.seq to SortOrder.DESC)
             .limit(limit)
@@ -46,7 +44,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
 
     /** Most recent events for one team (team-scoped history for owner/admin members). */
     suspend fun recentForTeam(teamId: String, limit: Int = 100): List<ActivityRow> =
-        newSuspendedTransaction(Dispatchers.IO, db) {
+        dbTransaction(db) {
             ActivityLog.selectAll()
                 .where { ActivityLog.teamId eq teamId }
                 .orderBy(ActivityLog.seq to SortOrder.DESC)
@@ -55,7 +53,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
         }
 
     /** Total retained events (≤ maxRows), for an accurate "N of M" in the console. */
-    suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun count(): Long = dbTransaction(db) {
         ActivityLog.selectAll().count()
     }
 
@@ -71,7 +69,7 @@ class ActivityRepository(private val db: Database, private val maxRows: Int = 2_
         ActivityLog.deleteWhere { seq lessEq keepFrom - 1 }
     }
 
-    private fun org.jetbrains.exposed.sql.ResultRow.toRow() = ActivityRow(
+    private fun org.jetbrains.exposed.v1.core.ResultRow.toRow() = ActivityRow(
         seq = this[ActivityLog.seq],
         accountId = this[ActivityLog.accountId],
         deviceId = this[ActivityLog.deviceId],

@@ -1,14 +1,12 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.selectAll
 
 /**
  * Read and destructive operations needed only by the admin console: account aggregates, real
@@ -49,7 +47,7 @@ class AdminRepository(private val db: Database) {
      * grouped queries, not N+1): devices (total/active/last seen) and records (total/tombstones/bytes).
      * `NOT revoked` / `CASE WHEN deleted` are portable between SQLite (0/1) and PostgreSQL (boolean).
      */
-    suspend fun accountSummaries(limit: Int = 100): List<AccountSummary> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun accountSummaries(limit: Int = 100): List<AccountSummary> = dbTransaction(db) {
         val devAgg = HashMap<String, DevAgg>()
         exec(
             """SELECT account_id,
@@ -101,7 +99,7 @@ class AdminRepository(private val db: Database) {
     }
 
     /** Total accounts on the instance, for an accurate "N of M" in the console. */
-    suspend fun accountCount(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun accountCount(): Long = dbTransaction(db) {
         Accounts.selectAll().count()
     }
 
@@ -110,7 +108,7 @@ class AdminRepository(private val db: Database) {
      * [limit]). [RecordEnvelope.previewHex] is the first 16 bytes of the actual ciphertext —
      * opaque noise demonstrating content is unreadable without the dataKey.
      */
-    suspend fun recordEnvelopes(accountId: String, limit: Int = 100): List<RecordEnvelope> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun recordEnvelopes(accountId: String, limit: Int = 100): List<RecordEnvelope> = dbTransaction(db) {
         Records.selectAll()
             .where { Records.accountId eq accountId }
             .orderBy(Records.serverSeq to SortOrder.DESC)
@@ -136,7 +134,7 @@ class AdminRepository(private val db: Database) {
      * [propagatedTombstones] over [tombstoneWatermark], as [RecordRepository.compactedTombstoneIds].
      * Returns the number of tombstones deleted.
      */
-    suspend fun purgeTombstones(accountId: String): Int = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun purgeTombstones(accountId: String): Int = dbTransaction(db) {
         val watermark = tombstoneWatermark(accountId)
         Records.deleteWhere { propagatedTombstones(accountId, watermark) }
     }
@@ -146,9 +144,9 @@ class AdminRepository(private val db: Database) {
      * transaction. The audit log is left untouched — it has no FK on [Accounts] and must survive
      * deletion (see [ActivityLog]). Returns false if the account doesn't exist.
      */
-    suspend fun deleteAccount(accountId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun deleteAccount(accountId: String): Boolean = dbTransaction(db) {
         val exists = Accounts.selectAll().where { Accounts.id eq accountId }.any()
-        if (!exists) return@newSuspendedTransaction false
+        if (!exists) return@dbTransaction false
         Records.deleteWhere { Records.accountId eq accountId }
         Pairing.deleteWhere { Pairing.accountId eq accountId }
         Devices.deleteWhere { Devices.accountId eq accountId }

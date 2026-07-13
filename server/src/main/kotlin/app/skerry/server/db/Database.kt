@@ -3,11 +3,12 @@ package app.skerry.server.db
 import app.skerry.server.config.ServerConfig
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.transactions.transaction
-import org.jetbrains.exposed.sql.vendors.SQLiteDialect
-import org.jetbrains.exposed.sql.vendors.currentDialect
+import org.jetbrains.exposed.v1.core.vendors.SQLiteDialect
+import org.jetbrains.exposed.v1.core.vendors.currentDialect
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.vendors.currentDialectMetadata
 
 /** Database connection and schema creation. SQLite by default, PostgreSQL via URL. */
 object Db {
@@ -45,7 +46,7 @@ object Db {
                 (sql.startsWith("ALTER TABLE") && " ADD " in sql && "CONSTRAINT" !in sql && "PRIMARY KEY" !in sql)
             // Like the original: without a reset, index metadata cached before the create phase
             // makes checkMappingConsistence re-emit CREATE INDEX for indexes that already exist.
-            db.dialect.resetCaches()
+            currentDialectMetadata.resetCaches()
             val created = SchemaUtils.createStatements(tables = tables)
             created.forEach { exec(it) }
             commit()
@@ -56,7 +57,7 @@ object Db {
             SchemaUtils.checkMappingConsistence(tables = tables)
                 .filter { it !in executed && supported(it) }
                 .forEach { exec(it) }
-            db.dialect.resetCaches()
+            currentDialectMetadata.resetCaches()
         }
     }
 }
