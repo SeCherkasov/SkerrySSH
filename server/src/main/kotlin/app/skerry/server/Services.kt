@@ -13,7 +13,7 @@ import app.skerry.server.db.StatsRepository
 import app.skerry.server.db.TeamRecordRepository
 import app.skerry.server.db.TeamRepository
 import app.skerry.server.sync.ChangeNotifier
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
 
 /** Wired dependencies for one server instance. Created once in [module]. */
 class Services(val config: ServerConfig, private val database: Database) {

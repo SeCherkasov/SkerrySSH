@@ -1,13 +1,12 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
-import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 
 /**
  * Account devices: registration on login, listing, revocation, activity tracking. All operations
@@ -27,7 +26,7 @@ class DeviceRepository(private val db: Database) {
         name: String,
         platform: String? = null,
         now: Long = System.currentTimeMillis(),
-    ): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
+    ): Boolean = dbTransaction(db) {
         // Cap to varchar(64): a longer client value would otherwise fail the insert with a 500
         // instead of silently truncating.
         val plat = platform?.take(64)
@@ -62,7 +61,7 @@ class DeviceRepository(private val db: Database) {
         }
     }
 
-    suspend fun list(accountId: String): List<DeviceRow> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun list(accountId: String): List<DeviceRow> = dbTransaction(db) {
         Devices.selectAll().where { Devices.accountId eq accountId }.map { it.toDeviceRow() }
     }
 
@@ -71,7 +70,7 @@ class DeviceRepository(private val db: Database) {
      * active first, capped at [limit] — devices are never deleted, only revoked, so an unbounded
      * list would grow indefinitely.
      */
-    suspend fun listAll(limit: Int = 200): List<DeviceRow> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun listAll(limit: Int = 200): List<DeviceRow> = dbTransaction(db) {
         Devices.selectAll()
             .orderBy(Devices.lastSeenAt to SortOrder.DESC)
             .limit(limit)
@@ -79,18 +78,18 @@ class DeviceRepository(private val db: Database) {
     }
 
     /** Total devices on the instance, for an accurate "N of M" in the console. */
-    suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun count(): Long = dbTransaction(db) {
         Devices.selectAll().count()
     }
 
-    suspend fun find(accountId: String, deviceId: String): DeviceRow? = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun find(accountId: String, deviceId: String): DeviceRow? = dbTransaction(db) {
         Devices.selectAll()
             .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }
             .singleOrNull()
             ?.toDeviceRow()
     }
 
-    suspend fun revoke(accountId: String, deviceId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun revoke(accountId: String, deviceId: String): Boolean = dbTransaction(db) {
         Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
             it[revoked] = true
         } > 0
@@ -105,7 +104,7 @@ class DeviceRepository(private val db: Database) {
         deviceId: String,
         now: Long = System.currentTimeMillis(),
         syncVersion: Long? = null,
-    ): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
+    ): Unit = dbTransaction(db) {
         Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq deviceId) }) {
             it[lastSeenAt] = now
             if (syncVersion != null) it[lastSyncVersion] = syncVersion
@@ -116,14 +115,14 @@ class DeviceRepository(private val db: Database) {
      * Whether the device is revoked. An unknown (missing) device counts as revoked, so a JWT for
      * a device no longer in the table is rejected.
      */
-    suspend fun isRevoked(accountId: String, deviceId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun isRevoked(accountId: String, deviceId: String): Boolean = dbTransaction(db) {
         Devices.selectAll()
             .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }
             .singleOrNull()
             ?.get(Devices.revoked) ?: true
     }
 
-    private fun org.jetbrains.exposed.sql.ResultRow.toDeviceRow() = DeviceRow(
+    private fun org.jetbrains.exposed.v1.core.ResultRow.toDeviceRow() = DeviceRow(
         id = this[Devices.id],
         accountId = this[Devices.accountId],
         name = this[Devices.name],

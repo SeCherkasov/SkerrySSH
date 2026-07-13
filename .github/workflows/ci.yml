@@ -28,9 +28,19 @@ jobs:
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
 
       - name: Install Android SDK packages
+        # The runner's bundled sdkmanager repository predates API 37 and can't resolve
+        # platforms;android-37 or build-tools;37.0.0, so fetch both archives from Google's
+        # SDK repo directly and unpack them where sdkmanager would.
         run: |
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.1.0"
+          install_sdk_pkg() {
+            curl -fsSL "$1" -o "$RUNNER_TEMP/sdk-pkg.zip"
+            rm -rf "$RUNNER_TEMP/sdk-pkg" && unzip -q "$RUNNER_TEMP/sdk-pkg.zip" -d "$RUNNER_TEMP/sdk-pkg"
+            mkdir -p "$(dirname "$2")" && rm -rf "$2"
+            mv "$(find "$RUNNER_TEMP/sdk-pkg" -mindepth 1 -maxdepth 1 -type d)" "$2"
+          }
+          install_sdk_pkg https://dl.google.com/android/repository/platform-37.0_r02.zip "$ANDROID_HOME/platforms/android-37"
+          install_sdk_pkg https://dl.google.com/android/repository/build-tools_r37_linux.zip "$ANDROID_HOME/build-tools/37.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6

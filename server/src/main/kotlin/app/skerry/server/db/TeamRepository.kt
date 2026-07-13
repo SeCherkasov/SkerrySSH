@@ -1,16 +1,14 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
-import org.jetbrains.exposed.sql.insert
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.statements.api.ExposedBlob
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
-import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.statements.api.ExposedBlob
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 
 /** Outcome of [TeamRepository.rekey]: success, a lost monotonicity race / stale epoch, or a gone team. */
 enum class RekeyOutcome { OK, EPOCH_CONFLICT, NO_TEAM }
@@ -23,7 +21,7 @@ enum class RekeyOutcome { OK, EPOCH_CONFLICT, NO_TEAM }
 class TeamRepository(private val db: Database) {
 
     /** Publishes (or replaces) an account's public identity keys (X25519 sharing + Ed25519 signing). */
-    suspend fun publishKey(accountId: String, publicKey: ByteArray, signPublicKey: ByteArray, now: Long): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun publishKey(accountId: String, publicKey: ByteArray, signPublicKey: ByteArray, now: Long): Unit = dbTransaction(db) {
         val updated = AccountKeys.update({ AccountKeys.accountId eq accountId }) {
             it[AccountKeys.publicKey] = ExposedBlob(publicKey)
             it[AccountKeys.signPublicKey] = ExposedBlob(signPublicKey)
@@ -38,16 +36,16 @@ class TeamRepository(private val db: Database) {
         }
     }
 
-    suspend fun accountKeys(accountId: String): AccountKeysRow? = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun accountKeys(accountId: String): AccountKeysRow? = dbTransaction(db) {
         AccountKeys.selectAll().where { AccountKeys.accountId eq accountId }.singleOrNull()?.let {
             AccountKeysRow(it[AccountKeys.publicKey].bytes, it[AccountKeys.signPublicKey]?.bytes)
         }
     }
 
     /** Creates a team with the owner as an active member. Returns false if the id is taken. */
-    suspend fun create(teamId: String, ownerAccountId: String, now: Long): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun create(teamId: String, ownerAccountId: String, now: Long): Boolean = dbTransaction(db) {
         val exists = Teams.selectAll().where { Teams.id eq teamId }.any()
-        if (exists) return@newSuspendedTransaction false
+        if (exists) return@dbTransaction false
         Teams.insert {
             it[id] = teamId
             it[Teams.ownerAccountId] = ownerAccountId
@@ -69,7 +67,7 @@ class TeamRepository(private val db: Database) {
     }
 
     /** Account memberships (including unaccepted invites) with team metadata. */
-    suspend fun teamsFor(accountId: String): List<TeamMembershipView> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun teamsFor(accountId: String): List<TeamMembershipView> = dbTransaction(db) {
         val memberships = TeamMembers.selectAll().where { TeamMembers.accountId eq accountId }
             .map { it.toMemberRow() }
         memberships.mapNotNull { m ->
@@ -80,27 +78,27 @@ class TeamRepository(private val db: Database) {
         }
     }
 
-    suspend fun members(teamId: String): List<TeamMemberRow> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun members(teamId: String): List<TeamMemberRow> = dbTransaction(db) {
         TeamMembers.selectAll().where { TeamMembers.teamId eq teamId }.map { it.toMemberRow() }
     }
 
-    suspend fun membership(teamId: String, accountId: String): TeamMemberRow? = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun membership(teamId: String, accountId: String): TeamMemberRow? = dbTransaction(db) {
         TeamMembers.selectAll()
             .where { (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId) }
             .singleOrNull()?.toMemberRow()
     }
 
-    suspend fun team(teamId: String): TeamRow? = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun team(teamId: String): TeamRow? = dbTransaction(db) {
         Teams.selectAll().where { Teams.id eq teamId }.singleOrNull()?.toTeamRow()
     }
 
     /** Invites an account with role [role] (status=invited, envelope carries teamKey). False if already a member/invited. */
     suspend fun invite(teamId: String, accountId: String, role: String, envelope: ByteArray, invitedBy: String, now: Long): Boolean =
-        newSuspendedTransaction(Dispatchers.IO, db) {
+        dbTransaction(db) {
             val exists = TeamMembers.selectAll()
                 .where { (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId) }
                 .any()
-            if (exists) return@newSuspendedTransaction false
+            if (exists) return@dbTransaction false
             TeamMembers.insert {
                 it[TeamMembers.teamId] = teamId
                 it[TeamMembers.accountId] = accountId
@@ -129,13 +127,13 @@ class TeamRepository(private val db: Database) {
      * [RekeyOutcome.NO_TEAM] if the team is gone.
      */
     suspend fun rekey(teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>): RekeyOutcome =
-        newSuspendedTransaction(Dispatchers.IO, db) {
+        dbTransaction(db) {
             val bumped = Teams.update({
                 (Teams.id eq teamId) and (Teams.keyEpoch eq newEpoch - 1)
             }) { it[keyEpoch] = newEpoch } > 0
             if (!bumped) {
                 val exists = Teams.selectAll().where { Teams.id eq teamId }.any()
-                return@newSuspendedTransaction if (exists) RekeyOutcome.EPOCH_CONFLICT else RekeyOutcome.NO_TEAM
+                return@dbTransaction if (exists) RekeyOutcome.EPOCH_CONFLICT else RekeyOutcome.NO_TEAM
             }
             envelopes.forEach { (accountId, envelope) ->
                 TeamMembers.update({
@@ -149,7 +147,7 @@ class TeamRepository(private val db: Database) {
 
     /** Changes a member's role (owner's role cannot change). False if member missing or is the owner. */
     suspend fun updateRole(teamId: String, accountId: String, role: String): Boolean =
-        newSuspendedTransaction(Dispatchers.IO, db) {
+        dbTransaction(db) {
             TeamMembers.update({
                 (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId) and
                     (TeamMembers.role neq TeamRoles.OWNER)
@@ -162,7 +160,7 @@ class TeamRepository(private val db: Database) {
      * Accepts an invite: invited -> active. The envelope is cleared; after acceptance teamKey
      * lives in the member's own vault and syncs via their account sync.
      */
-    suspend fun accept(teamId: String, accountId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun accept(teamId: String, accountId: String): Boolean = dbTransaction(db) {
         TeamMembers.update({
             (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId) and
                 (TeamMembers.status eq TeamMemberStatus.INVITED)
@@ -173,7 +171,7 @@ class TeamRepository(private val db: Database) {
     }
 
     /** Removes a member (access revocation, invite decline, or leave). Never removes the owner. */
-    suspend fun removeMember(teamId: String, accountId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun removeMember(teamId: String, accountId: String): Boolean = dbTransaction(db) {
         TeamMembers.deleteWhere {
             (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId) and
                 (TeamMembers.role neq TeamRoles.OWNER)
@@ -181,20 +179,20 @@ class TeamRepository(private val db: Database) {
     }
 
     /** Deletes a team entirely: records, members, and the team itself. */
-    suspend fun deleteTeam(teamId: String): Boolean = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun deleteTeam(teamId: String): Boolean = dbTransaction(db) {
         TeamRecords.deleteWhere { TeamRecords.teamId eq teamId }
         TeamMembers.deleteWhere { TeamMembers.teamId eq teamId }
         Teams.deleteWhere { Teams.id eq teamId } > 0
     }
 
     /** Ids of teams where the account is an active member (for WS subscriptions and record ACLs). */
-    suspend fun activeTeamIdsFor(accountId: String): List<String> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun activeTeamIdsFor(accountId: String): List<String> = dbTransaction(db) {
         TeamMembers.selectAll()
             .where { (TeamMembers.accountId eq accountId) and (TeamMembers.status eq TeamMemberStatus.ACTIVE) }
             .map { it[TeamMembers.teamId] }
     }
 
-    private fun org.jetbrains.exposed.sql.ResultRow.toMemberRow() = TeamMemberRow(
+    private fun org.jetbrains.exposed.v1.core.ResultRow.toMemberRow() = TeamMemberRow(
         teamId = this[TeamMembers.teamId],
         accountId = this[TeamMembers.accountId],
         role = this[TeamMembers.role],
@@ -205,7 +203,7 @@ class TeamRepository(private val db: Database) {
         createdAt = this[TeamMembers.createdAt],
     )
 
-    private fun org.jetbrains.exposed.sql.ResultRow.toTeamRow() = TeamRow(
+    private fun org.jetbrains.exposed.v1.core.ResultRow.toTeamRow() = TeamRow(
         id = this[Teams.id],
         ownerAccountId = this[Teams.ownerAccountId],
         teamSeq = this[Teams.teamSeq],

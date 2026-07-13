@@ -1,14 +1,14 @@
 package app.skerry.server.db
 
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.v1.jdbc.Database
 import java.nio.file.Files
 
 /**
  * Isolated SQLite database on a temp file for repository tests. A file, not in-memory: Exposed
  * opens its own connection per transaction, and `:memory:` is per-connection.
  *
- * Suspend block: repositories moved to `newSuspendedTransaction`, so the test body runs inside
+ * Suspend block: repositories run inside `dbTransaction`, so the test body runs inside
  * [runBlocking] to keep the synchronous call style.
  */
 fun withTestDb(block: suspend (Database) -> Unit) {
