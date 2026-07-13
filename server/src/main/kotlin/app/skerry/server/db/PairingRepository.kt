@@ -1,6 +1,5 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.greater
@@ -10,7 +9,6 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.v1.jdbc.update
 
 /**
@@ -20,7 +18,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 class PairingRepository(private val db: Database) {
 
     suspend fun create(code: String, accountId: String, encryptedDataKey: ByteArray, expiresAt: Long): Unit =
-        newSuspendedTransaction(Dispatchers.IO, db) {
+        dbTransaction(db) {
             Pairing.insert {
                 it[Pairing.code] = code
                 it[Pairing.accountId] = accountId
@@ -40,13 +38,13 @@ class PairingRepository(private val db: Database) {
      * gets `null`. This guarantees a code can never be claimed twice, even under a race.
      */
     suspend fun consume(code: String, now: Long = System.currentTimeMillis()): PairingRow? =
-        newSuspendedTransaction(Dispatchers.IO, db) {
+        dbTransaction(db) {
             val claimed = Pairing.update({
                 (Pairing.code eq code) and (Pairing.consumed eq false) and (Pairing.expiresAt greater now)
             }) {
                 it[consumed] = true
             }
-            if (claimed != 1) return@newSuspendedTransaction null
+            if (claimed != 1) return@dbTransaction null
             // This transaction won the race; the session's immutable fields are now safe to read.
             val row = Pairing.selectAll().where { Pairing.code eq code }.single()
             PairingRow(
@@ -59,7 +57,7 @@ class PairingRepository(private val db: Database) {
         }
 
     suspend fun cleanupExpired(now: Long = System.currentTimeMillis()): Int =
-        newSuspendedTransaction(Dispatchers.IO, db) {
+        dbTransaction(db) {
             Pairing.deleteWhere { expiresAt lessEq now }
         }
 }
