@@ -110,6 +110,25 @@ interface Vault {
      */
     fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean
 
+    /**
+     * Re-encrypts every record (live and tombstone) under [newKey] and switches the active key to
+     * it — a teamKey rotation (a member was removed, so future writes must use a key they don't
+     * have). Each record's `version` is bumped by one and re-sealed with this device's id, so the
+     * re-encrypted copy wins LWW and overwrites the server's old-key blob on the next sync; other
+     * members that adopt [newKey] then decrypt it. Records unreadable under the current key are left
+     * untouched (can't re-seal what we can't decrypt). Requires an unlocked vault; takes ownership of
+     * [newKey]. Returns `true` on success.
+     *
+     * The default is not a silent no-op: because the method takes ownership of [newKey], a vault that
+     * can't rotate would otherwise leak the key AND swallow the rotation without error (the team would
+     * adopt a key nobody re-encrypted under). So the default wipes [newKey] and throws — only file
+     * vaults back a rotation path; any other implementation must opt in explicitly.
+     */
+    fun rekeyRecords(newKey: DataKey): Boolean {
+        newKey.bytes.fill(0)
+        throw UnsupportedOperationException("rekeyRecords is only supported by file vaults")
+    }
+
     /** Locks: wipes `dataKey` from memory. After this, [isUnlocked] == false. */
     fun lock()
 

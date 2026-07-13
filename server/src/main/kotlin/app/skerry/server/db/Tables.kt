@@ -97,6 +97,9 @@ object ActivityLog : Table("activity_log") {
 object AccountKeys : Table("account_keys") {
     val accountId = varchar("account_id", 320).references(Accounts.id)
     val publicKey = blob("public_key")
+    /** Ed25519 signing key for authenticating invite/rekey envelopes. Nullable for rows written
+     *  before invite signing; the client republishes both keys on every login. */
+    val signPublicKey = blob("sign_public_key").nullable()
     val createdAt = long("created_at")
 
     override val primaryKey = PrimaryKey(accountId)
@@ -111,6 +114,8 @@ object Teams : Table("teams") {
     val id = varchar("id", 64)
     val ownerAccountId = varchar("owner_account_id", 320).references(Accounts.id)
     val teamSeq = long("team_seq").default(0)
+    /** Current teamKey generation; bumped by a rotation (member removal/demotion). */
+    val keyEpoch = long("key_epoch").default(0)
     val createdAt = long("created_at")
 
     override val primaryKey = PrimaryKey(id)
@@ -129,6 +134,12 @@ object TeamMembers : Table("team_members") {
     /** `invited` | `active`. */
     val status = varchar("status", 16)
     val envelope = blob("envelope").nullable()
+    /**
+     * Current-epoch teamKey re-sealed to this member by a rotation (signed sealed box, same format
+     * as [envelope]). Set on rekey; the payload carries the epoch, so a stale value is ignored by
+     * the client. Null until the first rotation this member is party to.
+     */
+    val keyEnvelope = blob("key_envelope").nullable()
     val invitedBy = varchar("invited_by", 320)
     val createdAt = long("created_at")
 

@@ -152,6 +152,26 @@ interface VaultCrypto {
      * pair, is corrupted, or is too short (untrusted input from the server — not thrown).
      */
     fun openSealedEnvelope(keyPair: SharingKeyPair, envelope: ByteArray): ByteArray?
+
+    /**
+     * New Ed25519 signing pair for the account identity. Distinct from the X25519 [SharingKeyPair]:
+     * that seals invite envelopes (confidentiality), this signs them (authenticity — proves *who*
+     * created the envelope). The public half is published on the sync server alongside the X25519
+     * key; the secret half never leaves the vault in plaintext.
+     */
+    fun newSigningKeyPair(): SigningKeyPair
+
+    /** Restores a signing pair from serialized halves (a vault record on another device). */
+    fun signingKeyPairFromBytes(publicKey: ByteArray, secretKey: ByteArray): SigningKeyPair
+
+    /** Detached Ed25519 signature over [message] (64 bytes). */
+    fun sign(keyPair: SigningKeyPair, message: ByteArray): ByteArray
+
+    /**
+     * Verifies a detached Ed25519 [signature] over [message] against [publicKey]. `false` on any
+     * mismatch or malformed input (untrusted server-delivered envelope — never throws).
+     */
+    fun verifySignature(publicKey: ByteArray, message: ByteArray, signature: ByteArray): Boolean
 }
 
 /**
@@ -172,4 +192,25 @@ class SharingKeyPair internal constructor(
     }
 
     override fun toString(): String = "SharingKeyPair(publicKey=${publicKey.size}B, secret=redacted)"
+}
+
+/**
+ * Ed25519 signing pair for the account identity. Signs Teams invite/rekey envelopes so a recipient
+ * can prove who authored them (the anonymous [SharingKeyPair] seal alone can't). Secret half kept
+ * `internal` for the same reasons as [MasterKey.bytes]; [exportSecretKey] copies it only for
+ * serializing into the account's own vault record (encrypted with the account's dataKey).
+ */
+class SigningKeyPair internal constructor(
+    val publicKey: ByteArray,
+    internal val secretKey: ByteArray,
+) {
+    /** Copy of the secret half for storing in the vault; wiping the copy is the caller's job. */
+    fun exportSecretKey(): ByteArray = secretKey.copyOf()
+
+    /** Wipe the secret half once the pair is no longer needed. Idempotent. */
+    fun zeroize() {
+        secretKey.fill(0)
+    }
+
+    override fun toString(): String = "SigningKeyPair(publicKey=${publicKey.size}B, secret=redacted)"
 }

@@ -16,6 +16,11 @@ import com.ionspin.kotlin.crypto.kdf.Kdf
 import com.ionspin.kotlin.crypto.pwhash.PasswordHash
 import com.ionspin.kotlin.crypto.pwhash.crypto_pwhash_SALTBYTES
 import com.ionspin.kotlin.crypto.pwhash.crypto_pwhash_argon2id_ALG_ARGON2ID13
+import com.ionspin.kotlin.crypto.signature.InvalidSignatureException
+import com.ionspin.kotlin.crypto.signature.Signature
+import com.ionspin.kotlin.crypto.signature.crypto_sign_BYTES
+import com.ionspin.kotlin.crypto.signature.crypto_sign_PUBLICKEYBYTES
+import com.ionspin.kotlin.crypto.signature.crypto_sign_SECRETKEYBYTES
 import com.ionspin.kotlin.crypto.util.LibsodiumRandom
 
 /**
@@ -160,6 +165,44 @@ class IonspinVaultCrypto : VaultCrypto {
             null
         } finally {
             secretCopy.fill(0u)
+        }
+    }
+
+    override fun newSigningKeyPair(): SigningKeyPair {
+        requireInitialized()
+        val pair = Signature.keypair()
+        return SigningKeyPair(pair.publicKey.toByteArray(), pair.secretKey.toByteArray()).also {
+            pair.publicKey.fill(0u)
+            pair.secretKey.fill(0u)
+        }
+    }
+
+    override fun signingKeyPairFromBytes(publicKey: ByteArray, secretKey: ByteArray): SigningKeyPair {
+        require(publicKey.size == crypto_sign_PUBLICKEYBYTES) { "publicKey must be $crypto_sign_PUBLICKEYBYTES bytes" }
+        require(secretKey.size == crypto_sign_SECRETKEYBYTES) { "secretKey must be $crypto_sign_SECRETKEYBYTES bytes" }
+        return SigningKeyPair(publicKey.copyOf(), secretKey.copyOf())
+    }
+
+    override fun sign(keyPair: SigningKeyPair, message: ByteArray): ByteArray {
+        requireInitialized()
+        val secretCopy = keyPair.secretKey.toUByteArray()
+        return try {
+            Signature.detached(message.toUByteArray(), secretCopy).toByteArray()
+        } finally {
+            secretCopy.fill(0u)
+        }
+    }
+
+    override fun verifySignature(publicKey: ByteArray, message: ByteArray, signature: ByteArray): Boolean {
+        requireInitialized()
+        // Malformed input (wrong key/signature length) is untrusted server-delivered data, not a
+        // programming error: return false instead of letting ionspin throw on the wrong buffer size.
+        if (publicKey.size != crypto_sign_PUBLICKEYBYTES || signature.size != crypto_sign_BYTES) return false
+        return try {
+            Signature.verifyDetached(signature.toUByteArray(), message.toUByteArray(), publicKey.toUByteArray())
+            true
+        } catch (e: InvalidSignatureException) {
+            false
         }
     }
 

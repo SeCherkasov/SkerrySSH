@@ -21,6 +21,7 @@ import com.nimbusds.srp6.SRP6ClientSession
 import com.nimbusds.srp6.SRP6CryptoParams
 import com.nimbusds.srp6.SRP6Exception
 import com.nimbusds.srp6.SRP6VerifierGenerator
+import app.skerry.shared.team.AccountKeys
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamMember
@@ -29,10 +30,12 @@ import app.skerry.shared.team.TeamRole
 import app.skerry.shared.team.TeamSummary
 import app.skerry.sync.wire.AccountKeyResponse
 import app.skerry.sync.wire.PublishKeyRequest
+import app.skerry.sync.wire.RekeyEnvelopeDto
 import app.skerry.sync.wire.TeamActivityResponse
 import app.skerry.sync.wire.TeamCreateRequest
 import app.skerry.sync.wire.TeamInviteRequest
 import app.skerry.sync.wire.TeamMembersResponse
+import app.skerry.sync.wire.TeamRekeyRequest
 import app.skerry.sync.wire.TeamRoleChangeRequest
 import app.skerry.sync.wire.TeamsResponse
 import io.ktor.client.HttpClient
@@ -214,19 +217,20 @@ class KtorSyncClient(
 
     // --- TeamClient ---
 
-    override suspend fun publishKey(session: SyncSession, publicKey: ByteArray) {
+    override suspend fun publishKey(session: SyncSession, publicKey: ByteArray, signPublicKey: ByteArray) {
         put("/account/key") {
             bearerAuth(session.accessToken)
             contentType(ContentType.Application.Json)
-            setBody(PublishKeyRequest(publicKey.b64()))
+            setBody(PublishKeyRequest(publicKey.b64(), signPublicKey.b64()))
         }.expectSuccess()
     }
 
-    override suspend fun fetchPublicKey(session: SyncSession, accountId: String): ByteArray? {
+    override suspend fun fetchPublicKey(session: SyncSession, accountId: String): AccountKeys? {
         val resp = get("/account/keys/${accountId.encodeURLPathPart()}") { bearerAuth(session.accessToken) }
         if (resp.status == HttpStatusCode.NotFound) return null
         if (!resp.status.isSuccess()) throw resp.toException()
-        return resp.body<AccountKeyResponse>().publicKey.unb64()
+        val body = resp.body<AccountKeyResponse>()
+        return AccountKeys(body.publicKey.unb64(), body.signPublicKey.unb64())
     }
 
     override suspend fun createTeam(session: SyncSession, teamId: String) {
@@ -248,6 +252,8 @@ class KtorSyncClient(
                 createdAt = it.createdAt,
                 memberCount = it.memberCount,
                 envelope = it.envelope?.unb64(),
+                keyEpoch = it.keyEpoch,
+                keyEnvelope = it.keyEnvelope?.unb64(),
             )
         }
     }
@@ -278,6 +284,14 @@ class KtorSyncClient(
             bearerAuth(session.accessToken)
             contentType(ContentType.Application.Json)
             setBody(TeamRoleChangeRequest(role.wire))
+        }.expectSuccess()
+    }
+
+    override suspend fun rekey(session: SyncSession, teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>) {
+        post("/teams/${teamId.encodeURLPathPart()}/rekey") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(TeamRekeyRequest(newEpoch, envelopes.map { (id, env) -> RekeyEnvelopeDto(id, env.b64()) }))
         }.expectSuccess()
     }
 

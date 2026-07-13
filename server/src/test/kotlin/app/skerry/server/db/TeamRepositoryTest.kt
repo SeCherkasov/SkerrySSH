@@ -22,12 +22,14 @@ class TeamRepositoryTest {
         seedAccount(db, alice)
         val repo = TeamRepository(db)
 
-        assertNull(repo.publicKey(alice))
-        repo.publishKey(alice, byteArrayOf(1, 2, 3), now = 10)
-        assertContentEquals(byteArrayOf(1, 2, 3), repo.publicKey(alice))
+        assertNull(repo.accountKeys(alice))
+        repo.publishKey(alice, byteArrayOf(1, 2, 3), byteArrayOf(4, 5), now = 10)
+        assertContentEquals(byteArrayOf(1, 2, 3), repo.accountKeys(alice)?.publicKey)
+        assertContentEquals(byteArrayOf(4, 5), repo.accountKeys(alice)?.signPublicKey)
 
-        repo.publishKey(alice, byteArrayOf(9), now = 20)
-        assertContentEquals(byteArrayOf(9), repo.publicKey(alice))
+        repo.publishKey(alice, byteArrayOf(9), byteArrayOf(8), now = 20)
+        assertContentEquals(byteArrayOf(9), repo.accountKeys(alice)?.publicKey)
+        assertContentEquals(byteArrayOf(8), repo.accountKeys(alice)?.signPublicKey)
     }
 
     @Test
@@ -88,6 +90,55 @@ class TeamRepositoryTest {
         assertFalse(repo.updateRole("team-1", alice, TeamRoles.VIEWER))
         assertEquals(TeamRoles.OWNER, repo.membership("team-1", alice)!!.role)
         assertFalse(repo.updateRole("team-1", "ghost@example.com", TeamRoles.VIEWER))
+    }
+
+    @Test
+    fun `rekey bumps the epoch and stores per-member key envelopes`() = withTestDb { db ->
+        seedTwoAccounts(db)
+        val repo = TeamRepository(db)
+        repo.create("team-1", alice, now = 10)
+        repo.invite("team-1", bob, TeamRoles.VIEWER, byteArrayOf(1), alice, now = 20)
+        repo.accept("team-1", bob)
+
+        assertEquals(0, repo.team("team-1")!!.keyEpoch)
+        assertNull(repo.membership("team-1", bob)!!.keyEnvelope)
+
+        assertEquals(RekeyOutcome.OK, repo.rekey("team-1", newEpoch = 1, envelopes = mapOf(bob to byteArrayOf(5, 5))))
+
+        assertEquals(1, repo.team("team-1")!!.keyEpoch)
+        assertContentEquals(byteArrayOf(5, 5), repo.membership("team-1", bob)!!.keyEnvelope)
+        // Surfaced to the member via teamsFor for adoption.
+        assertContentEquals(byteArrayOf(5, 5), repo.teamsFor(bob).single().keyEnvelope)
+
+        // A missing team can't be rotated.
+        assertEquals(RekeyOutcome.NO_TEAM, repo.rekey("ghost", newEpoch = 1, envelopes = emptyMap()))
+    }
+
+    @Test
+    fun `rekey epoch is a compare-and-set guarding a stale or racing double-rotation`() = withTestDb { db ->
+        seedTwoAccounts(db)
+        val repo = TeamRepository(db)
+        repo.create("team-1", alice, now = 10)
+        repo.invite("team-1", bob, TeamRoles.VIEWER, byteArrayOf(1), alice, now = 20)
+        repo.accept("team-1", bob)
+
+        // First rotation to epoch 1 wins.
+        assertEquals(RekeyOutcome.OK, repo.rekey("team-1", newEpoch = 1, envelopes = mapOf(bob to byteArrayOf(5))))
+
+        // A second rotation racing to the same epoch (built from a stale read of epoch 0) is rejected:
+        // its CAS predicate keyEpoch == 0 no longer holds. Its envelope must not clobber the winner's.
+        assertEquals(RekeyOutcome.EPOCH_CONFLICT, repo.rekey("team-1", newEpoch = 1, envelopes = mapOf(bob to byteArrayOf(9))))
+        assertEquals(1, repo.team("team-1")!!.keyEpoch)
+        assertContentEquals(byteArrayOf(5), repo.membership("team-1", bob)!!.keyEnvelope)
+
+        // Skipping an epoch (2 while at 1) is also rejected — only current + 1 is monotonic.
+        assertEquals(RekeyOutcome.EPOCH_CONFLICT, repo.rekey("team-1", newEpoch = 3, envelopes = mapOf(bob to byteArrayOf(7))))
+        assertEquals(1, repo.team("team-1")!!.keyEpoch)
+
+        // The legitimate next step (epoch 2) proceeds.
+        assertEquals(RekeyOutcome.OK, repo.rekey("team-1", newEpoch = 2, envelopes = mapOf(bob to byteArrayOf(6))))
+        assertEquals(2, repo.team("team-1")!!.keyEpoch)
+        assertContentEquals(byteArrayOf(6), repo.membership("team-1", bob)!!.keyEnvelope)
     }
 
     @Test

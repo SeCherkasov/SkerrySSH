@@ -16,11 +16,15 @@ import kotlinx.serialization.Serializable
 
 // --- account keys ---
 
+/**
+ * [publicKey] — X25519 half (seals invite/rekey envelopes). [signPublicKey] — Ed25519 half (signs
+ * them, so a recipient can authenticate the author). Both are 32 bytes; neither is secret.
+ */
 @Serializable
-data class PublishKeyRequest(val publicKey: String)
+data class PublishKeyRequest(val publicKey: String, val signPublicKey: String)
 
 @Serializable
-data class AccountKeyResponse(val accountId: String, val publicKey: String)
+data class AccountKeyResponse(val accountId: String, val publicKey: String, val signPublicKey: String)
 
 // --- teams and members ---
 
@@ -38,6 +42,14 @@ data class TeamDto(
     val memberCount: Int,
     /** Sealed invitation envelope for the current account; null after acceptance. */
     val envelope: String? = null,
+    /** Current teamKey generation; bumped on every key rotation (member removal/demotion). */
+    val keyEpoch: Long = 0,
+    /**
+     * Sealed current-epoch key envelope for the current member, delivered by a rotation. Same
+     * signed format as [envelope]; the client adopts it only when its payload epoch is newer than
+     * the locally stored one. Null when no rotation has happened since this member last had the key.
+     */
+    val keyEnvelope: String? = null,
 )
 
 @Serializable
@@ -64,6 +76,18 @@ data class TeamInviteRequest(val accountId: String, val envelope: String, val ro
 /** Role change by owner/admin (`admin`/`editor`/`viewer`; `owner` not allowed). */
 @Serializable
 data class TeamRoleChangeRequest(val role: String)
+
+/**
+ * teamKey rotation (`POST /teams/{id}/rekey`). After removing/demoting a member the manager
+ * generates a new teamKey and re-seals it to every remaining member; [envelopes] carries one signed
+ * sealed key per member. [newEpoch] must equal the team's current epoch + 1 (monotonic). Zero
+ * knowledge: the server stores the envelopes and the epoch but can't read the key.
+ */
+@Serializable
+data class TeamRekeyRequest(val newEpoch: Long, val envelopes: List<RekeyEnvelopeDto>)
+
+@Serializable
+data class RekeyEnvelopeDto(val accountId: String, val envelope: String)
 
 /**
  * Team audit entry (`GET /teams/{id}/activity`). Zero-knowledge: metadata only — actor, event,

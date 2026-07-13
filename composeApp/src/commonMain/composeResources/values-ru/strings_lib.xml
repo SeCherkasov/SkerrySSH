@@ -73,6 +73,9 @@
     <string name="lib_teams_invite_send">Отправить приглашение</string>
     <string name="lib_teams_your_fingerprint">Ваш отпечаток: %1$s</string>
     <string name="lib_teams_invited_banner">Вас пригласили в эту команду</string>
+    <string name="lib_teams_invited_by">Пригласил %1$s</string>
+    <string name="lib_teams_invited_fingerprint">Сверьте отпечаток пригласившего по доверенному каналу перед принятием: %1$s</string>
+    <string name="lib_teams_invite_unverified">Не удалось проверить, кто отправил приглашение. Не принимайте, если не доверяете ему.</string>
     <string name="lib_teams_accept">Принять</string>
     <string name="lib_teams_decline">Отклонить</string>
     <string name="lib_teams_role_owner">ВЛАДЕЛЕЦ</string>
@@ -121,4 +124,5 @@
     <string name="lib_teams_err_network">Сетевая ошибка — проверьте соединение с sync-сервером</string>
     <string name="lib_teams_err_protocol">Неожиданный ответ сервера</string>
     <string name="lib_teams_err_forbidden">Недоступно для вашей роли в команде</string>
+    <string name="lib_teams_err_vault_unreadable">Локальный файл командного хранилища нечитаем — он сохранён, не удалён</string>
 </resources>

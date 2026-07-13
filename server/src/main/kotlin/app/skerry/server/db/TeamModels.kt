@@ -5,7 +5,15 @@ data class TeamRow(
     val id: String,
     val ownerAccountId: String,
     val teamSeq: Long,
+    val keyEpoch: Long,
     val createdAt: Long,
+)
+
+/** An account's published Teams identity keys (both public halves). [signPublicKey] is null for
+ *  legacy rows written before invite signing. */
+data class AccountKeysRow(
+    val publicKey: ByteArray,
+    val signPublicKey: ByteArray?,
 )
 
 /**
@@ -18,6 +26,7 @@ data class TeamMemberRow(
     val role: String,
     val status: String,
     val envelope: ByteArray?,
+    val keyEnvelope: ByteArray?,
     val invitedBy: String,
     val createdAt: Long,
 ) {
@@ -26,7 +35,8 @@ data class TeamMemberRow(
         if (other !is TeamMemberRow) return false
         return teamId == other.teamId && accountId == other.accountId && role == other.role &&
             status == other.status && invitedBy == other.invitedBy && createdAt == other.createdAt &&
-            (envelope?.contentEquals(other.envelope ?: return false) ?: (other.envelope == null))
+            (envelope?.contentEquals(other.envelope) ?: (other.envelope == null)) &&
+            (keyEnvelope?.contentEquals(other.keyEnvelope) ?: (other.keyEnvelope == null))
     }
 
     override fun hashCode(): Int {
@@ -35,6 +45,7 @@ data class TeamMemberRow(
         result = 31 * result + role.hashCode()
         result = 31 * result + status.hashCode()
         result = 31 * result + (envelope?.contentHashCode() ?: 0)
+        result = 31 * result + (keyEnvelope?.contentHashCode() ?: 0)
         result = 31 * result + invitedBy.hashCode()
         result = 31 * result + createdAt.hashCode()
         return result
@@ -47,6 +58,7 @@ data class TeamMembershipView(
     val role: String,
     val status: String,
     val envelope: ByteArray?,
+    val keyEnvelope: ByteArray?,
     val memberCount: Int,
 ) {
     override fun equals(other: Any?): Boolean {
@@ -54,7 +66,8 @@ data class TeamMembershipView(
         if (other !is TeamMembershipView) return false
         return team == other.team && role == other.role && status == other.status &&
             memberCount == other.memberCount &&
-            (envelope?.contentEquals(other.envelope ?: return false) ?: (other.envelope == null))
+            (envelope?.contentEquals(other.envelope) ?: (other.envelope == null)) &&
+            (keyEnvelope?.contentEquals(other.keyEnvelope) ?: (other.keyEnvelope == null))
     }
 
     override fun hashCode(): Int {
@@ -62,6 +75,7 @@ data class TeamMembershipView(
         result = 31 * result + role.hashCode()
         result = 31 * result + status.hashCode()
         result = 31 * result + (envelope?.contentHashCode() ?: 0)
+        result = 31 * result + (keyEnvelope?.contentHashCode() ?: 0)
         result = 31 * result + memberCount
         return result
     }

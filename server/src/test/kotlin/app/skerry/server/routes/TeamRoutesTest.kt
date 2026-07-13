@@ -10,7 +10,9 @@ import app.skerry.sync.wire.RecordDto
 import app.skerry.sync.wire.RecordsResponse
 import app.skerry.sync.wire.TeamCreateRequest
 import app.skerry.sync.wire.TeamInviteRequest
+import app.skerry.sync.wire.RekeyEnvelopeDto
 import app.skerry.sync.wire.TeamMembersResponse
+import app.skerry.sync.wire.TeamRekeyRequest
 import app.skerry.sync.wire.TeamsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -41,11 +43,11 @@ class TeamRoutesTest {
     private fun record(id: String, version: Long = 1, type: String = "HOST") =
         RecordDto(id, type, version, "2026-07-04T00:00:00Z", "devA", false, byteArrayOf(1, 2).b64())
 
-    private suspend fun HttpClient.publishKey(token: String, key: ByteArray) =
+    private suspend fun HttpClient.publishKey(token: String, key: ByteArray, signKey: ByteArray = ByteArray(32) { 5 }) =
         put("/account/key") {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
-            setBody(PublishKeyRequest(key.b64()))
+            setBody(PublishKeyRequest(key.b64(), signKey.b64()))
         }
 
     private suspend fun HttpClient.createTeam(token: String, id: String = teamId) =
@@ -61,6 +63,48 @@ class TeamRoutesTest {
             contentType(ContentType.Application.Json)
             setBody(TeamInviteRequest(target, envelope.b64()))
         }
+
+    private suspend fun HttpClient.rekey(token: String, newEpoch: Long, envelopes: Map<String, ByteArray>) =
+        post("/teams/$teamId/rekey") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(TeamRekeyRequest(newEpoch, envelopes.map { (id, env) -> RekeyEnvelopeDto(id, env.b64()) }))
+        }
+
+    @Test
+    fun `rekey bumps the epoch, distributes key envelopes, and enforces monotonicity and role`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val aliceTokens = client.registerAccount(alice, password)
+        val bobTokens = client.registerAccount(bob, password, deviceId = "dev-bob")
+        client.createTeam(aliceTokens.accessToken)
+        client.invite(aliceTokens.accessToken, bob, byteArrayOf(1))
+        client.post("/teams/$teamId/accept") { bearerAuth(bobTokens.accessToken) }
+
+        val bobEnv = byteArrayOf(2, 2, 2)
+        val aliceEnv = byteArrayOf(3, 3, 3)
+
+        // Non-monotonic epoch (current is 0, next must be 1) → 409.
+        assertEquals(HttpStatusCode.Conflict, client.rekey(aliceTokens.accessToken, 2, mapOf(bob to bobEnv)).status)
+        // Envelope for a non-member → 400.
+        assertEquals(HttpStatusCode.BadRequest, client.rekey(aliceTokens.accessToken, 1, mapOf("ghost@x" to bobEnv)).status)
+        // A viewer (bob) can't rotate → 403.
+        assertEquals(HttpStatusCode.Forbidden, client.rekey(bobTokens.accessToken, 1, mapOf(bob to bobEnv)).status)
+
+        // Owner rotates to epoch 1.
+        assertEquals(HttpStatusCode.OK, client.rekey(aliceTokens.accessToken, 1, mapOf(bob to bobEnv, alice to aliceEnv)).status)
+
+        // Bob sees the new epoch and his re-sealed key envelope.
+        val bobTeams: TeamsResponse = client.get("/teams") { bearerAuth(bobTokens.accessToken) }.body()
+        val team = bobTeams.teams.single()
+        assertEquals(1L, team.keyEpoch)
+        assertEquals(bobEnv.b64(), team.keyEnvelope)
+
+        // Replaying epoch 1 is rejected (monotonic).
+        assertEquals(HttpStatusCode.Conflict, client.rekey(aliceTokens.accessToken, 1, mapOf(bob to bobEnv)).status)
+    }
 
     @Test
     fun `full team lifecycle create invite accept push pull`() = testApplication {

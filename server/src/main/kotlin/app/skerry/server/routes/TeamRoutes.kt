@@ -2,6 +2,7 @@ package app.skerry.server.routes
 
 import app.skerry.server.Services
 import app.skerry.server.accountId
+import app.skerry.server.db.RekeyOutcome
 import app.skerry.server.db.TeamMemberRow
 import app.skerry.server.db.TeamMemberStatus
 import app.skerry.server.db.TeamRoles
@@ -23,6 +24,7 @@ import app.skerry.sync.wire.TeamMemberDto
 import app.skerry.sync.wire.TeamActivityDto
 import app.skerry.sync.wire.TeamActivityResponse
 import app.skerry.sync.wire.TeamMembersResponse
+import app.skerry.sync.wire.TeamRekeyRequest
 import app.skerry.sync.wire.TeamRoleChangeRequest
 import app.skerry.sync.wire.TeamsResponse
 import io.ktor.http.HttpStatusCode
@@ -55,8 +57,10 @@ fun Route.teamRoutes(services: Services) {
         val principal = call.jwtPrincipal()
         val req = call.receive<PublishKeyRequest>()
         val key = req.publicKey.unb64()
+        val signKey = req.signPublicKey.unb64()
         if (key.size != PUBLIC_KEY_BYTES) throw BadRequestException("publicKey must be $PUBLIC_KEY_BYTES bytes")
-        services.teams.publishKey(principal.accountId, key, System.currentTimeMillis())
+        if (signKey.size != PUBLIC_KEY_BYTES) throw BadRequestException("signPublicKey must be $PUBLIC_KEY_BYTES bytes")
+        services.teams.publishKey(principal.accountId, key, signKey, System.currentTimeMillis())
         call.respond(HttpStatusCode.OK)
     }
 
@@ -64,12 +68,14 @@ fun Route.teamRoutes(services: Services) {
         call.jwtPrincipal()
         val target = call.requiredPathId("accountId") ?: return@get
         if (target.length > MAX_ACCOUNT_ID) throw BadRequestException("accountId too long")
-        val key = services.teams.publicKey(target)
-        if (key == null) {
+        val keys = services.teams.accountKeys(target)
+        // A legacy row without a signing key is unusable for signed invites; report it as unpublished
+        // (the owner republishes both keys on next login), so invitees never adopt a half-identity.
+        if (keys?.signPublicKey == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("no published key for account"))
             return@get
         }
-        call.respond(AccountKeyResponse(target, key.b64()))
+        call.respond(AccountKeyResponse(target, keys.publicKey.b64(), keys.signPublicKey.b64()))
     }
 
     post("/teams") {
@@ -95,6 +101,8 @@ fun Route.teamRoutes(services: Services) {
                 createdAt = view.team.createdAt,
                 memberCount = view.memberCount,
                 envelope = view.envelope?.b64(),
+                keyEpoch = view.team.keyEpoch,
+                keyEnvelope = view.keyEnvelope?.b64(),
             )
         }
         call.respond(TeamsResponse(teams))
@@ -176,6 +184,41 @@ fun Route.teamRoutes(services: Services) {
         }
         services.activity.record(principal.accountId, "team.role_change", "$target → ${req.role}", teamId = teamId)
         services.notifier.publishMembership(target)
+        call.respond(HttpStatusCode.OK)
+    }
+
+    post("/teams/{id}/rekey") {
+        val principal = call.jwtPrincipal()
+        val teamId = call.requiredPathId("id") ?: return@post
+        val req = call.receive<TeamRekeyRequest>()
+        call.requireActiveMember(
+            services, teamId, principal.accountId, TeamRoles::canManageMembers, "manage-members role required",
+        ) ?: return@post
+        val members = services.teams.members(teamId).associateBy { it.accountId }
+        val envelopes = mutableMapOf<String, ByteArray>()
+        for (e in req.envelopes) {
+            val blob = e.envelope.unb64()
+            if (blob.isEmpty() || blob.size > MAX_ENVELOPE_BYTES) throw BadRequestException("bad envelope")
+            if (e.accountId !in members) throw BadRequestException("not a member: ${e.accountId}")
+            envelopes[e.accountId] = blob
+        }
+        // Monotonic epoch: exactly one step past the current one, enforced as an atomic compare-and-set
+        // inside rekey (guards a stale replay and concurrent double-rotations racing to the same epoch —
+        // a route-level read-then-write here would be a TOCTOU, see TeamRepository.rekey).
+        when (services.teams.rekey(teamId, req.newEpoch, envelopes)) {
+            RekeyOutcome.NO_TEAM -> {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("no such team"))
+                return@post
+            }
+            RekeyOutcome.EPOCH_CONFLICT -> {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse("stale epoch (concurrent rotation); refetch and retry"))
+                return@post
+            }
+            RekeyOutcome.OK -> Unit
+        }
+        services.activity.record(principal.accountId, "team.rekey", "epoch ${req.newEpoch}", teamId = teamId)
+        // Every re-keyed member re-reads the team to adopt the new key.
+        envelopes.keys.forEach { services.notifier.publishMembership(it) }
         call.respond(HttpStatusCode.OK)
     }
 

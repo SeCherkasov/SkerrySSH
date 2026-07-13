@@ -73,6 +73,9 @@
     <string name="lib_teams_invite_send">Send invite</string>
     <string name="lib_teams_your_fingerprint">Your fingerprint: %1$s</string>
     <string name="lib_teams_invited_banner">You are invited to this team</string>
+    <string name="lib_teams_invited_by">Invited by %1$s</string>
+    <string name="lib_teams_invited_fingerprint">Confirm the inviter\'s fingerprint over a trusted channel before accepting: %1$s</string>
+    <string name="lib_teams_invite_unverified">Could not verify who sent this invite. Do not accept unless you trust it.</string>
     <string name="lib_teams_accept">Accept</string>
     <string name="lib_teams_decline">Decline</string>
     <string name="lib_teams_role_owner">OWNER</string>
@@ -121,4 +124,5 @@
     <string name="lib_teams_err_network">Network error — check the connection to the sync server</string>
     <string name="lib_teams_err_protocol">Unexpected server response</string>
     <string name="lib_teams_err_forbidden">Not allowed for your role in this team</string>
+    <string name="lib_teams_err_vault_unreadable">The local team vault file is unreadable — it was kept, not deleted</string>
 </resources>

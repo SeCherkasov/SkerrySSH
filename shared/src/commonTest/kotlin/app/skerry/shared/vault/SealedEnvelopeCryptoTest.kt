@@ -8,6 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Asymmetric layer for team sharing: a sealed envelope (crypto_box_seal, X25519) lets a teamKey
@@ -91,6 +92,53 @@ class SealedEnvelopeCryptoTest {
 
         assertEquals(32, a.publicKey.size)
         assertFalse(a.publicKey.contentEquals(b.publicKey))
+    }
+
+    @Test
+    fun `signature verifies for the matching key and message`() = cryptoTest {
+        val signer = crypto.newSigningKeyPair()
+        val message = "invite-envelope-bytes".encodeToByteArray()
+
+        val sig = crypto.sign(signer, message)
+
+        assertEquals(64, sig.size)
+        assertTrue(crypto.verifySignature(signer.publicKey, message, sig))
+    }
+
+    @Test
+    fun `signature fails for a different key, tampered message, or tampered signature`() = cryptoTest {
+        val signer = crypto.newSigningKeyPair()
+        val message = "authentic".encodeToByteArray()
+        val sig = crypto.sign(signer, message)
+
+        assertFalse(crypto.verifySignature(crypto.newSigningKeyPair().publicKey, message, sig))
+        assertFalse(crypto.verifySignature(signer.publicKey, "tampered".encodeToByteArray(), sig))
+
+        val badSig = sig.copyOf().also { it[it.size - 1] = (it[it.size - 1].toInt() xor 0x01).toByte() }
+        assertFalse(crypto.verifySignature(signer.publicKey, message, badSig))
+    }
+
+    @Test
+    fun `verifySignature returns false on malformed key or signature length`() = cryptoTest {
+        // Server-delivered (untrusted) input: wrong sizes yield false, never a throw.
+        val signer = crypto.newSigningKeyPair()
+        val message = "m".encodeToByteArray()
+        val sig = crypto.sign(signer, message)
+
+        assertFalse(crypto.verifySignature(ByteArray(31), message, sig))
+        assertFalse(crypto.verifySignature(signer.publicKey, message, ByteArray(63)))
+    }
+
+    @Test
+    fun `signing key pair survives serialization of both halves`() = cryptoTest {
+        val original = crypto.newSigningKeyPair()
+        val restored = crypto.signingKeyPairFromBytes(original.publicKey, original.exportSecretKey())
+        val message = "signed-on-another-device".encodeToByteArray()
+
+        val sig = crypto.sign(restored, message)
+
+        assertEquals(32, original.publicKey.size)
+        assertTrue(crypto.verifySignature(original.publicKey, message, sig))
     }
 
     @Test

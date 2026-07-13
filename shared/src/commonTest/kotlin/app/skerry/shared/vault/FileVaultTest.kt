@@ -47,6 +47,52 @@ class FileVaultTest {
     }
 
     @Test
+    fun `rekeyRecords re-encrypts under the new key, bumps versions, and drops the old key`() = vaultTest {
+        // Team-vault shape: keyed directly (no password wrapping), as TeamVaults uses it.
+        val v = vault()
+        val oldKey = crypto.newDataKey()
+        val oldKeyCopy = DataKey(oldKey.bytes.copyOf()) // rekeyRecords wipes the live old key
+        v.createWithDataKey(oldKey)
+        v.put("h1", RecordType.HOST, "payload-1".encodeToByteArray())
+        v.put("h2", RecordType.HOST, "payload-2".encodeToByteArray())
+        v.remove("h2") // tombstone must survive rotation (re-sealed empty)
+        val v1Before = v.records().first { it.id == "h1" }.version
+
+        val newKey = crypto.newDataKey()
+        val newKeyCopy = DataKey(newKey.bytes.copyOf())
+        assertTrue(v.rekeyRecords(newKey))
+
+        // Records remain readable through the vault, now under the new key; version bumped to win LWW.
+        assertContentEquals("payload-1".encodeToByteArray(), v.openPayload("h1"))
+        assertTrue(v.records().first { it.id == "h1" }.version > v1Before)
+        assertTrue(v.records().first { it.id == "h2" }.deleted)
+
+        // The on-disk file is now under the NEW key: a fresh vault opens and reads it with newKey…
+        val underNew = vault()
+        underNew.unlockWithDataKey(newKeyCopy)
+        assertContentEquals("payload-1".encodeToByteArray(), underNew.openPayload("h1"))
+        // …and the OLD key can no longer decrypt the re-sealed record.
+        val underOld = vault()
+        underOld.unlockWithDataKey(oldKeyCopy)
+        assertNull(underOld.openPayload("h1"))
+    }
+
+    @Test
+    fun `rekeyRecords throws on a locked vault`() = vaultTest {
+        assertFailsWith<IllegalStateException> { vault().rekeyRecords(crypto.newDataKey()) }
+    }
+
+    @Test
+    fun `rekeyRecords default throws and wipes the key so a non-file vault can't silently swallow a rotation`() {
+        // The interface default takes ownership of the key: it must not leak it or return a silent
+        // false (which would let a team adopt a key nobody re-encrypted under). FakeVault doesn't
+        // override rekeyRecords, so it exercises the default.
+        val key = DataKey(ByteArray(32) { 1 })
+        assertFailsWith<UnsupportedOperationException> { FakeVault().rekeyRecords(key) }
+        assertTrue(key.bytes.all { it == 0.toByte() }, "the default must wipe the key it took ownership of")
+    }
+
+    @Test
     fun `create writes a file and leaves the vault unlocked`() = vaultTest {
         val v = vault()
         assertFalse(v.exists())

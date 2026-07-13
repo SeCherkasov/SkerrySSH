@@ -53,14 +53,15 @@ class TeamSyncRoundTripTest {
             return RecordPage(result, seq)
         }
 
-        override suspend fun publishKey(session: SyncSession, publicKey: ByteArray) = error("unused")
-        override suspend fun fetchPublicKey(session: SyncSession, accountId: String): ByteArray? = error("unused")
+        override suspend fun publishKey(session: SyncSession, publicKey: ByteArray, signPublicKey: ByteArray) = error("unused")
+        override suspend fun fetchPublicKey(session: SyncSession, accountId: String): AccountKeys? = error("unused")
         override suspend fun createTeam(session: SyncSession, teamId: String) = error("unused")
         override suspend fun listTeams(session: SyncSession): List<TeamSummary> = error("unused")
         override suspend fun members(session: SyncSession, teamId: String): List<TeamMember> = error("unused")
         override suspend fun invite(session: SyncSession, teamId: String, accountId: String, role: TeamRole, envelope: ByteArray) = error("unused")
         override suspend fun accept(session: SyncSession, teamId: String) = error("unused")
         override suspend fun changeRole(session: SyncSession, teamId: String, accountId: String, role: TeamRole) = error("unused")
+        override suspend fun rekey(session: SyncSession, teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>) = error("unused")
         override suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry> = error("unused")
         override suspend fun removeMember(session: SyncSession, teamId: String, accountId: String) = error("unused")
         override suspend fun deleteTeam(session: SyncSession, teamId: String) = error("unused")
@@ -125,6 +126,37 @@ class TeamSyncRoundTripTest {
 
         assertNull(vaults.open(teamId, crypto.newDataKey()))
         assertEquals(true, vaults.open(teamId, rightKey)?.isUnlocked)
+    }
+
+    @Test
+    fun `openOrClassify distinguishes a superseded key from a corrupt file and never deletes`() = runBlocking {
+        initializeVaultCrypto()
+        val dir = Files.createTempDirectory("skerry-teams-classify").toString().toPath()
+        val vaults = TeamVaults(
+            dir = dir,
+            crypto = crypto,
+            deviceId = "dev-eve",
+            fileSystem = FileSystem.SYSTEM,
+            now = { "2026-07-04T00:00:00Z" },
+        )
+        val key = crypto.newDataKey()
+        // A non-empty vault under the right key opens.
+        val opened = vaults.openOrClassify(teamId, key)
+        assertTrue(opened is TeamVaults.OpenResult.Opened)
+        opened.vault.put("h1", RecordType.HOST, "x".encodeToByteArray())
+        opened.vault.lock()
+        vaults.lockAll()
+
+        // A wrong key on a non-empty file is a superseded key (safe to reset), not corruption.
+        assertEquals(TeamVaults.OpenResult.StaleKey, vaults.openOrClassify(teamId, crypto.newDataKey()))
+        vaults.lockAll()
+
+        // A structurally unreadable file must be reported as Unreadable — and left on disk (deleting
+        // it would silently drop any local records that were never pushed).
+        val file = dir / "$teamId.vault"
+        FileSystem.SYSTEM.write(file) { writeUtf8("not a vault at all") }
+        assertEquals(TeamVaults.OpenResult.Unreadable, vaults.openOrClassify(teamId, key))
+        assertTrue(FileSystem.SYSTEM.exists(file))
     }
 
     @Test

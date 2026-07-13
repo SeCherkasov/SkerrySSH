@@ -16,6 +16,7 @@ import app.skerry.shared.vault.MergeResult
 import app.skerry.shared.vault.MasterKey
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.SharingKeyPair
+import app.skerry.shared.vault.SigningKeyPair
 import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
@@ -182,6 +183,10 @@ private class StubCrypto : VaultCrypto {
     override fun sharingKeyPairFromBytes(publicKey: ByteArray, secretKey: ByteArray): SharingKeyPair = no()
     override fun sealForRecipient(recipientPublicKey: ByteArray, plaintext: ByteArray): ByteArray = no()
     override fun openSealedEnvelope(keyPair: SharingKeyPair, envelope: ByteArray): ByteArray? = no()
+    override fun newSigningKeyPair(): SigningKeyPair = no()
+    override fun signingKeyPairFromBytes(publicKey: ByteArray, secretKey: ByteArray): SigningKeyPair = no()
+    override fun sign(keyPair: SigningKeyPair, message: ByteArray): ByteArray = no()
+    override fun verifySignature(publicKey: ByteArray, message: ByteArray, signature: ByteArray): Boolean = no()
     private fun no(): Nothing = throw NotImplementedError()
 }
 

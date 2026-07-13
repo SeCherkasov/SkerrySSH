@@ -71,9 +71,13 @@ import app.skerry.ui.generated.resources.lib_teams_err_no_such_account
 import app.skerry.ui.generated.resources.lib_teams_err_not_connected
 import app.skerry.ui.generated.resources.lib_teams_err_protocol
 import app.skerry.ui.generated.resources.lib_teams_err_vault_locked
+import app.skerry.ui.generated.resources.lib_teams_err_vault_unreadable
 import app.skerry.ui.generated.resources.lib_teams_history
 import app.skerry.ui.generated.resources.lib_teams_invite
 import app.skerry.ui.generated.resources.lib_teams_invited_banner
+import app.skerry.ui.generated.resources.lib_teams_invited_by
+import app.skerry.ui.generated.resources.lib_teams_invited_fingerprint
+import app.skerry.ui.generated.resources.lib_teams_invite_unverified
 import app.skerry.ui.generated.resources.lib_teams_leave
 import app.skerry.ui.generated.resources.lib_teams_leave_message
 import app.skerry.ui.generated.resources.lib_teams_members
@@ -329,20 +333,35 @@ private fun TeamDetail(
     HLine()
     Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
         if (invited) {
-            Row(
+            // Verify the inviter's identity (signature + fingerprint) before offering Accept. Null =
+            // the invite couldn't be authenticated (forged/tampered) — warn and don't reveal a fingerprint.
+            val acceptPreview by produceState<InvitePreview?>(null, team.id) { value = tc.acceptPreview(team.id) }
+            Column(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(9.dp))
                     .background(D.amber.copy(alpha = 0.08f))
                     .border(1.dp, D.amber.copy(alpha = 0.25f), RoundedCornerShape(9.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Sym("mail", size = 18.sp, color = D.amber)
-                Txt(stringResource(Res.string.lib_teams_invited_banner), color = D.text, size = 12.5.sp, modifier = Modifier.weight(1f))
-                GhostButton(stringResource(Res.string.lib_teams_decline), onClick = onDecline, fg = D.dim)
-                PrimaryButton(stringResource(Res.string.lib_teams_accept), onClick = onAccept, enabled = !busy)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Sym("mail", size = 18.sp, color = D.amber)
+                    Txt(stringResource(Res.string.lib_teams_invited_banner), color = D.text, size = 12.5.sp, modifier = Modifier.weight(1f))
+                    GhostButton(stringResource(Res.string.lib_teams_decline), onClick = onDecline, fg = D.dim)
+                    PrimaryButton(stringResource(Res.string.lib_teams_accept), onClick = onAccept, enabled = !busy)
+                }
+                acceptPreview.let { p ->
+                    if (p == null) {
+                        Txt(stringResource(Res.string.lib_teams_invite_unverified), color = D.sunset, size = 11.5.sp)
+                    } else {
+                        Txt(stringResource(Res.string.lib_teams_invited_by, p.accountId), color = D.dim, size = 11.5.sp)
+                        Txt(stringResource(Res.string.lib_teams_invited_fingerprint, p.fingerprint), color = D.cyanBright, size = 11.5.sp, font = mono)
+                    }
+                }
             }
             Box(Modifier.padding(top = 24.dp))
         } else if (!team.hasKey) {
@@ -484,6 +503,7 @@ internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.Network -> stringResource(Res.string.lib_teams_err_network)
     TeamsFailure.Protocol -> stringResource(Res.string.lib_teams_err_protocol)
     TeamsFailure.Forbidden -> stringResource(Res.string.lib_teams_err_forbidden)
+    TeamsFailure.VaultUnreadable -> stringResource(Res.string.lib_teams_err_vault_unreadable)
 }
 
 /** launch from click handlers: a param-less suspend block, shorter than a lambda with CoroutineScope. */

@@ -6,17 +6,21 @@ import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSignal
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.SyncException
+import app.skerry.shared.team.AccountIdentity
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamInviteCodec
+import app.skerry.shared.team.TeamInvitePayload
 import app.skerry.shared.team.TeamKeyStore
 import app.skerry.shared.team.TeamIdentityStore
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
 import app.skerry.shared.team.TeamScopedSyncClient
+import app.skerry.shared.team.TeamSummary
 import app.skerry.shared.team.TeamVaults
-import app.skerry.shared.team.sharingKeyFingerprint
+import app.skerry.shared.team.accountKeyFingerprint
+import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
@@ -26,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -34,7 +39,7 @@ import app.skerry.shared.team.stripShareFields
 /** Typed cause of a Teams operation failure (text in the UI layer, syncFailureText style). */
 enum class TeamsFailure {
     NotConnected, VaultLocked, NoRecipientKey, AlreadyInvited, NoSuchAccount,
-    KeyMissing, Network, Protocol, Forbidden,
+    KeyMissing, Network, Protocol, Forbidden, VaultUnreadable,
 }
 
 /** A team as the UI sees it: server metadata + local key (the name lives in its vault / envelope). */
@@ -76,6 +81,13 @@ class TeamsCoordinator(
 
     private val opMutex = Mutex()
     private val syncMutex = Mutex()
+
+    // Verified invites cached between acceptPreview (the banner) and accept (the button) so accepting
+    // doesn't re-run the listTeams + fetchPublicKey round-trips openVerifiedInvite already did. Reusing
+    // the *verified* payload is sound (its signature was checked) — indeed it's the exact envelope whose
+    // fingerprint the user confirmed. A StateFlow (atomic updates) rather than a mutex-guarded map:
+    // acceptPreview runs outside opMutex and lock() (not suspend) must clear it without racing.
+    private val verifiedInvites = MutableStateFlow<Map<String, VerifiedInvite>>(emptyMap())
 
     private val _teams = MutableStateFlow<List<TeamUi>>(emptyList())
     val teams: StateFlow<List<TeamUi>> = _teams
@@ -147,10 +159,12 @@ class TeamsCoordinator(
         }
     }
 
-    /** Fingerprint of the own public half — shown in the UI for verification when inviting. */
+    /** Fingerprint of the own identity (both public halves) — shown in the UI for verification. */
     fun ownFingerprint(): String? {
         if (!vault.isUnlocked) return null
-        return runCatching { sharingKeyFingerprint(identityStore.ensure().publicKey) }.getOrNull()
+        return runCatching {
+            identityStore.ensure().let { accountKeyFingerprint(it.sharing.publicKey, it.signing.publicKey) }
+        }.getOrNull()
     }
 
     /** Reread teams from the server, open active teams' vaults, publish identity on first login. */
@@ -160,19 +174,13 @@ class TeamsCoordinator(
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
             // Publish identity idempotently: without it we can't be invited to a team.
-            c.publishKey(s, identityStore.ensure().publicKey)
+            val identity = publishIdentity(s, c)
             val remote = c.listTeams(s)
-            val keys = keyStore.list()
-            _teams.value = remote.map { t ->
-                val entry = keys[t.id]
-                val name = entry?.name ?: t.envelope?.let { env ->
-                    identityStore.load()?.let { id -> inviteCodec.open(id, env)?.teamName }
-                } ?: t.id
-                TeamUi(t.id, name, t.ownerAccountId, t.role, t.status, t.memberCount, entry != null)
-            }
+            adoptRotatedKeys(s, c, remote, identity)
+            publishTeams(remote, identity)
             // Keys of teams we were removed from (or that were deleted) are no longer needed.
             val liveIds = remote.map { it.id }.toSet()
-            keys.keys.filter { it !in liveIds }.forEach { gone ->
+            keyStore.list().keys.filter { it !in liveIds }.forEach { gone ->
                 keyStore.remove(gone)
                 teamVaults.reset(gone)
             }
@@ -200,10 +208,10 @@ class TeamsCoordinator(
         val c = client() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
-            c.publishKey(s, identityStore.ensure().publicKey)
+            publishIdentity(s, c)
             val teamId = newTeamId()
             c.createTeam(s, teamId)
-            keyStore.put(teamId, name.ifBlank { teamId }, TeamRole.OWNER, crypto.newDataKey())
+            keyStore.put(teamId, name.ifBlank { teamId }, TeamRole.OWNER, crypto.newDataKey(), epoch = 0)
             refreshUnlocked(s, c)
         }
     }
@@ -213,12 +221,12 @@ class TeamsCoordinator(
         val s = session() ?: run { markError(TeamsFailure.NotConnected); return null }
         val c = client() ?: run { markError(TeamsFailure.NotConnected); return null }
         return try {
-            val key = c.fetchPublicKey(s, accountId)
-            if (key == null) {
+            val keys = c.fetchPublicKey(s, accountId)
+            if (keys == null) {
                 markError(TeamsFailure.NoRecipientKey)
                 null
             } else {
-                InvitePreview(accountId, sharingKeyFingerprint(key))
+                InvitePreview(accountId, accountKeyFingerprint(keys.sharing, keys.signing))
             }
         } catch (e: CancellationException) {
             throw e
@@ -228,16 +236,29 @@ class TeamsCoordinator(
         }
     }
 
-    /** Invite step 2: seal teamKey+name to the invitee's key and create an invite membership with role [role]. */
+    /** Invite step 2: seal+sign teamKey+name to the invitee's key and create an invite membership with role [role]. */
     suspend fun invite(teamId: String, accountId: String, role: TeamRole) {
         val s = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
         val entry = keyStore.get(teamId) ?: return markError(TeamsFailure.KeyMissing)
         val teamKey = entry.dataKey() ?: return markError(TeamsFailure.KeyMissing)
         op {
-            val recipientKey = c.fetchPublicKey(s, accountId)
+            val identity = identityStore.ensure()
+            val recipient = c.fetchPublicKey(s, accountId)
                 ?: return@op markError(TeamsFailure.NoRecipientKey)
-            c.invite(s, teamId, accountId, role, inviteCodec.seal(recipientKey, teamKey, entry.name))
+            // Sign the envelope with our identity and bind it to (teamId, inviter=self, invitee, epoch):
+            // a malicious server can neither forge the invite nor retarget it to another team/invitee.
+            val envelope = inviteCodec.seal(
+                recipientPublicKey = recipient.sharing,
+                inviter = identity.signing,
+                inviterId = s.accountId,
+                inviteeId = accountId,
+                teamId = teamId,
+                teamKey = teamKey,
+                teamName = entry.name,
+                epoch = entry.epoch,
+            )
+            c.invite(s, teamId, accountId, role, envelope)
             refreshUnlocked(s, c)
         }
     }
@@ -266,21 +287,44 @@ class TeamsCoordinator(
         }
     }
 
-    /** Accept an invite: open the envelope with own identity, save the key, pull records. */
+    /**
+     * Invite step (invitee side): open+verify the envelope and return the **verified inviter's**
+     * account + fingerprint for out-of-band confirmation before accepting. null if the envelope is
+     * missing/forged (signature invalid, wrong team, or not addressed to us).
+     */
+    suspend fun acceptPreview(teamId: String): InvitePreview? {
+        val s = session() ?: run { markError(TeamsFailure.NotConnected); return null }
+        val c = client() ?: run { markError(TeamsFailure.NotConnected); return null }
+        if (!vault.isUnlocked) { markError(TeamsFailure.VaultLocked); return null }
+        return try {
+            val verified = openVerifiedInvite(s, c, teamId) ?: run { markError(TeamsFailure.KeyMissing); return null }
+            val inviterKeys = c.fetchPublicKey(s, verified.payload.inviterAccountId)
+                ?: run { markError(TeamsFailure.NoRecipientKey); return null }
+            InvitePreview(verified.payload.inviterAccountId, accountKeyFingerprint(inviterKeys.sharing, inviterKeys.signing))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            markError(e.toFailure())
+            null
+        }
+    }
+
+    /** Accept an invite: open+verify the signed envelope, save the key at its epoch, pull records. */
     suspend fun accept(teamId: String) {
         val s = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
-            val summary = c.listTeams(s).firstOrNull { it.id == teamId }
-                ?: return@op markError(TeamsFailure.Protocol)
-            val envelope = summary.envelope ?: return@op markError(TeamsFailure.KeyMissing)
-            val identity = identityStore.load() ?: return@op markError(TeamsFailure.KeyMissing)
-            val invite = inviteCodec.open(identity, envelope)
-                ?: return@op markError(TeamsFailure.KeyMissing)
+            // Reuse the invite acceptPreview already opened+verified (no second listTeams/fetchPublicKey),
+            // falling back to a fresh open if the banner didn't run. Either way the signature was checked:
+            // a server-fabricated invite to a fake team is rejected even if the user skipped the fingerprint.
+            val verified = cachedInvite(teamId) ?: openVerifiedInvite(s, c, teamId)
+                ?: return@op markError(TeamsFailure.Forbidden)
+            val invite = verified.payload
             // Placeholder role: the server returns the actual role at refreshUnlocked (listTeams).
-            keyStore.put(teamId, invite.teamName, TeamRole.VIEWER, invite.teamKey)
+            keyStore.put(teamId, invite.teamName, TeamRole.VIEWER, invite.teamKey, invite.epoch)
             c.accept(s, teamId)
+            verifiedInvites.update { it - teamId }
             refreshUnlocked(s, c)
         }
         syncTeam(teamId)
@@ -299,7 +343,16 @@ class TeamsCoordinator(
         val c = client() ?: return markError(TeamsFailure.NotConnected)
         op {
             c.removeMember(sess, teamId, accountId)
-            if (accountId == sess.accountId) forgetTeamLocally(teamId)
+            if (accountId == sess.accountId) {
+                // Voluntary leave/decline: we can't rotate (we're gone). A remaining manager rotates.
+                forgetTeamLocally(teamId)
+            } else {
+                // Removing someone else revokes their server ACL but not their copy of teamKey. Rotate
+                // so records shared after removal are encrypted under a key the removed member lacks
+                // (forward secrecy against a leaked backup / compromised server). Best-effort: a rotation
+                // failure still leaves the member removed — surfaced via lastError.
+                rotateTeamKey(sess, c, teamId)
+            }
             refreshUnlocked(sess, c)
         }
     }
@@ -352,7 +405,7 @@ class TeamsCoordinator(
     suspend fun syncTeam(teamId: String) {
         val s = session() ?: return
         val c = client() ?: return
-        val teamVault = teamVault(teamId) ?: return
+        val teamVault = openTeamVaultResettingStale(teamId) ?: return
         syncMutex.withLock {
             try {
                 val engine = SyncEngine(
@@ -385,6 +438,7 @@ class TeamsCoordinator(
     fun lock() {
         teamVaults.lockAll()
         _teams.value = emptyList()
+        verifiedInvites.value = emptyMap() // drop cached invite payloads (they hold teamKey material)
     }
 
     // --- internals ---
@@ -393,21 +447,172 @@ class TeamsCoordinator(
         keyStore.remove(teamId)
         teamVaults.reset(teamId)
         teamState.setCursor(cursorKey(teamId), 0)
+        verifiedInvites.update { it - teamId } // decline/leave: drop any cached invite for this team
     }
 
     /** refresh() without re-acquiring [opMutex] — for calls from inside op{} blocks. */
     private suspend fun refreshUnlocked(s: SyncSession, c: TeamClient) {
+        val identity = identityStore.load()
         val remote = c.listTeams(s)
+        if (identity != null) adoptRotatedKeys(s, c, remote, identity)
+        publishTeams(remote, identity)
+        onTeamsChanged()
+        maybeRecoverKeys()
+    }
+
+    /** Publish own identity (both public halves) and return it (creating it if needed). */
+    private suspend fun publishIdentity(s: SyncSession, c: TeamClient): AccountIdentity {
+        val identity = identityStore.ensure()
+        c.publishKey(s, identity.sharing.publicKey, identity.signing.publicKey)
+        return identity
+    }
+
+    /** Map server summaries to [TeamUi]; the display name comes from the local key or the invite envelope. */
+    private fun publishTeams(remote: List<TeamSummary>, identity: AccountIdentity?) {
         val keys = keyStore.list()
         _teams.value = remote.map { t ->
             val entry = keys[t.id]
             val name = entry?.name ?: t.envelope?.let { env ->
-                identityStore.load()?.let { id -> inviteCodec.open(id, env)?.teamName }
+                identity?.let { inviteCodec.open(it.sharing, env)?.teamName }
             } ?: t.id
             TeamUi(t.id, name, t.ownerAccountId, t.role, t.status, t.memberCount, entry != null)
         }
-        onTeamsChanged()
-        maybeRecoverKeys()
+    }
+
+    /**
+     * Adopt a rotated teamKey delivered by the server ([TeamSummary.keyEnvelope]): open+verify the
+     * signed rekey envelope and, if its epoch is newer than the locally stored key, replace the key.
+     * The stale local team-vault file (still under the old key) is dropped so [syncTeam] re-pulls the
+     * re-encrypted records. A forged/unverifiable envelope is ignored (the old key is kept).
+     */
+    private suspend fun adoptRotatedKeys(s: SyncSession, c: TeamClient, remote: List<TeamSummary>, identity: AccountIdentity) {
+        val adopted = mutableListOf<String>()
+        for (summary in remote) {
+            val envelope = summary.keyEnvelope ?: continue
+            val local = keyStore.get(summary.id) ?: continue
+            val payload = inviteCodec.open(identity.sharing, envelope) ?: continue
+            if (payload.teamId != summary.id || payload.inviteeAccountId != s.accountId) continue
+            if (payload.epoch <= local.epoch) continue
+            val rotatorKeys = c.fetchPublicKey(s, payload.inviterAccountId) ?: continue
+            if (!inviteCodec.verify(payload, rotatorKeys.signing)) continue
+            keyStore.rekey(summary.id, payload.teamKey, payload.epoch)
+            teamVaults.reset(summary.id) // old-key file is unreadable under the new key — rebuild on pull
+            adopted += summary.id
+        }
+        // Re-pull the re-encrypted records under the freshly adopted key (the reset dropped the stale file).
+        adopted.forEach { syncTeam(it) }
+    }
+
+    /**
+     * Rotate the teamKey after a member removal: generate a fresh key, re-seal it (signed) to every
+     * remaining member, bump the server epoch, then re-encrypt local records under the new key so they
+     * win LWW and overwrite the server's old-key copies.
+     *
+     * Fails closed: re-encrypting local records is mandatory (otherwise the server keeps old-key blobs
+     * while members adopt the new key, leaving every shared record unreadable for everyone). So the
+     * team vault is opened under the CURRENT key *before* the server epoch is bumped — if it can't be
+     * opened (vault locked, or the on-disk file is already under a superseded key), rotation aborts
+     * before touching the server: the old key stays authoritative and records stay readable. The next
+     * epoch is derived from the server's epoch, not the (possibly stale) local one, so a lagging device
+     * doesn't 409 while the member is already removed; a genuine concurrent rotation is retried a
+     * bounded number of times.
+     */
+    private suspend fun rotateTeamKey(s: SyncSession, c: TeamClient, teamId: String) {
+        val entry = keyStore.get(teamId) ?: return
+        val oldKey = entry.dataKey() ?: return markError(TeamsFailure.KeyMissing)
+        // Open under the current key up front (before keyStore.rekey swaps it) — the returned vault is
+        // what we re-encrypt after the server accepts the rotation. Abort here means nothing changed.
+        val teamVault = openTeamVault(teamId, oldKey) ?: return markError(TeamsFailure.KeyMissing)
+        val identity = identityStore.ensure()
+        var attempt = 0
+        while (true) {
+            val serverEpoch = c.listTeams(s).firstOrNull { it.id == teamId }?.keyEpoch
+                ?: return markError(TeamsFailure.KeyMissing)
+            val newEpoch = (serverEpoch + 1).toInt()
+            val newKey = crypto.newDataKey()
+            val envelopes = mutableMapOf<String, ByteArray>()
+            for (member in c.members(s, teamId)) {
+                if (member.accountId == s.accountId) continue // we adopt the key locally, no self-envelope
+                val keys = c.fetchPublicKey(s, member.accountId) ?: continue // unpublished key: can't re-seal
+                envelopes[member.accountId] = inviteCodec.seal(
+                    recipientPublicKey = keys.sharing,
+                    inviter = identity.signing,
+                    inviterId = s.accountId,
+                    inviteeId = member.accountId,
+                    teamId = teamId,
+                    teamKey = newKey,
+                    teamName = entry.name,
+                    epoch = newEpoch,
+                )
+            }
+            try {
+                c.rekey(s, teamId, newEpoch.toLong(), envelopes)
+            } catch (e: SyncException) {
+                newKey.zeroize() // rotation didn't commit — don't leave the unused key dangling
+                // A stale-epoch conflict means someone else rotated meanwhile: refetch the epoch and
+                // retry (their rotation may already cover the removal, but ours re-encrypts our local
+                // records). Give up after a few tries and surface — the member stays removed regardless.
+                if (e.kind == SyncException.Kind.CONFLICT && attempt++ < REKEY_MAX_ATTEMPTS) continue
+                throw e
+            }
+            // Server bumped and envelopes delivered. Commit locally: store the new key (keyStore.rekey
+            // base64-copies it) and re-encrypt records (version+1 wins LWW, overwriting the server's
+            // old-key copies), then push. rekeyRecords takes ownership of newKey.
+            keyStore.rekey(teamId, newKey, newEpoch)
+            teamVault.rekeyRecords(newKey)
+            syncTeam(teamId)
+            return
+        }
+    }
+
+    private class VerifiedInvite(val payload: TeamInvitePayload)
+
+    /**
+     * Open the invite envelope for [teamId] and verify the inviter's signature and binding. Returns
+     * null if there's no pending envelope, it isn't ours, the team/invitee binding is wrong, or the
+     * signature doesn't match the inviter's published key.
+     */
+    private suspend fun openVerifiedInvite(s: SyncSession, c: TeamClient, teamId: String): VerifiedInvite? {
+        val summary = c.listTeams(s).firstOrNull { it.id == teamId } ?: return null
+        val envelope = summary.envelope ?: return null
+        val identity = identityStore.load() ?: return null
+        val payload = inviteCodec.open(identity.sharing, envelope) ?: return null
+        if (payload.teamId != teamId || payload.inviteeAccountId != s.accountId) return null
+        val inviterKeys = c.fetchPublicKey(s, payload.inviterAccountId) ?: return null
+        if (!inviteCodec.verify(payload, inviterKeys.signing)) return null
+        return VerifiedInvite(payload).also { verified ->
+            verifiedInvites.update { it + (teamId to verified) }
+        }
+    }
+
+    private fun cachedInvite(teamId: String): VerifiedInvite? = verifiedInvites.value[teamId]
+
+    /** Open the team vault under [key] (no stale-file handling — used where the exact key is known). */
+    private fun openTeamVault(teamId: String, key: DataKey): Vault? {
+        if (!vault.isUnlocked) return null
+        return teamVaults.open(teamId, key)
+    }
+
+    /**
+     * Open the team vault under the current key, rebuilding it ONLY if the on-disk file is under a
+     * superseded key (a rotation adopted on another device left the local file stale). A structurally
+     * unreadable file is left in place and surfaced — resetting it would silently drop any local
+     * records that were never pushed. Used by sync paths, not by UI reads.
+     */
+    private fun openTeamVaultResettingStale(teamId: String): Vault? {
+        if (!vault.isUnlocked) return null
+        val key = keyStore.get(teamId)?.dataKey() ?: return null
+        return when (val r = teamVaults.openOrClassify(teamId, key)) {
+            is TeamVaults.OpenResult.Opened -> r.vault
+            TeamVaults.OpenResult.StaleKey -> {
+                teamVaults.reset(teamId) // old-key file → drop it and rebuild empty; syncTeam re-pulls
+                teamVaults.open(teamId, key)
+            }
+            TeamVaults.OpenResult.Unreadable -> {
+                markError(TeamsFailure.VaultUnreadable) // don't destroy a corrupt-but-maybe-unpushed file
+                null
+            }
+        }
     }
 
     /**
@@ -451,6 +656,8 @@ class TeamsCoordinator(
     }
 
     private companion object {
+        /** Bounded retries when a rotation loses the epoch race to a concurrent rotation. */
+        const val REKEY_MAX_ATTEMPTS = 3
         fun cursorKey(teamId: String) = "team:$teamId"
     }
 }

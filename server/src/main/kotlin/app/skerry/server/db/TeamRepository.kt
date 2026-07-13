@@ -12,6 +12,9 @@ import org.jetbrains.exposed.sql.statements.api.ExposedBlob
 import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.update
 
+/** Outcome of [TeamRepository.rekey]: success, a lost monotonicity race / stale epoch, or a gone team. */
+enum class RekeyOutcome { OK, EPOCH_CONFLICT, NO_TEAM }
+
 /**
  * Teams and their members. The server only tracks membership, roles, and sealed invite
  * envelopes; it never sees teamKey or record contents. Route ACL checks rely on
@@ -19,23 +22,26 @@ import org.jetbrains.exposed.sql.update
  */
 class TeamRepository(private val db: Database) {
 
-    /** Publishes (or replaces) an account's public X25519 key used for invitations. */
-    suspend fun publishKey(accountId: String, publicKey: ByteArray, now: Long): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
+    /** Publishes (or replaces) an account's public identity keys (X25519 sharing + Ed25519 signing). */
+    suspend fun publishKey(accountId: String, publicKey: ByteArray, signPublicKey: ByteArray, now: Long): Unit = newSuspendedTransaction(Dispatchers.IO, db) {
         val updated = AccountKeys.update({ AccountKeys.accountId eq accountId }) {
             it[AccountKeys.publicKey] = ExposedBlob(publicKey)
+            it[AccountKeys.signPublicKey] = ExposedBlob(signPublicKey)
         }
         if (updated == 0) {
             AccountKeys.insert {
                 it[AccountKeys.accountId] = accountId
                 it[AccountKeys.publicKey] = ExposedBlob(publicKey)
+                it[AccountKeys.signPublicKey] = ExposedBlob(signPublicKey)
                 it[createdAt] = now
             }
         }
     }
 
-    suspend fun publicKey(accountId: String): ByteArray? = newSuspendedTransaction(Dispatchers.IO, db) {
-        AccountKeys.selectAll().where { AccountKeys.accountId eq accountId }
-            .singleOrNull()?.get(AccountKeys.publicKey)?.bytes
+    suspend fun accountKeys(accountId: String): AccountKeysRow? = newSuspendedTransaction(Dispatchers.IO, db) {
+        AccountKeys.selectAll().where { AccountKeys.accountId eq accountId }.singleOrNull()?.let {
+            AccountKeysRow(it[AccountKeys.publicKey].bytes, it[AccountKeys.signPublicKey]?.bytes)
+        }
     }
 
     /** Creates a team with the owner as an active member. Returns false if the id is taken. */
@@ -46,6 +52,7 @@ class TeamRepository(private val db: Database) {
             it[id] = teamId
             it[Teams.ownerAccountId] = ownerAccountId
             it[teamSeq] = 0
+            it[keyEpoch] = 0
             it[createdAt] = now
         }
         TeamMembers.insert {
@@ -54,6 +61,7 @@ class TeamRepository(private val db: Database) {
             it[role] = TeamRoles.OWNER
             it[status] = TeamMemberStatus.ACTIVE
             it[envelope] = null
+            it[keyEnvelope] = null
             it[invitedBy] = ownerAccountId
             it[createdAt] = now
         }
@@ -68,7 +76,7 @@ class TeamRepository(private val db: Database) {
             val team = Teams.selectAll().where { Teams.id eq m.teamId }.singleOrNull()?.toTeamRow()
                 ?: return@mapNotNull null
             val count = TeamMembers.selectAll().where { TeamMembers.teamId eq m.teamId }.count().toInt()
-            TeamMembershipView(team, m.role, m.status, m.envelope, count)
+            TeamMembershipView(team, m.role, m.status, m.envelope, m.keyEnvelope, count)
         }
     }
 
@@ -99,10 +107,44 @@ class TeamRepository(private val db: Database) {
                 it[TeamMembers.role] = role
                 it[status] = TeamMemberStatus.INVITED
                 it[TeamMembers.envelope] = ExposedBlob(envelope)
+                it[TeamMembers.keyEnvelope] = null
                 it[TeamMembers.invitedBy] = invitedBy
                 it[createdAt] = now
             }
             true
+        }
+
+    /**
+     * Rotates the team's key: bumps [Teams.keyEpoch] to [newEpoch] and stores the re-sealed key
+     * ([envelopes]: accountId -> sealed blob) on each covered member. Members not present in
+     * [envelopes] keep their previous keyEnvelope (they will be stuck on the old epoch — the caller
+     * covers everyone).
+     *
+     * Monotonicity is enforced atomically here, not at the route: the epoch bump is a compare-and-set
+     * (`UPDATE ... WHERE keyEpoch = newEpoch - 1`). Two concurrent rotations racing to the same
+     * [newEpoch] both target `keyEpoch == newEpoch - 1`, but the row lock serializes them — the loser
+     * re-evaluates the predicate against the already-bumped epoch, matches 0 rows, and gets
+     * [RekeyOutcome.EPOCH_CONFLICT]. Without the predicate a route-level read-then-write TOCTOU would
+     * let both commit different keys at one epoch (split-brain: records unreadable). Returns
+     * [RekeyOutcome.NO_TEAM] if the team is gone.
+     */
+    suspend fun rekey(teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>): RekeyOutcome =
+        newSuspendedTransaction(Dispatchers.IO, db) {
+            val bumped = Teams.update({
+                (Teams.id eq teamId) and (Teams.keyEpoch eq newEpoch - 1)
+            }) { it[keyEpoch] = newEpoch } > 0
+            if (!bumped) {
+                val exists = Teams.selectAll().where { Teams.id eq teamId }.any()
+                return@newSuspendedTransaction if (exists) RekeyOutcome.EPOCH_CONFLICT else RekeyOutcome.NO_TEAM
+            }
+            envelopes.forEach { (accountId, envelope) ->
+                TeamMembers.update({
+                    (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq accountId)
+                }) {
+                    it[keyEnvelope] = ExposedBlob(envelope)
+                }
+            }
+            RekeyOutcome.OK
         }
 
     /** Changes a member's role (owner's role cannot change). False if member missing or is the owner. */
@@ -158,6 +200,7 @@ class TeamRepository(private val db: Database) {
         role = this[TeamMembers.role],
         status = this[TeamMembers.status],
         envelope = this[TeamMembers.envelope]?.bytes,
+        keyEnvelope = this[TeamMembers.keyEnvelope]?.bytes,
         invitedBy = this[TeamMembers.invitedBy],
         createdAt = this[TeamMembers.createdAt],
     )
@@ -166,6 +209,7 @@ class TeamRepository(private val db: Database) {
         id = this[Teams.id],
         ownerAccountId = this[Teams.ownerAccountId],
         teamSeq = this[Teams.teamSeq],
+        keyEpoch = this[Teams.keyEpoch],
         createdAt = this[Teams.createdAt],
     )
 }

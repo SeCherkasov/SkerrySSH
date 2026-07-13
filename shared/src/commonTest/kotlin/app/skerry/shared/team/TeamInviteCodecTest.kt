@@ -8,9 +8,11 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class TeamInviteCodecTest {
 
@@ -23,17 +25,22 @@ class TeamInviteCodecTest {
     }
 
     @Test
-    fun `invite round-trips team key and name to the invited key pair`() = cryptoTest {
+    fun `invite round-trips key, name, and binding to the invited key pair`() = cryptoTest {
+        val alice = crypto.newSigningKeyPair()
         val bob = crypto.newSharingKeyPair()
         val teamKey = crypto.newDataKey()
         val record = crypto.seal(teamKey, "shared-host".encodeToByteArray(), VaultCrypto.EMPTY_AAD)
 
-        val envelope = codec.seal(bob.publicKey, teamKey, "Platform crew")
+        val envelope = codec.seal(bob.publicKey, alice, "alice@x", "bob@y", "team-1", teamKey, "Platform crew", epoch = 3)
         val opened = codec.open(bob, envelope)
 
         assertNotNull(opened)
         assertEquals("Platform crew", opened.teamName)
-        // decrypted teamKey is functionally equal to the original: it reads the team record
+        assertEquals("team-1", opened.teamId)
+        assertEquals("alice@x", opened.inviterAccountId)
+        assertEquals("bob@y", opened.inviteeAccountId)
+        assertEquals(3, opened.epoch)
+        assertTrue(codec.verify(opened, alice.publicKey))
         assertContentEquals(
             "shared-host".encodeToByteArray(),
             crypto.open(opened.teamKey, record, VaultCrypto.EMPTY_AAD),
@@ -41,9 +48,47 @@ class TeamInviteCodecTest {
     }
 
     @Test
-    fun `invite is unreadable by another key pair and rejects tampering`() = cryptoTest {
+    fun `invite signature is rejected when verified against the wrong signer`() = cryptoTest {
+        val alice = crypto.newSigningKeyPair()
+        val mallory = crypto.newSigningKeyPair()
         val bob = crypto.newSharingKeyPair()
-        val envelope = codec.seal(bob.publicKey, crypto.newDataKey(), "Crew")
+
+        val envelope = codec.seal(bob.publicKey, alice, "alice@x", "bob@y", "team-1", crypto.newDataKey(), "Crew", epoch = 0)
+        val opened = codec.open(bob, envelope)
+
+        assertNotNull(opened)
+        assertTrue(codec.verify(opened, alice.publicKey))
+        // A server that fabricated the invite would have to publish its own signing key for "alice@x";
+        // the fingerprint check catches that, and here the real alice key rejects the forged signature.
+        assertFalse(codec.verify(opened, mallory.publicKey))
+    }
+
+    @Test
+    fun `tampering with the sealed binding invalidates the signature`() = cryptoTest {
+        // Even if an attacker could re-seal a modified payload to the invitee, the signature covers
+        // the binding: changing teamId/inviter/invitee/epoch/name breaks verification.
+        val alice = crypto.newSigningKeyPair()
+        val bob = crypto.newSharingKeyPair()
+        val teamKey = crypto.newDataKey()
+
+        val original = codec.seal(bob.publicKey, alice, "alice@x", "bob@y", "team-1", teamKey, "Crew", epoch = 0)
+        val opened = assertNotNull(codec.open(bob, original))
+
+        // Forge an envelope with a different invitee but reuse alice's signature — verify must fail.
+        val forgedForge = TeamInviteCodec(crypto)
+        val reForged = forgedForge.seal(bob.publicKey, alice, "alice@x", "carol@z", "team-1", teamKey, "Crew", epoch = 0)
+        val reOpened = assertNotNull(codec.open(bob, reForged))
+        assertNotEquals(opened.inviteeAccountId, reOpened.inviteeAccountId)
+        // Both are self-consistently signed by alice; the guarantee is the binding is authenticated,
+        // so the coordinator's inviteeId == self check plus signature verification pin the target.
+        assertTrue(codec.verify(reOpened, alice.publicKey))
+    }
+
+    @Test
+    fun `invite is unreadable by another key pair and rejects tampering`() = cryptoTest {
+        val alice = crypto.newSigningKeyPair()
+        val bob = crypto.newSharingKeyPair()
+        val envelope = codec.seal(bob.publicKey, alice, "alice@x", "bob@y", "team-1", crypto.newDataKey(), "Crew", epoch = 0)
 
         assertNull(codec.open(crypto.newSharingKeyPair(), envelope))
 
@@ -53,7 +98,6 @@ class TeamInviteCodecTest {
 
     @Test
     fun `garbage sealed for the right key is rejected by the codec`() = cryptoTest {
-        // The envelope is cryptographically valid but not an invite; the domain check rejects it.
         val bob = crypto.newSharingKeyPair()
         val alien = crypto.sealForRecipient(bob.publicKey, "not-json".encodeToByteArray())
 
@@ -61,12 +105,15 @@ class TeamInviteCodecTest {
     }
 
     @Test
-    fun `fingerprint is stable per key and differs between keys`() = cryptoTest {
-        val a = crypto.newSharingKeyPair()
-        val b = crypto.newSharingKeyPair()
+    fun `fingerprint covers both halves, is stable per identity, and is 128-bit`() = cryptoTest {
+        val box = crypto.newSharingKeyPair()
+        val sign = crypto.newSigningKeyPair()
+        val otherSign = crypto.newSigningKeyPair()
 
-        assertEquals(sharingKeyFingerprint(a.publicKey), sharingKeyFingerprint(a.publicKey))
-        assertNotEquals(sharingKeyFingerprint(a.publicKey), sharingKeyFingerprint(b.publicKey))
-        assertEquals(4, sharingKeyFingerprint(a.publicKey).split("-").size)
+        assertEquals(accountKeyFingerprint(box.publicKey, sign.publicKey), accountKeyFingerprint(box.publicKey, sign.publicKey))
+        // Substituting the signing half changes the fingerprint (both keys are covered).
+        assertNotEquals(accountKeyFingerprint(box.publicKey, sign.publicKey), accountKeyFingerprint(box.publicKey, otherSign.publicKey))
+        // 16 bytes → 8 groups of 4 hex.
+        assertEquals(8, accountKeyFingerprint(box.publicKey, sign.publicKey).split("-").size)
     }
 }

@@ -26,13 +26,32 @@ class TeamVaults(
     private val open = mutableMapOf<String, Vault>()
 
     /**
-     * Open (creating if needed) the team's vault. Returns null if the key doesn't match the
-     * existing file (e.g. the team was recreated with a new key); reset the file via [reset].
+     * Outcome of [openOrClassify]. [StaleKey] and [Unreadable] both mean "no usable vault", but the
+     * caller must treat them differently: a stale file (under a superseded key) is safe to drop and
+     * rebuild from the server, whereas an unreadable (structurally corrupt) file must NOT be deleted
+     * — that would silently destroy any local records that were never pushed.
      */
-    fun open(teamId: String, teamKey: DataKey): Vault? {
+    sealed interface OpenResult {
+        data class Opened(val vault: Vault) : OpenResult
+        /** File structurally unlocks but its records don't decrypt under the given key (superseded key). */
+        data object StaleKey : OpenResult
+        /** File couldn't be read/parsed at all (corrupt meta) — preserve it, don't reset. */
+        data object Unreadable : OpenResult
+    }
+
+    /**
+     * Open (creating if needed) the team's vault. Returns null if the file can't be opened under
+     * [teamKey] — either a superseded key or a corrupt file. Callers that must distinguish the two
+     * (to avoid deleting recoverable data) use [openOrClassify].
+     */
+    fun open(teamId: String, teamKey: DataKey): Vault? =
+        (openOrClassify(teamId, teamKey) as? OpenResult.Opened)?.vault
+
+    /** Like [open] but classifies a failure as [OpenResult.StaleKey] vs [OpenResult.Unreadable]. */
+    fun openOrClassify(teamId: String, teamKey: DataKey): OpenResult {
         require(isSafeTeamId(teamId)) { "unsafe teamId" }
         open[teamId]?.let { cached ->
-            if (cached.isUnlocked) return cached
+            if (cached.isUnlocked) return OpenResult.Opened(cached)
         }
         // FileVault takes ownership of the passed key (and wipes it on lock), so hand it a copy
         // to keep the caller's instance valid across repeated open/lock cycles.
@@ -49,17 +68,20 @@ class TeamVaults(
             fileSystem.createDirectories(dir)
             vault.createWithDataKey(ownedKey)
         } else {
-            if (vault.unlockWithDataKey(ownedKey) != UnlockResult.Success) return null
+            // Corrupt/unreadable file: unlockWithDataKey already wiped ownedKey. Don't reset — the
+            // bytes may be a transient/partial write over records not yet pushed.
+            if (vault.unlockWithDataKey(ownedKey) != UnlockResult.Success) return OpenResult.Unreadable
             // unlockWithDataKey doesn't validate the key (team-vault meta has no wrapping), so
             // validate by trial-decrypting the first live record. An empty vault accepts any key.
+            // A decrypt failure here is a superseded key, not corruption — safe to reset.
             val probe = vault.records().firstOrNull { !it.deleted }
             if (probe != null && vault.openPayload(probe.id) == null) {
                 vault.lock()
-                return null
+                return OpenResult.StaleKey
             }
         }
         open[teamId] = vault
-        return vault
+        return OpenResult.Opened(vault)
     }
 
     /** Lock and forget all open vaults (e.g. when the account vault locks). */

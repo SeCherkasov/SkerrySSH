@@ -56,7 +56,7 @@ enum class TeamMemberStatus { INVITED, ACTIVE;
     }
 }
 
-/** Team as seen by the current account: metadata + membership + invite envelope (while invited). */
+/** Team as seen by the current account: metadata + membership + invite/rekey envelopes. */
 class TeamSummary(
     val id: String,
     val ownerAccountId: String,
@@ -65,6 +65,10 @@ class TeamSummary(
     val createdAt: Long,
     val memberCount: Int,
     val envelope: ByteArray?,
+    /** Current teamKey generation; a rotation bumps it (see [TeamKeyEntry.epoch]). */
+    val keyEpoch: Long = 0,
+    /** Signed sealed current-epoch key from a rotation; the client adopts it when its epoch is newer. */
+    val keyEnvelope: ByteArray? = null,
 )
 
 class TeamMember(
@@ -74,17 +78,25 @@ class TeamMember(
     val createdAt: Long,
 )
 
+/** An account's published Teams identity keys (both public halves; see [TeamClient.fetchPublicKey]). */
+class AccountKeys(
+    /** X25519 sharing key — seal invite/rekey envelopes to it. */
+    val sharing: ByteArray,
+    /** Ed25519 signing key — verify the account's invite/rekey signatures against it. */
+    val signing: ByteArray,
+)
+
 /**
  * Teams network contract (`/account/key*`, `/teams*`) — stateless, all methods take [SyncSession].
  * Errors are [app.skerry.shared.sync.SyncException] with the same Kind as SyncClient.
  * Implemented by the same [app.skerry.shared.sync.SyncClient] transport (KtorSyncClient).
  */
 interface TeamClient {
-    /** Publishes the account identity pair's public X25519 half. */
-    suspend fun publishKey(session: SyncSession, publicKey: ByteArray)
+    /** Publishes the account identity's public halves (X25519 sharing key + Ed25519 signing key). */
+    suspend fun publishKey(session: SyncSession, publicKey: ByteArray, signPublicKey: ByteArray)
 
-    /** Another account's public key; null if it hasn't enabled Teams yet (key not published). */
-    suspend fun fetchPublicKey(session: SyncSession, accountId: String): ByteArray?
+    /** Another account's published keys; null if it hasn't enabled Teams yet (keys not published). */
+    suspend fun fetchPublicKey(session: SyncSession, accountId: String): AccountKeys?
 
     suspend fun createTeam(session: SyncSession, teamId: String)
 
@@ -99,6 +111,12 @@ interface TeamClient {
 
     /** Changes a member's role (owner/admin; server enforces anti-escalation, owner is immutable). */
     suspend fun changeRole(session: SyncSession, teamId: String, accountId: String, role: TeamRole)
+
+    /**
+     * Rotates the teamKey: bumps the team to [newEpoch] and stores one re-sealed key [envelopes]
+     * per remaining member. Server enforces monotonicity (newEpoch == current + 1) and manage-members role.
+     */
+    suspend fun rekey(session: SyncSession, teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>)
 
     /** Team audit log (owner/admin); newest events first. */
     suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry>

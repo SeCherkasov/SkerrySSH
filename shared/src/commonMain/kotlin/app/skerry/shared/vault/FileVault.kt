@@ -191,6 +191,33 @@ class FileVault(
         }
     }
 
+    override fun rekeyRecords(newKey: DataKey): Boolean = synchronized(lock) {
+        val oldKey = dataKey
+        if (oldKey == null) {
+            newKey.bytes.fill(0) // locked — don't leave the passed-in key dangling
+            throw IllegalStateException("vault is locked")
+        }
+        val currentMeta = session()
+        val rekeyed = records.map { record ->
+            // Re-seal only what we can decrypt under the old key; leave the rest (e.g. a not-yet-adopted
+            // blob from a newer epoch). A live record carries its payload; a tombstone stays empty.
+            val plaintext = crypto.open(oldKey, record.blob, recordAad(record)) ?: return@map record
+            val version = record.version + 1
+            val at = now()
+            val payload = if (record.deleted) ByteArray(0) else plaintext
+            val blob = crypto.seal(newKey, payload, recordAad(record.id, record.type, version, deviceId, record.deleted, at))
+            plaintext.fill(0)
+            record.copy(version = version, updatedAt = at, deviceId = deviceId, blob = blob)
+        }
+        writeFile(currentMeta, rekeyed) // commit after persist — a failed write leaves fields untouched
+        records.clear()
+        records.addAll(rekeyed)
+        oldKey.bytes.fill(0)
+        dataKey = newKey
+        _localChanges.tryEmit(Unit) // re-encrypted records need pushing
+        true
+    }
+
     override fun lock(): Unit = synchronized(lock) {
         dataKey?.bytes?.fill(0)
         dataKey = null
