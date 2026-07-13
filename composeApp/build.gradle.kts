@@ -212,3 +212,9 @@ tasks.register<JavaExec>("screenshotDesign") {
     // Stub window chrome: draws the custom window buttons of the undecorated window in the titlebar.
     systemProperty("skerry.screenshot.windowChrome", providers.systemProperty("skerry.screenshot.windowChrome").getOrElse("false"))
 }
+
+// Kover coverage — applied via pluginManager (classpath comes from the root buildscript) so the
+// offline Flatpak build, which sets -Dskerry.offlineRepo, never resolves it. See the root build.
+if (System.getProperty("skerry.offlineRepo") == null) {
+    pluginManager.apply("org.jetbrains.kotlinx.kover")
+}

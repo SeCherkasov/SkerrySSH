@@ -66,6 +66,11 @@ mlkit-barcode = "17.3.0"
 # JNA platform bindings — desktop-only; used for the Linux/X11 _NET_WM_MOVERESIZE native window drag
 # (the JNA core is already on the classpath transitively via the libsodium binding).
 jna = "5.18.1"
+# Kover — code-coverage for the JVM/KMP test suites. Loaded via the root buildscript classpath and
+# applied conditionally (see the root build.gradle.kts) so the offline Flatpak build never resolves it.
+# 0.9.8+ is required: earlier releases can't handle the com.android.kotlin.multiplatform.library
+# target used by :shared and :composeApp (they demand a legacy `android` extension). See kover #747/#772.
+kover = "0.9.8"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
