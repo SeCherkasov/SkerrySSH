@@ -63,10 +63,10 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: server/Dockerfile
@@ -92,7 +92,7 @@ jobs:
 
       - name: Log in to Docker Hub
         if: startsWith(github.ref, 'refs/tags/server-v')
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -100,7 +100,7 @@ jobs:
       - name: OCI labels
         if: startsWith(github.ref, 'refs/tags/server-v')
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
           # server-v0.1.2 → version label 0.1.2. Title/licenses are overridden because the
@@ -118,7 +118,7 @@ jobs:
         # just a push. Tags are applied to the merged manifest in the publish job.
         if: startsWith(github.ref, 'refs/tags/server-v')
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: server/Dockerfile
@@ -156,7 +156,7 @@ jobs:
           merge-multiple: true
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
