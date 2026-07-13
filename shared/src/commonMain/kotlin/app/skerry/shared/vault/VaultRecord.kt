@@ -23,8 +23,9 @@ enum class RecordType {
  * `updatedAt`, `deviceId`, `deleted`) is stored in plaintext; `blob` is
  * XChaCha20-Poly1305(dataKey, payload) with AAD bound to ALL of that metadata (see `recordAad`) —
  * a record can't be swapped into another slot, and its plaintext metadata can't be tampered with
- * without failing the tag check (blobs sealed before 0.1.3 bound only `id‖type`; they're read via
- * a legacy fallback). The same structure is the unit of E2E sync, so `version` is a Lamport
+ * without failing the tag check (blobs sealed before 0.1.3 bound only `id‖type`; they're upgraded
+ * in place on the first unlock and not trusted on read/merge until then). The same structure is the
+ * unit of E2E sync, so `version` is a Lamport
  * counter for LWW and deletion is a tombstone (`deleted=true`), not physical erasure.
  *
  * `blob` is serialized by kotlinx.serialization. `equals`/`hashCode` are default (reference-based

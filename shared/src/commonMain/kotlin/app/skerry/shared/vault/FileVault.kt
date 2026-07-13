@@ -137,6 +137,7 @@ class FileVault(
             dataKey?.bytes?.fill(0) // repeated unlock must not orphan the previous key
             dataKey = unwrapped
             adoptBody(body)
+            migrateLegacyRecords()
             UnlockResult.Success
         } finally {
             password.fill(' ')
@@ -153,6 +154,7 @@ class FileVault(
         this.dataKey?.bytes?.fill(0) // repeated unlock must not orphan the previous key
         this.dataKey = dataKey // assign the passed-in key — the caller does not wipe it (see contract)
         adoptBody(body)
+        migrateLegacyRecords()
         UnlockResult.Success
     }
 
@@ -421,13 +423,13 @@ class FileVault(
     )
 
     /**
-     * Decrypts a record's blob against the metadata it claims ([recordAad]), falling back to the
-     * legacy pre-metadata-binding AAD ([legacyRecordAad]) for blobs sealed by older clients (or
-     * still stored on the sync server). `null` means the blob doesn't authenticate under either.
+     * Decrypts a record's blob against the metadata it claims ([recordAad]). Legacy blobs (sealed
+     * under the pre-metadata-binding AAD) are NOT accepted here: they're upgraded once on unlock
+     * ([migrateLegacyRecords]), so by the time any read or merge happens every readable blob is
+     * bound to its metadata. `null` means the blob doesn't authenticate under the current AAD.
      */
     private fun openRecord(key: DataKey, record: VaultRecord): ByteArray? =
         crypto.open(key, record.blob, recordAad(record))
-            ?: crypto.open(key, record.blob, legacyRecordAad(record.id, record.type))
 
     /** True when [record]'s blob authenticates; the decrypted copy is wiped immediately. */
     private fun authenticates(key: DataKey, record: VaultRecord): Boolean {
@@ -436,8 +438,48 @@ class FileVault(
         return true
     }
 
+    /**
+     * One-time upgrade of records still sealed under the legacy `id‖type` AAD to the
+     * metadata-binding AAD ([recordAad]). Runs on unlock; gated by [VaultMeta.formatVersion] so it
+     * scans records only the first time a pre-0.1.3 vault is opened, then records the bump.
+     *
+     * Each legacy blob is re-sealed with its version bumped by one (a legacy tombstone re-sealed
+     * with an empty payload, dropping the deleted secret it used to carry) so the migrated record
+     * wins LWW and overwrites the server's legacy copy on the next sync — after which replaying the
+     * old blob with a tampered version/deleted no longer authenticates anywhere. Blobs unreadable
+     * under the current key (e.g. adoptDataKey leftovers) are left untouched: a newer readable copy
+     * may still arrive via sync, and we can't re-seal what we can't decrypt.
+     */
+    private fun migrateLegacyRecords() {
+        val currentMeta = meta ?: return
+        if (currentMeta.formatVersion >= FORMAT_VERSION) return // already metadata-bound
+        val key = requireUnlocked()
+        val migrated = records.map { record ->
+            if (crypto.open(key, record.blob, recordAad(record)) != null) return@map record // already v2
+            val plaintext = crypto.open(key, record.blob, legacyRecordAad(record.id, record.type))
+                ?: return@map record // unreadable under this key — not ours to migrate
+            val version = record.version + 1
+            val at = now()
+            val payload = if (record.deleted) ByteArray(0) else plaintext
+            val blob = crypto.seal(key, payload, recordAad(record.id, record.type, version, deviceId, record.deleted, at))
+            plaintext.fill(0) // wipe the decrypted secret (including a legacy tombstone's leftover payload)
+            record.copy(version = version, updatedAt = at, deviceId = deviceId, blob = blob)
+        }
+        val newMeta = currentMeta.copy(formatVersion = FORMAT_VERSION)
+        // Best-effort persist: a failed write (e.g. disk full) must not make unlock throw or leave
+        // the re-sealed records only half-applied. Adopt them in memory regardless so this session
+        // reads them; on persist failure the on-disk formatVersion stays 1, so migration simply
+        // re-runs on the next unlock (re-sealing is idempotent — a v2 blob is left untouched).
+        val persisted = runCatching { writeFile(newMeta, migrated) }.isSuccess
+        records.clear()
+        records.addAll(migrated)
+        if (persisted) meta = newMeta
+    }
+
     private companion object {
-        const val FORMAT_VERSION = 1
+        // 2: records bound to their metadata via [recordAad]. 1: legacy `id‖type` AAD (pre-0.1.3),
+        // upgraded in place by [migrateLegacyRecords] on the first unlock.
+        const val FORMAT_VERSION = 2
     }
 }
 
@@ -468,11 +510,11 @@ internal fun recordAad(record: VaultRecord): ByteArray =
     recordAad(record.id, record.type, record.version, record.deviceId, record.deleted, record.updatedAt)
 
 /**
- * Legacy record AAD (pre-0.1.3): `id` + [AAD_SEP] + `type.name` — metadata wasn't covered. Kept as
- * a read/merge fallback so existing vaults and records already on sync servers stay readable.
- * Never used for sealing: every rewrite (put/remove) upgrades the blob to [recordAad]. Residual
- * risk, accepted: a blob sealed under this AAD can still be replayed with tampered
- * version/deleted until its record is next edited.
+ * Legacy record AAD (pre-0.1.3): `id` + [AAD_SEP] + `type.name` — metadata wasn't covered, so a
+ * blob sealed under it could be replayed with a tampered version/deleted. Used ONLY to decrypt such
+ * blobs once during [FileVault.migrateLegacyRecords], which re-seals them under [recordAad]; never
+ * used for sealing, and NOT accepted on read or merge (a legacy blob arriving from the server is
+ * treated as tampering). `internal` for tests.
  */
 internal fun legacyRecordAad(id: String, type: RecordType): ByteArray =
     "$id$AAD_SEP${type.name}".encodeToByteArray()

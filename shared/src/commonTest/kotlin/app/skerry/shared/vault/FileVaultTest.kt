@@ -352,20 +352,146 @@ class FileVaultTest {
     }
 
     @Test
-    fun `mergeRemote and openPayload accept legacy blobs sealed with the id-type AAD`() = vaultTest {
+    fun `mergeRemote rejects legacy blobs sealed with the id-type AAD`() = vaultTest {
         val v = vault().apply { create("master".toCharArray()) }
-        // A blob sealed before metadata binding (an old client, or a record still on the sync
-        // server): AAD covers only id‖type. It must merge and read via the legacy fallback.
+        // Pre-0.1.3 AAD covered only id-type, so version/deleted were replayable. The fallback is
+        // gone (unlock migrates local legacy blobs; no pre-fix clients shipped): merge must treat
+        // such a blob as metadata tampering, not trust its claimed version.
         val key = v.exportDataKey()!!
-        val blob = crypto.seal(key, "legacy-payload".encodeToByteArray(), "old-1\u001F${RecordType.HOST.name}".encodeToByteArray())
+        val blob = crypto.seal(key, "legacy-payload".encodeToByteArray(), legacyRecordAad("old-1", RecordType.HOST))
         key.zeroize()
         val legacy = VaultRecord("old-1", RecordType.HOST, version = 2, updatedAt = TS, deviceId = "devX", deleted = false, blob = blob)
 
         val result = v.mergeRemote(listOf(legacy))
 
-        assertEquals(listOf("old-1"), result.applied.map { it.id })
-        assertTrue(result.rejected.isEmpty())
-        assertContentEquals("legacy-payload".encodeToByteArray(), v.openPayload("old-1"))
+        assertTrue(result.applied.isEmpty())
+        assertEquals(listOf("old-1"), result.rejected.map { it.id })
+        assertNull(v.openPayload("old-1"))
+    }
+
+    @Test
+    fun `unlock re-seals legacy blobs under the metadata AAD`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("fresh", RecordType.HOST, "v2-record".encodeToByteArray())
+        }
+        val key = v.exportDataKey()!!
+        val legacyBlob = crypto.seal(key, "legacy-payload".encodeToByteArray(), legacyRecordAad("old-1", RecordType.HOST))
+        v.lock()
+        // A record still sealed with the pre-0.1.3 AAD, as left on disk by an old client.
+        val body = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() })
+        val legacy = VaultRecord("old-1", RecordType.HOST, version = 3, updatedAt = TS, deviceId = "devX", deleted = false, blob = legacyBlob)
+        // Downgrade the format marker so the vault looks pre-0.1.3 and migration runs.
+        fs.write(file) { writeUtf8(json.encodeToString(body.copy(meta = body.meta.copy(formatVersion = 1), records = body.records + legacy))) }
+
+        val reopened = vault()
+        assertEquals(UnlockResult.Success, reopened.unlock("master".toCharArray()))
+
+        // Re-sealed under the metadata-binding AAD with a bumped version: the next sync pushes it
+        // over the server's legacy copy (LWW), after which replaying the old blob stops working.
+        val migrated = reopened.records().first { it.id == "old-1" }
+        assertEquals(4L, migrated.version)
+        assertEquals("device-1", migrated.deviceId)
+        assertContentEquals("legacy-payload".encodeToByteArray(), reopened.openPayload("old-1"))
+        assertContentEquals("legacy-payload".encodeToByteArray(), crypto.open(key, migrated.blob, recordAad(migrated)))
+        key.zeroize()
+        // A record already sealed under the metadata AAD is left untouched.
+        assertEquals(1L, reopened.records().first { it.id == "fresh" }.version)
+        // The migration reached disk, not just the cache.
+        val onDisk = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() }).records.first { it.id == "old-1" }
+        assertEquals(4L, onDisk.version)
+    }
+
+    @Test
+    fun `unlock re-seals a legacy tombstone with an empty payload`() = vaultTest {
+        val v = vault().apply { create("master".toCharArray()) }
+        val key = v.exportDataKey()!!
+        // Pre-0.1.3 tombstones kept the live blob verbatim - the deleted secret was still inside.
+        val legacyBlob = crypto.seal(key, "deleted-secret".encodeToByteArray(), legacyRecordAad("gone", RecordType.HOST))
+        v.lock()
+        val body = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() })
+        val tombstone = VaultRecord("gone", RecordType.HOST, version = 5, updatedAt = TS, deviceId = "devX", deleted = true, blob = legacyBlob)
+        fs.write(file) { writeUtf8(json.encodeToString(body.copy(meta = body.meta.copy(formatVersion = 1), records = body.records + tombstone))) }
+
+        val reopened = vault()
+        assertEquals(UnlockResult.Success, reopened.unlock("master".toCharArray()))
+
+        val migrated = reopened.records().first { it.id == "gone" }
+        assertTrue(migrated.deleted)
+        assertEquals(6L, migrated.version)
+        assertNull(reopened.openPayload("gone"))
+        // Authenticated deletion, and the old secret no longer lives in the tombstone blob.
+        assertContentEquals(ByteArray(0), crypto.open(key, migrated.blob, recordAad(migrated)))
+        key.zeroize()
+    }
+
+    @Test
+    fun `unlock leaves blobs unreadable under the current key untouched`() = vaultTest {
+        val v = vault().apply { create("master".toCharArray()) }
+        v.lock()
+        // A blob under someone else's key (adoptDataKey leftovers): not legacy, just unreadable -
+        // migration must not touch it (a newer readable copy may still arrive via sync).
+        val foreignKey = crypto.newDataKey()
+        val foreignBlob = crypto.seal(foreignKey, "other".encodeToByteArray(), legacyRecordAad("alien", RecordType.HOST))
+        foreignKey.zeroize()
+        val body = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() })
+        val alien = VaultRecord("alien", RecordType.HOST, version = 7, updatedAt = TS, deviceId = "devX", deleted = false, blob = foreignBlob)
+        fs.write(file) { writeUtf8(json.encodeToString(body.copy(meta = body.meta.copy(formatVersion = 1), records = body.records + alien))) }
+
+        val reopened = vault()
+        assertEquals(UnlockResult.Success, reopened.unlock("master".toCharArray()))
+
+        val kept = reopened.records().first { it.id == "alien" }
+        assertEquals(7L, kept.version)
+        assertContentEquals(foreignBlob, kept.blob)
+        assertNull(reopened.openPayload("alien"))
+    }
+
+    @Test
+    fun `unlockWithDataKey migrates legacy blobs too`() = vaultTest {
+        // Key-unlocked vaults (team stores) predate metadata binding as well - same migration path.
+        val key = crypto.newDataKey()
+        val v = vault()
+        v.createWithDataKey(DataKey(key.bytes.copyOf()))
+        v.lock()
+        val legacyBlob = crypto.seal(key, "team-secret".encodeToByteArray(), legacyRecordAad("t1", RecordType.HOST))
+        val body = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() })
+        val legacy = VaultRecord("t1", RecordType.HOST, version = 1, updatedAt = TS, deviceId = "devX", deleted = false, blob = legacyBlob)
+        fs.write(file) { writeUtf8(json.encodeToString(body.copy(meta = body.meta.copy(formatVersion = 1), records = body.records + legacy))) }
+
+        val reopened = vault()
+        assertEquals(UnlockResult.Success, reopened.unlockWithDataKey(DataKey(key.bytes.copyOf())))
+
+        val migrated = reopened.records().first { it.id == "t1" }
+        assertEquals(2L, migrated.version)
+        assertContentEquals("team-secret".encodeToByteArray(), reopened.openPayload("t1"))
+        assertContentEquals("team-secret".encodeToByteArray(), crypto.open(key, migrated.blob, recordAad(migrated)))
+        key.zeroize()
+    }
+
+    @Test
+    fun `unlock keeps migrated records in memory when the persist fails`() = vaultTest {
+        val v = vault().apply { create("master".toCharArray()) }
+        val key = v.exportDataKey()!!
+        val legacyBlob = crypto.seal(key, "legacy-payload".encodeToByteArray(), legacyRecordAad("old-1", RecordType.HOST))
+        key.zeroize()
+        v.lock()
+        val body = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() })
+        val legacy = VaultRecord("old-1", RecordType.HOST, version = 3, updatedAt = TS, deviceId = "devX", deleted = false, blob = legacyBlob)
+        fs.write(file) { writeUtf8(json.encodeToString(body.copy(meta = body.meta.copy(formatVersion = 1), records = body.records + legacy))) }
+
+        // A vault whose atomic write always fails (harden throws): migration can't reach disk.
+        val failing = FileVault(file, crypto, deviceId = "device-1", fileSystem = fs, harden = { error("disk full") }, now = { TS })
+        assertEquals(UnlockResult.Success, failing.unlock("master".toCharArray()))
+
+        // Re-sealed in memory so this session reads it, even though nothing was persisted...
+        assertContentEquals("legacy-payload".encodeToByteArray(), failing.openPayload("old-1"))
+        assertEquals(4L, failing.records().first { it.id == "old-1" }.version)
+        // ...and the on-disk record is still the un-migrated legacy one (formatVersion stayed 1), so
+        // the next unlock retries the migration.
+        val onDisk = json.decodeFromString<VaultFileBody>(fs.read(file) { readUtf8() })
+        assertEquals(1, onDisk.meta.formatVersion)
+        assertEquals(3L, onDisk.records.first { it.id == "old-1" }.version)
     }
 
     @Test
