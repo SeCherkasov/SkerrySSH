@@ -27,6 +27,13 @@ Thumbs.db
 *.keystore
 keystore.properties
 
+# Server secrets — .env holds the JWT secret, DB password and admin token
+# (server/.env.example is the committed template; the filled-in .env never is).
+.env
+.env.*
+!.env.example
+server/.env
+
 # Logs and temporary files
 *.log
 *.hprof

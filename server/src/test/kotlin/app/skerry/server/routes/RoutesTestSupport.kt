@@ -27,11 +27,11 @@ import java.security.SecureRandom
 
 val SRP_PARAMS: SRP6CryptoParams = SRP6CryptoParams.getInstance(2048, "SHA-256")
 
-fun testServices(adminToken: String = ""): Services {
+fun testServices(adminToken: String = "", extraEnv: Map<String, String> = emptyMap()): Services {
     val file = Files.createTempFile("skerry-routes-", ".db")
     file.toFile().deleteOnExit()
     val config = ServerConfig.fromEnv(
-        mapOf("SKERRY_DB_URL" to "jdbc:sqlite:${file.toAbsolutePath()}", "SKERRY_ADMIN_TOKEN" to adminToken),
+        mapOf("SKERRY_DB_URL" to "jdbc:sqlite:${file.toAbsolutePath()}", "SKERRY_ADMIN_TOKEN" to adminToken) + extraEnv,
     )
     val database: Database = Db.connect(config)
     return Services(config, database)

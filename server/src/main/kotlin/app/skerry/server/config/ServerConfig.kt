@@ -27,6 +27,17 @@ data class ServerConfig(
     val corsHosts: List<String>,
     /** Upper bound on request body size in bytes (OOM/abuse guard). Enforced via Content-Length -> 413. */
     val maxRequestBodyBytes: Long,
+    /**
+     * Trusted reverse-proxy IPs (the direct peers in front of the server). When a request's direct
+     * peer is one of these, per-IP rate limits key on the real client IP from `X-Forwarded-For`;
+     * otherwise the header is ignored (a client can't spoof it). Empty ⇒ no proxy, key on the
+     * direct connection.
+     */
+    val trustedProxies: List<String>,
+    /** Whether `POST /auth/register` accepts new accounts (Vaultwarden's SIGNUPS_ALLOWED). Closed ⇒ 403. */
+    val registrationOpen: Boolean,
+    /** Hard cap on total accounts (backstop for an instance left open). 0 ⇒ unlimited. */
+    val maxAccounts: Int,
 ) {
     val isPostgres: Boolean get() = databaseUrl.startsWith("jdbc:postgresql")
 
@@ -58,6 +69,11 @@ data class ServerConfig(
                 corsHosts = str("SKERRY_CORS_HOSTS", "")
                     .split(",").map { it.trim() }.filter { it.isNotEmpty() },
                 maxRequestBodyBytes = long("SKERRY_MAX_BODY_BYTES", 4L * 1024 * 1024), // 4 MiB
+                trustedProxies = str("SKERRY_TRUSTED_PROXIES", "")
+                    .split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                // Default open for backward compatibility; anything other than "open" (case-insensitive) closes it.
+                registrationOpen = str("SKERRY_REGISTRATION", "open").equals("open", ignoreCase = true),
+                maxAccounts = int("SKERRY_MAX_ACCOUNTS", 0).coerceAtLeast(0),
             )
         }
     }

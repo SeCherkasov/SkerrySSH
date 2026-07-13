@@ -2,10 +2,25 @@ package app.skerry.ui.sync
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PairingPayloadTest {
+
+    @Test
+    fun `flags an http server url as insecure`() {
+        val http = PairingPayload("http://192.168.1.5:8080", "code", ByteArray(32) { 1 }).encode()
+        assertTrue(PairingPayload.isInsecureServerUrl(http))
+    }
+
+    @Test
+    fun `does not flag https or malformed codes`() {
+        val https = PairingPayload("https://sync.example.com", "code", ByteArray(32) { 1 }).encode()
+        assertFalse(PairingPayload.isInsecureServerUrl(https))
+        assertFalse(PairingPayload.isInsecureServerUrl("not a pairing code"))
+        assertFalse(PairingPayload.isInsecureServerUrl(""))
+    }
 
     @Test
     fun `round-trips through encode and decode`() {

@@ -2,6 +2,12 @@
 #   docker compose up -d --build
 # SQLite in a named volume by default (zero configuration). For PostgreSQL,
 # uncomment the `db` service and the postgres variables on `sync`.
+#
+# TLS: the server speaks plain HTTP. Put a TLS-terminating reverse proxy
+# (Caddy, nginx, Traefik) in front of it in any deployment reachable off the
+# host — SRP-proofs, JWTs, wrapped dataKeys and the admin token cross the wire
+# otherwise. The published port is bound to 127.0.0.1 below so nothing is exposed
+# until a proxy (or an explicit edit) opens it. See SECURITY.md § "Transport".
 
 services:
   sync:
@@ -12,7 +18,10 @@ services:
       context: .
       dockerfile: server/Dockerfile
     ports:
-      - "8080:8080"
+      # Loopback-only by default: a TLS reverse proxy on the host publishes it.
+      # For direct LAN sync without TLS (accepted, E2E-encrypted payload), change
+      # this to "8080:8080" — but read the http:// warning in SECURITY.md first.
+      - "127.0.0.1:8080:8080"
     environment:
       SKERRY_DB_URL: jdbc:sqlite:/data/skerry-sync.db
       # REQUIRED: set a stable secret in production (otherwise tokens are invalidated on restart):

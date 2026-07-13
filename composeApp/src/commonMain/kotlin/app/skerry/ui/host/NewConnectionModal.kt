@@ -101,6 +101,7 @@ import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_mosh
 import app.skerry.ui.generated.resources.conn_protocol_ssh
 import app.skerry.ui.generated.resources.conn_protocol_telnet
+import app.skerry.ui.generated.resources.conn_telnet_plaintext_warning
 import app.skerry.ui.generated.resources.conn_save
 import app.skerry.ui.generated.resources.conn_save_changes
 import app.skerry.ui.generated.resources.conn_subtitle_edit
@@ -216,6 +217,15 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 Field(stringResource(Res.string.conn_field_name)) { ModalTextField(form.name, { form.name = it }, "e.g. prod-web-01") }
                 Spacer14()
                 Field(stringResource(Res.string.conn_field_protocol)) { ProtocolPicker(form) }
+                // Telnet has no transport encryption (unlike SSH/Mosh) — warn inline, mirroring the
+                // insecure-URL notices on the Sync/AI forms. The transport itself is correct (no creds
+                // auto-sent), this is a heads-up, not a block.
+                if (form.connectionType == ConnectionType.TELNET) {
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Sym("warning", size = 14.sp, color = D.sunset)
+                        Txt(stringResource(Res.string.conn_telnet_plaintext_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
+                    }
+                }
                 Spacer14()
                 val serial = form.connectionType == ConnectionType.SERIAL
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

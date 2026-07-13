@@ -38,6 +38,11 @@ class AccountRepository(private val db: Database) {
         AccountRow(accountId, srpSalt, srpVerifier, wrappedDataKey, 0)
     }
 
+    /** Total number of registered accounts (for the optional per-instance registration cap). */
+    suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
+        Accounts.selectAll().count()
+    }
+
     suspend fun find(accountId: String): AccountRow? = newSuspendedTransaction(Dispatchers.IO, db) {
         Accounts.selectAll().where { Accounts.id eq accountId }.singleOrNull()?.let {
             AccountRow(

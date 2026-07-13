@@ -39,11 +39,15 @@ jobs:
       name: ${{ steps.resolve.outputs.name }}
     steps:
       - id: resolve
+        # inputs.versionName goes through env, never interpolated into the shell — otherwise a
+        # dispatch input could inject commands into this step (it writes $GITHUB_OUTPUT).
+        env:
+          INPUT_VERSION: ${{ inputs.versionName }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "name=${{ inputs.versionName }}" >> "$GITHUB_OUTPUT"
+            echo "name=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
           fi
 
   linux-desktop:
@@ -70,7 +74,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm fakeroot
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
       - name: Package deb + rpm
         run: >
@@ -78,11 +82,21 @@ jobs:
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
       - name: Fetch appimagetool
-        # Pin the tool the AppImage build shells out to, so the external download is explicit
-        # here rather than hidden in the build script's fallback path.
+        # Pin the tool to an immutable tagged release (not the mutable `continuous` tag) and verify
+        # its sha256 before use — a swapped binary here would run in the build. Passing arch via env
+        # keeps the matrix value out of the shell command.
+        env:
+          APPIMAGETOOL_VERSION: "1.9.1"
+          ARCH: ${{ matrix.arch }}
         run: |
+          case "$ARCH" in
+            x86_64)  sha=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 ;;
+            aarch64) sha=f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158 ;;
+            *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
+          esac
           curl -fsSL -o "$RUNNER_TEMP/appimagetool" \
-            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.arch }}.AppImage"
+            "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-${ARCH}.AppImage"
+          echo "${sha}  ${RUNNER_TEMP}/appimagetool" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/appimagetool"
           echo "APPIMAGETOOL=$RUNNER_TEMP/appimagetool" >> "$GITHUB_ENV"
 
@@ -124,7 +138,7 @@ jobs:
         run: choco install wixtoolset -y --no-progress
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
       - name: Package msi
         shell: bash
@@ -167,7 +181,7 @@ jobs:
           java-version: "21"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
       - name: Package dmg
         # Unsigned/un-notarized on purpose (no Apple Developer account yet) — Gatekeeper
@@ -181,11 +195,15 @@ jobs:
         # the emitted file is Skerry-1.x.y.dmg. Rename it back to the release version and
         # disambiguate the matrix legs before the release step flattens everything.
         # On a manual run without a version, fall back to the gradle.properties default.
+        # Version/arch come through env, not interpolated into the shell (injection-safe).
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.name }}
+          ARCH: ${{ matrix.arch }}
         run: |
-          version="${{ needs.version.outputs.name }}"
+          version="$VERSION_NAME"
           [ -z "$version" ] && version="$(sed -n 's/^skerry.versionName=//p' gradle.properties)"
           cd composeApp/build/compose/binaries/main/dmg
-          for f in *.dmg; do mv "$f" "Skerry-${version}-${{ matrix.arch }}.dmg"; done
+          for f in *.dmg; do mv "$f" "Skerry-${version}-${ARCH}.dmg"; done
 
       - name: Upload macOS distributable
         uses: actions/upload-artifact@v7
@@ -198,11 +216,11 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     env:
-      # Secrets via job env so the decode step can be gated on env (secrets aren't available in if).
-      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      SKERRY_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      SKERRY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      SKERRY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      # Only a non-secret boolean at job level (secrets can't be referenced directly in `if:`).
+      # The keystore blob and the signing passwords are scoped to the two steps that need them, so
+      # checkout / SDK setup — and the untrusted Gradle plugin + JitPack dependency graph they pull —
+      # never see them via the job environment.
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -213,7 +231,7 @@ jobs:
           java-version: "21"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
 
       - name: Install Android SDK packages
         run: |
@@ -222,29 +240,43 @@ jobs:
 
       - name: Decode release keystore
         # Without the secret this step is skipped → release is built unsigned (fallback in build.gradle.kts).
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        # The base64 blob is a step-scoped env, not visible to any other step.
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/skerry-release.jks"
           echo "SKERRY_KEYSTORE_FILE=$RUNNER_TEMP/skerry-release.jks" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
       - name: Assemble release APK
         # versionCode must be a monotonic integer; the tag's semver can't map to one, so use
         # the run number (grows every run). A dispatch input still overrides it if provided.
+        # Signing passwords are scoped to this step only; version values go through env (not
+        # interpolated into the shell) to close the expression-injection surface.
+        env:
+          SKERRY_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SKERRY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SKERRY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION_NAME: ${{ needs.version.outputs.name }}
+          VERSION_CODE: ${{ inputs.versionCode || github.run_number }}
         run: >
           ./gradlew :androidApp:assembleRelease --stacktrace
-          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
-          -Pskerry.versionCode=${{ inputs.versionCode || github.run_number }}
+          ${VERSION_NAME:+-Pskerry.versionName=$VERSION_NAME}
+          -Pskerry.versionCode=$VERSION_CODE
 
       - name: Rename APK to match the other artifacts
         # AGP emits androidApp-release.apk. Rename it to the Skerry-<version> scheme the
         # msi/dmg/AppImage/flatpak assets use (deb/rpm keep the lowercase names their
         # platform conventions dictate).
         # On a manual run without a version, fall back to the gradle.properties default.
+        # Version comes through env, not interpolated into the shell (injection-safe).
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.name }}
         run: |
-          version="${{ needs.version.outputs.name }}"
+          version="$VERSION_NAME"
           [ -z "$version" ] && version="$(sed -n 's/^skerry.versionName=//p' gradle.properties)"
           mv androidApp/build/outputs/apk/release/*.apk \
              "androidApp/build/outputs/apk/release/Skerry-${version}.apk"
@@ -279,10 +311,15 @@ jobs:
         # The sandbox build reads the version from the copied gradle.properties — it can't see the
         # -P override the other jobs pass. Rewrite it in place when a version is resolved.
         if: needs.version.outputs.name != ''
-        run: sed -i "s/^skerry.versionName=.*/skerry.versionName=${{ needs.version.outputs.name }}/" gradle.properties
+        # Version through env, not interpolated into the sed command (injection-safe).
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.name }}
+        run: sed -i "s/^skerry.versionName=.*/skerry.versionName=${VERSION_NAME}/" gradle.properties
 
       - name: Build flatpak bundle
-        run: VERSION="${{ needs.version.outputs.name || '0.1.0' }}" bash composeApp/flatpak/package-flatpak.sh
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.name }}
+        run: VERSION="${VERSION_NAME:-0.1.0}" bash composeApp/flatpak/package-flatpak.sh
 
       - name: Upload flatpak bundle
         uses: actions/upload-artifact@v7
