@@ -1,13 +1,11 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.statements.api.ExposedBlob
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.transactions.experimental.newSuspendedTransaction
 
 /** Accounts: registration (SRP verifier + wrapped dataKey) and lookup. */
 class AccountRepository(private val db: Database) {
@@ -19,7 +17,7 @@ class AccountRepository(private val db: Database) {
         srpVerifier: String,
         wrappedDataKey: ByteArray,
         now: Long = System.currentTimeMillis(),
-    ): AccountRow = newSuspendedTransaction(Dispatchers.IO, db) {
+    ): AccountRow = dbTransaction(db) {
         val exists = Accounts.selectAll().where { Accounts.id eq accountId }.any()
         check(!exists) { "account already exists" }
         try {
@@ -40,11 +38,11 @@ class AccountRepository(private val db: Database) {
     }
 
     /** Total number of registered accounts (for the optional per-instance registration cap). */
-    suspend fun count(): Long = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun count(): Long = dbTransaction(db) {
         Accounts.selectAll().count()
     }
 
-    suspend fun find(accountId: String): AccountRow? = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun find(accountId: String): AccountRow? = dbTransaction(db) {
         Accounts.selectAll().where { Accounts.id eq accountId }.singleOrNull()?.let {
             AccountRow(
                 id = it[Accounts.id],

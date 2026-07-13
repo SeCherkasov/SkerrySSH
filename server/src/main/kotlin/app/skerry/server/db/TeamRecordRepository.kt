@@ -1,6 +1,5 @@
 package app.skerry.server.db
 
-import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
@@ -11,7 +10,6 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.v1.jdbc.update
 
 /**
@@ -23,7 +21,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 class TeamRecordRepository(private val db: Database, private val lockTeamRow: Boolean = false) {
 
     /** Batch upsert with LWW by (`version`, `deviceId`) — same semantics as [RecordRepository.upsert]. */
-    suspend fun upsert(teamId: String, incoming: List<IncomingRecord>): UpsertResult = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun upsert(teamId: String, incoming: List<IncomingRecord>): UpsertResult = dbTransaction(db) {
         val teamQuery = Teams.selectAll().where { Teams.id eq teamId }
         val seqBefore = (if (lockTeamRow) teamQuery.forUpdate() else teamQuery).single()[Teams.teamSeq]
         var seq = seqBefore
@@ -77,7 +75,7 @@ class TeamRecordRepository(private val db: Database, private val lockTeamRow: Bo
     }
 
     /** Team delta: records with `teamSeq > since`, ordered by ascending cursor. */
-    suspend fun delta(teamId: String, since: Long): List<StoredRecord> = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun delta(teamId: String, since: Long): List<StoredRecord> = dbTransaction(db) {
         TeamRecords.selectAll()
             .where { (TeamRecords.teamId eq teamId) and (TeamRecords.teamSeq greater since) }
             .orderBy(TeamRecords.teamSeq to SortOrder.ASC)
@@ -85,7 +83,7 @@ class TeamRecordRepository(private val db: Database, private val lockTeamRow: Bo
     }
 
     /** Deletes tombstones older than [beforeIso] (ISO-8601 UTC) across all teams. Returns row count. */
-    suspend fun purgeTombstones(beforeIso: String): Int = newSuspendedTransaction(Dispatchers.IO, db) {
+    suspend fun purgeTombstones(beforeIso: String): Int = dbTransaction(db) {
         TeamRecords.deleteWhere { (deleted eq true) and (updatedAt less beforeIso) }
     }
 
