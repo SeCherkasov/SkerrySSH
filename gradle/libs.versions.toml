@@ -15,7 +15,7 @@ androidx-biometric = "1.1.0"
 androidx-fragment = "1.8.5"
 # Last CMP line with a stable material3 (1.9.0). Newer CMP only pairs with -alpha material3.
 composeMultiplatform = "1.9.3"
-kotlin = "2.4.0"
+kotlin = "2.4.10"
 material3 = "1.9.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
