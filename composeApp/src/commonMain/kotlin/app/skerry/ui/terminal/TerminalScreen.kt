@@ -636,6 +636,11 @@ fun TerminalScreen(
                 // Runs before the KeyDown guard so a Ctrl KeyUp also clears it. Never consumes the event.
                 hoverPos?.let { linkHover = event.isCtrlPressed && linkUnderPos(it) }
                 if (event.type != KeyEventType.KeyDown || closed) return@onPreviewKeyEvent false
+                if (isImeOwnedPrintable(imeInput, event.isCtrlPressed, event.isAltPressed, event.utf16CodePoint) &&
+                    isSoftKeyboardEvent(event)
+                ) {
+                    return@onPreviewKeyEvent true
+                }
                 // --- Reverse history search (Ctrl-R): while the overlay is open, keys drive it, not the PTY ---
                 if (state.reverseSearchQuery != null) {
                     when {

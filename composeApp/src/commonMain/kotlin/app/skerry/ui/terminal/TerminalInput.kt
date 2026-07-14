@@ -13,6 +13,11 @@ private const val CHAR_UNDEFINED = 0xffff
 private const val ESC = ""
 private const val DEL = ""
 
+// On the IME path the hidden field already feeds printable chars; some keyboards also emit a
+// hardware key event for the number row, so the key path must drop it or "3" is sent twice.
+fun isImeOwnedPrintable(imeInput: Boolean, ctrl: Boolean, alt: Boolean, codePoint: Int): Boolean =
+    imeInput && !ctrl && !alt && codePoint in 0x20 until CHAR_UNDEFINED && codePoint != 0x7f
+
 /**
  * Maps a key press to PTY bytes — raw mode of the interactive terminal: characters go to the shell
  * one at a time, echo is drawn by the shell itself. Returns the string to send to the session, or
