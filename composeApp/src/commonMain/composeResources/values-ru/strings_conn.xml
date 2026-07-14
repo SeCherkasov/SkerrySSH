@@ -15,7 +15,7 @@
     <string name="conn_field_authentication">Аутентификация</string>
     <string name="conn_field_group">Группа</string>
     <string name="conn_field_tags">Теги</string>
-    <string name="conn_field_jump_host">Прыжковый хост (необязательно)</string>
+    <string name="conn_field_jump_host">Прыжковый хост</string>
     <string name="conn_field_keep_alive">Keep-alive</string>
     <string name="conn_field_ai_policy">Политика AI для этого подключения</string>
     <string name="conn_field_ai_policy_short">Политика AI</string>
@@ -81,4 +81,5 @@
     <string name="conn_test_checking">Проверка подключения…</string>
     <string name="conn_test_connected">Подключено</string>
     <string name="conn_test_rtt_ms">%1$d мс</string>
+    <string name="conn_test_incomplete">Введите хост, логин и данные для входа</string>
 </resources>
