@@ -43,9 +43,15 @@ class SyncIndicatorTest {
     }
 
     @Test
-    fun hidden_when_not_configured_or_unknown() {
+    fun hidden_only_when_not_configured() {
         assertNull(syncIndicator(null, ServerReachable.REACHABLE))
         assertNull(syncIndicator(SyncStatus.Disabled, ServerReachable.REACHABLE))
-        assertNull(syncIndicator(SyncStatus.Online("me", 0, 0), ServerReachable.UNKNOWN))
+    }
+
+    @Test
+    fun online_before_first_ping_is_optimistic() {
+        val i = syncIndicator(SyncStatus.Online("me", 0, 0), ServerReachable.UNKNOWN)!!
+        assertEquals("cloud_done", i.icon)
+        assertEquals(SyncIndicatorLevel.OK, i.level)
     }
 }

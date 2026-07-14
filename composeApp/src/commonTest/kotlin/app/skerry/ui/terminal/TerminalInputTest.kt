@@ -3,7 +3,9 @@ package app.skerry.ui.terminal
 import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Expected control bytes are checked by numeric char code, not literals — otherwise ESC/DEL
@@ -294,5 +296,16 @@ class TerminalInputTest {
         assertNull(mapTerminalKey(Key.CtrlLeft, ctrl = false, codePoint = 0))
         assertNull(mapTerminalKey(Key.ShiftLeft, ctrl = false, codePoint = 0))
         assertNull(mapTerminalKey(Key.Unknown, ctrl = false, codePoint = 0))
+    }
+
+    @Test
+    fun `IME path owns bare printable keys so a number-row key event isn't doubled`() {
+        assertTrue(isImeOwnedPrintable(imeInput = true, ctrl = false, alt = false, codePoint = '3'.code))
+        assertTrue(isImeOwnedPrintable(imeInput = true, ctrl = false, alt = false, codePoint = 'a'.code))
+        assertFalse(isImeOwnedPrintable(imeInput = true, ctrl = false, alt = false, codePoint = 0))
+        assertFalse(isImeOwnedPrintable(imeInput = true, ctrl = false, alt = false, codePoint = 0x7f))
+        assertFalse(isImeOwnedPrintable(imeInput = true, ctrl = false, alt = false, codePoint = 0xffff))
+        assertFalse(isImeOwnedPrintable(imeInput = true, ctrl = true, alt = false, codePoint = 'c'.code))
+        assertFalse(isImeOwnedPrintable(imeInput = false, ctrl = false, alt = false, codePoint = '3'.code))
     }
 }
