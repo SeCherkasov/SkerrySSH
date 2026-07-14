@@ -1,5 +1,6 @@
 package app.skerry.server.db
 
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.selectAll
 
@@ -16,7 +17,9 @@ class StatsRepository(private val db: Database) {
     suspend fun counts(): Counts = dbTransaction(db) {
         Counts(
             accounts = Accounts.selectAll().count(),
-            devices = Devices.selectAll().count(),
+            // Active devices only: a revoked device is inert (no sync) and devices are never
+            // deleted, so counting them would keep the tile climbing and never reflect a revoke.
+            devices = Devices.selectAll().where { Devices.revoked eq false }.count(),
             records = Records.selectAll().count(),
             pairingSessions = Pairing.selectAll().count(),
             // Total ciphertext size in bytes. `LENGTH(blob)` is computed DB-side (portable between

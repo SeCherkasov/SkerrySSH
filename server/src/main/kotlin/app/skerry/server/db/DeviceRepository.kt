@@ -67,19 +67,21 @@ class DeviceRepository(private val db: Database) {
 
     /**
      * Instance-wide devices for the admin console (zero-knowledge: metadata only). Most recently
-     * active first, capped at [limit] — devices are never deleted, only revoked, so an unbounded
-     * list would grow indefinitely.
+     * active first, capped at [limit]. Revoked devices are excluded: they're inert (no sync) and are
+     * never deleted, so including them would let the list grow without bound. A revoked device that
+     * re-authenticates clears its revocation and reappears here.
      */
     suspend fun listAll(limit: Int = 200): List<DeviceRow> = dbTransaction(db) {
         Devices.selectAll()
+            .where { Devices.revoked eq false }
             .orderBy(Devices.lastSeenAt to SortOrder.DESC)
             .limit(limit)
             .map { it.toDeviceRow() }
     }
 
-    /** Total devices on the instance, for an accurate "N of M" in the console. */
+    /** Active (non-revoked) devices on the instance, matching [listAll] for an accurate "N of M". */
     suspend fun count(): Long = dbTransaction(db) {
-        Devices.selectAll().count()
+        Devices.selectAll().where { Devices.revoked eq false }.count()
     }
 
     suspend fun find(accountId: String, deviceId: String): DeviceRow? = dbTransaction(db) {

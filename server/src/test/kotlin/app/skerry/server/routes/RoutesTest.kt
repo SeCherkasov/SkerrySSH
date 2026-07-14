@@ -339,11 +339,13 @@ class RoutesTest {
             client.delete("/admin/devices/devA?accountId=$accountId") { header("X-Admin-Token", "s3cret") }.status,
         )
 
-        // after revoke the device shows as revoked and no longer authenticates
+        // after revoke the device is hidden from the admin list (revoked devices are inert, so the
+        // list — and the "N of M" total — count only active devices)
         val after: AdminDevicesResponse = client.get("/admin/devices") {
             header("X-Admin-Token", "s3cret")
         }.body()
-        assertTrue(after.devices.single().revoked)
+        assertTrue(after.devices.isEmpty())
+        assertEquals(0, after.total)
 
         // unknown device -> 404
         assertEquals(
