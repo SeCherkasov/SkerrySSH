@@ -49,9 +49,9 @@ class SyncIndicatorTest {
     }
 
     @Test
-    fun online_before_first_ping_is_optimistic() {
+    fun online_before_first_ping_reads_as_checking_not_green() {
         val i = syncIndicator(SyncStatus.Online("me", 0, 0), ServerReachable.UNKNOWN)!!
-        assertEquals("cloud_done", i.icon)
-        assertEquals(SyncIndicatorLevel.OK, i.level)
+        assertEquals("sync", i.icon)
+        assertEquals(SyncIndicatorLevel.WARN, i.level)
     }
 }

@@ -17,16 +17,18 @@ data class SyncIndicator(val icon: String, val label: String, val level: SyncInd
 
 /**
  * Testable projection of sync state onto the status indicator. Session status ([SyncStatus]) leads
- * and shows immediately; reachability only downgrades a live session to "offline" once a ping fails
- * (UNKNOWN before the first ping stays optimistic, so the icon doesn't lag a couple seconds behind a
- * connect). Hidden only when sync isn't configured.
+ * and shows immediately (so the icon doesn't lag a connect); reachability only distinguishes a live
+ * session's online/offline. Before the first ping ([ServerReachable.UNKNOWN]) an active session reads
+ * as "checking", not a premature green. Hidden only when sync isn't configured.
  */
 fun syncIndicator(status: SyncStatus?, reachable: ServerReachable): SyncIndicator? {
     if (status == null || status == SyncStatus.Disabled) return null
     return when (status) {
-        is SyncStatus.Online ->
-            if (reachable == ServerReachable.UNREACHABLE) SyncIndicator("cloud_off", "Sync offline", SyncIndicatorLevel.ERROR)
-            else SyncIndicator("cloud_done", "Sync online", SyncIndicatorLevel.OK)
+        is SyncStatus.Online -> when (reachable) {
+            ServerReachable.REACHABLE -> SyncIndicator("cloud_done", "Sync online", SyncIndicatorLevel.OK)
+            ServerReachable.UNREACHABLE -> SyncIndicator("cloud_off", "Sync offline", SyncIndicatorLevel.ERROR)
+            ServerReachable.UNKNOWN -> SyncIndicator("sync", "Syncing…", SyncIndicatorLevel.WARN)
+        }
         SyncStatus.Busy -> SyncIndicator("sync", "Syncing…", SyncIndicatorLevel.WARN)
         is SyncStatus.Configured -> SyncIndicator("cloud_off", "Sync paused", SyncIndicatorLevel.WARN)
         is SyncStatus.Failed -> SyncIndicator("cloud_off", "Sync error", SyncIndicatorLevel.ERROR)
@@ -42,9 +44,11 @@ fun syncIndicator(status: SyncStatus?, reachable: ServerReachable): SyncIndicato
 fun syncIndicatorLocalized(status: SyncStatus?, reachable: ServerReachable): SyncIndicator? {
     val base = syncIndicator(status, reachable) ?: return null
     val label = when (status) {
-        is SyncStatus.Online ->
-            if (reachable == ServerReachable.UNREACHABLE) stringResource(Res.string.stail_sync_offline)
-            else stringResource(Res.string.stail_sync_online)
+        is SyncStatus.Online -> when (reachable) {
+            ServerReachable.REACHABLE -> stringResource(Res.string.stail_sync_online)
+            ServerReachable.UNREACHABLE -> stringResource(Res.string.stail_sync_offline)
+            ServerReachable.UNKNOWN -> stringResource(Res.string.stail_syncing)
+        }
         SyncStatus.Busy -> stringResource(Res.string.stail_syncing)
         is SyncStatus.Configured -> stringResource(Res.string.stail_sync_paused)
         is SyncStatus.Failed -> stringResource(Res.string.stail_sync_error)
