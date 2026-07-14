@@ -75,8 +75,8 @@ modules:
       # Gradle distribution (the wrapper can't self-download offline). Pinned to the wrapper's
       # version + checksum; extracted to gradle-dist/ and invoked directly.
       - type: archive
-        url: https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
-        sha256: b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06
+        url: https://services.gradle.org/distributions/gradle-9.6.1-bin.zip
+        sha256: 9c0f7faeeb306cb14e4279a3e084ca6b596894089a0638e68a07c945a32c9e14
         dest: gradle-dist
         strip-components: 1
       # Every Maven artifact of the desktop build (URL + sha256), downloaded into ./offline-repository

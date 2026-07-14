@@ -1,6 +1,11 @@
 name: Release build
 
-# Two modes:
+# Three modes:
+#   • Pull request touching packaging/toolchain files: builds every distributable as a
+#     pre-merge smoke test and uploads them as run artifacts — publishes NOTHING. This
+#     catches release-only breakage (e.g. a dependency bump that desyncs the Flatpak
+#     offline repo, or a new jar that collides in the Android resource merge) on the PR
+#     instead of on the release tag. The paths filter keeps it off unrelated PRs.
 #   • Manual (workflow_dispatch): builds all distributables and uploads them as run
 #     artifacts only — publishes NOTHING, exactly as before.
 #   • Tag push (v*): builds with the version taken from the tag, then publishes a DRAFT
@@ -8,6 +13,18 @@ name: Release build
 #     and clicks Publish — nothing goes public automatically.
 # The sync server is released separately (tags server-v*) — see server-image.yml.
 on:
+  pull_request:
+    # Only files that can change what the release build produces. A dependency/toolchain
+    # bump (libs.versions.toml), a Gradle wrapper change, any build script, the version
+    # source, or the Flatpak offline sources all land here; UI/logic-only PRs don't.
+    paths:
+      - "gradle/libs.versions.toml"
+      - "gradle/wrapper/**"
+      - "gradle.properties"
+      - "settings.gradle.kts"
+      - "**/build.gradle.kts"
+      - "composeApp/flatpak/**"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
       versionName:
