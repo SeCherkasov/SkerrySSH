@@ -1,8 +1,11 @@
-// Kover (code coverage) is loaded via the buildscript classpath instead of the plugins {} DSL, and
-// applied conditionally below. A versioned plugins {} entry is resolved even with `apply false` (the
-// same trap that keeps io.ktor.plugin out of this block — see the note there), which would make the
-// hermetic offline Flatpak build (-Dskerry.offlineRepo) fail: its offline repo doesn't carry Kover.
-// Coverage is a dev/CI concern, so it is simply absent from the offline packaging build.
+// Kover (code coverage) is loaded onto the root buildscript classpath (not the plugins {} DSL) so
+// every measured module inherits it and applies it by id (see each module's build.gradle.kts). It is
+// gated on the online build: a versioned plugins {} entry would be resolved even with `apply false`
+// (the same trap that keeps io.ktor.plugin out of that block — see the note there), which would make
+// the hermetic offline Flatpak build (-Dskerry.offlineRepo) fail — its offline repo doesn't carry
+// Kover. Coverage is a dev/CI concern, absent from the offline packaging build. The root-level
+// aggregation + report config lives in gradle/kover.gradle.kts, applied online only (below), so this
+// file never names a Kover type — which would fail to COMPILE offline, where Kover is off the classpath.
 buildscript {
     if (System.getProperty("skerry.offlineRepo") == null) {
         repositories { gradlePluginPortal() }
@@ -29,19 +32,9 @@ plugins {
 // Aggregate coverage at the root over the modules that carry real logic and tests. Each measured
 // module applies Kover itself (see its build.gradle.kts). findProject keeps this correct under the
 // serverOnly / desktopOnly settings graphs, which drop some modules. Run: ./gradlew koverHtmlReport
+// Applied from a separate script so build.gradle.kts carries no Kover types — the offline Flatpak
+// build has no Kover on its classpath and a direct reference here would fail to compile. See the
+// script header. buildscript{} above already gates the classpath the same way.
 if (System.getProperty("skerry.offlineRepo") == null) {
-    apply(plugin = "org.jetbrains.kotlinx.kover")
-    dependencies {
-        listOf(":shared", ":composeApp", ":server", ":sync-wire").forEach { path ->
-            findProject(path)?.let { add("kover", it) }
-        }
-    }
-    extensions.configure<kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension> {
-        reports.filters.excludes {
-            // Generated code has no tests by design and swamps the denominator: the Compose
-            // resource accessors alone are ~43k lines of generated Kotlin (the i18n string table).
-            packages("app.skerry.ui.generated.resources")
-            classes("app.skerry.ui.app.AppVersion")
-        }
-    }
+    apply(from = rootProject.file("gradle/kover.gradle.kts"))
 }
