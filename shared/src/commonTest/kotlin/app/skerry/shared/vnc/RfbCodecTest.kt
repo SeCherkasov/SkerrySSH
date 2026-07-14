@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** Builds a server→client byte stream in RFB wire order. */
@@ -37,7 +38,14 @@ private class FixtureSource(private val data: ByteArray, private val chunk: Int 
 
 private class CapturingSink : VncSink {
     val out = ArrayList<Byte>()
-    override suspend fun write(bytes: ByteArray) { bytes.forEach { out.add(it) } }
+
+    /** Each write kept whole: the codec writes exactly one message per call, so this is the message log. */
+    val messages = ArrayList<ByteArray>()
+
+    override suspend fun write(bytes: ByteArray) {
+        messages += bytes
+        bytes.forEach { out.add(it) }
+    }
     fun bytes() = out.toByteArray()
 }
 
@@ -154,7 +162,7 @@ class RfbCodecTest {
             .build()
         val fb = VncFramebuffer(2, 1)
         val c = codec(FixtureSource(update), CapturingSink(), fb)
-        val msg = c.readMessage()
+        val msg = c.readMessage().single()
 
         assertTrue(msg is VncUpdate.Region)
         assertEquals(listOf(VncRect(0, 0, 2, 1)), msg.rects)
@@ -172,7 +180,7 @@ class RfbCodecTest {
             .build()
         val fb = VncFramebuffer(2, 1)
         val c = codec(FixtureSource(update, chunk = 1), CapturingSink(), fb)
-        val msg = c.readMessage()
+        val msg = c.readMessage().single()
 
         assertTrue(msg is VncUpdate.Region)
         assertEquals(0xFF0000FF.toInt(), fb.pixels[1]) // opaque blue at x=1
@@ -226,7 +234,7 @@ class RfbCodecTest {
         repeat(10_000) { w.u8(RfbCodec.MSG_SET_COLOUR_MAP).u8(0).u16(0).u16(0) }
         val update = w.u8(RfbCodec.MSG_BELL).build()
 
-        val msg = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+        val msg = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage().single()
         assertEquals(VncUpdate.Bell, msg)
     }
 
@@ -237,9 +245,128 @@ class RfbCodecTest {
             .u8(RfbCodec.MSG_SERVER_CUT_TEXT).u8(0).u8(0).u8(0)
             .s32(3).bytes(byteArrayOf(0xE9.toByte(), 0x61, 0x62))
             .build()
-        val msg = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+        val msg = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage().single()
 
         assertTrue(msg is VncUpdate.ClipboardText)
         assertEquals("éab", msg.text)
+    }
+
+    // --- Cursor pseudo-encoding (client-side cursor) ---
+
+    @Test
+    fun cursor_rectangle_decodes_shape_hotspot_and_mask() = runTest {
+        // 2x1 cursor, hotspot at (1,0): red then green, mask 0b10xxxxxx = first pixel opaque, second
+        // transparent. The rect must NOT touch the framebuffer — the client draws this itself.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(1).u16(0).u16(2).u16(1).s32(RfbCodec.ENC_CURSOR)   // hotspot (1,0), size 2x1
+            .bytes(byteArrayOf(0, 0xFF.toByte(), 0, 0, 0, 0, 0xFF.toByte(), 0)) // red, green
+            .bytes(byteArrayOf(0b1000_0000.toByte()))                // one mask row, MSB = x0
+            .build()
+        val fb = VncFramebuffer(2, 1)
+        val updates = codec(FixtureSource(update), CapturingSink(), fb).readMessage()
+
+        val cursor = updates.filterIsInstance<VncUpdate.CursorShape>().single()
+        assertEquals(2, cursor.width)
+        assertEquals(1, cursor.height)
+        assertEquals(1, cursor.hotspotX)
+        assertEquals(0, cursor.hotspotY)
+        // Masked-out pixels are zeroed whole (not just alpha) — see readCursor.
+        assertContentEquals(intArrayOf(0xFFFF0000.toInt(), 0), cursor.argb)
+        assertEquals(0, fb.pixels[0]) // framebuffer untouched
+        assertEquals(0, fb.pixels[1])
+    }
+
+    @Test
+    fun cursor_and_framebuffer_rects_in_one_message_both_surface() = runTest {
+        // Servers pack the cursor shape alongside real rects; neither may swallow the other.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(2)
+            .u16(0).u16(0).u16(1).u16(1).s32(RfbCodec.ENC_CURSOR)    // 1x1 cursor
+            .bytes(byteArrayOf(0, 0, 0, 0xFF.toByte()))              // blue
+            .bytes(byteArrayOf(0b1000_0000.toByte()))
+            .u16(0).u16(0).u16(2).u16(1).s32(RfbCodec.ENC_RAW)       // then a Raw rect
+            .bytes(byteArrayOf(0, 0xFF.toByte(), 0, 0, 0, 0, 0xFF.toByte(), 0))
+            .build()
+        val fb = VncFramebuffer(2, 1)
+        val updates = codec(FixtureSource(update), CapturingSink(), fb).readMessage()
+
+        assertEquals(1, updates.filterIsInstance<VncUpdate.CursorShape>().size)
+        val region = updates.filterIsInstance<VncUpdate.Region>().single()
+        assertEquals(listOf(VncRect(0, 0, 2, 1)), region.rects)
+        assertEquals(0xFFFF0000.toInt(), fb.pixels[0])
+    }
+
+    @Test
+    fun empty_cursor_means_no_cursor() = runTest {
+        // A 0x0 shape is how a server says "the cursor is hidden right now".
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(0).u16(0).s32(RfbCodec.ENC_CURSOR)
+            .build()
+        val updates = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+
+        val cursor = updates.filterIsInstance<VncUpdate.CursorShape>().single()
+        assertEquals(0, cursor.width)
+        assertEquals(0, cursor.height)
+    }
+
+    @Test
+    fun oversized_cursor_throws_before_allocating() = runTest {
+        // A cursor is a sprite, not a screen: a 65535-square one is a hostile allocation, not a shape.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(65535).u16(65535).s32(RfbCodec.ENC_CURSOR)
+            .build()
+        assertFailsWith<VncProtocolException> {
+            codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+        }
+    }
+
+    @Test
+    fun a_desktop_resize_is_not_swallowed_by_rects_in_the_same_message() = runTest {
+        // Both must reach the UI: the Resize reallocates the bitmap the Region then writes into.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(2)
+            .u16(0).u16(0).u16(4).u16(2).s32(RfbCodec.ENC_DESKTOP_SIZE)
+            .u16(0).u16(0).u16(1).u16(1).s32(RfbCodec.ENC_RAW)
+            .bytes(byteArrayOf(0, 0, 0, 0xFF.toByte()))
+            .build()
+        val updates = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+
+        assertEquals(VncUpdate.Resize(4, 2), updates.filterIsInstance<VncUpdate.Resize>().single())
+        assertEquals(listOf(VncRect(0, 0, 1, 1)), updates.filterIsInstance<VncUpdate.Region>().single().rects)
+    }
+
+    @Test
+    fun set_encodings_offers_the_cursor_pseudo_encoding_until_it_is_turned_off() = runTest {
+        // Advertising Cursor is what stops the server painting the cursor into the framebuffer, so it
+        // is exactly the switch between server-side and client-side cursor rendering.
+        val server = Wire()
+            .str("RFB 003.008\n").u8(1).u8(RfbCodec.SEC_NONE).s32(0).serverInit(2, 1, "x")
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(server), sink, VncFramebuffer(1, 1))
+        c.handshake(VncAuth.None)
+        assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
+
+        c.setLocalCursor(false)
+        assertFalse(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
+        // The rest of the list must survive the switch — it isn't a cursor-only re-advertisement.
+        assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_TIGHT))
+
+        c.setLocalCursor(true)
+        assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
+    }
+}
+
+/** The encoding list from the most recent SetEncodings (type 2) message the codec wrote. */
+private fun CapturingSink.lastEncodings(): List<Int> {
+    val msg = messages.last { it.isNotEmpty() && it[0].toInt() == 2 }
+    val count = ((msg[2].toInt() and 0xFF) shl 8) or (msg[3].toInt() and 0xFF)
+    return (0 until count).map { k ->
+        val o = 4 + k * 4
+        ((msg[o].toInt() and 0xFF) shl 24) or ((msg[o + 1].toInt() and 0xFF) shl 16) or
+            ((msg[o + 2].toInt() and 0xFF) shl 8) or (msg[o + 3].toInt() and 0xFF)
     }
 }

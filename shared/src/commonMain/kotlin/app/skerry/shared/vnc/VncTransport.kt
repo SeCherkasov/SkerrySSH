@@ -72,6 +72,14 @@ interface VncSession {
     /** Adjust the quality/compression preference (re-issues SetEncodings / Tight quality level). */
     suspend fun setQuality(quality: VncQuality)
 
+    /**
+     * Choose who draws the remote cursor. [enabled] = we do: the server sends its shape as a
+     * [VncUpdate.CursorShape] and leaves the framebuffer clean, so the cursor tracks OUR pointer with
+     * no round-trip. Disabled, the server paints it into the framebuffer instead — which is the only
+     * honest option when our pointer isn't the one moving it (view-only).
+     */
+    suspend fun setLocalCursor(enabled: Boolean)
+
     /** Close the socket and end the session. Idempotent. */
     suspend fun close()
 }
@@ -79,13 +87,36 @@ interface VncSession {
 /**
  * A decoded server→client event surfaced to the UI. [Region] means [VncFramebuffer] changed in the
  * listed rectangles (upload them); [Resize] means the desktop size changed (reallocate the bitmap);
- * [ClipboardText] is the server's cut buffer; [Bell] is a beep; [Closed] ends the session
- * ([cleanExit] true = the peer closed cleanly, false = a transport drop → the controller may
- * auto-reconnect).
+ * [CursorShape] is a new remote cursor sprite; [ClipboardText] is the server's cut buffer; [Bell] is
+ * a beep; [Closed] ends the session ([cleanExit] true = the peer closed cleanly, false = a transport
+ * drop → the controller may auto-reconnect).
  */
 sealed interface VncUpdate {
     data class Region(val rects: List<VncRect>) : VncUpdate
     data class Resize(val width: Int, val height: Int) : VncUpdate
+
+    /**
+     * The remote cursor's shape (Cursor pseudo-encoding), sent instead of painting it into the
+     * framebuffer. [argb] is [width]×[height] row-major, with alpha taken from RFB's 1-bit mask;
+     * [hotspotX]/[hotspotY] is the pixel that sits under the pointer. A 0×0 shape means the server
+     * is hiding the cursor.
+     */
+    data class CursorShape(
+        val argb: IntArray,
+        val width: Int,
+        val height: Int,
+        val hotspotX: Int,
+        val hotspotY: Int,
+    ) : VncUpdate {
+        // Hand-written because IntArray uses identity equality (same reason as DecodedImage).
+        override fun equals(other: Any?): Boolean =
+            other is CursorShape && width == other.width && height == other.height &&
+                hotspotX == other.hotspotX && hotspotY == other.hotspotY && argb.contentEquals(other.argb)
+
+        override fun hashCode(): Int =
+            (((width * 31 + height) * 31 + hotspotX) * 31 + hotspotY) * 31 + argb.contentHashCode()
+    }
+
     data class ClipboardText(val text: String) : VncUpdate
     data object Bell : VncUpdate
     data class Closed(val cleanExit: Boolean) : VncUpdate

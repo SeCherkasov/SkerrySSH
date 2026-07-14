@@ -90,7 +90,7 @@ class VncSocketSession(
     override val updates: Flow<VncUpdate> = flow {
         check(collected.compareAndSet(false, true)) { "VncSession.updates supports only one collector" }
         while (true) {
-            val update = try {
+            val batch = try {
                 codec.readMessage()
             } catch (e: CancellationException) {
                 throw e // never swallow cooperative cancellation (collector left / socket closed)
@@ -101,13 +101,12 @@ class VncSocketSession(
                 emit(VncUpdate.Closed(cleanExit = false))
                 break
             }
-            emit(update)
-            when (update) {
-                // Steady state: after applying an update, ask for the next incremental one.
-                is VncUpdate.Region, is VncUpdate.Resize ->
-                    codec.writeFramebufferUpdateRequest(true, 0, 0, framebuffer.width, framebuffer.height)
-                is VncUpdate.Closed -> break
-                else -> {}
+            for (update in batch) emit(update)
+            if (batch.any { it is VncUpdate.Closed }) break
+            // Steady state: one request per applied framebuffer update, not per update in it — a
+            // batch is a single server message, and asking once per part would just pile up requests.
+            if (batch.any { it is VncUpdate.Region || it is VncUpdate.Resize }) {
+                codec.writeFramebufferUpdateRequest(true, 0, 0, framebuffer.width, framebuffer.height)
             }
         }
     }.flowOn(Dispatchers.IO)
@@ -137,6 +136,10 @@ class VncSocketSession(
 
     override suspend fun setQuality(quality: VncQuality) = withContext(Dispatchers.IO) {
         codec.setQuality(quality)
+    }
+
+    override suspend fun setLocalCursor(enabled: Boolean) = withContext(Dispatchers.IO) {
+        codec.setLocalCursor(enabled)
     }
 
     override suspend fun close() = withContext(Dispatchers.IO) { closeSocket() }

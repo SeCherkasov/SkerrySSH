@@ -70,14 +70,36 @@ class VncScreenState(
     /** Change the quality preference; the server applies it on the next framebuffer update. */
     fun applyQuality(newQuality: VncQuality) {
         quality = newQuality
-        scope.launch { session.setQuality(newQuality) }
+        send { session.setQuality(newQuality) }
     }
+
+    /**
+     * The remote cursor sprite (Cursor pseudo-encoding), drawn at our own pointer. Null while the
+     * server hasn't sent a shape — either it ignores the encoding and paints the cursor into the
+     * framebuffer, or it is telling us the cursor is hidden.
+     */
+    var cursor: VncCursorImage? by mutableStateOf(null)
+        private set
 
     /** View-only: when true, pointer/key input is not forwarded (look, don't touch). */
     var viewOnly by mutableStateOf(false)
         private set
 
-    fun toggleViewOnly() { viewOnly = !viewOnly }
+    /**
+     * Toggle view-only, and hand the cursor back to the server while it's on: with nothing driving
+     * our pointer, a sprite under it would claim the remote cursor is somewhere it isn't. The full
+     * update is what makes the switch visible — re-advertising only governs what the server sends
+     * next, so without it the cursor the server last painted would stay burnt into the framebuffer
+     * next to the sprite.
+     */
+    fun toggleViewOnly() {
+        viewOnly = !viewOnly
+        val localCursor = !viewOnly
+        send {
+            session.setLocalCursor(localCursor)
+            session.requestUpdate(incremental = false)
+        }
+    }
 
     /** True once the session has closed (server drop / EOF); the controller reacts to this. */
     var closed by mutableStateOf(false)
@@ -124,6 +146,7 @@ class VncScreenState(
                 desktopSize = IntSize(update.width, update.height)
                 frame++
             }
+            is VncUpdate.CursorShape -> cursor = VncCursorImage.of(update)
             is VncUpdate.ClipboardText -> {
                 serverClipboard = update.text
                 onClipboard(update.text)
@@ -139,17 +162,36 @@ class VncScreenState(
     /** Forward a pointer event (framebuffer coordinates + RFB button mask). No-op in view-only mode. */
     fun onPointer(x: Int, y: Int, buttonMask: Int) {
         if (viewOnly) return
-        scope.launch { session.sendPointer(VncPointerEvent(x, y, buttonMask)) }
+        send { session.sendPointer(VncPointerEvent(x, y, buttonMask)) }
     }
 
     /** Forward a key event (X11 keysym). No-op in view-only mode. */
     fun onKey(keySym: Long, down: Boolean) {
         if (viewOnly) return
-        scope.launch { session.sendKey(keySym, down) }
+        send { session.sendKey(keySym, down) }
     }
 
     /** Send local clipboard text to the server. */
     fun onLocalClipboard(text: String) {
-        scope.launch { session.sendClientCutText(text) }
+        send { session.sendClientCutText(text) }
+    }
+
+    /**
+     * Fire-and-forget a write to the server. Every caller is a UI event (a mouse move, a menu click)
+     * racing the read loop, so the socket can already be dead when the write lands — and an exception
+     * escaping a bare `launch` isn't merely lost, it reaches the default handler and takes the whole
+     * process down on Android. The dropped session surfaces through [closed] instead, which is the
+     * read loop's job; there is nothing a failed input write can tell the user that the imminent
+     * "Connection lost" doesn't.
+     */
+    private fun send(block: suspend () -> Unit) {
+        scope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
     }
 }

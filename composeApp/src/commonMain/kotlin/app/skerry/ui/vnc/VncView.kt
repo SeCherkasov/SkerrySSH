@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -55,6 +56,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
+import kotlin.math.roundToInt
 
 /**
  * The VNC tab's work area. Renders the active session's [VncSessionController] state: connecting /
@@ -96,11 +98,15 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
     // Tracks whether the mouse is over the drawn image rather than the letterbox around it — the
     // pointer loop below sets it from the same geometry the draw uses. See [shouldHideLocalCursor].
     var pointerOverImage by remember { mutableStateOf(false) }
+    // Last pointer position INSIDE the image, where the remote cursor therefore is. Deliberately not
+    // cleared when the pointer leaves: the remote cursor stays put, so the sprite does too — exactly
+    // what a server-painted cursor looks like when you move off the framebuffer.
+    var pointerPos by remember { mutableStateOf<Offset?>(null) }
 
     // clipToBounds: a zoomed framebuffer must never draw outside its own area onto the app chrome.
     var mod = Modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged { canvasSize = it }
-    // The server paints the remote cursor into the framebuffer, so the OS pointer on top would be a
-    // second cursor — hide it while we're driving the remote one. See [shouldHideLocalCursor].
+    // Something remote already tracks the mouse — our sprite, or a cursor the server painted into the
+    // framebuffer — so the OS pointer on top would be a second one. See [shouldHideLocalCursor].
     if (shouldHideLocalCursor(interactive, screen.viewOnly, pointerOverImage)) {
         hiddenPointerIcon()?.let { mod = mod.pointerHoverIcon(it) }
     }
@@ -128,6 +134,7 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
                         // exactly when the local pointer has to come back.
                         pointerOverImage = fb != null
                         if (fb == null) { continue }
+                        pointerPos = change.position
                         if (event.type == PointerEventType.Scroll) {
                             // Wheel goes to the server (scroll inside the remote desktop). No local
                             // zoom on desktop: without panning it only shows the center, and the fit
@@ -168,10 +175,14 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
             .focusable()
     }
 
+    // The sprite is ours to draw only while we're the ones moving the remote cursor; in view-only the
+    // server paints it into the framebuffer instead. See [VncScreenState.toggleViewOnly].
+    val sprite = if (interactive && !screen.viewOnly) screen.cursor else null
+
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
             @Suppress("UNUSED_EXPRESSION") frame // captured so the draw invalidates when it changes
-            drawFramebuffer(screen)
+            drawFramebuffer(screen, sprite, pointerPos)
         }
     }
 
@@ -192,8 +203,11 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
     }
 }
 
-/** Fit-to-window draw: preserve aspect ratio, center, nearest-neighbor for crisp pixels. */
-private fun DrawScope.drawFramebuffer(screen: VncScreenState) {
+/**
+ * Fit-to-window draw: preserve aspect ratio, center, nearest-neighbor for crisp pixels. [sprite] is
+ * the remote cursor drawn on top at [pointerPos] (both null = nothing to draw there).
+ */
+private fun DrawScope.drawFramebuffer(screen: VncScreenState, sprite: VncCursorImage?, pointerPos: Offset?) {
     val image = screen.imageBitmap
     val geom = fitGeometry(
         size.width, size.height, image.width, image.height,
@@ -204,6 +218,16 @@ private fun DrawScope.drawFramebuffer(screen: VncScreenState) {
         image = image,
         dstOffset = IntOffset(geom.offsetX.toInt(), geom.offsetY.toInt()),
         dstSize = IntSize(geom.dstWidth, geom.dstHeight),
+        filterQuality = FilterQuality.None,
+    )
+    if (sprite == null || pointerPos == null) return
+    val at = cursorTopLeft(geom, pointerPos.x, pointerPos.y, sprite.hotspotX, sprite.hotspotY) ?: return
+    // Scaled and filtered like the framebuffer it sits on: a cursor is remote pixels too, so under
+    // zoom it grows with them rather than staying a lone sharp sprite on a blown-up screen.
+    drawImage(
+        image = sprite.bitmap,
+        dstOffset = IntOffset(at.x.roundToInt(), at.y.roundToInt()),
+        dstSize = IntSize((sprite.width * geom.scale).roundToInt(), (sprite.height * geom.scale).roundToInt()),
         filterQuality = FilterQuality.None,
     )
 }

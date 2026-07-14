@@ -26,6 +26,9 @@ class RfbCodec(
     // Current quality/compression preference, advertised as Tight pseudo-encodings in SetEncodings.
     private var quality: VncQuality = VncQuality.Auto
 
+    // Whether we advertise the Cursor pseudo-encoding — i.e. whether the client draws the cursor.
+    private var localCursor = true
+
     // One persistent ZRLE zlib stream for the whole connection (created on first ZRLE rect).
     private var zrleInflater: Inflater? = null
     // Up to four independent persistent Tight zlib streams, created lazily as control bytes name them.
@@ -56,18 +59,22 @@ class RfbCodec(
     }
 
     /**
-     * Read server→client messages until one produces an update, apply it to [fb], and return it.
+     * Read server→client messages until one produces updates, apply them to [fb], and return them.
+     * A list because ONE FramebufferUpdate can carry several kinds of change at once — a resize, a
+     * cursor shape and painted rectangles are all "rectangles" on the wire — and the caller must see
+     * every one of them.
+     *
      * A loop, not self-recursion: a server may stream many SetColourMap messages (skipped under our
      * forced true-colour), and recursing per message would grow the suspend continuation chain
      * unbounded toward a StackOverflowError.
      */
-    suspend fun readMessage(): VncUpdate {
+    suspend fun readMessage(): List<VncUpdate> {
         while (true) {
             when (val type = readU8()) {
                 MSG_FRAMEBUFFER_UPDATE -> return readFramebufferUpdate()
                 MSG_SET_COLOUR_MAP -> skipSetColourMap() // true-colour forced; consume and continue
-                MSG_BELL -> return VncUpdate.Bell
-                MSG_SERVER_CUT_TEXT -> return VncUpdate.ClipboardText(readServerCutText())
+                MSG_BELL -> return listOf(VncUpdate.Bell)
+                MSG_SERVER_CUT_TEXT -> return listOf(VncUpdate.ClipboardText(readServerCutText()))
                 else -> throw VncProtocolException("unknown server message type $type")
             }
         }
@@ -146,11 +153,21 @@ class RfbCodec(
 
     // ---- framebuffer update ----
 
-    private suspend fun readFramebufferUpdate(): VncUpdate {
+    /**
+     * Read one FramebufferUpdate. Pseudo-encodings (DesktopSize, Cursor) are metadata carried in the
+     * rectangle list, not pixels: they get their own update and never enter [VncUpdate.Region], whose
+     * rects the UI blits straight out of [fb].
+     *
+     * The Region always comes last and is always present, even when empty: pseudo-encodings are
+     * applied to [fb] first (a Resize must reach the UI before the rects written after it), and the
+     * transport keys its "request the next update" off a Region, so every FramebufferUpdate must
+     * carry exactly one — otherwise a cursor-only message would stall the session.
+     */
+    private suspend fun readFramebufferUpdate(): List<VncUpdate> {
         readU8() // padding
         val rectCount = readU16()
         val rects = ArrayList<VncRect>(rectCount)
-        var resize: VncUpdate.Resize? = null
+        val pseudo = ArrayList<VncUpdate>()
         repeat(rectCount) {
             val x = readU16()
             val y = readU16()
@@ -159,19 +176,49 @@ class RfbCodec(
             when (val encoding = readS32()) {
                 ENC_DESKTOP_SIZE -> {
                     boundedResize(w, h)
-                    resize = VncUpdate.Resize(w, h)
+                    pseudo += VncUpdate.Resize(w, h)
                 }
+                ENC_CURSOR -> pseudo += readCursor(hotspotX = x, hotspotY = y, width = w, height = h)
                 else -> {
                     decodeRectangle(encoding, VncRect(x, y, w, h))
                     rects += VncRect(x, y, w, h)
                 }
             }
         }
-        return when {
-            rects.isNotEmpty() -> VncUpdate.Region(rects)
-            resize != null -> resize
-            else -> VncUpdate.Region(emptyList())
+        return pseudo + VncUpdate.Region(rects)
+    }
+
+    /**
+     * Cursor pseudo-encoding (-239): [width]×[height] pixels in our canonical format, then a 1-bit
+     * transparency mask of `ceil(width/8)` bytes per row, MSB = leftmost pixel, 1 = opaque.
+     */
+    private suspend fun readCursor(hotspotX: Int, hotspotY: Int, width: Int, height: Int): VncUpdate.CursorShape {
+        // A cursor is a sprite, not a screen — bound it far below MAX_DIMENSION before deriving any
+        // buffer size from it, so a hostile server can't bill us a multi-GB "cursor" for four bytes.
+        if (width > MAX_CURSOR_DIMENSION || height > MAX_CURSOR_DIMENSION) {
+            throw VncProtocolException("cursor ${width}x$height exceeds max $MAX_CURSOR_DIMENSION")
         }
+        if (width == 0 || height == 0) return VncUpdate.CursorShape(EMPTY_ARGB, 0, 0, 0, 0)
+        val pixels = readBytes(width * height * CanonicalPixelFormat.PIXEL_BYTES)
+        val maskStride = (width + 7) / 8
+        val mask = readBytes(maskStride * height)
+        val argb = IntArray(width * height)
+        var i = 0
+        var y = 0
+        while (y < height) {
+            var x = 0
+            while (x < width) {
+                val opaque = (mask[y * maskStride + x / 8].toInt() shr (7 - (x % 8))) and 1 == 1
+                // Masked-out pixels are zeroed whole, not just their alpha: the desktop bitmap hands
+                // these bytes to Skia as premultiplied, where alpha 0 over non-zero RGB is invalid
+                // and renders as a halo around the sprite.
+                argb[i] = if (opaque) CanonicalPixelFormat.argbFromPixel(pixels, i * CanonicalPixelFormat.PIXEL_BYTES) else 0
+                i++
+                x++
+            }
+            y++
+        }
+        return VncUpdate.CursorShape(argb, width, height, hotspotX, hotspotY)
     }
 
     /**
@@ -231,9 +278,9 @@ class RfbCodec(
     }
 
     private suspend fun writeSetEncodings() {
-        // Base encodings + Tight quality/compression pseudo-encodings for the current preference.
-        val pseudo = qualityPseudoEncodings(quality)
-        val all = requestedEncodings + pseudo
+        // Base encodings + Cursor (while we draw it) + Tight quality/compression pseudo-encodings.
+        val cursor = if (localCursor) intArrayOf(ENC_CURSOR) else IntArray(0)
+        val all = requestedEncodings + cursor + qualityPseudoEncodings(quality)
         val n = all.size
         val msg = ByteArray(4 + n * 4)
         msg[0] = 2 // SetEncodings
@@ -249,6 +296,16 @@ class RfbCodec(
     /** Change the quality preference and re-advertise encodings (server applies it on the next update). */
     suspend fun setQuality(newQuality: VncQuality) {
         quality = newQuality
+        writeSetEncodings()
+    }
+
+    /**
+     * Advertise (or drop) the Cursor pseudo-encoding — see [VncSession.setLocalCursor]. Re-advertising
+     * only changes what the server sends NEXT; the caller asks for a full update so the framebuffer
+     * stops (or starts) carrying a baked-in cursor right away.
+     */
+    suspend fun setLocalCursor(enabled: Boolean) {
+        localCursor = enabled
         writeSetEncodings()
     }
 
@@ -359,18 +416,22 @@ class RfbCodec(
         const val MAX_REASON_LEN = 64 * 1024
         const val MAX_CLIPBOARD_LEN = 4 * 1024 * 1024
 
+        /** Cursor sprites are ~32-96px in practice; 1024 leaves room for hi-dpi and still caps at 4 MB. */
+        const val MAX_CURSOR_DIMENSION = 1024
+
         // Encodings.
         const val ENC_RAW = 0
         const val ENC_COPY_RECT = 1
         const val ENC_HEXTILE = 5
         const val ENC_TIGHT = 7
         const val ENC_ZRLE = 16
+        const val ENC_CURSOR = -239
         const val ENC_DESKTOP_SIZE = -223
 
         /**
-         * Encodings advertised to the server, most-preferred first. Grown per implementation slice
-         * so the client only ever offers what it can decode (the server picks from this list): Raw +
-         * CopyRect + DesktopSize now; Hextile/ZRLE/Tight are added as their slices land.
+         * Encodings advertised to the server, most-preferred first — the client only ever offers what
+         * it can decode (the server picks from this list). [ENC_CURSOR] is NOT here: it's toggled per
+         * session by [setLocalCursor], not a fixed preference.
          */
         val DEFAULT_ENCODINGS = intArrayOf(ENC_TIGHT, ENC_ZRLE, ENC_HEXTILE, ENC_COPY_RECT, ENC_RAW, ENC_DESKTOP_SIZE)
 
@@ -387,6 +448,7 @@ class RfbCodec(
         }
 
         private val EMPTY = ByteArray(0)
+        private val EMPTY_ARGB = IntArray(0)
 
         private fun putU16(dst: ByteArray, off: Int, v: Int) {
             dst[off] = (v ushr 8).toByte()
