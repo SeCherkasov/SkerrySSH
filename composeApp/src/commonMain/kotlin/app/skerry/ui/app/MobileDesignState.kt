@@ -8,11 +8,14 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
+import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.vault.AutoLockDuration
+import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
@@ -102,6 +105,14 @@ class MobileDesignState(
     // back; threaded into [app.skerry.ui.vault.VaultGate] as the timer's idleMs.
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
+    // Terminal behaviour (More -> Appearance -> Terminal): scrollback depth and default cursor style.
+    // Read from persistence at startup, written back via the callbacks. Defaults (10,000 lines,
+    // blinking block, no-op) are for previews/tests. Both apply to NEW sessions on connect (see
+    // [app.skerry.ui.terminal.TerminalSessionPrefs]) and are also pushed live into already-open sessions.
+    initialTerminalScrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
+    private val onTerminalScrollbackChange: (Int) -> Unit = {},
+    initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
+    private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
 ) {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
     var route: MobileRoute? by mutableStateOf(null); private set
@@ -234,6 +245,12 @@ class MobileDesignState(
     /** Idle auto-lock threshold (More -> Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
     var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
 
+    /** Scrollback depth for new sessions, lines (More -> Appearance -> Terminal). Applies to new sessions. */
+    var terminalScrollback: Int by mutableStateOf(initialTerminalScrollback); private set
+
+    /** Default cursor style (More -> Appearance -> Terminal). Applies to new sessions. */
+    var terminalCursorStyle: TerminalCursorStyle by mutableStateOf(initialTerminalCursorStyle); private set
+
     /** Choose the auto-lock threshold and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseAutoLock(duration: AutoLockDuration) {
         if (duration == autoLock) return
@@ -292,5 +309,23 @@ class MobileDesignState(
         if (language == uiLanguage) return
         uiLanguage = language
         onUiLanguageChange(language)
+    }
+
+    /**
+     * Set the scrollback depth and report outward (for persistence). A value outside
+     * [TERMINAL_SCROLLBACK_OPTIONS] or equal to the current one is a no-op (no write, no callback).
+     * Applies to subsequent sessions.
+     */
+    fun chooseTerminalScrollback(lines: Int) {
+        if (lines == terminalScrollback || lines !in TERMINAL_SCROLLBACK_OPTIONS) return
+        terminalScrollback = lines
+        onTerminalScrollbackChange(lines)
+    }
+
+    /** Choose the cursor style and report outward (for persistence). Repeating the same value is a no-op. */
+    fun chooseTerminalCursorStyle(style: TerminalCursorStyle) {
+        if (style == terminalCursorStyle) return
+        terminalCursorStyle = style
+        onTerminalCursorStyleChange(style)
     }
 }

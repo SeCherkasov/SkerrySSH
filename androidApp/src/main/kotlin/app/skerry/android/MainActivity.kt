@@ -45,9 +45,12 @@ import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
 import app.skerry.ui.i18n.AppLocaleProvider
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
+import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
+import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnel
@@ -153,6 +156,10 @@ class MainActivity : FragmentActivity() {
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
                     initialAutoLock = readAutoLock(dir),
                     onAutoLockChange = { writeAutoLock(dir, it) },
+                    initialTerminalScrollback = readTerminalScrollback(dir),
+                    onTerminalScrollbackChange = { writeTerminalScrollback(dir, it) },
+                    initialTerminalCursorStyle = readTerminalCursorStyle(dir),
+                    onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
                 )
             }
             AppLocaleProvider(currentUiLanguage.value) {
@@ -242,6 +249,39 @@ class MainActivity : FragmentActivity() {
     private fun writeTerminalFontSize(dir: File, px: Int) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_font_size").writeText(px.toString()) }
+        }
+    }
+
+    /**
+     * Scrollback depth for new sessions (More → Appearance → Terminal): a number in
+     * `terminal_scrollback`. Missing/unreadable/outside [TERMINAL_SCROLLBACK_OPTIONS] →
+     * [DEFAULT_TERMINAL_SCROLLBACK]. Write is best-effort, off the UI thread.
+     */
+    private fun readTerminalScrollback(dir: File): Int {
+        val lines = runCatching { File(dir, "terminal_scrollback").readText().trim().toInt() }
+            .getOrDefault(DEFAULT_TERMINAL_SCROLLBACK)
+        return if (lines in TERMINAL_SCROLLBACK_OPTIONS) lines else DEFAULT_TERMINAL_SCROLLBACK
+    }
+
+    private fun writeTerminalScrollback(dir: File, lines: Int) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_scrollback").writeText(lines.toString()) }
+        }
+    }
+
+    /**
+     * Default cursor style for new sessions (More → Appearance → Terminal): stable
+     * [TerminalCursorStyle.id] in `terminal_cursor_style`. Missing/unreadable/unknown →
+     * [TerminalCursorStyle.DEFAULT]. Write is best-effort, off the UI thread.
+     */
+    private fun readTerminalCursorStyle(dir: File): TerminalCursorStyle = runCatching {
+        TerminalCursorStyle.fromId(File(dir, "terminal_cursor_style").readText().trim())
+    }.getOrDefault(TerminalCursorStyle.DEFAULT)
+
+    private fun writeTerminalCursorStyle(dir: File, style: TerminalCursorStyle) {
+        val id = style.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_cursor_style").writeText(id) }
         }
     }
 
@@ -417,6 +457,8 @@ class MainActivity : FragmentActivity() {
                 knownHosts.entries.toList().forEach { knownHosts.forget(it) }
                 writeTerminalFont(dir, TerminalFont.DEFAULT)
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
+                writeTerminalScrollback(dir, DEFAULT_TERMINAL_SCROLLBACK)
+                writeTerminalCursorStyle(dir, TerminalCursorStyle.DEFAULT)
                 writeClipboardWrite(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)

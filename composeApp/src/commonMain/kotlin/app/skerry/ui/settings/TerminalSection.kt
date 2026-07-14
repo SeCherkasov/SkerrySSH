@@ -237,7 +237,7 @@ private fun ThemeCard(
 
 /** Localized cursor style label (shape + blink) for the dropdown and its trigger. */
 @Composable
-private fun TerminalCursorStyle.label(): String = stringResource(
+internal fun TerminalCursorStyle.cursorStyleLabel(): String = stringResource(
     when (this) {
         TerminalCursorStyle.BlockBlink -> Res.string.settings_terminal_cursor_block_blink
         TerminalCursorStyle.BlockSteady -> Res.string.settings_terminal_cursor_block_steady
@@ -257,9 +257,9 @@ private fun ScrollbackPicker(current: Int, onPick: (Int) -> Unit) {
 /** Dropdown for cursor style ([TerminalCursorStyle.entries]). */
 @Composable
 private fun CursorStylePicker(current: TerminalCursorStyle, onPick: (TerminalCursorStyle) -> Unit) {
-    DropdownField(current, TerminalCursorStyle.entries, label = { it.label() }, onPick = onPick)
+    DropdownField(current, TerminalCursorStyle.entries, label = { it.cursorStyleLabel() }, onPick = onPick)
 }
 
 /** "10000" -> "10 000" (space between thousands) for readable line counts. */
-private fun formatScrollback(lines: Int): String =
+internal fun formatScrollback(lines: Int): String =
     lines.toString().reversed().chunked(3).joinToString(" ").reversed()
