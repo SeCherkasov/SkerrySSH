@@ -50,6 +50,8 @@ import app.skerry.ui.generated.resources.appearance_section_interface
 import app.skerry.ui.generated.resources.appearance_section_terminal
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
+import app.skerry.ui.generated.resources.settings_terminal_cursor_style
+import app.skerry.ui.generated.resources.settings_terminal_scrollback
 import app.skerry.ui.generated.resources.appearance_title
 import app.skerry.ui.generated.resources.more_about
 import app.skerry.ui.generated.resources.more_ai_privacy
@@ -79,6 +81,8 @@ import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MAX
 import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_MIN
+import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
+import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
@@ -126,7 +130,9 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.settings.autoLockLabel
+import app.skerry.ui.settings.cursorStyleLabel
 import app.skerry.ui.settings.formatDecimal
+import app.skerry.ui.settings.formatScrollback
 import app.skerry.ui.settings.masterPasswordSubtitle
 import app.skerry.ui.settings.securityEventLine
 
@@ -480,6 +486,16 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                     fieldWidth = 52.dp,
                 )
             }
+            // Scrollback depth and default cursor style for new sessions (behaviour, desktop parity).
+            // Both apply to new sessions at connect and are pushed live into already-open ones.
+            Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+            FontSettingRow(stringResource(Res.string.settings_terminal_scrollback)) {
+                MobileScrollbackPicker(state.terminalScrollback, onPick = state::chooseTerminalScrollback)
+            }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+            FontSettingRow(stringResource(Res.string.settings_terminal_cursor_style)) {
+                MobileCursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle)
+            }
             // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host
             // from silently overwriting the system clipboard. Applies to new and already-open sessions.
             Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
@@ -579,6 +595,42 @@ private fun MobileFontPicker(current: TerminalFont, onPick: (TerminalFont) -> Un
             MobileDropdownMenu(width) {
                 TerminalFont.entries.forEach { option ->
                     MobileDropdownOption(option.displayName, selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Scrollback-depth dropdown ([TERMINAL_SCROLLBACK_OPTIONS], lines; formatted as "10 000"). */
+@Composable
+private fun MobileScrollbackPicker(current: Int, onPick: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger(formatScrollback(current), onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                TERMINAL_SCROLLBACK_OPTIONS.forEach { option ->
+                    MobileDropdownOption(formatScrollback(option), selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Cursor-style dropdown (shape × blink, [TerminalCursorStyle.entries]). */
+@Composable
+private fun MobileCursorStylePicker(current: TerminalCursorStyle, onPick: (TerminalCursorStyle) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger(current.cursorStyleLabel(), onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                TerminalCursorStyle.entries.forEach { option ->
+                    MobileDropdownOption(option.cursorStyleLabel(), selected = option == current) { onPick(option); open = false }
                 }
             }
         },

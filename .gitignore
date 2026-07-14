@@ -1,3 +1,6 @@
+# Local working notes — never committed
+*.local.md
+
 # Gradle
 .gradle/
 build/

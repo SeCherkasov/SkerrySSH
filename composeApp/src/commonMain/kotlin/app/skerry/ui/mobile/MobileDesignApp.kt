@@ -132,9 +132,15 @@ fun MobileDesignApp(
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
-                        // OSC 52 clipboard-write gate is read at connect time — new sessions pick up
-                        // the current choice, already-open ones are updated live below.
-                        terminalPrefs = { TerminalSessionPrefs(clipboardWriteEnabled = state.allowServerClipboardWrite) },
+                        // Terminal settings are read at connect time — new sessions pick up the current
+                        // scrollback/cursor/clipboard choice, already-open ones are updated live below.
+                        terminalPrefs = {
+                            TerminalSessionPrefs(
+                                state.terminalScrollback,
+                                state.terminalCursorStyle,
+                                clipboardWriteEnabled = state.allowServerClipboardWrite,
+                            )
+                        },
                     )
                 },
             )
@@ -142,6 +148,27 @@ fun MobileDesignApp(
     }
     val ownsSessions = sessions == null
     DisposableEffect(liveSessions) { onDispose { if (ownsSessions) liveSessions?.disconnectAll() } }
+    // A cursor-style change applies to ALREADY open sessions live (new ones pick it up at connect via
+    // terminalPrefs). Pushed into each session's terminal; the command goes through the emulator's
+    // queue, so no race. Mobile has no split pane, but push into it too for parity/safety.
+    val cursorStyle = state.terminalCursorStyle
+    LaunchedEffect(cursorStyle, liveSessions) {
+        val manager = liveSessions ?: return@LaunchedEffect
+        manager.sessions.forEach { s ->
+            s.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
+            s.splitSession?.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
+        }
+    }
+    // A scrollback change likewise applies to ALREADY open sessions live: shrinking trims old history,
+    // growing keeps new lines around longer. New sessions pick up the value at connect via terminalPrefs.
+    val scrollbackLines = TerminalSessionPrefs(scrollback = state.terminalScrollback).effectiveScrollback
+    LaunchedEffect(scrollbackLines, liveSessions) {
+        val manager = liveSessions ?: return@LaunchedEffect
+        manager.sessions.forEach { s ->
+            s.liveTerminal?.applyScrollback(scrollbackLines)
+            s.splitSession?.liveTerminal?.applyScrollback(scrollbackLines)
+        }
+    }
     // Toggling the OSC 52 clipboard-write gate applies to ALREADY open sessions live; new sessions
     // pick the value up at connect via terminalPrefs above.
     val allowClipboardWrite = state.allowServerClipboardWrite
