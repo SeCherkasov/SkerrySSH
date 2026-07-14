@@ -16,25 +16,21 @@ enum class SyncIndicatorLevel { OK, WARN, ERROR }
 data class SyncIndicator(val icon: String, val label: String, val level: SyncIndicatorLevel)
 
 /**
- * Testable projection of sync state onto the status indicator. The lead signal is session status
- * ([SyncStatus]); server reachability only distinguishes online/offline while a session is active.
- *
- * - [SyncStatus.Online] + REACHABLE → "Sync online" (OK); + UNREACHABLE → "Sync offline" (ERROR).
- * - [SyncStatus.Busy] → "Syncing…" (WARN).
- * - [SyncStatus.Configured] → "Sync paused" (WARN): linked but no session — not "online".
- * - [SyncStatus.Failed] → "Sync error" (ERROR).
- * - Not configured / not yet pinged ([SyncStatus.Disabled] / [ServerReachable.UNKNOWN]) → hide.
+ * Testable projection of sync state onto the status indicator. Session status ([SyncStatus]) leads
+ * and shows immediately; reachability only downgrades a live session to "offline" once a ping fails
+ * (UNKNOWN before the first ping stays optimistic, so the icon doesn't lag a couple seconds behind a
+ * connect). Hidden only when sync isn't configured.
  */
 fun syncIndicator(status: SyncStatus?, reachable: ServerReachable): SyncIndicator? {
-    if (status == null || status == SyncStatus.Disabled || reachable == ServerReachable.UNKNOWN) return null
+    if (status == null || status == SyncStatus.Disabled) return null
     return when (status) {
         is SyncStatus.Online ->
-            if (reachable == ServerReachable.REACHABLE) SyncIndicator("cloud_done", "Sync online", SyncIndicatorLevel.OK)
-            else SyncIndicator("cloud_off", "Sync offline", SyncIndicatorLevel.ERROR)
+            if (reachable == ServerReachable.UNREACHABLE) SyncIndicator("cloud_off", "Sync offline", SyncIndicatorLevel.ERROR)
+            else SyncIndicator("cloud_done", "Sync online", SyncIndicatorLevel.OK)
         SyncStatus.Busy -> SyncIndicator("sync", "Syncing…", SyncIndicatorLevel.WARN)
         is SyncStatus.Configured -> SyncIndicator("cloud_off", "Sync paused", SyncIndicatorLevel.WARN)
         is SyncStatus.Failed -> SyncIndicator("cloud_off", "Sync error", SyncIndicatorLevel.ERROR)
-        SyncStatus.Disabled -> null // covered by the early return; branch for exhaustive when
+        SyncStatus.Disabled -> null
     }
 }
 
@@ -47,8 +43,8 @@ fun syncIndicatorLocalized(status: SyncStatus?, reachable: ServerReachable): Syn
     val base = syncIndicator(status, reachable) ?: return null
     val label = when (status) {
         is SyncStatus.Online ->
-            if (reachable == ServerReachable.REACHABLE) stringResource(Res.string.stail_sync_online)
-            else stringResource(Res.string.stail_sync_offline)
+            if (reachable == ServerReachable.UNREACHABLE) stringResource(Res.string.stail_sync_offline)
+            else stringResource(Res.string.stail_sync_online)
         SyncStatus.Busy -> stringResource(Res.string.stail_syncing)
         is SyncStatus.Configured -> stringResource(Res.string.stail_sync_paused)
         is SyncStatus.Failed -> stringResource(Res.string.stail_sync_error)
