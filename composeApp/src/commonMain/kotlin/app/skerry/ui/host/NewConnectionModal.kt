@@ -3,6 +3,7 @@ package app.skerry.ui.host
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -272,6 +275,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 Field(stringResource(Res.string.conn_field_tags)) {
                     // Suggestions = other hosts' tags not yet added here, narrowed by the typed draft.
                     var tagFocused by remember(editHost) { mutableStateOf(false) }
+                    val tagFocus = remember { FocusRequester() }
                     val tagSugs = remember(allHosts, form.tags, tagDraft) { tagSuggestions(allHosts, form.tags, tagDraft) }
                     AnchoredDropdown(
                         expanded = tagFocused && tagSugs.isNotEmpty(),
@@ -279,7 +283,10 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         focusable = false, // don't steal focus from the tag input field
                         trigger = {
                             FlowRow(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
+                                // Tapping anywhere in the capsule (padding, gaps between pills) focuses the input.
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { tagFocus.requestFocus() }
+                                    .padding(horizontal = 10.dp, vertical = 7.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
@@ -290,6 +297,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                                     onValueChange = { v -> if (v.contains(',')) { form.addTag(v); tagDraft = "" } else tagDraft = v },
                                     onCommit = { form.addTag(tagDraft); tagDraft = "" },
                                     onFocusChanged = { tagFocused = it },
+                                    modifier = Modifier.focusRequester(tagFocus),
                                 )
                             }
                         },
@@ -799,7 +807,7 @@ private fun TestStatusLabel(status: ConnectionTestStatus) {
 
 /** Inline input for a new tag inside the Tags block: Enter ([onCommit]) or a comma commits the pill. */
 @Composable
-private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: () -> Unit, onFocusChanged: ((Boolean) -> Unit)? = null) {
+private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: () -> Unit, onFocusChanged: ((Boolean) -> Unit)? = null, modifier: Modifier = Modifier) {
     val fonts = LocalFonts.current
     val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = fonts.ui) }
     BasicTextField(
@@ -810,7 +818,7 @@ private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: (
         cursorBrush = SolidColor(D.cyan),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onCommit() }),
-        modifier = Modifier.widthIn(min = 72.dp).onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
+        modifier = modifier.widthIn(min = 72.dp).onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty()) Txt(stringResource(Res.string.conn_tag_add_placeholder), color = D.faint, size = 12.5.sp)

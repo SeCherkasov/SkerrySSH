@@ -840,26 +840,30 @@ private fun DialogField(
     }
     Column {
         Txt(label, color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
-        Box(
-            Modifier.fillMaxWidth().bringIntoViewRequester(requester).onSizeChanged { fieldSize = it }.clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
-                .then(if (singleLine) Modifier else Modifier.heightIn(min = 72.dp, max = 132.dp))
-                .padding(horizontal = 11.dp, vertical = 10.dp),
-        ) {
-            if (value.isEmpty()) Txt(placeholder, color = D.faint, size = if (singleLine) 13.sp else 11.sp, font = if (singleLine) ui else mono)
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth()
-                    .onFocusChanged { focused = it.isFocused }
-                    .then(if (singleLine) Modifier else Modifier.verticalScroll(rememberScrollState())),
-                singleLine = singleLine,
-                textStyle = style,
-                cursorBrush = SolidColor(D.cyan),
-                visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default, keyboardType = keyboardType ?: if (password) KeyboardType.Password else KeyboardType.Text),
-                keyboardActions = KeyboardActions(),
-            )
-        }
+        // Capsule/padding live in decorationBox so a click anywhere in the field (incl. the empty area
+        // below the caret in multi-line PEM/certificate fields) places the caret.
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+            singleLine = singleLine,
+            textStyle = style,
+            cursorBrush = SolidColor(D.cyan),
+            visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default, keyboardType = keyboardType ?: if (password) KeyboardType.Password else KeyboardType.Text),
+            keyboardActions = KeyboardActions(),
+            decorationBox = { inner ->
+                Box(
+                    Modifier.fillMaxWidth().bringIntoViewRequester(requester).onSizeChanged { fieldSize = it }.clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                        .then(if (singleLine) Modifier else Modifier.heightIn(min = 72.dp, max = 132.dp))
+                        .padding(horizontal = 11.dp, vertical = 10.dp)
+                        .then(if (singleLine) Modifier else Modifier.verticalScroll(rememberScrollState())),
+                ) {
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = if (singleLine) 13.sp else 11.sp, font = if (singleLine) ui else mono)
+                    inner()
+                }
+            },
+        )
     }
 }
 
