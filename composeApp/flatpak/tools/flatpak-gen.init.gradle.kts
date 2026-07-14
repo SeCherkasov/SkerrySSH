@@ -52,6 +52,32 @@ gradle.allprojects {
             // generator can't see — vendor it explicitly so createDistributable runs offline.
             dependencies.add("classpath", "org.jetbrains.compose:gradle-plugin-internal-jdk-version-probe:1.9.3")
         }
+        // pluginManagement resolves each plugin's classpath in isolation; the generator instead
+        // captures ONE merged buildscript classpath, where the Kotlin plugins' kotlin-stdlib (2.4.10)
+        // outranks the older kotlin-stdlib/-reflect that AGP 9.1.1 pulls (2.2.21). Those never land
+        // in the offline repo, so the sandbox — which does resolve AGP's marker on its own — fails on
+        // `Could not resolve kotlin-stdlib:2.2.21`. Resolve the AGP marker in an isolated project
+        // configuration so its Kotlin transitives are captured at AGP's real version (tracks any
+        // future AGP bump automatically — no hardcoded stdlib version). Included in the generator's
+        // whitelist below.
+        val agpProbe = configurations.create("flatpakAgpProbe") {
+            isCanBeResolved = true
+            isCanBeConsumed = false
+        }
+        dependencies.add(agpProbe.name, "com.android.application:com.android.application.gradle.plugin:9.1.1")
+        // The Kotlin Gradle plugin's Gradle-API variant (kotlin-gradle-plugin-idea's module metadata)
+        // depends on an OLDER kotlin-stdlib/-reflect (2.2.21 for KGP 2.4.10) than the compiler itself
+        // (2.4.10). The generator captures only the merged/highest version, but the sandbox resolves
+        // that variant on the root buildscript classpath and needs the exact 2.2.21 jars. Vendor them
+        // in their own isolated configuration so the merge can't collapse them to 2.4.10.
+        // NOTE: bump this alongside the `kotlin` catalog version — check the failure if the sandbox
+        // build reports a different `Could not resolve kotlin-stdlib:<x>` after a Kotlin upgrade.
+        val kgpApiProbe = configurations.create("flatpakKgpApiProbe") {
+            isCanBeResolved = true
+            isCanBeConsumed = false
+        }
+        dependencies.add(kgpApiProbe.name, "org.jetbrains.kotlin:kotlin-stdlib:2.2.21")
+        dependencies.add(kgpApiProbe.name, "org.jetbrains.kotlin:kotlin-reflect:2.2.21")
     }
     if (name in desktopModules) {
         apply<io.github.jwharm.flatpakgradlegenerator.FlatpakGradleGeneratorPlugin>()
@@ -77,6 +103,10 @@ gradle.allprojects {
                     "kotlinCompilerPluginClasspath",
                     "kotlinCompilerPluginClasspathDesktopMain", // KMP desktop compilation
                     "kotlinCompilerPluginClasspathMain",        // plain JVM (sync-wire)
+                    // Probe configs (sync-wire only) — capture the Kotlin transitives the merged
+                    // classpath hides: AGP's isolated deps and KGP's Gradle-API-variant stdlib/reflect.
+                    // A no-op on modules that don't define them; the generator resolves only what exists.
+                    "flatpakAgpProbe", "flatpakKgpApiProbe",
                 )
             )
         }
