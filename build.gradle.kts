@@ -9,7 +9,12 @@
 buildscript {
     if (System.getProperty("skerry.offlineRepo") == null) {
         repositories { gradlePluginPortal() }
-        dependencies { classpath("org.jetbrains.kotlinx:kover-gradle-plugin:" + libs.versions.kover.get()) }
+        dependencies {
+            classpath("org.jetbrains.kotlinx:kover-gradle-plugin:" + libs.versions.kover.get())
+            // Compose Hot Reload (dev-only live reload) rides the same online-only gate as Kover: a
+            // plugins {} entry would be resolved even with `apply false` and break the offline build.
+            classpath("org.jetbrains.compose.hot-reload:hot-reload-gradle-plugin:" + libs.versions.composeHotReload.get())
+        }
     }
 }
 
