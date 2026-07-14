@@ -15,7 +15,7 @@
     <string name="conn_field_authentication">Authentication</string>
     <string name="conn_field_group">Group</string>
     <string name="conn_field_tags">Tags</string>
-    <string name="conn_field_jump_host">Jump host (optional)</string>
+    <string name="conn_field_jump_host">Jump host</string>
     <string name="conn_field_keep_alive">Keep-alive</string>
     <string name="conn_field_ai_policy">AI policy for this connection</string>
     <string name="conn_field_ai_policy_short">AI policy</string>
@@ -81,4 +81,5 @@
     <string name="conn_test_checking">Testing connection…</string>
     <string name="conn_test_connected">Connected</string>
     <string name="conn_test_rtt_ms">%1$d ms</string>
+    <string name="conn_test_incomplete">Enter host, username and credentials to test</string>
 </resources>
