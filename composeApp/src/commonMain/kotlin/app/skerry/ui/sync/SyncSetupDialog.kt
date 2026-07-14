@@ -216,27 +216,31 @@ internal fun SyncField(
     onSubmit: () -> Unit = {},
     onChange: (String) -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Sym(icon, size = 16.sp, color = D.faint)
-        val ui = LocalFonts.current.ui
-        val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
-        Box(Modifier.fillMaxWidth()) {
-            if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
-            BasicTextField(
-                value = value,
-                onValueChange = onChange,
-                singleLine = true,
-                textStyle = style,
-                cursorBrush = SolidColor(D.cyan),
-                visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType),
-                keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }, onSend = { onSubmit() }),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
+    val ui = LocalFonts.current.ui
+    val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
+    // Capsule/padding/icon live in decorationBox so a click anywhere in the field places the caret.
+    BasicTextField(
+        value = value,
+        onValueChange = onChange,
+        singleLine = true,
+        textStyle = style,
+        cursorBrush = SolidColor(D.cyan),
+        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType),
+        keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }, onSend = { onSubmit() }),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Sym(icon, size = 16.sp, color = D.faint)
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
+                    inner()
+                }
+            }
+        },
+    )
 }

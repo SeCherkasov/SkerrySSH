@@ -3,6 +3,7 @@ package app.skerry.ui.snippet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -312,13 +313,17 @@ private fun SnipTagsField(
 ) {
     val mono = LocalFonts.current.mono
     var focused by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
     AnchoredDropdown(
         expanded = focused && suggestions.isNotEmpty(),
         onDismiss = { focused = false },
         focusable = false, // don't steal focus from the tag input field
         trigger = {
             FlowRow(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
+                // Tapping anywhere in the capsule (padding, gaps between pills) focuses the input.
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { focus.requestFocus() }
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -332,7 +337,7 @@ private fun SnipTagsField(
                     cursorBrush = SolidColor(D.cyan),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommit() }),
-                    modifier = Modifier.widthIn(min = 72.dp).onFocusChanged { focused = it.isFocused },
+                    modifier = Modifier.widthIn(min = 72.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (draft.isEmpty()) Txt(stringResource(Res.string.lib_snippets_add_tag), color = D.faint, size = 12.5.sp, font = mono)

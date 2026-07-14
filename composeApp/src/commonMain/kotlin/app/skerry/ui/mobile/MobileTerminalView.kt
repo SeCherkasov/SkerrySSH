@@ -39,7 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -587,27 +586,14 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
             Spacer(Modifier.height(18.dp))
             Txt(stringResource(Res.string.term_password_label), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
             Spacer(Modifier.height(6.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(D.bg)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
-                    .padding(horizontal = 14.dp, vertical = 13.dp),
-            ) {
-                if (password.isEmpty()) Txt("••••••••", color = D.faint, size = 15.sp)
-                BasicTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
-                    cursorBrush = SolidColor(D.cyan),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { submit() }, onDone = { submit() }),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            MobileFormInput(
+                value = password,
+                onValueChange = { password = it },
+                placeholder = "••••••••",
+                masked = true,
+                imeAction = ImeAction.Go,
+                onSubmit = { submit() },
+            )
             Spacer(Modifier.height(20.dp))
             Box(
                 Modifier

@@ -31,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -69,13 +71,17 @@ internal fun MobileTagsEditor(
     val fonts = LocalFonts.current
     val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 14.sp, fontFamily = fonts.ui) }
     var focused by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
     AnchoredDropdown(
         expanded = focused && suggestions.isNotEmpty(),
         onDismiss = { focused = false },
         focusable = false, // don't steal focus from the tag input field
         trigger = {
             FlowRow(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                // Tapping anywhere in the capsule (padding, gaps between pills) focuses the input.
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { focus.requestFocus() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
@@ -104,7 +110,7 @@ internal fun MobileTagsEditor(
                     cursorBrush = SolidColor(D.cyan),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommit() }),
-                    modifier = Modifier.widthIn(min = 90.dp).onFocusChanged { focused = it.isFocused },
+                    modifier = Modifier.widthIn(min = 90.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (draft.isEmpty()) Txt(placeholder, color = D.faint, size = 14.sp)

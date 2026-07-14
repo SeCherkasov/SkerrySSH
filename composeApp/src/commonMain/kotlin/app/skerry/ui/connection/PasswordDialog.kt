@@ -79,28 +79,33 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
             Txt(host.connectionSubtitle(), color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
 
             Txt(stringResource(Res.string.shell_password_caps), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("key", size = 16.sp, color = D.faint)
-                val ui = LocalFonts.current.ui
-                val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
-                Box(Modifier.fillMaxWidth()) {
-                    if (password.isEmpty()) Txt(stringResource(Res.string.shell_password_host_placeholder), color = D.faint, size = 13.sp)
-                    BasicTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        singleLine = true,
-                        textStyle = style,
-                        cursorBrush = SolidColor(D.cyan),
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
-                        keyboardActions = KeyboardActions(onDone = { submit() }),
-                    )
-                }
-            }
+            val ui = LocalFonts.current.ui
+            val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
+            // Capsule/padding/icon live in decorationBox so a click anywhere in the field places the caret.
+            BasicTextField(
+                value = password,
+                onValueChange = { password = it },
+                singleLine = true,
+                textStyle = style,
+                cursorBrush = SolidColor(D.cyan),
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
+                keyboardActions = KeyboardActions(onDone = { submit() }),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { inner ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Sym("key", size = 16.sp, color = D.faint)
+                        Box(Modifier.weight(1f)) {
+                            if (password.isEmpty()) Txt(stringResource(Res.string.shell_password_host_placeholder), color = D.faint, size = 13.sp)
+                            inner()
+                        }
+                    }
+                },
+            )
 
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
