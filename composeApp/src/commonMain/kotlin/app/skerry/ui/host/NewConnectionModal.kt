@@ -109,6 +109,7 @@ import app.skerry.ui.generated.resources.conn_subtitle_new
 import app.skerry.ui.generated.resources.conn_tag_add_placeholder
 import app.skerry.ui.generated.resources.conn_test
 import app.skerry.ui.generated.resources.conn_test_checking
+import app.skerry.ui.generated.resources.conn_test_incomplete
 import app.skerry.ui.generated.resources.conn_test_connected
 import app.skerry.ui.generated.resources.conn_test_rtt_ms
 import app.skerry.ui.generated.resources.conn_title_edit
@@ -190,6 +191,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
         findCredential = { id -> credentials?.find(id) },
     )
     val jumpErrorText = (testJump as? JumpChainResolution.Unavailable)?.let { jumpProblemText(it.problem) }
+    // Shown as the test result when "Test" is clicked with an incomplete form (no username/host/secret):
+    // the button stays tappable, so give feedback instead of silently doing nothing.
+    val incompleteTestMessage = stringResource(Res.string.conn_test_incomplete)
     ModalScrim(onDismiss = state::closeModal) {
         Column(
             Modifier
@@ -346,6 +350,10 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                                 is JumpChainResolution.Resolved ->
                                     tester.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim(), jump = testJump.jump), auth)
                             }
+                        } else {
+                            // Form isn't ready to dial (missing host/username/credentials): report it as a
+                            // failure so the click isn't a silent no-op.
+                            tester?.fail(incompleteTestMessage)
                         }
                     },
                     fg = if (canTest) D.text else D.faint,

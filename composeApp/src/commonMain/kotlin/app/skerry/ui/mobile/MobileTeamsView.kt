@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
@@ -63,6 +65,9 @@ import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
 import app.skerry.ui.generated.resources.lib_teams_create
+import app.skerry.ui.generated.resources.lib_teams_create_subtitle
+import app.skerry.ui.generated.resources.lib_teams_create_title
+import app.skerry.ui.generated.resources.lib_teams_name_placeholder
 import app.skerry.ui.generated.resources.lib_teams_decline
 import app.skerry.ui.generated.resources.lib_teams_delete
 import app.skerry.ui.generated.resources.lib_teams_delete_message
@@ -89,9 +94,10 @@ import app.skerry.ui.generated.resources.lib_teams_shared_hosts
 import app.skerry.ui.generated.resources.lib_teams_shared_snippets
 import app.skerry.ui.generated.resources.lib_teams_status_invited
 import app.skerry.ui.generated.resources.lib_teams_sync_now
+import app.skerry.ui.generated.resources.shell_cancel
+import app.skerry.ui.generated.resources.shell_create
 import app.skerry.ui.generated.resources.shell_route_team
 import app.skerry.ui.teams.AuditLogDialog
-import app.skerry.ui.teams.CreateTeamDialog
 import app.skerry.ui.teams.InviteMemberDialog
 import app.skerry.ui.teams.RoleBadge
 import app.skerry.ui.teams.RolePickerDialog
@@ -112,6 +118,55 @@ private sealed interface MobileTeamsConfirm {
     data class Leave(val teamId: String) : MobileTeamsConfirm
     data class Delete(val teamId: String) : MobileTeamsConfirm
     data class Remove(val teamId: String, val accountId: String) : MobileTeamsConfirm
+}
+
+/**
+ * Create team on the phone: the native centered dialog ([MobileCenteredDialog], parity with
+ * "New group") rather than the desktop [app.skerry.ui.teams.CreateTeamDialog] card — it rides above
+ * the keyboard (root safeDrawing) and lays out for a narrow screen. Single name field; the team key
+ * is generated locally (the caption notes it).
+ */
+@Composable
+private fun MobileCreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    val canCreate = name.isNotBlank()
+    val submit = { if (canCreate) onCreate(name.trim()) }
+    MobileCenteredDialog(onDismiss = onDismiss) {
+        Txt(stringResource(Res.string.lib_teams_create_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+        Txt(
+            stringResource(Res.string.lib_teams_create_subtitle),
+            color = D.dim,
+            size = 12.5.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(top = 6.dp, bottom = 16.dp),
+        )
+        MobileFormInput(name, { name = it }, stringResource(Res.string.lib_teams_name_placeholder), imeAction = ImeAction.Done, onSubmit = submit)
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+                    .padding(vertical = 13.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 15.sp, weight = FontWeight.Medium)
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (canCreate) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
+                    .padding(vertical = 13.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Txt(stringResource(Res.string.shell_create), color = D.ink, size = 15.sp, weight = FontWeight.Bold)
+            }
+        }
+    }
 }
 
 /**
@@ -156,6 +211,10 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
 
     val selected = teams.firstOrNull { it.id == selectedId } ?: teams.firstOrNull()
 
+    // Box, not a bare Column: the dialogs below are plain in-composition overlays (ModalScrim /
+    // MobileCenteredDialog fill their parent), so they must be siblings in a full-size Box — as a
+    // Column's trailing children they'd get whatever height the scroll body left (≈0) and collapse.
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
         error?.let { Txt(teamsFailureText(it), color = D.sunset, size = 11.5.sp, modifier = Modifier.padding(vertical = 6.dp)) }
         Row(
@@ -193,7 +252,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     }
 
     if (showCreate) {
-        CreateTeamDialog(
+        MobileCreateTeamDialog(
             onDismiss = { showCreate = false },
             onCreate = { name -> showCreate = false; scope.launch { tc.createTeam(name); tick++ } },
         )
@@ -257,6 +316,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
             },
             onDismiss = { confirm = null },
         )
+    }
     }
 }
 
