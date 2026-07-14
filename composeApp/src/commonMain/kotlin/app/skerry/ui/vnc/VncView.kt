@@ -38,6 +38,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboard
@@ -92,9 +93,17 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
     val frame = screen.frame
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val focus = remember { FocusRequester() }
+    // Tracks whether the mouse is over the drawn image rather than the letterbox around it — the
+    // pointer loop below sets it from the same geometry the draw uses. See [shouldHideLocalCursor].
+    var pointerOverImage by remember { mutableStateOf(false) }
 
     // clipToBounds: a zoomed framebuffer must never draw outside its own area onto the app chrome.
     var mod = Modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged { canvasSize = it }
+    // The server paints the remote cursor into the framebuffer, so the OS pointer on top would be a
+    // second cursor — hide it while we're driving the remote one. See [shouldHideLocalCursor].
+    if (shouldHideLocalCursor(interactive, screen.viewOnly, pointerOverImage)) {
+        hiddenPointerIcon()?.let { mod = mod.pointerHoverIcon(it) }
+    }
     if (interactive) {
         mod = mod
             .pointerInput(screen) {
@@ -102,12 +111,22 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull() ?: continue
+                        // Leaving the surface restores the OS pointer explicitly (as TerminalScreen
+                        // does): the exit coordinate isn't guaranteed to land outside the image, and
+                        // inferring it from geometry alone could strand the cursor hidden app-wide.
+                        if (event.type == PointerEventType.Exit) {
+                            pointerOverImage = false
+                            continue
+                        }
                         val geom = fitGeometry(
                             canvasSize.width.toFloat(), canvasSize.height.toFloat(),
                             screen.desktopSize.width, screen.desktopSize.height,
                             screen.userScale, screen.userOffset.x, screen.userOffset.y,
                         )
                         val fb = geom.toFramebuffer(change.position.x, change.position.y)
+                        // Set before the null-check below: leaving the image (onto the letterbox) is
+                        // exactly when the local pointer has to come back.
+                        pointerOverImage = fb != null
                         if (fb == null) { continue }
                         if (event.type == PointerEventType.Scroll) {
                             // Wheel goes to the server (scroll inside the remote desktop). No local
@@ -216,8 +235,10 @@ private fun VncGraphicsBar(screen: VncScreenState) {
                         VncMenuRow(q.name, selected = screen.quality == q) { screen.applyQuality(q) }
                     }
                     HLine(modifier = Modifier.padding(vertical = 4.dp))
+                    // No "Reset zoom" here: desktop has no local zoom (the wheel scrolls the remote
+                    // desktop instead), so the fit is always 1:1 and the control would be a no-op.
+                    // Mobile keeps it — pinch-zoom is real there.
                     VncMenuRow("View only", selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
-                    VncMenuRow("Reset zoom", selected = false, icon = "fit_screen") { screen.resetZoom(); open = false }
                 }
             },
         )
