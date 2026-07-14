@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** A fake session with a controllable update flow and captured input. */
-class FakeVncSession(
+open class FakeVncSession(
     override val serverName: String = "fake-desktop",
     override val framebuffer: VncFramebuffer = VncFramebuffer(2, 1),
     override val updates: Flow<VncUpdate> = MutableSharedFlow(),
@@ -27,13 +27,16 @@ class FakeVncSession(
     val pointers = mutableListOf<VncPointerEvent>()
     val keys = mutableListOf<Pair<Long, Boolean>>()
     val cutText = mutableListOf<String>()
+    val localCursor = mutableListOf<Boolean>()
+    val fullUpdates = mutableListOf<Boolean>()
     var closed = false
 
     override suspend fun sendPointer(event: VncPointerEvent) { pointers += event }
     override suspend fun sendKey(keySym: Long, down: Boolean) { keys += keySym to down }
     override suspend fun sendClientCutText(text: String) { cutText += text }
-    override suspend fun requestUpdate(incremental: Boolean) {}
+    override suspend fun requestUpdate(incremental: Boolean) { fullUpdates += incremental }
     override suspend fun setQuality(quality: VncQuality) {}
+    override suspend fun setLocalCursor(enabled: Boolean) { localCursor += enabled }
     override suspend fun close() { closed = true }
 }
 
