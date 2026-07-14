@@ -41,16 +41,16 @@ gradle.allprojects {
             fun marker(id: String, version: String) =
                 dependencies.add("classpath", "$id:$id.gradle.plugin:$version")
             marker("org.gradle.toolchains.foojay-resolver-convention", "1.0.0")
-            marker("org.jetbrains.kotlin.multiplatform", "2.3.21")
-            marker("org.jetbrains.kotlin.jvm", "2.3.21")
-            marker("org.jetbrains.kotlin.plugin.compose", "2.3.21")
-            marker("org.jetbrains.kotlin.plugin.serialization", "2.3.21")
-            marker("org.jetbrains.compose", "1.11.1")
-            marker("com.android.application", "9.0.1")
-            marker("com.android.kotlin.multiplatform.library", "9.0.1")
+            marker("org.jetbrains.kotlin.multiplatform", "2.4.0")
+            marker("org.jetbrains.kotlin.jvm", "2.4.0")
+            marker("org.jetbrains.kotlin.plugin.compose", "2.4.0")
+            marker("org.jetbrains.kotlin.plugin.serialization", "2.4.0")
+            marker("org.jetbrains.compose", "1.9.3")
+            marker("com.android.application", "9.1.1")
+            marker("com.android.kotlin.multiplatform.library", "9.1.1")
             // Resolved by the Compose plugin at task-execution time via a detached configuration the
             // generator can't see — vendor it explicitly so createDistributable runs offline.
-            dependencies.add("classpath", "org.jetbrains.compose:gradle-plugin-internal-jdk-version-probe:1.11.1")
+            dependencies.add("classpath", "org.jetbrains.compose:gradle-plugin-internal-jdk-version-probe:1.9.3")
         }
     }
     if (name in desktopModules) {

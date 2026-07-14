@@ -22,3 +22,7 @@ updates:
     groups:
       gradle-dependencies:
         patterns: ["*"]
+    # CMP + material3 are a hand-managed matched pair, frozen at the last CMP with a stable material3.
+    # Newer stable CMP only pairs with -alpha material3. Revisit by hand if a stable material3 > 1.9.0 ships.
+    ignore:
+      - dependency-name: "org.jetbrains.compose*"
