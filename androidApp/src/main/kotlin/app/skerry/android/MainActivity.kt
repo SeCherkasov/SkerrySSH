@@ -478,6 +478,7 @@ class MainActivity : FragmentActivity() {
         )
         return AppDependencies(
             transport = transport,
+            vncTransport = app.skerry.shared.vnc.VncTcpTransport(),
             hosts = hosts,
             vault = vault,
             credentials = credentials,

@@ -57,6 +57,7 @@ import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
+import app.skerry.shared.ssh.isVnc
 import app.skerry.ui.connection.ConnectionTestController
 import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.JumpChainResolution
@@ -104,7 +105,9 @@ import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_mosh
 import app.skerry.ui.generated.resources.conn_protocol_ssh
 import app.skerry.ui.generated.resources.conn_protocol_telnet
+import app.skerry.ui.generated.resources.conn_protocol_vnc
 import app.skerry.ui.generated.resources.conn_telnet_plaintext_warning
+import app.skerry.ui.generated.resources.conn_vnc_plaintext_warning
 import app.skerry.ui.generated.resources.conn_save
 import app.skerry.ui.generated.resources.conn_save_changes
 import app.skerry.ui.generated.resources.conn_subtitle_edit
@@ -233,6 +236,13 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         Txt(stringResource(Res.string.conn_telnet_plaintext_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
                     }
                 }
+                // VNC/RFB has no transport encryption either — same heads-up as Telnet.
+                if (form.connectionType == ConnectionType.VNC) {
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Sym("warning", size = 14.sp, color = D.sunset)
+                        Txt(stringResource(Res.string.conn_vnc_plaintext_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
+                    }
+                }
                 Spacer14()
                 val serial = form.connectionType == ConnectionType.SERIAL
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -257,6 +267,11 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     Field(stringResource(Res.string.conn_field_username)) { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form) }
+                }
+                // VNC authenticates with a password only — no username, no private key (allowKey = false).
+                if (form.connectionType.isVnc) {
+                    Spacer14()
+                    Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form, allowKey = false) }
                 }
                 Spacer14()
                 Field(stringResource(Res.string.conn_field_group)) { GroupPicker(form, allHosts) }
@@ -311,8 +326,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     )
                 }
                 // AI policy selection is visible when AI is actually available (live controller or feature flag).
-                // Written directly into the form -> host profile (Host.aiPolicy).
-                if (LocalFeatures.current.ai || LocalAi.current != null) {
+                // Written directly into the form -> host profile (Host.aiPolicy). Not for VNC: a remote
+                // desktop has no shell/terminal for AI to act on.
+                if (!form.connectionType.isVnc && (LocalFeatures.current.ai || LocalAi.current != null)) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_ai_policy)) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -514,6 +530,7 @@ private fun ProtocolPicker(form: NewConnectionFormState) {
         ProtocolSegment(stringResource(Res.string.conn_protocol_mosh), "bolt", form.connectionType == ConnectionType.MOSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.MOSH) }
         ProtocolSegment(stringResource(Res.string.conn_protocol_telnet), "terminal", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
         ProtocolSegment(stringResource(Res.string.conn_protocol_serial), "cable", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
+        ProtocolSegment(stringResource(Res.string.conn_protocol_vnc), "desktop_windows", form.connectionType == ConnectionType.VNC, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.VNC) }
     }
 }
 
@@ -536,7 +553,7 @@ private fun ProtocolSegment(label: String, icon: String, selected: Boolean, modi
  * live [LocalCredentials] (behind the vault gate); in the mock path only the no-vault options remain.
  */
 @Composable
-private fun AuthPicker(form: NewConnectionFormState) {
+private fun AuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
     val credentials = LocalCredentials.current
     val saved = credentials?.credentials ?: emptyList()
     var menuOpen by remember { mutableStateOf(false) }
@@ -569,8 +586,11 @@ private fun AuthPicker(form: NewConnectionFormState) {
                     AuthOption("password", stringResource(Res.string.conn_auth_password_option), stringResource(Res.string.conn_auth_password_desc), form.authMode == AuthMode.NEW_PASSWORD) {
                         form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false
                     }
-                    AuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
-                        form.authMode = AuthMode.NEW_KEY; menuOpen = false
+                    // VNC has no key auth (allowKey = false): the RFB VNC-Auth scheme is password-only.
+                    if (allowKey) {
+                        AuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
+                            form.authMode = AuthMode.NEW_KEY; menuOpen = false
+                        }
                     }
                     if (saved.isNotEmpty()) {
                         HLine(modifier = Modifier.padding(vertical = 4.dp))

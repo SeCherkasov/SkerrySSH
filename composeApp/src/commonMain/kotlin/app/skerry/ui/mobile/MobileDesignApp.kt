@@ -25,6 +25,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.ssh.usesSshAuth
+import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.ai.AiSettingsStore
 import app.skerry.ui.ai.aiProviderFactory
 import app.skerry.ui.AppDependencies
@@ -38,6 +39,7 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
+import app.skerry.ui.connection.toVncAuth
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.session.SessionsController
@@ -129,6 +131,7 @@ fun MobileDesignApp(
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
+                vncControllerFactory = deps.vncTransport?.let { vt -> { app.skerry.ui.vnc.VncSessionController(vt, scope) } },
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
@@ -327,6 +330,8 @@ private fun MobileChrome(
     // Host with no bound secret → ask for a password via a sheet before connecting. Along with the
     // host, remember the destination (terminal/files) so entering the password navigates there.
     var pending by remember { mutableStateOf<PendingConnect?>(null) }
+    // VNC "ask every time": a host with no stored password prompts before opening the framebuffer screen.
+    var pendingVnc by remember { mutableStateOf<Host?>(null) }
 
     // ProxyJump chain resolution failed for the tapped host — show a notice instead of connecting
     // (never silently direct). Desktop parity ([JumpErrorDialog]).
@@ -340,29 +345,41 @@ private fun MobileChrome(
     // including the password prompt, diverging only in the final navigation [navigateAfterConnect]).
     val connect = remember(sessions, credentials, hostManager, state) {
         { host: Host, dest: MobileConnectDest ->
-            val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
-            when (mobileConnectAction(existing?.controller?.uiState)) {
-                MobileConnectAction.Resume -> {
-                    existing?.let { sessions.activate(it.id) }
-                    navigateAfterConnect(state, dest)
+            if (host.connectionType.isVnc) {
+                // VNC opens a framebuffer screen (not a terminal). A stored password is used directly;
+                // "ask every time" (no bound secret) prompts for one first.
+                val cred = credentials?.find(host.credentialId)
+                if (cred != null) {
+                    sessions?.openVnc(host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth())
+                    if (sessions != null) state.push(MobileRoute.Vnc)
+                } else {
+                    pendingVnc = host
                 }
-                MobileConnectAction.OpenFresh -> {
-                    existing?.let { sessions.close(it.id) }
-                    // ProxyJump chain first — resolved before the password prompt so a broken
-                    // chain surfaces immediately, not after the user typed a password.
-                    when (val chain = resolveJumpChain(host, { id -> hostManager?.find(id) }, { id -> credentials?.find(id) })) {
-                        is JumpChainResolution.Unavailable -> jumpProblem = chain.problem
-                        is JumpChainResolution.Resolved -> {
-                            // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
-                            val credential = credentials?.find(host.credentialId)
-                            when {
-                                // Telnet/Serial have no auth — connect immediately, no password
-                                // prompt. SSH and Mosh resolve a credential or ask for a password.
-                                !host.connectionType.usesSshAuth ->
-                                    openMobileSession(sessions, state, host, SshAuth.Password(""), chain.jump, dest)
-                                credential != null ->
-                                    openMobileSession(sessions, state, host, credential.toSshAuth(), chain.jump, dest)
-                                else -> pending = PendingConnect(host, dest, chain.jump)
+            } else {
+                val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
+                when (mobileConnectAction(existing?.controller?.uiState)) {
+                    MobileConnectAction.Resume -> {
+                        existing?.let { sessions.activate(it.id) }
+                        navigateAfterConnect(state, dest)
+                    }
+                    MobileConnectAction.OpenFresh -> {
+                        existing?.let { sessions.close(it.id) }
+                        // ProxyJump chain first — resolved before the password prompt so a broken
+                        // chain surfaces immediately, not after the user typed a password.
+                        when (val chain = resolveJumpChain(host, { id -> hostManager?.find(id) }, { id -> credentials?.find(id) })) {
+                            is JumpChainResolution.Unavailable -> jumpProblem = chain.problem
+                            is JumpChainResolution.Resolved -> {
+                                // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
+                                val credential = credentials?.find(host.credentialId)
+                                when {
+                                    // Telnet/Serial have no auth — connect immediately, no password
+                                    // prompt. SSH and Mosh resolve a credential or ask for a password.
+                                    !host.connectionType.usesSshAuth ->
+                                        openMobileSession(sessions, state, host, SshAuth.Password(""), chain.jump, dest)
+                                    credential != null ->
+                                        openMobileSession(sessions, state, host, credential.toSshAuth(), chain.jump, dest)
+                                    else -> pending = PendingConnect(host, dest, chain.jump)
+                                }
                             }
                         }
                     }
@@ -442,6 +459,19 @@ private fun MobileChrome(
                     onConnect = { pw -> pending = null; openMobileSession(sessions, state, host, SshAuth.Password(pw), jump, dest) },
                 )
             }
+            // VNC password prompt ("ask every time"): empty = server needs no password (None), else VNC-Auth.
+            pendingVnc?.let { host ->
+                MobilePasswordSheet(
+                    host = host,
+                    onDismiss = { pendingVnc = null },
+                    onConnect = { pw ->
+                        pendingVnc = null
+                        val auth = if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw)
+                        sessions?.openVnc(host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth)
+                        if (sessions != null) state.push(MobileRoute.Vnc)
+                    },
+                )
+            }
             // Broken ProxyJump chain for the tapped host: explain instead of connecting.
             jumpProblem?.let { problem ->
                 JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
@@ -499,6 +529,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
     when (route) {
         MobileRoute.HostDetail -> MobileHostDetailScreen(state)
         MobileRoute.Terminal -> MobileTerminalScreen(state)
+        MobileRoute.Vnc -> MobileVncScreen(state)
         MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
         MobileRoute.Ports -> MobilePortsScreen(state)
         MobileRoute.Known -> MobileKnownScreen(state)

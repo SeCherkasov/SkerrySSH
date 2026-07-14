@@ -1,6 +1,7 @@
 package app.skerry.ui
 
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vnc.VncTransport
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.ui.ai.LocalAiDeps
 import app.skerry.shared.vault.SshCertificateInspector
@@ -25,6 +26,8 @@ import app.skerry.ui.tunnel.TunnelManager
  */
 data class AppDependencies(
     val transport: SshTransport? = null,
+    /** VNC/RFB transport for remote-desktop tabs; `null` if VNC isn't wired up on this platform. */
+    val vncTransport: VncTransport? = null,
     val hosts: HostManagerController? = null,
     val vault: Vault? = null,
     /** Manager for keychain secrets (keys/passwords/certificates); `null` if not wired up. */

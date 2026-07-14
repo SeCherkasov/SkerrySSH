@@ -6,6 +6,7 @@ import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.shared.vnc.VncAuth
 
 /**
  * Pure helpers wiring a saved host profile to a live session. Kept separate from UI so the
@@ -37,6 +38,16 @@ fun Credential.toSshAuth(): SshAuth = when (val s = secret) {
     is CredentialSecret.Password -> SshAuth.Password(s.password)
     is CredentialSecret.PrivateKey -> SshAuth.PublicKey(s.privateKeyPem, s.passphrase)
     is CredentialSecret.Certificate -> SshAuth.Certificate(s.privateKeyPem, s.certificate, s.passphrase)
+}
+
+/**
+ * Keychain secret → VNC auth. VNC authenticates with a password only (RFB VNC-Auth), so a stored
+ * password maps to [VncAuth.Password]; a key/certificate secret is meaningless for VNC and falls
+ * back to [VncAuth.None] (the server may still accept a no-auth connection).
+ */
+fun Credential.toVncAuth(): VncAuth = when (val s = secret) {
+    is CredentialSecret.Password -> VncAuth.Password(s.password)
+    else -> VncAuth.None
 }
 
 /**
