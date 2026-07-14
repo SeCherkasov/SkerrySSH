@@ -729,6 +729,13 @@
   },
   {
     "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/com/android/application/com.android.application.gradle.plugin/9.1.1/com.android.application.gradle.plugin-9.1.1.pom",
+    "sha512": "687953bee518f8f08eea5f7d06c419df89bbd45356f03861a312c1678034f10cc84ca22bc9146a6399a25f3a4be088b217d174397ab9cdbdbb3aa1ef007ace88",
+    "dest": "offline-repository/com/android/application/com.android.application.gradle.plugin/9.1.1",
+    "dest-filename": "com.android.application.gradle.plugin-9.1.1.pom"
+  },
+  {
+    "type": "file",
     "url": "https://dl.google.com/dl/android/maven2/com/android/databinding/baseLibrary/9.1.1/baseLibrary-9.1.1.jar",
     "sha512": "c1f350e35e37c065c887b52a4720186f96dfe87436791a61ea6424c094edd0d41435925f26b8433388608e197fe1c82a9596be0d366f28f3d3373f2c8bd2693a",
     "dest": "offline-repository/com/android/databinding/baseLibrary/9.1.1",
@@ -845,6 +852,13 @@
     "sha512": "1678213c3659abc59f609d1a7c0e383d51306ffd56467314c41c14784355ccc69c72592a3fcfe2807c6ad30d856c55b5f800a78ac9960e7bfa69c786011b792c",
     "dest": "offline-repository/com/android/tools/build/aapt2-proto/9.1.1-14792394",
     "dest-filename": "aapt2-proto-9.1.1-14792394.module"
+  },
+  {
+    "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/com/android/tools/build/aapt2-proto/9.1.1-14792394/aapt2-proto-9.1.1-14792394.pom",
+    "sha512": "ca93a5e42dcb6fdc7d7f6a4334428caa7b0c0d5819a30c5b9c49e17a42fd881c3931397057d67c456b2122f9139562e3ff0604e20c215b3a5b395073bca4312a",
+    "dest": "offline-repository/com/android/tools/build/aapt2-proto/9.1.1-14792394",
+    "dest-filename": "aapt2-proto-9.1.1-14792394.pom"
   },
   {
     "type": "file",
