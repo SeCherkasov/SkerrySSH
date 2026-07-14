@@ -30,7 +30,9 @@ android {
     }
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // LICENSE.md is shipped in every BouncyCastle jar (bcprov/bcpkix/bcutil) since 1.85;
+            // three identical copies would collide on merge, so drop the license notices.
+            excludes += "/META-INF/{AL2.0,LGPL2.1,LICENSE.md}"
         }
         // .so files are page-mapped straight from the uncompressed APK (Llamatik's 16KB alignment is kept),
         // extractNativeLibs is not needed.
