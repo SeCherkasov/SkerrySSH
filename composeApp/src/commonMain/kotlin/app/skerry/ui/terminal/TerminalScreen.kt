@@ -1,5 +1,8 @@
 package app.skerry.ui.terminal
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -102,6 +105,7 @@ import app.skerry.shared.terminal.UnderlineStyle
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.ui.design.D
 import app.skerry.ui.design.ModalPresence
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
@@ -114,6 +118,7 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.terminal_copied
 import app.skerry.ui.generated.resources.terminal_reverse_search_no_matches
 import app.skerry.ui.generated.resources.terminal_reverse_search_prompt
 import app.skerry.ui.theme.SkerryColors
@@ -206,6 +211,11 @@ fun TerminalScreen(
     // hidden field is a no-op (focus remains after hiding, so the keyboard would not reappear).
     val keyboard = LocalSoftwareKeyboardController.current
     var layoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    // Bumped every time a selection is actually copied to the clipboard (right click / Ctrl+Shift+C /
+    // touch "Copy" menu) — drives the transient "Copied" banner overlay below. Starts at 0 (no banner
+    // on first composition); each increment re-triggers the banner's show-then-hide timer.
+    var copiedNonce by remember(state) { mutableStateOf(0) }
 
     // Ctrl+hover over a link shows the hand cursor (VS Code style). hoverPos is the last cell the
     // pointer was over (null when it left the terminal); linkHover drives the cursor icon and is
@@ -437,6 +447,7 @@ fun TerminalScreen(
     // copy/paste for the rest of the session. Rethrow cancellation, swallow the rest (clipboard unavailable).
     fun copySelection() {
         val text = state.selectedText() ?: return
+        copiedNonce++ // show the transient "Copied" banner (only when something was actually copied)
         clipboardScope.launch {
             try {
                 // Wayland: wl-copy (paired with paste via wl-paste); otherwise the standard Compose clipboard.
@@ -1094,6 +1105,38 @@ fun TerminalScreen(
               ),
           )
       }
+
+      // Transient "Copied" confirmation over the top of the terminal (right-click / Ctrl+Shift+C /
+      // touch "Copy"). Same overlay slot and visual language as the DisconnectedBanner in TerminalView.
+      CopiedBanner(copiedNonce, Modifier.align(Alignment.TopCenter))
+    }
+}
+
+/**
+ * Brief, self-dismissing "Copied" banner. [nonce] is bumped on each successful copy; 0 means "never
+ * copied yet / reset on tab switch" and hides it ([shouldShowCopiedFlash]). Each bump fades the banner
+ * in and hides it after [COPIED_BANNER_MS]; a re-key to 0 mid-show hides it immediately (no stuck pill).
+ */
+@Composable
+private fun CopiedBanner(nonce: Int, modifier: Modifier = Modifier) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(nonce) {
+        if (!shouldShowCopiedFlash(nonce)) {
+            visible = false
+            return@LaunchedEffect
+        }
+        visible = true
+        delay(COPIED_BANNER_MS)
+        visible = false
+    }
+    AnimatedVisibility(visible, modifier = modifier, enter = fadeIn(), exit = fadeOut()) {
+        TerminalOverlayBanner(
+            icon = "content_copy",
+            text = stringResource(Res.string.terminal_copied),
+            accent = D.cyan,
+            background = D.surfaceDeep.copy(alpha = 0.8f),
+            contentColor = D.cyanBright,
+        )
     }
 }
 
