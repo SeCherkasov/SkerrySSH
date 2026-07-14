@@ -40,6 +40,9 @@
     <string name="terminal_reverse_search_prompt">(reverse-i-search)`%1$s`:  ↑↓ выбрать · Enter вставить · Del убрать · Esc</string>
     <string name="terminal_reverse_search_no_matches">— нет совпадений —</string>
 
+    <!-- Transient "copied to clipboard" banner shown after copying a terminal selection. -->
+    <string name="terminal_copied">Скопировано</string>
+
     <!-- Экран сканирования QR (mobile, связывание устройств). -->
     <string name="qr_scan_hint">Наведите камеру на QR-код, показанный на другом устройстве.</string>
     <string name="qr_permission_needed">Для сканирования кода связывания нужен доступ к камере.</string>

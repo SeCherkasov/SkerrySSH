@@ -238,7 +238,6 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
  */
 @Composable
 private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: Modifier = Modifier) {
-    val mono = LocalFonts.current.mono
     val color = when {
         state.cleanExit -> D.dim
         state.reconnecting -> D.amber
@@ -254,19 +253,7 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
         state.reconnecting -> stringResource(Res.string.term_reconnecting, state.attempt)
         else -> stringResource(Res.string.term_connection_lost)
     }
-    Row(
-        modifier
-            .padding(top = 10.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xCC1A0E0E))
-            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Sym(icon, size = 14.sp, color = color)
-        Txt(text, color = color, size = 11.5.sp, font = mono)
-    }
+    TerminalOverlayBanner(icon = icon, text = text, accent = color, background = Color(0xCC1A0E0E), modifier = modifier)
 }
 
 /** Centered message over the terminal background (no session / connecting / error). */
