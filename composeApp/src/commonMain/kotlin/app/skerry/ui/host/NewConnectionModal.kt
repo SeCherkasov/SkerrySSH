@@ -120,6 +120,7 @@ import app.skerry.ui.generated.resources.conn_test_connected
 import app.skerry.ui.generated.resources.conn_test_rtt_ms
 import app.skerry.ui.generated.resources.conn_title_edit
 import app.skerry.ui.generated.resources.conn_title_new
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.D
@@ -526,13 +527,25 @@ private fun ProtocolPicker(form: NewConnectionFormState) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        ProtocolSegment(stringResource(Res.string.conn_protocol_ssh), "lan", form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
-        ProtocolSegment(stringResource(Res.string.conn_protocol_mosh), "bolt", form.connectionType == ConnectionType.MOSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.MOSH) }
-        ProtocolSegment(stringResource(Res.string.conn_protocol_telnet), "terminal", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
-        ProtocolSegment(stringResource(Res.string.conn_protocol_serial), "cable", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
-        ProtocolSegment(stringResource(Res.string.conn_protocol_vnc), "desktop_windows", form.connectionType == ConnectionType.VNC, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.VNC) }
+        // Driven off ConnectionType.entries: a new protocol gets its segment for free, and the
+        // exhaustive `when`s behind labelRes/icon fail the build until it's given a label and an icon.
+        ConnectionType.entries.forEach { type ->
+            ProtocolSegment(stringResource(type.labelRes), type.icon, form.connectionType == type, Modifier.weight(1f)) {
+                form.chooseConnectionType(type)
+            }
+        }
     }
 }
+
+/** Localized protocol name for the picker segment; the icon counterpart is [ConnectionType.icon]. */
+private val ConnectionType.labelRes: StringResource
+    get() = when (this) {
+        ConnectionType.SSH -> Res.string.conn_protocol_ssh
+        ConnectionType.MOSH -> Res.string.conn_protocol_mosh
+        ConnectionType.TELNET -> Res.string.conn_protocol_telnet
+        ConnectionType.SERIAL -> Res.string.conn_protocol_serial
+        ConnectionType.VNC -> Res.string.conn_protocol_vnc
+    }
 
 /** One pill of the segmented protocol picker: the active one sits on a cyan backing. */
 @Composable

@@ -67,6 +67,7 @@ import app.skerry.ui.host.folderHeaderAnchor
 import app.skerry.ui.host.folderRangeAnchor
 import app.skerry.ui.host.hostBoundsAnchor
 import app.skerry.ui.host.hostChipLabel
+import app.skerry.ui.host.icon
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.host.draggableFolderHeader
 import app.skerry.ui.host.draggableHostRow
@@ -399,8 +400,9 @@ private fun MobileFolderHeader(
 }
 
 /**
- * Host row: icon tile + name + monospace `user@address` + status dot. The `dns` tile is generic
- * (no per-host icon/AI policy); the dot color is live, taken from the host's latest session status
+ * Host row: icon tile + name + monospace `user@address` + status dot. The tile carries the
+ * profile's protocol ([app.skerry.ui.host.icon], same symbol as the desktop sidebar and the
+ * connection form); the dot color is live, taken from the host's latest session status
  * ([SessionsController.statusFor]) via the desktop-shared [sessionDotColor] (connected → green,
  * connecting → amber, error/dropped → sunset, no session → dim). Reading uiState inside the
  * composition subscribes the row to status changes so the dot updates on connect.
@@ -427,7 +429,7 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
             Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(D.cyan.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center,
         ) {
-            Sym("dns", size = 21.sp, color = D.cyanBright)
+            Sym(host.connectionType.icon, size = 21.sp, color = D.cyanBright)
         }
         Column(Modifier.weight(1f)) {
             Txt(host.label, color = D.text, size = 15.sp, weight = FontWeight.SemiBold, maxLines = 1)
