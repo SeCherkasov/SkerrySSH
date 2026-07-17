@@ -36,6 +36,9 @@ sealed interface BiometricResult<out T> {
     /** Biometric match failed / sensor error — fall back to the master password. */
     data object Failed : BiometricResult<Nothing>
 
+    /** Sensor locked out after too many attempts — tell the user to wait, fall back to the password. */
+    data object LockedOut : BiometricResult<Nothing>
+
     /**
      * `bioKey` was irreversibly invalidated by the platform (biometric enrollment changed).
      * Orchestration must delete the `vault.bio` artifact and require the master password.

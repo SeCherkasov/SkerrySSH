@@ -35,6 +35,9 @@ sealed interface BiometricUnlockResult {
     /** Biometric failure — password form. */
     data object Failed : BiometricUnlockResult
 
+    /** Sensor temporarily locked out (too many attempts) — password form, tell the user to wait. */
+    data object LockedOut : BiometricUnlockResult
+
     /**
      * `bioKey` invalidated (new fingerprint/face). Biometrics is disabled (artifact removed) —
      * the user must sign in with the master password and re-enable biometrics if desired.
@@ -116,7 +119,8 @@ class VaultBiometrics(
                     BiometricEnableResult.Enabled
                 }
                 BiometricResult.Cancelled -> BiometricEnableResult.Cancelled
-                BiometricResult.Failed -> BiometricEnableResult.Failed
+                // Lockout during enable isn't worth a dedicated outcome — retry once the sensor frees up.
+                BiometricResult.Failed, BiometricResult.LockedOut -> BiometricEnableResult.Failed
                 BiometricResult.KeyInvalidated -> {
                     keyStore.deleteKey(alias) // freshly created key already invalidated — don't leave it
                     BiometricEnableResult.Failed
@@ -158,6 +162,7 @@ class VaultBiometrics(
         BioAuth.Unavailable -> BiometricUnlockResult.Unavailable
         BioAuth.Cancelled -> BiometricUnlockResult.Cancelled
         BioAuth.Failed -> BiometricUnlockResult.Failed
+        BioAuth.LockedOut -> BiometricUnlockResult.LockedOut
         BioAuth.Invalidated -> BiometricUnlockResult.Invalidated
     }
 
@@ -178,7 +183,8 @@ class VaultBiometrics(
         BioAuth.NotEnabled -> BiometricConfirmResult.NotEnabled
         BioAuth.Unavailable -> BiometricConfirmResult.Unavailable
         BioAuth.Cancelled -> BiometricConfirmResult.Cancelled
-        BioAuth.Failed -> BiometricConfirmResult.Failed
+        // The dedicated lockout message is only for the unlock screen; here a plain failure is enough.
+        BioAuth.Failed, BioAuth.LockedOut -> BiometricConfirmResult.Failed
         BioAuth.Invalidated -> BiometricConfirmResult.Invalidated
     }
 
@@ -210,6 +216,7 @@ class VaultBiometrics(
             is BiometricResult.Success -> BioAuth.Success(unwrapped.value)
             BiometricResult.Cancelled -> BioAuth.Cancelled
             BiometricResult.Failed -> BioAuth.Failed
+            BiometricResult.LockedOut -> BioAuth.LockedOut
             BiometricResult.KeyInvalidated -> {
                 disable() // biometrics compromised by an enrollment change — disable and require password
                 BioAuth.Invalidated
@@ -224,6 +231,7 @@ class VaultBiometrics(
         data object Unavailable : BioAuth
         data object Cancelled : BioAuth
         data object Failed : BioAuth
+        data object LockedOut : BioAuth
         data object Invalidated : BioAuth
     }
 

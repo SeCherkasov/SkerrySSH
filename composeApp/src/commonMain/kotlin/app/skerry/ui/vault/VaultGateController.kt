@@ -103,6 +103,12 @@ enum class VaultGateError {
 
     /** Biometrics reset (new fingerprint/face) — it's disabled, the master password is needed. */
     BiometricReset,
+
+    /** Biometric unlock didn't succeed (hardware error / OEM quirk) — fall back to the password. */
+    BiometricFailed,
+
+    /** Sensor temporarily locked after too many attempts — wait and use the master password meanwhile. */
+    BiometricLockedOut,
 }
 
 /**
@@ -352,8 +358,8 @@ class VaultGateController(
 
     /**
      * Unlock with biometrics. Success → [VaultGateState.Unlocked]. Key invalidation disables biometrics
-     * and asks for the password ([VaultGateError.BiometricReset]). Cancel/failure — stay silently on the
-     * password form with no error. [prompt] (localized strings) comes from the UI.
+     * and asks for the password ([VaultGateError.BiometricReset]). Failure/unavailability surface a
+     * "use your password" hint; cancellation stays silent. [prompt] (localized strings) comes from the UI.
      */
     suspend fun unlockWithBiometric(prompt: BiometricPrompt) {
         val bio = biometrics ?: return
@@ -370,8 +376,15 @@ class VaultGateController(
                     error = VaultGateError.BiometricReset
                 }
                 BiometricUnlockResult.Corrupted -> state = VaultGateState.Corrupted
-                // Cancelled / Failed / Unavailable / NotEnabled — stay on the password form silently.
-                else -> Unit
+                // A silent failure looks like the tap did nothing — surface a "use your password" hint.
+                BiometricUnlockResult.Failed,
+                BiometricUnlockResult.Unavailable,
+                -> error = VaultGateError.BiometricFailed
+                BiometricUnlockResult.LockedOut -> error = VaultGateError.BiometricLockedOut
+                // Deliberate dismissal stays silent — a message there would just be noise.
+                BiometricUnlockResult.Cancelled,
+                BiometricUnlockResult.NotEnabled,
+                -> Unit
             }
         } finally {
             biometricInFlight = false

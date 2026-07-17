@@ -45,6 +45,8 @@ import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vtail_error_biometric_failed
+import app.skerry.ui.generated.resources.vtail_error_biometric_locked_out
 import app.skerry.ui.generated.resources.vtail_error_biometric_reset
 import app.skerry.ui.generated.resources.vtail_error_corrupted
 import app.skerry.ui.generated.resources.vtail_error_password_mismatch
@@ -518,4 +520,6 @@ internal fun vaultGateErrorMessage(error: VaultGateError): String = when (error)
     VaultGateError.WrongPassword -> stringResource(Res.string.vtail_error_wrong_password)
     VaultGateError.Corrupted -> stringResource(Res.string.vtail_error_corrupted)
     VaultGateError.BiometricReset -> stringResource(Res.string.vtail_error_biometric_reset)
+    VaultGateError.BiometricFailed -> stringResource(Res.string.vtail_error_biometric_failed)
+    VaultGateError.BiometricLockedOut -> stringResource(Res.string.vtail_error_biometric_locked_out)
 }

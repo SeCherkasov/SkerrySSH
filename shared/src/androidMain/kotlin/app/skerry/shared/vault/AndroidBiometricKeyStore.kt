@@ -78,6 +78,7 @@ class AndroidBiometricKeyStore(
                 BiometricResult.Failed
             }
             Auth.Cancelled -> BiometricResult.Cancelled
+            Auth.LockedOut -> BiometricResult.LockedOut
             Auth.Failed, Auth.NoActivity -> BiometricResult.Failed
         }
     }
@@ -107,6 +108,7 @@ class AndroidBiometricKeyStore(
                 BiometricResult.Failed // includes AEADBadTagException — tampered wrapper
             }
             Auth.Cancelled -> BiometricResult.Cancelled
+            Auth.LockedOut -> BiometricResult.LockedOut
             Auth.Failed, Auth.NoActivity -> BiometricResult.Failed
         }
     }
@@ -121,6 +123,7 @@ class AndroidBiometricKeyStore(
         data class Success(val cipher: Cipher) : Auth
         data object Cancelled : Auth
         data object Failed : Auth
+        data object LockedOut : Auth
         data object NoActivity : Auth
     }
 
@@ -135,8 +138,11 @@ class AndroidBiometricKeyStore(
             val callback = object : AndroidxBiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: AndroidxBiometricPrompt.AuthenticationResult) {
                     if (!cont.isActive) return
-                    val authedCipher = result.cryptoObject?.cipher
-                    cont.resume(if (authedCipher != null) Auth.Success(authedCipher) else Auth.Failed)
+                    // Some OEM ROMs (Xiaomi/MIUI, some Samsung) report success with a null CryptoObject.
+                    // Falling back to the cipher bound to this prompt is safe: the Keystore key demands
+                    // per-operation biometric auth, so doFinal() throws if auth didn't really happen.
+                    val authedCipher = result.cryptoObject?.cipher ?: cipher
+                    cont.resume(Auth.Success(authedCipher))
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -147,7 +153,11 @@ class AndroidBiometricKeyStore(
                             AndroidxBiometricPrompt.ERROR_USER_CANCELED,
                             AndroidxBiometricPrompt.ERROR_CANCELED,
                             -> Auth.Cancelled
-                            else -> Auth.Failed // lockout, hw error, etc. — soft fallback to password
+                            // Distinct from Failed so the UI can say "wait" instead of "didn't work".
+                            AndroidxBiometricPrompt.ERROR_LOCKOUT,
+                            AndroidxBiometricPrompt.ERROR_LOCKOUT_PERMANENT,
+                            -> Auth.LockedOut
+                            else -> Auth.Failed // hw error, timeout, etc. — soft fallback to password
                         },
                     )
                 }
