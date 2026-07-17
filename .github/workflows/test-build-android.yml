@@ -1,0 +1,64 @@
+name: Test build (Android)
+
+# Lightweight Android-only build for testing feature branches.
+# Uploads the APK to R2 under Skerry/test/<r2-path>/ — isolated from
+# Skerry/latest/ (official releases). Run manually from any branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build (default: the one you manually selected)"
+        required: false
+        type: string
+      r2_path:
+        description: "R2 sub-path under Skerry/test/ (e.g. fingerprint-fix)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.branch || github.ref_name }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-35 build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble release APK
+        run: ./gradlew composeApp:assembleRelease
+
+      - name: Rename APK
+        run: |
+          find composeApp/build -name '*.apk' -exec cp {} Skerry-test.apk \;
+
+      - name: Upload to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          set -euo pipefail
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          aws s3 cp Skerry-test.apk \
+            "s3://${R2_BUCKET_NAME}/Skerry/test/${{ inputs.r2_path }}/Skerry-android.apk" \
+            --endpoint-url "$ENDPOINT" --region auto --no-progress
+          echo "✅ https://dl.onepve.com/Skerry/test/${{ inputs.r2_path }}/Skerry-android.apk"
