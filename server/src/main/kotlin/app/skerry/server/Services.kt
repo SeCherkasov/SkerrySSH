@@ -49,7 +49,7 @@ class Services(val config: ServerConfig, private val database: Database) {
     /** Fire-and-forget: send a welcome email after registration. */
     fun sendWelcome(accountId: String) {
         if (!config.mailEnabled) return
-        val lang = EmailTemplates.detectLang(accountId, mailConfig.lang_fallback)
+        val lang = mailConfig.lang_fallback
         val (subject, body) = EmailTemplates.welcome(mailConfig, lang, config.publicUrl)
         mailer.send(accountId, subject, body.replace("{{email}}", accountId), body.replace("{{email}}", accountId))
     }
@@ -57,7 +57,7 @@ class Services(val config: ServerConfig, private val database: Database) {
     /** Fire-and-forget: alert that a new device paired with the vault. */
     fun sendNewDeviceAlert(accountId: String, deviceName: String, platform: String?) {
         if (!config.mailEnabled) return
-        val lang = EmailTemplates.detectLang(accountId, mailConfig.lang_fallback)
+        val lang = mailConfig.lang_fallback
         val now = ZonedDateTime.now()
         val (subject, body) = EmailTemplates.newDevice(mailConfig, lang, deviceName, platform, now, config.publicUrl)
         mailer.send(accountId, subject, body, body)
@@ -66,7 +66,7 @@ class Services(val config: ServerConfig, private val database: Database) {
     /** Fire-and-forget: master password changed notification. */
     fun sendPasswordChanged(accountId: String, deviceName: String) {
         if (!config.mailEnabled) return
-        val lang = EmailTemplates.detectLang(accountId, mailConfig.lang_fallback)
+        val lang = mailConfig.lang_fallback
         val now = ZonedDateTime.now()
         val (subject, body) = EmailTemplates.passwordChanged(mailConfig, lang, deviceName, now, config.publicUrl)
         mailer.send(accountId, subject, body, body)
@@ -75,7 +75,7 @@ class Services(val config: ServerConfig, private val database: Database) {
     /** Fire-and-forget: suspicious login from new IP. */
     fun sendSuspiciousLogin(accountId: String, deviceName: String, ip: String) {
         if (!config.mailEnabled) return
-        val lang = EmailTemplates.detectLang(accountId, mailConfig.lang_fallback)
+        val lang = mailConfig.lang_fallback
         val now = ZonedDateTime.now()
         val (subject, body) = EmailTemplates.suspiciousLogin(mailConfig, lang, deviceName, ip, now, config.publicUrl)
         mailer.send(accountId, subject, body, body)
