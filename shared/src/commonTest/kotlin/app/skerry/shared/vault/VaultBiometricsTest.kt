@@ -182,6 +182,46 @@ class VaultBiometricsTest {
     }
 
     @Test
+    fun `obsolete bio artifact version is migrated away and reported as a reset`() = bioTest {
+        // A vault.bio written by a superseded key scheme (older formatVersion) can't be unwrapped by
+        // the current bioKey (see #23: the pre-time-bound per-operation key never authorized on some
+        // OEM ROMs). Unlock must clear it — delete the stale key and artifact — and report Invalidated
+        // (the "biometrics were reset — use your password" flow) so an upgrading user gets feedback
+        // instead of a silent no-op, then re-enables biometrics on the current scheme.
+        val keyStore = FakeBiometricKeyStore()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore).enable(prompt)
+        }
+        val current = artifacts().read()!!
+        artifacts().write(current.copy(formatVersion = current.formatVersion - 1)) // simulate the old scheme
+
+        val fresh = vault()
+        assertEquals(BiometricUnlockResult.Invalidated, biometrics(fresh, keyStore).unlock(prompt))
+        assertFalse(fresh.isUnlocked)
+        assertFalse(artifacts().exists(), "the obsolete enrollment should be cleared so the user re-enables")
+        assertTrue(keyStore.deletedAliases.isNotEmpty(), "the stale key must be deleted")
+    }
+
+    @Test
+    fun `bio artifact from a newer format version is left untouched`() = bioTest {
+        // A future formatVersion (written by a newer app build) is not something this build can
+        // migrate — leave the key and artifact alone rather than deleting a possibly-valid enrollment.
+        val keyStore = FakeBiometricKeyStore()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore).enable(prompt)
+        }
+        val current = artifacts().read()!!
+        artifacts().write(current.copy(formatVersion = current.formatVersion + 1)) // a newer build's scheme
+
+        val fresh = vault()
+        assertEquals(BiometricUnlockResult.NotEnabled, biometrics(fresh, keyStore).unlock(prompt))
+        assertTrue(artifacts().exists(), "a newer-version artifact must not be deleted")
+        assertTrue(keyStore.deletedAliases.isEmpty(), "a newer-version enrollment must not be cleared")
+    }
+
+    @Test
     fun `artifact from another device is ignored and falls back to password`() = bioTest {
         val keyStore = FakeBiometricKeyStore()
         run {

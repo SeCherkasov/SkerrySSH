@@ -23,11 +23,15 @@ import kotlin.coroutines.resume
 
 /**
  * Android implementation of [BiometricKeyStore]: `bioKey` is a non-exportable AES-256-GCM key in
- * `AndroidKeyStore` (TEE, StrongBox when available), gated by biometrics via
- * [AndroidxBiometricPrompt] + `CryptoObject`. `setUserAuthenticationRequired(true)` requires live
- * biometric auth per operation; `setInvalidatedByBiometricEnrollment(true)` invalidates the key
- * when a new fingerprint/face is enrolled — then `init` throws [KeyPermanentlyInvalidatedException]
- * and we return [BiometricResult.KeyInvalidated] (the orchestrator resets biometrics).
+ * `AndroidKeyStore` (TEE, StrongBox when available), gated by [AndroidxBiometricPrompt].
+ * `setUserAuthenticationRequired(true)` with a short time-bound validity window
+ * (`setUserAuthenticationParameters`) requires a live strong-biometric auth just before use. We do
+ * NOT bind auth to a per-operation `CryptoObject`: some OEM ROMs (Xiaomi/MIUI/HyperOS) report success
+ * with a null CryptoObject and never authorize the bound operation, so `doFinal()` always failed and
+ * unlock silently bounced to the password screen (#23). `setInvalidatedByBiometricEnrollment(true)`
+ * invalidates the key when a new fingerprint/face is enrolled — then `init` throws
+ * [KeyPermanentlyInvalidatedException] and we return [BiometricResult.KeyInvalidated] (the
+ * orchestrator resets biometrics).
  *
  * The prompt is bound to a [FragmentActivity] (androidx.biometric requirement) and fetched lazily
  * via [activityProvider] — the store survives Activity recreation and grabs the current one only
@@ -61,22 +65,10 @@ class AndroidBiometricKeyStore(
         plaintext: ByteArray,
         prompt: BiometricPrompt,
     ): BiometricResult<ByteArray> = withContext(Dispatchers.Main) {
-        val cipher = try {
-            Cipher.getInstance(TRANSFORMATION).apply {
-                init(Cipher.ENCRYPT_MODE, loadKey(alias) ?: return@withContext BiometricResult.Failed)
-            }
-        } catch (e: KeyPermanentlyInvalidatedException) {
-            return@withContext BiometricResult.KeyInvalidated
-        } catch (e: Exception) {
-            return@withContext BiometricResult.Failed
-        }
-        when (val auth = authenticate(cipher, prompt)) {
-            is Auth.Success -> try {
-                val sealed = auth.cipher.iv + auth.cipher.doFinal(plaintext)
-                BiometricResult.Success(sealed)
-            } catch (e: Exception) {
-                BiometricResult.Failed
-            }
+        // Time-bound scheme: authenticate FIRST (no CryptoObject), then run the cipher within the
+        // window the successful strong-biometric auth just opened (see authenticate / generateKey).
+        when (authenticate(prompt)) {
+            Auth.Success -> encrypt(alias, plaintext)
             Auth.Cancelled -> BiometricResult.Cancelled
             Auth.LockedOut -> BiometricResult.LockedOut
             Auth.Failed, Auth.NoActivity -> BiometricResult.Failed
@@ -88,28 +80,39 @@ class AndroidBiometricKeyStore(
         wrapped: ByteArray,
         prompt: BiometricPrompt,
     ): BiometricResult<ByteArray> = withContext(Dispatchers.Main) {
-        if (wrapped.size <= IV_LENGTH) return@withContext BiometricResult.Failed
-        val iv = wrapped.copyOfRange(0, IV_LENGTH)
-        val ciphertext = wrapped.copyOfRange(IV_LENGTH, wrapped.size)
-        val cipher = try {
-            Cipher.getInstance(TRANSFORMATION).apply {
-                val key = loadKey(alias) ?: return@withContext BiometricResult.KeyInvalidated
-                init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
-            }
-        } catch (e: KeyPermanentlyInvalidatedException) {
-            return@withContext BiometricResult.KeyInvalidated
-        } catch (e: Exception) {
-            return@withContext BiometricResult.Failed
-        }
-        when (val auth = authenticate(cipher, prompt)) {
-            is Auth.Success -> try {
-                BiometricResult.Success(auth.cipher.doFinal(ciphertext))
-            } catch (e: Exception) {
-                BiometricResult.Failed // includes AEADBadTagException — tampered wrapper
-            }
+        when (authenticate(prompt)) {
+            Auth.Success -> decrypt(alias, wrapped)
             Auth.Cancelled -> BiometricResult.Cancelled
             Auth.LockedOut -> BiometricResult.LockedOut
             Auth.Failed, Auth.NoActivity -> BiometricResult.Failed
+        }
+    }
+
+    /** Encrypt after a successful auth (key is authorized within the time-bound window). IV(12) || GCM. */
+    private fun encrypt(alias: String, plaintext: ByteArray): BiometricResult<ByteArray> = try {
+        val key = loadKey(alias) ?: return BiometricResult.Failed
+        val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key) }
+        BiometricResult.Success(cipher.iv + cipher.doFinal(plaintext))
+    } catch (e: KeyPermanentlyInvalidatedException) {
+        BiometricResult.KeyInvalidated // enrollment changed — orchestrator resets biometrics
+    } catch (e: Exception) {
+        BiometricResult.Failed
+    }
+
+    /** Decrypt IV(12) || GCM after a successful auth; a stale/OEM auth surfaces here as [Failed]. */
+    private fun decrypt(alias: String, wrapped: ByteArray): BiometricResult<ByteArray> {
+        if (wrapped.size <= IV_LENGTH) return BiometricResult.Failed
+        val iv = wrapped.copyOfRange(0, IV_LENGTH)
+        val ciphertext = wrapped.copyOfRange(IV_LENGTH, wrapped.size)
+        return try {
+            val key = loadKey(alias) ?: return BiometricResult.KeyInvalidated
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+                .apply { init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv)) }
+            BiometricResult.Success(cipher.doFinal(ciphertext))
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            BiometricResult.KeyInvalidated
+        } catch (e: Exception) {
+            BiometricResult.Failed // includes AEADBadTagException — tampered wrapper
         }
     }
 
@@ -120,15 +123,20 @@ class AndroidBiometricKeyStore(
     // --- internal ---
 
     private sealed interface Auth {
-        data class Success(val cipher: Cipher) : Auth
+        data object Success : Auth
         data object Cancelled : Auth
         data object Failed : Auth
         data object LockedOut : Auth
         data object NoActivity : Auth
     }
 
-    /** Show the system prompt and await its outcome, binding auth to [cipher] via CryptoObject. */
-    private suspend fun authenticate(cipher: Cipher, prompt: BiometricPrompt): Auth =
+    /**
+     * Show the system prompt and await its outcome. Time-bound scheme (no `CryptoObject`): a
+     * successful strong-biometric auth authorizes the `bioKey` for a short window (see [generateKey]),
+     * so [encrypt]/[decrypt] run right after. Binding per operation via CryptoObject is deliberately
+     * avoided — some OEM ROMs never populate it, breaking unlock (#23).
+     */
+    private suspend fun authenticate(prompt: BiometricPrompt): Auth =
         suspendCancellableCoroutine { cont ->
             val activity = activityProvider()
             if (activity == null) {
@@ -137,12 +145,7 @@ class AndroidBiometricKeyStore(
             }
             val callback = object : AndroidxBiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: AndroidxBiometricPrompt.AuthenticationResult) {
-                    if (!cont.isActive) return
-                    // Some OEM ROMs (Xiaomi/MIUI, some Samsung) report success with a null CryptoObject.
-                    // Falling back to the cipher bound to this prompt is safe: the Keystore key demands
-                    // per-operation biometric auth, so doFinal() throws if auth didn't really happen.
-                    val authedCipher = result.cryptoObject?.cipher ?: cipher
-                    cont.resume(Auth.Success(authedCipher))
+                    if (cont.isActive) cont.resume(Auth.Success)
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -170,7 +173,7 @@ class AndroidBiometricKeyStore(
                 .setNegativeButtonText(prompt.cancelLabel)
                 .setAllowedAuthenticators(BIOMETRIC_STRONG)
                 .build()
-            bioPrompt.authenticate(info, AndroidxBiometricPrompt.CryptoObject(cipher))
+            bioPrompt.authenticate(info) // no CryptoObject — time-bound key
             // Coroutine cancellation (e.g. the gate tore down the subtree) must dismiss the system
             // prompt, or it's left orphaned. cancelAuthentication -> onAuthenticationError(CANCELED),
             // which the cont.isActive guard already swallows.
@@ -192,8 +195,17 @@ class AndroidBiometricKeyStore(
             if (strongBox) builder.setIsStrongBoxBacked(true)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // per-operation strong-biometric auth; default behavior for the auth key on <R
-            builder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+            // Time-bound (not per-operation): a successful strong biometric authorizes the key for
+            // AUTH_VALIDITY_SECONDS. Per-op CryptoObject binding is avoided — some OEM ROMs drop it
+            // and never authorize the operation, so doFinal() always failed (#23).
+            builder.setUserAuthenticationParameters(AUTH_VALIDITY_SECONDS, KeyProperties.AUTH_BIOMETRIC_STRONG)
+        } else {
+            // Pre-R time-bound API. Unlike the R+ overload it takes no authenticator type: Keystore
+            // authorizes the key after ANY device auth (incl. device credential) within the window, so
+            // "strong biometric only" is enforced by the app's BIOMETRIC_STRONG prompt, not Keystore.
+            // Acceptable here: the key is only ever used synchronously right after our own prompt.
+            @Suppress("DEPRECATION")
+            builder.setUserAuthenticationValidityDurationSeconds(AUTH_VALIDITY_SECONDS)
         }
         KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE).apply {
             init(builder.build())
@@ -217,5 +229,8 @@ class AndroidBiometricKeyStore(
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_LENGTH = 12
         const val GCM_TAG_BITS = 128
+        // Window (seconds) after a successful strong biometric during which the bioKey may be used
+        // without re-auth. Short: just enough to run wrap/unwrap immediately after the prompt.
+        const val AUTH_VALIDITY_SECONDS = 5
     }
 }
