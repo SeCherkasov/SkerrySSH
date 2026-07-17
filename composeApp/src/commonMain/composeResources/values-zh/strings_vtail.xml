@@ -1,0 +1,35 @@
+<resources>
+    <!-- 保险库界面中遗留的非 @Composable 面向用户的字符串（前缀 vtail_）。 -->
+
+    <!-- 生物识别提示（标题 / 取消按钮 / 副标题）：保险库门禁启用 & 解锁、密钥复制重新认证。 -->
+    <string name="vtail_bio_enable_title">启用生物识别</string>
+    <string name="vtail_bio_enable_cancel">取消</string>
+    <string name="vtail_bio_enable_subtitle">确认你的生物识别以绑定保险库解锁。</string>
+    <string name="vtail_bio_unlock_title">解锁 Skerry</string>
+    <string name="vtail_bio_unlock_cancel">输入密码</string>
+    <string name="vtail_bio_unlock_subtitle">确认你的生物识别以打开保险库。</string>
+    <string name="vtail_bio_copy_title">确认身份</string>
+    <string name="vtail_bio_copy_cancel">取消</string>
+    <string name="vtail_bio_copy_subtitle">验证你的生物识别以将此密钥复制到剪贴板。</string>
+
+    <!-- 认证选择器：密钥链凭据类型标签。 -->
+    <string name="vtail_picker_type_password">密码</string>
+    <string name="vtail_picker_type_ssh_key">SSH 密钥</string>
+    <string name="vtail_picker_type_certificate">证书</string>
+
+    <!-- 保险库门禁错误消息 -->
+    <string name="vtail_error_password_too_short">密码太短 — 至少需要 %1$d 个字符。</string>
+    <string name="vtail_error_password_mismatch">密码不匹配。</string>
+    <string name="vtail_error_wrong_password">主密码错误。</string>
+    <string name="vtail_error_corrupted">保险库文件损坏或无法读取。</string>
+    <string name="vtail_error_biometric_reset">生物识别已重置 — 请使用主密码登录。</string>
+
+    <!-- 密钥卡片\"被使用\"片段，单数 / 复数 -->
+    <string name="vtail_used_by_one">被 1 台主机使用</string>
+    <string name="vtail_used_by_other">被 %1$d 台主机使用</string>
+
+    <!-- 保险库侧边栏分类标题 -->
+    <string name="vtail_category_ssh_keys">SSH 密钥</string>
+    <string name="vtail_category_passwords">密码</string>
+    <string name="vtail_category_certificates">证书</string>
+</resources>

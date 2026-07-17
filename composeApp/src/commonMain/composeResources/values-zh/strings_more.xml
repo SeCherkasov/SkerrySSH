@@ -1,0 +1,21 @@
+<resources>
+    <string name="more_title">更多</string>
+    <string name="more_port_forwarding">端口转发</string>
+    <string name="more_known_hosts">已知主机</string>
+    <string name="more_team">团队</string>
+    <string name="more_ai_privacy">AI 助手</string>
+    <string name="more_ai_subtitle_byok">OpenAI · BYOK</string>
+    <string name="more_ai_subtitle_local">本地</string>
+    <string name="more_ai_subtitle_off">关闭</string>
+    <string name="more_sync">同步</string>
+    <string name="more_lock">锁定 Skerry</string>
+    <string name="more_sync_local_only">仅本地</string>
+    <string name="more_sync_synced">已同步</string>
+    <string name="more_sync_syncing">同步中…</string>
+    <string name="more_sync_linked_locked">已关联 · 已锁定</string>
+    <string name="more_sync_error">同步错误</string>
+    <string name="more_biometric_prompt_title">启用生物识别解锁</string>
+    <string name="more_biometric_prompt_cancel">取消</string>
+    <string name="more_biometric_prompt_subtitle">验证你的生物识别信息，无需输入主密码即可解锁 Skerry。</string>
+    <string name="more_about">关于</string>
+</resources>
