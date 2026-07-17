@@ -210,6 +210,10 @@ class VaultBiometrics(
      * password.
      */
     private suspend fun authenticate(prompt: BiometricPrompt): BioAuth {
+        // A migrated (superseded-scheme) enrollment is reported as Invalidated, not NotEnabled: it
+        // maps to the "biometrics were reset — use your password" message, so an upgrading user gets
+        // feedback instead of a silent no-op (which would look exactly like the #23 bug).
+        if (clearObsoleteEnrollment()) return BioAuth.Invalidated
         val artifact = readValidArtifact() ?: return BioAuth.NotEnabled
         if (keyStore.availability() != BiometricAvailability.Available) return BioAuth.Unavailable
         return when (val unwrapped = keyStore.unwrap(alias, artifact.wrappedBio, prompt)) {
@@ -224,6 +228,23 @@ class VaultBiometrics(
         }
     }
 
+    /**
+     * A `vault.bio` written by a superseded key scheme (older [BioArtifact.formatVersion]) can't be
+     * unwrapped by the current `bioKey`, so clear it — delete the stale key and artifact — and return
+     * `true` so the caller reports it as a reset. The user re-enables biometrics on the current
+     * scheme. Only this device's own obsolete artifact is migrated: a foreign or future-version file
+     * is left untouched (that's [readValidArtifact]'s job). See #23 — the pre-time-bound per-operation
+     * key never authorized on some OEM ROMs, so old enrollments must be recreated.
+     */
+    private fun clearObsoleteEnrollment(): Boolean {
+        val artifact = artifacts.read() ?: return false
+        if (artifact.deviceId != deviceId || artifact.alias != alias || artifact.formatVersion >= FORMAT_VERSION) {
+            return false
+        }
+        disable()
+        return true
+    }
+
     /** Internal outcome of [authenticate]; mapped 1:1 to Unlock/Confirm results. */
     private sealed interface BioAuth {
         class Success(val key: ByteArray) : BioAuth
@@ -236,6 +257,9 @@ class VaultBiometrics(
     }
 
     private companion object {
-        const val FORMAT_VERSION = 1
+        // v2: bioKey moved from per-operation (CryptoObject-bound) to time-bound auth so it works on
+        // OEM ROMs that drop CryptoObject (#23). A v1 artifact was wrapped by the old key scheme and
+        // is unwrappable now — clearObsoleteEnrollment() migrates it away.
+        const val FORMAT_VERSION = 2
     }
 }
