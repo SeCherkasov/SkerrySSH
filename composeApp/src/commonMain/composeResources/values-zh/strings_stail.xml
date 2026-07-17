@@ -1,0 +1,20 @@
+<resources>
+    <!-- 同步指示器（桌面端状态栏 / 移动端头部） -->
+    <string name="stail_sync_online">同步在线</string>
+    <string name="stail_sync_offline">同步离线</string>
+    <string name="stail_syncing">同步中…</string>
+    <string name="stail_sync_paused">同步已暂停</string>
+    <string name="stail_sync_error">同步错误</string>
+
+    <!-- 账户卡片（设置 → 账户 / 移动端更多） -->
+    <string name="stail_local_vault">本地保险库</string>
+    <string name="stail_encrypted_on_device">在此设备上加密</string>
+    <string name="stail_synced_host">已同步 · %1$s</string>
+    <string name="stail_synced">已同步</string>
+    <string name="stail_linked_locked">已关联 · 已锁定</string>
+
+    <!-- 同步密钥变更后重新注册生物识别提示 -->
+    <string name="stail_reenroll_prompt_title">重新启用生物识别解锁</string>
+    <string name="stail_reenroll_prompt_cancel">取消</string>
+    <string name="stail_reenroll_prompt_subtitle">确认你的生物识别以将快速解锁绑定到新的账户密钥。</string>
+</resources>

@@ -1,0 +1,116 @@
+<resources>
+    <!-- Vault section: 密钥管理器、密钥卡片/详情、对话框和主密码门控 -->
+    <string name="vault_title">保险库</string>
+    <string name="vault_sidebar_header">保险库</string>
+    <string name="vault_e2e_encrypted">端到端加密</string>
+    <string name="vault_e2e_description">私钥由你的主密码加密保护，永远不会以明文同步。</string>
+    <string name="vault_banner_encrypted">端到端加密 · 由主密码加密保护</string>
+    <string name="vault_generate_key">生成密钥</string>
+    <string name="vault_add_password">添加密码</string>
+    <string name="vault_import_certificate">导入证书</string>
+
+    <!-- 密钥卡片元数据 -->
+    <string name="vault_meta_certificate">证书 · %1$s</string>
+    <string name="vault_meta_any_principal">任意主体 · %1$s</string>
+    <string name="vault_meta_password">密码 · %1$s</string>
+
+    <!-- 空分类状态 -->
+    <string name="vault_empty_ssh_title">暂无 SSH 密钥</string>
+    <string name="vault_empty_ssh_hint">生成一个密钥——它将加密存储在保险库中，可随时附加到主机。</string>
+    <string name="vault_empty_passwords_title">暂无密码</string>
+    <string name="vault_empty_passwords_hint">添加密码——它将被加密存储，可跨主机重复使用。</string>
+    <string name="vault_empty_certificates_title">暂无证书</string>
+    <string name="vault_empty_certificates_hint">导入 CA 签发的证书及其私钥——加密存储在保险库中，可随时附加到主机。</string>
+    <string name="vault_empty_certificates_hint_short">导入 CA 签发的证书及其私钥——加密存储在保险库中。</string>
+
+    <!-- 密钥详情：副标题和标签 -->
+    <string name="vault_subtitle_certificate">证书</string>
+    <string name="vault_subtitle_certificate_typed">%1$s 证书</string>
+    <string name="vault_subtitle_private_key">私钥</string>
+    <string name="vault_subtitle_password">密码</string>
+    <string name="vault_label_public_key">公钥</string>
+    <string name="vault_key_unreadable">无法读取密钥</string>
+    <string name="vault_label_fingerprint">指纹</string>
+    <string name="vault_copy_certificate">复制证书</string>
+    <string name="vault_copy_public_key">复制公钥</string>
+    <string name="vault_copy_password">复制密码</string>
+    <string name="vault_export">导出</string>
+    <string name="vault_delete">删除</string>
+    <string name="vault_cancel">取消</string>
+    <string name="vault_used_by_one">被 1 台主机使用</string>
+    <string name="vault_used_by">被 %1$d 台主机使用</string>
+    <string name="vault_not_attached">尚未附加到任何主机。</string>
+    <string name="vault_cert_key_id">密钥 ID: %1$s</string>
+    <string name="vault_cert_unreadable">无法读取证书</string>
+    <string name="vault_label_principals">主体</string>
+    <string name="vault_any_principal">任意主体</string>
+    <string name="vault_label_valid">有效期</string>
+    <string name="vault_badge_expired">已过期</string>
+    <string name="vault_label_serial">序列号</string>
+    <string name="vault_label_signing_ca">签发 CA</string>
+
+    <!-- 生成 SSH 密钥对话框 -->
+    <string name="vault_dialog_generate_title">生成 SSH 密钥</string>
+    <string name="vault_dialog_generate_subtitle">新密钥对将加密存储在保险库中——无需密码短语。</string>
+    <string name="vault_field_name">名称</string>
+    <string name="vault_placeholder_name_key">例如 工作电脑</string>
+    <string name="vault_field_algorithm">算法</string>
+    <string name="vault_generate">生成</string>
+
+    <!-- 添加密码对话框 -->
+    <string name="vault_dialog_add_password_subtitle">加密存储在保险库中，可跨主机重复使用。</string>
+    <string name="vault_placeholder_name_password">例如 数据库管理员</string>
+    <string name="vault_field_password">密码</string>
+    <string name="vault_placeholder_password">密码</string>
+    <string name="vault_add">添加</string>
+
+    <!-- 导入证书对话框 -->
+    <string name="vault_dialog_import_subtitle">CA 签发的证书及其私钥将加密存储在保险库中。</string>
+    <string name="vault_placeholder_name_cert">例如 生产环境访问</string>
+    <string name="vault_field_private_key_pem">私钥 (PEM)</string>
+    <string name="vault_field_certificate">证书 (*-cert.pub)</string>
+    <string name="vault_field_passphrase">密码短语（如有）</string>
+    <string name="vault_placeholder_optional">可选</string>
+    <string name="vault_cert_read_error">无法读取该证书——期望 OpenSSH *-cert.pub 格式。</string>
+    <string name="vault_cert_valid_summary">%1$s · %2$s · 有效期至 %3$s</string>
+    <string name="vault_import">导入</string>
+
+    <!-- 复制密钥前确认主密码 -->
+    <string name="vault_confirm_master_title">确认主密码</string>
+    <string name="vault_confirm_master_subtitle">请输入主密码以将此密钥复制到剪贴板。</string>
+    <string name="vault_field_master_password">主密码</string>
+    <string name="vault_placeholder_master_password">主密码</string>
+    <string name="vault_password_mismatch_retry">密码不匹配——请重试。</string>
+    <string name="vault_copy">复制</string>
+
+    <!-- 删除密钥对话框 -->
+    <string name="vault_delete_title">删除「%1$s」？</string>
+    <string name="vault_delete_detail_none">此密钥将从保险库中移除。此操作不可撤销。</string>
+    <string name="vault_delete_detail_bound">%1$d 台主机将失去此凭证，下次连接时需输入密码。此操作不可撤销。</string>
+
+    <!-- 主密码门控：创建 / 解锁 / 生物识别 / 损坏 / 重置 -->
+    <string name="vault_create_title">创建主密码</string>
+    <string name="vault_create_subtitle">它将加密你的本地保险库。密码永不离开此设备且无法恢复——忘记密码则数据无法解密。</string>
+    <string name="vault_master_password_label">主密码</string>
+    <string name="vault_confirm_password_label">确认密码</string>
+    <string name="vault_create_button">创建保险库</string>
+    <string name="vault_biometric_offer_title">快速解锁</string>
+    <string name="vault_biometric_offer_subtitle">开启生物识别解锁，无需输入主密码即可打开保险库。你可以在设置中随时更改。</string>
+    <string name="vault_biometric_enable">启用生物识别</string>
+    <string name="vault_not_now">暂不</string>
+    <string name="vault_unlock_title">解锁保险库</string>
+    <string name="vault_unlock_subtitle">输入主密码以打开你的主机、密钥和会话。</string>
+    <string name="vault_unlock_button">解锁</string>
+    <string name="vault_unlock_biometric">使用生物识别解锁</string>
+    <string name="vault_forgot_password">忘记主密码？</string>
+    <string name="vault_corrupted_title">保险库已损坏</string>
+    <string name="vault_corrupted_subtitle">保险库文件无法读取或解密。要继续使用应用，你需要重置保险库并重新开始。</string>
+    <string name="vault_reset_vault">重置保险库</string>
+    <string name="vault_reset_subtitle">此操作不可逆。保存的密码、密钥和凭证将被彻底删除且无法恢复——你的主密码不保护它们，而是全新开始。</string>
+    <string name="vault_reset_scope_secrets_title">仅密钥</string>
+    <string name="vault_reset_scope_secrets_subtitle">保留主机配置和 known_hosts。</string>
+    <string name="vault_reset_scope_everything_title">清除一切</string>
+    <string name="vault_reset_scope_everything_subtitle">同时删除主机配置、known_hosts 和设置。</string>
+    <string name="vault_reset_confirm_label">输入 %1$s 以确认</string>
+    <string name="vault_reset_confirm_button">永久重置</string>
+</resources>

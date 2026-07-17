@@ -1,0 +1,50 @@
+<resources>
+    <!-- Appearance / 外观设置 -->
+    <string name="appearance_title">外观</string>
+    <string name="appearance_subtitle">界面语言和侧边栏。</string>
+    <string name="appearance_badge_active">活跃</string>
+    <string name="appearance_section_terminal">终端</string>
+    <string name="appearance_section_interface">界面</string>
+    <string name="appearance_font">字体</string>
+    <string name="appearance_font_size">字号</string>
+    <string name="appearance_line_height">行高</string>
+    <string name="appearance_letter_spacing">字间距</string>
+    <string name="appearance_default_value">默认: %1$s</string>
+    <string name="appearance_language">语言</string>
+    <string name="appearance_recent_show">最近连接</string>
+    <string name="appearance_recent_show_desc">在侧边栏显示最近连接的主机。</string>
+    <string name="appearance_recent_count">显示数量</string>
+
+    <!-- 界面语言。具体语言用自名（English, Русский, 简体中文）；仅 "System" 本地化 -->
+    <string name="language_system">跟随系统</string>
+
+    <!-- 底部导航（移动端） -->
+    <string name="nav_tab_hosts">主机</string>
+    <string name="nav_tab_snippets">片段</string>
+    <string name="nav_tab_vault">保险库</string>
+    <string name="nav_tab_more">更多</string>
+
+    <!-- 桌面端左侧图标栏 -->
+    <string name="rail_terminal">终端</string>
+    <string name="rail_tunnels">隧道</string>
+    <string name="rail_snippets">片段</string>
+    <string name="rail_vault">保险库</string>
+    <string name="rail_hosts">主机</string>
+    <string name="rail_team">团队</string>
+
+    <!-- SFTP 原生文件对话框 -->
+    <string name="sftp_dialog_save_as">另存为</string>
+    <string name="sftp_dialog_pick_upload">选择要上传的文件</string>
+
+    <!-- 终端反向搜索（Ctrl-R） -->
+    <string name="terminal_reverse_search_prompt">(反向搜索)`%1$s`:  ↑↓ 选择 · Enter 插入 · Del 删除 · Esc</string>
+    <string name="terminal_reverse_search_no_matches">— 无匹配 —</string>
+
+    <!-- 复制到剪贴板提示 -->
+    <string name="terminal_copied">已复制</string>
+
+    <!-- 扫码配对（移动端） -->
+    <string name="qr_scan_hint">将摄像头对准另一设备上显示的二维码。</string>
+    <string name="qr_permission_needed">需要相机权限才能扫描配对码。</string>
+    <string name="qr_cancel">取消</string>
+</resources>
