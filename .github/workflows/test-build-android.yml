@@ -43,11 +43,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Assemble release APK
-        run: ./gradlew composeApp:assembleRelease
+        run: ./gradlew :androidApp:assembleRelease --stacktrace
 
       - name: Rename APK
         run: |
-          find composeApp/build -name '*.apk' -exec cp {} Skerry-test.apk \;
+          mkdir -p dist
+          find androidApp/build/outputs/apk -name '*.apk' -exec cp {} dist/Skerry-test.apk \;
 
       - name: Upload to R2
         env:
@@ -58,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          aws s3 cp Skerry-test.apk \
+          aws s3 cp dist/Skerry-test.apk \
             "s3://${R2_BUCKET_NAME}/Skerry/test/${{ inputs.r2_path }}/Skerry-android.apk" \
             --endpoint-url "$ENDPOINT" --region auto --no-progress
           echo "✅ https://dl.onepve.com/Skerry/test/${{ inputs.r2_path }}/Skerry-android.apk"
