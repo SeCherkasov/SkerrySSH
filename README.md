@@ -1,210 +1,177 @@
 # Skerry
 
-**English** · [Русский](README.ru.md)
+**中文** · [English](README.en.md) · [Русский](README.ru.md)
 
-[![CI](https://github.com/SeCherkasov/SkerrySSH/actions/workflows/ci.yml/badge.svg)](https://github.com/SeCherkasov/SkerrySSH/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/SeCherkasov/SkerrySSH)](../../releases/latest)
+[![CI](https://github.com/onepve/SkerrySSH/actions/workflows/ci.yml/badge.svg)](https://github.com/onepve/SkerrySSH/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/onepve/SkerrySSH)](../../releases/latest)
 [![Clients: GPL-3.0](https://img.shields.io/badge/clients-GPL--3.0-blue)](LICENSE)
 [![Server: AGPL-3.0](https://img.shields.io/badge/server-AGPL--3.0-blue)](server/LICENSE)
 
-An open-source, cross-platform SSH client with a single core: Kotlin Multiplatform under the
-hood, Compose Multiplatform UI on top. One core codebase and one UI across
-**Desktop (Linux, Windows, macOS)** and **Android**, with feature parity between platforms.
+Skerry 是一款开源、跨平台 SSH 客户端，基于 Kotlin Multiplatform 核心 + Compose Multiplatform
+UI，**一份代码、一套 UI 覆盖桌面端（Linux、Windows、macOS）和 Android**，各平台功能一致。
 
-- **Local-first** — everything works without a server or an account.
-- **Zero-knowledge** — the master password never leaves the device.
-- **AI under policy** — model output is treated as untrusted; actions require confirmation;
-  a fully local model is an option.
-- **Platform parity** — a feature isn't done until it works everywhere.
+- **本地优先** — 无需服务器或账户即可使用全部功能。
+- **零知识** — 主密码从不离开设备。
+- **AI 受策略约束** — 模型输出视为不可信；操作需确认；可选运行完全本地模型。
+- **平台对等** — 功能在所有平台同时可用才算完成。
 
-## How Skerry compares
+## 对比
 
-| Feature | Skerry | Termius | PuTTY | Tabby |
+| 特性 | Skerry | Termius | PuTTY | Tabby |
 |---|---|---|---|---|
-| **Open source** | ✅ GPL-3.0 · AGPL-3.0 | ❌ | ✅ MIT | ✅ MIT |
-| **Platforms** | Linux · Windows · macOS · Android | Windows · macOS · Linux · iOS · Android | Windows · Unix | Windows · macOS · Linux |
-| **First release** | 2026 (v0.1.x) | 2011 | 1999 | 2017 |
-| **Price** | free | free tier · paid from $10/mo | free | free |
-| **Works without an account** | ✅ | ⚠️ local only <sup>1</sup> | ✅ | ✅ |
-| **Encrypted vault** | ✅ always on <sup>2</sup> | ✅ | ❌ | ⚠️ opt-in |
-| **Sync** | ✅ self-hosted, zero-knowledge | ✅ vendor cloud, E2E (paid) | ❌ | ✅ self-hostable, E2E opt-in <sup>3</sup> |
-| **Team sharing** | ✅ end-to-end | ⚠️ paid tier | ❌ | ❌ |
-| **SFTP** | ✅ dual-pane UI | ✅ | ⚠️ CLI only (`psftp`) | ✅ built-in panel |
-| **Port forwarding** | ✅ local · remote · dynamic | ✅ | ✅ | ✅ |
-| **Serial / Telnet** | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
+| **开源** | ✅ GPL-3.0 · AGPL-3.0 | ❌ | ✅ MIT | ✅ MIT |
+| **平台** | Linux · Windows · macOS · Android | Windows · macOS · Linux · iOS · Android | Windows · Unix | Windows · macOS · Linux |
+| **首发年份** | 2026 (v0.1.x) | 2011 | 1999 | 2017 |
+| **价格** | 免费 | 免费版 / 付费 $10/月起 | 免费 | 免费 |
+| **无需账户可用** | ✅ | ⚠️ 仅本地 <sup>1</sup> | ✅ | ✅ |
+| **加密保险库** | ✅ 始终开启 <sup>2</sup> | ✅ | ❌ | ⚠️ 可选开启 |
+| **同步** | ✅ 自托管，零知识 | ✅ 厂商云，端到端（付费） | ❌ | ✅ 可自托管，端到端可选 <sup>3</sup> |
+| **团队共享** | ✅ 端到端 | ⚠️ 付费版 | ❌ | ❌ |
+| **SFTP** | ✅ 双窗格界面 | ✅ | ⚠️ 仅 CLI (`psftp`) | ✅ 内建面板 |
+| **端口转发** | ✅ 本地 · 远程 · 动态 | ✅ | ✅ | ✅ |
+| **串口 / Telnet** | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
 | **Mosh** | ✅ | ✅ | ❌ | ❌ |
-| **AI assistant** | ✅ local or BYOK cloud <sup>4</sup> | ⚠️ cloud, account required | ❌ | ❌ |
+| **AI 助手** | ✅ 本地或 BYOK 云端 <sup>4</sup> | ⚠️ 云端，需账户 | ❌ | ❌ |
 
-**Legend:** ✅ yes · ⚠️ partial / with caveats · ❌ no
+**图例：** ✅ 支持 · ⚠️ 部分支持 / 有限制 · ❌ 不支持
 
-<sup>1</sup> sync and AI need an account &nbsp;·&nbsp;
+<sup>1</sup> 同步和 AI 需要账户 &nbsp;·&nbsp;
 <sup>2</sup> Argon2id + XChaCha20-Poly1305 &nbsp;·&nbsp;
-<sup>3</sup> via self-hostable Tabby Web &nbsp;·&nbsp;
-<sup>4</sup> optional; model output treated as untrusted, actions require confirmation
+<sup>3</sup> 通过自托管 Tabby Web &nbsp;·&nbsp;
+<sup>4</sup> 可选；模型输出不可信，操作需确认
 
-*Competitor data collected from the projects' official sites and repositories on 2026-07-12.
-Spotted an error? Please open a PR.*
+*竞品数据采集于其官网和仓库，截至 2026-07-12。发现错误请提 PR。*
 
-## Status
+## 当前状态
 
-Actively developed for **Linux**, **Windows**, **macOS**, and **Android**. **iOS/iPadOS** is
-planned.
+活跃开发中，覆盖 **Linux**、**Windows**、**macOS** 和 **Android**。**iOS/iPadOS** 已列入计划。
 
-## Install
+## 安装
 
-Grab a package from the **[latest release](../../releases/latest)**:
+从 **[最新 Release](../../releases/latest)** 下载对应包：
 
-| Platform | Arch | Files |
+| 平台 | 架构 | 文件 |
 |---|---|---|
-| Linux | x86_64 | `.deb`, `.rpm`, `.AppImage`, `.flatpak` |
-| Linux | arm64 | `.deb`, `.rpm`, `.AppImage` |
-| Windows | x64 | `.msi` |
+| Linux | x86_64 | `.deb`、`.rpm`、`.AppImage`、`.flatpak` |
+| Linux | arm64 | `.deb`、`.rpm`、`.AppImage` |
+| Windows | x64 | `.msi` `.zip`（便携版） |
 | macOS | Apple Silicon | `Skerry-*-arm64.dmg` |
 | macOS | Intel | `Skerry-*-x64.dmg` |
-| Android | arm64-v8a | `.apk` (signed; sideload) |
+| Android | arm64-v8a | `.apk`（已签名，侧载） |
 
-- **macOS builds are unsigned and not notarized** (no Apple Developer account yet), so
-  Gatekeeper blocks the first launch: right-click the app → Open, or allow it under
-  System Settings → Privacy & Security. The app's bundle metadata (Finder's Get Info)
-  shows a `1.x.y` version — it is the same `0.x` release (macOS packaging requires a
-  major version ≥ 1); the About screen shows the real version.
-- The Windows `.msi` is not code-signed either; SmartScreen may warn on first run.
-- Verify downloads against the attached checksums: `sha256sum -c --ignore-missing SHA256SUMS.txt`.
+- **macOS 包未签名也未公证**（暂无 Apple 开发者账号），首次启动 Gatekeeper 会拦截：
+  右键应用 → 打开，或在系统设置 → 隐私与安全中放行。Finder → 简介中的版本号显示
+  `1.x.y`——实际对应 `0.x` 版本（macOS 打包要求主版本号 ≥1）；关于页面显示真实版本。
+- Windows `.msi` 也未签名，首次运行 SmartScreen 可能警告。
+- 用发布的校验和验证下载：`sha256sum -c --ignore-missing SHA256SUMS.txt`。
 
-Building it yourself is also easy — see [Building from source](#building-from-source).
+也可自行构建——见[从源码构建](#从源码构建)。
 
-## Screenshots
+## 截图
 
-![Terminal with host manager, session tabs, and live metrics panel](docs/screenshots/desktop-terminal.png)
+![终端：主机管理、会话标签、实时指标](docs/screenshots/desktop-terminal.png)
 
 <details>
-<summary>More screenshots</summary>
+<summary>更多截图</summary>
 
-![Dual-pane SFTP commander](docs/screenshots/desktop-sftp.png)
+![双窗格 SFTP](docs/screenshots/desktop-sftp.png)
 
-![Port forwarding manager](docs/screenshots/desktop-tunnels.png)
+![端口转发管理](docs/screenshots/desktop-tunnels.png)
 
-![Vault: keys, passwords, certificates](docs/screenshots/desktop-vault.png)
+![保险库：密钥、密码、证书](docs/screenshots/desktop-vault.png)
 
-![AI assistant with per-host policies](docs/screenshots/desktop-ai.png)
+![AI 助手：按主机策略](docs/screenshots/desktop-ai.png)
 
-| Host list | Terminal |
+| 主机列表 | 终端 |
 |---|---|
-| ![Host list with groups and tags](docs/screenshots/mobile-hosts.png) | ![Mobile terminal](docs/screenshots/mobile-terminal.png) |
+| ![带分组和标签的主机列表](docs/screenshots/mobile-hosts.png) | ![移动终端](docs/screenshots/mobile-terminal.png) |
 
 </details>
 
-## Features
+## 功能
 
-- **Connections** — SSH with jump hosts (ProxyJump) and SSH certificates; SFTP (dual-pane
-  commander); port forwarding: local, remote, dynamic/SOCKS; Telnet; serial (desktop and
-  Android USB-OTG).
-- **Terminal** — custom grid emulation, session tabs with split view, SSH auto-reconnect,
-  scrollback search, live host metrics.
-- **Vault** — always-on encryption (Argon2id + XChaCha20-Poly1305) for keys, passwords,
-  identities, and certificates; biometric unlock on Android.
-- **Sync** — optional and self-hosted, zero-knowledge, live push over WebSocket, device
-  pairing via QR. See [Sync server](#sync-server).
-- **Teams** — end-to-end encrypted sharing of hosts and snippets within a team.
-- **Snippets & AI** — command library with type-ahead in the terminal; AI assistant with
-  per-host policies — bring your own OpenAI key or run a local model.
-  See [AI and privacy](#ai-and-privacy).
-- **Localization** — English and Russian UI; the assistant replies in the UI language.
+- **连接** — SSH 跳板（ProxyJump）和 SSH 证书；SFTP（双窗格管理）；端口转发：本地、远程、动态/SOCKS；Telnet；串口（桌面和 Android USB-OTG）。
+- **终端** — 自研网格仿真，会话标签支持分屏，SSH 自动重连，回滚搜索，实时主机指标。
+- **保险库** — 始终加密（Argon2id + XChaCha20-Poly1305），管理密钥、密码、身份和证书；Android 支持生物识别解锁。
+- **同步** — 可选、自托管、零知识，WebSocket 实时推送，设备通过二维码配对。详见[同步服务器](#同步服务器)。
+- **团队** — 端到端加密共享主机和代码片段。
+- **代码片段与 AI** — 命令库支持终端补全；AI 助手支持按主机策略——可自带 OpenAI 密钥或运行本地模型。详见 [AI 与隐私](#ai-与隐私)。
+- **多语言** — 英文、中文、俄语 UI；AI 助手回复语言跟随 UI 语言。
 
-The full, detailed feature list lives in **[docs/FEATURES.md](docs/FEATURES.md)**.
+完整功能清单见 **[docs/FEATURES.md](docs/FEATURES.md)**。
 
-## AI and privacy
+## AI 与隐私
 
-The vault promise ("the master password never leaves the device") and a cloud AI assistant
-only coexist under explicit rules:
+保险库承诺（"主密码从不离开设备"）和云端 AI 助手只有在明确规则下才能共存：
 
-- **Nothing is sent anywhere automatically.** A request contains only the text you type
-  into the AI bar or chat, plus a fixed system prompt. Terminal output, host lists, and
-  vault contents are never attached.
-- **Cloud mode is BYOK**: your own OpenAI API key; requests go directly from the app to the
-  endpoint you configured.
-- **Per-host policies** decide where a request may go:
-  - **Strict** (default for new hosts) — local model only; nothing leaves the device.
-  - **Balanced** — cloud allowed; obvious secrets (private keys, tokens, `password=…`) are
-    redacted from the prompt before sending. Redaction is best-effort pattern matching,
-    not a guarantee.
-  - **Permissive** — cloud allowed without redaction, for non-sensitive systems.
-  - **Off** — AI is hidden for this host.
-- The global quick-chat always redacts secrets, even when using the local model.
-- **Local mode**: the app downloads GGUF models (Qwen3, Phi-4 Mini) and runs them on-device
-  via llama.cpp — no data leaves the device at all.
-- **Model output is untrusted**: a suggested command never runs by itself — it requires
-  explicit confirmation, and commands classified as risky require an extra confirmation.
+- **无自动发送。** 请求仅包含你在 AI 栏或聊天中输入的内容，加上固定系统提示。终端输出、主机列表、保险库内容永不附带。
+- **云端模式为 BYOK**：你自己的 OpenAI API 密钥；请求从应用直接发送到你配置的端点。
+- **按主机策略**决定请求可发送到哪里：
+  - **严格**（新主机默认）— 仅本地模型；任何数据不离开设备。
+  - **平衡** — 允许云端；明显密钥（私钥、令牌、`password=…`）在发送前从提示中脱敏。脱敏为尽力模式匹配，不作绝对保证。
+  - **宽松** — 允许云端、不脱敏，适用于非敏感系统。
+  - **关闭** — 该主机隐藏 AI 功能。
+- 全局快捷聊天始终脱敏密钥，即使使用本地模型。
+- **本地模式**：应用自动下载 GGUF 模型（Qwen3、Phi-4 Mini）通过 llama.cpp 在设备本地运行——任何数据不离开设备。
+- **模型输出不可信**：建议的命令不会自动执行——需要明确确认，高风险命令需二次确认。
 
-## Tech stack
+## 技术栈
 
-- **Language/UI**: Kotlin 2.x, Compose Multiplatform 1.11.1
-- **Build**: Gradle 9.3.1, Android Gradle Plugin 9.0.1
-- **JVM target**: JDK 21 (`jvmToolchain(21)` in all modules, `JVM_21`)
-- **Android**: minSdk 26 (Android 8.0), compileSdk/targetSdk 36
-- **Core**: sshj 0.40.0, BouncyCastle 1.80.2, libsodium (ionspin KMP), okio, atomicfu
-- **Serial**: jSerialComm 2.11.0 (desktop), usb-serial-for-android 3.9.0 (Android, jitpack)
-- **Sync**: Ktor 3.4.3 (client+server), Exposed 0.58.0, SQLite/PostgreSQL, HikariCP,
-  Nimbus SRP-6a
+- **语言/UI**：Kotlin 2.x，Compose Multiplatform 1.11.1
+- **构建**：Gradle 9.3.1，Android Gradle Plugin 9.0.1
+- **JVM 目标**：JDK 21（所有模块 `jvmToolchain(21)`，`JVM_21`）
+- **Android**：minSdk 26 (Android 8.0)，compileSdk/targetSdk 36
+- **核心**：sshj 0.40.0，BouncyCastle 1.80.2，libsodium (ionspin KMP)，okio，atomicfu
+- **串口**：jSerialComm 2.11.0（桌面），usb-serial-for-android 3.9.0（Android）
+- **同步**：Ktor 3.4.3（客户端+服务端），Exposed 0.58.0，SQLite/PostgreSQL，HikariCP，Nimbus SRP-6a
 
-## Repository layout
+## 仓库布局
 
 ```
-shared/       # KMP core: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ (+ai/local),
+shared/       # KMP 核心: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ (+ai/local),
               # telnet/, serial/, tunnel/, snippet/, host/, files/
 composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
-androidApp/   # Android app (MainActivity, manifest); applicationId app.skerry
-server/       # self-hosted sync server (Ktor, AGPL-3.0)
-sync-wire/    # wire contract shared by client and server
-docs/         # HTML prototypes (source of truth for UX) and design documents
+androidApp/   # Android App (MainActivity, manifest); applicationId app.skerry
+server/       # 自托管同步服务器 (Ktor, AGPL-3.0)
+sync-wire/    # 客户端与服务端共享的传输数据结构
+docs/         # HTML 原型和设计文档
 ```
 
-HTML prototypes in `docs/design/` (`Skerry Tablet.html`, `Skerry Logo.html`) are the source
-of truth for the UI, built 1:1.
+## 从源码构建
 
-## Building from source
+以下内容面向贡献者——普通用户请从[安装](#安装)下载打包版本。
+详见 **[CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)**。
 
-This section is for contributors — regular users should grab a package from
-[Install](#install). See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the development
-workflow, commit conventions, and packaging notes.
+需要 **JDK 21**（`foojay-resolver` 自动获取）。Android 需要 Android SDK（`ANDROID_HOME`）。
 
-Requires **JDK 21** (`foojay-resolver` fetches one if needed). Android additionally needs
-the Android SDK (`ANDROID_HOME`).
-
-Desktop (packages are produced for the OS and CPU architecture of the machine the build
-runs on — build on macOS/ARM to get a `.dmg`/arm64 package):
+桌面端（生成当前机器的 OS/CPU 架构包——在 macOS/ARM 上构建才能拿到 `.dmg`/arm64 包）：
 
 ```bash
-./gradlew :composeApp:run                                # run
+./gradlew :composeApp:run                                # 直接运行
 ./gradlew :composeApp:packageDistributionForCurrentOS    # .deb / .rpm / .msi / .dmg
-./gradlew :composeApp:packageAppImage                    # portable Linux .AppImage
-./gradlew :composeApp:packageFlatpak                     # single-file Linux .flatpak (needs flatpak + flatpak-builder)
+./gradlew :composeApp:packageAppImage                    # 便携 Linux .AppImage
+./gradlew :composeApp:packageFlatpak                     # 单文件 Linux .flatpak (需 flatpak + flatpak-builder)
 ```
 
-Android:
+Android：
 
 ```bash
 ANDROID_HOME=$HOME/Android/Sdk ./gradlew :androidApp:installDebug
 ```
 
-Tests (JUnit 5):
+测试 (JUnit 5)：
 
 ```bash
 ./gradlew test
 ```
 
-## Sync server
+## 同步服务器
 
-Skerry is local-first — the app is fully functional without any server. When you want your
-vault on more than one device, you run your **own** sync server; there is no vendor cloud.
+Skerry 以本地优先——应用无需服务器即可完整使用。若要在多设备间同步保险库，你需运行**自己的**同步服务器；没有厂商云。
 
-The server is zero-knowledge by design: it stores only ciphertext (the wrapped `dataKey`,
-encrypted vault records) and sync metadata. It authenticates clients with SRP-6a — the
-password itself is never transmitted — and cannot decrypt anything you store.
+设计上服务器为零知识：仅存储加密数据（加密后的 `dataKey` 和保险库记录）及同步元数据。认证采用 SRP-6a——密码本身从不传输——服务器无法解密你存储的任何内容。
 
-Quick start (prebuilt multi-arch image from
-[Docker Hub](https://hub.docker.com/r/secherkasov/skerry-sync), SQLite in a named volume —
-zero configuration):
+快速启动（预构建多架构镜像，SQLite 命名卷，零配置）：
 
 ```bash
 docker run -d --name skerry-sync -p 8080:8080 \
@@ -214,28 +181,19 @@ docker run -d --name skerry-sync -p 8080:8080 \
   secherkasov/skerry-sync:latest
 ```
 
-The server listens on `http://localhost:8080` and ships a built-in, fully offline admin
-console at `/console`. To build from source instead, run `docker compose up -d --build`
-from the repository root; for PostgreSQL, uncomment the `db` service and the postgres
-variables in [docker-compose.yml](docker-compose.yml). A server-only Gradle build needs no
-Android SDK: `./gradlew :server:run -PserverOnly`.
+服务监听 `http://localhost:8080`，内建完全离线的管理控制台 `/console`。从仓库根目录构建：`docker compose up -d --build`。PostgreSQL 模式取消 `db` 服务和对应变量注释即可。
 
-The full deployment guide — configuration reference, API endpoints, TLS termination
-(Caddy/nginx), backups, and the privacy model — lives in
-**[server/README.md](server/README.md)**.
+完整部署指南——配置参考、API 端点、TLS 终端（Caddy/nginx）、备份及隐私模型，详见 **[server/README.zh.md](server/README.zh.md)**。
 
-## Security
+## 安全
 
-The security policy — how to report a vulnerability privately, supported versions, the
-threat model, and an honest note on audit status — lives in **[SECURITY.md](SECURITY.md)**.
+安全策略——如何私下报告漏洞、受支持版本、威胁模型及审计状态说明，详见 **[SECURITY.zh.md](SECURITY.zh.md)**。
 
-## Contributing
+## 贡献
 
-Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** for the environment
-setup, build and test commands, module structure, commit conventions, and the PR process.
+欢迎贡献——环境搭建、构建测试命令、模块结构、提交规范及 PR 流程见 **[CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)**。
 
-## Licenses
+## 许可证
 
-- Clients (`shared/`, `composeApp/`, `androidApp/`) — [GPL-3.0](LICENSE)
-- Sync server (`server/`) — [AGPL-3.0](server/LICENSE). The server is AGPL so that forks
-  which host it as a service contribute their changes back to the project.
+- 客户端（`shared/`、`composeApp/`、`androidApp/`）— [GPL-3.0](LICENSE)
+- 同步服务器（`server/`）— [AGPL-3.0](server/LICENSE)。服务器采用 AGPL 确保托管为服务的 fork 将修改回馈社区。

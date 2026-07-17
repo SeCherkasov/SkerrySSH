@@ -38,9 +38,11 @@
 
     <!-- Поля формы -->
     <string name="sync_field_server_url">АДРЕС СЕРВЕРА</string>
-    <string name="sync_placeholder_server_url">https://sync.example.com</string>
-    <string name="sync_field_account">АККАУНТ</string>
-    <string name="sync_placeholder_account">you@example.com</string>
+    <string name="sync_placeholder_server_url">https://sync.onepve.com</string>
+    <string name="sync_field_account">Почта аккаунта</string>
+    <string name="sync_placeholder_account">your@email.com</string>
+    <string name="sync_account_email_hint">Введите действительный адрес эл. почты</string>
+    <string name="sync_server_url_reset">Сбросить на адрес по умолчанию</string>
     <string name="sync_field_master_password">МАСТЕР-ПАРОЛЬ</string>
     <string name="sync_placeholder_master_password">мастер-пароль</string>
     <string name="sync_keep_connected">Оставаться подключённым</string>
@@ -61,6 +63,9 @@
     <string name="sync_placeholder_min_chars">не менее %1$d символов</string>
     <string name="sync_field_repeat_password">ПОВТОРИТЕ ПАРОЛЬ</string>
     <string name="sync_placeholder_repeat">повторите для подтверждения</string>
+    <string name="sync_field_confirm_password">ПОДТВЕРДИТЕ ГЛАВНЫЙ ПАРОЛЬ</string>
+    <string name="sync_placeholder_confirm_password">введите ещё раз для подтверждения</string>
+    <string name="sync_master_password_warning">⚠️ Главный пароль не подлежит восстановлению. При утере все зашифрованные им данные будут потеряны навсегда. Сохраните его в менеджере паролей или держите хотя бы одно устройство онлайн для сопряжения новых.</string>
     <string name="sync_passwords_mismatch">Пароли не совпадают.</string>
     <string name="sync_link_this_device">Связать это устройство</string>
     <string name="sync_zero_knowledge_account">Zero-knowledge · пароль аккаунта никуда не передаётся</string>

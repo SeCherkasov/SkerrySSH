@@ -111,11 +111,13 @@ compose.desktop {
         mainClass = "app.skerry.ui.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Dmg)
+            targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Dmg)
             // jlink drops modules loaded reflectively (jdk.unsupported, java.naming, GSSAPI, …),
             // so the packaged app died on startup while `./gradlew run` worked. Bundle them all.
             includeAllModules = true
             packageName = "Skerry"
+            vendor = "onepve"
+            description = "开源跨平台 SSH 客户端"
             // Version from the single source (gradle.properties); the release workflow overrides it.
             val appVersion = providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0"
             packageVersion = appVersion
@@ -128,8 +130,8 @@ compose.desktop {
             linux { iconFile.set(project.file("icons/skerry.png")) }
             windows {
                 iconFile.set(project.file("icons/skerry.ico"))
-                // Space-free install path (%LOCALAPPDATA%\Skerry): goterl/ionspin's isJarFile()
-                // throws on the space in "C:\Program Files" and then crashes libsodium init.
+                // Space-free install path (%LOCALAPPDATA%\\Skerry): goterl/ionspin's isJarFile()
+                // throws on the space in "C:\\Program Files" and then crashes libsodium init.
                 perUserInstall = true
                 menu = true
                 shortcut = true
@@ -217,4 +219,7 @@ tasks.register<JavaExec>("screenshotDesign") {
 // offline Flatpak build, which sets -Dskerry.offlineRepo, never resolves it. See the root build.
 if (System.getProperty("skerry.offlineRepo") == null) {
     pluginManager.apply("org.jetbrains.kotlinx.kover")
+    // Compose Hot Reload — same online-only gate: adds the dev `hotRunJvm` task (live UI reload on
+    // the desktop target). Never applied in the offline packaging build (no dev tasks needed there).
+    pluginManager.apply("org.jetbrains.compose.hot-reload")
 }

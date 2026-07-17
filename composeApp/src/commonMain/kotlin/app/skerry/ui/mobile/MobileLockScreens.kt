@@ -54,6 +54,7 @@ import app.skerry.ui.generated.resources.shell_corrupted_title
 import app.skerry.ui.generated.resources.shell_create_subtitle
 import app.skerry.ui.generated.resources.shell_create_title
 import app.skerry.ui.generated.resources.shell_create_vault
+import app.skerry.ui.generated.resources.shell_create_warning
 import app.skerry.ui.generated.resources.shell_footer_never_leaves_short
 import app.skerry.ui.generated.resources.shell_forgot_password
 import app.skerry.ui.generated.resources.shell_lock_title
@@ -168,6 +169,8 @@ fun MobileCreateScreen(
         error = error,
     ) {
         MobileLockField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Next)
+        Spacer(Modifier.height(4.dp))
+        Txt(stringResource(Res.string.shell_create_warning), color = D.dim, size = 12.sp)
         issue?.let {
             Spacer(Modifier.height(8.dp))
             Txt(masterPasswordHint(it), color = D.amber, size = 12.sp)

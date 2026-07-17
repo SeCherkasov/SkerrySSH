@@ -65,6 +65,7 @@ import app.skerry.ui.generated.resources.shell_reset_permanently
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_create_title
 import app.skerry.ui.generated.resources.shell_create_subtitle
+import app.skerry.ui.generated.resources.shell_create_warning
 import app.skerry.ui.generated.resources.shell_repeat_password
 import app.skerry.ui.generated.resources.shell_create_vault
 import app.skerry.ui.generated.resources.shell_pairing_link
@@ -83,7 +84,6 @@ import app.skerry.ui.sync.PairingJoinScreen
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
-
 /**
  * Lock overlay (mock path): radial background, large logo, master password field and buttons. Unlock
  * here is a stub ([DesktopDesignState.unlock]); the live gate over `VaultGateController` renders
@@ -135,8 +135,6 @@ fun DesktopUnlockScreen(
             PrimaryButton(stringResource(Res.string.shell_unlock), onClick = submit, modifier = Modifier.weight(1f))
             if (canUseBiometric) BiometricButton(onClick = onBiometric)
         }
-        // A forgotten password can only be resolved by a reset (zero-knowledge): an unobtrusive link
-        // under the button leads to the confirmation screen.
         Txt(
             stringResource(Res.string.shell_forgot_password),
             color = D.faint,
@@ -150,7 +148,7 @@ fun DesktopUnlockScreen(
 }
 
 /**
- * Corrupted vault file screen. The file can't be read → no password entry; the only action is to go to
+ * Corrupted vault file screen. The file can't be read -> no password entry; the only action is to go to
  * reset confirmation ([onReset]). Amber warning icon.
  */
 @Composable
@@ -259,8 +257,6 @@ fun DesktopCreateScreen(
 ) {
     var pwd by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    // Losing the master password = irreversibly losing the vault (zero-knowledge): require explicit
-    // acknowledgement before creation so "no recovery" isn't missed as fine print.
     var acknowledged by remember { mutableStateOf(false) }
     var joining by remember { mutableStateOf(false) }
     val strength = passwordStrength(pwd)
@@ -278,6 +274,7 @@ fun DesktopCreateScreen(
         subtitle = stringResource(Res.string.shell_create_subtitle),
         error = error,
     ) {
+        Txt(stringResource(Res.string.shell_create_warning), color = D.faint, size = 12.sp, modifier = Modifier.padding(bottom = 16.dp))
         LockPasswordField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Next, autoFocus = true)
         strength?.let { PasswordStrengthMeter(it) }
         issue?.let { Txt(masterPasswordHint(it), color = D.amber, size = 11.sp) }

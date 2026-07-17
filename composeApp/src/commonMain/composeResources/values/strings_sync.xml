@@ -38,9 +38,11 @@
 
     <!-- Поля формы -->
     <string name="sync_field_server_url">SERVER URL</string>
-    <string name="sync_placeholder_server_url">https://sync.example.com</string>
-    <string name="sync_field_account">ACCOUNT</string>
-    <string name="sync_placeholder_account">you@example.com</string>
+    <string name="sync_placeholder_server_url">https://sync.onepve.com</string>
+    <string name="sync_field_account">Account email</string>
+    <string name="sync_placeholder_account">your@email.com</string>
+    <string name="sync_account_email_hint">Please enter a valid email address</string>
+    <string name="sync_server_url_reset">Reset to default URL</string>
     <string name="sync_field_master_password">MASTER PASSWORD</string>
     <string name="sync_placeholder_master_password">master password</string>
     <string name="sync_keep_connected">Keep me connected</string>
@@ -61,6 +63,9 @@
     <string name="sync_placeholder_min_chars">at least %1$d characters</string>
     <string name="sync_field_repeat_password">REPEAT PASSWORD</string>
     <string name="sync_placeholder_repeat">repeat to confirm</string>
+    <string name="sync_field_confirm_password">CONFIRM MASTER PASSWORD</string>
+    <string name="sync_placeholder_confirm_password">type again to confirm</string>
+    <string name="sync_master_password_warning">⚠️ Your master password is not recoverable. If lost, all data encrypted under it will be lost forever. Store it in a password manager or keep at least one device online to pair new ones.</string>
     <string name="sync_passwords_mismatch">Passwords don't match.</string>
     <string name="sync_link_this_device">Link this device</string>
     <string name="sync_zero_knowledge_account">Zero-knowledge · the account password never travels</string>

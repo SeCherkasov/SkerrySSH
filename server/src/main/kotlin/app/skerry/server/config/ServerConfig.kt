@@ -38,6 +38,27 @@ data class ServerConfig(
     val registrationOpen: Boolean,
     /** Hard cap on total accounts (backstop for an instance left open). 0 ⇒ unlimited. */
     val maxAccounts: Int,
+    // --- Mail settings (Scheme B) ---
+    /** Whether the mail subsystem is active. When false, all mail calls are no-ops. */
+    val mailEnabled: Boolean,
+    val smtpHost: String,
+    val smtpPort: Int,
+    val smtpUser: String,
+    val smtpPassword: String,
+    /** "From" address for outgoing mail, e.g. "Skerry <noreply@sync.onepve.com>". */
+    val smtpFrom: String,
+    /** Use STARTTLS (port 587) or SMTPS (port 465). */
+    val smtpTls: Boolean,
+    /**
+     * Path to the mail brand/template configuration JSON file. When relative, resolved against the
+     * process working directory. Default: `./data/mail-config.json`.
+     */
+    val mailConfigPath: String,
+    /**
+     * Public URL of this sync server (e.g. "https://sync.example.com") — shown in email footers so
+     * users know which instance mailed them. Empty = footer line omitted.
+     */
+    val publicUrl: String,
 ) {
     val isPostgres: Boolean get() = databaseUrl.startsWith("jdbc:postgresql")
 
@@ -74,6 +95,16 @@ data class ServerConfig(
                 // Default open for backward compatibility; anything other than "open" (case-insensitive) closes it.
                 registrationOpen = str("SKERRY_REGISTRATION", "open").equals("open", ignoreCase = true),
                 maxAccounts = int("SKERRY_MAX_ACCOUNTS", 0).coerceAtLeast(0),
+                // Mail
+                mailEnabled = str("SKERRY_MAIL_ENABLED", "false").equals("true", ignoreCase = true),
+                smtpHost = str("SKERRY_SMTP_HOST", ""),
+                smtpPort = int("SKERRY_SMTP_PORT", 587),
+                smtpUser = str("SKERRY_SMTP_USER", ""),
+                smtpPassword = str("SKERRY_SMTP_PASSWORD", ""),
+                smtpFrom = str("SKERRY_SMTP_FROM", "Skerry <noreply@sync.onepve.com>"),
+                smtpTls = str("SKERRY_SMTP_TLS", "true").equals("true", ignoreCase = true),
+                mailConfigPath = str("SKERRY_MAIL_CONFIG_PATH", "/data/mail-config.json"),
+                publicUrl = str("SKERRY_PUBLIC_URL", "").trimEnd('/'),
             )
         }
     }

@@ -45,7 +45,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: secherkasov/skerry-sync
+  IMAGE: onepve/skerry-sync
 
 jobs:
   build:

@@ -12,6 +12,7 @@
 
     <string name="shell_create_title">Set a master password</string>
     <string name="shell_create_subtitle">It encrypts this vault and never leaves the device — there is no recovery.</string>
+    <string name="shell_create_warning">This password is your only key for encrypting and decrypting the vault — never lose it. Even if you use cloud sync, this is the password you still need.</string>
     <string name="shell_repeat_password">Repeat password</string>
     <string name="shell_create_vault">Create vault</string>
     <string name="shell_pairing_link">Linking from another device? Use a pairing code</string>

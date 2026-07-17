@@ -1,6 +1,6 @@
 # Skerry Sync Server
 
-**English** · [Русский](README.ru.md)
+**English** · [Русский](README.ru.md) · [中文](README.zh.md)
 
 Self-hosted, zero-knowledge E2E sync for [Skerry](../README.md) (Vaultwarden model). The
 server stores **ciphertext only** — the wrapped `dataKey` and encrypted vault records — plus

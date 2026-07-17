@@ -10,6 +10,7 @@ import app.skerry.server.routes.pairingStartRoute
 import app.skerry.server.routes.syncWebSocket
 import app.skerry.server.routes.teamRoutes
 import app.skerry.server.routes.vaultRoutes
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -34,6 +35,7 @@ import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.http.content.staticFiles
 import io.ktor.server.http.content.staticResources
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.header
@@ -44,6 +46,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
+import java.io.File
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
@@ -60,6 +63,12 @@ object RateLimits {
 
 /** Server version for /healthz and the admin console. */
 const val SERVER_VERSION = "0.1.0"
+
+/**
+ * Root for operator-overridable data files (landing page, admin console assets). Matches the
+ * Docker /data volume; override with SKERRY_DATA_DIR for bare-metal runs.
+ */
+private val dataDir: File = File(System.getenv("SKERRY_DATA_DIR") ?: "/data")
 
 val JWTPrincipal.accountId: String get() = payload.subject
 val JWTPrincipal.deviceId: String get() = payload.getClaim(TokenService.CLAIM_DEVICE).asString()
@@ -193,10 +202,19 @@ fun Application.configureServer(services: Services) {
     routing {
         get("/healthz") { call.respondText("ok") }
 
-        // Root redirects to the admin console so opening the server in a browser isn't a 404.
-        get("/") { call.respondRedirect("/console/") }
+        // Landing page: serve the static index.html. Admin console at /console/.
+        // Both honor external overrides under $SKERRY_DATA_DIR (default /data): drop a file at
+        // /data/static/index.html (landing) or /data/admin/... (console) to customize without
+        // rebuilding the image; anything missing falls back to the bundled resources.
+        get("/") {
+            val html = dataDir.resolve("static/index.html").takeIf { it.isFile }?.readText()
+                ?: this::class.java.classLoader.getResource("static/index.html")?.readText()
+                ?: "<html><body><h1>Skerry Sync</h1><p><a href='/console/'>Admin Console</a></p></body></html>"
+            call.respondText(html, ContentType.Text.Html)
+        }
 
-        // Static admin console (self-hosted): /console -> resources/admin/index.html.
+        // Static admin console (self-hosted): /console -> /data/admin/ override, else resources/admin.
+        staticFiles("/console", dataDir.resolve("admin"))
         staticResources("/console", "admin")
 
         authRoutes(services)

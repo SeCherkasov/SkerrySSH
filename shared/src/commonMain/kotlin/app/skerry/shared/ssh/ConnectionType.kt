@@ -8,7 +8,10 @@ import kotlinx.serialization.Serializable
  * [SSH]), then the session itself runs over mosh's encrypted UDP protocol; no SFTP/forwarding.
  * [TELNET] — raw TCP stream with Telnet option negotiation (RFC 854), no auth/encryption,
  * no SFTP/forwarding. [SERIAL] — local serial port (desktop: native port, Android: USB-OTG); in the
- * profile `address` holds the device name and `port` holds the baud rate.
+ * profile `address` holds the device name and `port` holds the baud rate. [VNC] — remote desktop
+ * over the RFB protocol (framebuffer + input, not a byte stream): `address`/`port` name the RFB
+ * server (default 5900), `credentialId` holds the optional VNC password (no username); it does not
+ * flow through the shell/terminal stack (see [app.skerry.shared.vnc.VncTransport]).
  *
  * Lives in package `ssh` as a transport tag: [SshTarget.connectionType] feeds it to the transport
  * router ([RoutingTransport]), [app.skerry.shared.host.Host.connectionType] to the profile.
@@ -16,12 +19,22 @@ import kotlinx.serialization.Serializable
  * compatibility; a missing field in old files defaults to [SSH].
  */
 @Serializable
-enum class ConnectionType { SSH, MOSH, TELNET, SERIAL }
+enum class ConnectionType { SSH, MOSH, TELNET, SERIAL, VNC }
 
 /**
  * Whether the profile authenticates over SSH: username/credentials/jump host apply. True for
  * [ConnectionType.SSH] and [ConnectionType.MOSH] (Mosh bootstraps through an SSH hop with the
- * profile's full auth); Telnet/Serial have no authentication at all.
+ * profile's full auth); Telnet/Serial/VNC have no SSH authentication (VNC has its own password —
+ * see [isVnc]).
  */
 val ConnectionType.usesSshAuth: Boolean
     get() = this == ConnectionType.SSH || this == ConnectionType.MOSH
+
+/**
+ * Whether the profile is a VNC/RFB remote desktop. VNC authenticates with an optional password
+ * (stored as [app.skerry.shared.vault.CredentialSecret.Password], like SSH) but has no username,
+ * private key, jump host or keep-alive — so the form gates auth on this separately from
+ * [usesSshAuth].
+ */
+val ConnectionType.isVnc: Boolean
+    get() = this == ConnectionType.VNC

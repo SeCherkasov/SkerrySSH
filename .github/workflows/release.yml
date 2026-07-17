@@ -149,33 +149,24 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Install WiX Toolset (jpackage MSI)
-        # jpackage needs WiX 3.x (candle.exe/light.exe) for .msi; recent
-        # windows runners may not ship it.
-        run: choco install wixtoolset -y --no-progress
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
-      - name: Package msi
-        shell: bash
-        run: >
-          ./gradlew :composeApp:packageMsi --stacktrace
-          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
-
-      - name: Suffix msi with the architecture
-        # jpackage emits Skerry-<version>.msi with no arch marker; every other desktop
-        # asset carries one, and a Windows ARM build would otherwise collide.
-        shell: bash
+      - name: Build portable ZIP
+        shell: pwsh
+        env:
+          VERSION_PROP: ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
         run: |
-          cd composeApp/build/compose/binaries/main/msi
-          for f in *.msi; do mv "$f" "${f%.msi}-x64.msi"; done
+          ./gradlew :composeApp:createDistributable --stacktrace $env:VERSION_PROP
+          # portable marker in the app dir
+          New-Item -ItemType File -Path composeApp/build/compose/binaries/main/app/Skerry/portable -Force | Out-Null
+          Compress-Archive -Path composeApp/build/compose/binaries/main/app/Skerry -DestinationPath Skerry-portable-x64.zip
 
-      - name: Upload Windows distributable
+      - name: Upload Windows portable ZIP
         uses: actions/upload-artifact@v7
         with:
           name: skerry-windows-x64
-          path: composeApp/build/compose/binaries/main/msi/*.msi
+          path: Skerry-portable-x64.zip
           if-no-files-found: error
 
   macos-desktop:
@@ -379,10 +370,66 @@ jobs:
           find artifacts -type f -exec cp {} dist/ \;
           cd dist && sha256sum * > SHA256SUMS.txt
 
+      - name: Write release notes
+        run: |
+          cat > dist/RELEASE_NOTES.md <<'EOF'
+          ## 下载适合你平台的客户端 / Download the right package for your platform
+
+          | 平台 / Platform | 文件名 / Filename pattern | 格式 / Package type | 用途 / Use case |
+          |:---|:---|:---|:---|
+          | Linux x86_64 | `Skerry-*-amd64.deb` | Debian 包 / Debian package | Ubuntu / Debian / Linux Mint 安装版 / Install on Ubuntu / Debian / Linux Mint |
+          | Linux x86_64 | `Skerry-*-x86_64.rpm` | RPM 包 / RPM package | Fedora / openSUSE / RHEL 安装版 / Install on Fedora / openSUSE / RHEL |
+          | Linux x86_64 | `Skerry-*-x86_64.AppImage` | AppImage | Linux 绿色便携版 / Portable: download, make executable, run |
+          | Linux ARM64 | `Skerry-*-arm64.deb` | Debian 包 / Debian package | ARM64 Ubuntu / Debian 安装版 / Install on ARM64 Ubuntu / Debian |
+          | Linux ARM64 | `Skerry-*-aarch64.rpm` | RPM 包 / RPM package | ARM64 Fedora / openSUSE 安装版 / Install on ARM64 Fedora / openSUSE |
+          | Linux ARM64 | `Skerry-*-aarch64.AppImage` | AppImage | ARM64 Linux 绿色便携版 / Portable: download, make executable, run |
+          | Windows x64 | `Skerry-portable-x64.zip` | ZIP 压缩包 / ZIP archive | Windows 绿色便携版 / Portable: extract and run |
+          | macOS Apple Silicon | `Skerry-*-arm64.dmg` | DMG 磁盘映像 / DMG disk image | Apple Silicon Mac 安装版 / Install on Apple Silicon Macs |
+          | macOS Intel | `Skerry-*-x64.dmg` | DMG 磁盘映像 / DMG disk image | Intel Mac 安装版 / Install on Intel Macs |
+          | Android | `Skerry-*.apk` | APK | Android 设备安装版 / Install on Android devices |
+          | Linux (Flatpak) | `Skerry-*.flatpak` | Flatpak 软件包 / Flatpak bundle | 支持 Flatpak 的 Linux 发行版 / Sandbox install on any Flatpak-enabled distro |
+
+          > **注意 / Note:** macOS 安装包未签名且未经过公证。首次运行时，请前往系统设置 → 隐私与安全性，点击“仍然打开”。  
+          > macOS packages are unsigned and un-notarized. On first launch, open **System Settings → Privacy & Security** and click **Open Anyway**.
+
+          ## 校验 / Verification
+          SHA256 校验和请查看 `SHA256SUMS.txt` / SHA256 checksums for all files are in `SHA256SUMS.txt`.
+          EOF
+
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" dist/*
-          --draft --generate-notes --title "$GITHUB_REF_NAME"
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file dist/RELEASE_NOTES.md \
+            dist/*
+
+      - name: Upload stable filenames to R2
+        # Fixed paths under Skerry/latest/ so the landing page's download cards never change.
+        # Needs R2_DOWNLOADS_ACCOUNT_ID / R2_DOWNLOADS_ACCESS_KEY_ID / R2_DOWNLOADS_SECRET_ACCESS_KEY secrets.
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_DOWNLOADS_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_DOWNLOADS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_DOWNLOADS_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          upload() { # $1 local file, $2 r2 key
+            aws s3 cp "$1" "s3://downloads/Skerry/latest/$2" \
+              --endpoint-url "$ENDPOINT" --region auto --no-progress
+          }
+          upload "$(ls dist/Skerry-*.apk)"                    Skerry-android.apk
+          upload "$(ls dist/Skerry-portable-x64.zip)"         Skerry-portable-x64.zip
+          upload "$(ls dist/Skerry-*-arm64.dmg)"              Skerry-macos-arm64.dmg
+          upload "$(ls dist/Skerry-*-x64.dmg)"                Skerry-macos-x64.dmg
+          upload "$(ls dist/*-amd64.deb)"                     Skerry-linux-amd64.deb
+          upload "$(ls dist/*-x86_64.rpm)"                    Skerry-linux-x86_64.rpm
+          upload "$(ls dist/*-x86_64.AppImage)"               Skerry-linux-x86_64.AppImage
+          upload "$(ls dist/*-arm64.deb)"                     Skerry-linux-arm64.deb
+          upload "$(ls dist/*-aarch64.rpm)"                   Skerry-linux-aarch64.rpm
+          upload "$(ls dist/*-aarch64.AppImage)"              Skerry-linux-aarch64.AppImage
+          upload "$(ls dist/Skerry-*.flatpak)"                Skerry-linux.flatpak
+          upload dist/SHA256SUMS.txt                          SHA256SUMS.txt

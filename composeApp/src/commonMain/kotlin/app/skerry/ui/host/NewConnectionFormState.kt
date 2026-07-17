@@ -9,6 +9,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.host.MAX_TAGS_PER_HOST
 import app.skerry.shared.host.normalizeTag
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -135,6 +136,9 @@ class NewConnectionFormState {
             return when (connectionType) {
                 ConnectionType.SSH, ConnectionType.MOSH -> base && username.isNotBlank() && authValid
                 ConnectionType.TELNET, ConnectionType.SERIAL -> base
+                // VNC authenticates with an optional password (no username): base + a valid auth
+                // choice (Ask / a stored password), same secret resolution as SSH minus the username.
+                ConnectionType.VNC -> base && authValid
             }
         }
 
@@ -148,8 +152,9 @@ class NewConnectionFormState {
      * (writes to the vault); if it returns `null`, there's no attachment.
      */
     fun resolveCredentialId(saveCredential: (CredentialDraft) -> String?): String? = when {
-        // Telnet/Serial have no auth, no secret gets attached.
-        !connectionType.usesSshAuth -> null
+        // Telnet/Serial have no auth, no secret gets attached. VNC does authenticate (password),
+        // so it takes the same secret-resolution path as SSH below (the UI just hides the key option).
+        !connectionType.usesSshAuth && !connectionType.isVnc -> null
         else -> when (authMode) {
             AuthMode.ASK -> null
             AuthMode.EXISTING -> existingCredentialId
@@ -184,11 +189,12 @@ class NewConnectionFormState {
     )
 
     companion object {
-        /** Default port/speed by type: SSH/Mosh->22 (the SSH hop's port), Telnet->23, Serial->9600 (baud). */
+        /** Default port/speed by type: SSH/Mosh->22 (the SSH hop's port), Telnet->23, Serial->9600 (baud), VNC->5900 (RFB display :0). */
         fun defaultPortFor(type: ConnectionType): Int = when (type) {
             ConnectionType.SSH, ConnectionType.MOSH -> 22
             ConnectionType.TELNET -> 23
             ConnectionType.SERIAL -> 9600
+            ConnectionType.VNC -> 5900
         }
 
         /**

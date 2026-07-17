@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title data-l10n="pageTitle">Skerry · 开源跨平台 SSH 客户端</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --green:#0ea365;--green-d:#068049;
+  --g10:rgba(14,163,101,.10);--g15:rgba(14,163,101,.15);--g25:rgba(14,163,101,.25);
+  --text:#0a1f15;--muted:#4a7a62;
+  --border-s:rgba(14,163,101,.10);
+}
+html{scroll-behavior:smooth}
+body{font-family:"Inter",system-ui,-apple-system,sans-serif;background:linear-gradient(160deg,#fff 0%,#f4fcf8 40%,#e8f6ef 100%);color:var(--text);min-height:100vh;overflow-x:hidden;line-height:1.6;-webkit-font-smoothing:antialiased}
+.bg-glow{position:fixed;inset:0;pointer-events:none;z-index:-1}
+.bg-glow::before{content:"";position:absolute;top:-200px;right:-200px;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,var(--g15) 0%,transparent 70%)}
+.bg-glow::after{content:"";position:absolute;bottom:-150px;left:-150px;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(20,160,110,.08) 0%,transparent 70%)}
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 6%;background:rgba(255,255,255,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border-s)}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-size:1.05rem;font-weight:800;color:var(--text);letter-spacing:-.4px}
+.nav-logo .dot{width:10px;height:10px;border-radius:50%;background:var(--green);display:inline-block;box-shadow:0 0 12px var(--g25)}
+.nav-dl{background:var(--green);color:#fff!important;padding:9px 20px;border-radius:100px;font-weight:700;font-size:.88rem;text-decoration:none;transition:background .2s,transform .15s;white-space:nowrap}
+.nav-dl:hover{background:var(--green-d);transform:translateY(-1px)}
+.hero{padding:130px 6% 30px;text-align:center;max-width:900px;margin:0 auto}
+.badge{display:inline-flex;align-items:center;gap:6px;background:var(--g10);border:1px solid var(--g25);border-radius:100px;padding:5px 14px;font-size:.78rem;font-weight:600;color:var(--green-d);margin-bottom:18px}
+.badge .bdot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.credit{font-size:.8rem;color:rgba(74,122,98,.5)}
+.credit a{color:var(--green);text-decoration:none;font-weight:500;transition:color .2s}
+.credit a:hover{color:var(--green-d)}
+.hero-cta{display:inline-block;margin-top:22px}
+.sec{padding:30px 6% 40px;max-width:1400px;margin:0 auto}
+.sec-label{display:inline-block;font-size:.73rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--green);background:var(--g10);padding:4px 12px;border-radius:100px;margin-bottom:12px}
+.sec-title{font-size:clamp(1.6rem,3vw,2.3rem);font-weight:800;letter-spacing:-.8px;line-height:1.2;color:var(--text);margin-bottom:10px}
+.sec-sub{font-size:.95rem;color:var(--muted);max-width:500px;line-height:1.7;margin-bottom:36px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.c{background:#fff;border:1.5px solid var(--border-s);border-radius:20px;padding:24px;text-decoration:none;color:inherit;transition:border-color .25s,transform .25s,box-shadow .25s;display:block}
+.c:hover{border-color:var(--g25);transform:translateY(-4px);box-shadow:0 14px 36px rgba(14,163,101,.10)}
+.c.platform{border-color:var(--g15);cursor:pointer}
+.c.platform:hover{border-color:var(--green);box-shadow:0 14px 36px rgba(14,163,101,.14)}
+.fi{width:42px;height:42px;border-radius:12px;background:var(--g10);border:1px solid var(--g15);display:flex;align-items:center;justify-content:center;margin-bottom:14px;color:var(--green)}
+.fi svg{width:21px;height:21px}
+.c.platform .fi{width:48px;height:48px;border-radius:14px;background:var(--g10);border-color:var(--g25);color:var(--green)}
+.c.platform .fi svg{width:24px;height:24px}
+.ct{font-size:.92rem;font-weight:700;color:var(--text);margin-bottom:5px;letter-spacing:-.2px}
+.cd{font-size:.82rem;color:var(--muted);line-height:1.65}
+.c .arrow{display:inline-flex;align-items:center;gap:4px;margin-top:10px;font-size:.78rem;font-weight:600;color:var(--green);transition:gap .2s}
+.c:hover .arrow{gap:8px}
+.footer{padding:32px 6% 40px;text-align:center}
+.footer-links{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+.footer-links a{color:var(--muted);text-decoration:none;font-size:.82rem;font-weight:500;transition:color .2s}
+.footer-links a:hover{color:var(--green)}
+.footer-copy{font-size:.74rem;color:#aac8bb}
+/* language dropdown */
+.lang-drop{position:relative;margin-left:6px}
+.lang-btn{background:transparent;border:1px solid var(--g15);border-radius:6px;padding:4px 10px;font-size:.75rem;font-weight:600;color:var(--muted);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:5px}
+.lang-btn:hover{border-color:var(--g25);color:var(--green)}
+.lang-btn .caret{font-size:.6rem;opacity:.6}
+.lang-menu{position:absolute;top:calc(100% + 6px);right:0;min-width:130px;background:#fff;border:1px solid var(--border-s);border-radius:10px;box-shadow:0 10px 30px rgba(10,31,21,.12);padding:5px;display:none;z-index:200}
+.lang-menu.open{display:block}
+.lang-item{display:block;width:100%;text-align:left;background:none;border:none;padding:7px 10px;font-size:.8rem;font-weight:500;color:var(--muted);border-radius:7px;cursor:pointer;transition:all .15s}
+.lang-item:hover{background:var(--g10);color:var(--text)}
+.lang-item.active{color:var(--green);font-weight:700}
+@media(max-width:1024px){
+  .hero{padding:120px 5% 30px}
+  .sec-title{font-size:1.5rem}
+  .sec-sub{margin-bottom:24px}
+}
+@media(max-width:600px){
+  .hero{padding:110px 5% 30px}
+  .g{grid-template-columns:1fr}
+  .nav{padding:0 5%}
+  .sec{padding:30px 5% 30px}
+}
+</style>
+</head>
+<body>
+<div class="bg-glow"></div>
+
+<nav class="nav">
+  <span class="nav-logo"><span class="dot"></span>Skerry</span>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="lang-drop">
+      <button class="lang-btn" id="langBtn" aria-haspopup="true"><span id="langCur">中文</span><span class="caret">▾</span></button>
+      <div class="lang-menu" id="langMenu">
+        <button class="lang-item" data-lang="en">English</button>
+        <button class="lang-item" data-lang="ru">Русский</button>
+        <button class="lang-item" data-lang="zh">简体中文</button>
+      </div>
+    </div>
+    <a class="nav-dl" href="#platforms" data-l10n="downloadBtn">免费下载</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="badge"><span class="bdot"></span><span data-l10n="badgeText">一个 SSH 客户端</span></div>
+  <p class="credit"><span data-l10n="creditBased">基于</span> <a href="https://github.com/SeCherkasov/SkerrySSH" target="_blank">SeCherkasov/SkerrySSH</a> <span data-l10n="creditFork">二次开发</span></p>
+  <a class="nav-dl hero-cta" href="#platforms" data-l10n="downloadBtn">免费下载</a>
+</section>
+
+<section class="sec">
+  <span class="sec-label" data-l10n="featuresLabel">功能特性</span>
+  <h2 class="sec-title" data-l10n="featuresTitle">一个客户端，覆盖所有运维场景</h2>
+  <p class="sec-sub" data-l10n="featuresSub">本地优先，零知识，主流平台功能对等。</p>
+  <div class="g">
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></div>
+      <div class="ct" data-l10n="featCrossPlatform">全平台一致体验</div>
+      <div class="cd" data-l10n="featCrossPlatformDesc">Linux / Windows / macOS / Android，同一套核心与 UI，功能完全对等——一个特性没全平台跑通就不算完成。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 18 0"/><path d="M3 12v6a3 3 0 0 0 3 3h0a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3z"/><path d="M21 12v6a3 3 0 0 1-3 3h0a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1h3z"/></svg></div>
+      <div class="ct" data-l10n="featLocalFirst">本地优先</div>
+      <div class="cd" data-l10n="featLocalFirstDesc">无需注册、无需服务器，开箱即用。所有数据默认留在本机，账号与云同步只是可选项。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/></svg></div>
+      <div class="ct" data-l10n="featVault">加密保险库</div>
+      <div class="cd" data-l10n="featVaultDesc">Argon2id + XChaCha20-Poly1305 始终加密，主密码永不离设备，零知识设计。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
+      <div class="ct" data-l10n="featSync">自托管零知识同步</div>
+      <div class="cd" data-l10n="featSyncDesc">同步服务器可自行部署，服务端只见密文。也可直连官方同步实例，无需运维。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="ct" data-l10n="featTeam">团队共享</div>
+      <div class="cd" data-l10n="featTeamDesc">主机、密钥与配置可端到端加密共享给团队成员，权限粒度到单个连接。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></div>
+      <div class="ct" data-l10n="featTerminal">终端 &amp; 双栏 SFTP</div>
+      <div class="cd" data-l10n="featTerminalDesc">内置终端模拟器，多标签会话管理。双栏可视化 SFTP，拖拽传文件。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2.5 2.5"/><path d="M2 12h2M20 12h2M12 2v2"/></svg></div>
+      <div class="ct" data-l10n="featForward">端口转发</div>
+      <div class="cd" data-l10n="featForwardDesc">本地 / 远程 / 动态（SOCKS）三种转发模式全支持，隧道随连接自动建立。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4z"/><path d="M2 20h20"/><path d="M6 8h.01M10 8h.01M6 12h8"/></svg></div>
+      <div class="ct" data-l10n="featSerial">Serial / Telnet / Mosh</div>
+      <div class="cd" data-l10n="featSerialDesc">除 SSH 外还支持串口与 Telnet 直连；Mosh 让移动网络下的会话掉线不断。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.3c-1.8-1.2-3-3.3-3-5.7a7 7 0 0 1 7-7z"/><line x1="9" y1="22" x2="15" y2="22"/></svg></div>
+      <div class="ct" data-l10n="featAI">AI 辅助（可控）</div>
+      <div class="cd" data-l10n="featAIDesc">本地模型或自带 Key 的云端模型均可选。模型输出视为不可信，每条命令执行前需你确认。</div>
+    </div>
+    <div class="c">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+      <div class="ct" data-l10n="featLicense">完全开源</div>
+      <div class="cd" data-l10n="featLicenseDesc">客户端 GPL-3.0、服务端 AGPL-3.0，代码完全开放，自由审计与再分发。</div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="platforms">
+  <span class="sec-label" data-l10n="downloadLabel">下载</span>
+  <h2 class="sec-title" data-l10n="downloadTitle">多平台下载</h2>
+  <p class="sec-sub" data-l10n="downloadSub">Linux · Windows · macOS · Android，功能对等，下载即用。</p>
+  <div class="g" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+    <a class="c platform" href="https://dl.onepve.com/Skerry/latest/Skerry-android.apk" target="_blank">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></div>
+      <div class="ct" data-l10n="dlAndroid">Android</div>
+      <div class="cd" data-l10n="dlAndroidFmt">.apk 安装包</div>
+      <div class="arrow" data-l10n="dlArrow">下载 →</div>
+    </a>
+    <a class="c platform" href="https://dl.onepve.com/Skerry/latest/Skerry-portable-x64.zip" target="_blank">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+      <div class="ct" data-l10n="dlWindows">Windows</div>
+      <div class="cd" data-l10n="dlWindowsFmt">.msi / .zip 安装包</div>
+      <div class="arrow" data-l10n="dlArrow">下载 →</div>
+    </a>
+    <a class="c platform" href="https://dl.onepve.com/Skerry/latest/Skerry-macos-arm64.dmg" target="_blank">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 1 4 19"/><path d="M12 2a10 10 0 0 0-4 19"/><line x1="2" y1="12" x2="22" y2="12"/><polyline points="6 8 2 12 6 16"/></svg></div>
+      <div class="ct" data-l10n="dlMacos">macOS</div>
+      <div class="cd" data-l10n="dlMacosFmt">.dmg 安装包</div>
+      <div class="arrow" data-l10n="dlArrow">下载 →</div>
+    </a>
+    <a class="c platform" href="https://dl.onepve.com/Skerry/latest/Skerry-linux-amd64.deb" target="_blank">
+      <div class="fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h2a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2"/><path d="M22 12h-2a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2"/><path d="M12 2v20"/></svg></div>
+      <div class="ct" data-l10n="dlLinux">Linux</div>
+      <div class="cd" data-l10n="dlLinuxFmt">.deb / .rpm / AppImage</div>
+      <div class="arrow" data-l10n="dlArrow">下载 →</div>
+    </a>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="footer-links">
+    <a href="https://github.com/onepve/SkerrySSH" target="_blank" data-l10n="footerGithub">GitHub</a>
+    <a href="https://github.com/onepve/SkerrySSH/releases/latest" target="_blank" data-l10n="footerDownload">下载</a>
+    <a href="https://github.com/onepve/SkerrySSH/blob/main/LICENSE" target="_blank" data-l10n="footerLicense">GPL-3.0</a>
+  </div>
+  <div class="footer-copy" data-l10n="footerCopy">Skerry · 开源跨平台 SSH 客户端</div>
+</footer>
+<script>
+// === L10N ===
+const L10N = {
+  en: {
+    pageTitle: "Skerry · Open-source Cross-platform SSH Client",
+    downloadBtn: "Download",
+    badgeText: "One SSH client",
+    creditBased: "Based on",
+    creditFork: "fork by onepve",
+    featuresLabel: "Features",
+    featuresTitle: "One client for every ops task",
+    featuresSub: "Local-first, zero-knowledge, feature parity across major platforms.",
+    featCrossPlatform: "Full platform parity",
+    featCrossPlatformDesc: "Linux / Windows / macOS / Android. One core, one UI — a feature isn't done until it works everywhere.",
+    featLocalFirst: "Local-first",
+    featLocalFirstDesc: "No account, no server required — works out of the box. Your data stays on your device; sync is optional.",
+    featVault: "Encrypted Vault",
+    featVaultDesc: "Argon2id + XChaCha20-Poly1305, always on. The master password never leaves the device. Zero-knowledge by design.",
+    featSync: "Self-hosted zero-knowledge sync",
+    featSyncDesc: "Run your own sync server — it only ever sees ciphertext. Or use the hosted instance, no ops needed.",
+    featTeam: "Team sharing",
+    featTeamDesc: "Share hosts, keys and configs with your team, end-to-end encrypted, with per-connection granularity.",
+    featTerminal: "Terminal & dual-pane SFTP",
+    featTerminalDesc: "Built-in terminal emulator with tabbed sessions. Dual-pane visual SFTP with drag-and-drop transfers.",
+    featForward: "Port forwarding",
+    featForwardDesc: "Local, remote and dynamic (SOCKS) forwarding, all supported. Tunnels come up with the connection.",
+    featSerial: "Serial / Telnet / Mosh",
+    featSerialDesc: "Beyond SSH: serial and Telnet built in. Mosh keeps sessions alive over flaky mobile networks.",
+    featAI: "AI assistant (in policy)",
+    featAIDesc: "Local models or bring-your-own-key cloud. Model output is treated as untrusted — every command needs your confirmation.",
+    featLicense: "Fully open source",
+    featLicenseDesc: "Client GPL-3.0, server AGPL-3.0. Fully open code — audit and redistribute freely.",
+    downloadLabel: "Download",
+    downloadTitle: "Multi-platform downloads",
+    downloadSub: "Linux · Windows · macOS · Android — feature parity, download and go.",
+    dlLinux: "Linux", dlLinuxFmt: ".deb / .rpm / AppImage",
+    dlWindows: "Windows", dlWindowsFmt: ".msi / .zip package",
+    dlMacos: "macOS", dlMacosFmt: ".dmg package",
+    dlAndroid: "Android", dlAndroidFmt: ".apk package",
+    dlArrow: "Download →",
+    footerGithub: "GitHub", footerDownload: "Download", footerLicense: "GPL-3.0",
+    footerCopy: "Skerry · Open-source cross-platform SSH client"
+  },
+  zh: {
+    pageTitle: "Skerry · 开源跨平台 SSH 客户端",
+    downloadBtn: "免费下载",
+    badgeText: "一个 SSH 客户端",
+    creditBased: "基于",
+    creditFork: "二次开发",
+    featuresLabel: "功能特性",
+    featuresTitle: "一个客户端，覆盖所有运维场景",
+    featuresSub: "本地优先，零知识，主流平台功能对等。",
+    featCrossPlatform: "全平台一致体验",
+    featCrossPlatformDesc: "Linux / Windows / macOS / Android，同一套核心与 UI，功能完全对等——一个特性没全平台跑通就不算完成。",
+    featLocalFirst: "本地优先",
+    featLocalFirstDesc: "无需注册、无需服务器，开箱即用。所有数据默认留在本机，账号与云同步只是可选项。",
+    featVault: "加密保险库",
+    featVaultDesc: "Argon2id + XChaCha20-Poly1305 始终加密，主密码永不离设备，零知识设计。",
+    featSync: "自托管零知识同步",
+    featSyncDesc: "同步服务器可自行部署，服务端只见密文。也可直连官方同步实例，无需运维。",
+    featTeam: "团队共享",
+    featTeamDesc: "主机、密钥与配置可端到端加密共享给团队成员，权限粒度到单个连接。",
+    featTerminal: "终端 & 双栏 SFTP",
+    featTerminalDesc: "内置终端模拟器，多标签会话管理。双栏可视化 SFTP，拖拽传文件。",
+    featForward: "端口转发",
+    featForwardDesc: "本地 / 远程 / 动态（SOCKS）三种转发模式全支持，隧道随连接自动建立。",
+    featSerial: "Serial / Telnet / Mosh",
+    featSerialDesc: "除 SSH 外还支持串口与 Telnet 直连；Mosh 让移动网络下的会话掉线不断。",
+    featAI: "AI 辅助（可控）",
+    featAIDesc: "本地模型或自带 Key 的云端模型均可选。模型输出视为不可信，每条命令执行前需你确认。",
+    featLicense: "完全开源",
+    featLicenseDesc: "客户端 GPL-3.0、服务端 AGPL-3.0，代码完全开放，自由审计与再分发。",
+    downloadLabel: "下载",
+    downloadTitle: "多平台下载",
+    downloadSub: "Linux · Windows · macOS · Android，功能对等，下载即用。",
+    dlLinux: "Linux", dlLinuxFmt: ".deb / .rpm / AppImage",
+    dlWindows: "Windows", dlWindowsFmt: ".msi / .zip 安装包",
+    dlMacos: "macOS", dlMacosFmt: ".dmg 安装包",
+    dlAndroid: "Android", dlAndroidFmt: ".apk 安装包",
+    dlArrow: "下载 →",
+    footerGithub: "GitHub", footerDownload: "下载", footerLicense: "GPL-3.0",
+    footerCopy: "Skerry · 开源跨平台 SSH 客户端"
+  },
+  ru: {
+    pageTitle: "Skerry · Кроссплатформенный SSH-клиент с открытым кодом",
+    downloadBtn: "Скачать",
+    badgeText: "Один SSH-клиент",
+    creditBased: "На основе",
+    creditFork: "форк onepve",
+    featuresLabel: "Возможности",
+    featuresTitle: "Один клиент для всех задач",
+    featuresSub: "Локально в первую очередь, нулевое разглашение, паритет на основных платформах.",
+    featCrossPlatform: "Полный паритет платформ",
+    featCrossPlatformDesc: "Linux / Windows / macOS / Android. Одно ядро, один UI — функция не готова, пока не работает везде.",
+    featLocalFirst: "Локально в первую очередь",
+    featLocalFirstDesc: "Без аккаунта и сервера — работает из коробки. Данные остаются на устройстве; синхронизация опциональна.",
+    featVault: "Зашифрованное хранилище",
+    featVaultDesc: "Argon2id + XChaCha20-Poly1305, всегда включено. Главный пароль никогда не покидает устройство.",
+    featSync: "Своя синхронизация без разглашения",
+    featSyncDesc: "Разверните свой сервер — он видит только шифротекст. Или используйте готовый инстанс без администрирования.",
+    featTeam: "Командный доступ",
+    featTeamDesc: "Делитесь хостами, ключами и настройками с командой со сквозным шифрованием и точностью до отдельного подключения.",
+    featTerminal: "Терминал и двухпанельный SFTP",
+    featTerminalDesc: "Встроенный эмулятор терминала с вкладками. Двухпанельный SFTP с перетаскиванием файлов.",
+    featForward: "Проброс портов",
+    featForwardDesc: "Локальный, удалённый и динамический (SOCKS) проброс. Туннели поднимаются вместе с подключением.",
+    featSerial: "Serial / Telnet / Mosh",
+    featSerialDesc: "Помимо SSH — последовательный порт и Telnet. Mosh держит сессию в нестабильных мобильных сетях.",
+    featAI: "AI-ассистент (под контролем)",
+    featAIDesc: "Локальные модели или облако со своим ключом. Вывод модели ненадёжен — каждая команда требует подтверждения.",
+    featLicense: "Полностью открытый код",
+    featLicenseDesc: "Клиент GPL-3.0, сервер AGPL-3.0. Код полностью открыт — аудит и распространение свободны.",
+    downloadLabel: "Загрузка",
+    downloadTitle: "Загрузка для всех платформ",
+    downloadSub: "Linux · Windows · macOS · Android — полный паритет. Скачайте и запускайте.",
+    dlLinux: "Linux", dlLinuxFmt: ".deb / .rpm / AppImage",
+    dlWindows: "Windows", dlWindowsFmt: ".msi / .zip",
+    dlMacos: "macOS", dlMacosFmt: ".dmg",
+    dlAndroid: "Android", dlAndroidFmt: ".apk",
+    dlArrow: "Скачать →",
+    footerGithub: "GitHub", footerDownload: "Загрузка", footerLicense: "GPL-3.0",
+    footerCopy: "Skerry · Кроссплатформенный SSH-клиент"
+  }
+};
+const LANG_KEY = 'skerry_lang';
+const LANG_LABEL = { en: 'EN', ru: 'RU', zh: '中文' };
+function t(key) { return (L10N[lang]&&L10N[lang][key])||(L10N.en&&L10N.en[key])||key; }
+// Follow the system language on first visit (zh→中文, ru→Русский, else English);
+// a manual pick is remembered in localStorage and wins from then on.
+function detectLang() {
+  const nav = (navigator.language || 'en').toLowerCase();
+  if (nav.startsWith('zh')) return 'zh';
+  if (nav.startsWith('ru')) return 'ru';
+  return 'en';
+}
+var lang = localStorage.getItem(LANG_KEY) || detectLang();
+function applyLang(l, persist) {
+  lang = l; if (persist !== false) localStorage.setItem(LANG_KEY, l);
+  document.documentElement.lang = {zh:'zh-CN',ru:'ru',en:'en'}[l]||'en';
+  document.title = t('pageTitle');
+  document.querySelectorAll('[data-l10n]').forEach(el => { el.textContent = t(el.getAttribute('data-l10n')); });
+  document.getElementById('langCur').textContent = LANG_LABEL[l] || l;
+  document.querySelectorAll('.lang-item').forEach(b => { b.classList.toggle('active', b.getAttribute('data-lang') === l); });
+}
+var langBtn = document.getElementById('langBtn'), langMenu = document.getElementById('langMenu');
+langBtn.addEventListener('click', function(e) { e.stopPropagation(); langMenu.classList.toggle('open'); });
+document.addEventListener('click', function() { langMenu.classList.remove('open'); });
+document.querySelectorAll('.lang-item').forEach(btn => {
+  btn.addEventListener('click', function() { applyLang(this.getAttribute('data-lang')); langMenu.classList.remove('open'); });
+});
+applyLang(lang, false);
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@
 .kotlin
 .idea
 **/build
+!server/build/install/server
 *.db
 *.db-journal
 local.properties

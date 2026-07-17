@@ -1,0 +1,26 @@
+# Skerry Sync — multi-arch Docker image (amd64 + arm64).
+# Phase 1: build the server distribution locally ONCE:
+#   ./gradlew -PserverOnly :server:installDist
+# Phase 2: build & push multi-arch image:
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -f server/Dockerfile.multi -t onepve/skerry-sync:latest --push .
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY server/build/install/server/ /app/
+
+# Use the 'nobody' user (UID 65534) which exists in all base images — avoids QEMU
+# crashes during groupadd/useradd on cross-architecture emulation.
+RUN mkdir -p /data && chown nobody:nogroup /app /data
+USER nobody
+
+ENV SKERRY_HOST=0.0.0.0 \
+    SKERRY_PORT=8080 \
+    SKERRY_DB_URL=jdbc:sqlite:/data/skerry-sync.db
+VOLUME ["/data"]
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \
+    CMD ["sh", "-c", "wget -qO- http://localhost:${SKERRY_PORT}/healthz || exit 1"]
+
+ENTRYPOINT ["/app/bin/server"]

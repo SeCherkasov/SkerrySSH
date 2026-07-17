@@ -12,6 +12,7 @@
 
     <string name="shell_create_title">Задайте мастер-пароль</string>
     <string name="shell_create_subtitle">Он шифрует этот vault и никогда не покидает устройство — восстановления нет.</string>
+    <string name="shell_create_warning">Это единственный ключ для шифрования и расшифровки хранилища — никогда не теряйте его. Даже при облачной синхронизации нужен именно этот пароль.</string>
     <string name="shell_repeat_password">Повторите пароль</string>
     <string name="shell_create_vault">Создать vault</string>
     <string name="shell_pairing_link">Подключаетесь с другого устройства? Используйте код связывания</string>

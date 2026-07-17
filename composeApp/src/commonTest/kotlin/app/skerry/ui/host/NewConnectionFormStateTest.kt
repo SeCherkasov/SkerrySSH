@@ -117,6 +117,47 @@ class NewConnectionFormStateTest {
         assertEquals("cred-1", f.resolveCredentialId { null })
     }
 
+    @Test
+    fun vnc_defaults_to_port_5900_and_needs_no_username() {
+        val f = NewConnectionFormState().apply { name = "desk"; address = "10.0.0.9" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals("5900", f.port) // RFB display :0
+        // VNC has no username; the default ASK auth is enough to save.
+        assertTrue(f.canSave)
+        assertEquals(app.skerry.shared.ssh.ConnectionType.VNC, f.toDraft().connectionType)
+        assertEquals(5900, f.toDraft().port)
+    }
+
+    @Test
+    fun vnc_out_of_range_port_blocks_save() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "a" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        f.port = "70000"; assertFalse(f.canSave)
+        f.port = "5901"; assertTrue(f.canSave)
+    }
+
+    @Test
+    fun vnc_stores_a_password_credential_without_username() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "10.0.0.9" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        f.authMode = AuthMode.NEW_PASSWORD
+        assertFalse(f.canSave) // password blank
+        f.password = "sekret"
+        assertTrue(f.canSave)
+        val cap = Captures()
+        assertEquals("cred-id", f.resolveCredentialId(cap.saveCredential))
+        assertEquals(CredentialKind.PASSWORD, cap.credentialDraft?.kind)
+        assertEquals("sekret", cap.credentialDraft?.password)
+    }
+
+    @Test
+    fun vnc_ask_auth_resolves_to_null() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "a" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals(AuthMode.ASK, f.authMode)
+        assertNull(f.resolveCredentialId { error("ask must not save a credential") })
+    }
+
     // Authentication
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }

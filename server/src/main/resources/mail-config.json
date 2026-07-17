@@ -1,0 +1,30 @@
+{
+  "app_name": {
+    "zh": "Skerry",
+    "en": "Skerry",
+    "ru": "Skerry"
+  },
+  "subjects": {
+    "welcome": {
+      "zh": "欢迎加入 Skerry",
+      "en": "Welcome to Skerry",
+      "ru": "Добро пожаловать в Skerry"
+    },
+    "new_device": {
+      "zh": "新设备已关联你的保险库",
+      "en": "New device linked to your vault",
+      "ru": "Новое устройство подключено к хранилищу"
+    },
+    "pw_changed": {
+      "zh": "你的主密码已变更",
+      "en": "Your master password was changed",
+      "ru": "Ваш мастер-пароль был изменён"
+    },
+    "suspicious_login": {
+      "zh": "你的账户从新设备登录",
+      "en": "New sign-in to your account",
+      "ru": "Новый вход в вашу учётную запись"
+    }
+  },
+  "lang_fallback": "en"
+}

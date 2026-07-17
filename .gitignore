@@ -46,6 +46,10 @@ server/.env
 *.db-journal
 .tokensave
 
+# Runtime data directory — never commit runtime DB files, but templates (mail-config.json) are tracked
+data/*.db
+data/*.db-journal
+
 # Flatpak build outputs (the committed inputs are the manifest + flatpak-sources.json)
 composeApp/flatpak/.build/
 composeApp/flatpak/*.flatpak

@@ -63,11 +63,11 @@ internal fun AboutSection() {
 
 // Project pages opened from the About buttons.
 internal object AboutLinks {
-    const val DOCUMENTATION = "https://github.com/SeCherkasov/SkerrySSH#readme"
-    const val LICENSES = "https://github.com/SeCherkasov/SkerrySSH/blob/main/LICENSE"
+    const val DOCUMENTATION = "https://github.com/onepve/SkerrySSH#readme"
+    const val LICENSES = "https://github.com/onepve/SkerrySSH/blob/main/LICENSE"
 
     /** Release notes of the running version: the GitHub release tagged `v<version>`. */
-    fun whatsNew(version: String) = "https://github.com/SeCherkasov/SkerrySSH/releases/tag/v$version"
+    fun whatsNew(version: String) = "https://github.com/onepve/SkerrySSH/releases/tag/v$version"
 }
 
 /** What's new / Documentation / Licenses row, shared by the desktop and mobile About screens. */

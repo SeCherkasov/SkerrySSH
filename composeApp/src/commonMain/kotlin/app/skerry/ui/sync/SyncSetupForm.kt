@@ -7,9 +7,12 @@ package app.skerry.ui.sync
  * [SyncCoordinator] later receives them.
  */
 data class SyncSetupForm(
-    val serverUrl: String = "",
+    val serverUrl: String = DEFAULT_SERVER_URL,
     val accountId: String = "",
 ) {
+    companion object {
+        const val DEFAULT_SERVER_URL = "https://sync.onepve.com"
+    }
     /** Server URL trimmed (as it goes to [SyncCoordinator]). */
     val normalizedServerUrl: String get() = serverUrl.trim()
 
@@ -30,6 +33,10 @@ data class SyncSetupForm(
      * session tokens are defenseless against MITM, so the UI must show an explicit warning when this is `true`.
      */
     val isInsecureUrl: Boolean get() = normalizedServerUrl.startsWith("http://")
+
+    /** Whether [accountId] looks like an email address (contains @ with a domain). */
+    val isAccountEmail: Boolean get() = normalizedAccountId.contains("@") &&
+        normalizedAccountId.substringAfterLast("@").contains(".")
 
     private fun isHttpUrl(url: String): Boolean =
         (url.startsWith("http://") || url.startsWith("https://")) && url.length > "https://".length

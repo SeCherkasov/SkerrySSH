@@ -80,22 +80,50 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Skerry config directory. Defaults to `~/.config/skerry`; honors XDG_CONFIG_HOME. Created with
- * mode 0700 (and upgraded if an old install left 0755), so UI prefs and config files inside are
- * not accessible to other local users regardless of their permissions.
+ * If a file named {@code portable} exists next to the application launcher, the app
+ * runs in portable mode: config, data, and device-id live in the same directory as
+ * the executable instead of under {@code ~/.config/skerry} / {@code ~/.local/share/skerry}.
+ * Detected once at startup; the result is cached for the lifetime of the process.
+ */
+private val portableDir: Path? by lazy {
+    val marker = resolveAppDir()?.resolve("portable")
+    if (marker != null && Files.exists(marker)) marker.parent else null
+}
+
+/** Best-effort: directory containing the application launcher (jpackage {@code app-path}, JAR, or cwd fallback). */
+private fun resolveAppDir(): Path? {
+    // jpackage sets this system property to the absolute path of the native launcher.
+    System.getProperty("jpackage.app-path")?.let { return Path.of(it).parent }
+    // When running from an IDE or plain JAR, resolve via the code source location.
+    try {
+        val jarUrl = object {}.javaClass.protectionDomain?.codeSource?.location
+        if (jarUrl != null && jarUrl.protocol == "file") {
+            val jarPath = Path.of(jarUrl.toURI())
+            // Inside a jpackage image the jar is at  <app>/lib/app/skerry-ui-desktop-*.jar;
+            // in a fat-JAR it's the jar itself. Walk up to the containing directory.
+            return if (Files.isDirectory(jarPath)) jarPath else jarPath.parent
+        }
+    } catch (_: Exception) { /* fall through */ }
+    return null
+}
+
+/**
+ * Skerry config directory. In portable mode, it's the app directory itself;
+ * otherwise {@code ~/.config/skerry}, honouring {@code XDG_CONFIG_HOME}.
  */
 private fun configDir(): Path {
+    portableDir?.let { return it }
     val xdg = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }
     val base = xdg?.let { Path.of(it) } ?: Path.of(System.getProperty("user.home"), ".config")
     return base.resolve("skerry").also { PrivateConfig.ensureDir(it) }
 }
 
 /**
- * Skerry data directory (not config): large artifacts such as downloaded local-AI GGUF models.
- * Defaults to `~/.local/share/skerry`; honors XDG_DATA_HOME (the app data dir inside a Flatpak
- * sandbox). Models are public weights, so 0600 hardening is not required.
+ * Skerry data directory (large artifacts: downloaded local-AI GGUF models).
+ * In portable mode, share the app directory with config.
  */
 private fun dataDir(): Path {
+    portableDir?.let { return it }
     val xdg = System.getenv("XDG_DATA_HOME")?.takeIf { it.isNotBlank() }
     val base = xdg?.let { Path.of(it) } ?: Path.of(System.getProperty("user.home"), ".local", "share")
     return base.resolve("skerry").also { Files.createDirectories(it) }
@@ -135,6 +163,7 @@ private class DesktopGraph(
     val deps: AppDependencies,
     val securityLog: FileSecurityLog,
     val probeTransport: SshTransport,
+    val vncTransport: app.skerry.shared.vnc.VncTransport,
     val workspaceLayout: WorkspaceLayoutStore,
     val ai: AiAssistantController,
     val updates: app.skerry.ui.update.UpdateNoticeController,
@@ -359,6 +388,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         deps = deps,
         securityLog = securityLog,
         probeTransport = probeTransport,
+        vncTransport = app.skerry.shared.vnc.VncTcpTransport(),
         workspaceLayout = workspaceLayout,
         ai = ai,
         updates = updates,
@@ -454,6 +484,7 @@ fun main() {
                     securityLog = graph.securityLog,
                     hosts = deps.hosts,
                     transport = deps.transport,
+                    vncTransport = graph.vncTransport,
                     testTransport = graph.probeTransport,
                     credentials = deps.credentials,
                     knownHosts = deps.knownHosts,

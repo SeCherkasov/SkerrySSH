@@ -64,6 +64,7 @@ import app.skerry.ui.generated.resources.sync_keep_connected_sub
 import app.skerry.ui.generated.resources.sync_link_this_device
 import app.skerry.ui.generated.resources.sync_passwords_mismatch
 import app.skerry.ui.generated.resources.sync_placeholder_account
+import app.skerry.ui.generated.resources.sync_account_email_hint
 import app.skerry.ui.generated.resources.sync_placeholder_master_password
 import app.skerry.ui.generated.resources.sync_placeholder_min_chars
 import app.skerry.ui.generated.resources.sync_placeholder_pairing_code
@@ -253,7 +254,7 @@ internal fun SyncSetupBody(
 ) {
     // Prefill from the saved link (Configured after restart): only the password is needed.
     val saved = remember { sync.savedConfig }
-    var serverUrl by remember { mutableStateOf(saved?.serverUrl ?: "") }
+    var serverUrl by remember { mutableStateOf(saved?.serverUrl ?: SyncSetupForm.DEFAULT_SERVER_URL) }
     var account by remember { mutableStateOf(saved?.accountId ?: "") }
     var password by remember { mutableStateOf("") }
     var keepConnected by remember { mutableStateOf(saved?.keepConnected ?: true) }
@@ -262,9 +263,19 @@ internal fun SyncSetupBody(
     val canSubmit = form.canSubmit(password.length) && !busy
 
     SyncFieldLabel(stringResource(Res.string.sync_field_server_url))
-    SyncTextField(serverUrl, stringResource(Res.string.sync_placeholder_server_url), KeyboardType.Uri, icon = "dns") { serverUrl = it }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) {
+            SyncTextField(serverUrl, stringResource(Res.string.sync_placeholder_server_url), KeyboardType.Uri, icon = "dns") { serverUrl = it }
+        }
+        if (serverUrl.trim() != SyncSetupForm.DEFAULT_SERVER_URL) {
+            Sym("close", size = 18.sp, color = D.faint, modifier = Modifier.padding(start = 6.dp).clickable { serverUrl = SyncSetupForm.DEFAULT_SERVER_URL })
+        }
+    }
     SyncFieldLabel(stringResource(Res.string.sync_field_account))
-    SyncTextField(account, stringResource(Res.string.sync_placeholder_account), KeyboardType.Text, icon = "person") { account = it }
+    SyncTextField(account, stringResource(Res.string.sync_placeholder_account), KeyboardType.Email, icon = "person") { account = it }
+    if (account.isNotEmpty() && !form.isAccountEmail) {
+        Txt(stringResource(Res.string.sync_account_email_hint), color = D.amber, size = 12.sp, modifier = Modifier.padding(top = 4.dp))
+    }
     SyncFieldLabel(stringResource(Res.string.sync_field_master_password))
     SyncTextField(password, stringResource(Res.string.sync_placeholder_master_password), KeyboardType.Password, masked = true, icon = "key") { password = it }
 

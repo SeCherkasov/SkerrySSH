@@ -82,8 +82,10 @@ import app.skerry.ui.connection.JumpErrorDialog
 import app.skerry.ui.connection.jumpRouteLabel
 import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.forward.humanRate
+import app.skerry.shared.ssh.isVnc
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
+import app.skerry.ui.connection.toVncAuth
 import app.skerry.ui.app.GroupDialog
 import app.skerry.ui.host.GroupDialog as GroupEditDialog
 import app.skerry.ui.host.HostManagerController
@@ -278,6 +280,9 @@ fun DesktopDesignApp(
     securityLog: SecurityLog? = null,
     hosts: HostManagerController? = null,
     transport: SshTransport? = null,
+    // VNC (RFB) transport for remote-desktop tabs — separate from the SSH-shaped [transport] because
+    // VNC is a framebuffer protocol (see VncTransport). `null` in mock/preview (no VNC tabs).
+    vncTransport: app.skerry.shared.vnc.VncTransport? = null,
     // Transport for the one-off "Test connection": separate from [transport] (live sessions), because a
     // probe must not add the host key to known_hosts (read-only verifier). `null` — use [transport]
     // (offscreen render/preview, where there's no enroll side effect). See main.kt.
@@ -336,13 +341,14 @@ fun DesktopDesignApp(
     // built from the live transport — one shell per tab, like in [app.skerry.ui.mobile.MobileApp].
     // We close our own graph on dispose; an externally-owned one belongs to the caller and is left alone.
     val scope = rememberCoroutineScope()
-    val liveSessions = sessions ?: remember(transport, scope, vault) {
+    val liveSessions = sessions ?: remember(transport, vncTransport, scope, vault) {
         transport?.let { t ->
             // Per-host terminal command history persistence (for autocomplete) on top of the encrypted vault.
             val termHistory = vault?.let { VaultTerminalHistoryStore(it) }
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
+                vncControllerFactory = vncTransport?.let { vt -> { app.skerry.ui.vnc.VncSessionController(vt, scope) } },
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
@@ -499,6 +505,8 @@ private fun DesktopChrome(
     // chosen, not at submit — otherwise switching tabs while typing the password would open the split
     // in the wrong place) / snippet's "Run on host" (also remembers the command).
     var pendingAuth by remember { mutableStateOf<PendingAuth?>(null) }
+    // VNC "ask every time": a host with no stored password prompts before opening the framebuffer tab.
+    var pendingVncHost by remember { mutableStateOf<Host?>(null) }
 
     // ProxyJump chain resolution failed for the clicked host — connecting would either dial
     // forever or silently go direct, so a notice is shown instead ([JumpErrorDialog]).
@@ -535,7 +543,21 @@ private fun DesktopChrome(
     // Stable connect lambdas: without remember they'd be recreated on every recomposition and,
     // flowing into a staticCompositionLocalOf, would invalidate all consumers of [LocalConnectHost] etc.
     val connectHost = remember(sessions, credentials, hostManager, state) {
-        { host: Host -> connectOrAsk(PendingAuth.NewTab(host)) }
+        { host: Host ->
+            if (host.connectionType.isVnc) {
+                // VNC opens a framebuffer tab (not a terminal). A stored password is used directly;
+                // "ask every time" (no bound secret) prompts for one first. No ProxyJump/host-key path.
+                val cred = credentials?.find(host.credentialId)
+                if (cred != null) {
+                    sessions?.openVnc(host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth())
+                } else {
+                    pendingVncHost = host
+                }
+                Unit
+            } else {
+                connectOrAsk(PendingAuth.NewTab(host))
+            }
+        }
     }
 
     // Snippet's "Run on host": open a session to the host and run the command once connected.
@@ -639,6 +661,19 @@ private fun DesktopChrome(
                     onConnect = { pw ->
                         pendingAuth = null
                         openResolved(pending, SshAuth.Password(pw))
+                    },
+                )
+            }
+            // VNC password prompt ("ask every time"): an empty entry means the server needs no password
+            // (security type None); a non-empty one is the VNC-Auth password.
+            pendingVncHost?.let { host ->
+                DesktopPasswordDialog(
+                    host = host,
+                    onDismiss = { pendingVncHost = null },
+                    onConnect = { pw ->
+                        pendingVncHost = null
+                        val auth = if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw)
+                        sessions?.openVnc(host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth)
                     },
                 )
             }

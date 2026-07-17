@@ -43,20 +43,7 @@
       unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
     }
     :root {
-      --page:        #050E16;
-      --panel:       #07141E;
-      --card:        #0B1A26;
-      --cyan:        #2BBDEE;
-      --moss:        #5DCE9E;
-      --amber:       #F2A65A;
-      --storm:       #E94B4B;
-      --text:        #E6ECEF;
-      --text-dim:    #8FA3B0;
-      --text-faint:  #5A7080;
-      --text-ghost:  #3F5664;
-      --line:        rgba(43,189,238,0.08);
-      --line-soft:   rgba(43,189,238,0.05);
-      --line-strong: rgba(43,189,238,0.16);
+      /* theme variables are loaded from /console/themes/<theme>.json */
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
@@ -71,9 +58,9 @@
 
     .wrap  { max-width: 1240px; margin: 0 auto; }
     .panel {
-      background: var(--panel); border: 1px solid rgba(43,189,238,0.10);
+      background: var(--panel); border: 1px solid var(--panel-border);
       border-radius: 22px; padding: 36px 40px 44px;
-      box-shadow: 0 30px 80px rgba(0,0,0,0.45);
+      box-shadow: 0 30px 80px var(--panel-shadow);
     }
 
     /* ===== header ===== */
@@ -85,12 +72,11 @@
     .head .right  { margin-left: auto; display: flex; align-items: center; gap: 16px; }
     .server-pill {
       display: flex; align-items: center; gap: 8px;
-      background: rgba(93,206,158,0.08); border: 1px solid rgba(93,206,158,0.22);
+      background: var(--server-pill-bg); border: 1px solid var(--server-pill-border);
       border-radius: 10px; padding: 7px 13px;
     }
     .server-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 8px var(--moss); }
-    .server-pill .host { font-size: 12px; font-weight: 600; color: var(--moss); }
-    .server-pill.down  { background: rgba(233,75,75,0.08); border-color: rgba(233,75,75,0.25); }
+    .server-pill.down  { background: var(--server-pill-down-bg); border-color: var(--server-pill-down-border); }
     .server-pill.down .dot  { background: var(--storm); box-shadow: 0 0 8px var(--storm); }
     .server-pill.down .host { color: var(--storm); }
     .ver { font-size: 11.5px; color: var(--text-faint); }
@@ -112,33 +98,45 @@
     .connbar .msg.err { color: var(--storm); }
     .connbar .msg.ok  { color: var(--moss); }
     .cbtn {
-      background: transparent; border: 1px solid rgba(43,189,238,0.25); color: var(--text-dim);
+      background: transparent; border: 1px solid var(--btn-border); color: var(--text-dim);
       border-radius: 9px; padding: 9px 16px; font-weight: 600; font-size: 13px; cursor: pointer;
       font-family: inherit;
     }
     .cbtn:hover { border-color: var(--cyan); color: var(--text); }
-    .cbtn.soft { border-color: rgba(43,189,238,0.15); color: var(--text-faint); }
-    .cbtn.primary { background: var(--cyan); border-color: var(--cyan); color: #04222E; }
+    .cbtn.soft { border-color: var(--btn-soft-border); color: var(--text-faint); }
+    .cbtn.primary { background: var(--cyan); border-color: var(--cyan); color: var(--primary-fg); }
     .cbtn.primary:hover { filter: brightness(1.08); }
 
     /* ===== hero / zero-knowledge ===== */
     .hero {
       display: flex; align-items: center; gap: 30px; margin-top: 18px; padding: 28px 30px;
       border-radius: 18px; border: 1px solid var(--line-strong);
-      background: linear-gradient(120deg, rgba(43,189,238,0.10), rgba(43,189,238,0.02) 60%);
+      background: linear-gradient(120deg, var(--hero-gradient-start), var(--hero-gradient-end) 60%);
     }
     .hero .icon {
       flex: 0 0 auto; width: 64px; height: 64px; border-radius: 16px;
-      background: rgba(43,189,238,0.12); display: flex; align-items: center; justify-content: center;
+      background: var(--hero-icon-bg); display: flex; align-items: center; justify-content: center;
     }
     .hero .body { flex: 1; }
     .hero .h { font-size: 22px; font-weight: 600; letter-spacing: -0.4px; color: var(--text); }
     .hero .p { font-size: 13.5px; color: var(--text-dim); line-height: 1.55; margin-top: 6px; max-width: 680px; }
-    .hero .exposure { flex: 0 0 auto; text-align: right; padding-left: 24px; border-left: 1px solid rgba(43,189,238,0.14); }
+    .hero .exposure { flex: 0 0 auto; text-align: right; padding-left: 24px; border-left: 1px solid var(--exposure-border); }
     .hero .exposure .lbl { font-size: 11px; color: var(--text-faint); letter-spacing: 1px; }
     .hero .exposure .val { font-size: 32px; font-weight: 700; color: var(--moss); letter-spacing: -1px; }
     .hero .exposure .val span { font-size: 14px; color: var(--text-dim); font-weight: 500; }
     .hero .exposure .why { font-size: 10px; color: var(--text-faint); letter-spacing: 0.5px; margin-top: 4px; }
+
+    /* ===== password explainer ===== */
+    .pwhelp {
+      margin-top: 14px; padding: 18px 22px; border-radius: 14px;
+      border: 1px solid var(--line); background: var(--card);
+    }
+    .pwhelp .t { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+    .pwhelp .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .pwhelp .col .h { font-size: 12px; font-weight: 600; color: var(--cyan); margin-bottom: 4px; }
+    .pwhelp .col .d { font-size: 12px; color: var(--text-dim); line-height: 1.55; }
+    .pwhelp .note { font-size: 11.5px; color: var(--text-faint); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+    @media (max-width: 720px) { .pwhelp .cols { grid-template-columns: 1fr; } }
 
     /* ===== section label ===== */
     .label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-faint); }
@@ -167,12 +165,17 @@
     th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
     td { padding: 14px 16px; border-bottom: 1px solid var(--line-soft); color: var(--text-dim); vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
-    tbody tr.row:hover td { background: rgba(43,189,238,0.02); }
-    tr.selected td { background: rgba(43,189,238,0.06) !important; }
+    tbody tr.row:hover td { background: var(--row-hover-bg); }
+    tr.selected td { background: var(--selected-bg) !important; }
     td.id   { color: var(--text); font-weight: 500; }
     td.text { color: var(--text); }
     .clip { display: inline-block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
     .empty { padding: 26px 22px; text-align: center; color: var(--text-faint); font-size: 13px; }
+
+    /* === (empty cell centering fix for narrow screens) === */
+    @media (max-width: 640px) {
+      .empty { padding: 20px 12px; font-size: 12px; }
+    }
 
     .badge { display: inline-block; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 6px; }
     .badge.ok      { background: rgba(93,206,158,0.12); color: var(--moss); }
@@ -183,22 +186,22 @@
 
     .acts { text-align: right; white-space: nowrap; }
     .act {
-      border: 1px solid rgba(43,189,238,0.30); color: var(--cyan); background: transparent;
+      border: 1px solid var(--act-border); color: var(--cyan); background: transparent;
       border-radius: 8px; padding: 6px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer;
       font-family: inherit; margin-left: 6px;
     }
     .act:first-child { margin-left: 0; }
-    .act:hover  { background: rgba(43,189,238,0.12); }
-    .act.on     { background: rgba(43,189,238,0.16); }
-    .act.warn   { border-color: rgba(242,166,90,0.40); color: var(--amber); }
-    .act.warn:hover { background: rgba(242,166,90,0.12); }
-    .act.danger { border-color: rgba(233,75,75,0.30); color: var(--storm); }
-    .act.danger:hover { background: rgba(233,75,75,0.14); }
+    .act:hover  { background: var(--btn-hover-bg); }
+    .act.on     { background: var(--btn-on-bg); }
+    .act.warn   { border-color: var(--warn-btn-border); color: var(--amber); }
+    .act.warn:hover { background: var(--warn-btn-hover-bg); }
+    .act.danger { border-color: var(--danger-btn-border); color: var(--storm); }
+    .act.danger:hover { background: var(--danger-btn-hover-bg); }
     .act:disabled { opacity: 0.35; cursor: default; }
     .act:disabled:hover { background: transparent; }
 
     /* device grouping */
-    .grouphead td { background: rgba(43,189,238,0.043); border-bottom: 1px solid var(--line); padding: 11px 22px; }
+    .grouphead td { background: var(--grouphead-bg); border-bottom: 1px solid var(--line); padding: 11px 22px; }
     .grouphead .gid  { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--text); font-weight: 600; }
     .grouphead .gsub { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11px; color: var(--text-faint); margin-left: 9px; }
     .devrow td:first-child { padding-left: 34px; }
@@ -214,7 +217,7 @@
     .insp-head .close { margin-left: auto; }
     .rtype { display: inline-block; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; padding: 2px 8px; border-radius: 6px; background: rgba(43,189,238,0.10); color: var(--cyan); }
     .hex { font-family: "JetBrains Mono", ui-monospace, monospace; color: var(--text-faint); font-size: 11px; letter-spacing: 0.3px; }
-    .insp-note { display: flex; gap: 9px; padding: 13px 22px; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; border-top: 1px solid var(--line); background: rgba(0,0,0,0.18); }
+    .insp-note { display: flex; gap: 9px; padding: 13px 22px; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; border-top: 1px solid var(--line); background: var(--insp-note-bg); }
     .insp-note svg { flex: 0 0 auto; margin-top: 1px; }
 
     /* ===== activity ===== */
@@ -231,7 +234,7 @@
     /* ===== "load more" footer (appears only when a list is truncated) ===== */
     .tfoot { display: none; align-items: center; padding: 13px 22px; border-top: 1px solid var(--line); font-size: 12px; color: var(--text-faint); }
     .tfoot .more {
-      margin-left: auto; background: transparent; border: 1px solid rgba(43,189,238,0.25);
+      margin-left: auto; background: transparent; border: 1px solid var(--more-btn-border);
       color: var(--text-dim); border-radius: 8px; padding: 6px 14px; font-weight: 600; font-size: 12px;
       cursor: pointer; font-family: inherit;
     }
@@ -240,6 +243,115 @@
     .foot { margin-top: 30px; color: var(--text-faint); font-size: 12px; line-height: 1.6; }
     .foot strong { color: var(--text-dim); }
     #board.locked { opacity: 0.4; pointer-events: none; }
+
+    /* ===== light theme overrides loaded from /console/themes/light.json ===== */
+
+    /* ===== 主题切换按钮 ===== */
+    .theme-btn {
+      background: transparent; border: 1px solid var(--line-strong);
+      color: var(--text-dim); border-radius: 8px; padding: 6px 10px;
+      cursor: pointer; font-size: 15px; line-height: 1;
+    }
+    .theme-btn:hover { border-color: var(--cyan); color: var(--text); }
+
+    .lang-btn {
+      background: transparent; border: 1px solid var(--line-strong);
+      color: var(--text-faint); border-radius: 8px; padding: 6px 10px;
+      cursor: pointer; font-size: 12px; font-weight: 600; font-family: inherit;
+    }
+    .lang-btn:hover { border-color: var(--cyan); color: var(--text); }
+    .lang-btn.active { border-color: var(--cyan); color: var(--cyan); }
+
+    /* language dropdown */
+    .lang-dropdown { position: relative; display: inline-block; }
+    .lang-dropdown .lang-current {
+      background: transparent; border: 1px solid var(--line-strong);
+      color: var(--text-faint); border-radius: 8px; padding: 6px 10px;
+      cursor: pointer; font-size: 12px; font-weight: 600; font-family: inherit;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .lang-dropdown .lang-current:hover { border-color: var(--cyan); color: var(--text); }
+    .lang-dropdown .lang-menu {
+      position: absolute; top: 100%; right: 0; margin-top: 4px;
+      background: var(--panel); border: 1px solid var(--line-strong);
+      border-radius: 8px; padding: 4px; min-width: 120px;
+      display: none; z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .lang-dropdown.open .lang-menu { display: block; }
+    .lang-dropdown .lang-item {
+      display: block; width: 100%; text-align: left;
+      background: transparent; border: none; color: var(--text-dim);
+      padding: 8px 10px; border-radius: 6px; cursor: pointer;
+      font-size: 12px; font-weight: 600; font-family: inherit;
+    }
+    .lang-dropdown .lang-item:hover { background: var(--row-hover-bg); color: var(--text); }
+    .lang-dropdown .lang-item.active { color: var(--cyan); background: var(--selected-bg); }
+
+    /* === responsive: tablet (≤ 1024px) === */
+    @media (max-width: 1024px) {
+      body  { padding: 24px 20px 70px; }
+      .panel { padding: 28px 24px 34px; border-radius: 18px; }
+      .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .stat  { padding: 16px 18px; }
+      .stat .v { font-size: 28px; }
+      .hero { flex-direction: column; align-items: flex-start; gap: 16px; padding: 22px 24px; }
+      .hero .exposure { border-left: none; padding-left: 0; text-align: left; }
+      .hero .h { font-size: 18px; }
+      .connbar { flex-wrap: wrap; gap: 8px; }
+      .connbar input { min-width: 140px; }
+      .head { flex-wrap: wrap; gap: 10px; }
+      .head .right { margin-left: 0; flex-wrap: wrap; }
+      th, td { padding: 10px 10px; font-size: 12px; }
+      th:first-child, td:first-child { padding-left: 14px; }
+      th:last-child,  td:last-child  { padding-right: 14px; }
+      .clip { max-width: 160px; }
+      .tcard { overflow-x: auto; }
+      .label-row { margin: 24px 0 10px; }
+    }
+
+    /* === responsive: phone (≤ 640px) === */
+    @media (max-width: 640px) {
+      body  { padding: 12px 8px 50px; font-size: 14px; }
+      .panel { padding: 18px 12px 24px; border-radius: 14px; }
+      .stats { grid-template-columns: 1fr; gap: 8px; }
+      .stat  { padding: 14px 16px; border-radius: 12px; }
+      .stat .v { font-size: 26px; margin-top: 4px; }
+      .hero { padding: 16px 18px; border-radius: 14px; }
+      .hero .icon { width: 44px; height: 44px; }
+      .hero .icon svg { width: 24px; height: 24px; }
+      .hero .h { font-size: 16px; }
+      .hero .p { font-size: 12px; }
+      .hero .exposure .val { font-size: 22px; }
+      .head { flex-direction: column; align-items: flex-start; }
+      .head .title { font-size: 16px; }
+      .head .right { width: 100%; justify-content: flex-start; gap: 6px; }
+      .connbar { flex-direction: column; align-items: stretch; }
+      .connbar input { width: 100%; }
+      .cbtn { padding: 8px 14px; font-size: 12px; }
+      th, td { padding: 8px 6px; font-size: 11px; }
+      th:first-child, td:first-child { padding-left: 10px; }
+      th:last-child,  td:last-child  { padding-right: 10px; }
+      .clip { max-width: 100px; }
+      .label { font-size: 10px; }
+      .label-row { margin: 18px 0 8px; }
+      .sec { margin: 18px 0 8px; }
+      .activity td { padding: 8px 6px; font-size: 10.5px; }
+      .activity td:first-child { width: 60px; padding-left: 10px; }
+      .activity td.event { width: 100px; }
+      .badge { font-size: 9.5px; padding: 2px 6px; }
+      .act { padding: 5px 8px; font-size: 10.5px; }
+      .server-pill { padding: 5px 9px; gap: 5px; }
+      .server-pill .host { font-size: 10.5px; }
+      .lang-btn, .theme-btn { padding: 5px 7px; font-size: 11px; }
+      .insp-head { flex-wrap: wrap; padding: 10px 14px; }
+      .devrow td:first-child { padding-left: 16px; }
+    }
+
+    /* === horizontal scroll wrapper for tables on small screens === */
+    @media (max-width: 768px) {
+      .tcard { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    }
   </style>
 </head>
 <body>
@@ -273,9 +385,24 @@
       <div class="logo"><svg viewBox="0 0 120 120"><use href="#skerry-mark"/></svg></div>
       <div>
         <div class="title display">Skerry Sync</div>
-        <div class="subtitle">Server console</div>
+        <div class="subtitle" data-l10n="subtitle">Server console</div>
       </div>
       <div class="right">
+        <div class="lang-dropdown" id="lang-dropdown">
+          <button class="lang-current" id="lang-current" aria-haspopup="true" aria-expanded="false">
+            <span id="lang-current-text">EN</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="lang-menu" role="menu" aria-labelledby="lang-current">
+            <button class="lang-item" data-lang="en" role="menuitem">English</button>
+            <button class="lang-item" data-lang="ru" role="menuitem">Русский</button>
+            <button class="lang-item" data-lang="zh" role="menuitem">简体中文</button>
+          </div>
+        </div>
+        <button class="theme-btn" id="theme-toggle" title="Toggle theme">
+          <svg id="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg id="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
         <div class="server-pill down" id="server-pill">
           <span class="dot"></span><span class="host mono" id="server-host">—</span>
         </div>
@@ -288,8 +415,8 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5A7080" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12.5 11.5a4 4 0 1 0-3.9 5 4 4 0 0 0 3.7-2.5H17v2.5h2.5V14h2.5v-2.5z"/>
       </svg>
-      <input id="token" type="password" placeholder="Admin token (SKERRY_ADMIN_TOKEN)" autocomplete="off"/>
-      <span class="conn-text" id="conn-text" style="display:none">Connected — admin session active.</span>
+      <input id="token" type="password" placeholder="Admin token" autocomplete="off"/>
+      <span class="conn-text" id="conn-text" style="display:none">Connected</span>
       <span class="msg err" id="msg"></span>
       <button id="connect" class="cbtn primary">Connect</button>
       <button id="refresh" class="cbtn" style="display:none">Refresh</button>
@@ -304,58 +431,72 @@
         </svg>
       </div>
       <div class="body">
-        <div class="h display">The server can&rsquo;t read your data.</div>
-        <div class="p">Everything below is live sync metadata. Master passwords, data keys, host names and
-          credentials never reach the server — only opaque XChaCha20-Poly1305 ciphertext does. Inspect any
-          account to see exactly what a record looks like from here.</div>
+        <div class="h display" data-l10n="heroTitle">The server can&rsquo;t read your data.</div>
+        <div class="p" data-l10n="heroDesc">Everything below is live sync metadata...</div>
       </div>
       <div class="exposure">
-        <div class="lbl mono">EXPOSURE</div>
-        <div class="val display">0 <span>plaintext</span></div>
-        <div class="why mono">enforced by design</div>
+        <div class="lbl mono" data-l10n="exposure">EXPOSURE</div>
+        <div class="val display">0 <span data-l10n="plaintext">plaintext</span></div>
+        <div class="why mono" data-l10n="enforcedByDesign">enforced by design</div>
       </div>
+    </div>
+
+    <!-- ===== password explainer ===== -->
+    <div class="pwhelp">
+      <div class="t" data-l10n="pwHelpTitle">Two passwords, two jobs</div>
+      <div class="cols">
+        <div class="col">
+          <div class="h" data-l10n="pwHelpDeviceH">Device password (master password)</div>
+          <div class="d" data-l10n="pwHelpDeviceD">Lives only on this device and unlocks your local vault. Each device can have its own.</div>
+        </div>
+        <div class="col">
+          <div class="h" data-l10n="pwHelpSyncH">Sync password</div>
+          <div class="d" data-l10n="pwHelpSyncD">Set when first enabling sync — identifies your account on the server and encrypts cloud data. Must be the same on every device, or synced data can't be decrypted.</div>
+        </div>
+      </div>
+      <div class="note" data-l10n="pwHelpNote">In short: the device password unlocks this machine; the sync password unlocks the cloud. The server never sees either.</div>
     </div>
 
     <div id="board" class="locked">
 
       <!-- ===== overview ===== -->
-      <div class="label sec">Overview</div>
+      <div class="label sec" data-l10n="overview">Overview</div>
       <div class="stats">
         <div class="stat">
-          <div class="k">Accounts</div>
+          <div class="k" data-l10n="accounts">Accounts</div>
           <div class="v display" id="s-accounts">—</div>
           <div class="sub" id="s-accounts-sub">&nbsp;</div>
         </div>
         <div class="stat">
-          <div class="k">Devices</div>
+          <div class="k" data-l10n="devices">Devices</div>
           <div class="v display" id="s-devices">—</div>
           <div class="sub" id="s-devices-sub">&nbsp;</div>
         </div>
         <div class="stat">
-          <div class="k">Vault records</div>
+          <div class="k" data-l10n="vaultRecords">Vault records</div>
           <div class="v display" id="s-records">—</div>
-          <div class="sub">ciphertext blobs + tombstones</div>
+          <div class="sub" data-l10n="recordsBlobs">ciphertext blobs + tombstones</div>
         </div>
         <div class="stat">
-          <div class="k">Encrypted storage</div>
+          <div class="k" data-l10n="encryptedStorage">Encrypted storage</div>
           <div class="v display" id="s-storage">—</div>
-          <div class="sub">opaque encrypted blobs</div>
+          <div class="sub" data-l10n="opaqueEncrypted">opaque encrypted blobs</div>
         </div>
       </div>
 
       <!-- ===== accounts ===== -->
       <div class="label-row">
-        <span class="label">Accounts</span>
+        <span class="label" data-l10n="accountsLabel">Accounts</span>
         <span class="count" id="accounts-count"></span>
       </div>
       <div class="tcard">
         <table>
           <thead><tr>
-            <th>Account</th><th>Created</th><th class="num">Devices</th><th class="num">Records</th>
-            <th class="num">Tombstones</th><th class="num">Storage</th><th>Last activity</th><th></th>
+            <th data-l10n="accountHdr">Account</th><th data-l10n="created">Created</th><th class="num" data-l10n="numDevices">Devices</th><th class="num" data-l10n="numRecords">Records</th>
+            <th class="num" data-l10n="tombstones">Tombstones</th><th class="num" data-l10n="storage">Storage</th><th data-l10n="lastActivity">Last activity</th><th></th>
           </tr></thead>
           <tbody id="accounts-rows">
-            <tr><td colspan="8" class="empty">Enter the admin token and press Connect.</td></tr>
+            <tr><td colspan="8" class="empty" data-l10n="enterToken">Enter the admin token and press Connect.</td></tr>
           </tbody>
         </table>
         <div class="tfoot" id="acc-foot"></div>
@@ -367,14 +508,14 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2BBDEE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
           </svg>
-          <span class="t">What the server actually stores for</span>
+          <span class="t" data-l10n="whatServerStores">What the server actually stores for</span>
           <span class="acct" id="insp-acct"></span>
-          <button class="act close" id="insp-close">Close</button>
+          <button class="act close" id="insp-close" data-l10n="close">Close</button>
         </div>
         <table>
           <thead><tr>
-            <th>Type</th><th>Record ID</th><th class="num">Version</th><th>State</th>
-            <th class="num">Bytes</th><th class="num">Seq</th><th>Ciphertext preview</th>
+            <th data-l10n="inspType">Type</th><th data-l10n="inspRecordId">Record ID</th><th class="num" data-l10n="inspVersion">Version</th><th data-l10n="inspState">State</th>
+            <th class="num" data-l10n="inspBytes">Bytes</th><th class="num" data-l10n="inspSeq">Seq</th><th data-l10n="inspCipherPreview">Ciphertext preview</th>
           </tr></thead>
           <tbody id="insp-rows"></tbody>
         </table>
@@ -382,17 +523,16 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5DCE9E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2 4 6v6c0 5 3.4 7.7 8 10 4.6-2.3 8-5 8-10V6z"/>
           </svg>
-          <span>The preview is the real first bytes of each blob. Without the dataKey it is irreversible
-            noise — a full database dump reveals only this structure, never content.</span>
+          <span data-l10n="inspNote">The preview is the real first bytes...</span>
         </div>
       </div>
 
       <!-- ===== devices (grouped by account) ===== -->
-      <div class="label sec">Devices</div>
+      <div class="label sec" data-l10n="devicesLabel">Devices</div>
       <div class="tcard">
         <table>
           <thead><tr>
-            <th>Device</th><th>Platform</th><th>Last sync</th><th>Status</th><th></th>
+            <th data-l10n="devDevice">Device</th><th data-l10n="platform">Platform</th><th data-l10n="lastSync">Last sync</th><th data-l10n="status">Status</th><th></th>
           </tr></thead>
           <tbody id="devices-rows">
             <tr><td colspan="5" class="empty">—</td></tr>
@@ -403,8 +543,8 @@
 
       <!-- ===== recent activity ===== -->
       <div class="label-row">
-        <span class="label">Recent activity</span>
-        <span class="note">metadata only</span>
+        <span class="label" data-l10n="recentActivity">Recent activity</span>
+        <span class="note" data-l10n="metadataOnly">metadata only</span>
       </div>
       <div class="tcard activity">
         <table>
@@ -415,12 +555,8 @@
         <div class="tfoot" id="act-foot"></div>
       </div>
 
-      <div class="foot">
-        The audit log records only the event, account, device and a human-readable summary (counters /
-        cursors) — never content. <strong>Purge tombstones</strong> only removes deletion markers every
-        device has already synced past, so it can never resurrect a record. <strong>Delete account</strong>
-        cascades its records, devices and pairing sessions — irreversibly.
-      </div>
+      <div class="foot" data-l10n-html="footText">
+        The audit log records only the event, account, device...</div>
 
     </div>
   </div>
@@ -428,6 +564,95 @@
 
 <script>
   "use strict";
+
+  // ===== i18n translations =====
+  let L10N = {};
+  let lang = localStorage.getItem("skerry-lang") || systemLang();
+  let theme = localStorage.getItem("skerry-theme") || systemTheme();
+
+  function systemLang() {
+    const nav = navigator.language || navigator.userLanguage || "en";
+    if (nav.startsWith("zh")) return "zh";
+    if (nav.startsWith("ru")) return "ru";
+    return "en";
+  }
+  function systemTheme() {
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  async function loadLocale(l) {
+    const r = await fetch("/console/locales/" + l + ".json", { cache: "no-store" });
+    if (!r.ok) return null;
+    return r.json();
+  }
+  async function loadTheme(t) {
+    const r = await fetch("/console/themes/" + t + ".json", { cache: "no-store" });
+    if (!r.ok) return null;
+    return r.json();
+  }
+  function applyThemeVars(vars) {
+    const root = document.documentElement.style;
+    for (const [k, v] of Object.entries(vars)) {
+      root.setProperty("--" + k, v);
+    }
+  }
+  function applyThemeOverrides() {
+    const isLight = theme === "light";
+    document.querySelector(".theme-btn").style.color = isLight ? "var(--text-dim)" : "";
+  }
+  async function applyTheme(t) {
+    theme = t;
+    localStorage.setItem("skerry-theme", t);
+    const vars = await loadTheme(t);
+    if (!vars) return;
+    applyThemeVars(vars);
+    applyThemeOverrides();
+    const sun = document.getElementById("theme-icon-sun");
+    const moon = document.getElementById("theme-icon-moon");
+    if (sun && moon) {
+      sun.style.display = t === "light" ? "block" : "none";
+      moon.style.display = t === "light" ? "none" : "block";
+    }
+  }
+  function t(key) { return (L10N && L10N[key]) || key; }
+  async function setLang(l) {
+    const dict = await loadLocale(l);
+    if (!dict) return;
+    L10N = dict;
+    lang = l;
+    localStorage.setItem("skerry-lang", l);
+    document.querySelectorAll(".lang-item").forEach(b => b.classList.toggle("active", b.dataset.lang === l));
+    const labels = { en: "EN", ru: "RU", zh: "ZH" };
+    const cur = document.getElementById("lang-current-text");
+    if (cur) cur.textContent = labels[l] || "EN";
+    document.documentElement.lang = l === "zh" ? "zh-CN" : l;
+    refreshAllText();
+  }
+  document.querySelectorAll(".lang-item").forEach(b => b.addEventListener("click", () => {
+    setLang(b.dataset.lang);
+    langDropdown.classList.remove("open");
+    langCurrent.setAttribute("aria-expanded", "false");
+  }));
+  document.getElementById("theme-toggle").addEventListener("click", () => applyTheme(theme === "light" ? "dark" : "light"));
+
+  // language dropdown toggle
+  const langDropdown = document.getElementById("lang-dropdown");
+  const langCurrent = document.getElementById("lang-current");
+  langCurrent.addEventListener("click", (e) => {
+    e.stopPropagation();
+    langDropdown.classList.toggle("open");
+    langCurrent.setAttribute("aria-expanded", langDropdown.classList.contains("open"));
+  });
+  document.addEventListener("click", (e) => {
+    if (!langDropdown.contains(e.target)) {
+      langDropdown.classList.remove("open");
+      langCurrent.setAttribute("aria-expanded", "false");
+    }
+  });
+
+  // Initialize theme and locale on load
+  applyTheme(theme).catch(() => {});
+  setLang(lang).catch(() => {});
+
   const STALE_MS = 7 * 24 * 60 * 60 * 1000;
   let token = "";
   let selected = null; // account id currently open in the inspector
@@ -441,7 +666,7 @@
   function renderFoot(id, shown, total, key) {
     const el = $(id);
     if (total > shown) {
-      el.innerHTML = '<span>Showing ' + shown + ' of ' + total + '</span><button class="more">Load more</button>';
+      el.innerHTML = '<span>' + t("showing") + shown + t("of") + total + '</span><button class="more">' + t("loadMore") + '</button>';
       el.querySelector(".more").addEventListener("click", () => {
         lim[key] += PAGE[key];
         if (key === "acc") loadAccounts();
@@ -466,25 +691,27 @@
     return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
   function relTime(ms) {
-    if (!ms) return "—";
+    if (!ms) return t("nothing");
     const diff = Date.now() - ms;
-    if (diff < 60000) return "just now";
+    if (diff < 60000) return t("justNow");
     const min = Math.floor(diff / 60000);
-    if (min < 60) return min + " min ago";
+    if (min < 60) return min + t("minAgo");
     const h = Math.floor(min / 60);
-    if (h < 24) return h + " h ago";
+    if (h < 24) return h + t("hAgo");
     const d = Math.floor(h / 24);
-    return d + (d === 1 ? " day ago" : " days ago");
+    return d + (d === 1 ? t("dayAgo") : t("daysAgo"));
   }
   function dateShort(ms) {
-    return new Date(ms).toLocaleDateString("en", { year: "2-digit", month: "short", day: "2-digit" });
+    const loc = {zh:'zh-CN',en:'en-us',ru:'ru'}[lang]||'en-us';
+    return new Date(ms).toLocaleDateString(loc, { year:"numeric", month:"2-digit", day:"2-digit" });
   }
   function clockTime(ms) {
     const d = new Date(ms);
     const p = n => String(n).padStart(2, "0");
     const sameDay = new Date().toDateString() === d.toDateString();
     if (sameDay) return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
-    return d.toLocaleString("en", { month: "short", day: "2-digit" });
+    const loc = {zh:'zh-CN',en:'en-us',ru:'ru'}[lang]||'en-us';
+    return d.toLocaleString(loc, { month:"short", day:"2-digit" });
   }
   function fmtBytes(n) {
     if (n < 1024) return n + " B";
@@ -492,9 +719,9 @@
     return (n / (1024 * 1024)).toFixed(1) + " MB";
   }
   function deviceStatus(d) {
-    if (d.revoked) return { cls: "revoked", text: "REVOKED" };
-    if (Date.now() - d.lastSeenAt > STALE_MS) return { cls: "stale", text: "STALE" };
-    return { cls: "ok", text: "UP TO DATE" };
+    if (d.revoked) return { cls: "revoked", text: t("revoked") };
+    if (Date.now() - d.lastSeenAt > STALE_MS) return { cls: "stale", text: t("stale") };
+    return { cls: "ok", text: t("ok") };
   }
   function eventClass(ev) {
     if (ev === "account.deleted" || ev === "device.revoked") return "ev-danger";
@@ -506,8 +733,8 @@
 
   async function adminGet(path) {
     const r = await fetch(path, { headers: { "X-Admin-Token": token } });
-    if (r.status === 401) { setMsg("Invalid admin token."); return null; }
-    if (!r.ok) { setMsg("Error " + r.status); return null; }
+    if (r.status === 401) { setMsg(t("invalidToken")); return null; }
+    if (!r.ok) { setMsg(t("error") + r.status); return null; }
     return r.json();
   }
   async function adminDelete(path) {
@@ -528,12 +755,12 @@
     const j = await adminGet("/admin/stats");
     if (!j) return;
     $("s-accounts").textContent = j.accounts;
-    $("s-accounts-sub").textContent = j.accounts === 1 ? "single-user instance" : "multi-user instance";
+    $("s-accounts-sub").textContent = j.accounts === 1 ? t("singleUser") : t("multiUser");
     $("s-devices").textContent = j.devices;
     $("s-records").textContent = j.records;
     $("s-storage").textContent = fmtBytes(j.storageBytes || 0);
     if (j.pairingSessions) $("s-devices-sub").textContent =
-      j.pairingSessions + (j.pairingSessions === 1 ? " pairing session open" : " pairing sessions open");
+      j.pairingSessions + (j.pairingSessions === 1 ? t("pairingOpen") : t("pairingsOpen"));
     else $("s-devices-sub").innerHTML = "&nbsp;";
   }
 
@@ -541,9 +768,9 @@
     const j = await adminGet("/admin/accounts?limit=" + lim.acc);
     const tbody = $("accounts-rows");
     if (!j) return;
-    $("accounts-count").textContent = j.total + (j.total === 1 ? " account" : " accounts");
+    $("accounts-count").textContent = j.total + (j.total === 1 ? t("account") : t("accountsPl"));
     if (!j.accounts.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty">No accounts on this instance yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty">' + t("noAccounts") + '</td></tr>';
       $("acc-foot").style.display = "none";
       hideInspector();
       return;
@@ -551,12 +778,12 @@
     tbody.innerHTML = j.accounts.map(a => {
       const aid = esc(a.id);
       const enc = encodeURIComponent(a.id);
-      const devs = a.devices === 0 ? '<span class="badge muted">none</span>'
+      const devs = a.devices === 0 ? '<span class="badge muted">' + t("none") + '</span>'
         : a.activeDevices + ' / ' + a.devices;
       const tomb = a.tombstones > 0 ? '<span class="badge tomb">' + a.tombstones + '</span>' : '0';
       const inspectOn = selected === a.id ? " on" : "";
       const purgeBtn = a.tombstones > 0
-        ? '<button class="act warn" data-purge="' + enc + '" title="Remove deletion markers every device has synced past">Purge</button>'
+        ? '<button class="act warn" data-purge="' + enc + '">' + t("purge") + '</button>'
         : '';
       return '<tr class="row' + (selected === a.id ? ' selected' : '') + '">'
         + '<td class="id mono"><span class="clip" title="' + aid + '">' + aid + '</span></td>'
@@ -567,9 +794,9 @@
         + '<td class="num mono">' + fmtBytes(a.storageBytes) + '</td>'
         + '<td class="mono">' + relTime(a.lastSeenAt) + '</td>'
         + '<td class="acts">'
-          + '<button class="act' + inspectOn + '" data-inspect="' + enc + '">Inspect</button>'
+          + '<button class="act' + inspectOn + '" data-inspect="' + enc + '">' + t("inspect") + '</button>'
           + purgeBtn
-          + '<button class="act danger" data-delete="' + enc + '" data-label="' + aid + '">Delete</button>'
+          + '<button class="act danger" data-delete="' + enc + '" data-label="' + aid + '">' + t("deleteBtn") + '</button>'
         + '</td>'
         + '</tr>';
     }).join("");
@@ -591,12 +818,12 @@
     $("insp-acct").textContent = accountId;
     const tbody = $("insp-rows");
     if (!records.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty">No records stored for this account.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">' + t("noRecords") + '</td></tr>';
     } else {
       tbody.innerHTML = records.map(r => {
         const state = r.deleted
-          ? '<span class="badge tomb">tombstone</span>'
-          : '<span class="badge ok">live</span>';
+          ? '<span class="badge tomb">' + t("recordsTomb") + '</span>'
+          : '<span class="badge ok">' + t("recordsLive") + '</span>';
         return '<tr class="row">'
           + '<td><span class="rtype">' + esc(r.type) + '</span></td>'
           + '<td class="mono">' + esc(r.id) + '</td>'
@@ -629,23 +856,23 @@
   }
 
   async function purgeTombstones(accountId) {
-    if (!confirm("Purge synced tombstones for " + accountId + "?\n\nOnly deletion markers every device has already pulled past are removed — this cannot resurrect a record.")) return;
+    if (!confirm(t("purgeConfirm") + accountId + t("purgeConfirmNote"))) return;
     const r = await adminDelete("/admin/accounts/" + encodeURIComponent(accountId) + "/tombstones");
-    if (r.status === 401) { setMsg("Invalid admin token."); return; }
-    if (!r.ok) { setMsg("Error " + r.status); return; }
+    if (r.status === 401) { setMsg(t("invalidToken")); return; }
+    if (!r.ok) { setMsg(t("error") + r.status); return; }
     const j = await r.json();
-    setMsg(j.purged > 0 ? ("Purged " + j.purged + " tombstone(s).") : "Nothing to purge — no tombstone is past every device cursor yet.", true);
+    setMsg(j.purged > 0 ? (t("purged") + j.purged + t("tombS")) : t("nothingPurge"), true);
     refreshData();
   }
 
   async function deleteAccount(accountId, label) {
-    if (!confirm("Delete account " + label + "?\n\nThis irreversibly removes its records, devices and pairing sessions. Any client still signed in will lose sync access.")) return;
+    if (!confirm(t("deleteConfirm") + label + t("deleteConfirmNote"))) return;
     const r = await adminDelete("/admin/accounts/" + encodeURIComponent(accountId));
-    if (r.status === 401) { setMsg("Invalid admin token."); return; }
-    if (r.status === 404) { setMsg("Account not found."); return; }
-    if (r.status !== 204) { setMsg("Error " + r.status); return; }
+    if (r.status === 401) { setMsg(t("invalidToken")); return; }
+    if (r.status === 404) { setMsg(t("accountNotFound")); return; }
+    if (r.status !== 204) { setMsg(t("error") + r.status); return; }
     if (selected === accountId) hideInspector();
-    setMsg("Deleted account " + label + ".", true);
+    setMsg(t("deletedAccount") + label + ".", true);
     refreshData();
   }
 
@@ -654,7 +881,7 @@
     const tbody = $("devices-rows");
     if (!j) return;
     if (!j.devices.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">No devices yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">' + t("noDevices") + '</td></tr>';
       $("dev-foot").style.display = "none";
       return;
     }
@@ -670,14 +897,14 @@
       const n = g.devices.length;
       const head = '<tr class="grouphead"><td colspan="5">'
         + '<span class="gid">' + esc(g.id) + '</span>'
-        + '<span class="gsub">' + n + (n === 1 ? ' device' : ' devices') + '</span>'
+        + '<span class="gsub">' + n + (n === 1 ? t("device") : t("devicesPl")) + '</span>'
         + '</td></tr>';
       const rows = g.devices.map(d => {
         const st = deviceStatus(d);
-        const plat = d.platform ? esc(d.platform) : "—";
+        const plat = d.platform ? esc(d.platform) : t("nothing");
         const revokeBtn = d.revoked
-          ? '<button class="act danger" disabled>Revoked</button>'
-          : '<button class="act danger" data-account="' + esc(d.accountId) + '" data-id="' + esc(d.id) + '">Revoke</button>';
+          ? '<button class="act danger" disabled>' + t("revokedBtn") + '</button>'
+          : '<button class="act danger" data-account="' + esc(d.accountId) + '" data-id="' + esc(d.id) + '">' + t("revoke") + '</button>';
         return '<tr class="row devrow">'
           + '<td><span class="dname">' + esc(d.name) + '</span><span class="did">' + esc(d.id) + '</span></td>'
           + '<td>' + plat + '</td>'
@@ -694,13 +921,13 @@
   }
 
   async function revokeDevice(accountId, id) {
-    if (!confirm("Revoke device " + id + "?\n\nIt stops syncing until it signs in again with the master password.")) return;
+    if (!confirm(t("revokeConfirm") + id + t("revokeConfirmNote"))) return;
     const url = "/admin/devices/" + encodeURIComponent(id) + "?accountId=" + encodeURIComponent(accountId);
     const r = await adminDelete(url);
-    if (r.status === 401) { setMsg("Invalid admin token."); return; }
-    if (r.status === 204) { setMsg("Device revoked.", true); refreshData(); return; }
-    if (r.status === 404) { setMsg("Device not found."); return; }
-    setMsg("Error " + r.status);
+    if (r.status === 401) { setMsg(t("invalidToken")); return; }
+    if (r.status === 204) { setMsg(t("deviceRevoked"), true); refreshData(); return; }
+    if (r.status === 404) { setMsg(t("deviceNotFound")); return; }
+    setMsg(t("error") + r.status);
   }
 
   async function loadActivity() {
@@ -708,7 +935,7 @@
     const tbody = $("activity-rows");
     if (!j) return;
     if (!j.events.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">No activity yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">' + t("noActivity") + '</td></tr>';
       $("act-foot").style.display = "none";
       return;
     }
@@ -734,13 +961,14 @@
 
   function connect() {
     token = tokenValue();
-    if (!token) { setMsg("Enter the admin token."); return; }
+    if (!token) { setMsg(t("enterAdminToken")); return; }
     setMsg("");
     lim.acc = PAGE.acc; lim.dev = PAGE.dev; lim.act = PAGE.act;
     $("board").classList.remove("locked");
     $("token").style.display = "none";
     $("connect").style.display = "none";
     $("conn-text").style.display = "";
+    $("conn-text").textContent = t("connected");
     $("refresh").style.display = "";
     $("lock").style.display = "";
     refreshData();
@@ -761,11 +989,40 @@
     $("lock").style.display = "none";
     $("token").style.display = "";
     $("connect").style.display = "";
-    $("accounts-rows").innerHTML = '<tr><td colspan="8" class="empty">Enter the admin token and press Connect.</td></tr>';
-    $("devices-rows").innerHTML = '<tr><td colspan="5" class="empty">—</td></tr>';
-    $("activity-rows").innerHTML = '<tr><td colspan="5" class="empty">—</td></tr>';
+    $("accounts-rows").innerHTML = '<tr><td colspan="8" class="empty">' + t("enterToken") + '</td></tr>';
+    $("devices-rows").innerHTML = '<tr><td colspan="5" class="empty">' + t("nothing") + '</td></tr>';
+    $("activity-rows").innerHTML = '<tr><td colspan="5" class="empty">' + t("nothing") + '</td></tr>';
     $("token").focus();
   }
+
+  // ===== refresh static text after language change =====
+  function refreshAllText() {
+    document.querySelectorAll("[data-l10n]").forEach(el => {
+      el.textContent = t(el.getAttribute("data-l10n"));
+    });
+    document.querySelectorAll("[data-l10n-html]").forEach(el => {
+      el.innerHTML = t(el.getAttribute("data-l10n-html"));
+    });
+    // Update the token placeholder
+    $("token").placeholder = t("tokenPlaceholder");
+    // Update button text
+    $("connect").textContent = t("connect");
+    $("refresh").textContent = t("refresh");
+    $("lock").textContent = t("lock");
+    // Update hero text
+    const heroTitle = document.querySelector(".hero .h");
+    if (heroTitle) heroTitle.innerHTML = t("heroTitle");
+    const heroDesc = document.querySelector(".hero .p");
+    if (heroDesc) heroDesc.textContent = t("heroDesc");
+    // Insp-close button
+    const inspClose = document.getElementById("insp-close");
+    if (inspClose) inspClose.textContent = t("close");
+    // Time strings in already-rendered data: just re-render
+    if ($("board").classList.contains("locked") === false) refreshData();
+  }
+
+  // Initialize text on page load
+  setTimeout(refreshAllText, 0);
 
   $("connect").addEventListener("click", connect);
   $("refresh").addEventListener("click", refreshData);

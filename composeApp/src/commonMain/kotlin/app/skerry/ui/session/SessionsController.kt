@@ -6,15 +6,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
+import app.skerry.shared.vnc.VncAuth
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.vnc.VncSessionController
 
 /**
  * Sub-view of a session (tab-scoped): what's shown in its work area. Tunnels are not included here;
- * they're a global section, see [app.skerry.ui.app.DesktopView.isAppLevel].
+ * they're a global section, see [app.skerry.ui.app.DesktopView.isAppLevel]. [Vnc] is a
+ * framebuffer tab (remote desktop) — it has no terminal/SFTP sub-views.
  */
-enum class SessionView { Terminal, Sftp }
+enum class SessionView { Terminal, Sftp, Vnc }
 
 /**
  * One open session — a titlebar tab. Owns its own [ConnectionController] (one shell per session).
@@ -34,9 +37,18 @@ class Session(
     title: String,
     subtitle: String,
     val controller: ConnectionController,
+    /**
+     * Set only for VNC tabs (a framebuffer session): when non-null, this tab renders a remote
+     * desktop instead of a terminal, and [controller] is an idle, unused terminal controller kept
+     * so the many `session.controller` read-sites (split/status/close) stay total. See [isVnc].
+     */
+    val vncController: VncSessionController? = null,
 ) {
     var hostId: String? by mutableStateOf(hostId)
         private set
+
+    /** Whether this is a VNC (remote-desktop) tab rather than a terminal one. */
+    val isVnc: Boolean get() = vncController != null
     var title: String by mutableStateOf(title)
         private set
     var subtitle: String by mutableStateOf(subtitle)
@@ -65,7 +77,7 @@ class Session(
      * [ConnectionUiState.Form]). Created by the "+" button; the first connection fills it. A tab
      * with a host already bound does not become blank again after [ConnectionController.disconnect].
      */
-    val isBlank: Boolean get() = hostId == null && controller.uiState is ConnectionUiState.Form
+    val isBlank: Boolean get() = hostId == null && vncController == null && controller.uiState is ConnectionUiState.Form
 
     internal fun setView(v: SessionView) { view = v }
 
@@ -149,6 +161,10 @@ fun effectiveTabTitle(liveTitle: String?, fallback: String): String =
 class SessionsController(
     private val newId: () -> String,
     private val controllerFactory: () -> ConnectionController,
+    // VNC tabs use their own controller. Defaulted to a no-op factory so tests and non-VNC entry
+    // points that don't wire a VNC transport keep compiling; the desktop/Android entry points pass a
+    // real one (VncSessionController over VncTcpTransport).
+    private val vncControllerFactory: (() -> VncSessionController)? = null,
 ) {
     var sessions: List<Session> by mutableStateOf(emptyList())
         private set
@@ -212,9 +228,28 @@ class SessionsController(
         return open(hostId, title, subtitle, target, auth, onConnected)
     }
 
-    /** Switch the active tab's sub-view (Terminal/SFTP); no-op if there's no active tab. */
+    /**
+     * Open a new VNC (remote-desktop) tab and connect it. Always a fresh tab (a VNC session never
+     * reuses a blank terminal tab), with [SessionView.Vnc]. Requires a VNC controller factory
+     * (wired at the entry point); a no-op if none was provided. Returns the new tab's id, or null.
+     */
+    fun openVnc(hostId: String?, title: String, subtitle: String, target: SshTarget, auth: VncAuth): String? {
+        val vncFactory = vncControllerFactory ?: return null
+        val vnc = vncFactory()
+        // An idle terminal controller keeps `session.controller` non-null for the shared read-sites.
+        val session = Session(newId(), hostId, title, subtitle, controllerFactory(), vncController = vnc)
+        session.setView(SessionView.Vnc)
+        sessions = sessions + session
+        activeId = session.id
+        vnc.connect(target, auth)
+        return session.id
+    }
+
+    /** Switch the active tab's sub-view (Terminal/SFTP); no-op on a VNC tab or with no active tab. */
     fun setActiveView(view: SessionView) {
-        active?.setView(view)
+        val tab = active ?: return
+        if (tab.isVnc) return // VNC tabs are locked to the framebuffer view
+        tab.setView(view)
     }
 
     /** Make session [id] active; an unknown id is ignored. */
@@ -276,6 +311,7 @@ class SessionsController(
         val index = sessions.indexOfFirst { it.id == id }
         if (index < 0) return
         sessions[index].controller.disconnect()
+        sessions[index].vncController?.disconnect()
         sessions[index].splitSession?.controller?.disconnect()
         val remaining = sessions.toMutableList().apply { removeAt(index) }
         if (activeId == id) {
@@ -293,6 +329,7 @@ class SessionsController(
     fun disconnectAll() {
         sessions.forEach {
             it.controller.disconnect()
+            it.vncController?.disconnect()
             it.splitSession?.controller?.disconnect()
         }
         sessions = emptyList()

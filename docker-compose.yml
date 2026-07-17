@@ -1,52 +1,21 @@
-# Skerry Sync — self-hosted (AGPL-3.0).
-#   docker compose up -d --build
-# SQLite in a named volume by default (zero configuration). For PostgreSQL,
-# uncomment the `db` service and the postgres variables on `sync`.
+# Skerry Sync — 自托管同步服务 (AGPL-3.0)。
 #
-# TLS: the server speaks plain HTTP. Put a TLS-terminating reverse proxy
-# (Caddy, nginx, Traefik) in front of it in any deployment reachable off the
-# host — SRP-proofs, JWTs, wrapped dataKeys and the admin token cross the wire
-# otherwise. The published port is bound to 127.0.0.1 below so nothing is exposed
-# until a proxy (or an explicit edit) opens it. See SECURITY.md § "Transport".
+# 部署步骤:
+#   cp server/.env.example /opt/SkerrySSH-Sync/.env
+#   vim /opt/SkerrySSH-Sync/.env              # 填写密钥和邮件等参数
+#   cp docker-compose.yml /opt/SkerrySSH-Sync/docker-compose.yml
+#   docker compose -f /opt/SkerrySSH-Sync/docker-compose.yml up -d --build
+#
+# 所有敏感信息（.env、数据库）均在 /opt/SkerrySSH-Sync/ 目录下，与源码仓库隔离。
 
 services:
   sync:
-    # Prebuilt multi-arch image from Docker Hub — swap it for the build: block
-    # to skip compiling from source:
-    # image: secherkasov/skerry-sync:latest
     build:
       context: .
       dockerfile: server/Dockerfile
     ports:
-      # Loopback-only by default: a TLS reverse proxy on the host publishes it.
-      # For direct LAN sync without TLS (accepted, E2E-encrypted payload), change
-      # this to "8080:8080" — but read the http:// warning in SECURITY.md first.
       - "127.0.0.1:8080:8080"
-    environment:
-      SKERRY_DB_URL: jdbc:sqlite:/data/skerry-sync.db
-      # REQUIRED: set a stable secret in production (otherwise tokens are invalidated on restart):
-      SKERRY_JWT_SECRET: ${SKERRY_JWT_SECRET:-dev-insecure-change-me}
-      SKERRY_ADMIN_TOKEN: ${SKERRY_ADMIN_TOKEN:-}
-      # --- PostgreSQL (optional) ---
-      # SKERRY_DB_URL: jdbc:postgresql://db:5432/skerry
-      # SKERRY_DB_USER: skerry
-      # SKERRY_DB_PASSWORD: ${POSTGRES_PASSWORD:-skerry}
+    env_file: /opt/SkerrySSH-Sync/.env
     volumes:
-      - skerry-data:/data
+      - /opt/SkerrySSH-Sync/data:/data
     restart: unless-stopped
-    # depends_on:
-    #   - db
-
-  # db:
-  #   image: postgres:17-alpine
-  #   environment:
-  #     POSTGRES_DB: skerry
-  #     POSTGRES_USER: skerry
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skerry}
-  #   volumes:
-  #     - skerry-pg:/var/lib/postgresql/data
-  #   restart: unless-stopped
-
-volumes:
-  skerry-data:
-  # skerry-pg:

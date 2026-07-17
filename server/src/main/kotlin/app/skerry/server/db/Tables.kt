@@ -37,6 +37,8 @@ object Devices : Table("devices") {
     /** Sync cursor the device has read/written up to (plaintext counter). */
     val lastSyncVersion = long("last_sync_version").nullable()
     val revoked = bool("revoked").default(false)
+    /** Last IP address that logged in with this device (for suspicious login detection). */
+    val lastIp = varchar("last_ip", 45).nullable()
 
     // PK on (accountId, id): deviceId is unique per account, not globally — otherwise a client
     // supplying another account's deviceId could hijack or make un-revocable someone else's

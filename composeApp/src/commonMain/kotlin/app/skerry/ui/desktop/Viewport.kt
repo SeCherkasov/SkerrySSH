@@ -12,6 +12,7 @@ import app.skerry.ui.teams.TeamsView
 import app.skerry.ui.terminal.TerminalView
 import app.skerry.ui.tunnel.TunnelsView
 import app.skerry.ui.vault.VaultView
+import app.skerry.ui.vnc.VncView
 import app.skerry.ui.app.asSessionView
 
 /**
@@ -34,6 +35,7 @@ fun Viewport(state: DesktopDesignState) {
             when (view) {
                 SessionView.Terminal -> TerminalView(state)
                 SessionView.Sftp -> SftpView()
+                SessionView.Vnc -> VncView()
             }
         }
     }

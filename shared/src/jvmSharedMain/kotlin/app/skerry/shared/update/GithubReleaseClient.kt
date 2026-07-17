@@ -28,7 +28,7 @@ class GithubReleaseClient(
     }
 
     companion object {
-        const val LATEST_RELEASE_URL = "https://api.github.com/repos/SeCherkasov/SkerrySSH/releases/latest"
+        const val LATEST_RELEASE_URL = "https://api.github.com/repos/onepve/SkerrySSH/releases/latest"
 
         /** Bare CIO client — the check is a single small GET, no negotiation plugins needed. */
         fun defaultHttpClient(): HttpClient = HttpClient(CIO)

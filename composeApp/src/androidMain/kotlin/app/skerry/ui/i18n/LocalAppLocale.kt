@@ -23,7 +23,10 @@ actual object LocalAppLocale {
     @Composable
     actual infix fun provides(languageTag: String?): ProvidedValue<*> {
         if (systemDefault == null) systemDefault = Locale.getDefault()
-        val locale = if (languageTag == null) systemDefault!! else Locale.forLanguageTag(languageTag)
+        val locale = if (languageTag == null) {
+            val sys = systemDefault!!
+            if (sys.language in setOf("en", "ru", "zh")) sys else Locale.forLanguageTag("zh")
+        } else Locale.forLanguageTag(languageTag)
         Locale.setDefault(locale)
         val configuration = LocalConfiguration.current
         configuration.setLocale(locale)

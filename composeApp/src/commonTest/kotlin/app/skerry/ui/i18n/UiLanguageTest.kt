@@ -33,6 +33,7 @@ class UiLanguageTest {
     fun `explicit languages carry their BCP-47 tag`() {
         assertEquals("en", UiLanguage.English.localeTag)
         assertEquals("ru", UiLanguage.Russian.localeTag)
+        assertEquals("zh", UiLanguage.Chinese.localeTag)
     }
 
     @Test

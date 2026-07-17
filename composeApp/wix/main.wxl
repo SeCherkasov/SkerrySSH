@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-us" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <!-- jpackage WiX UI strings — Chinese (Simplified) override -->
+
+  <!-- Welcome dialog -->
+  <String Id="WelcomeDlgTitle">{\WixUI_Font_Bigger}欢迎使用 Skerry 安装向导</String>
+  <String Id="WelcomeDlgDescription">本向导将在您的计算机上安装 Skerry SSH 客户端。&#13;&#10;请单击“下一步”继续，或单击“取消”退出安装。</String>
+
+  <!-- License dialog -->
+  <String Id="LicenseAgreementDlgTitle">{\WixUI_Font_Bigger}最终用户许可协议</String>
+  <String Id="LicenseAgreementDlgDescription">请仔细阅读以下许可协议。</String>
+
+  <!-- Install directory dialog -->
+  <String Id="InstallDirDlgTitle">{\WixUI_Font_Bigger}选择安装位置</String>
+  <String Id="InstallDirDlgDescription">选择 Skerry 的安装文件夹。</String>
+
+  <!-- Ready to install -->
+  <String Id="VerifyReadyDlgInstallText">向导已准备就绪，即将开始安装。&#13;&#10;单击“安装”开始安装。</String>
+
+  <!-- Progress -->
+  <String Id="ProgressDlgTitleInstalling">{\WixUI_Font_Bigger}正在安装 Skerry</String>
+  <String Id="ProgressDlgTextInstalling">请稍候，安装向导正在安装 Skerry。这可能需要几分钟。</String>
+
+  <!-- Exit / Finish -->
+  <String Id="ExitDialogTitle">{\WixUI_Font_Bigger}Skerry 安装完成</String>
+  <String Id="ExitDialogDescription">单击“完成”退出安装向导。</String>
+
+  <!-- Maintenance / uninstall -->
+  <String Id="MaintenanceWelcomeDlgTitle">{\WixUI_Font_Bigger}Skerry 安装维护</String>
+  <String Id="MaintenanceWelcomeDlgDescription">选择要对 Skerry 执行的操作。&#13;&#10;单击“下一步”继续。</String>
+  <String Id="MaintenanceTypeDlgTitle">{\WixUI_Font_Bigger}更改、修复或删除安装</String>
+  <String Id="MaintenanceTypeDlgDescription">选择所需的维护类型。</String>
+
+  <!-- Buttons (WiX uses these across all dialogs) -->
+  <String Id="Button_Next">下一步(&amp;N)</String>
+  <String Id="Button_Back">上一步(&amp;B)</String>
+  <String Id="Button_Install">安装(&amp;I)</String>
+  <String Id="Button_Finish">完成(&amp;F)</String>
+  <String Id="Button_Cancel">取消</String>
+  <String Id="Button_Remove">删除(&amp;R)</String>
+  <String Id="Button_Repair">修复(&amp;P)</String>
+  <String Id="Button_Change">更改(&amp;C)</String>
+  <String Id="Button_Yes">是(&amp;Y)</String>
+  <String Id="Button_No">否(&amp;N)</String>
+  <String Id="Button_OK">确定</String>
+</WixLocalization>
