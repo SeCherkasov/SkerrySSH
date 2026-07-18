@@ -83,6 +83,15 @@ sealed interface SyncStatus {
     data class Online(val accountId: String, val lastPushed: Int, val lastPulled: Int) : SyncStatus
 
     /**
+     * The typed password is a valid password for an EXISTING account, but not this device's vault
+     * password. Joining that account re-keys the local vault to the account password — i.e. this device
+     * will start unlocking with the account password (issue #28). We don't do it silently: the UI must
+     * confirm ([SyncCoordinator.confirmPasswordReplace]) or cancel ([SyncCoordinator.cancelPasswordReplace]).
+     * Server/account are echoed for the dialog copy.
+     */
+    data class NeedsPasswordReplaceConfirm(val serverUrl: String, val accountId: String) : SyncStatus
+
+    /**
      * Failure: [reason] is a typed cause (localized in the UI layer), [detail] an optional technical
      * detail (exception message) for cases where it aids diagnosis; the UI appends it after the
      * localized text.
@@ -182,6 +191,31 @@ class SyncCoordinator(
      */
     private val _biometricResetNeeded = MutableStateFlow(false)
     val biometricResetNeeded: StateFlow<Boolean> = _biometricResetNeeded.asStateFlow()
+
+    /**
+     * Connect paused on [SyncStatus.NeedsPasswordReplaceConfirm]: the params to re-run the connect once the
+     * user confirms replacing the vault unlock password. Holds an owned password copy — wiped on confirm
+     * (handed to the re-run, wiped in its finally), cancel, a superseding connect, and [close].
+     */
+    private class PendingReplace(
+        val serverUrl: String,
+        val accountId: String,
+        val password: CharArray,
+        val keepConnected: Boolean,
+    )
+
+    // Set under [opMutex] in doConnect; read/cleared from the UI thread (confirm/cancel/connect) and [close].
+    // @Volatile for cross-thread visibility (doConnect runs on [scope]); the status flips to
+    // NeedsPasswordReplaceConfirm only after the stash, and the UI acts on that status, so confirm/cancel
+    // always observe a set value.
+    @Volatile
+    private var pendingReplace: PendingReplace? = null
+
+    /** Stash the pending replace, wiping any superseded one's password first. */
+    private fun stashPendingReplace(next: PendingReplace) {
+        pendingReplace?.password?.fill(' ')
+        pendingReplace = next
+    }
 
     // "What to sync" (account level) — stored as a SETTINGS record in the vault, synced by the same
     // sync (see [SyncSettings]). Read lazily from the vault: on a locked vault the store returns default.
@@ -291,6 +325,8 @@ class SyncCoordinator(
      * process/test teardown. Does not touch the saved link (that's [disconnect]).
      */
     fun close() {
+        pendingReplace?.password?.fill(' ')
+        pendingReplace = null
         scope.cancel()
     }
 
@@ -317,6 +353,8 @@ class SyncCoordinator(
         // Disabled and Skip is active: proceeding to biometric enroll, the user would wrap it under a key
         // that connect then replaces (account-key adoption race).
         _status.value = SyncStatus.Busy
+        // A fresh connect supersedes any pending vault-password-replace confirmation: wipe its kept password.
+        pendingReplace?.let { it.password.fill(' '); pendingReplace = null }
         // Copy synchronously and wipe the original before launch: the coroutine starts on
         // Dispatchers.Default not immediately, and the caller may wipe the array first — otherwise
         // deriveMasterKey would get an empty password (TOCTOU). The copy is owned by [doConnect] and
@@ -327,7 +365,7 @@ class SyncCoordinator(
     }
 
     // Under [opMutex] (see connect): session activation must not race with disconnect.
-    private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean) {
+    private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false) {
         _status.value = SyncStatus.Busy
         val dataKey = vault.exportDataKey()
         if (dataKey == null) {
@@ -348,13 +386,52 @@ class SyncCoordinator(
             val device = DeviceInfo(deviceId, deviceName, platformName)
             val syncClient = clientFactory(serverUrl)
 
-            // Register-or-login: a new account publishes our dataKey; an existing one — log in and
-            // adopt its dataKey, else other records won't decrypt. CONFLICT = account already exists.
+            // The account (remote) password is the single source of truth: every device shares one
+            // account dataKey wrapped under it, so a synced device MUST unlock with the account password.
+            // [matchesVault] — is the typed password THIS vault's own unlock password? — decides the flow
+            // and whether the unlock password changes (issue #28). verifyPassword runs Argon2id over the
+            // vault salt; a rare user-initiated connect, so the extra derivation is acceptable.
+            val matchesVault = vault.verifyPassword(masterPassword.copyOf())
             var adoptedKey = false
-            val newSession = try {
-                syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device)
-            } catch (e: SyncException) {
-                if (e.kind != SyncException.Kind.CONFLICT) throw e
+            val newSession: SyncSession = if (matchesVault) {
+                // Establish the account under the vault's own password: register a new one (publishes our
+                // dataKey), or on CONFLICT log into our existing account and adopt its key. Adopting here
+                // never changes the unlock password (same password, at most a new dataKey → full re-pull).
+                try {
+                    syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device)
+                } catch (e: SyncException) {
+                    if (e.kind != SyncException.Kind.CONFLICT) throw e
+                    val s = syncClient.login(accountId, ak, device)
+                    adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())
+                    s
+                }
+            } else if (!allowPasswordReplace) {
+                // Typed password isn't this vault's. Never register — creating an account under a non-vault
+                // password permanently splits the local unlock password from the account password (issue
+                // #28's root cause). The only valid intent is joining an EXISTING account under its own
+                // password, which re-keys this vault to that password. Log in to verify it's a real account
+                // password (don't prompt on a wrong one), then pause for the user to confirm the change.
+                val s = try {
+                    syncClient.login(accountId, ak, device)
+                } catch (e: SyncException) {
+                    // The server hides "no such account" behind a wrong-password shape — both surface as
+                    // Unauthorized (the UI hint tells the user to use their vault password).
+                    if (e.kind == SyncException.Kind.UNAUTHORIZED || e.kind == SyncException.Kind.NOT_FOUND) {
+                        runCatching { syncClient.close() }
+                        _status.value = SyncStatus.Failed(SyncFailureReason.Unauthorized)
+                        return
+                    }
+                    throw e
+                }
+                // Verified only — close this client; the confirmed re-run opens its own. Stash the connect
+                // params + password and ask the UI to confirm (finally still wipes mk/authKey/dataKey/password).
+                runCatching { syncClient.close() }
+                stashPendingReplace(PendingReplace(serverUrl, accountId, masterPassword.copyOf(), keepConnected))
+                _status.value = SyncStatus.NeedsPasswordReplaceConfirm(serverUrl, accountId)
+                return
+            } else {
+                // Confirmed ([confirmPasswordReplace]): log into the existing account and adopt its key,
+                // re-keying this vault to the account password (the intended, consented password change).
                 val s = syncClient.login(accountId, ak, device)
                 adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())
                 s
@@ -432,6 +509,10 @@ class SyncCoordinator(
      * re-login. If the wrap doesn't unwrap (different password) — keep the local key. adoptDataKey
      * wipes [password] and consumes [accountDataKey]. Returns `true` if the key was adopted (changed) —
      * the caller forces a full re-pull on that.
+     *
+     * Whether this changes the vault UNLOCK password is decided by the caller ([doConnect]) via
+     * `matchesVault`, not here: re-wrapping under a [password] equal to the current one keeps the unlock
+     * password; a different one (only reached after the user confirmed, issue #28) changes it.
      */
     private suspend fun adoptAccountDataKey(syncClient: SyncClient, s: SyncSession, masterKey: MasterKey, password: CharArray): Boolean {
         val wrapped = syncClient.fetchWrappedDataKey(s)
@@ -454,6 +535,35 @@ class SyncCoordinator(
     /** Clear the re-enroll prompt (the user re-enrolled or dismissed it). */
     fun acknowledgeBiometricReset() {
         _biometricResetNeeded.value = false
+    }
+
+    /**
+     * Confirm replacing this device's vault unlock password with the sync password (status
+     * [SyncStatus.NeedsPasswordReplaceConfirm]): re-run the paused connect, this time allowed to adopt the
+     * differing account key. The password kept from the paused connect is handed to the re-run and wiped in
+     * its finally. No-op if nothing is pending (stale tap / already resolved).
+     */
+    fun confirmPasswordReplace() {
+        val pending = pendingReplace ?: return
+        pendingReplace = null
+        _status.value = SyncStatus.Busy
+        scope.launch {
+            opMutex.withLock {
+                doConnect(pending.serverUrl, pending.accountId, pending.password, pending.keepConnected, allowPasswordReplace = true)
+            }
+        }
+    }
+
+    /**
+     * Decline replacing the vault unlock password (status [SyncStatus.NeedsPasswordReplaceConfirm]): wipe the
+     * kept password and return to the prior state (Configured if a link is saved, else Disabled). The account
+     * is untouched and the local vault keeps its current password. No-op if nothing is pending.
+     */
+    fun cancelPasswordReplace() {
+        val pending = pendingReplace ?: return
+        pendingReplace = null
+        pending.password.fill(' ')
+        _status.value = configStore.load()?.let { SyncStatus.Configured(it.serverUrl, it.accountId) } ?: SyncStatus.Disabled
     }
 
     /**
