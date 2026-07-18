@@ -120,6 +120,12 @@
     <string name="sync_fail_sync">同步失败</string>
     <string name="sync_fail_revoke">无法撤销设备</string>
 
+    <!-- issue #28: 连接到使用其他密码的现有账户会将本设备改用该密码 -->
+    <string name="sync_password_replace_title">使用账户密码？</string>
+    <string name="sync_password_replace_body">账户「%1$s」使用其他密码保护。若要同步，此设备将改用您的账户密码解锁。</string>
+    <string name="sync_password_replace_confirm">使用账户密码</string>
+    <string name="sync_password_replace_cancel">取消</string>
+
     <!-- Teams 邀请的账户标识符（设置 → 同步 / 移动端同步） -->
     <string name="sync_account_id_label">账户 ID</string>
     <string name="sync_sharing_fingerprint_label">共享密钥指纹</string>
