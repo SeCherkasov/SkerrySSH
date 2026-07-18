@@ -75,7 +75,8 @@ fun syncFailureText(failed: SyncStatus.Failed): String {
         },
     )
     val detail = failed.detail?.takeIf { it.isNotBlank() } ?: return base
-    val isZh = runCatching { LocalAppLocale.current.startsWith("zh") }.getOrDefault(false)
+    val locale = LocalAppLocale.current
+    val isZh = locale.startsWith("zh")
     val detailText = if (isZh) zhServerErrorMessages[detail] ?: detail else detail
     return "$base: $detailText"
 }

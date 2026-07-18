@@ -353,7 +353,7 @@ class SyncCoordinator(
             // adopt its dataKey, else other records won't decrypt. CONFLICT = account already exists.
             var adoptedKey = false
             val newSession = try {
-                syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device, inviteCode)
+                syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device)
             } catch (e: SyncException) {
                 if (e.kind != SyncException.Kind.CONFLICT) throw e
                 val s = syncClient.login(accountId, ak, device)
