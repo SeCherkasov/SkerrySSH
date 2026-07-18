@@ -115,6 +115,12 @@
     <string name="sync_fail_sync">Sync failed</string>
     <string name="sync_fail_revoke">Couldn't revoke the device</string>
 
+    <!-- issue #28: joining an existing account whose password differs re-keys this device to it -->
+    <string name="sync_password_replace_title">Use your account password?</string>
+    <string name="sync_password_replace_body">The account “%1$s” is protected by a different password. To sync, this device will start unlocking with your account password.</string>
+    <string name="sync_password_replace_confirm">Use account password</string>
+    <string name="sync_password_replace_cancel">Cancel</string>
+
     <!-- Идентификаторы аккаунта для Teams-приглашений (Settings → Sync / mobile Sync) -->
     <string name="sync_account_id_label">Account ID</string>
     <string name="sync_sharing_fingerprint_label">Sharing key fingerprint</string>

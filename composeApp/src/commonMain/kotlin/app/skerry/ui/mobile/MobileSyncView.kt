@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.sync.RemoteDevice
 import app.skerry.ui.sync.AccountIdentityBlock
+import app.skerry.ui.sync.PasswordReplaceConfirm
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupBody
 import app.skerry.ui.sync.SyncStatus
@@ -211,6 +212,9 @@ private fun SyncBody(sync: SyncCoordinator) {
             MobileWhatSyncs(sync)
             MobileLinkedDevices(sync)
         }
+        // Connecting hit an existing account under a different password → confirm re-keying this device
+        // to the account password before adopting it (issue #28).
+        is SyncStatus.NeedsPasswordReplaceConfirm -> PasswordReplaceConfirm(sync, s.accountId)
         // One shared SyncSetupBody call site for all form states: separate when-branches would be
         // separate composition slots, and a Disabled → Failed transition would still reset the
         // typed fields even though the form never visually left the screen.
