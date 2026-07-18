@@ -127,5 +127,5 @@ sealed interface SyncSignal {
 
 /** Sync client error: network, protocol, or expected (no account / wrong password). */
 class SyncException(val kind: Kind, message: String, cause: Throwable? = null) : Exception(message, cause) {
-    enum class Kind { NETWORK, UNAUTHORIZED, CONFLICT, NOT_FOUND, GONE, PROTOCOL }
+    enum class Kind { NETWORK, UNAUTHORIZED, CONFLICT, NOT_FOUND, GONE, PROTOCOL, FORBIDDEN }
 }

@@ -43,6 +43,8 @@
     <string name="sync_placeholder_account">you@example.com</string>
     <string name="sync_field_master_password">MASTER PASSWORD</string>
     <string name="sync_placeholder_master_password">master password</string>
+    <string name="sync_field_invite_code">INVITATION CODE (optional)</string>
+    <string name="sync_placeholder_invite_code">enter invitation code</string>
     <string name="sync_keep_connected">Keep me connected</string>
     <string name="sync_keep_connected_sub">Reconnect automatically after restart.</string>
     <string name="sync_keep_connected_sub_long">Reconnect automatically after restart — no password needed.</string>
@@ -113,7 +115,8 @@
     <string name="sync_fail_pairing">Couldn't link the device. Check the code and try again.</string>
     <string name="sync_fail_save_settings">Couldn't save sync settings</string>
     <string name="sync_fail_sync">Sync failed</string>
-    <string name="sync_fail_revoke">Couldn't revoke the device</string>
+    <string name="sync_fail_revoke">Failed to revoke device</string>
+    <string name="sync_fail_forbidden">Forbidden</string>
 
     <!-- Идентификаторы аккаунта для Teams-приглашений (Settings → Sync / mobile Sync) -->
     <string name="sync_account_id_label">Account ID</string>

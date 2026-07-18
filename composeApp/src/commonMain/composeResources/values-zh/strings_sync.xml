@@ -34,7 +34,7 @@
     <string name="sync_sync_now">立即同步</string>
     <string name="sync_disconnect">断开连接</string>
     <string name="sync_linked_title">已关联 · %1$s</string>
-    <string name="sync_reconnect_password">使用主密码重新连接。</string>
+    <string name="sync_reconnect_password">使用同步账户密码重新连接</string>
 
     <!-- 表单字段 -->
     <string name="sync_field_server_url">服务器 URL</string>
@@ -43,18 +43,20 @@
     <string name="sync_placeholder_account">your@email.com</string>
     <string name="sync_account_email_hint">请输入有效的电子邮件地址</string>
     <string name="sync_server_url_reset">重置为默认地址</string>
-    <string name="sync_field_master_password">同步账户主密码</string>
-    <string name="sync_placeholder_master_password">账户主密码</string>
-    <string name="sync_field_confirm_password">再次输入账户主密码</string>
+    <string name="sync_field_master_password">同步账户密码</string>
+    <string name="sync_placeholder_master_password">同步账户密码</string>
+    <string name="sync_field_invite_code">邀请码（可选）</string>
+    <string name="sync_placeholder_invite_code">输入邀请码</string>
+    <string name="sync_field_confirm_password">再次输入同步账户密码</string>
     <string name="sync_placeholder_confirm_password">再次输入以确认</string>
     <string name="sync_keep_connected">保持连接</string>
     <string name="sync_keep_connected_sub">重启后自动重新连接。</string>
     <string name="sync_keep_connected_sub_long">重启后自动重新连接 — 无需密码。</string>
-    <string name="sync_master_password_warning">⚠️ 主密码不可找回。一旦遗忘，加密数据将永久丢失。建议用密码管理器保存，或保持至少一台设备在线以便配对新设备。</string>
+    <string name="sync_master_password_warning">⚠️ 同步账户密码不可找回。一旦遗忘，加密数据将永久丢失。建议用密码管理器保存，或保持至少一台设备在线以便配对新设备。</string>
     <string name="sync_insecure_url_warning">明文 http:// — 传输中未加密。除非本地测试，否则请使用 https://。</string>
     <string name="sync_connect">连接</string>
     <string name="sync_zero_knowledge">零知识</string>
-    <string name="sync_zero_knowledge_password">零知识 · 密码永不离开此设备</string>
+    <string name="sync_zero_knowledge_password">零知识 · 同步账户密码永不离开此设备</string>
 
     <!-- 通过代码关联 (join) -->
     <string name="sync_join_title">使用代码关联</string>
@@ -82,7 +84,7 @@
     <!-- 已关联设备 -->
     <string name="sync_linked_devices">已关联设备</string>
     <string name="sync_loading_devices">加载设备中…</string>
-    <string name="sync_load_devices_failed">无法加载设备。请尝试\"立即同步\"。</string>
+    <string name="sync_load_devices_failed">无法加载设备，请点击「立即同步」</string>
     <string name="sync_only_this_device">目前只有此设备。</string>
     <string name="sync_this_device_badge">● 此设备</string>
     <string name="sync_device_linked_current">已关联 · 此设备</string>
@@ -104,21 +106,22 @@
 
     <!-- SyncStatus.Failed 原因 -->
     <string name="sync_fail_vault_locked">保险库已锁定</string>
-    <string name="sync_fail_unauthorized">主密码或账户错误</string>
+    <string name="sync_fail_unauthorized">同步账户密码错误，请重试</string>
     <string name="sync_fail_account_not_found">未找到账户</string>
     <string name="sync_fail_account_exists">账户已存在</string>
     <string name="sync_fail_pairing_expired">配对码已过期</string>
-    <string name="sync_fail_network">无法连接到服务器</string>
-    <string name="sync_fail_protocol">同步协议错误</string>
-    <string name="sync_fail_connect">无法连接</string>
+    <string name="sync_fail_network">无法连接服务器，请检查网络</string>
+    <string name="sync_fail_protocol">同步出现问题</string>
+    <string name="sync_fail_connect">连接失败，请稍后重试</string>
     <string name="sync_fail_code_malformed">这看起来不像是配对码</string>
     <string name="sync_fail_code_invalid">配对码无效</string>
     <string name="sync_fail_wrong_device_password">此设备的密码错误</string>
-    <string name="sync_fail_local_vault_corrupted">本地保险库已损坏</string>
-    <string name="sync_fail_pairing">无法关联设备。请检查代码后重试。</string>
+    <string name="sync_fail_local_vault_corrupted">本地数据已损坏，请重新登录</string>
+    <string name="sync_fail_pairing">无法关联设备，请检查代码后重试</string>
+    <string name="sync_fail_sync">同步出现问题，请重试</string>
     <string name="sync_fail_save_settings">无法保存同步设置</string>
-    <string name="sync_fail_sync">同步失败</string>
     <string name="sync_fail_revoke">无法撤销设备</string>
+    <string name="sync_fail_forbidden">操作被禁止</string>
 
     <!-- Teams 邀请的账户标识符（设置 → 同步 / 移动端同步） -->
     <string name="sync_account_id_label">账户 ID</string>

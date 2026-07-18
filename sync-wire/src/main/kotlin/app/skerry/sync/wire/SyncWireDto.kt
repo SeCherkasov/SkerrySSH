@@ -9,6 +9,10 @@ import kotlinx.serialization.Serializable
  * sees metadata only) stay in `server/.../model/Dto.kt`, unknown to the client.
  */
 
+/** Generic error envelope returned by the server on non-2xx responses. */
+@Serializable
+data class ErrorResponse(val error: String)
+
 // --- auth ---
 
 @Serializable
@@ -21,6 +25,8 @@ data class RegisterRequest(
     val deviceName: String,
     // Optional (default null): older clients without this field stay wire-compatible.
     val platform: String? = null,
+    // Optional (default null): invitation code for gated-registration instances.
+    val inviteCode: String? = null,
 )
 
 @Serializable

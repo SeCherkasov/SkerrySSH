@@ -43,6 +43,8 @@
     <string name="sync_placeholder_account">you@example.com</string>
     <string name="sync_field_master_password">МАСТЕР-ПАРОЛЬ</string>
     <string name="sync_placeholder_master_password">мастер-пароль</string>
+    <string name="sync_field_invite_code">КОД ПРИГЛАШЕНИЯ (необязательно)</string>
+    <string name="sync_placeholder_invite_code">введите код приглашения</string>
     <string name="sync_keep_connected">Оставаться подключённым</string>
     <string name="sync_keep_connected_sub">Автоматически переподключаться после перезапуска.</string>
     <string name="sync_keep_connected_sub_long">Автоматически переподключаться после перезапуска — пароль не нужен.</string>
@@ -114,6 +116,7 @@
     <string name="sync_fail_save_settings">Не удалось сохранить настройки синхронизации</string>
     <string name="sync_fail_sync">Ошибка синхронизации</string>
     <string name="sync_fail_revoke">Не удалось отозвать устройство</string>
+    <string name="sync_fail_forbidden">Доступ запрещён</string>
 
     <!-- Идентификаторы аккаунта для Teams-приглашений (Settings → Sync / mobile Sync) -->
     <string name="sync_account_id_label">ID аккаунта</string>

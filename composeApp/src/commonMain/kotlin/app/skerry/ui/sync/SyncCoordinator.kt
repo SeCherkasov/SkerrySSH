@@ -108,6 +108,7 @@ enum class SyncFailureReason {
     SaveSettingsFailed,    // sync settings didn't save (detail: cause)
     SyncFailed,            // sync cycle failure (detail: cause)
     RevokeFailed,          // device revoke failed (detail: cause)
+    Forbidden,             // server rejected (registration closed, invite code invalid, etc.)
 }
 
 /**
@@ -304,7 +305,7 @@ class SyncCoordinator(
      * Register makes the local dataKey the account key; logging into an existing account instead adopts
      * the account key (see [doConnect]).
      */
-    fun connect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean = false) {
+    fun connect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean = false, inviteCode: String? = null) {
         // Guard against a double launch: a repeat click while the previous connect/claim is in flight
         // would spawn a second Ktor client (pool/socket leak) and a status race. Calls come from UI
         // handlers on the main thread, so check-then-set without CAS is enough (like panel busy flags).
@@ -323,11 +324,11 @@ class SyncCoordinator(
         // wiped in its finally.
         val owned = masterPassword.copyOf()
         masterPassword.fill(' ')
-        scope.launch { opMutex.withLock { doConnect(serverUrl, accountId, owned, keepConnected) } }
+        scope.launch { opMutex.withLock { doConnect(serverUrl, accountId, owned, keepConnected, inviteCode) } }
     }
 
     // Under [opMutex] (see connect): session activation must not race with disconnect.
-    private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean) {
+    private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, inviteCode: String?) {
         _status.value = SyncStatus.Busy
         val dataKey = vault.exportDataKey()
         if (dataKey == null) {
@@ -352,7 +353,7 @@ class SyncCoordinator(
             // adopt its dataKey, else other records won't decrypt. CONFLICT = account already exists.
             var adoptedKey = false
             val newSession = try {
-                syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device)
+                syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device, inviteCode)
             } catch (e: SyncException) {
                 if (e.kind != SyncException.Kind.CONFLICT) throw e
                 val s = syncClient.login(accountId, ak, device)
@@ -911,6 +912,7 @@ class SyncCoordinator(
         SyncException.Kind.GONE -> SyncStatus.Failed(SyncFailureReason.PairingCodeExpired)
         SyncException.Kind.NETWORK -> SyncStatus.Failed(SyncFailureReason.Network, e.message)
         SyncException.Kind.PROTOCOL -> SyncStatus.Failed(SyncFailureReason.Protocol, e.message)
+        SyncException.Kind.FORBIDDEN -> SyncStatus.Failed(SyncFailureReason.Forbidden, e.message)
     }
 }
 
