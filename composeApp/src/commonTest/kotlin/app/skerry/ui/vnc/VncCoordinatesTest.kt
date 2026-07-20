@@ -1,7 +1,9 @@
 package app.skerry.ui.vnc
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -61,5 +63,22 @@ class VncCoordinatesTest {
         // Float noise around an integer (a 1000px canvas over a 1000px desktop) still counts as 1:1.
         assertEquals(FilterQuality.None, framebufferFilterQuality(1.0001f))
         assertEquals(FilterQuality.None, framebufferFilterQuality(0f))
+    }
+
+    @Test
+    fun panning_is_capped_so_the_zoomed_picture_never_leaves_the_viewport() {
+        // 100x100 desktop zoomed 2x in a 100x100 viewport: 100px of overflow, so at most 50 each way.
+        assertEquals(Offset(50f, -50f), clampPan(Offset(500f, -500f), IntSize(100, 100), 100, 100, 2f))
+        assertEquals(Offset(10f, 10f), clampPan(Offset(10f, 10f), IntSize(100, 100), 100, 100, 2f))
+    }
+
+    @Test
+    fun a_picture_that_fits_is_centered_and_cannot_be_panned() {
+        assertEquals(Offset.Zero, clampPan(Offset(40f, 40f), IntSize(100, 100), 100, 100, 1f))
+    }
+
+    @Test
+    fun panning_without_a_measured_viewport_is_left_untouched() {
+        assertEquals(Offset(7f, 7f), clampPan(Offset(7f, 7f), IntSize.Zero, 100, 100, 2f))
     }
 }

@@ -111,8 +111,6 @@ Building it yourself is also easy — see [Building from source](#building-from-
   See [AI and privacy](#ai-and-privacy).
 - **Localization** — English and Russian UI; the assistant replies in the UI language.
 
-The full, detailed feature list lives in **[docs/FEATURES.md](docs/FEATURES.md)**.
-
 ## AI and privacy
 
 The vault promise ("the master password never leaves the device") and a cloud AI assistant
