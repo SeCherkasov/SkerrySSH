@@ -62,16 +62,23 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import java.io.File
-import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.vault.DesktopCorruptedScreen
 import app.skerry.ui.vault.DesktopCreateScreen
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.vault.DesktopResetScreen
 import app.skerry.ui.vault.DesktopUnlockScreen
 import app.skerry.ui.app.DesktopView
-import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.mobile.MOBILE_PREVIEW_HOSTS
+import androidx.compose.runtime.CompositionLocalProvider
+import app.skerry.ui.design.DesignFonts
+import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.metrics.MetricsAvailability
+import app.skerry.ui.metrics.PREVIEW_HOST_METRICS
+import app.skerry.ui.metrics.PREVIEW_METRICS_HISTORY
+import app.skerry.ui.metrics.PREVIEW_RX_RATE
+import app.skerry.ui.metrics.PREVIEW_TX_RATE
 import app.skerry.ui.mobile.MobileDesignApp
+import app.skerry.ui.mobile.MobileHostMonitorSheet
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.app.MobileTab
@@ -226,7 +233,26 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     if (overlay == "sheet") state.openNewConn() // New connection sheet over the current tab
     // Scene width/height are in pixels: 780x1688 at density 2 = logical 390x844dp (phone).
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
-        SkerryTheme { MobileDesignApp(deps = deps, state = state, sessions = sessions, aiOverride = ai, updatesOverride = updates) }
+        SkerryTheme {
+            MobileDesignApp(deps = deps, state = state, sessions = sessions, aiOverride = ai, updatesOverride = updates)
+            // overlay=monitor: the host-monitor sheet on a fixed snapshot. The sheet is opened from
+            // the terminal's menu at runtime, which an offscreen render can't tap, and the live
+            // poller publishes from a background dispatcher that never reaches this scene.
+            if (overlay == "monitor") {
+                // Drawn beside the app, so it needs its own font set (the app provides LocalFonts
+                // only inside its own tree).
+                GateScreenPreview {
+                    MobileHostMonitorSheet(
+                        metrics = PREVIEW_HOST_METRICS,
+                        history = PREVIEW_METRICS_HISTORY,
+                        netRxRate = PREVIEW_RX_RATE,
+                        netTxRate = PREVIEW_TX_RATE,
+                        availability = MetricsAvailability.Live,
+                        onDismiss = {},
+                    )
+                }
+            }
+        }
     }
     var img = scene.render(0)
     for (i in 1..80) {
@@ -506,30 +532,49 @@ private class FakeConnection(private val target: SshTarget) : SshConnection {
     override val isConnected: Boolean = true
     override val cipher: String? = "chacha20-poly1305@openssh.com"
 
-    // Realistic METRICS_COMMAND output so the offscreen render of the info panel shows live
-    // metrics and host facts (CPU/memory/disk/uptime/load/OS/kernel/CPU) instead of "..." placeholders.
-    override suspend fun exec(command: String): ExecResult = ExecResult(
-        exitCode = 0,
-        stdout = """
-            cpu  100 0 100 800 0 0 0 0
-            cpu  168 0 132 900 0 0 0 0
-            @MEM
-            Mem:     4000000000  2100000000  1000000000
-            @DISK
-            /dev/sda1  51475068 42000000 6900000 87% /
-            @UPTIME
-            372765.42 1488907.15
-            @LOAD
-            0.42 0.51 0.48 1/512 28931
-            @OS
-            PRETTY_NAME="Ubuntu 22.04.4 LTS"
-            @KERNEL
-            Linux 5.15.0-105-generic x86_64
-            @CPU
-            4
-        """.trimIndent(),
-        stderr = "",
-    )
+    // Realistic METRICS_COMMAND output so the offscreen render of the info panel shows a live
+    // monitor (CPU/memory/swap, network, filesystems, top processes, host facts) instead of "..."
+    // placeholders. The network counters advance per poll so the rates and their sparklines have
+    // something to draw.
+    private var polls = 0
+
+    override suspend fun exec(command: String): ExecResult {
+        val tick = polls++
+        return ExecResult(
+            exitCode = 0,
+            stdout = """
+                cpu  100 0 100 800 0 0 0 0
+                cpu  168 0 132 900 0 0 0 0
+                @MEM
+                Mem:     4000000000  2100000000  1000000000
+                Swap:    2000000000   210000000  1790000000
+                @DISK
+                Filesystem     1024-blocks      Used Available Capacity Mounted on
+                /dev/sda1         51475068  42000000   6900000      87% /
+                tmpfs               400000      1000    399000       1% /run
+                /dev/sda2        209715200 120000000  78000000      62% /var
+                @NET
+                    lo: 1000000 100 0 0 0 0 0 0 1000000 100
+                  eth0: ${'$'}{4_000_000 + tick * 380_000} 500 0 0 0 0 0 0 ${'$'}{1_200_000 + tick * 95_000} 200
+                @PROC
+                2481  12.4  8.1 postgres
+                 991   4.2  2.3 nginx
+                1204   1.8  5.7 node
+                @UPTIME
+                372765.42 1488907.15
+                @LOAD
+                0.42 0.51 0.48 1/512 28931
+                @OS
+                PRETTY_NAME="Ubuntu 22.04.4 LTS"
+                @KERNEL
+                Linux 5.15.0-105-generic x86_64
+                @CPU
+                4
+            """.trimIndent(),
+            stderr = "",
+        )
+    }
+
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = FakeChannel(target)
     override suspend fun openSftp(): SftpClient = FakeSftpClient()
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = FakePortForward(if (spec.bindPort != 0) spec.bindPort else 50080)
