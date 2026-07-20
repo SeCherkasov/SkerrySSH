@@ -11,6 +11,7 @@ import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncOutcome
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.sync.SyncSignal
+import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.Vault
@@ -55,7 +56,13 @@ class SyncCoordinatorPasswordReplaceTest {
      * for the matching authKey; `register` collides when the account exists. The wrapped account dataKey is
      * a DIFFERENT key wrapped under the account password (adopting it re-keys the joining vault).
      */
-    private inner class FakeAccountClient(existingAccountPassword: String?) : SyncClient {
+    private inner class FakeAccountClient(
+        existingAccountPassword: String?,
+        /** The account key to publish. `null` = a fresh random one (a genuinely foreign account). */
+        accountDataKey: DataKey? = null,
+        /** Serve a wrap that can't be unwrapped, modelling a corrupted/mismatched server record. */
+        private val corruptWrap: Boolean = false,
+    ) : SyncClient {
         private val expectedAuthKey: ByteArray?
         private val wrappedAccountKey: ByteArray?
 
@@ -66,10 +73,10 @@ class SyncCoordinatorPasswordReplaceTest {
             } else {
                 val mk = crypto.deriveMasterKey(existingAccountPassword.toCharArray(), crypto.deriveSyncSalt(account))
                 expectedAuthKey = crypto.deriveAuthKey(mk)
-                val accountKey = crypto.newDataKey()
-                wrappedAccountKey = crypto.wrapDataKey(mk, accountKey)
+                val key = accountDataKey ?: crypto.newDataKey()
+                wrappedAccountKey = crypto.wrapDataKey(mk, key)
                 mk.zeroize()
-                accountKey.zeroize()
+                key.zeroize()
             }
         }
 
@@ -88,8 +95,11 @@ class SyncCoordinatorPasswordReplaceTest {
             throw SyncException(SyncException.Kind.UNAUTHORIZED, "wrong password") // server hides "no such account"
         }
 
-        override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray =
-            wrappedAccountKey?.copyOf() ?: throw NotImplementedError("no account")
+        override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray {
+            val wrap = wrappedAccountKey?.copyOf() ?: throw NotImplementedError("no account")
+            if (corruptWrap) wrap.indices.forEach { wrap[it] = 0 }
+            return wrap
+        }
 
         override fun changes(session: SyncSession): Flow<SyncSignal> = emptyFlow()
         override suspend fun ping(): Boolean = true
@@ -188,6 +198,59 @@ class SyncCoordinatorPasswordReplaceTest {
             sut.confirmPasswordReplace()
             assertTrue(sut.status.value is SyncStatus.Disabled, "a stale confirm must be a no-op, not a re-connect")
             assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "local vault password must be untouched")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The account key can already BE this vault's key while the passwords have diverged: register under a
+     * password, then change the vault password locally (Settings → Security). Reconnecting with the account
+     * password then confirms a replace that [Vault.adoptDataKey] refuses to perform — it deliberately keeps
+     * the meta when the key is unchanged — so without an explicit re-wrap the vault would keep unlocking
+     * with the local password while the account stays on its own: exactly the divergence of issue #28,
+     * only this time with the user's consent on screen.
+     */
+    @Test
+    fun `confirming re-keys the vault even when the account key is already ours`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val ourKey = vault.exportDataKey()!!
+        val client = FakeAccountClient(existingAccountPassword = accountPassword, accountDataKey = ourKey)
+        val sut = coordinator(vault, client)
+        try {
+            // The vault password drifts away from the account password (Settings → Security).
+            assertTrue(vault.changePassword(vaultPassword.toCharArray(), "changed-X".toCharArray()))
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            sut.confirmPasswordReplace()
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            assertTrue(sut.status.value is SyncStatus.Online, "connects: the key is ours, only the wrap changes")
+            assertTrue(vault.verifyPassword(accountPassword.toCharArray()), "the account password now unlocks the vault")
+            assertFalse(vault.verifyPassword("changed-X".toCharArray()), "the old local password no longer unlocks")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * If the account's wrapped key can't be unwrapped, the local key stays — so the confirmed replace did
+     * NOT happen. Connecting anyway would leave the user believing a password change they consented to
+     * took effect, on a device whose records can't decrypt. Fail the connect instead.
+     */
+    @Test
+    fun `confirming fails loudly when the account key cannot be adopted`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = accountPassword, corruptWrap = true)
+        val sut = coordinator(vault, client)
+        try {
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            sut.confirmPasswordReplace()
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            assertTrue(sut.status.value is SyncStatus.Failed, "must not report success on a replace that didn't happen")
+            assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the vault password is left as it was")
         } finally {
             sut.close()
         }

@@ -402,7 +402,8 @@ class SyncCoordinator(
                 } catch (e: SyncException) {
                     if (e.kind != SyncException.Kind.CONFLICT) throw e
                     val s = syncClient.login(accountId, ak, device)
-                    adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())
+                    // Same password on both sides: nothing to re-wrap, only a possible key change.
+                    adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf()) == KeyAdoption.Adopted
                     s
                 }
             } else if (!allowPasswordReplace) {
@@ -433,7 +434,24 @@ class SyncCoordinator(
                 // Confirmed ([confirmPasswordReplace]): log into the existing account and adopt its key,
                 // re-keying this vault to the account password (the intended, consented password change).
                 val s = syncClient.login(accountId, ak, device)
-                adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())
+                when (adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())) {
+                    KeyAdoption.Adopted -> adoptedKey = true
+                    // The account key already IS ours (registered here, then the vault password was changed
+                    // locally): adoptDataKey keeps the meta in that case, so the unlock password would stay
+                    // the local one and diverge from the account — re-wrap it explicitly instead.
+                    KeyAdoption.AlreadyOurs -> if (!vault.rewrapUnder(masterPassword.copyOf())) {
+                        runCatching { syncClient.close() }
+                        _status.value = SyncStatus.Failed(SyncFailureReason.ConnectFailed, "vault re-key failed")
+                        return
+                    }
+                    // The replace the user confirmed did NOT happen (the account wrap didn't open). Connecting
+                    // now would claim a password change that isn't there, on records we can't decrypt.
+                    KeyAdoption.Undecryptable -> {
+                        runCatching { syncClient.close() }
+                        _status.value = SyncStatus.Failed(SyncFailureReason.ConnectFailed, "account key could not be adopted")
+                        return
+                    }
+                }
                 s
             }
 
@@ -514,12 +532,12 @@ class SyncCoordinator(
      * `matchesVault`, not here: re-wrapping under a [password] equal to the current one keeps the unlock
      * password; a different one (only reached after the user confirmed, issue #28) changes it.
      */
-    private suspend fun adoptAccountDataKey(syncClient: SyncClient, s: SyncSession, masterKey: MasterKey, password: CharArray): Boolean {
+    private suspend fun adoptAccountDataKey(syncClient: SyncClient, s: SyncSession, masterKey: MasterKey, password: CharArray): KeyAdoption {
         val wrapped = syncClient.fetchWrappedDataKey(s)
         val accountDataKey = crypto.unwrapDataKey(masterKey, wrapped)
         if (accountDataKey == null) {
             password.fill(' ')
-            return false
+            return KeyAdoption.Undecryptable
         }
         // Key changed → biometrics is wrapped under the old key and would yield the wrong dataKey on
         // fingerprint unlock: ask the platform to reset it (runCatching — a biometrics failure must not
@@ -529,13 +547,16 @@ class SyncCoordinator(
         if (adopted) {
             if (runCatching { onDataKeyAdopted() }.getOrDefault(false)) _biometricResetNeeded.value = true
         }
-        return adopted
+        return if (adopted) KeyAdoption.Adopted else KeyAdoption.AlreadyOurs
     }
 
     /** Clear the re-enroll prompt (the user re-enrolled or dismissed it). */
     fun acknowledgeBiometricReset() {
         _biometricResetNeeded.value = false
     }
+
+    /** Outcome of [adoptAccountDataKey]: the account key replaced ours, already was ours, or didn't open. */
+    private enum class KeyAdoption { Adopted, AlreadyOurs, Undecryptable }
 
     /**
      * Confirm replacing this device's vault unlock password with the sync password (status
