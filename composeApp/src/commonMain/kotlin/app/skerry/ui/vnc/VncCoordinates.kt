@@ -37,11 +37,6 @@ data class FitGeometry(
 }
 
 /**
- * Compute fit-to-window geometry for a [fbWidth]×[fbHeight] framebuffer in a [canvasWidth]×
- * [canvasHeight] canvas. [userScale] (>=1 typically) zooms in and [userOffsetX]/[userOffsetY] pan;
- * the defaults reproduce a plain centered fit.
- */
-/**
  * Filter for drawing the framebuffer at [scale]: 1:1 and integer zooms keep nearest-neighbor (hard
  * pixel edges), any fractional scale is resampled bilinearly — nearest there duplicates some pixel
  * rows and drops others, which shreds remote text and icons. Medium (bilinear + mipmaps), not High
@@ -54,6 +49,11 @@ fun framebufferFilterQuality(scale: Float): FilterQuality {
     return if (nearest >= 1 && abs(scale - nearest) < 0.001f) FilterQuality.None else FilterQuality.Medium
 }
 
+/**
+ * Compute fit-to-window geometry for a [fbWidth]×[fbHeight] framebuffer in a [canvasWidth]×
+ * [canvasHeight] canvas. [userScale] (>=1 typically) zooms in and [userOffsetX]/[userOffsetY] pan;
+ * the defaults reproduce a plain centered fit.
+ */
 fun fitGeometry(
     canvasWidth: Float,
     canvasHeight: Float,

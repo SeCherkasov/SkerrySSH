@@ -20,7 +20,7 @@ fun keySymFor(key: Key, codePoint: Int): Long {
 private fun unicodeKeySym(codePoint: Int): Long =
     if (codePoint in 0x20..0xFF) codePoint.toLong() else 0x01000000L + codePoint.toLong()
 
-// Named non-printable keys → X11 keysyms (keysymdef.h). Modifiers use the left-hand variant.
+// Named non-printable keys → X11 keysyms (keysymdef.h); left/right modifiers keep their own keysyms.
 private val special: Map<Key, Long> = buildMap {
     put(Key.Enter, 0xFF0DL)
     put(Key.NumPadEnter, 0xFF0DL)

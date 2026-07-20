@@ -45,6 +45,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
+import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.nav.PlatformBackHandler
@@ -377,7 +378,10 @@ private fun MobileProtocolSegment(label: String, selected: Boolean, modifier: Mo
 @Composable
 private fun MobileAuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
     val credentials = LocalCredentials.current
-    val saved = credentials?.credentials ?: emptyList()
+    // VNC (allowKey = false) can only use a password secret: a key/certificate would silently map
+    // to no auth at connect (toVncAuth), so those are not offered.
+    val saved = (credentials?.credentials ?: emptyList())
+        .filter { allowKey || it.secret is CredentialSecret.Password }
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
         AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)

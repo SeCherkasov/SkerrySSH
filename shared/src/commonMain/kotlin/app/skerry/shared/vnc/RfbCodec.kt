@@ -304,6 +304,19 @@ class RfbCodec(
         tightInflaters[id] = null
     }
 
+    /**
+     * Release the persistent zlib streams (native state on the JVM — GC finalization is not
+     * reliable for it). The transport calls this on session teardown; idempotent.
+     */
+    fun close() {
+        zrleInflater?.close()
+        zrleInflater = null
+        for (i in tightInflaters.indices) {
+            tightInflaters[i]?.close()
+            tightInflaters[i] = null
+        }
+    }
+
     private suspend fun skipSetColourMap() {
         readU8() // padding
         readU16() // first colour
@@ -485,7 +498,7 @@ class RfbCodec(
         const val MAX_REASON_LEN = 64 * 1024
         const val MAX_CLIPBOARD_LEN = 4 * 1024 * 1024
 
-        /** Cursor sprites are ~32-96px in practice; 1024 leaves room for hi-dpi and still caps at 4 MB. */
+        /** Cursor sprites are ~32-96px in practice; 1024 leaves room for hi-dpi and still caps pixels+mask at ~4.3 MB. */
         const val MAX_CURSOR_DIMENSION = 1024
 
         // Encodings.

@@ -186,6 +186,43 @@ class RfbCodecTest {
         assertEquals(0xFF0000FF.toInt(), fb.pixels[1]) // opaque blue at x=1
     }
 
+    @Test
+    fun close_releases_the_persistent_zlib_streams() = runTest {
+        class CountingInflater : Inflater {
+            var closed = false
+            // Ignores input, returns a solid-red ZRLE tile (subencoding 1 + CPIXEL R,G,B).
+            override fun inflate(input: ByteArray) = byteArrayOf(1, 0xFF.toByte(), 0, 0)
+            override fun close() {
+                closed = true
+            }
+        }
+
+        val created = ArrayList<CountingInflater>()
+        val factory = InflaterFactory { CountingInflater().also { created += it } }
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(2).u16(2).s32(RfbCodec.ENC_ZRLE) // 2x2 rect, ZRLE
+            .s32(1).u8(0)                                        // compressed length 1 + dummy byte
+            .build()
+        val fb = VncFramebuffer(2, 2)
+        val c = RfbCodec(FixtureSource(update), CapturingSink(), fb, factory, VncChallengeResponder { _, _ -> ByteArray(16) })
+        c.readMessage()
+
+        assertEquals(1, created.size) // the persistent ZRLE stream was created
+        assertFalse(created.single().closed)
+
+        c.close()
+
+        assertTrue(created.all { it.closed })
+        c.close() // idempotent
+    }
+
+    @Test
+    fun close_before_any_zlib_stream_is_a_no_op() {
+        val c = codec(FixtureSource(ByteArray(0)), CapturingSink(), VncFramebuffer(1, 1))
+        c.close() // nothing created yet — must not throw
+    }
+
     // --- hardening against a hostile/buggy server (the RFB socket is plaintext and untrusted) ---
 
     @Test

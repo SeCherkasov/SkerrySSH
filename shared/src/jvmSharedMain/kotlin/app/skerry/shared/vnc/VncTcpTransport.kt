@@ -3,6 +3,7 @@ package app.skerry.shared.vnc
 import app.skerry.shared.ssh.SshTarget
 import java.io.BufferedOutputStream
 import java.io.DataInputStream
+import java.io.EOFException
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
@@ -94,6 +95,11 @@ class VncSocketSession(
                 codec.readMessage()
             } catch (e: CancellationException) {
                 throw e // never swallow cooperative cancellation (collector left / socket closed)
+            } catch (e: EOFException) {
+                // Orderly FIN from the server (stream ended between reads) — a clean close, so the
+                // UI can say "Session closed" rather than "Connection lost".
+                emit(VncUpdate.Closed(cleanExit = true))
+                break
             } catch (e: Exception) {
                 // Any decode failure on the untrusted stream — socket IOException, a malformed-data
                 // VncProtocolException, a corrupt-zlib DataFormatException, or an OOB from a crafted
@@ -156,6 +162,10 @@ class VncSocketSession(
     }
 
     private fun closeSocket() {
-        if (closedFlag.compareAndSet(false, true)) runCatching { socket.close() }
+        if (closedFlag.compareAndSet(false, true)) {
+            runCatching { socket.close() }
+            // Release the codec's persistent zlib streams (native state; GC won't do it reliably).
+            runCatching { codec.close() }
+        }
     }
 }

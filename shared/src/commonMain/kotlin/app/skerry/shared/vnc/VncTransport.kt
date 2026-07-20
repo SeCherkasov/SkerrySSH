@@ -95,8 +95,9 @@ interface VncSession {
  * A decoded server→client event surfaced to the UI. [Region] means [VncFramebuffer] changed in the
  * listed rectangles (upload them); [Resize] means the desktop size changed (reallocate the bitmap);
  * [CursorShape] is a new remote cursor sprite; [ClipboardText] is the server's cut buffer; [Bell] is
- * a beep; [Closed] ends the session ([cleanExit] true = the peer closed cleanly, false = a transport
- * drop → the controller may auto-reconnect).
+ * a beep; [Closed] ends the session ([cleanExit] true = the peer ended the stream in an orderly
+ * way (EOF), false = a transport drop or protocol error). Reconnecting is always the user's call —
+ * the controller does not auto-reconnect (see `VncUiState.Disconnected`).
  */
 sealed interface VncUpdate {
     data class Region(val rects: List<VncRect>) : VncUpdate

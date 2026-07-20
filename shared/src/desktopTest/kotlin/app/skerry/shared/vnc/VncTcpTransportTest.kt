@@ -49,6 +49,81 @@ class VncTcpTransportTest {
     private fun u16(v: Int) = byteArrayOf((v ushr 8).toByte(), v.toByte())
     private fun u32(v: Int) = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
 
+    /** Serve a full None-security handshake (1x1 desktop), consume client messages up to the first
+     *  FramebufferUpdateRequest, then hand the socket to [afterHandshake]. */
+    private fun serveHandshakeThen(afterHandshake: (Socket) -> Unit) = serve { socket ->
+        val out = socket.getOutputStream()
+        val din = DataInputStream(socket.getInputStream())
+        out.write("RFB 003.008\n".encodeToByteArray()); out.flush()
+        din.readFully(ByteArray(12))
+        out.write(byteArrayOf(1, RfbCodec.SEC_NONE.toByte())); out.flush()
+        din.read()
+        out.write(u32(0)); out.flush()
+        din.read() // ClientInit
+        out.write(u16(1)); out.write(u16(1)); out.write(ByteArray(16))
+        out.write(u32(1)); out.write("d".encodeToByteArray()); out.flush()
+        // Drain SetPixelFormat/SetEncodings until the initial FramebufferUpdateRequest, so the
+        // client is fully past the handshake before afterHandshake acts on the socket.
+        var sawRequest = false
+        while (!sawRequest) {
+            when (din.read()) {
+                0 -> din.readFully(ByteArray(19))
+                2 -> {
+                    din.readFully(ByteArray(1))
+                    val n = din.readUnsignedShort()
+                    din.readFully(ByteArray(4 * n))
+                }
+                3 -> {
+                    din.readFully(ByteArray(9))
+                    sawRequest = true
+                }
+                else -> return@serve
+            }
+        }
+        afterHandshake(socket)
+    }
+
+    private suspend fun collectClosed(session: VncSession): VncUpdate.Closed {
+        val closed = CompletableFuture<VncUpdate.Closed>()
+        val collector = kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                session.updates.collect { if (it is VncUpdate.Closed) closed.complete(it) }
+            }.onFailure { closed.completeExceptionally(it) }
+        }
+        return try {
+            withContext(Dispatchers.IO) { closed.get(TIMEOUT_MS, TimeUnit.MILLISECONDS) }
+        } finally {
+            collector.cancel()
+            session.close()
+        }
+    }
+
+    @Test
+    fun `server EOF surfaces as a clean close`() = runBlocking {
+        serveHandshakeThen { socket -> socket.close() } // orderly FIN right after the handshake
+
+        val transport = VncTcpTransport()
+        val session = transport.connect(
+            SshTarget(host = server.inetAddress.hostAddress, port = server.localPort, username = ""),
+            VncAuth.None,
+        )
+        assertEquals(true, collectClosed(session).cleanExit)
+    }
+
+    @Test
+    fun `garbage on the stream surfaces as a dirty close`() = runBlocking {
+        serveHandshakeThen { socket ->
+            socket.getOutputStream().apply { write(99); flush() } // unknown message type
+        }
+
+        val transport = VncTcpTransport()
+        val session = transport.connect(
+            SshTarget(host = server.inetAddress.hostAddress, port = server.localPort, username = ""),
+            VncAuth.None,
+        )
+        assertEquals(false, collectClosed(session).cleanExit)
+    }
+
     @Test
     fun `handshake then a raw update reaches the framebuffer`() = runBlocking {
         val chosenSecurity = CompletableFuture<Int>()

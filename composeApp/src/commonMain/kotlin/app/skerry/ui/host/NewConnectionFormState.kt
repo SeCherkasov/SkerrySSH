@@ -58,7 +58,8 @@ class NewConnectionFormState {
      * Switch transport. If [port] still equals the previous type's default (user hasn't touched
      * it), substitute the new type's default: SSH/Mosh->22, Telnet->23, Serial->9600 (baud).
      * Otherwise the value is kept. Leaving the SSH-auth family drops the jump host (ProxyJump
-     * needs the SSH hop). [keepAliveSeconds] is deliberately kept: unlike a jump reference it's
+     * needs the SSH hop); switching to VNC additionally drops key/selected-secret auth (see
+     * [dropNonVncAuth]). [keepAliveSeconds] is deliberately kept: unlike a jump reference it's
      * harmless on other profiles (the session layer gates on SSH), and the choice survives
      * toggling back to SSH.
      */
@@ -68,7 +69,21 @@ class NewConnectionFormState {
             port = defaultPortFor(type).toString()
         }
         if (!type.usesSshAuth) jumpHostId = null
+        if (type.isVnc) dropNonVncAuth()
         connectionType = type
+    }
+
+    /**
+     * VNC auth is password-only: leftover key state — or an already-picked saved secret, possibly
+     * a key the form can't tell apart by id — would silently degrade to no auth at connect
+     * (`toVncAuth` maps non-password secrets to `VncAuth.None`), so both reset to Ask. A
+     * new-password entry stays: it's valid for VNC as-is.
+     */
+    private fun dropNonVncAuth() {
+        if (authMode == AuthMode.NEW_KEY || authMode == AuthMode.EXISTING) authMode = AuthMode.ASK
+        existingCredentialId = null
+        privateKeyPem = ""
+        passphrase = ""
     }
 
     /** Saved SSH profile to tunnel through (ProxyJump), `null` — connect directly. */

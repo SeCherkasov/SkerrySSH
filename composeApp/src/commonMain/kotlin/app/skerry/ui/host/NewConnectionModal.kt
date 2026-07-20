@@ -58,6 +58,7 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
+import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.ConnectionTestController
 import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.JumpChainResolution
@@ -568,7 +569,10 @@ private fun ProtocolSegment(label: String, icon: String, selected: Boolean, modi
 @Composable
 private fun AuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
     val credentials = LocalCredentials.current
-    val saved = credentials?.credentials ?: emptyList()
+    // VNC (allowKey = false) can only use a password secret: a key/certificate would silently map
+    // to no auth at connect (toVncAuth), so those are not offered.
+    val saved = (credentials?.credentials ?: emptyList())
+        .filter { allowKey || it.secret is CredentialSecret.Password }
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
         AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)

@@ -158,6 +158,43 @@ class NewConnectionFormStateTest {
         assertNull(f.resolveCredentialId { error("ask must not save a credential") })
     }
 
+    @Test
+    fun switching_to_vnc_drops_key_auth_state() {
+        // Started as SSH with a key: switching to VNC must not carry the key over — VNC auth is
+        // password-only and a key credential would silently degrade to no auth at connect.
+        val f = NewConnectionFormState().apply { name = "d"; address = "a"; username = "u" }
+        f.authMode = AuthMode.NEW_KEY
+        f.privateKeyPem = "-----BEGIN OPENSSH PRIVATE KEY-----"
+        f.passphrase = "pp"
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals(AuthMode.ASK, f.authMode)
+        assertEquals("", f.privateKeyPem)
+        assertEquals("", f.passphrase)
+        assertNull(f.resolveCredentialId { error("no key credential may be created for VNC") })
+    }
+
+    @Test
+    fun switching_to_vnc_drops_existing_credential_selection() {
+        // The form can't tell a key secret from a password one by id, so the selection resets.
+        val f = NewConnectionFormState().apply { name = "d"; address = "a"; username = "u" }
+        f.authMode = AuthMode.EXISTING
+        f.existingCredentialId = "key-cred"
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals(AuthMode.ASK, f.authMode)
+        assertNull(f.existingCredentialId)
+    }
+
+    @Test
+    fun switching_to_vnc_keeps_new_password_auth() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "a"; username = "u" }
+        f.authMode = AuthMode.NEW_PASSWORD
+        f.password = "sekret"
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals(AuthMode.NEW_PASSWORD, f.authMode)
+        assertEquals("sekret", f.password)
+        assertTrue(f.canSave)
+    }
+
     // Authentication
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
