@@ -1,7 +1,6 @@
 package app.skerry.shared.vault
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path
 
@@ -33,6 +32,12 @@ interface BiometricSupportStore {
     /** Forget the refusal streak after a biometric unlock worked. */
     fun clearRefusals()
 
+    /** Remember which [BiometricKeyHardening] the current enrollment ended up on. */
+    fun rememberHardening(hardening: BiometricKeyHardening)
+
+    /** The rung the current enrollment uses, or `null` if unknown (never enabled, or written by an older build). */
+    fun hardening(): BiometricKeyHardening?
+
     /** Forget everything — on a successful enable, or when the user asks to re-check. */
     fun clear()
 
@@ -40,11 +45,14 @@ interface BiometricSupportStore {
     class Volatile : BiometricSupportStore {
         private var unsupported = false
         private var refusals = 0
+        private var hardening: BiometricKeyHardening? = null
         override fun isUnsupported(): Boolean = unsupported
         override fun markUnsupported() { unsupported = true }
         override fun recordRefusal(): Int = ++refusals
         override fun clearRefusals() { refusals = 0 }
-        override fun clear() { unsupported = false; refusals = 0 }
+        override fun rememberHardening(hardening: BiometricKeyHardening) { this.hardening = hardening }
+        override fun hardening(): BiometricKeyHardening? = hardening
+        override fun clear() { unsupported = false; refusals = 0; hardening = null }
     }
 }
 
@@ -58,6 +66,12 @@ data class BiometricSupportVerdict(
     val deviceId: String,
     val unsupported: Boolean = false,
     val refusals: Int = 0,
+    /**
+     * Name of the [BiometricKeyHardening] the current enrollment runs on. A plain string, not the
+     * enum: a rung added by a newer build must degrade to "unknown" instead of making the whole file
+     * unreadable.
+     */
+    val hardening: String? = null,
 )
 
 /**
@@ -72,20 +86,18 @@ class FileBiometricSupportStore(
     private val harden: (Path) -> Unit = {},
 ) : BiometricSupportStore {
 
-    // encodeDefaults so `unsupported = false` is written explicitly: a file that only carries a
-    // refusal streak must not read back as a verdict once the field is missing.
-    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
+    private val file = JsonFileStore(path, fileSystem, BiometricSupportVerdict.serializer(), harden)
 
     override fun isUnsupported(): Boolean = read()?.unsupported == true
 
     override fun markUnsupported() {
-        write(BiometricSupportVerdict(deviceId, unsupported = true))
+        write((read() ?: BiometricSupportVerdict(deviceId)).copy(unsupported = true))
     }
 
     override fun recordRefusal(): Int {
-        val refusals = (read()?.refusals ?: 0) + 1
-        write(BiometricSupportVerdict(deviceId, unsupported = false, refusals = refusals))
-        return refusals
+        val current = read() ?: BiometricSupportVerdict(deviceId)
+        write(current.copy(refusals = current.refusals + 1))
+        return current.refusals + 1
     }
 
     override fun clearRefusals() {
@@ -93,17 +105,22 @@ class FileBiometricSupportStore(
         if (current.refusals != 0) write(current.copy(refusals = 0))
     }
 
+    override fun rememberHardening(hardening: BiometricKeyHardening) {
+        val current = read() ?: BiometricSupportVerdict(deviceId)
+        write(current.copy(hardening = hardening.name))
+    }
+
+    override fun hardening(): BiometricKeyHardening? =
+        read()?.hardening?.let { name -> BiometricKeyHardening.entries.firstOrNull { it.name == name } }
+
     override fun clear() {
-        runCatching { fileSystem.delete(path, mustExist = false) }
+        runCatching { file.clear() }
     }
 
     /** `null` for a missing/corrupt file, or one written by another device (see [deviceId]). */
-    private fun read(): BiometricSupportVerdict? =
-        runCatching { json.decodeFromString<BiometricSupportVerdict>(fileSystem.read(path) { readUtf8() }) }
-            .getOrNull()
-            ?.takeIf { it.deviceId == deviceId }
+    private fun read(): BiometricSupportVerdict? = file.read()?.takeIf { it.deviceId == deviceId }
 
     private fun write(verdict: BiometricSupportVerdict) {
-        runCatching { atomicWriteUtf8(fileSystem, path, json.encodeToString(verdict), harden) }
+        runCatching { file.write(verdict) }
     }
 }

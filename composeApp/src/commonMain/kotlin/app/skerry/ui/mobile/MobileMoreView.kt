@@ -108,6 +108,7 @@ import app.skerry.ui.generated.resources.settings_security_touch_id
 import app.skerry.ui.generated.resources.settings_security_touch_id_desc
 import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
 import app.skerry.ui.generated.resources.settings_security_touch_id_unsupported
+import app.skerry.ui.generated.resources.settings_security_touch_id_weak_binding
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -342,7 +343,10 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
                             Txt(stringResource(Res.string.settings_security_touch_id), color = D.text, size = 14.5.sp)
-                            Txt(stringResource(Res.string.settings_security_touch_id_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                            // Same subtitle slot admits a weaker key binding when the device took one.
+                            val desc = if (controller.biometricReducedBinding) Res.string.settings_security_touch_id_weak_binding
+                            else Res.string.settings_security_touch_id_desc
+                            Txt(stringResource(desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                         }
                         Toggle(
                             on = controller.biometricEnabled,

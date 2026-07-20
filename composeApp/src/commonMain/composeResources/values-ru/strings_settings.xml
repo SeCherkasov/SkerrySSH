@@ -113,6 +113,7 @@
     <string name="settings_security_touch_id_desc">Использовать биометрию вместо ввода мастер-пароля.</string>
     <string name="settings_security_touch_id_unsupported">Защищённое хранилище ключей этого устройства не расшифровывает хранилище после проверки биометрии, поэтому вход остаётся по мастер-паролю.</string>
     <string name="settings_security_touch_id_recheck">Проверить снова</string>
+    <string name="settings_security_touch_id_weak_binding">Включено, но устройство приняло только ослабленную привязку ключа: ключ остаётся применимым при заблокированном экране. Биометрия по-прежнему нужна для каждой разблокировки.</string>
     <string name="settings_security_auto_lock">Автоблокировка</string>
     <string name="settings_security_auto_lock_desc">Блокировать Skerry после простоя.</string>
     <string name="settings_autolock_1m">Через 1 минуту</string>

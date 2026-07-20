@@ -113,6 +113,7 @@
     <string name="settings_security_touch_id_desc">Use biometrics instead of typing the master password.</string>
     <string name="settings_security_touch_id_unsupported">This device's secure hardware won't decrypt the vault after a biometric check, so unlock stays on the master password.</string>
     <string name="settings_security_touch_id_recheck">Check again</string>
+    <string name="settings_security_touch_id_weak_binding">Enabled, but this device only accepted a weaker key binding: the key stays usable while the screen is locked. Your biometrics is still required for every unlock.</string>
     <string name="settings_security_auto_lock">Auto-lock</string>
     <string name="settings_security_auto_lock_desc">Lock Skerry after inactivity.</string>
     <string name="settings_autolock_1m">After 1 minute</string>

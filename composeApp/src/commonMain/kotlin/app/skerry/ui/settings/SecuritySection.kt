@@ -87,6 +87,7 @@ import app.skerry.ui.generated.resources.settings_security_touch_id
 import app.skerry.ui.generated.resources.settings_security_touch_id_desc
 import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
 import app.skerry.ui.generated.resources.settings_security_touch_id_unsupported
+import app.skerry.ui.generated.resources.settings_security_touch_id_weak_binding
 import app.skerry.ui.generated.resources.settings_time_days_ago
 import app.skerry.ui.generated.resources.settings_time_today
 import app.skerry.ui.generated.resources.settings_time_yesterday
@@ -173,7 +174,10 @@ internal fun SecuritySection(
         )
         SettingToggleRow(
             stringResource(Res.string.settings_security_touch_id),
-            stringResource(Res.string.settings_security_touch_id_desc),
+            // The subtitle doubles as the place to admit a weaker key binding when that's what the
+            // device would take (see VaultGateController.biometricReducedBinding).
+            if (controller.biometricReducedBinding) stringResource(Res.string.settings_security_touch_id_weak_binding)
+            else stringResource(Res.string.settings_security_touch_id_desc),
             on = controller.biometricEnabled,
             onToggle = {
                 if (controller.biometricInFlight) return@SettingToggleRow

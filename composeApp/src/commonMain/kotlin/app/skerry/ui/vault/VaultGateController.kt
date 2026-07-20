@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.vault.BiometricAvailability
+import app.skerry.shared.vault.BiometricKeyHardening
 import app.skerry.shared.vault.BiometricEnableResult
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.BiometricUnlockResult
@@ -186,6 +187,15 @@ class VaultGateController(
      * silently missing row would read as "Skerry has no biometrics", which isn't what happened.
      */
     var biometricUnsupported: Boolean by mutableStateOf(biometrics?.isUnsupported() == true)
+        private set
+
+    /**
+     * Biometrics is enabled, but only on a rung that had to drop "the key is unusable while the device
+     * is locked" ([BiometricKeyHardening.Relaxed]) — the strongest configurations weren't honoured here.
+     * Per-operation biometric auth still guards the key; the UI says so anyway, because a downgrade the
+     * user never chose shouldn't be invisible.
+     */
+    var biometricReducedBinding: Boolean by mutableStateOf(biometrics?.reducedBinding() == true)
         private set
 
     /** User activity counter — idle auto-lock restarts when it changes. */
@@ -427,6 +437,7 @@ class VaultGateController(
             withContext(kdfDispatcher) {
                 biometricEnabled = bio.isEnabled()
                 biometricUnsupported = bio.isUnsupported()
+                biometricReducedBinding = bio.reducedBinding()
             }
             if (result == BiometricEnableResult.Enabled) securityLog?.record(SecurityEventType.BiometricEnabled)
             result == BiometricEnableResult.Enabled
@@ -459,6 +470,7 @@ class VaultGateController(
         val wasEnabled = bio.isEnabled()
         bio.disable()
         biometricEnabled = bio.isEnabled()
+        biometricReducedBinding = false
         // Record the event only if biometrics was actually enabled (disable is idempotent).
         if (wasEnabled && !biometricEnabled) securityLog?.record(SecurityEventType.BiometricDisabled)
     }
@@ -500,3 +512,7 @@ class VaultGateController(
         if (state == VaultGateState.OfferBiometric) state = VaultGateState.Unlocked
     }
 }
+
+/** Whether the current enrollment sits on the weakest rung of the hardening ladder (see [VaultGateController.biometricReducedBinding]). */
+private fun VaultBiometrics.reducedBinding(): Boolean =
+    isEnabled() && enrolledHardening() == BiometricKeyHardening.Relaxed

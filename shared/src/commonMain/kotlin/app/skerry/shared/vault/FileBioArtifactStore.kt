@@ -1,6 +1,5 @@
 package app.skerry.shared.vault
 
-import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path
 
@@ -23,19 +22,14 @@ class FileBioArtifactStore(
     private val harden: (Path) -> Unit = {},
 ) : BioArtifactStore {
 
-    private val json = Json { prettyPrint = true; ignoreUnknownKeys = true }
+    // Atomic write with tmp cleanup on failure (no orphaned wrapper) and harden applied to tmp.
+    private val file = JsonFileStore(path, fileSystem, BioArtifact.serializer(), harden)
 
-    override fun exists(): Boolean = fileSystem.exists(path)
+    override fun exists(): Boolean = file.exists()
 
-    override fun read(): BioArtifact? =
-        runCatching { json.decodeFromString<BioArtifact>(fileSystem.read(path) { readUtf8() }) }.getOrNull()
+    override fun read(): BioArtifact? = file.read()
 
-    override fun write(artifact: BioArtifact) {
-        // Atomic, with tmp cleanup on failure (no orphaned wrapper) and harden applied to tmp.
-        atomicWriteUtf8(fileSystem, path, json.encodeToString(artifact), harden)
-    }
+    override fun write(artifact: BioArtifact) = file.write(artifact)
 
-    override fun clear() {
-        fileSystem.delete(path, mustExist = false)
-    }
+    override fun clear() = file.clear()
 }

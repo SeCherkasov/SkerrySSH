@@ -113,6 +113,7 @@
     <string name="settings_security_touch_id_desc">使用生物识别代替输入主密码。</string>
     <string name="settings_security_touch_id_unsupported">此设备的安全硬件在生物识别验证后不会解密保险库，因此解锁仍需主密码。</string>
     <string name="settings_security_touch_id_recheck">重新检查</string>
+    <string name="settings_security_touch_id_weak_binding">已启用，但此设备只接受较弱的密钥绑定：屏幕锁定时密钥仍可使用。每次解锁仍然需要你的生物识别。</string>
     <string name="settings_security_auto_lock">自动锁定</string>
     <string name="settings_security_auto_lock_desc">闲置后锁定 Skerry。</string>
     <string name="settings_autolock_1m">1 分钟后</string>

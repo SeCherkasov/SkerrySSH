@@ -214,6 +214,19 @@ class VaultBiometricsTest {
     }
 
     @Test
+    fun `the rung the enrollment ended up on is remembered so the UI can admit a weaker one`() = bioTest {
+        // Relaxed drops "unusable while the device is locked". The user never chose that downgrade, so
+        // it must be visible rather than silent — the UI reads it back through enrolledHardening().
+        val keyStore = FakeBiometricKeyStore(workingHardenings = setOf(BiometricKeyHardening.Relaxed))
+        val support = BiometricSupportStore.Volatile()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore, support).enable(prompt))
+
+        assertEquals(BiometricKeyHardening.Relaxed, biometrics(v, keyStore, support).enrolledHardening())
+    }
+
+    @Test
     fun `enable reports Unsupported and remembers it when no rung works`() = bioTest {
         // Nothing on this device can decrypt the vault biometrically. Enabling must leave no
         // artifact and no key behind, and the verdict must stick so the UI stops offering it.

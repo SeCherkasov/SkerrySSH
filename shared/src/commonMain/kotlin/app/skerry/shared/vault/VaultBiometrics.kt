@@ -139,6 +139,13 @@ class VaultBiometrics(
     fun forgetUnsupported() = support.clear()
 
     /**
+     * Which [BiometricKeyHardening] the current enrollment ended up on, or `null` if unknown. The UI
+     * uses it to say so when the device could only take a weaker rung — a downgrade the user never
+     * asked for shouldn't be invisible. Meaningful only while [isEnabled] is true.
+     */
+    fun enrolledHardening(): BiometricKeyHardening? = support.hardening()
+
+    /**
      * Enable biometrics: the vault must be unlocked. Wraps the current `dataKey` under `bioKey` and
      * saves `vault.bio` — but only after unwrapping it right back and comparing byte for byte, so an
      * enclave that accepts encryption and then refuses decryption (#23) is caught here rather than on
@@ -185,7 +192,10 @@ class VaultBiometrics(
             }
             when (val attempt = attemptEnable(hardening, dataKey, prompt, verifyPrompt)) {
                 Attempt.Verified -> {
-                    support.clear() // a device that works now must not stay branded unsupported
+                    withContext(io) {
+                        support.clear() // a device that works now must not stay branded unsupported
+                        support.rememberHardening(hardening) // the UI admits a weaker rung (see enrolledHardening)
+                    }
                     return LadderOutcome(BiometricEnableResult.Enabled, keyRecreated)
                 }
                 Attempt.NextRung -> Unit
