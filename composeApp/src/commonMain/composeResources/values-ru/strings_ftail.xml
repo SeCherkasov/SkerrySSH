@@ -15,8 +15,28 @@
     <!-- Резервные сообщения об ошибках контроллеров/эффектов -->
     <string name="ftail_open_failed">Не удалось открыть SFTP</string>
     <string name="ftail_transfer_error">Ошибка передачи</string>
-    <string name="ftail_sftp_error">Ошибка SFTP</string>
-    <string name="ftail_file_pane_error">Ошибка файловой панели</string>
     <string name="ftail_delete_source_failed">Не удалось удалить источник после переноса</string>
     <string name="ftail_file_fallback">файл</string>
+
+    <!-- Типизированные ошибки файлового браузера/передачи (сырой текст платформы не показывается) -->
+    <string name="ftail_err_local_io">Ошибка локальной файловой системы</string>
+    <string name="ftail_err_sftp">Ошибка SFTP</string>
+    <string name="ftail_err_illegal_name">Недопустимое имя в списке файлов</string>
+    <string name="ftail_err_open_source">Не удалось открыть выбранный файл</string>
+    <string name="ftail_err_open_target">Не удалось открыть файл для записи</string>
+
+    <!-- Локальная файловая система: подпись панели и «хлебных крошек» -->
+    <string name="ftail_local_label">Это устройство</string>
+
+    <!-- Шаблоны размера: название единицы и десятичный разделитель переводятся -->
+    <string name="ftail_size_bytes">%1$d Б</string>
+    <string name="ftail_size_kb">%1$d,%2$d КБ</string>
+    <string name="ftail_size_mb">%1$d,%2$d МБ</string>
+    <string name="ftail_size_gb">%1$d,%2$d ГБ</string>
+    <string name="ftail_size_tb">%1$d,%2$d ТБ</string>
+    <string name="ftail_size_pb">%1$d,%2$d ПБ</string>
+
+    <!-- Строка передачи: имя файла со счётчиком пакета и «передано из общего» -->
+    <string name="ftail_transfer_counter">%1$s (%2$d/%3$d)</string>
+    <string name="ftail_transfer_progress">%1$s из %2$s</string>
 </resources>

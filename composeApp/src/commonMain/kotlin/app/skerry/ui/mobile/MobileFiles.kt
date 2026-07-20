@@ -2,7 +2,8 @@ package app.skerry.ui.mobile
 
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
-import app.skerry.ui.sftp.humanSize
+import app.skerry.ui.sftp.SizeParts
+import app.skerry.ui.sftp.sizeParts
 
 /**
  * Mode of the mobile Files screen (single-pane):
@@ -26,12 +27,12 @@ fun mobileFilesMode(hasSessions: Boolean, connected: Boolean, connecting: Boolea
 }
 
 /**
- * Row subtitle, a direct projection of [FileItem]: human-readable size for a file, empty for a
- * directory (the model doesn't carry permissions/item count, unlike the empty directory subtitle
- * in desktop `SftpView`).
+ * Row subtitle, a direct projection of [FileItem]: size parts for a file, `null` for a directory
+ * (the model doesn't carry permissions/item count, unlike the empty directory subtitle in desktop
+ * `SftpView`). The view renders it through the localized template ([app.skerry.ui.sftp.sizeText]).
  */
-fun mobileFileRowMeta(item: FileItem): String =
-    if (item.type == FileItemType.File) humanSize(item.size) else ""
+fun mobileFileRowMeta(item: FileItem): SizeParts? =
+    if (item.type == FileItemType.File) sizeParts(item.size) else null
 
 /**
  * Leading row icon ([Sym] ligature): directory → `folder`, symlink → `link`, shell script →

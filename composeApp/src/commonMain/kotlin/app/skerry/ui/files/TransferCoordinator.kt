@@ -6,22 +6,47 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.FileBrowserException
+import app.skerry.shared.files.FileBrowserFailure
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntryType
-import app.skerry.shared.sftp.SftpException
 import app.skerry.ui.sftp.DownloadTarget
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.UploadSource
-import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.ftail_delete_source_failed
-import app.skerry.ui.generated.resources.ftail_file_fallback
-import app.skerry.ui.generated.resources.ftail_transfer_error
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
+
+/**
+ * Typed, user-facing reason for a failed transfer; the UI maps it to a localized string. Raw
+ * exception text is never shown — a [FileBrowserException] contributes only its
+ * [FileBrowserFailure], anything else lands on [Transfer].
+ */
+enum class FileTransferFailure {
+    /** The byte transfer itself failed (stream/SFTP/local I/O). */
+    Transfer,
+
+    /** Files reached the destination, but a source could not be removed after a move. */
+    DeleteSource,
+
+    /** A listing entry carried a name unsafe to use as a path component. */
+    IllegalName,
+
+    /** The picked upload source could not be opened. */
+    OpenSource,
+
+    /** The chosen download target could not be opened. */
+    OpenTarget,
+}
+
+/** Maps a browser failure onto the transfer bar's reason; I/O-level causes collapse to [FileTransferFailure.Transfer]. */
+private fun FileBrowserFailure.toTransferFailure(): FileTransferFailure = when (this) {
+    FileBrowserFailure.IllegalName -> FileTransferFailure.IllegalName
+    FileBrowserFailure.OpenSource -> FileTransferFailure.OpenSource
+    FileBrowserFailure.OpenTarget -> FileTransferFailure.OpenTarget
+    FileBrowserFailure.LocalIo, FileBrowserFailure.Sftp -> FileTransferFailure.Transfer
+}
 
 /** Cross-pane batch transfer state, for the bottom transfer bar. */
 sealed interface TransferState {
@@ -41,8 +66,12 @@ sealed interface TransferState {
         val total: Long,
     ) : TransferState
 
-    /** Transfer of [name] failed; [message] is user-facing. */
-    data class Failed(val name: String, val message: String) : TransferState
+    /**
+     * Transfer of [name] failed; [failure] is the typed reason, localized by the UI. [name] is
+     * blank when the failure happened before any file became active — the UI substitutes a
+     * localized placeholder.
+     */
+    data class Failed(val name: String, val failure: FileTransferFailure) : TransferState
 }
 
 /**
@@ -178,8 +207,8 @@ class TransferCoordinator(
         for (item in items) {
             try {
                 delete(item)
-            } catch (e: FileBrowserException) {
-                return TransferState.Failed(item.name, e.message ?: getString(Res.string.ftail_delete_source_failed))
+            } catch (_: FileBrowserException) {
+                return TransferState.Failed(item.name, FileTransferFailure.DeleteSource)
             }
         }
         return null
@@ -289,8 +318,10 @@ class TransferCoordinator(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val name = (transfer as? TransferState.Active)?.name ?: getString(Res.string.ftail_file_fallback)
-                transfer = TransferState.Failed(name, e.message ?: getString(Res.string.ftail_transfer_error))
+                // Blank name = no file was active yet; the UI fills in a localized placeholder.
+                val name = (transfer as? TransferState.Active)?.name.orEmpty()
+                val failure = (e as? FileBrowserException)?.failure?.toTransferFailure() ?: FileTransferFailure.Transfer
+                transfer = TransferState.Failed(name, failure)
             } finally {
                 onFinally()
                 busy = false
@@ -374,7 +405,7 @@ class TransferCoordinator(
         plan: DownloadPlan,
     ) {
         if (isUnsafeListingName(name)) {
-            throw SftpException("Illegal name in listing: $name")
+            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
         }
         val localPath = childPath(localDir, name)
         when (type) {
@@ -438,7 +469,7 @@ class TransferCoordinator(
         plan: UploadPlan,
     ) {
         if (isUnsafeListingName(name)) {
-            throw SftpException("Illegal name in listing: $name")
+            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
         }
         val remotePath = childPath(remoteDir, name)
         when (type) {
@@ -460,7 +491,7 @@ class TransferCoordinator(
      */
     private fun safeRemoteChild(name: String, remoteDir: String): String {
         if (isUnsafeListingName(name)) {
-            throw SftpException("Illegal name in listing: $name")
+            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
         }
         return childPath(remoteDir, name)
     }

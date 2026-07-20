@@ -131,6 +131,8 @@ import app.skerry.ui.generated.resources.vault_subtitle_password
 import app.skerry.ui.generated.resources.vault_subtitle_private_key
 import app.skerry.ui.generated.resources.vault_used_by
 import app.skerry.ui.generated.resources.vault_used_by_one
+import app.skerry.ui.generated.resources.vtail_meta_fingerprint
+import app.skerry.ui.generated.resources.vtail_meta_principals
 import app.skerry.ui.host.HostDraft
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -156,6 +158,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
@@ -452,7 +455,7 @@ private fun LiveSecretCard(
                     val meta = when {
                         info == null -> stringResource(Res.string.vault_meta_certificate, usedBy)
                         info.principals.isEmpty() -> stringResource(Res.string.vault_meta_any_principal, usedBy)
-                        else -> "${info.principals.joinToString(", ")} · $usedBy"
+                        else -> stringResource(Res.string.vtail_meta_principals, info.principals.joinToString(", "), usedBy)
                     }
                     Txt(meta, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
                 }
@@ -465,7 +468,11 @@ private fun LiveSecretCard(
                         Txt(credential.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
                         info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp) }
                     }
-                    val meta = if (info != null) "${shortFingerprint(info.fingerprintSha256)} · $usedBy" else usedBy
+                    val meta = if (info != null) {
+                        stringResource(Res.string.vtail_meta_fingerprint, shortFingerprint(info.fingerprintSha256), usedBy)
+                    } else {
+                        usedBy
+                    }
                     Txt(meta, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
                 }
             }
@@ -1053,7 +1060,7 @@ private fun KeyDetail(mono: FontFamily) {
 
 @Composable
 internal fun DetailLabel(text: String) {
-    Txt(text.uppercase(), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
+    Txt(labelUppercase(text), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
 }
 
 @Composable

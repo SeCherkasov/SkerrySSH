@@ -17,8 +17,15 @@ sealed interface LocalModelStatus {
     data class Downloading(val downloadedBytes: Long, val totalBytes: Long) : LocalModelStatus
     data object Verifying : LocalModelStatus
     data object Installed : LocalModelStatus
-    data class Failed(val message: String) : LocalModelStatus
+    data class Failed(val failure: LocalModelFailure) : LocalModelStatus
 }
+
+/**
+ * Why a model download failed. Typed on purpose: the controller never builds user-visible text,
+ * the UI resolves it via `localModelFailureMessage`. [UNKNOWN] covers unexpected exceptions — the
+ * raw library message is not shown to the user.
+ */
+enum class LocalModelFailure { NETWORK, INTEGRITY, UNKNOWN }
 
 /**
  * UI controller for local model lifecycle: download with progress/cancel, delete, and current
@@ -69,9 +76,9 @@ class LocalModelController(
                 statuses[model.id] = if (installed(model)) LocalModelStatus.Installed else LocalModelStatus.NotInstalled
                 throw e
             } catch (e: ModelDownloadException) {
-                statuses[model.id] = LocalModelStatus.Failed(friendlyMessage(e))
-            } catch (e: Exception) {
-                statuses[model.id] = LocalModelStatus.Failed("Model download failed: ${e.message}")
+                statuses[model.id] = LocalModelStatus.Failed(e.toFailure())
+            } catch (_: Exception) {
+                statuses[model.id] = LocalModelStatus.Failed(LocalModelFailure.UNKNOWN)
             }
         }
     }
@@ -87,9 +94,10 @@ class LocalModelController(
         remove(model)
         statuses[model.id] = LocalModelStatus.NotInstalled
     }
+}
 
-    private fun friendlyMessage(e: ModelDownloadException): String = when (e.kind) {
-        ModelDownloadException.Kind.NETWORK -> "Network error — the download will resume from where it stopped."
-        ModelDownloadException.Kind.INTEGRITY -> "The downloaded file failed verification. Try again."
-    }
+/** Maps a downloader exception to the typed UI failure. */
+private fun ModelDownloadException.toFailure(): LocalModelFailure = when (kind) {
+    ModelDownloadException.Kind.NETWORK -> LocalModelFailure.NETWORK
+    ModelDownloadException.Kind.INTEGRITY -> LocalModelFailure.INTEGRITY
 }

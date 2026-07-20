@@ -377,7 +377,7 @@ class TerminalAiControllerTest {
         c.ask("list files")
         advanceUntilIdle()
 
-        assertIs<AiNotice.Error>(c.notice)
+        assertEquals(AiFailure.UNAUTHORIZED, assertIs<AiNotice.Error>(c.notice).failure)
         assertNull(c.pending)
         assertFalse(c.busy)
     }

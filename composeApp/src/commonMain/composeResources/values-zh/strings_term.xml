@@ -24,8 +24,6 @@
     <string name="term_no_host_selected">未选择主机</string>
     <string name="term_notice_pick_side_by_side">选择主机以分屏打开。</string>
     <string name="term_no_hosts_in_catalog">目录中无主机</string>
-    <string name="term_info_connection">连接</string>
-    <string name="term_info_live">实时</string>
     <string name="term_info_host">主机</string>
     <string name="term_info_address">地址</string>
     <string name="term_info_user">用户</string>
@@ -50,6 +48,8 @@
     <string name="term_monitor_col_command">进程</string>
     <string name="term_monitor_unavailable">此主机无法提供指标</string>
     <string name="term_monitor_title">主机监控</string>
+    <string name="term_system_vcpu">%1$d 个 vCPU</string>
+    <string name="term_system_load">负载 %1$s</string>
     <string name="term_ai_thinking">思考中…</string>
     <string name="term_ai_ask_placeholder">向 Skerry 提问：\"查找大于 100MB 的文件\"</string>
     <string name="term_ai_run">运行</string>
@@ -63,6 +63,12 @@
     <string name="term_ai_blocked_disabled">AI 已在 AI 设置中关闭。</string>
     <string name="term_mobile_title_fallback">终端</string>
     <string name="term_mobile_open_host_connect">打开一个主机并点击\"连接\"。</string>
+    <!-- 主机名下方的会话状态行（移动端终端标题栏）。 -->
+    <string name="term_status_connected">已连接</string>
+    <string name="term_status_connecting">连接中…</string>
+    <string name="term_status_disconnected">已断开</string>
+    <string name="term_status_closed">已关闭</string>
+    <string name="term_status_no_session">无会话</string>
     <string name="term_ai_ask_short">向 Skerry 提问…</string>
     <string name="term_ai_confirm">确认</string>
     <string name="term_password_label">密码</string>

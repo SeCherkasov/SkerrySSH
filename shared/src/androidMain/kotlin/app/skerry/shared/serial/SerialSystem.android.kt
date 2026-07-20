@@ -48,24 +48,24 @@ actual object SerialSystem {
 
     actual fun open(config: SerialConfig): SerialPortHandle {
         val context = SerialUsbBridge.context()
-            ?: throw SerialUnavailableException("USB context unavailable (app not initialized)")
+            ?: throw SerialUnavailableException(SerialProblem.UNSUPPORTED)
         val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
-            ?: throw SerialUnavailableException("USB Host API unavailable on this device")
+            ?: throw SerialUnavailableException(SerialProblem.UNSUPPORTED)
 
         val (driver, portIndex) = locate(usbManager, config.portName)
-            ?: throw SerialUnavailableException("USB device ${config.portName} not found")
+            ?: throw SerialUnavailableException(SerialProblem.PORT_NOT_FOUND, config.portName)
 
         if (!ensurePermission(context, usbManager, driver.device)) {
-            throw SerialUnavailableException("No permission to access USB device ${config.portName}")
+            throw SerialUnavailableException(SerialProblem.PERMISSION_DENIED, config.portName)
         }
 
         val connection: UsbDeviceConnection = usbManager.openDevice(driver.device)
-            ?: throw SerialUnavailableException("Failed to open USB device ${config.portName}")
+            ?: throw SerialUnavailableException(SerialProblem.OPEN_FAILED, config.portName)
 
         val port = driver.ports.getOrNull(portIndex)
             ?: run {
                 runCatching { connection.close() }
-                throw SerialUnavailableException("Port #$portIndex missing on ${config.portName}")
+                throw SerialUnavailableException(SerialProblem.PORT_NOT_FOUND, config.portName)
             }
         return try {
             port.open(connection)
@@ -79,7 +79,7 @@ actual object SerialSystem {
         } catch (e: Exception) {
             runCatching { port.close() }
             runCatching { connection.close() }
-            throw SerialUnavailableException("Failed to configure USB port ${config.portName}", e)
+            throw SerialUnavailableException(SerialProblem.CONFIGURE_FAILED, config.portName, e)
         }
     }
 

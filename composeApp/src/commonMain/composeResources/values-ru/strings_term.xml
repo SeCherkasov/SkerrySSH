@@ -24,8 +24,6 @@
     <string name="term_no_host_selected">Хост не выбран</string>
     <string name="term_notice_pick_side_by_side">Выберите хост, чтобы открыть его рядом.</string>
     <string name="term_no_hosts_in_catalog">В каталоге нет хостов</string>
-    <string name="term_info_connection">ПОДКЛЮЧЕНИЕ</string>
-    <string name="term_info_live">АКТИВНО</string>
     <string name="term_info_host">Хост</string>
     <string name="term_info_address">Адрес</string>
     <string name="term_info_user">Пользователь</string>
@@ -50,6 +48,8 @@
     <string name="term_monitor_col_command">ПРОЦЕСС</string>
     <string name="term_monitor_unavailable">Метрики недоступны на этом хосте</string>
     <string name="term_monitor_title">Мониторинг хоста</string>
+    <string name="term_system_vcpu">%1$d vCPU</string>
+    <string name="term_system_load">загрузка %1$s</string>
     <string name="term_ai_thinking">Думаю…</string>
     <string name="term_ai_ask_placeholder">Спросите Skerry: «найди файлы больше 100 МБ»</string>
     <string name="term_ai_run">Выполнить</string>
@@ -63,6 +63,12 @@
     <string name="term_ai_blocked_disabled">AI выключен в настройках AI.</string>
     <string name="term_mobile_title_fallback">Терминал</string>
     <string name="term_mobile_open_host_connect">Откройте хост и нажмите «Подключиться».</string>
+    <!-- Строка состояния сессии под именем хоста (шапка мобильного терминала) — строчные буквы намеренно. -->
+    <string name="term_status_connected">подключено</string>
+    <string name="term_status_connecting">подключение…</string>
+    <string name="term_status_disconnected">отключено</string>
+    <string name="term_status_closed">закрыто</string>
+    <string name="term_status_no_session">нет сессии</string>
     <string name="term_ai_ask_short">Спросите Skerry…</string>
     <string name="term_ai_confirm">Подтвердить</string>
     <string name="term_password_label">ПАРОЛЬ</string>

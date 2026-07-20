@@ -45,8 +45,12 @@ import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.PathJumpField
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.TransferState
+import app.skerry.ui.files.fileBrowserFailureText
 import app.skerry.ui.files.platformLocalBrowser
+import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_file_fallback
+import app.skerry.ui.generated.resources.ftail_local_label
 import app.skerry.ui.generated.resources.ftail_open_failed
 import app.skerry.ui.generated.resources.sftp_connecting
 import app.skerry.ui.generated.resources.sftp_create
@@ -68,6 +72,7 @@ import app.skerry.ui.generated.resources.sftp_transfer_error
 import app.skerry.ui.generated.resources.sftp_unavailable
 import app.skerry.ui.generated.resources.sftp_upload_file
 import app.skerry.ui.sftp.TransferDirection
+import app.skerry.ui.sftp.sizeText
 import app.skerry.ui.sftp.pickDownloadTarget
 import app.skerry.ui.sftp.pickUploadSource
 import org.jetbrains.compose.resources.stringResource
@@ -142,8 +147,9 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
             coord = controller.openTransferCoordinator(platformLocalBrowser(), subtitle)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            openError = e.message ?: openFailedMsg
+        } catch (_: Exception) {
+            // sshj/transport text carries addresses and internals — only the localized reason is shown.
+            openError = openFailedMsg
         }
     }
 
@@ -177,7 +183,10 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                     val downloadHere = remember(c) {
                         { item: FileItem -> c.remote.selectOnly(item); c.downloadSelection() }
                     }
-                    MobileFilesBreadcrumbRow(pane.label, pane.path, mono, onGoToPath = pane::goToPath)
+                    MobileFilesBreadcrumbRow(
+                        pane.label.ifBlank { stringResource(Res.string.ftail_local_label) },
+                        pane.path,
+                        mono, onGoToPath = pane::goToPath)
                     MobileLivePane(
                         pane = pane,
                         mono = mono,
@@ -276,7 +285,8 @@ private fun MobileLivePane(
     Box(modifier.fillMaxWidth()) {
         when (val st = pane.state) {
             FilePaneState.Loading -> MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_loading), null, D.faint)
-            is FilePaneState.Error -> MobileFilesNoticeBox("error", stringResource(Res.string.sftp_error), st.message, D.sunset)
+            is FilePaneState.Error ->
+                MobileFilesNoticeBox("error", stringResource(Res.string.sftp_error), fileBrowserFailureText(st.failure), D.sunset)
             is FilePaneState.Loaded -> Column(
                 Modifier.fillMaxSize().verticalScroll(scroll).padding(top = 12.dp, start = 12.dp, end = 12.dp),
             ) {
@@ -352,8 +362,7 @@ private fun MobileFileRow(
         Sym(mobileFileIcon(entry), size = 23.sp, color = if (isDir) D.cyanBright else D.dim)
         Column(Modifier.weight(1f)) {
             Txt(entry.name, color = D.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val meta = mobileFileRowMeta(entry)
-            if (meta.isNotEmpty()) Txt(meta, color = D.faint, size = 11.sp)
+            mobileFileRowMeta(entry)?.let { Txt(sizeText(it), color = D.faint, size = 11.sp) }
         }
         Sym(mobileFileTrailingIcon(entry.type), size = 20.sp, color = D.faint)
     }
@@ -439,7 +448,13 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 Sym("error", size = 17.sp, color = D.sunset)
-                Txt(stringResource(Res.string.sftp_transfer_error, transfer.name, transfer.message), color = D.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Txt(
+                    stringResource(
+                        Res.string.sftp_transfer_error,
+                        transfer.name.ifBlank { stringResource(Res.string.ftail_file_fallback) },
+                        transferFailureText(transfer.failure),
+                    ),
+                    color = D.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 IconBtn("close", onClick = onDismiss, box = 26, icon = 16.sp)
             }
         }

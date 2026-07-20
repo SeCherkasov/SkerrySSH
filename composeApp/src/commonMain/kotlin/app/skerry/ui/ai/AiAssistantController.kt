@@ -52,7 +52,8 @@ class AiAssistantController(
 
     /** Partial reply while streaming; `null` when not generating. */
     var streaming by mutableStateOf<String?>(null); private set
-    var error by mutableStateOf<String?>(null); private set
+    /** Typed reason the last request failed; the UI resolves the text (see `aiFailureMessage`). */
+    var error by mutableStateOf<AiFailure?>(null); private set
     var busy by mutableStateOf(false); private set
 
     private var job: Job? = null

@@ -60,10 +60,11 @@ import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.ConnectionTestController
+import app.skerry.ui.connection.ConnectionTestProblem
 import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.JumpChainResolution
+import app.skerry.ui.connection.connectionTestFailureText
 import app.skerry.ui.connection.jumpHostCandidates
-import app.skerry.ui.connection.jumpProblemText
 import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.design.DropdownField
@@ -116,7 +117,6 @@ import app.skerry.ui.generated.resources.conn_subtitle_new
 import app.skerry.ui.generated.resources.conn_tag_add_placeholder
 import app.skerry.ui.generated.resources.conn_test
 import app.skerry.ui.generated.resources.conn_test_checking
-import app.skerry.ui.generated.resources.conn_test_incomplete
 import app.skerry.ui.generated.resources.conn_test_connected
 import app.skerry.ui.generated.resources.conn_test_rtt_ms
 import app.skerry.ui.generated.resources.conn_title_edit
@@ -198,10 +198,6 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
         findHost = { id -> allHosts.firstOrNull { it.id == id } },
         findCredential = { id -> credentials?.find(id) },
     )
-    val jumpErrorText = (testJump as? JumpChainResolution.Unavailable)?.let { jumpProblemText(it.problem) }
-    // Shown as the test result when "Test" is clicked with an incomplete form (no username/host/secret):
-    // the button stays tappable, so give feedback instead of silently doing nothing.
-    val incompleteTestMessage = stringResource(Res.string.conn_test_incomplete)
     ModalScrim(onDismiss = state::closeModal) {
         Column(
             Modifier
@@ -372,14 +368,14 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         }
                         if (canTest && auth != null) {
                             when (testJump) {
-                                is JumpChainResolution.Unavailable -> tester.fail(jumpErrorText.orEmpty())
+                                is JumpChainResolution.Unavailable -> tester.fail(ConnectionTestProblem.Jump(testJump.problem))
                                 is JumpChainResolution.Resolved ->
                                     tester.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim(), jump = testJump.jump), auth)
                             }
                         } else {
                             // Form isn't ready to dial (missing host/username/credentials): report it as a
                             // failure so the click isn't a silent no-op.
-                            tester?.fail(incompleteTestMessage)
+                            tester?.fail(ConnectionTestProblem.IncompleteForm)
                         }
                     },
                     fg = if (canTest) D.text else D.faint,
@@ -837,7 +833,7 @@ private fun TestStatusLabel(status: ConnectionTestStatus) {
         }
         is ConnectionTestStatus.Failure -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("error", size = 14.sp, color = D.storm)
-            Txt(status.message, color = D.storm, size = 11.5.sp)
+            Txt(connectionTestFailureText(status.problem), color = D.storm, size = 11.5.sp)
         }
     }
 }

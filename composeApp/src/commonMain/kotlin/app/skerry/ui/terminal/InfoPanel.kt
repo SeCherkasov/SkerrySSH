@@ -40,13 +40,13 @@ import app.skerry.ui.generated.resources.term_auth_password
 import app.skerry.ui.generated.resources.term_info_address
 import app.skerry.ui.generated.resources.term_info_auth
 import app.skerry.ui.generated.resources.term_info_cipher
-import app.skerry.ui.generated.resources.term_info_connection
 import app.skerry.ui.generated.resources.term_info_host
 import app.skerry.ui.generated.resources.term_info_jump
-import app.skerry.ui.generated.resources.term_info_live
 import app.skerry.ui.generated.resources.term_info_system
 import app.skerry.ui.generated.resources.term_info_uptime
 import app.skerry.ui.generated.resources.term_info_user
+import app.skerry.ui.generated.resources.term_system_load
+import app.skerry.ui.generated.resources.term_system_vcpu
 import app.skerry.ui.metrics.HostMetrics
 import app.skerry.ui.metrics.HostMonitorSections
 import app.skerry.ui.metrics.MetricsAvailability
@@ -146,14 +146,13 @@ private const val MOCK_SYSTEM = "Ubuntu 22.04.4 LTS\nLinux 5.15.0-105 x86_64\n4 
  * Builds the info panel's SYSTEM block from live host facts: OS, kernel, "N vCPU · load …" line.
  * Skips fields not yet available (poll pending / non-Linux). If all are empty, returns "…".
  */
+@Composable
 private fun liveSystemSummary(m: HostMetrics?): String {
-    val cpuLoad = buildString {
-        m?.cpuCount?.let { append("$it vCPU") }
-        m?.loadAverage?.let {
-            if (isNotEmpty()) append(" · ")
-            append("load $it")
-        }
-    }
+    // Parts are resolved through resources here (not concatenated from literals) so the block follows
+    // the UI language.
+    val cpu = m?.cpuCount?.let { stringResource(Res.string.term_system_vcpu, it) }
+    val load = m?.loadAverage?.let { stringResource(Res.string.term_system_load, it) }
+    val cpuLoad = listOfNotNull(cpu, load).joinToString(" · ")
     val lines = listOfNotNull(
         m?.osName,
         m?.kernel,

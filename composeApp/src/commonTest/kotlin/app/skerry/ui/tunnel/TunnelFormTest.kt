@@ -6,6 +6,7 @@ import app.skerry.shared.tunnel.Tunnel
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.connection.JumpChainProblem
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -84,7 +85,7 @@ class TunnelFormTest {
         val r = assertIs<TunnelResolution.Unavailable>(
             resolveTunnel(tunnel, findHost = { null }, findCredential = { credential }),
         )
-        assertEquals("Host not found", r.reason)
+        assertEquals(TunnelUnavailable.HostNotFound, r.reason)
     }
 
     @Test
@@ -92,7 +93,7 @@ class TunnelFormTest {
         val r = assertIs<TunnelResolution.Unavailable>(
             resolveTunnel(tunnel, findHost = { host }, findCredential = { null }),
         )
-        assertEquals("No saved credential", r.reason)
+        assertEquals(TunnelUnavailable.NoCredential, r.reason)
     }
 
     @Test
@@ -119,6 +120,6 @@ class TunnelFormTest {
         val r = assertIs<TunnelResolution.Unavailable>(
             resolveTunnel(tunnel, findHost = { hosts[it] }, findCredential = { if (it == "c1") credential else null }),
         )
-        assertEquals("Jump host has no saved credential", r.reason)
+        assertEquals(TunnelUnavailable.Jump(JumpChainProblem.NO_CREDENTIAL), r.reason)
     }
 }

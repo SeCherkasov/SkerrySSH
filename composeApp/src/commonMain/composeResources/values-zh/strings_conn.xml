@@ -84,4 +84,19 @@
     <string name="conn_test_connected">已连接</string>
     <string name="conn_test_rtt_ms">%1$d 毫秒</string>
     <string name="conn_test_incomplete">请输入主机、用户名和凭据以进行测试</string>
+
+    <string name="conn_test_err_auth">身份验证失败</string>
+    <string name="conn_test_err_host_key">主机密钥被拒绝</string>
+    <string name="conn_test_err_connection">连接失败</string>
+    <string name="conn_error_failed">连接失败</string>
+    <string name="conn_error_failed_detail">连接失败（%1$s）</string>
+
+    <string name="conn_tunnel_error_host_missing">未找到主机</string>
+    <string name="conn_tunnel_error_no_credential">没有已保存的凭据</string>
+
+    <string name="conn_serial_err_unsupported">此设备不支持串口。</string>
+    <string name="conn_serial_err_not_found">未找到端口 %1$s。请重新连接设备或选择其他端口。</string>
+    <string name="conn_serial_err_permission">访问端口 %1$s 被拒绝。</string>
+    <string name="conn_serial_err_open">无法打开端口 %1$s — 它可能正被其他程序占用。</string>
+    <string name="conn_serial_err_configure">端口 %1$s 拒绝了所选的速率或帧格式。</string>
 </resources>

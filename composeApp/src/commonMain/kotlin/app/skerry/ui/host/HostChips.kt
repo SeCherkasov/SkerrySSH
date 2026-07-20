@@ -1,9 +1,21 @@
 package app.skerry.ui.host
 
+import androidx.compose.runtime.Composable
 import app.skerry.shared.host.Host
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shtail_chip_all
+import org.jetbrains.compose.resources.stringResource
 
-/** "All hosts" chip at the start of the Hosts list filter row (desktop sidebar and mobile). */
+/**
+ * Technical key of the "all hosts" chip at the start of the Hosts list filter row (desktop sidebar
+ * and mobile). Used as the filter value in [filterHosts] and as the chip identity; not localized,
+ * since that would break filtering on locale change. For display, use [allHostsChipLabel].
+ */
 const val ALL_HOSTS_CHIP = "All"
+
+/** Localized "all hosts" chip label for display (not for filtering, see [ALL_HOSTS_CHIP]). */
+@Composable
+fun allHostsChipLabel(): String = stringResource(Res.string.shtail_chip_all)
 
 /**
  * Filter chips: `All` plus unique host tags in order of first appearance (canonical form, no `#`).
@@ -17,8 +29,13 @@ fun hostTagChips(hosts: List<Host>): List<String> = buildList {
     for (host in hosts) for (tag in host.tags) if (seen.add(tag)) add(tag)
 }
 
-/** Chip label for display: `All` as-is, tags prefixed with `#` (model value has no `#`). */
-fun hostChipLabel(chip: String): String = if (chip == ALL_HOSTS_CHIP) chip else "#$chip"
+/** Chip label for display: localized for [ALL_HOSTS_CHIP], tags via [hostTagChipLabel]. */
+@Composable
+fun hostChipLabel(chip: String): String =
+    if (chip == ALL_HOSTS_CHIP) allHostsChipLabel() else hostTagChipLabel(chip)
+
+/** Tag chip label: `#` prefix (the model value has none). Pure, no localization involved. */
+fun hostTagChipLabel(tag: String): String = "#$tag"
 
 /**
  * Narrow [hosts] by the active chip ([activeChip] = tag, `All` = no filter) and [query] (AND).

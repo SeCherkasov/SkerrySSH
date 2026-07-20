@@ -85,7 +85,7 @@ class PortForwardControllerTest {
 
         val entry = controller.forwards.single()
         val status = assertIs<ForwardStatus.Failed>(entry.status)
-        assertEquals("port busy", status.message)
+        assertEquals(ForwardFailure.RaiseFailed, status.failure)
     }
 
     @Test

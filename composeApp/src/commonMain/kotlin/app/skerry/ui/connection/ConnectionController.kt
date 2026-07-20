@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.serial.SerialProblem
+import app.skerry.shared.serial.SerialUnavailableException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
@@ -55,16 +57,19 @@ sealed interface ConnectionUiState {
     data class Connected(val terminal: TerminalScreenState) : ConnectionUiState
 
     /**
-     * Connect failed; [message] is shown to the user. [moshReason]/[moshDetail] are set when the
-     * failure is a typed Mosh setup problem — the view then renders a localized explanation
-     * (missing server package, locale, blocked UDP) instead of the raw English [message]
-     * (see `moshFailureText`); building the text here would bake in one language
+     * Connect failed; [message] is shown to the user. [moshReason]/[moshDetail] and
+     * [serialProblem]/[serialDetail] are set when the failure is a typed Mosh setup or serial port
+     * problem — the view then renders a localized explanation (missing server package, locale,
+     * blocked UDP; port missing, permission denied) instead of the raw English [message]
+     * (see `connectionErrorText`); building the text here would bake in one language
      * (same rule as [app.skerry.shared.sync.SyncFailureReason]).
      */
     data class Error(
         val message: String,
         val moshReason: MoshSetupException.Reason? = null,
         val moshDetail: String? = null,
+        val serialProblem: SerialProblem? = null,
+        val serialDetail: String? = null,
     ) : ConnectionUiState
 
     /**
@@ -191,10 +196,17 @@ class ConnectionController(
                 // establishSession; uiState was set to Form by disconnect() itself.
                 throw e
             } catch (e: Exception) {
+                // The serial transport wraps its typed failure into SshConnectionException, so the
+                // cause carries the reason the view localizes.
+                val serial = e as? SerialUnavailableException ?: e.cause as? SerialUnavailableException
                 uiState = ConnectionUiState.Error(
-                    message = e.message ?: "Failed to connect",
+                    // Transport text is diagnostics only: the view shows a localized base and keeps
+                    // this as a parenthetical detail (sshj/okio messages are always English).
+                    message = e.message.orEmpty(),
                     moshReason = (e as? MoshSetupException)?.reason,
                     moshDetail = (e as? MoshSetupException)?.detail,
+                    serialProblem = serial?.problem,
+                    serialDetail = serial?.detail,
                 )
             }
         }

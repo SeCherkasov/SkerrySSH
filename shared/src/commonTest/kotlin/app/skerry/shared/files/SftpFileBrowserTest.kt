@@ -117,7 +117,9 @@ class SftpFileBrowserTest {
     fun `sftp errors are wrapped in FileBrowserException`() = runTest {
         client.failList = true
 
-        assertFailsWith<FileBrowserException> { browser().list("/d") }
+        // The sshj text is diagnostic detail only; the user-facing reason is the typed failure.
+        val e = assertFailsWith<FileBrowserException> { browser().list("/d") }
+        assertEquals(FileBrowserFailure.Sftp, e.failure)
     }
 
     @Test
