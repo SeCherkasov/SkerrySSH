@@ -9,6 +9,7 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -206,6 +207,13 @@ class DesktopDesignState(
      */
     var vncSidebar: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
+
+    /**
+     * View state of the snippet library (search, category chip, collapsed sections). Lives here so
+     * leaving the Snippets section and coming back doesn't reset the view; not persisted across
+     * restarts (see [app.skerry.ui.snippet.SnippetLibraryState]).
+     */
+    val snippetLibrary = SnippetLibraryState()
 
     /** Names of collapsed host folders in the sidebar (their host lists are hidden). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
