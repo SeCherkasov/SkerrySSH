@@ -56,7 +56,8 @@ class LocalFileBrowser(
     }
 
     /**
-     * Run blocking I/O on [ioDispatcher], wrapping okio [IOException] in [FileBrowserException].
+     * Run blocking I/O on [ioDispatcher], wrapping okio [IOException] in [FileBrowserException]
+     * ([FileBrowserFailure.LocalIo]; the okio text is kept as diagnostic detail only).
      * [CancellationException] is rethrown explicitly (not an [IOException], but kept for consistency
      * in case the catch is broadened later).
      */
@@ -67,7 +68,7 @@ class LocalFileBrowser(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
-                throw FileBrowserException(e.message ?: "Filesystem error", e)
+                throw FileBrowserException(FileBrowserFailure.LocalIo, e.message, e)
             }
         }
 }

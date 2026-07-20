@@ -92,8 +92,8 @@ import app.skerry.ui.generated.resources.lib_teams_share_host
 import app.skerry.ui.generated.resources.lib_teams_share_host_title
 import app.skerry.ui.generated.resources.lib_teams_share_snippet
 import app.skerry.ui.generated.resources.lib_teams_share_snippet_title
-import app.skerry.ui.generated.resources.lib_teams_shared_hosts
-import app.skerry.ui.generated.resources.lib_teams_shared_snippets
+import app.skerry.ui.generated.resources.lib_teams_shared_hosts_count
+import app.skerry.ui.generated.resources.lib_teams_shared_snippets_count
 import app.skerry.ui.generated.resources.lib_teams_sidebar
 import app.skerry.ui.generated.resources.lib_teams_status_invited
 import app.skerry.ui.generated.resources.lib_teams_sync_now
@@ -383,7 +383,7 @@ private fun TeamDetail(
         if (!invited) {
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Column(Modifier.weight(1f)) {
-                    LiveSectionLabel("${stringResource(Res.string.lib_teams_shared_hosts)} · ${sharedHosts.size}")
+                    LiveSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
                     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
                     sharedHosts.forEach { host ->
                         SharedRecordRow(host.label, "${host.username}@${host.address}", mono, canUnshare = canWrite) { onUnshare(host.id) }
@@ -393,7 +393,7 @@ private fun TeamDetail(
                     }
                 }
                 Column(Modifier.weight(1f)) {
-                    LiveSectionLabel("${stringResource(Res.string.lib_teams_shared_snippets)} · ${sharedSnippets.size}")
+                    LiveSectionLabel(stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size))
                     if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
                     sharedSnippets.forEach { snippet ->
                         SharedRecordRow(snippet.label, snippet.command, mono, canUnshare = canWrite) { onUnshare(snippet.id) }

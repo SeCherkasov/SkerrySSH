@@ -20,6 +20,9 @@
     <!-- Host grouping: synthetic bucket for hosts without a group (display only) -->
     <string name="shtail_ungrouped">Ungrouped</string>
 
+    <!-- Host filter chips: "no tag filter" chip label (display only, see ALL_HOSTS_CHIP) -->
+    <string name="shtail_chip_all">All</string>
+
     <!-- Mobile known hosts (MobileKnown.kt) -->
     <string name="shtail_known_changed">changed</string>
     <string name="shtail_known_key_changed_title">Key changed: %1$s</string>

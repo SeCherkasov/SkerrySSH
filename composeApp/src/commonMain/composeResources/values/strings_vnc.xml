@@ -3,6 +3,8 @@
     <string name="vnc_session_closed">Session closed</string>
     <string name="vnc_connection_lost">Connection lost</string>
     <string name="vnc_connect_failed">Failed to connect</string>
+    <string name="vnc_error_auth">The server requires an authentication method Skerry doesn't support.</string>
+    <string name="vnc_error_protocol">The server sent an unexpected VNC stream.</string>
     <string name="vnc_quality">Quality</string>
     <string name="vnc_quality_auto">Auto</string>
     <string name="vnc_quality_low">Low</string>

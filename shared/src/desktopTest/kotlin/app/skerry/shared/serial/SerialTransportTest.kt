@@ -84,7 +84,7 @@ class SerialTransportTest {
 
     @Test
     fun `unavailable port surfaces as a connection exception`() = runBlocking<Unit> {
-        val transport = SerialTransport(openPort = { throw SerialUnavailableException("no port") })
+        val transport = SerialTransport(openPort = { throw SerialUnavailableException(SerialProblem.PORT_NOT_FOUND, "/dev/ttyUSB0") })
         assertFailsWith<SshConnectionException> {
             transport.connect(SshTarget(host = "/dev/ttyZZZ", port = 9600, username = ""), SshAuth.Password(""))
         }

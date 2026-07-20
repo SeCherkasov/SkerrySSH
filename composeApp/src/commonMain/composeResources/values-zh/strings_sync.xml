@@ -41,16 +41,11 @@
     <string name="sync_placeholder_server_url">https://sync.onepve.com</string>
     <string name="sync_field_account">账户邮箱</string>
     <string name="sync_placeholder_account">your@email.com</string>
-    <string name="sync_account_email_hint">请输入有效的电子邮件地址</string>
-    <string name="sync_server_url_reset">重置为默认地址</string>
     <string name="sync_field_master_password">同步账户主密码</string>
     <string name="sync_placeholder_master_password">账户主密码</string>
-    <string name="sync_field_confirm_password">再次输入账户主密码</string>
-    <string name="sync_placeholder_confirm_password">再次输入以确认</string>
     <string name="sync_keep_connected">保持连接</string>
     <string name="sync_keep_connected_sub">重启后自动重新连接。</string>
     <string name="sync_keep_connected_sub_long">重启后自动重新连接 — 无需密码。</string>
-    <string name="sync_master_password_warning">⚠️ 主密码不可找回。一旦遗忘，加密数据将永久丢失。建议用密码管理器保存，或保持至少一台设备在线以便配对新设备。</string>
     <string name="sync_insecure_url_warning">明文 http:// — 传输中未加密。除非本地测试，否则请使用 https://。</string>
     <string name="sync_connect">连接</string>
     <string name="sync_zero_knowledge">零知识</string>

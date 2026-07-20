@@ -78,7 +78,8 @@ class VncSessionControllerTest {
 
         val state = controller.uiState
         assertTrue(state is VncUiState.Error)
-        assertEquals("refused", state.message)
+        assertEquals(VncFailure.Other, state.failure)
+        assertEquals("refused", state.detail)
     }
 
     @Test

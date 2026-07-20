@@ -20,6 +20,9 @@
     <!-- 主机分组：无分组主机的合成桶（仅显示） -->
     <string name="shtail_ungrouped">未分组</string>
 
+    <!-- 主机筛选标签：无标签筛选的标签（仅用于显示，参见 ALL_HOSTS_CHIP） -->
+    <string name="shtail_chip_all">全部</string>
+
     <!-- 移动端已知主机 (MobileKnown.kt) -->
     <string name="shtail_known_changed">已变更</string>
     <string name="shtail_known_key_changed_title">密钥已变更：%1$s</string>

@@ -79,13 +79,11 @@
     <string name="lib_teams_accept">接受</string>
     <string name="lib_teams_decline">拒绝</string>
     <string name="lib_teams_role_owner">拥有者</string>
-    <string name="lib_teams_role_member">成员</string>
     <string name="lib_teams_role_admin">管理员</string>
     <string name="lib_teams_role_editor">编辑者</string>
     <string name="lib_teams_role_viewer">查看者</string>
     <string name="lib_teams_status_invited">已邀请</string>
     <string name="lib_teams_invite_role">角色</string>
-    <string name="lib_teams_change_role">更改角色</string>
     <string name="lib_teams_role_picker_title">成员角色</string>
     <string name="lib_teams_history">历史</string>
     <string name="lib_teams_history_title">团队活动</string>
@@ -97,16 +95,17 @@
     <string name="lib_teams_event_role_change">更改了角色</string>
     <string name="lib_teams_event_share">共享了记录</string>
     <string name="lib_teams_event_delete">删除了团队</string>
+    <!-- 客户端未知的审计事件代码的回退文案；%1$s — 服务器返回的原始代码 -->
+    <string name="lib_teams_event_unknown">其他事件（%1$s）</string>
+    <string name="lib_teams_shared_hosts_count">共享的主机 · %1$d</string>
+    <string name="lib_teams_shared_snippets_count">共享的片段 · %1$d</string>
     <string name="lib_teams_members_count">%1$d 个成员</string>
-    <string name="lib_teams_shared_hosts">共享的主机</string>
-    <string name="lib_teams_shared_snippets">共享的片段</string>
     <string name="lib_teams_share_host">共享主机</string>
     <string name="lib_teams_share_snippet">共享片段</string>
     <string name="lib_teams_share_host_title">与团队共享主机</string>
     <string name="lib_teams_share_snippet_title">与团队共享片段</string>
     <string name="lib_teams_share_empty">没有可共享的内容</string>
     <string name="lib_teams_nothing_shared">暂无共享内容</string>
-    <string name="lib_teams_unshare">从团队中移除</string>
     <string name="lib_teams_sync_now">同步</string>
     <string name="lib_teams_no_key">团队密钥尚未到达此设备</string>
     <string name="lib_teams_remove_member_title">移除成员</string>

@@ -11,4 +11,12 @@
     <string name="ptail_err_forward_failed">Не удалось пробросить порт</string>
     <string name="ptail_err_connection_failed">Ошибка подключения</string>
     <string name="ptail_forward_raise_failed">Не удалось поднять проброс</string>
+
+    <!-- Колонка SOURCE для удалённого (-R) проброса: слушатель на стороне сервера -->
+    <string name="ptail_source_server">сервер:%1$d</string>
+
+    <!-- Шаблоны скорости: название единицы и десятичный разделитель переводятся -->
+    <string name="ptail_rate_bytes">%1$d Б/с</string>
+    <string name="ptail_rate_kb">%1$d КБ/с</string>
+    <string name="ptail_rate_mb">%1$d,%2$d МБ/с</string>
 </resources>

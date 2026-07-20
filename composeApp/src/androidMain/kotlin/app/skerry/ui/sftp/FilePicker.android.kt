@@ -4,13 +4,14 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import app.skerry.shared.files.FileBrowserException
+import app.skerry.shared.files.FileBrowserFailure
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -45,7 +46,7 @@ actual suspend fun pickUploadSource(): UploadSource? {
         withContext(Dispatchers.IO) {
             ctx.contentResolver.openInputStream(uri)?.use { input ->
                 staging.outputStream().use { output -> input.copyTo(output) }
-            } ?: throw IOException("Failed to open the selected file")
+            } ?: throw FileBrowserException(FileBrowserFailure.OpenSource)
         }
         SafUploadSource(name, staging)
     } catch (e: CancellationException) {
@@ -72,7 +73,7 @@ private class SafDownloadTarget(
         try {
             ctx.contentResolver.openOutputStream(uri)?.use { output ->
                 staging.inputStream().use { input -> input.copyTo(output) }
-            } ?: throw IOException("Failed to open the write target")
+            } ?: throw FileBrowserException(FileBrowserFailure.OpenTarget)
         } finally {
             staging.delete()
         }

@@ -1,5 +1,6 @@
 package app.skerry.ui.mobile
 
+import androidx.compose.runtime.Composable
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.app.MobileDesignState
@@ -10,18 +11,22 @@ import app.skerry.ui.app.MobileRoute
  * ([MobileTerminalScreen]) so it can be unit-tested without Compose.
  */
 
+/** Session state shown in the terminal header status line. The UI localizes it. */
+enum class MobileTerminalStatus { Connected, Connecting, Disconnected, Closed, NoSession }
+
 /**
- * Status-line text under the host name in the terminal header, from the active session's connection
+ * Status shown under the host name in the terminal header, from the active session's connection
  * state. Color comes separately via [sessionDotColor]. Live metrics (RTT/throughput) render alongside
  * as separate elements ([mobileRttLabel]/[mobileRateLabel]), not in this line.
  */
-fun mobileTerminalStatusText(state: ConnectionUiState?): String = when (state) {
-    is ConnectionUiState.Connected -> "connected"
-    ConnectionUiState.Connecting -> "connecting…"
-    is ConnectionUiState.Error -> "disconnected"
+fun mobileTerminalStatus(state: ConnectionUiState?): MobileTerminalStatus = when (state) {
+    is ConnectionUiState.Connected -> MobileTerminalStatus.Connected
+    ConnectionUiState.Connecting -> MobileTerminalStatus.Connecting
+    is ConnectionUiState.Error -> MobileTerminalStatus.Disconnected
     // Clean shell exit (`exit`) → neutral "closed"; transport drop → "disconnected".
-    is ConnectionUiState.Disconnected -> if (state.cleanExit) "closed" else "disconnected"
-    else -> "no session"
+    is ConnectionUiState.Disconnected ->
+        if (state.cleanExit) MobileTerminalStatus.Closed else MobileTerminalStatus.Disconnected
+    else -> MobileTerminalStatus.NoSession
 }
 
 /**
@@ -34,6 +39,7 @@ fun mobileRttLabel(rttMs: Long?): String = rttMs?.let { "$it ms" } ?: "—"
  * Throughput label (↑/↓) for terminal header metrics: human-readable rate ([humanRate]), or "—"
  * until the first sample. Parity with the desktop status bar.
  */
+@Composable
 fun mobileRateLabel(bytesPerSec: Long?): String = bytesPerSec?.let { humanRate(it) } ?: "—"
 
 /** What to do on Connect when the host already has an open session. */

@@ -44,6 +44,9 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.more_biometric_prompt_cancel
+import app.skerry.ui.generated.resources.more_biometric_prompt_subtitle
+import app.skerry.ui.generated.resources.more_biometric_prompt_title
 import app.skerry.ui.generated.resources.settings_autolock_15m
 import app.skerry.ui.generated.resources.settings_autolock_1m
 import app.skerry.ui.generated.resources.settings_autolock_30m
@@ -61,9 +64,11 @@ import app.skerry.ui.generated.resources.settings_change_pw_title
 import app.skerry.ui.generated.resources.settings_event_biometric_disabled
 import app.skerry.ui.generated.resources.settings_event_biometric_enabled
 import app.skerry.ui.generated.resources.settings_event_device_paired
+import app.skerry.ui.generated.resources.settings_event_line
 import app.skerry.ui.generated.resources.settings_event_password_changed
 import app.skerry.ui.generated.resources.settings_event_unlocked_biometric
 import app.skerry.ui.generated.resources.settings_event_vault_created
+import app.skerry.ui.generated.resources.settings_event_with_detail
 import app.skerry.ui.generated.resources.settings_manage
 import app.skerry.ui.generated.resources.settings_recent_security_events
 import app.skerry.ui.generated.resources.settings_security_2fa
@@ -95,13 +100,6 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
 // Security section: master password, biometrics, auto-lock, event log.
-
-/** Prompt for enabling biometrics from the Security section (English, matching the rest of the UI). */
-private val SECURITY_ENABLE_BIOMETRIC_PROMPT = BiometricPrompt(
-    title = "Enable biometric unlock",
-    cancelLabel = "Cancel",
-    subtitle = "Confirm your biometrics to unlock Skerry without typing the master password.",
-)
 
 /**
  * Live Security section: master password change ([VaultGateController.changePassword] via a
@@ -140,6 +138,13 @@ internal fun SecuritySection(
     // headless desktop Linux — nothing to configure).
     val scope = rememberCoroutineScope()
     if (controller != null && controller.canEnableBiometric()) {
+        // Prompt strings resolved in composable scope (stringResource can't be called in onToggle);
+        // shares the mobile prompt wording (MobileMoreView) — the same system dialog.
+        val enablePrompt = BiometricPrompt(
+            title = stringResource(Res.string.more_biometric_prompt_title),
+            cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
+            subtitle = stringResource(Res.string.more_biometric_prompt_subtitle),
+        )
         SettingToggleRow(
             stringResource(Res.string.settings_security_touch_id),
             stringResource(Res.string.settings_security_touch_id_desc),
@@ -148,7 +153,7 @@ internal fun SecuritySection(
                 if (controller.biometricInFlight) return@SettingToggleRow
                 scope.launch {
                     if (controller.biometricEnabled) controller.disableBiometric()
-                    else controller.enableBiometric(SECURITY_ENABLE_BIOMETRIC_PROMPT)
+                    else controller.enableBiometric(enablePrompt)
                     onBiometricToggled()
                 }
             },
@@ -212,8 +217,8 @@ internal fun masterPasswordSubtitle(lastChangeAt: String?): String {
 @Composable
 internal fun securityEventLine(event: SecurityEvent): String {
     val label = event.type.eventLabel()
-    val head = event.detail?.let { "$label: $it" } ?: label
-    return "$head · ${securityEventTime(event.at)}"
+    val head = event.detail?.let { stringResource(Res.string.settings_event_with_detail, label, it) } ?: label
+    return stringResource(Res.string.settings_event_line, head, securityEventTime(event.at))
 }
 
 /** Localized event type label. */

@@ -86,7 +86,7 @@ class LocalModelControllerTest {
 
         c.download(model)
         advanceUntilIdle()
-        assertIs<LocalModelStatus.Failed>(c.status(model))
+        assertEquals(LocalModelFailure.NETWORK, assertIs<LocalModelStatus.Failed>(c.status(model)).failure)
 
         fail = false
         c.download(model)
