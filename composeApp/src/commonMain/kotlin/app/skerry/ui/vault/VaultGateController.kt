@@ -423,8 +423,11 @@ class VaultGateController(
         biometricInFlight = true
         return try {
             val result = bio.enable(prompt, verifyPrompt)
-            biometricEnabled = bio.isEnabled()
-            biometricUnsupported = bio.isUnsupported()
+            // Both answers come off disk; enable() is called straight from a click handler.
+            withContext(kdfDispatcher) {
+                biometricEnabled = bio.isEnabled()
+                biometricUnsupported = bio.isUnsupported()
+            }
             if (result == BiometricEnableResult.Enabled) securityLog?.record(SecurityEventType.BiometricEnabled)
             result == BiometricEnableResult.Enabled
         } finally {
@@ -435,12 +438,19 @@ class VaultGateController(
     /**
      * Drop the "this device can't do biometrics" verdict so the next [enableBiometric] walks the whole
      * hardening ladder again — a ROM update or a reboot can fix an enclave that used to refuse the key.
+     * The verdict lives in a file, so the erase runs on [kdfDispatcher], not in the click handler;
+     * the row flips immediately (Compose state is safe to write from any thread).
      */
     fun recheckBiometricSupport() {
         val bio = biometrics ?: return
-        bio.forgetUnsupported()
-        biometricUnsupported = bio.isUnsupported()
+        biometricUnsupported = false
         if (error == VaultGateError.BiometricUnsupported) error = null
+        scope.launch {
+            biometricUnsupported = withContext(kdfDispatcher) {
+                bio.forgetUnsupported()
+                bio.isUnsupported()
+            }
+        }
     }
 
     /** Disable biometrics (remove the key and `vault.bio`). */

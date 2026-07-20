@@ -1,5 +1,9 @@
 package app.skerry.shared.vault
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
 /** Outcome of enabling biometrics for a vault. */
 enum class BiometricEnableResult {
     /** Biometrics enabled: `vault.bio` written. */
@@ -114,6 +118,9 @@ class VaultBiometrics(
     private val deviceId: String,
     private val alias: String = "skerry.vault.bio.$deviceId",
     private val support: BiometricSupportStore = BiometricSupportStore.Volatile(),
+    // Key-material bookkeeping (secure-storage entries, `vault.bio`, the support verdict) is blocking
+    // I/O, and enable/unlock are driven straight from click handlers — keep it off the UI thread.
+    private val io: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
     /** Biometric availability on this device — to show/hide the toggle and button. */
@@ -137,53 +144,67 @@ class VaultBiometrics(
      * enclave that accepts encryption and then refuses decryption (#23) is caught here rather than on
      * the next cold start. That verification costs a second prompt ([verifyPrompt]).
      *
-     * Each [BiometricKeyHardening] rung gets its own attempt with a freshly created key; the first
-     * one that survives the round trip is kept. If none does, the verdict is recorded and
-     * [BiometricEnableResult.Unsupported] is returned. Zeroizes the exported key copy in `finally`.
+     * The rungs of [BiometricKeyHardening] are tried in order; the first one that survives the round
+     * trip is kept. If none does, the verdict is recorded and [BiometricEnableResult.Unsupported] is
+     * returned. Zeroizes the exported key copy in `finally`.
      */
     suspend fun enable(prompt: BiometricPrompt, verifyPrompt: BiometricPrompt = prompt): BiometricEnableResult {
         if (keyStore.availability() != BiometricAvailability.Available) return BiometricEnableResult.Unavailable
         val dataKey = vault.exportDataKey() ?: return BiometricEnableResult.VaultLocked
-        val result = try {
+        val outcome = try {
             walkLadder(dataKey.bytes, prompt, verifyPrompt)
         } finally {
             dataKey.bytes.fill(0)
         }
-        if (result != BiometricEnableResult.Enabled) {
-            // Every rung deleted the previous key, so a leftover artifact (re-enrollment on a device
-            // that used to work) would now point at nothing. Turn biometrics fully off instead of
-            // leaving a wrapper that can only fail at the next unlock.
-            disable()
+        // Descending the ladder destroys the previous key, so a surviving `vault.bio` would point at
+        // nothing — turn biometrics fully off. A failure on the first rung touched no key material,
+        // and there dismissing a prompt must not cost the user the enrollment they already had.
+        if (outcome.result != BiometricEnableResult.Enabled && outcome.keyRecreated) {
+            withContext(io) { disable() }
         }
-        return result
+        return outcome.result
     }
 
-    /** [enable] minus key-material bookkeeping: try the rungs in order until one survives the round trip. */
+    /**
+     * [enable] minus the exported-key handling: walk the rungs until one survives the round trip.
+     * The first rung reuses an existing `bioKey` when there is one (re-enrollment on a device that
+     * already works must not throw its key away before knowing the new attempt succeeds); every
+     * further rung needs its own configuration, so it recreates the key — hence
+     * [LadderOutcome.keyRecreated].
+     */
     private suspend fun walkLadder(
         dataKey: ByteArray,
         prompt: BiometricPrompt,
         verifyPrompt: BiometricPrompt,
-    ): BiometricEnableResult {
-        for (hardening in keyStore.hardeningLadder()) {
+    ): LadderOutcome {
+        var keyRecreated = false
+        keyStore.hardeningLadder().forEachIndexed { index, hardening ->
+            if (index > 0) {
+                withContext(io) { keyStore.deleteKey(alias) }
+                keyRecreated = true
+            }
             when (val attempt = attemptEnable(hardening, dataKey, prompt, verifyPrompt)) {
                 Attempt.Verified -> {
                     support.clear() // a device that works now must not stay branded unsupported
-                    return BiometricEnableResult.Enabled
+                    return LadderOutcome(BiometricEnableResult.Enabled, keyRecreated)
                 }
-                Attempt.NextRung -> continue
-                is Attempt.Abort -> return attempt.result
+                Attempt.NextRung -> Unit
+                is Attempt.Abort -> return LadderOutcome(attempt.result, keyRecreated)
             }
         }
-        support.markUnsupported()
-        return BiometricEnableResult.Unsupported
+        withContext(io) { support.markUnsupported() }
+        return LadderOutcome(BiometricEnableResult.Unsupported, keyRecreated)
     }
 
     /**
-     * One rung of the ladder: recreate `bioKey` under [hardening], wrap [dataKey], then unwrap and
-     * compare. Anything the enclave botches ([BiometricResult.Failed], [BiometricResult.Unusable],
-     * a key invalidated on the spot, or a mismatching round trip) moves on to the next rung; the
-     * user cancelling or the sensor locking out aborts the whole thing — those aren't the device's
-     * verdict, and burning through the remaining rungs would just mean more prompts.
+     * One rung of the ladder: create `bioKey` under [hardening], wrap [dataKey], then unwrap and
+     * compare. Only evidence about the *key configuration* moves to the next rung — the enclave
+     * refusing an authorized operation, a key invalidated on the spot, a configuration the platform
+     * won't create, or a round trip that comes back different. Everything else stops the ladder:
+     * cancellation and lockout are the user's or the sensor's business, and a plain
+     * [BiometricResult.Failed] covers timeouts, a destroyed Activity and hardware hiccups — retrying
+     * those on weaker rungs would throw extra prompts at the user and could brand a healthy device
+     * unsupported.
      */
     private suspend fun attemptEnable(
         hardening: BiometricKeyHardening,
@@ -191,27 +212,24 @@ class VaultBiometrics(
         prompt: BiometricPrompt,
         verifyPrompt: BiometricPrompt,
     ): Attempt {
-        keyStore.deleteKey(alias) // each rung starts from a key created with its own configuration
         if (!keyStore.ensureKey(alias, hardening)) return Attempt.NextRung
         val wrapped = when (val result = keyStore.wrap(alias, dataKey, prompt)) {
             is BiometricResult.Success -> result.value
             BiometricResult.Cancelled -> return Attempt.Abort(BiometricEnableResult.Cancelled)
-            BiometricResult.LockedOut -> return Attempt.Abort(BiometricEnableResult.Failed)
-            BiometricResult.Failed, BiometricResult.Unusable, BiometricResult.KeyInvalidated ->
-                return Attempt.NextRung
+            BiometricResult.Failed, BiometricResult.LockedOut -> return Attempt.Abort(BiometricEnableResult.Failed)
+            BiometricResult.Unusable, BiometricResult.KeyInvalidated -> return Attempt.NextRung
         }
         return when (val verified = keyStore.unwrap(alias, wrapped, verifyPrompt)) {
             is BiometricResult.Success -> {
                 val matches = constantTimeEquals(verified.value, dataKey)
                 verified.value.fill(0) // the verification copy of the dataKey must not outlive the check
                 if (!matches) return Attempt.NextRung
-                artifacts.write(BioArtifact(FORMAT_VERSION, alias, deviceId, wrapped))
+                withContext(io) { artifacts.write(BioArtifact(FORMAT_VERSION, alias, deviceId, wrapped)) }
                 Attempt.Verified
             }
             BiometricResult.Cancelled -> Attempt.Abort(BiometricEnableResult.Cancelled)
-            BiometricResult.LockedOut -> Attempt.Abort(BiometricEnableResult.Failed)
-            BiometricResult.Failed, BiometricResult.Unusable, BiometricResult.KeyInvalidated ->
-                Attempt.NextRung
+            BiometricResult.Failed, BiometricResult.LockedOut -> Attempt.Abort(BiometricEnableResult.Failed)
+            BiometricResult.Unusable, BiometricResult.KeyInvalidated -> Attempt.NextRung
         }
     }
 
@@ -223,9 +241,12 @@ class VaultBiometrics(
         /** This key configuration doesn't work here; try a weaker one. */
         data object NextRung : Attempt
 
-        /** Stop the ladder and report [result] (user cancelled, sensor locked out). */
+        /** Stop the ladder and report [result] (user cancelled, sensor locked out, hardware failure). */
         class Abort(val result: BiometricEnableResult) : Attempt
     }
+
+    /** [walkLadder]'s result plus whether it destroyed the `bioKey` the device had before. */
+    private class LadderOutcome(val result: BiometricEnableResult, val keyRecreated: Boolean)
 
     /** Disable biometrics: remove `bioKey` and `vault.bio`. Idempotent. */
     fun disable() {
@@ -311,21 +332,29 @@ class VaultBiometrics(
         val artifact = readValidArtifact() ?: return BioAuth.NotEnabled
         if (keyStore.availability() != BiometricAvailability.Available) return BioAuth.Unavailable
         return when (val unwrapped = keyStore.unwrap(alias, artifact.wrappedBio, prompt)) {
-            is BiometricResult.Success -> BioAuth.Success(unwrapped.value)
+            is BiometricResult.Success -> {
+                withContext(io) { support.clearRefusals() } // the enclave is behaving — forget the streak
+                BioAuth.Success(unwrapped.value)
+            }
             BiometricResult.Cancelled -> BioAuth.Cancelled
             BiometricResult.Failed -> BioAuth.Failed
             BiometricResult.LockedOut -> BioAuth.LockedOut
-            BiometricResult.KeyInvalidated -> {
+            BiometricResult.KeyInvalidated -> withContext(io) {
                 disable() // biometrics compromised by an enrollment change — disable and require password
                 BioAuth.Invalidated
             }
-            // The enclave stopped honouring a key that passed the round-trip check at enable time
-            // (a ROM update, or a rung that only fails later). Nothing here can be repaired by
-            // retrying, so record the verdict and hand the user back to the master password.
-            BiometricResult.Unusable -> {
-                disable()
-                support.markUnsupported()
-                BioAuth.Unsupported
+            // The enclave refused a key that passed the round-trip check at enable time. That is what a
+            // ROM update looks like — but also what a one-off keystore glitch looks like, and the
+            // reaction (delete the enrollment, brand the device) is both destructive and sticky. So a
+            // single refusal only reads as an ordinary failure; the streak is what convicts.
+            BiometricResult.Unusable -> withContext(io) {
+                if (support.recordRefusal() < REFUSALS_BEFORE_UNSUPPORTED) {
+                    BioAuth.Failed
+                } else {
+                    disable()
+                    support.markUnsupported()
+                    BioAuth.Unsupported
+                }
             }
         }
     }
@@ -344,5 +373,9 @@ class VaultBiometrics(
 
     private companion object {
         const val FORMAT_VERSION = 1
+
+        // Consecutive enclave refusals at unlock before biometrics is disabled and the device is
+        // branded unsupported. Two: one refusal is as likely to be a keystore hiccup as a broken ROM.
+        const val REFUSALS_BEFORE_UNSUPPORTED = 2
     }
 }

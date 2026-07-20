@@ -378,13 +378,19 @@ class VaultGateControllerTest {
     }
 
     @Test
-    fun `an enclave that stops honouring the key turns the toggle inert instead of failing silently`() = runTest {
-        // #23 at unlock time: the fingerprint is accepted, the enclave refuses the key. The user must be
-        // told, and the toggle must stop offering a setup that can't work — until they re-check it.
+    fun `a repeated enclave refusal turns the toggle inert instead of failing silently`() = runTest {
+        // #23 at unlock time: the fingerprint is accepted, the enclave refuses the key. One refusal reads
+        // as an ordinary failure (it could be a keystore hiccup); a streak disables biometrics, tells the
+        // user why, and stops onboarding from offering a setup this device can't complete.
+        val support = BiometricSupportStore.Volatile()
         val controller = gate(
             FakeVault(exists = true),
-            biometricsForUnlock(BiometricResult.Unusable),
+            biometricsForUnlock(BiometricResult.Unusable, support = support),
         )
+
+        controller.unlockWithBiometric(PROMPT)
+        assertEquals(VaultGateError.BiometricFailed, controller.error)
+        assertFalse(controller.biometricUnsupported)
 
         controller.unlockWithBiometric(PROMPT)
 
@@ -398,10 +404,12 @@ class VaultGateControllerTest {
     @Test
     fun `re-checking biometric support clears the verdict and the message`() = runTest {
         // A ROM update can fix the enclave, so the verdict is never final — the user can ask again.
+        val support = BiometricSupportStore.Volatile()
         val controller = gate(
             FakeVault(exists = true),
-            biometricsForUnlock(BiometricResult.Unusable),
+            biometricsForUnlock(BiometricResult.Unusable, support = support),
         )
+        controller.unlockWithBiometric(PROMPT)
         controller.unlockWithBiometric(PROMPT)
 
         controller.recheckBiometricSupport()
