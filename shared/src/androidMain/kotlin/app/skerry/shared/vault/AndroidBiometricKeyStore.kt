@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.security.KeyStore
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -28,6 +29,11 @@ import kotlin.coroutines.resume
  * biometric auth per operation; `setInvalidatedByBiometricEnrollment(true)` invalidates the key
  * when a new fingerprint/face is enrolled — then `init` throws [KeyPermanentlyInvalidatedException]
  * and we return [BiometricResult.KeyInvalidated] (the orchestrator resets biometrics).
+ *
+ * Key hardening follows [hardeningLadder]: OEM keystores exist that accept an auth-bound key and
+ * then refuse every operation on it (#23). When that happens the operation resolves to
+ * [BiometricResult.Unusable] and the orchestrator retries on a weaker rung; per-operation biometric
+ * auth itself is never traded away, so a device where no rung works simply has no biometric unlock.
  *
  * The prompt is bound to a [FragmentActivity] (androidx.biometric requirement) and fetched lazily
  * via [activityProvider] — the store survives Activity recreation and grabs the current one only
@@ -49,11 +55,24 @@ class AndroidBiometricKeyStore(
             else -> BiometricAvailability.NoHardware // no hardware / HW unavailable / update needed
         }
 
-    override suspend fun ensureKey(alias: String): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * StrongBox first, then TEE, then TEE without [KeyGenParameterSpec.Builder.setUnlockedDeviceRequired].
+     * Both of the dropped properties are known to make OEM keystores accept an auth-bound key and then
+     * refuse every operation on it (#23; KeePassDX #2298 reports the StrongBox variant as
+     * "Invalid operation handle"). Per-operation biometric auth — the property that actually guards the
+     * `dataKey` — is required on every rung.
+     */
+    override fun hardeningLadder(): List<BiometricKeyHardening> = listOf(
+        BiometricKeyHardening.Strongest,
+        BiometricKeyHardening.NoStrongBox,
+        BiometricKeyHardening.Relaxed,
+    )
+
+    override suspend fun ensureKey(alias: String, hardening: BiometricKeyHardening): Boolean = withContext(Dispatchers.IO) {
         if (availability() != BiometricAvailability.Available) return@withContext false
         val keyStore = androidKeyStore()
         if (keyStore.containsAlias(alias)) return@withContext true
-        generateKey(alias, strongBox = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+        generateKey(alias, hardening)
     }
 
     override suspend fun wrap(
@@ -75,10 +94,12 @@ class AndroidBiometricKeyStore(
                 val sealed = auth.cipher.iv + auth.cipher.doFinal(plaintext)
                 BiometricResult.Success(sealed)
             } catch (e: Exception) {
-                BiometricResult.Failed
+                // Auth passed, the enclave still refused the operation — see Auth.Unusable.
+                BiometricResult.Unusable
             }
             Auth.Cancelled -> BiometricResult.Cancelled
             Auth.LockedOut -> BiometricResult.LockedOut
+            Auth.Unusable -> BiometricResult.Unusable
             Auth.Failed, Auth.NoActivity -> BiometricResult.Failed
         }
     }
@@ -104,11 +125,17 @@ class AndroidBiometricKeyStore(
         when (val auth = authenticate(cipher, prompt)) {
             is Auth.Success -> try {
                 BiometricResult.Success(auth.cipher.doFinal(ciphertext))
+            } catch (e: AEADBadTagException) {
+                BiometricResult.Failed // wrapper doesn't match this key — tampering or a stale file
             } catch (e: Exception) {
-                BiometricResult.Failed // includes AEADBadTagException — tampered wrapper
+                // Anything else after a successful auth is the enclave refusing the authorized
+                // operation (typically IllegalBlockSizeException caused by KeyStoreException
+                // "Invalid operation handle") — see Auth.Unusable.
+                BiometricResult.Unusable
             }
             Auth.Cancelled -> BiometricResult.Cancelled
             Auth.LockedOut -> BiometricResult.LockedOut
+            Auth.Unusable -> BiometricResult.Unusable
             Auth.Failed, Auth.NoActivity -> BiometricResult.Failed
         }
     }
@@ -124,6 +151,9 @@ class AndroidBiometricKeyStore(
         data object Cancelled : Auth
         data object Failed : Auth
         data object LockedOut : Auth
+
+        /** Auth reported success but no authorized cipher came back — the enclave can't serve us (#23). */
+        data object Unusable : Auth
         data object NoActivity : Auth
     }
 
@@ -138,11 +168,11 @@ class AndroidBiometricKeyStore(
             val callback = object : AndroidxBiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: AndroidxBiometricPrompt.AuthenticationResult) {
                     if (!cont.isActive) return
-                    // Some OEM ROMs (Xiaomi/MIUI, some Samsung) report success with a null CryptoObject.
-                    // Falling back to the cipher bound to this prompt is safe: the Keystore key demands
-                    // per-operation biometric auth, so doFinal() throws if auth didn't really happen.
-                    val authedCipher = result.cryptoObject?.cipher ?: cipher
-                    cont.resume(Auth.Success(authedCipher))
+                    // A null CryptoObject (reported on some OEM ROMs) means the prompt authorized
+                    // nothing: reusing the unbound cipher would only fail at doFinal(). Report it as
+                    // Unusable so enable() drops to a weaker key configuration instead of pretending.
+                    val authedCipher = result.cryptoObject?.cipher
+                    cont.resume(if (authedCipher != null) Auth.Success(authedCipher) else Auth.Unusable)
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -177,7 +207,7 @@ class AndroidBiometricKeyStore(
             cont.invokeOnCancellation { bioPrompt.cancelAuthentication() }
         }
 
-    private fun generateKey(alias: String, strongBox: Boolean): Boolean = try {
+    private fun generateKey(alias: String, hardening: BiometricKeyHardening): Boolean = try {
         val builder = KeyGenParameterSpec.Builder(
             alias,
             KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
@@ -188,8 +218,8 @@ class AndroidBiometricKeyStore(
             .setUserAuthenticationRequired(true)
             .setInvalidatedByBiometricEnrollment(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            builder.setUnlockedDeviceRequired(true)
-            if (strongBox) builder.setIsStrongBoxBacked(true)
+            if (hardening != BiometricKeyHardening.Relaxed) builder.setUnlockedDeviceRequired(true)
+            if (hardening == BiometricKeyHardening.Strongest) builder.setIsStrongBoxBacked(true)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             // per-operation strong-biometric auth; default behavior for the auth key on <R
@@ -201,8 +231,9 @@ class AndroidBiometricKeyStore(
         }
         true
     } catch (e: StrongBoxUnavailableException) {
-        // A StrongBox-less retry can also throw (full keystore, TEE bug) — must not fail enable().
-        if (strongBox) runCatching { generateKey(alias, strongBox = false) }.getOrDefault(false) else false
+        // Device advertises no StrongBox — the ladder's next rung asks for exactly that, so just fail
+        // this one instead of silently downgrading behind the caller's back.
+        false
     } catch (e: Exception) {
         false
     }

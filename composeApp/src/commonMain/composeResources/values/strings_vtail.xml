@@ -5,6 +5,8 @@
     <string name="vtail_bio_enable_title">Enable biometrics</string>
     <string name="vtail_bio_enable_cancel">Cancel</string>
     <string name="vtail_bio_enable_subtitle">Confirm your biometrics to bind vault unlock.</string>
+    <string name="vtail_bio_verify_title">Check biometric unlock</string>
+    <string name="vtail_bio_verify_subtitle">One more touch — Skerry makes sure this device can really open the vault.</string>
     <string name="vtail_bio_unlock_title">Unlock Skerry</string>
     <string name="vtail_bio_unlock_cancel">Enter password</string>
     <string name="vtail_bio_unlock_subtitle">Confirm your biometrics to open the vault.</string>
@@ -25,6 +27,7 @@
     <string name="vtail_error_biometric_reset">Biometrics were reset — sign in with your master password.</string>
     <string name="vtail_error_biometric_failed">Biometric unlock didn't work — enter your master password.</string>
     <string name="vtail_error_biometric_locked_out">Biometrics are temporarily locked — enter your master password.</string>
+    <string name="vtail_error_biometric_unsupported">This device can't open the vault with biometrics — enter your master password.</string>
 
     <!-- Secret card "used by" fragment, singular / plural (keys ready; wiring blocked by VaultPresentationTest). -->
     <string name="vtail_used_by_one">used by 1 host</string>

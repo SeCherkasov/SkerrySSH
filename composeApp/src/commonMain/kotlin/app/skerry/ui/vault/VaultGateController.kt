@@ -109,6 +109,9 @@ enum class VaultGateError {
 
     /** Sensor temporarily locked after too many attempts — wait and use the master password meanwhile. */
     BiometricLockedOut,
+
+    /** This device's secure hardware can't decrypt the vault — biometrics is off, password only (#23). */
+    BiometricUnsupported,
 }
 
 /**
@@ -175,6 +178,14 @@ class VaultGateController(
 
     /** Whether biometrics is enabled for this vault (reactive — the toggle updates the UI). */
     var biometricEnabled: Boolean by mutableStateOf(biometrics?.isEnabled() == true)
+        private set
+
+    /**
+     * The device proved it can't decrypt the vault with a biometrics-protected key (#23). The toggle
+     * stays visible but inert, with an explanation and a re-check ([recheckBiometricSupport]) — a
+     * silently missing row would read as "Skerry has no biometrics", which isn't what happened.
+     */
+    var biometricUnsupported: Boolean by mutableStateOf(biometrics?.isUnsupported() == true)
         private set
 
     /** User activity counter — idle auto-lock restarts when it changes. */
@@ -352,9 +363,13 @@ class VaultGateController(
     fun canUnlockWithBiometric(): Boolean =
         biometrics?.let { it.availability() == BiometricAvailability.Available && it.isEnabled() } == true
 
-    /** Whether enabling biometrics can be offered (hardware present and a factor enrolled). */
+    /**
+     * Whether enabling biometrics can be offered (hardware present, a factor enrolled, and the device
+     * not already known to be incapable of it). Onboarding skips the offer when this is false; the
+     * settings row also renders on [biometricUnsupported], to explain rather than vanish.
+     */
     fun canEnableBiometric(): Boolean =
-        biometrics?.let { it.availability() == BiometricAvailability.Available } == true
+        biometrics?.let { it.availability() == BiometricAvailability.Available } == true && !biometricUnsupported
 
     /**
      * Unlock with biometrics. Success → [VaultGateState.Unlocked]. Key invalidation disables biometrics
@@ -376,6 +391,13 @@ class VaultGateController(
                     error = VaultGateError.BiometricReset
                 }
                 BiometricUnlockResult.Corrupted -> state = VaultGateState.Corrupted
+                // The enclave stopped honouring the key — biometrics is off for good on this device
+                // until the user re-checks it (see biometricUnsupported).
+                BiometricUnlockResult.Unsupported -> {
+                    biometricEnabled = false
+                    biometricUnsupported = true
+                    error = VaultGateError.BiometricUnsupported
+                }
                 // A silent failure looks like the tap did nothing — surface a "use your password" hint.
                 BiometricUnlockResult.Failed,
                 BiometricUnlockResult.Unavailable,
@@ -391,18 +413,34 @@ class VaultGateController(
         }
     }
 
-    /** Enable biometrics (vault already unlocked). `true` if enabled. */
-    suspend fun enableBiometric(prompt: BiometricPrompt): Boolean {
+    /**
+     * Enable biometrics (vault already unlocked). `true` if enabled. [verifyPrompt] labels the second
+     * prompt of the round-trip check ([VaultBiometrics.enable]) — the one that proves this device can
+     * actually decrypt the vault; a device that fails it lands in [biometricUnsupported].
+     */
+    suspend fun enableBiometric(prompt: BiometricPrompt, verifyPrompt: BiometricPrompt = prompt): Boolean {
         val bio = biometrics ?: return false
         biometricInFlight = true
         return try {
-            val enabled = bio.enable(prompt) == BiometricEnableResult.Enabled
+            val result = bio.enable(prompt, verifyPrompt)
             biometricEnabled = bio.isEnabled()
-            if (enabled) securityLog?.record(SecurityEventType.BiometricEnabled)
-            enabled
+            biometricUnsupported = bio.isUnsupported()
+            if (result == BiometricEnableResult.Enabled) securityLog?.record(SecurityEventType.BiometricEnabled)
+            result == BiometricEnableResult.Enabled
         } finally {
             biometricInFlight = false
         }
+    }
+
+    /**
+     * Drop the "this device can't do biometrics" verdict so the next [enableBiometric] walks the whole
+     * hardening ladder again — a ROM update or a reboot can fix an enclave that used to refuse the key.
+     */
+    fun recheckBiometricSupport() {
+        val bio = biometrics ?: return
+        bio.forgetUnsupported()
+        biometricUnsupported = bio.isUnsupported()
+        if (error == VaultGateError.BiometricUnsupported) error = null
     }
 
     /** Disable biometrics (remove the key and `vault.bio`). */

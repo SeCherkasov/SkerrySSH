@@ -80,6 +80,8 @@ import app.skerry.ui.generated.resources.settings_security_subtitle
 import app.skerry.ui.generated.resources.settings_security_title
 import app.skerry.ui.generated.resources.settings_security_touch_id
 import app.skerry.ui.generated.resources.settings_security_touch_id_desc
+import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
+import app.skerry.ui.generated.resources.settings_security_touch_id_unsupported
 import app.skerry.ui.generated.resources.settings_time_days_ago
 import app.skerry.ui.generated.resources.settings_time_today
 import app.skerry.ui.generated.resources.settings_time_yesterday
@@ -101,6 +103,13 @@ private val SECURITY_ENABLE_BIOMETRIC_PROMPT = BiometricPrompt(
     title = "Enable biometric unlock",
     cancelLabel = "Cancel",
     subtitle = "Confirm your biometrics to unlock Skerry without typing the master password.",
+)
+
+/** Second prompt of the enable round trip — it proves this device can read the wrapper back. */
+private val SECURITY_VERIFY_BIOMETRIC_PROMPT = BiometricPrompt(
+    title = "Check biometric unlock",
+    cancelLabel = "Cancel",
+    subtitle = "One more touch — Skerry makes sure this device can really open the vault.",
 )
 
 /**
@@ -137,9 +146,28 @@ internal fun SecuritySection(
     HLine()
 
     // Biometric unlock row only shown when biometrics are available on the device (e.g. hidden on
-    // headless desktop Linux — nothing to configure).
+    // headless desktop Linux — nothing to configure). A device whose enclave refuses to decrypt the
+    // vault (#23) keeps the row, off and inert, with the reason and a re-check — dropping it silently
+    // would read as "Skerry has no biometrics".
     val scope = rememberCoroutineScope()
-    if (controller != null && controller.canEnableBiometric()) {
+    if (controller != null && controller.biometricUnsupported) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Txt(stringResource(Res.string.settings_security_touch_id), color = D.faint, size = 13.sp, weight = FontWeight.Medium)
+                Txt(
+                    stringResource(Res.string.settings_security_touch_id_unsupported),
+                    color = D.dim,
+                    size = 11.5.sp,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            GhostButton(
+                stringResource(Res.string.settings_security_touch_id_recheck),
+                onClick = { controller.recheckBiometricSupport() },
+            )
+        }
+        HLine()
+    } else if (controller != null && controller.canEnableBiometric()) {
         SettingToggleRow(
             stringResource(Res.string.settings_security_touch_id),
             stringResource(Res.string.settings_security_touch_id_desc),
@@ -148,7 +176,7 @@ internal fun SecuritySection(
                 if (controller.biometricInFlight) return@SettingToggleRow
                 scope.launch {
                     if (controller.biometricEnabled) controller.disableBiometric()
-                    else controller.enableBiometric(SECURITY_ENABLE_BIOMETRIC_PROMPT)
+                    else controller.enableBiometric(SECURITY_ENABLE_BIOMETRIC_PROMPT, SECURITY_VERIFY_BIOMETRIC_PROMPT)
                     onBiometricToggled()
                 }
             },

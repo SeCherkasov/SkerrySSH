@@ -47,7 +47,10 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_error_biometric_failed
 import app.skerry.ui.generated.resources.vtail_error_biometric_locked_out
+import app.skerry.ui.generated.resources.vtail_bio_verify_subtitle
+import app.skerry.ui.generated.resources.vtail_bio_verify_title
 import app.skerry.ui.generated.resources.vtail_error_biometric_reset
+import app.skerry.ui.generated.resources.vtail_error_biometric_unsupported
 import app.skerry.ui.generated.resources.vtail_error_corrupted
 import app.skerry.ui.generated.resources.vtail_error_password_mismatch
 import app.skerry.ui.generated.resources.vtail_error_password_too_short
@@ -214,6 +217,12 @@ fun VaultGate(
         cancelLabel = stringResource(Res.string.vtail_bio_enable_cancel),
         subtitle = stringResource(Res.string.vtail_bio_enable_subtitle),
     )
+    // Second prompt of the enable round trip: it proves the wrapper can be read back on this device.
+    val verifyPrompt = BiometricPrompt(
+        title = stringResource(Res.string.vtail_bio_verify_title),
+        cancelLabel = stringResource(Res.string.vtail_bio_enable_cancel),
+        subtitle = stringResource(Res.string.vtail_bio_verify_subtitle),
+    )
     val unlockPrompt = BiometricPrompt(
         title = stringResource(Res.string.vtail_bio_unlock_title),
         cancelLabel = stringResource(Res.string.vtail_bio_unlock_cancel),
@@ -289,7 +298,7 @@ fun VaultGate(
             VaultGateState.OfferBiometric ->
                 offerBiometricForm(
                     controller.biometricInFlight,
-                    { scope.launch { controller.enableBiometric(enablePrompt); controller.dismissBiometricOffer() } },
+                    { scope.launch { controller.enableBiometric(enablePrompt, verifyPrompt); controller.dismissBiometricOffer() } },
                     { controller.dismissBiometricOffer() },
                 )
 
@@ -522,4 +531,5 @@ internal fun vaultGateErrorMessage(error: VaultGateError): String = when (error)
     VaultGateError.BiometricReset -> stringResource(Res.string.vtail_error_biometric_reset)
     VaultGateError.BiometricFailed -> stringResource(Res.string.vtail_error_biometric_failed)
     VaultGateError.BiometricLockedOut -> stringResource(Res.string.vtail_error_biometric_locked_out)
+    VaultGateError.BiometricUnsupported -> stringResource(Res.string.vtail_error_biometric_unsupported)
 }

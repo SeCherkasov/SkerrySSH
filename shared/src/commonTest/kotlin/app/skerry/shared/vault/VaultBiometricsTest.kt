@@ -30,8 +30,11 @@ class VaultBiometricsTest {
 
     private fun vault() = FileVault(vaultPath, crypto, deviceId = "device-1", fileSystem = fs, now = { "2026-06-12T00:00:00Z" })
     private fun artifacts() = FileBioArtifactStore(bioPath, fs)
-    private fun biometrics(v: Vault, keyStore: FakeBiometricKeyStore) =
-        VaultBiometrics(v, keyStore, artifacts(), deviceId = "device-1")
+    private fun biometrics(
+        v: Vault,
+        keyStore: FakeBiometricKeyStore,
+        support: BiometricSupportStore = BiometricSupportStore.Volatile(),
+    ) = VaultBiometrics(v, keyStore, artifacts(), deviceId = "device-1", support = support)
 
     private fun bioTest(block: suspend () -> Unit): TestResult = runTest {
         initializeVaultCrypto()
@@ -179,6 +182,143 @@ class VaultBiometricsTest {
         val fresh = vault()
         assertEquals(BiometricUnlockResult.Corrupted, biometrics(fresh, keyStore).unlock(prompt))
         assertFalse(fresh.isUnlocked)
+    }
+
+    @Test
+    fun `enable verifies the round trip and keeps the strongest working key`() = bioTest {
+        // The whole point of the round trip: enable() must prove the wrapper it stores can be read
+        // back, not just written. On a healthy device that succeeds on the first rung.
+        val keyStore = FakeBiometricKeyStore()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
+
+        assertEquals(listOf(BiometricKeyHardening.Strongest), keyStore.hardeningUsed)
+        assertTrue(artifacts().exists())
+    }
+
+    @Test
+    fun `enable walks down the hardening ladder when the enclave refuses the strongest key`() = bioTest {
+        // #23: the keystore accepts an auth-bound key and then never authorizes operations on it.
+        // Instead of enabling something that can never unlock, enable() retries on weaker rungs and
+        // keeps the first one the device actually honours.
+        val keyStore = FakeBiometricKeyStore(workingHardenings = setOf(BiometricKeyHardening.Relaxed))
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
+
+        assertEquals(BiometricKeyHardening.entries.toList(), keyStore.hardeningUsed)
+        // The stored wrapper belongs to the working rung: a fresh instance can unlock with it.
+        val fresh = vault()
+        assertEquals(BiometricUnlockResult.Unlocked, biometrics(fresh, keyStore).unlock(prompt))
+    }
+
+    @Test
+    fun `enable reports Unsupported and remembers it when no rung works`() = bioTest {
+        // Nothing on this device can decrypt the vault biometrically. Enabling must leave no
+        // artifact and no key behind, and the verdict must stick so the UI stops offering it.
+        val keyStore = FakeBiometricKeyStore(workingHardenings = emptySet())
+        val support = BiometricSupportStore.Volatile()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Unsupported, biometrics(v, keyStore, support).enable(prompt))
+
+        assertEquals(BiometricKeyHardening.entries.toList(), keyStore.hardeningUsed, "every rung must be tried")
+        assertFalse(artifacts().exists(), "a vault.bio that can't be read back must not be stored")
+        assertTrue(keyStore.deletedAliases.isNotEmpty(), "the unusable key must not be left behind")
+        assertTrue(support.isUnsupported())
+    }
+
+    @Test
+    fun `enable stops at the first rung when the user cancels`() = bioTest {
+        // Cancelling is the user's verdict, not the device's: don't march down the ladder throwing
+        // more prompts at them, and don't brand the device unsupported.
+        val keyStore = FakeBiometricKeyStore()
+        keyStore.nextWrap = BiometricOutcome.Cancelled
+        val support = BiometricSupportStore.Volatile()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Cancelled, biometrics(v, keyStore, support).enable(prompt))
+
+        assertEquals(listOf(BiometricKeyHardening.Strongest), keyStore.hardeningUsed)
+        assertFalse(support.isUnsupported())
+        assertFalse(artifacts().exists())
+    }
+
+    @Test
+    fun `enable moves to the next rung when verification returns the wrong key`() = bioTest {
+        // A round trip that "succeeds" with different bytes is as broken as one that throws — the
+        // stored wrapper would unlock nothing.
+        val keyStore = object : FakeBiometricKeyStore() {
+            override suspend fun unwrap(alias: String, wrapped: ByteArray, prompt: BiometricPrompt) =
+                if (hardeningUsed.size == 1) BiometricResult.Success(ByteArray(wrapped.size))
+                else super.unwrap(alias, wrapped, prompt)
+        }
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
+
+        assertTrue(keyStore.hardeningUsed.size > 1, "a mismatching round trip must not be accepted")
+    }
+
+    @Test
+    fun `unlock on an enclave that stopped honouring the key disables biometrics and records the verdict`() = bioTest {
+        // The key passed the round trip at enable time but the enclave refuses it later (ROM update).
+        // Retrying can't fix it: disable, remember, and let the UI explain instead of failing silently.
+        val keyStore = FakeBiometricKeyStore()
+        val support = BiometricSupportStore.Volatile()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore, support).enable(prompt)
+        }
+        keyStore.nextUnwrap = BiometricOutcome.Unusable
+
+        val fresh = vault()
+        assertEquals(BiometricUnlockResult.Unsupported, biometrics(fresh, keyStore, support).unlock(prompt))
+
+        assertFalse(fresh.isUnlocked)
+        assertFalse(artifacts().exists(), "a key the enclave won't honour must not stay enabled")
+        assertTrue(support.isUnsupported())
+    }
+
+    @Test
+    fun `a failed re-enable leaves no artifact pointing at a key that no longer exists`() = bioTest {
+        // Re-enrolling on a device that used to work (e.g. after pairing changed the dataKey): every
+        // rung recreates the key, so a leftover vault.bio would only fail at the next unlock.
+        val keyStore = FakeBiometricKeyStore()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
+        keyStore.nextWrap = BiometricOutcome.Failed
+
+        assertEquals(BiometricEnableResult.Unsupported, biometrics(v, keyStore).enable(prompt))
+
+        assertFalse(artifacts().exists(), "a stale wrapper must not survive a failed re-enable")
+    }
+
+    @Test
+    fun `a successful enable clears a previous unsupported verdict`() = bioTest {
+        // The user re-checks after a ROM update and it works — the device must not stay branded.
+        val keyStore = FakeBiometricKeyStore()
+        val support = BiometricSupportStore.Volatile().apply { markUnsupported() }
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore, support).enable(prompt))
+
+        assertFalse(support.isUnsupported())
+    }
+
+    @Test
+    fun `the unsupported verdict survives a restart and is scoped to this device`() = bioTest {
+        // Persisted next to vault.json: a copied workspace directory must not silence biometrics on
+        // another device, so the verdict carries the deviceId that produced it.
+        val path = "/vault.bio.unsupported".toPath()
+        FileBiometricSupportStore(path, fs, deviceId = "device-1").markUnsupported()
+
+        assertTrue(FileBiometricSupportStore(path, fs, deviceId = "device-1").isUnsupported())
+        assertFalse(FileBiometricSupportStore(path, fs, deviceId = "device-2").isUnsupported())
+
+        FileBiometricSupportStore(path, fs, deviceId = "device-1").clear()
+        assertFalse(FileBiometricSupportStore(path, fs, deviceId = "device-1").isUnsupported())
     }
 
     @Test
