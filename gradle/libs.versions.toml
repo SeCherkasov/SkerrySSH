@@ -8,7 +8,7 @@ android-compileSdk = "37"
 android-minSdk = "26"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
-androidx-lifecycle = "2.10.0"
+androidx-lifecycle = "2.11.0"
 # Android biometrics: BiometricPrompt + CryptoObject (Keystore-fenced key)
 androidx-biometric = "1.1.0"
 # FragmentActivity — an androidx.biometric requirement for the prompt host
@@ -31,7 +31,7 @@ sshj = "0.40.0"
 jserialcomm = "2.11.4"
 # usb-serial-for-android: access to USB-serial adapters (CDC/FTDI/CP210x/CH34x) via the USB Host API.
 # androidMain only — desktop uses jSerialComm.
-usbSerial = "3.10.0"
+usbSerial = "3.11.0"
 # full BouncyCastle: an sshj transitive (as implementation, not visible on the compile classpath),
 # added explicitly — on Android the system "BC" is stripped down and SshjTransport.ensureCryptoProvider replaces it
 bouncycastle = "1.85"
