@@ -1,0 +1,30 @@
+<resources>
+    <!-- 设置导航标签 (SettingsPanel.kt · SettingsTab.navLabel) -->
+    <string name="shtail_nav_ai">AI</string>
+    <string name="shtail_nav_sync">同步</string>
+    <string name="shtail_nav_security">安全</string>
+    <string name="shtail_nav_appearance">外观</string>
+    <string name="shtail_nav_terminal">终端</string>
+    <string name="shtail_nav_keyboard">键盘</string>
+    <string name="shtail_nav_about">关于</string>
+
+    <!-- 移动端主机详情行 (MobileHostDetailView.kt · mobileHostDetailRows) -->
+    <string name="shtail_host_address">地址</string>
+    <string name="shtail_host_port">端口</string>
+    <string name="shtail_host_auth">认证</string>
+    <string name="shtail_host_saved_credential">已保存的凭据</string>
+    <string name="shtail_host_ask_on_connect">连接时询问</string>
+    <string name="shtail_host_group">分组</string>
+    <string name="shtail_host_jump">跳板主机</string>
+
+    <!-- 主机分组：无分组主机的合成桶（仅显示） -->
+    <string name="shtail_ungrouped">未分组</string>
+
+    <!-- 移动端已知主机 (MobileKnown.kt) -->
+    <string name="shtail_known_changed">已变更</string>
+    <string name="shtail_known_key_changed_title">密钥已变更：%1$s</string>
+    <string name="shtail_known_mismatch_body">%1$s 的指纹与记录不符。重新连接前请验证。</string>
+
+    <!-- 会话标签：空白标签的默认标题 (SessionsController.openBlank caller) -->
+    <string name="shtail_new_tab">新标签页</string>
+</resources>
