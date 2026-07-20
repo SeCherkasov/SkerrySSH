@@ -10,6 +10,11 @@
     <string name="term_no_active_session">无活动会话</string>
     <string name="term_run_snippet_placeholder">运行片段…</string>
     <string name="term_no_snippets_yet">暂无片段</string>
+    <string name="term_palette_title">命令历史</string>
+    <string name="term_palette_placeholder">搜索命令…</string>
+    <string name="term_palette_empty">尚未记录任何命令</string>
+    <string name="term_palette_hint">Enter 只会把命令插入终端，不会执行</string>
+    <string name="term_palette_this_host">当前主机</string>
     <string name="term_no_matches">无匹配</string>
     <string name="term_untitled">未命名</string>
     <string name="term_notice_pick_host_to_connect">从侧边栏选择一个主机进行连接。</string>
