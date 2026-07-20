@@ -422,7 +422,12 @@ private fun MobileChrome(
         // lifts all content above the keyboard, and the tab bar (BottomCenter) would otherwise float
         // as a bar right above it.
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        // Session screens run full-bleed: they hide the system bars and use the whole display (a phone
+        // has no pixels to spare for chrome, and in landscape the status bar sat on top of the remote
+        // picture). Their own floating chrome keeps clear of the insets, and they handle the keyboard
+        // inset themselves — see ImmersiveScreen / hiddenSystemBarsPadding.
+        val fullBleed = state.route == MobileRoute.Vnc || state.route == MobileRoute.Terminal
+        Box(Modifier.fillMaxSize().then(if (fullBleed) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing))) {
             val route = state.route
             Box(Modifier.fillMaxSize()) {
                 if (route != null) {
