@@ -12,11 +12,13 @@ import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -157,6 +159,19 @@ class PortForwardControllerTest {
         assertEquals(5500, entry.bytesUp)
         assertEquals(500, entry.upRate)
         assertEquals(0, entry.downRate)
+    }
+
+    @Test
+    fun `stop cancels the telemetry poller`() {
+        val job = Job()
+        val scope = CoroutineScope(UnconfinedTestDispatcher() + job)
+        val controller = PortForwardController(FakeForwardConnection(localPort = 50004), scope)
+
+        controller.stop()
+
+        val leaked = job.children.any { it.isActive }
+        job.cancel()
+        assertFalse(leaked)
     }
 
     @Test
