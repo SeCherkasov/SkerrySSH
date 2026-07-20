@@ -67,6 +67,7 @@ import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
+import app.skerry.ui.generated.resources.term_broadcast_title
 import app.skerry.ui.generated.resources.term_monitor_title
 import app.skerry.ui.generated.resources.term_no_active_session
 import app.skerry.ui.generated.resources.term_mobile_open_host_connect
@@ -96,6 +97,7 @@ import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.terminal.arrowSequence
+import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.delay
 
@@ -176,6 +178,9 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     var menuOpen by remember(active?.id) { mutableStateOf(false) }
     // Host monitor sheet (desktop info-panel parity) — raised from the same menu, connected only.
     var monitorOpen by remember(active?.id) { mutableStateOf(false) }
+    // Broadcast sheet (desktop ⌘B parity): one command into several sessions. Not keyed on the
+    // session — it addresses all of them, and the selection lives on the shell state.
+    var broadcastOpen by remember { mutableStateOf(false) }
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
@@ -277,6 +282,13 @@ fun MobileTerminalScreen(state: MobileDesignState) {
         if (monitorOpen && active?.controller != null && activeTerminal != null) {
             MobileHostMonitorSheet(active.controller, onDismiss = { monitorOpen = false })
         }
+        if (broadcastOpen) {
+            MobileBroadcastSheet(
+                controller = state.broadcast,
+                targets = broadcastTargets(sessions),
+                onDismiss = { broadcastOpen = false },
+            )
+        }
         if (menuOpen && onDisconnect != null) {
             MobileBottomSheet(
                 onDismiss = { menuOpen = false },
@@ -291,6 +303,15 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             onClick = { menuOpen = false; monitorOpen = true },
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             icon = "monitoring",
+                            filled = false,
+                        )
+                    }
+                    if (activeTerminal != null) {
+                        MobileSheetButton(
+                            label = stringResource(Res.string.term_broadcast_title),
+                            onClick = { menuOpen = false; broadcastOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "campaign",
                             filled = false,
                         )
                     }
