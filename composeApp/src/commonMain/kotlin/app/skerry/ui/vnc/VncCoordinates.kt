@@ -1,7 +1,9 @@
 package app.skerry.ui.vnc
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -47,6 +49,29 @@ fun framebufferFilterQuality(scale: Float): FilterQuality {
     if (scale <= 0f) return FilterQuality.None
     val nearest = scale.roundToInt()
     return if (nearest >= 1 && abs(scale - nearest) < 0.001f) FilterQuality.None else FilterQuality.Medium
+}
+
+/**
+ * Cap a user pan so the zoomed framebuffer keeps covering the viewport: at most half the overflow in
+ * each direction, and no pan at all while the picture still fits ([userScale] 1, or an axis that
+ * letterboxes). Without this a pinch-pan can push the desktop off-screen entirely, leaving black —
+ * on touch, where every zoom gesture also pans, that happens constantly.
+ *
+ * Returns [userOffset] unchanged when the viewport hasn't been measured yet.
+ */
+fun clampPan(userOffset: Offset, canvas: IntSize, fbWidth: Int, fbHeight: Int, userScale: Float): Offset {
+    if (canvas.width <= 0 || canvas.height <= 0 || fbWidth <= 0 || fbHeight <= 0) return userOffset
+    val fit = minOf(canvas.width.toFloat() / fbWidth, canvas.height.toFloat() / fbHeight)
+    val scale = fit * userScale
+    return Offset(
+        panLimit(userOffset.x, canvas.width.toFloat(), fbWidth * scale),
+        panLimit(userOffset.y, canvas.height.toFloat(), fbHeight * scale),
+    )
+}
+
+private fun panLimit(offset: Float, extent: Float, drawn: Float): Float {
+    val slack = (drawn - extent) / 2f
+    return if (slack <= 0f) 0f else offset.coerceIn(-slack, slack)
 }
 
 /**

@@ -55,10 +55,13 @@ class VncScreenState(
     var userOffset by mutableStateOf(Offset.Zero)
         private set
 
-    /** Apply a zoom+pan (from touch/scroll gestures); clamps the zoom to a sane range. */
+    /**
+     * Apply a zoom+pan (from touch gestures); clamps the zoom to a sane range and the pan to what
+     * still keeps the picture over the viewport (see [clampPan]).
+     */
     fun setZoom(scale: Float, offset: Offset) {
         userScale = scale.coerceIn(1f, 8f)
-        userOffset = offset
+        userOffset = clampPan(offset, viewport, desktopSize.width, desktopSize.height, userScale)
     }
 
     /** Reset zoom/pan back to plain fit-to-window. */
