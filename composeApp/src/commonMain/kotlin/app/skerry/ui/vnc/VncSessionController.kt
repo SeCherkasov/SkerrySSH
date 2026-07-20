@@ -27,7 +27,7 @@ sealed interface VncUiState {
     /** Session is live; [screen] is the framebuffer + input bridge. */
     data class Connected(val screen: VncScreenState) : VncUiState
 
-    /** Connect failed; [message] is shown to the user. */
+    /** Connect failed; [message] is shown to the user (blank → the UI shows a generic localized "failed to connect"). */
     data class Error(val message: String) : VncUiState
 
     /**
@@ -90,7 +90,8 @@ class VncSessionController(
                 throw e
             } catch (e: Exception) {
                 releaseSession()
-                uiState = VncUiState.Error(e.message ?: "Failed to connect")
+                // Blank message → the UI substitutes a localized generic (controllers can't resolve resources).
+                uiState = VncUiState.Error(e.message ?: "")
             }
         }
     }

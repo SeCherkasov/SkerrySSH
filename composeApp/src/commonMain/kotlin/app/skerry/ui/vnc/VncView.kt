@@ -57,10 +57,23 @@ import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vnc_connect_failed
+import app.skerry.ui.generated.resources.vnc_connecting
+import app.skerry.ui.generated.resources.vnc_connection_lost
+import app.skerry.ui.generated.resources.vnc_quality
+import app.skerry.ui.generated.resources.vnc_quality_auto
+import app.skerry.ui.generated.resources.vnc_quality_high
+import app.skerry.ui.generated.resources.vnc_quality_low
+import app.skerry.ui.generated.resources.vnc_quality_medium
+import app.skerry.ui.generated.resources.vnc_resize_to_window
+import app.skerry.ui.generated.resources.vnc_session_closed
+import app.skerry.ui.generated.resources.vnc_view_only
 import app.skerry.ui.terminal.HostsSidebar
 import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
 import kotlin.math.roundToInt
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The VNC tab's work area. Renders the active session's [VncSessionController] state: connecting /
@@ -73,17 +86,21 @@ fun VncView(state: DesktopDesignState) {
     val vnc = sessions?.active?.vncController ?: return
     Box(Modifier.fillMaxSize()) {
         when (val ui = vnc.uiState) {
-            is VncUiState.Connecting -> CenterNotice("hourglass_empty", "Connecting…")
+            is VncUiState.Connecting -> CenterNotice("hourglass_empty", stringResource(Res.string.vnc_connecting))
             is VncUiState.Connected -> Box(Modifier.fillMaxSize()) {
                 VncSurface(ui.screen)
                 Box(Modifier.align(Alignment.TopEnd)) { VncGraphicsBar(ui.screen) }
             }
-            is VncUiState.Error -> CenterNotice("error", ui.message, color = D.sunset)
+            is VncUiState.Error -> CenterNotice(
+                "error",
+                ui.message.ifBlank { stringResource(Res.string.vnc_connect_failed) },
+                color = D.sunset,
+            )
             is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 VncSurface(ui.screen, interactive = false)
                 CenterNotice(
                     "link_off",
-                    if (ui.cleanExit) "Session closed" else "Connection lost",
+                    stringResource(if (ui.cleanExit) Res.string.vnc_session_closed else Res.string.vnc_connection_lost),
                     color = D.sunset,
                 )
             }
@@ -301,24 +318,35 @@ private fun VncGraphicsBar(screen: VncScreenState) {
                     Modifier.width(width.coerceAtLeast(180.dp)).clip(RoundedCornerShape(9.dp))
                         .background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(9.dp)).padding(vertical = 4.dp),
                 ) {
-                    Txt("Quality", color = D.faint, size = 10.5.sp, modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
+                    Txt(stringResource(Res.string.vnc_quality), color = D.faint, size = 10.5.sp, modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
                     VncQuality.entries.forEach { q ->
-                        VncMenuRow(q.name, selected = screen.quality == q) { screen.applyQuality(q) }
+                        VncMenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
                     }
                     HLine(modifier = Modifier.padding(vertical = 4.dp))
                     // No "Reset zoom" here: desktop has no local zoom (the wheel scrolls the remote
                     // desktop instead), so the fit is always 1:1 and the control would be a no-op.
                     // Mobile keeps it — pinch-zoom is real there.
-                    VncMenuRow("View only", selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
+                    VncMenuRow(stringResource(Res.string.vnc_view_only), selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
                     // Only offered once the server has said it accepts SetDesktopSize.
                     if (screen.canResizeRemote) {
-                        VncMenuRow("Resize to window", selected = screen.remoteResize, icon = if (screen.remoteResize) "check_box" else "check_box_outline_blank") { screen.toggleRemoteResize() }
+                        VncMenuRow(stringResource(Res.string.vnc_resize_to_window), selected = screen.remoteResize, icon = if (screen.remoteResize) "check_box" else "check_box_outline_blank") { screen.toggleRemoteResize() }
                     }
                 }
             },
         )
     }
 }
+
+/** Localized label for a quality level in the graphics menu (shared with the mobile VNC screen). */
+@Composable
+internal fun VncQuality.label(): String = stringResource(
+    when (this) {
+        VncQuality.Auto -> Res.string.vnc_quality_auto
+        VncQuality.Low -> Res.string.vnc_quality_low
+        VncQuality.Medium -> Res.string.vnc_quality_medium
+        VncQuality.High -> Res.string.vnc_quality_high
+    },
+)
 
 @Composable
 private fun VncMenuRow(label: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
