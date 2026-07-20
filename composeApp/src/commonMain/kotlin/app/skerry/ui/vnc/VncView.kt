@@ -236,19 +236,26 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
     }
 
     if (interactive) {
-        val clipboard = LocalClipboard.current
-        LaunchedEffect(screen) {
-            focus.requestFocus()
-            // Local → server: push the current system clipboard once when the session opens, so a
-            // paste on the remote host has our text (RFB has no clipboard-request, only cut-text).
-            runCatching { clipboard.getClipEntry()?.readPlainText() }.getOrNull()
-                ?.let { screen.onLocalClipboard(it) }
-        }
-        // Server → local: mirror ServerCutText into the system clipboard as it arrives.
-        LaunchedEffect(screen.serverClipboard) {
-            val text = screen.serverClipboard ?: return@LaunchedEffect
-            runCatching { clipboard.setClipEntry(plainTextClipEntry(text)) }
-        }
+        LaunchedEffect(screen) { focus.requestFocus() }
+        VncClipboardBridge(screen)
+    }
+}
+
+/**
+ * Keeps the system clipboard and the remote one in step for a live session: our text is pushed once
+ * when the session opens (RFB has no clipboard-request, only cut-text, so a paste on the remote host
+ * needs it up front), and every ServerCutText is mirrored back.
+ */
+@Composable
+internal fun VncClipboardBridge(screen: VncScreenState) {
+    val clipboard = LocalClipboard.current
+    LaunchedEffect(screen) {
+        runCatching { clipboard.getClipEntry()?.readPlainText() }.getOrNull()
+            ?.let { screen.onLocalClipboard(it) }
+    }
+    LaunchedEffect(screen.serverClipboard) {
+        val text = screen.serverClipboard ?: return@LaunchedEffect
+        runCatching { clipboard.setClipEntry(plainTextClipEntry(text)) }
     }
 }
 
@@ -256,7 +263,7 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
  * Fit-to-window draw: preserve aspect ratio, center, filter per [framebufferFilterQuality] — crisp
  * nearest-neighbor at 1:1/integer zoom, bilinear at fractional scales.
  */
-private fun DrawScope.drawFramebuffer(screen: VncScreenState) {
+internal fun DrawScope.drawFramebuffer(screen: VncScreenState) {
     val image = screen.imageBitmap
     val geom = fitGeometry(
         size.width, size.height, image.width, image.height,
