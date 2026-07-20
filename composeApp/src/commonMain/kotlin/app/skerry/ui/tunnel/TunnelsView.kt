@@ -81,6 +81,7 @@ import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalTunnels
 import app.skerry.ui.design.MeterBar
@@ -286,7 +287,7 @@ private fun TunnelRowGlobal(
             }
         }
         (entry.status as? TunnelStatus.Failed)?.let {
-            Txt(it.message, color = D.sunset, size = 11.sp, font = mono, modifier = Modifier.padding(start = 16.dp, bottom = 10.dp))
+            Txt(tunnelFailureText(it), color = D.sunset, size = 11.sp, font = mono, modifier = Modifier.padding(start = 16.dp, bottom = 10.dp))
         }
     }
 }
@@ -566,7 +567,7 @@ private fun TunnelDetail() {
 
 @Composable
 private fun FieldLabel(text: String) {
-    Txt(text.uppercase(), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 5.dp))
+    Txt(labelUppercase(text), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 5.dp))
 }
 
 @Composable

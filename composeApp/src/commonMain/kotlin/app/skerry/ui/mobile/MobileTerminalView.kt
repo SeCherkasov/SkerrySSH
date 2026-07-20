@@ -54,9 +54,12 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.ai.AiNotice
 import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.ai.aiBlockedMessage
+import app.skerry.ui.ai.aiFailureMessage
+import app.skerry.ui.ai.shortLabel
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.immersive.ImmersiveScreen
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.secure.SecureScreen
@@ -356,7 +359,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                         is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         is AiNotice.Ask -> Txt(notice.question, color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         AiNotice.Rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Error -> Txt(notice.message, color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     else -> {
                         if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = D.dim, size = 13.sp)
@@ -384,7 +387,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                 controller.notice != null ->
                     MobileAiChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
                 else -> {
-                    Txt(controller.policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)
+                    Txt(labelUppercase(controller.policy.shortLabel()), color = D.faint, size = 10.sp, font = mono)
                     Box(
                         Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(D.cyan)
                             .clickable(enabled = !controller.busy) { submit() },
@@ -465,7 +468,7 @@ private fun MobileTerminalHeader(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Dot(sessionDotColor(status))
-                        Txt(mobileTerminalStatusText(status), color = sessionDotColor(status), size = 10.5.sp)
+                        Txt(mobileTerminalStatusText(mobileTerminalStatus(status)), color = sessionDotColor(status), size = 10.5.sp)
                     }
                     // Live metrics of the active session (desktop status-bar parity) — only when connected.
                     if (connected) {

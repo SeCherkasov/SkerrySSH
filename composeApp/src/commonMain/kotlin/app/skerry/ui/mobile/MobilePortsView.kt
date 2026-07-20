@@ -48,6 +48,7 @@ import app.skerry.ui.tunnel.TunnelEntry
 import app.skerry.ui.tunnel.TunnelFormState
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.TunnelStatus
+import app.skerry.ui.tunnel.tunnelFailureText
 import app.skerry.ui.tunnel.badgeColors
 import app.skerry.ui.tunnel.badgeLabel
 import app.skerry.ui.tunnel.displayLabel
@@ -221,7 +222,7 @@ private fun LiveTunnelCard(
         }
         (entry.status as? TunnelStatus.Failed)?.let {
             Spacer(Modifier.height(6.dp))
-            Txt(it.message, color = D.sunset, size = 11.sp, font = mono)
+            Txt(tunnelFailureText(it), color = D.sunset, size = 11.sp, font = mono)
         }
     }
     if (menuOpen) {

@@ -84,4 +84,19 @@
     <string name="conn_test_connected">Подключено</string>
     <string name="conn_test_rtt_ms">%1$d мс</string>
     <string name="conn_test_incomplete">Введите хост, логин и данные для входа</string>
+
+    <string name="conn_test_err_auth">Не удалось пройти аутентификацию</string>
+    <string name="conn_test_err_host_key">Ключ хоста отклонён</string>
+    <string name="conn_test_err_connection">Не удалось подключиться</string>
+    <string name="conn_error_failed">Не удалось подключиться</string>
+    <string name="conn_error_failed_detail">Не удалось подключиться (%1$s)</string>
+
+    <string name="conn_tunnel_error_host_missing">Хост не найден</string>
+    <string name="conn_tunnel_error_no_credential">Нет сохранённых учётных данных</string>
+
+    <string name="conn_serial_err_unsupported">На этом устройстве последовательные порты недоступны.</string>
+    <string name="conn_serial_err_not_found">Порт %1$s не найден. Переподключите устройство или выберите другой порт.</string>
+    <string name="conn_serial_err_permission">Доступ к порту %1$s запрещён.</string>
+    <string name="conn_serial_err_open">Не удалось открыть порт %1$s — возможно, он занят другой программой.</string>
+    <string name="conn_serial_err_configure">Порт %1$s не принял выбранную скорость или формат кадра.</string>
 </resources>

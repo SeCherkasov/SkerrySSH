@@ -90,8 +90,8 @@ import app.skerry.ui.generated.resources.lib_teams_share_host
 import app.skerry.ui.generated.resources.lib_teams_share_host_title
 import app.skerry.ui.generated.resources.lib_teams_share_snippet
 import app.skerry.ui.generated.resources.lib_teams_share_snippet_title
-import app.skerry.ui.generated.resources.lib_teams_shared_hosts
-import app.skerry.ui.generated.resources.lib_teams_shared_snippets
+import app.skerry.ui.generated.resources.lib_teams_shared_hosts_count
+import app.skerry.ui.generated.resources.lib_teams_shared_snippets_count
 import app.skerry.ui.generated.resources.lib_teams_status_invited
 import app.skerry.ui.generated.resources.lib_teams_sync_now
 import app.skerry.ui.generated.resources.shell_cancel
@@ -436,7 +436,7 @@ private fun MobileTeamDetail(
         }
     }
 
-    MobileTeamsSectionLabel("${stringResource(Res.string.lib_teams_shared_hosts)} · ${sharedHosts.size}")
+    MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
     sharedHosts.forEach { host ->
         MobileSharedRow(host.label, "${host.username}@${host.address}", canUnshare = canWrite) { onUnshare(host.id) }
@@ -445,7 +445,7 @@ private fun MobileTeamDetail(
         GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
     }
 
-    MobileTeamsSectionLabel("${stringResource(Res.string.lib_teams_shared_snippets)} · ${sharedSnippets.size}")
+    MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size))
     if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
     sharedSnippets.forEach { snippet ->
         MobileSharedRow(snippet.label, snippet.command, canUnshare = canWrite) { onUnshare(snippet.id) }

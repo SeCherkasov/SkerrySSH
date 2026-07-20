@@ -2,6 +2,7 @@ package app.skerry.ui.files
 
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.FileBrowserException
+import app.skerry.shared.files.FileBrowserFailure
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.files.SftpFileBrowser
@@ -143,7 +144,7 @@ class FilePaneControllerTest {
         val noDotDot = object : FileBrowser {
             override val label: String get() = base.label
             override suspend fun realpath(path: String): String {
-                if (path.contains("..")) throw FileBrowserException("REALPATH with .. not supported")
+                if (path.contains("..")) throw FileBrowserException(FileBrowserFailure.Sftp)
                 return base.realpath(path)
             }
             override suspend fun list(path: String): List<FileItem> = base.list(path)
@@ -667,7 +668,7 @@ class FilePaneControllerTest {
         val noDotDot = object : FileBrowser {
             override val label: String get() = base.label
             override suspend fun realpath(path: String): String {
-                if (path.contains("..")) throw FileBrowserException("REALPATH with .. not supported")
+                if (path.contains("..")) throw FileBrowserException(FileBrowserFailure.Sftp)
                 return base.realpath(path)
             }
             override suspend fun list(path: String): List<FileItem> = base.list(path)

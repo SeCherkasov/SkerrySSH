@@ -35,9 +35,8 @@ class HostChipsTest {
     }
 
     @Test
-    fun chip_label_prefixes_tags_with_hash_but_keeps_all() {
-        assertEquals("All", hostChipLabel(ALL_HOSTS_CHIP))
-        assertEquals("#prod", hostChipLabel("prod"))
+    fun tag_chip_label_prefixes_with_hash() {
+        assertEquals("#prod", hostTagChipLabel("prod"))
     }
 
     @Test

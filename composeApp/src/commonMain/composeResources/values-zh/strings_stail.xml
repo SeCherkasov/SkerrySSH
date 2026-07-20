@@ -17,4 +17,10 @@
     <string name="stail_reenroll_prompt_title">重新启用生物识别解锁</string>
     <string name="stail_reenroll_prompt_cancel">取消</string>
     <string name="stail_reenroll_prompt_subtitle">确认你的生物识别以将快速解锁绑定到新的账户密钥。</string>
+
+    <!-- 同步失败原因（SyncFailureReason），参见 syncFailureText -->
+    <string name="stail_sync_fail_rekey">无法用账户密码重新加密保险库</string>
+    <string name="stail_sync_fail_key_adopt">无法采用账户密钥</string>
+    <!-- %1$s — 本地化原因，%2$s — 技术细节（服务器/库的原始消息） -->
+    <string name="stail_sync_fail_detail">%1$s（%2$s）</string>
 </resources>

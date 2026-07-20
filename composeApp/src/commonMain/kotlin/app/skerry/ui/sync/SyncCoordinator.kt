@@ -114,6 +114,8 @@ enum class SyncFailureReason {
     WrongDevicePassword,
     LocalVaultCorrupted,
     PairingFailed,         // other pairing failures (no detail: don't expose crypto/Ktor internals)
+    VaultRekeyFailed,      // vault couldn't be re-wrapped under the account password
+    AccountKeyNotAdopted,  // the account key didn't open, so the confirmed replace didn't happen
     SaveSettingsFailed,    // sync settings didn't save (detail: cause)
     SyncFailed,            // sync cycle failure (detail: cause)
     RevokeFailed,          // device revoke failed (detail: cause)
@@ -441,14 +443,14 @@ class SyncCoordinator(
                     // the local one and diverge from the account — re-wrap it explicitly instead.
                     KeyAdoption.AlreadyOurs -> if (!vault.rewrapUnder(masterPassword.copyOf())) {
                         runCatching { syncClient.close() }
-                        _status.value = SyncStatus.Failed(SyncFailureReason.ConnectFailed, "vault re-key failed")
+                        _status.value = SyncStatus.Failed(SyncFailureReason.VaultRekeyFailed)
                         return
                     }
                     // The replace the user confirmed did NOT happen (the account wrap didn't open). Connecting
                     // now would claim a password change that isn't there, on records we can't decrypt.
                     KeyAdoption.Undecryptable -> {
                         runCatching { syncClient.close() }
-                        _status.value = SyncStatus.Failed(SyncFailureReason.ConnectFailed, "account key could not be adopted")
+                        _status.value = SyncStatus.Failed(SyncFailureReason.AccountKeyNotAdopted)
                         return
                     }
                 }

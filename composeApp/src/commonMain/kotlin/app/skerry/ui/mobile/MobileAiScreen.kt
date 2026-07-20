@@ -26,6 +26,7 @@ import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.ai.AiRole
 import app.skerry.ui.ai.AiChatBubble
 import app.skerry.ui.ai.AiQuickChatHeader
+import app.skerry.ui.ai.aiFailureMessage
 import app.skerry.ui.ai.isInsecureAiEndpoint
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.MobileDesignState
@@ -104,7 +105,7 @@ fun MobileAiScreen(state: MobileDesignState) {
                 ai.turns.forEach { turn -> AiChatBubble(turn.role, turn.text) }
                 ai.streaming?.let { AiChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
                 // Request error uses the error token (D.storm), as on desktop; D.sunset is reserved for warnings.
-                ai.error?.let { Txt(it, color = D.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
+                ai.error?.let { Txt(aiFailureMessage(it), color = D.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
 
                 var prompt by remember { mutableStateOf("") }
                 val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }

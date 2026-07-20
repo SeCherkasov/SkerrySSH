@@ -18,23 +18,43 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
+ * Why a "Test connection" check failed. Typed, not a message string, so the view renders localized
+ * text (`connectionTestFailureText`) — same rule as [app.skerry.shared.sync.SyncFailureReason].
+ */
+sealed interface ConnectionTestProblem {
+    /** The server rejected the supplied credentials. */
+    data object AuthenticationFailed : ConnectionTestProblem
+
+    /** The host presented a key that doesn't match the pinned one. */
+    data object HostKeyRejected : ConnectionTestProblem
+
+    /** Anything else on the wire. Deliberately coarse: transport text would leak library/host detail. */
+    data object ConnectionFailed : ConnectionTestProblem
+
+    /** The form has no host/username/secret yet, so nothing was dialled. */
+    data object IncompleteForm : ConnectionTestProblem
+
+    /** The profile's ProxyJump chain didn't resolve, so the probe couldn't take the same route. */
+    data class Jump(val problem: JumpChainProblem) : ConnectionTestProblem
+}
+
+/**
  * Result of a "Test connection" check: a one-shot connect to the host without opening a session.
  * [Idle] — not run yet; [Checking] — connect in flight; [Success] — connection established (with
- * round-trip ms if the transport reported it, else `null`); [Failure] — with a human-readable
- * message describing the cause (auth/host key/network).
+ * round-trip ms if the transport reported it, else `null`); [Failure] — with a typed [problem].
  */
 sealed interface ConnectionTestStatus {
     data object Idle : ConnectionTestStatus
     data object Checking : ConnectionTestStatus
     data class Success(val roundTripMillis: Long?) : ConnectionTestStatus
-    data class Failure(val message: String) : ConnectionTestStatus
+    data class Failure(val problem: ConnectionTestProblem) : ConnectionTestStatus
 }
 
 /**
  * One-shot connectivity check: connect, measure round-trip (if available), then disconnect right
  * away — the connection is temporary, no session is opened. Transport exceptions are mapped to
- * [ConnectionTestStatus.Failure] with a friendly message by category (auth/host key/network); the
- * raw transport exception text is never surfaced in the UI (would leak library internals/host
+ * [ConnectionTestStatus.Failure] with a [ConnectionTestProblem] by category (auth/host key/network);
+ * the raw transport exception text is never surfaced in the UI (would leak library internals/host
  * address). A ping failure alone doesn't fail the test (the connection already succeeded).
  * [CancellationException] is rethrown (cooperative cancellation isn't masked); the temporary
  * connection is closed unconditionally ([NonCancellable]) so cancellation never leaves a socket
@@ -66,15 +86,15 @@ suspend fun runConnectionTest(
         }
     }
 } catch (e: SshAuthenticationException) {
-    ConnectionTestStatus.Failure("Authentication failed")
+    ConnectionTestStatus.Failure(ConnectionTestProblem.AuthenticationFailed)
 } catch (e: SshHostKeyRejectedException) {
-    ConnectionTestStatus.Failure("Host key rejected")
+    ConnectionTestStatus.Failure(ConnectionTestProblem.HostKeyRejected)
 } catch (e: SshConnectionException) {
-    ConnectionTestStatus.Failure("Connection failed")
+    ConnectionTestStatus.Failure(ConnectionTestProblem.ConnectionFailed)
 } catch (e: CancellationException) {
     throw e
 } catch (e: Exception) {
-    ConnectionTestStatus.Failure("Connection failed")
+    ConnectionTestStatus.Failure(ConnectionTestProblem.ConnectionFailed)
 }
 
 /**
@@ -102,11 +122,11 @@ class ConnectionTestController(
 
     /**
      * Report a pre-connect failure (e.g. the profile's jump chain didn't resolve) as the test's
-     * result without dialing anything. [message] is already localized by the caller.
+     * result without dialing anything.
      */
-    fun fail(message: String) {
+    fun fail(problem: ConnectionTestProblem) {
         job?.cancel()
-        status = ConnectionTestStatus.Failure(message)
+        status = ConnectionTestStatus.Failure(problem)
     }
 
     fun reset() {

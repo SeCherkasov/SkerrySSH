@@ -58,7 +58,6 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.vnc_connect_failed
 import app.skerry.ui.generated.resources.vnc_connecting
 import app.skerry.ui.generated.resources.vnc_connection_lost
 import app.skerry.ui.generated.resources.vnc_quality
@@ -93,7 +92,7 @@ fun VncView(state: DesktopDesignState) {
             }
             is VncUiState.Error -> CenterNotice(
                 "error",
-                ui.message.ifBlank { stringResource(Res.string.vnc_connect_failed) },
+                vncFailureText(ui.failure),
                 color = D.sunset,
             )
             is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {

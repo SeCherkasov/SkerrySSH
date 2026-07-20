@@ -167,7 +167,8 @@ class TransferCoordinatorTest {
         r.coordinator.downloadSelection()
         advanceUntilIdle()
 
-        assertIs<TransferState.Failed>(r.coordinator.transfer)
+        val failed = assertIs<TransferState.Failed>(r.coordinator.transfer)
+        assertEquals(FileTransferFailure.IllegalName, failed.failure)
         assertTrue(r.remoteFake.downloads.none { it.first.endsWith("evil.txt") })
     }
 
@@ -405,6 +406,8 @@ class TransferCoordinatorTest {
         r.coordinator.uploadSelection()
         advanceUntilIdle()
 
-        assertIs<TransferState.Failed>(r.coordinator.transfer)
+        // The library text ("disk full") never reaches the bar — only the typed reason does.
+        val failed = assertIs<TransferState.Failed>(r.coordinator.transfer)
+        assertEquals(FileTransferFailure.Transfer, failed.failure)
     }
 }
