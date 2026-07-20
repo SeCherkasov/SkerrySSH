@@ -23,7 +23,7 @@
     <string name="vtail_error_wrong_password">Wrong master password.</string>
     <string name="vtail_error_corrupted">The vault file is corrupted or unreadable.</string>
     <string name="vtail_error_biometric_reset">Biometrics were reset — sign in with your master password.</string>
-    <string name="vtail_error_biometric_failed">Biometric unlock didn't work — enter your master password.</string>
+    <string name="vtail_error_biometric_failed">Biometric unlock didn\'t work — enter your master password.</string>
     <string name="vtail_error_biometric_locked_out">Biometrics are temporarily locked — enter your master password.</string>
 
     <!-- Secret card "used by" fragment, singular / plural (keys ready; wiring blocked by VaultPresentationTest). -->
