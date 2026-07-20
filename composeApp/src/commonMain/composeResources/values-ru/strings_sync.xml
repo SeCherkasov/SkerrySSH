@@ -99,7 +99,7 @@
 
     <!-- Причины SyncStatus.Failed (typed reason → текст; техническая деталь добавляется после двоеточия) -->
     <string name="sync_fail_vault_locked">Хранилище заблокировано</string>
-    <string name="sync_fail_unauthorized">Неверный мастер-пароль или аккаунт</string>
+    <string name="sync_fail_unauthorized">Неверный пароль или аккаунт. Для нового аккаунта введите пароль этого хранилища.</string>
     <string name="sync_fail_account_not_found">Аккаунт не найден</string>
     <string name="sync_fail_account_exists">Аккаунт уже существует</string>
     <string name="sync_fail_pairing_expired">Код паринга истёк</string>

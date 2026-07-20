@@ -104,7 +104,7 @@
 
     <!-- SyncStatus.Failed 原因 -->
     <string name="sync_fail_vault_locked">保险库已锁定</string>
-    <string name="sync_fail_unauthorized">主密码或账户错误</string>
+    <string name="sync_fail_unauthorized">密码或账户错误。若要新建账户，请使用此保险库的密码。</string>
     <string name="sync_fail_account_not_found">未找到账户</string>
     <string name="sync_fail_account_exists">账户已存在</string>
     <string name="sync_fail_pairing_expired">配对码已过期</string>
