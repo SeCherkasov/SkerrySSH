@@ -323,7 +323,7 @@ class NewConnectionFormStateTest {
     fun addTag_caps_total_count() {
         val f = NewConnectionFormState()
         f.addTag((1..50).joinToString(",") { "tag$it" })
-        assertEquals(app.skerry.shared.host.MAX_TAGS_PER_HOST, f.tags.size)
+        assertEquals(app.skerry.shared.tag.MAX_TAGS_PER_RECORD, f.tags.size)
     }
 
     @Test

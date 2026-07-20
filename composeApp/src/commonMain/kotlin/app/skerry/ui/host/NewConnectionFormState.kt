@@ -6,8 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.host.Host
-import app.skerry.shared.host.MAX_TAGS_PER_HOST
-import app.skerry.shared.host.normalizeTag
+import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
+import app.skerry.shared.tag.normalizeTag
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.ssh.usesSshAuth
@@ -113,8 +113,8 @@ class NewConnectionFormState {
     fun addTag(raw: String) {
         val additions = raw.split(',').mapNotNull(::normalizeTag)
         if (additions.isEmpty()) return
-        // Cap on tag count (guards against pasting thousands of labels): drop beyond [MAX_TAGS_PER_HOST].
-        tags = LinkedHashSet(tags).apply { addAll(additions) }.take(MAX_TAGS_PER_HOST)
+        // Cap on tag count (guards against pasting thousands of labels): drop beyond [MAX_TAGS_PER_RECORD].
+        tags = LinkedHashSet(tags).apply { addAll(additions) }.take(MAX_TAGS_PER_RECORD)
     }
 
     /** Remove a tag (value is already canonical, the one rendered on the pill). */

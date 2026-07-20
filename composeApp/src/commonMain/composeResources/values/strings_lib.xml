@@ -30,6 +30,9 @@
     <string name="lib_snippets_library">LIBRARY</string>
     <string name="lib_snippets_empty">No snippets yet</string>
     <string name="lib_snippets_no_matches">No matches</string>
+    <string name="lib_snippets_chip_all">All</string>
+    <string name="lib_snippets_starter_pack">Add starter snippets</string>
+    <string name="lib_snippets_uncategorized">Uncategorized</string>
     <string name="lib_snippets_new">New snippet</string>
     <string name="lib_snippets_edit">Edit snippet</string>
     <string name="lib_snippets_untitled">Untitled</string>

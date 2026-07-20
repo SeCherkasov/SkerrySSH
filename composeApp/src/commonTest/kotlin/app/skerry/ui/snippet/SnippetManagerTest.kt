@@ -154,6 +154,26 @@ class SnippetManagerTest {
     }
 
     @Test
+    fun `save canonicalizes tags`() {
+        val store = FakeSnippetStore()
+        val manager = managerWith(store)
+
+        val id = manager.save(draft(tags = listOf("#DB", "db", "  Disk  ")))
+
+        assertEquals(listOf("db", "disk"), manager.find(id)!!.snippet.tags)
+        assertEquals(listOf("db", "disk"), store.all().single().tags) // canonical in the store too
+    }
+
+    @Test
+    fun `reads legacy non-canonical tags in canonical form`() {
+        val store = FakeSnippetStore()
+        store.put(Snippet("x", "saved", "ls -la", listOf("FS", "#fs", "Disk")))
+        val manager = managerWith(store)
+
+        assertEquals(listOf("fs", "disk"), manager.snippets.single().snippet.tags)
+    }
+
+    @Test
     fun `loads previously saved snippets on construction`() {
         val store = FakeSnippetStore()
         store.put(Snippet("x", "saved", "ls -la", listOf("fs")))
