@@ -279,6 +279,57 @@ class VaultBiometricsTest {
     }
 
     @Test
+    fun `enable descends when the enclave calls its own fresh wrapper a tag mismatch`() = bioTest {
+        // What #23 actually reports (Xiaomi HyperOS, StrongBox): KeyMint answers VERIFICATION_FAILED
+        // when finishing the round-trip decryption, which the platform surfaces as a bad GCM tag on a
+        // wrapper this very key produced a second earlier. That can't be a real mismatch, so at enable
+        // time it is evidence about the key configuration — walk the ladder instead of aborting.
+        val keyStore = object : FakeBiometricKeyStore() {
+            override suspend fun unwrap(alias: String, wrapped: ByteArray, prompt: BiometricPrompt) =
+                if (hardeningUsed.size < BiometricKeyHardening.entries.size) BiometricResult.TagMismatch
+                else super.unwrap(alias, wrapped, prompt)
+        }
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
+
+        assertEquals(BiometricKeyHardening.entries.toList(), keyStore.hardeningUsed)
+        val fresh = vault()
+        assertEquals(BiometricUnlockResult.Unlocked, biometrics(fresh, keyStore).unlock(prompt))
+    }
+
+    @Test
+    fun `enable reports Unsupported when every rung answers with a tag mismatch`() = bioTest {
+        val keyStore = FakeBiometricKeyStore().also { it.nextUnwrap = BiometricOutcome.TagMismatch }
+        val support = BiometricSupportStore.Volatile()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Unsupported, biometrics(v, keyStore, support).enable(prompt))
+
+        assertTrue(support.isUnsupported())
+        assertFalse(artifacts().exists())
+    }
+
+    @Test
+    fun `a tag mismatch at unlock stays an ordinary failure`() = bioTest {
+        // Outside the round-trip check a mismatching wrapper means what it says — a stale or tampered
+        // `vault.bio`, not a broken enclave. Fall back to the password without destroying anything.
+        val keyStore = FakeBiometricKeyStore()
+        val support = BiometricSupportStore.Volatile()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore, support).enable(prompt)
+        }
+        keyStore.nextUnwrap = BiometricOutcome.TagMismatch
+
+        assertEquals(BiometricUnlockResult.Failed, biometrics(vault(), keyStore, support).unlock(prompt))
+        assertEquals(BiometricUnlockResult.Failed, biometrics(vault(), keyStore, support).unlock(prompt))
+
+        assertTrue(artifacts().exists())
+        assertFalse(support.isUnsupported())
+    }
+
+    @Test
     fun `enable moves to the next rung when verification returns the wrong key`() = bioTest {
         // A round trip that "succeeds" with different bytes is as broken as one that throws — the
         // stored wrapper would unlock nothing.
