@@ -516,6 +516,7 @@ class ConnectionController(
      */
     private fun releaseSessionResources() {
         val conn = connection
+        portForwards?.stop()
         portForwards?.closeAll()
         portForwards = null
         val sftp = sftpClient

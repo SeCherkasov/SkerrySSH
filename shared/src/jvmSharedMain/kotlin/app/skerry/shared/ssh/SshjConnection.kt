@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.ConnectionException
+import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder
 import net.schmizz.sshj.transport.TransportException
 
@@ -85,9 +86,7 @@ internal class SshjConnection(
     override suspend fun openShell(size: PtySize, term: String): ShellChannel =
         withContext(Dispatchers.IO) {
             try {
-                val session = client.startSession()
-                session.allocatePTY(term, size.cols, size.rows, size.widthPx, size.heightPx, emptyMap())
-                SshjShellChannel(session, session.startShell())
+                openShellChannel(client.startSession(), size, term)
             } catch (e: IOException) {
                 throw SshConnectionException("Failed to open shell channel", e)
             }
@@ -106,7 +105,7 @@ internal class SshjConnection(
             // Each accepted connection is tunneled ourselves through a direct-tcpip channel to
             // destHost:destPort — this gives traffic counters and pause (see [SshjLocalForward]);
             // sshj's stock LocalPortForwarder hides the pumping internally.
-            SshjLocalForward(client, bindListener(spec.bindHost, spec.bindPort), spec.destHost, spec.destPort)
+            SshjLocalForward(client, bindForwardListener(spec.bindHost, spec.bindPort), spec.destHost, spec.destPort)
         }
 
     override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward =
@@ -128,21 +127,7 @@ internal class SshjConnection(
     override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward =
         withContext(Dispatchers.IO) {
             // Listener as for `-L`; each accepted connection then speaks the SOCKS5 protocol.
-            SshjDynamicForward(client, bindListener(spec.bindHost, spec.bindPort))
-        }
-
-    /**
-     * Bind a local listener for forwards (`-L`, `-D`): bound ourselves so the actual port can be read
-     * when bindPort=0, and "port in use" is caught as [PortForwardException] before the accept loop starts.
-     */
-    private fun bindListener(bindHost: String, bindPort: Int): ServerSocket =
-        try {
-            ServerSocket().apply {
-                reuseAddress = true
-                bind(InetSocketAddress(bindHost, bindPort))
-            }
-        } catch (e: IOException) {
-            throw PortForwardException("Failed to bind local port $bindHost:$bindPort", e)
+            SshjDynamicForward(client, bindForwardListener(spec.bindHost, spec.bindPort))
         }
 
     override suspend fun disconnect() {
@@ -185,3 +170,39 @@ internal class SshjConnection(
         const val MAX_EXEC_OUTPUT_BYTES = 1 * 1024 * 1024 // 1 MiB per stdout and per stderr
     }
 }
+
+/**
+ * Bind a local listener for forwards (`-L`, `-D`): bound ourselves so the actual port can be read
+ * when bindPort=0, and "port in use" is caught as [PortForwardException] before the accept loop
+ * starts. The socket is closed on a failed bind — its fd would otherwise linger until GC.
+ */
+internal fun bindForwardListener(
+    bindHost: String,
+    bindPort: Int,
+    newSocket: () -> ServerSocket = ::ServerSocket,
+): ServerSocket {
+    var socket: ServerSocket? = null
+    return try {
+        newSocket().apply {
+            socket = this
+            reuseAddress = true
+            bind(InetSocketAddress(bindHost, bindPort))
+        }
+    } catch (e: IOException) {
+        runCatching { socket?.close() }
+        throw PortForwardException("Failed to bind local port $bindHost:$bindPort", e)
+    }
+}
+
+/**
+ * Open the shell on an already-open [session] channel. On a failed PTY/shell request the channel is
+ * closed before rethrowing — abandoned open channels accumulate on the connection until disconnect.
+ */
+internal fun openShellChannel(session: Session, size: PtySize, term: String): SshjShellChannel =
+    try {
+        session.allocatePTY(term, size.cols, size.rows, size.widthPx, size.heightPx, emptyMap())
+        SshjShellChannel(session, session.startShell())
+    } catch (e: Exception) {
+        runCatching { session.close() }
+        throw e
+    }
