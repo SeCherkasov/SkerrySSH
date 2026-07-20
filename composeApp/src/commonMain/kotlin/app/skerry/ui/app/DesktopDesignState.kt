@@ -198,6 +198,13 @@ class DesktopDesignState(
     var split: Boolean by mutableStateOf(false); private set
     /** Whether the terminal's left host sidebar is hidden (toggled from the icon rail). */
     var sidebarHidden: Boolean by mutableStateOf(false); private set
+
+    /**
+     * Whether the VNC view's slide-over host drawer is open. Separate from [sidebarHidden]: the VNC
+     * framebuffer wants the full work area, so its drawer overlays the render and defaults to closed
+     * instead of reserving layout space like the terminal sidebar.
+     */
+    var vncSidebar: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
 
     /** Names of collapsed host folders in the sidebar (their host lists are hidden). */
@@ -354,6 +361,7 @@ class DesktopDesignState(
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
     fun toggleSidebar() { sidebarHidden = !sidebarHidden }
+    fun toggleVncSidebar() { vncSidebar = !vncSidebar }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
 
     // Signal to focus the AI bar's input (hotkey Cmd// Ctrl+Shift+/). SharedFlow rather than a counter

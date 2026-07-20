@@ -1,5 +1,6 @@
 package app.skerry.ui.vnc
 
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.unit.IntOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,5 +47,19 @@ class VncCoordinatesTest {
         val geom = fitGeometry(0f, 0f, 0, 0)
         assertEquals(0f, geom.scale)
         assertNull(geom.toFramebuffer(0f, 0f))
+    }
+
+    @Test
+    fun integer_scales_stay_nearest_fractional_scales_filter() {
+        // 1:1 and integer zooms keep hard pixel edges; any fractional scale must be resampled —
+        // nearest-neighbor there duplicates some pixel rows and drops others, shredding text.
+        assertEquals(FilterQuality.None, framebufferFilterQuality(1f))
+        assertEquals(FilterQuality.None, framebufferFilterQuality(2f))
+        assertEquals(FilterQuality.Medium, framebufferFilterQuality(0.5f))
+        assertEquals(FilterQuality.Medium, framebufferFilterQuality(0.73f))
+        assertEquals(FilterQuality.Medium, framebufferFilterQuality(1.37f))
+        // Float noise around an integer (a 1000px canvas over a 1000px desktop) still counts as 1:1.
+        assertEquals(FilterQuality.None, framebufferFilterQuality(1.0001f))
+        assertEquals(FilterQuality.None, framebufferFilterQuality(0f))
     }
 }

@@ -73,6 +73,13 @@ interface VncSession {
     suspend fun setQuality(quality: VncQuality)
 
     /**
+     * Ask the server to resize the remote desktop to [width]×[height] (SetDesktopSize). Silently
+     * ignored until the server has advertised support via [VncUpdate.SetDesktopSizeSupported]; the
+     * server's answer (or refusal) arrives as a normal [VncUpdate.Resize] — or nothing.
+     */
+    suspend fun setDesktopSize(width: Int, height: Int)
+
+    /**
      * Choose who draws the remote cursor. [enabled] = we do: the server sends its shape as a
      * [VncUpdate.CursorShape] and leaves the framebuffer clean, so the cursor tracks OUR pointer with
      * no round-trip. Disabled, the server paints it into the framebuffer instead — which is the only
@@ -94,6 +101,12 @@ interface VncSession {
 sealed interface VncUpdate {
     data class Region(val rects: List<VncRect>) : VncUpdate
     data class Resize(val width: Int, val height: Int) : VncUpdate
+
+    /**
+     * Emitted once, on the first ExtendedDesktopSize rect: the server accepts
+     * [VncSession.setDesktopSize] requests (the UI may offer "resize to window").
+     */
+    data object SetDesktopSizeSupported : VncUpdate
 
     /**
      * The remote cursor's shape (Cursor pseudo-encoding), sent instead of painting it into the

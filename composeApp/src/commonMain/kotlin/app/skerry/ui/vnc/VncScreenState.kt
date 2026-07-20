@@ -12,6 +12,8 @@ import app.skerry.shared.vnc.VncQuality
 import app.skerry.shared.vnc.VncSession
 import app.skerry.shared.vnc.VncUpdate
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -29,6 +31,8 @@ class VncScreenState(
     private val session: VncSession,
     private val scope: CoroutineScope,
     private val onClipboard: (String) -> Unit = {},
+    remoteResizeInitial: Boolean = false,
+    private val onRemoteResizeChanged: (Boolean) -> Unit = {},
 ) {
     private val image = FramebufferImage(
         session.framebuffer.width.coerceAtLeast(1),
@@ -66,6 +70,61 @@ class VncScreenState(
     /** Current image quality/compression preference (Graphics settings). */
     var quality by mutableStateOf(VncQuality.Auto)
         private set
+
+    /** True once the server has advertised SetDesktopSize support (ExtendedDesktopSize). */
+    var canResizeRemote by mutableStateOf(false)
+        private set
+
+    /**
+     * User flag: keep the remote desktop resized to the viewport instead of scaling to fit. Seeded
+     * from the saved per-host value; changes are reported through [onRemoteResizeChanged] so the
+     * host profile remembers them.
+     */
+    var remoteResize by mutableStateOf(remoteResizeInitial)
+        private set
+
+    // Last known viewport (canvas) size in pixels — the resize target when [remoteResize] is on.
+    private var viewport = IntSize.Zero
+    private var resizeJob: Job? = null
+
+    /** Toggle following the viewport; turning it on resizes to the current viewport right away. */
+    fun toggleRemoteResize() {
+        remoteResize = !remoteResize
+        onRemoteResizeChanged(remoteResize)
+        if (remoteResize) {
+            scheduleRemoteResize()
+        } else {
+            resizeJob?.cancel()
+            resizeJob = null
+        }
+    }
+
+    /** The drawing surface reports its size here (every layout change, cheap when idle). */
+    fun onViewportSize(size: IntSize) {
+        viewport = size
+        if (remoteResize) scheduleRemoteResize()
+    }
+
+    /**
+     * Debounced SetDesktopSize: a window drag-resize spews sizes many times a second, and each
+     * server-side resize costs a full-screen retransmit — so only the size the user settles on is
+     * sent. Same swallow-the-write discipline as [send].
+     */
+    private fun scheduleRemoteResize() {
+        val target = viewport
+        if (!canResizeRemote || target.width <= 0 || target.height <= 0) return
+        resizeJob?.cancel()
+        resizeJob = scope.launch {
+            delay(RESIZE_DEBOUNCE_MS)
+            if (target == desktopSize) return@launch
+            try {
+                session.setDesktopSize(target.width, target.height)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     /** Change the quality preference; the server applies it on the next framebuffer update. */
     fun applyQuality(newQuality: VncQuality) {
@@ -146,6 +205,11 @@ class VncScreenState(
                 desktopSize = IntSize(update.width, update.height)
                 frame++
             }
+            is VncUpdate.SetDesktopSizeSupported -> {
+                canResizeRemote = true
+                // A restored-from-profile flag is already on before support is known — apply it now.
+                if (remoteResize) scheduleRemoteResize()
+            }
             is VncUpdate.CursorShape -> cursor = VncCursorImage.of(update)
             is VncUpdate.ClipboardText -> {
                 serverClipboard = update.text
@@ -193,5 +257,9 @@ class VncScreenState(
             } catch (_: Exception) {
             }
         }
+    }
+
+    private companion object {
+        const val RESIZE_DEBOUNCE_MS = 400L
     }
 }

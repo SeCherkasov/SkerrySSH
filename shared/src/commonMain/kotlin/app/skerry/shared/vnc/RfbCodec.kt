@@ -29,6 +29,18 @@ class RfbCodec(
     // Whether we advertise the Cursor pseudo-encoding — i.e. whether the client draws the cursor.
     private var localCursor = true
 
+    // ExtendedDesktopSize state. @Volatile like VncFramebuffer's fields: written by the read loop,
+    // read by writeSetDesktopSize on a UI-driven coroutine. The screen id/flags are echoed back in
+    // SetDesktopSize so the server recognises its own layout.
+    @Volatile
+    private var supportsSetDesktopSize = false
+
+    @Volatile
+    private var screenId = 0
+
+    @Volatile
+    private var screenFlags = 0
+
     // One persistent ZRLE zlib stream for the whole connection (created on first ZRLE rect).
     private var zrleInflater: Inflater? = null
     // Up to four independent persistent Tight zlib streams, created lazily as control bytes name them.
@@ -178,6 +190,7 @@ class RfbCodec(
                     boundedResize(w, h)
                     pseudo += VncUpdate.Resize(w, h)
                 }
+                ENC_EXTENDED_DESKTOP_SIZE -> readExtendedDesktopSize(reason = x, status = y, width = w, height = h, out = pseudo)
                 ENC_CURSOR -> pseudo += readCursor(hotspotX = x, hotspotY = y, width = w, height = h)
                 else -> {
                     decodeRectangle(encoding, VncRect(x, y, w, h))
@@ -186,6 +199,40 @@ class RfbCodec(
             }
         }
         return pseudo + VncUpdate.Region(rects)
+    }
+
+    /**
+     * ExtendedDesktopSize pseudo-encoding (-308). The rect header's x/y carry the reason for the
+     * change and, for our own SetDesktopSize requests, the status; w/h is the framebuffer size. The
+     * payload is the screen layout, whose first screen we remember to echo back in SetDesktopSize.
+     *
+     * Appends to [out]: [VncUpdate.SetDesktopSizeSupported] the first time (receiving this rect at
+     * all is how support is signalled) and a [VncUpdate.Resize] only when the size actually changed —
+     * resizing to the same size would reallocate and blank a perfectly good picture.
+     */
+    private suspend fun readExtendedDesktopSize(reason: Int, status: Int, width: Int, height: Int, out: MutableList<VncUpdate>) {
+        val screenCount = readU8()
+        readBytes(3) // padding
+        repeat(screenCount) { i ->
+            val id = readS32()
+            readU16(); readU16(); readU16(); readU16() // screen x, y, w, h — single-screen client, ignored
+            val flags = readS32()
+            if (i == 0) {
+                screenId = id
+                screenFlags = flags
+            }
+        }
+        if (!supportsSetDesktopSize) {
+            supportsSetDesktopSize = true
+            out += VncUpdate.SetDesktopSizeSupported
+        }
+        // reason 1 = the server answering OUR SetDesktopSize; a non-zero status there is a refusal,
+        // and the w/h that come with it must not be applied (a buggy server could still change them).
+        if (reason == REASON_CLIENT_REQUEST && status != 0) return
+        if (width != fb.width || height != fb.height) {
+            boundedResize(width, height)
+            out += VncUpdate.Resize(width, height)
+        }
     }
 
     /**
@@ -309,6 +356,28 @@ class RfbCodec(
         writeSetEncodings()
     }
 
+    /**
+     * SetDesktopSize (message 251): ask the server to resize the desktop to [width]×[height] as a
+     * single screen. A no-op until an ExtendedDesktopSize rect has arrived — the spec forbids the
+     * message before the server has shown it understands the extension. Dimensions are clamped to
+     * the same bound we accept from the server.
+     */
+    suspend fun writeSetDesktopSize(width: Int, height: Int) {
+        if (!supportsSetDesktopSize) return
+        val w = width.coerceIn(1, MAX_DIMENSION)
+        val h = height.coerceIn(1, MAX_DIMENSION)
+        val msg = ByteArray(24)
+        msg[0] = 251.toByte()
+        putU16(msg, 2, w)
+        putU16(msg, 4, h)
+        msg[6] = 1 // one screen
+        putS32(msg, 8, screenId)
+        putU16(msg, 12, 0); putU16(msg, 14, 0) // screen at the origin…
+        putU16(msg, 16, w); putU16(msg, 18, h) // …covering the whole desktop
+        putS32(msg, 20, screenFlags)
+        sink.write(msg)
+    }
+
     suspend fun writeFramebufferUpdateRequest(incremental: Boolean, x: Int, y: Int, w: Int, h: Int) {
         val msg = ByteArray(10)
         msg[0] = 3 // FramebufferUpdateRequest
@@ -427,13 +496,20 @@ class RfbCodec(
         const val ENC_ZRLE = 16
         const val ENC_CURSOR = -239
         const val ENC_DESKTOP_SIZE = -223
+        const val ENC_EXTENDED_DESKTOP_SIZE = -308
+
+        /** ExtendedDesktopSize rect header x: 1 = the change answers this client's SetDesktopSize. */
+        const val REASON_CLIENT_REQUEST = 1
 
         /**
          * Encodings advertised to the server, most-preferred first — the client only ever offers what
          * it can decode (the server picks from this list). [ENC_CURSOR] is NOT here: it's toggled per
          * session by [setLocalCursor], not a fixed preference.
          */
-        val DEFAULT_ENCODINGS = intArrayOf(ENC_TIGHT, ENC_ZRLE, ENC_HEXTILE, ENC_COPY_RECT, ENC_RAW, ENC_DESKTOP_SIZE)
+        val DEFAULT_ENCODINGS = intArrayOf(
+            ENC_TIGHT, ENC_ZRLE, ENC_HEXTILE, ENC_COPY_RECT, ENC_RAW,
+            ENC_EXTENDED_DESKTOP_SIZE, ENC_DESKTOP_SIZE,
+        )
 
         /**
          * Tight quality/compression pseudo-encodings for a [VncQuality]. JPEG quality level N is

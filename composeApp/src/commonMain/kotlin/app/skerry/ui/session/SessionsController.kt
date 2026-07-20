@@ -233,7 +233,15 @@ class SessionsController(
      * reuses a blank terminal tab), with [SessionView.Vnc]. Requires a VNC controller factory
      * (wired at the entry point); a no-op if none was provided. Returns the new tab's id, or null.
      */
-    fun openVnc(hostId: String?, title: String, subtitle: String, target: SshTarget, auth: VncAuth): String? {
+    fun openVnc(
+        hostId: String?,
+        title: String,
+        subtitle: String,
+        target: SshTarget,
+        auth: VncAuth,
+        remoteResize: Boolean = false,
+        onRemoteResizeChanged: (Boolean) -> Unit = {},
+    ): String? {
         val vncFactory = vncControllerFactory ?: return null
         val vnc = vncFactory()
         // An idle terminal controller keeps `session.controller` non-null for the shared read-sites.
@@ -241,7 +249,7 @@ class SessionsController(
         session.setView(SessionView.Vnc)
         sessions = sessions + session
         activeId = session.id
-        vnc.connect(target, auth)
+        vnc.connect(target, auth, remoteResize, onRemoteResizeChanged)
         return session.id
     }
 

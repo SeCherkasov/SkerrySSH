@@ -358,7 +358,98 @@ class RfbCodecTest {
         c.setLocalCursor(true)
         assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
     }
+
+    // --- ExtendedDesktopSize / SetDesktopSize ---
+
+    @Test
+    fun default_encodings_advertise_extended_desktop_size() {
+        assertTrue(RfbCodec.DEFAULT_ENCODINGS.contains(RfbCodec.ENC_EXTENDED_DESKTOP_SIZE))
+    }
+
+    @Test
+    fun extended_desktop_size_resizes_and_reports_capability() = runTest {
+        val fb = VncFramebuffer(1, 1)
+        val updates = codec(FixtureSource(extendedSizeUpdate(0, 0, 4, 2)), CapturingSink(), fb).readMessage()
+
+        assertEquals(VncUpdate.Resize(4, 2), updates.filterIsInstance<VncUpdate.Resize>().single())
+        assertTrue(updates.any { it is VncUpdate.SetDesktopSizeSupported })
+        assertEquals(4, fb.width)
+        assertEquals(2, fb.height)
+    }
+
+    @Test
+    fun extended_desktop_size_with_unchanged_size_does_not_clear_the_framebuffer() = runTest {
+        val fb = VncFramebuffer(2, 1)
+        fb.setPixel(0, 0, 0xFF123456.toInt())
+        val stream = extendedSizeUpdate(0, 0, 2, 1) + extendedSizeUpdate(2, 0, 2, 1)
+        val c = codec(FixtureSource(stream), CapturingSink(), fb)
+
+        // Same size: a Resize would reallocate the buffer and wipe the picture for nothing.
+        val first = c.readMessage()
+        assertTrue(first.none { it is VncUpdate.Resize })
+        assertTrue(first.any { it is VncUpdate.SetDesktopSizeSupported })
+        assertEquals(0xFF123456.toInt(), fb.pixels[0])
+
+        // Capability is announced once, not on every ExtendedDesktopSize rect.
+        assertTrue(c.readMessage().none { it is VncUpdate.SetDesktopSizeSupported })
+    }
+
+    @Test
+    fun failed_own_resize_request_does_not_resize() = runTest {
+        val fb = VncFramebuffer(2, 1)
+        // reason=1 (our SetDesktopSize), status=1 (prohibited). Dimensions deliberately differ from
+        // the current size to prove the status guard (not a same-size comparison) blocks the resize.
+        val updates = codec(FixtureSource(extendedSizeUpdate(1, 1, 9, 9)), CapturingSink(), fb).readMessage()
+
+        assertTrue(updates.none { it is VncUpdate.Resize })
+        assertEquals(2, fb.width)
+        assertEquals(1, fb.height)
+    }
+
+    @Test
+    fun set_desktop_size_echoes_the_server_screen_layout() = runTest {
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(extendedSizeUpdate(0, 0, 4, 2, screenId = 0x11223344, flags = 5)), sink, VncFramebuffer(1, 1))
+        c.readMessage()
+        c.writeSetDesktopSize(640, 480)
+
+        val msg = sink.messages.last()
+        assertEquals(24, msg.size)
+        assertEquals(251, msg[0].toInt() and 0xFF)   // SetDesktopSize
+        assertEquals(640, u16At(msg, 2))             // requested width
+        assertEquals(480, u16At(msg, 4))             // requested height
+        assertEquals(1, msg[6].toInt())              // one screen
+        assertEquals(0x11223344, s32At(msg, 8))      // echoed screen id
+        assertEquals(0, u16At(msg, 12))              // screen x
+        assertEquals(0, u16At(msg, 14))              // screen y
+        assertEquals(640, u16At(msg, 16))            // screen covers the whole desktop
+        assertEquals(480, u16At(msg, 18))
+        assertEquals(5, s32At(msg, 20))              // echoed flags
+    }
+
+    @Test
+    fun set_desktop_size_before_server_support_is_a_noop() = runTest {
+        // The spec forbids SetDesktopSize until the server has sent an ExtendedDesktopSize rect.
+        val sink = CapturingSink()
+        codec(FixtureSource(ByteArray(0)), sink, VncFramebuffer(1, 1)).writeSetDesktopSize(640, 480)
+        assertTrue(sink.messages.isEmpty())
+    }
 }
+
+/** FramebufferUpdate with one ExtendedDesktopSize rect: header x/y carry [reason]/[status]. */
+private fun extendedSizeUpdate(reason: Int, status: Int, w: Int, h: Int, screenId: Int = 7, flags: Int = 3) = Wire()
+    .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+    .u16(reason).u16(status).u16(w).u16(h).s32(RfbCodec.ENC_EXTENDED_DESKTOP_SIZE)
+    .u8(1).u8(0).u8(0).u8(0)                          // one screen + 3 bytes padding
+    .s32(screenId).u16(0).u16(0).u16(w).u16(h).s32(flags)
+    .build()
+
+private fun u16At(msg: ByteArray, off: Int): Int =
+    ((msg[off].toInt() and 0xFF) shl 8) or (msg[off + 1].toInt() and 0xFF)
+
+private fun s32At(msg: ByteArray, off: Int): Int =
+    ((msg[off].toInt() and 0xFF) shl 24) or ((msg[off + 1].toInt() and 0xFF) shl 16) or
+        ((msg[off + 2].toInt() and 0xFF) shl 8) or (msg[off + 3].toInt() and 0xFF)
 
 /** The encoding list from the most recent SetEncodings (type 2) message the codec wrote. */
 private fun CapturingSink.lastEncodings(): List<Int> {
