@@ -64,6 +64,7 @@ import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
+import app.skerry.ui.generated.resources.term_monitor_title
 import app.skerry.ui.generated.resources.term_no_active_session
 import app.skerry.ui.generated.resources.term_mobile_open_host_connect
 import app.skerry.ui.generated.resources.term_connecting
@@ -170,6 +171,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // [MobileActionSheet] Popup: over an open soft keyboard a Popup measures against the shrunk window and
     // hangs at the old keyboard line with a gap below. Inline lives in the same window with live insets.
     var menuOpen by remember(active?.id) { mutableStateOf(false) }
+    // Host monitor sheet (desktop info-panel parity) — raised from the same menu, connected only.
+    var monitorOpen by remember(active?.id) { mutableStateOf(false) }
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
@@ -268,6 +271,9 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 onDismiss = { paletteOpen = false },
             )
         }
+        if (monitorOpen && active?.controller != null && activeTerminal != null) {
+            MobileHostMonitorSheet(active.controller, onDismiss = { monitorOpen = false })
+        }
         if (menuOpen && onDisconnect != null) {
             MobileBottomSheet(
                 onDismiss = { menuOpen = false },
@@ -276,6 +282,15 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 Txt(active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    if (activeTerminal != null) {
+                        MobileSheetButton(
+                            label = stringResource(Res.string.term_monitor_title),
+                            onClick = { menuOpen = false; monitorOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "monitoring",
+                            filled = false,
+                        )
+                    }
                     MobileSheetButton(
                         label = stringResource(Res.string.term_disconnect),
                         onClick = { menuOpen = false; onDisconnect() },
