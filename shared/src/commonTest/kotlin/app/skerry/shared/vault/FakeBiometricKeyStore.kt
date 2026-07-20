@@ -1,7 +1,7 @@
 package app.skerry.shared.vault
 
 /** Scripted outcome of a biometric prompt in [FakeBiometricKeyStore]. */
-enum class BiometricOutcome { Success, Cancelled, Failed, LockedOut, Invalidated, Unusable }
+enum class BiometricOutcome { Success, Cancelled, Failed, LockedOut, Invalidated, Unusable, TagMismatch }
 
 /**
  * In-memory [BiometricKeyStore] for orchestration tests without hardware. Wraps via XOR with a
@@ -59,6 +59,7 @@ open class FakeBiometricKeyStore(
         BiometricOutcome.Failed -> BiometricResult.Failed
         BiometricOutcome.LockedOut -> BiometricResult.LockedOut
         BiometricOutcome.Unusable -> BiometricResult.Unusable
+        BiometricOutcome.TagMismatch -> BiometricResult.TagMismatch
         BiometricOutcome.Invalidated -> {
             pads.remove(alias)
             BiometricResult.KeyInvalidated
@@ -78,6 +79,7 @@ open class FakeBiometricKeyStore(
         BiometricOutcome.Failed -> BiometricResult.Failed
         BiometricOutcome.LockedOut -> BiometricResult.LockedOut
         BiometricOutcome.Unusable -> BiometricResult.Unusable
+        BiometricOutcome.TagMismatch -> BiometricResult.TagMismatch
         BiometricOutcome.Invalidated -> {
             pads.remove(alias)
             BiometricResult.KeyInvalidated

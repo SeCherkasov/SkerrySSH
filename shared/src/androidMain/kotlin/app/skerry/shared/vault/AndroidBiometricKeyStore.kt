@@ -133,7 +133,10 @@ class AndroidBiometricKeyStore(
             is Auth.Success -> try {
                 BiometricResult.Success(auth.cipher.doFinal(ciphertext))
             } catch (e: AEADBadTagException) {
-                BiometricResult.Failed // wrapper doesn't match this key — tampering or a stale file
+                // Either the wrapper genuinely doesn't match this key, or KeyMint answered
+                // VERIFICATION_FAILED on finish() for a wrapper the key just produced (#23) — the
+                // caller decides, since only it knows whether the ciphertext is fresh.
+                BiometricResult.TagMismatch
             } catch (e: Exception) {
                 // Anything else after a successful auth is the enclave refusing the authorized
                 // operation (typically IllegalBlockSizeException caused by KeyStoreException

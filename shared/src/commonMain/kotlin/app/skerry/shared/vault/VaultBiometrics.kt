@@ -227,6 +227,8 @@ class VaultBiometrics(
             is BiometricResult.Success -> result.value
             BiometricResult.Cancelled -> return Attempt.Abort(BiometricEnableResult.Cancelled)
             BiometricResult.Failed, BiometricResult.LockedOut -> return Attempt.Abort(BiometricEnableResult.Failed)
+            // TagMismatch has no meaning while encrypting — treat it as the failure it is.
+            BiometricResult.TagMismatch -> return Attempt.Abort(BiometricEnableResult.Failed)
             BiometricResult.Unusable, BiometricResult.KeyInvalidated -> return Attempt.NextRung
         }
         return when (val verified = keyStore.unwrap(alias, wrapped, verifyPrompt)) {
@@ -239,6 +241,9 @@ class VaultBiometrics(
             }
             BiometricResult.Cancelled -> Attempt.Abort(BiometricEnableResult.Cancelled)
             BiometricResult.Failed, BiometricResult.LockedOut -> Attempt.Abort(BiometricEnableResult.Failed)
+            // This wrapper was produced by this key seconds ago, so a bad tag can't be a real
+            // mismatch — it's the enclave refusing the operation under another name (#23).
+            BiometricResult.TagMismatch -> Attempt.NextRung
             BiometricResult.Unusable, BiometricResult.KeyInvalidated -> Attempt.NextRung
         }
     }
@@ -347,7 +352,9 @@ class VaultBiometrics(
                 BioAuth.Success(unwrapped.value)
             }
             BiometricResult.Cancelled -> BioAuth.Cancelled
-            BiometricResult.Failed -> BioAuth.Failed
+            // Away from the round-trip check a bad tag means what it says: a stale or tampered
+            // `vault.bio`. Soft fallback to the password, nothing destroyed.
+            BiometricResult.Failed, BiometricResult.TagMismatch -> BioAuth.Failed
             BiometricResult.LockedOut -> BioAuth.LockedOut
             BiometricResult.KeyInvalidated -> withContext(io) {
                 disable() // biometrics compromised by an enrollment change — disable and require password

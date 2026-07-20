@@ -67,6 +67,15 @@ sealed interface BiometricResult<out T> {
     data object Unusable : BiometricResult<Nothing>
 
     /**
+     * Authenticated decryption came back with a bad tag: the wrapper doesn't match the key. Normally
+     * that means a stale or tampered artifact — but an enclave that answers this for a wrapper the
+     * same key produced seconds ago is describing itself, not the data (#23: HyperOS StrongBox
+     * returns KeyMint `VERIFICATION_FAILED` on `finish`, which the platform surfaces as a bad tag).
+     * Only the caller knows which of the two it is looking at, so the classification lives there.
+     */
+    data object TagMismatch : BiometricResult<Nothing>
+
+    /**
      * `bioKey` was irreversibly invalidated by the platform (biometric enrollment changed).
      * Orchestration must delete the `vault.bio` artifact and require the master password.
      */
