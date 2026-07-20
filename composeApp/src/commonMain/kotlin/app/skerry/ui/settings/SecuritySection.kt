@@ -44,6 +44,11 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.more_biometric_prompt_cancel
+import app.skerry.ui.generated.resources.more_biometric_prompt_subtitle
+import app.skerry.ui.generated.resources.more_biometric_prompt_title
+import app.skerry.ui.generated.resources.more_biometric_verify_subtitle
+import app.skerry.ui.generated.resources.more_biometric_verify_title
 import app.skerry.ui.generated.resources.settings_autolock_15m
 import app.skerry.ui.generated.resources.settings_autolock_1m
 import app.skerry.ui.generated.resources.settings_autolock_30m
@@ -97,20 +102,6 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
 // Security section: master password, biometrics, auto-lock, event log.
-
-/** Prompt for enabling biometrics from the Security section (English, matching the rest of the UI). */
-private val SECURITY_ENABLE_BIOMETRIC_PROMPT = BiometricPrompt(
-    title = "Enable biometric unlock",
-    cancelLabel = "Cancel",
-    subtitle = "Confirm your biometrics to unlock Skerry without typing the master password.",
-)
-
-/** Second prompt of the enable round trip — it proves this device can read the wrapper back. */
-private val SECURITY_VERIFY_BIOMETRIC_PROMPT = BiometricPrompt(
-    title = "Check biometric unlock",
-    cancelLabel = "Cancel",
-    subtitle = "One more touch — Skerry makes sure this device can really open the vault.",
-)
 
 /**
  * Live Security section: master password change ([VaultGateController.changePassword] via a
@@ -168,6 +159,18 @@ internal fun SecuritySection(
         }
         HLine()
     } else if (controller != null && controller.canEnableBiometric()) {
+        // Prompt strings are resolved here (stringResource needs composable scope) and handed to the
+        // coroutine below; the second one labels the round-trip check that enable() performs.
+        val enablePrompt = BiometricPrompt(
+            title = stringResource(Res.string.more_biometric_prompt_title),
+            cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
+            subtitle = stringResource(Res.string.more_biometric_prompt_subtitle),
+        )
+        val verifyPrompt = BiometricPrompt(
+            title = stringResource(Res.string.more_biometric_verify_title),
+            cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
+            subtitle = stringResource(Res.string.more_biometric_verify_subtitle),
+        )
         SettingToggleRow(
             stringResource(Res.string.settings_security_touch_id),
             stringResource(Res.string.settings_security_touch_id_desc),
@@ -176,7 +179,7 @@ internal fun SecuritySection(
                 if (controller.biometricInFlight) return@SettingToggleRow
                 scope.launch {
                     if (controller.biometricEnabled) controller.disableBiometric()
-                    else controller.enableBiometric(SECURITY_ENABLE_BIOMETRIC_PROMPT, SECURITY_VERIFY_BIOMETRIC_PROMPT)
+                    else controller.enableBiometric(enablePrompt, verifyPrompt)
                     onBiometricToggled()
                 }
             },

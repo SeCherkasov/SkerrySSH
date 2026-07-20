@@ -262,9 +262,9 @@ class VaultBiometricsTest {
     }
 
     @Test
-    fun `unlock on an enclave that stopped honouring the key disables biometrics and records the verdict`() = bioTest {
-        // The key passed the round trip at enable time but the enclave refuses it later (ROM update).
-        // Retrying can't fix it: disable, remember, and let the UI explain instead of failing silently.
+    fun `a single enclave refusal at unlock is not enough to destroy the enrollment`() = bioTest {
+        // The refusal comes from a catch-all after a successful auth, so one occurrence is as likely to
+        // be a keystore hiccup as a broken ROM. Reacting to it would delete a working enrollment.
         val keyStore = FakeBiometricKeyStore()
         val support = BiometricSupportStore.Volatile()
         run {
@@ -272,6 +272,25 @@ class VaultBiometricsTest {
             biometrics(v, keyStore, support).enable(prompt)
         }
         keyStore.nextUnwrap = BiometricOutcome.Unusable
+
+        assertEquals(BiometricUnlockResult.Failed, biometrics(vault(), keyStore, support).unlock(prompt))
+
+        assertTrue(artifacts().exists(), "one refusal must not disable biometrics")
+        assertFalse(support.isUnsupported())
+    }
+
+    @Test
+    fun `repeated enclave refusals disable biometrics and record the verdict`() = bioTest {
+        // A streak is evidence: the enclave stopped honouring a key that passed the round trip at enable
+        // time (a ROM update). Retrying can't fix it — disable, remember, let the UI explain.
+        val keyStore = FakeBiometricKeyStore()
+        val support = BiometricSupportStore.Volatile()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore, support).enable(prompt)
+        }
+        keyStore.nextUnwrap = BiometricOutcome.Unusable
+        biometrics(vault(), keyStore, support).unlock(prompt)
 
         val fresh = vault()
         assertEquals(BiometricUnlockResult.Unsupported, biometrics(fresh, keyStore, support).unlock(prompt))
@@ -282,17 +301,62 @@ class VaultBiometricsTest {
     }
 
     @Test
-    fun `a failed re-enable leaves no artifact pointing at a key that no longer exists`() = bioTest {
-        // Re-enrolling on a device that used to work (e.g. after pairing changed the dataKey): every
-        // rung recreates the key, so a leftover vault.bio would only fail at the next unlock.
+    fun `a working unlock forgets an earlier refusal`() = bioTest {
+        // Only *consecutive* refusals convict: a hiccup two sessions ago must not count towards the verdict.
+        val keyStore = FakeBiometricKeyStore()
+        val support = BiometricSupportStore.Volatile()
+        run {
+            val v = vault().also { it.create("master-pass".toCharArray()) }
+            biometrics(v, keyStore, support).enable(prompt)
+        }
+        keyStore.nextUnwrap = BiometricOutcome.Unusable
+        biometrics(vault(), keyStore, support).unlock(prompt)
+        keyStore.nextUnwrap = BiometricOutcome.Success
+        assertEquals(BiometricUnlockResult.Unlocked, biometrics(vault(), keyStore, support).unlock(prompt))
+
+        keyStore.nextUnwrap = BiometricOutcome.Unusable
+        assertEquals(BiometricUnlockResult.Failed, biometrics(vault(), keyStore, support).unlock(prompt))
+        assertTrue(artifacts().exists(), "the streak restarts after a working unlock")
+    }
+
+    @Test
+    fun `a hardware failure on the first rung keeps the enrollment the device already had`() = bioTest {
+        // Timeouts, a destroyed Activity, a sensor hiccup — none of that says anything about the key
+        // configuration. Re-enabling must not cost the user a working setup because of one of them.
         val keyStore = FakeBiometricKeyStore()
         val v = vault().also { it.create("master-pass".toCharArray()) }
         assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
         keyStore.nextWrap = BiometricOutcome.Failed
 
+        assertEquals(BiometricEnableResult.Failed, biometrics(v, keyStore).enable(prompt))
+
+        assertTrue(artifacts().exists(), "the previous enrollment must survive a hardware failure")
+    }
+
+    @Test
+    fun `cancelling the verification prompt keeps the enrollment the device already had`() = bioTest {
+        // The second prompt is ours, not the user's idea — dismissing it must be free.
+        val keyStore = FakeBiometricKeyStore()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
+        keyStore.nextUnwrap = BiometricOutcome.Cancelled
+
+        assertEquals(BiometricEnableResult.Cancelled, biometrics(v, keyStore).enable(prompt))
+
+        assertTrue(artifacts().exists())
+    }
+
+    @Test
+    fun `descending the ladder without success leaves no artifact behind`() = bioTest {
+        // Here the key really was recreated, so the old wrapper points at nothing — biometrics goes off.
+        val keyStore = FakeBiometricKeyStore()
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
+        keyStore.workingHardenings = emptySet()
+
         assertEquals(BiometricEnableResult.Unsupported, biometrics(v, keyStore).enable(prompt))
 
-        assertFalse(artifacts().exists(), "a stale wrapper must not survive a failed re-enable")
+        assertFalse(artifacts().exists(), "a stale wrapper must not survive a rebuilt key")
     }
 
     @Test
