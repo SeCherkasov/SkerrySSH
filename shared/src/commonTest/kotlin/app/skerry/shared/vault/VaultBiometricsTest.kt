@@ -259,6 +259,26 @@ class VaultBiometricsTest {
     }
 
     @Test
+    fun `enable descends when the enclave accepts encryption but refuses decryption`() = bioTest {
+        // The device shape from #23 (Xiaomi HyperOS): wrap succeeds, the round-trip unwrap is the
+        // first operation the enclave refuses. That refusal is evidence about the key configuration
+        // and must walk the ladder — a rung that never decrypts must not end the attempt as a
+        // hardware failure, or weaker rungs that might work are never tried.
+        val keyStore = object : FakeBiometricKeyStore() {
+            override suspend fun unwrap(alias: String, wrapped: ByteArray, prompt: BiometricPrompt) =
+                if (hardeningUsed.size < BiometricKeyHardening.entries.size) BiometricResult.Unusable
+                else super.unwrap(alias, wrapped, prompt)
+        }
+        val v = vault().also { it.create("master-pass".toCharArray()) }
+
+        assertEquals(BiometricEnableResult.Enabled, biometrics(v, keyStore).enable(prompt))
+
+        assertEquals(BiometricKeyHardening.entries.toList(), keyStore.hardeningUsed)
+        val fresh = vault()
+        assertEquals(BiometricUnlockResult.Unlocked, biometrics(fresh, keyStore).unlock(prompt))
+    }
+
+    @Test
     fun `enable moves to the next rung when verification returns the wrong key`() = bioTest {
         // A round trip that "succeeds" with different bytes is as broken as one that throws — the
         // stored wrapper would unlock nothing.
