@@ -174,21 +174,36 @@ class FileVault(
                 newDataKey.bytes.fill(0)
                 return@synchronized false
             }
-            val newSalt = crypto.newSalt()
-            val newMaster = crypto.deriveMasterKey(password, newSalt)
-            val newWrapped = crypto.wrapDataKey(newMaster, newDataKey)
-            newMaster.bytes.fill(0)
-            val newMeta = VaultMeta(FORMAT_VERSION, newSalt, newWrapped)
             // Records stay as-is: synced ones will arrive under the new key; local ones (under the
             // old key) become unreadable. Commit happens after persist — a failed write leaves fields untouched.
-            writeFile(newMeta, records.toList())
+            rewrapMeta(newDataKey, password)
             key.bytes.fill(0) // old key no longer needed
             dataKey = newDataKey
-            meta = newMeta
             true
         } finally {
             password.fill(' ')
         }
+    }
+
+    override fun rewrapUnder(password: CharArray): Boolean = synchronized(lock) {
+        try {
+            val key = dataKey ?: return@synchronized false
+            rewrapMeta(key, password)
+            true
+        } finally {
+            password.fill(' ')
+        }
+    }
+
+    /** Persist new metadata binding [key] to [password] (fresh salt + wrap); commits [meta] on success. */
+    private fun rewrapMeta(key: DataKey, password: CharArray) {
+        val newSalt = crypto.newSalt()
+        val newMaster = crypto.deriveMasterKey(password, newSalt)
+        val newWrapped = crypto.wrapDataKey(newMaster, key)
+        newMaster.bytes.fill(0)
+        val newMeta = VaultMeta(FORMAT_VERSION, newSalt, newWrapped)
+        writeFile(newMeta, records.toList())
+        meta = newMeta
     }
 
     override fun rekeyRecords(newKey: DataKey): Boolean = synchronized(lock) {

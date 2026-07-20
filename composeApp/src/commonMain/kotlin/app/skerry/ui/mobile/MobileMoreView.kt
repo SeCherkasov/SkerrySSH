@@ -208,7 +208,7 @@ private fun syncSubtitle(): String {
     val sync = LocalSync.current ?: return stringResource(Res.string.more_sync_local_only)
     return when (sync.status.collectAsState().value) {
         is app.skerry.ui.sync.SyncStatus.Online -> stringResource(Res.string.more_sync_synced)
-        app.skerry.ui.sync.SyncStatus.Busy -> stringResource(Res.string.more_sync_syncing)
+        app.skerry.ui.sync.SyncStatus.Busy, is app.skerry.ui.sync.SyncStatus.NeedsPasswordReplaceConfirm -> stringResource(Res.string.more_sync_syncing)
         is app.skerry.ui.sync.SyncStatus.Configured -> stringResource(Res.string.more_sync_linked_locked)
         is app.skerry.ui.sync.SyncStatus.Failed -> stringResource(Res.string.more_sync_error)
         app.skerry.ui.sync.SyncStatus.Disabled -> stringResource(Res.string.more_sync_local_only)
