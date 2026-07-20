@@ -82,12 +82,16 @@ class AndroidBiometricKeyStore(
     ): BiometricResult<ByteArray> = withContext(Dispatchers.Main) {
         val cipher = try {
             Cipher.getInstance(TRANSFORMATION).apply {
-                init(Cipher.ENCRYPT_MODE, loadKey(alias) ?: return@withContext BiometricResult.Failed)
+                init(Cipher.ENCRYPT_MODE, loadKey(alias) ?: return@withContext BiometricResult.Unusable)
             }
         } catch (e: KeyPermanentlyInvalidatedException) {
             return@withContext BiometricResult.KeyInvalidated
         } catch (e: Exception) {
-            return@withContext BiometricResult.Failed
+            // Refusing to even start an operation on a key this store just created is the same
+            // configuration evidence as refusing doFinal after auth (#23: HyperOS rejects TEE
+            // auth-bound keys at init, KeePassDX #2298 sees "Invalid operation handle" here) —
+            // Unusable, so enable() walks the ladder instead of aborting before the weaker rungs.
+            return@withContext BiometricResult.Unusable
         }
         when (val auth = authenticate(cipher, prompt)) {
             is Auth.Success -> try {
@@ -120,7 +124,10 @@ class AndroidBiometricKeyStore(
         } catch (e: KeyPermanentlyInvalidatedException) {
             return@withContext BiometricResult.KeyInvalidated
         } catch (e: Exception) {
-            return@withContext BiometricResult.Failed
+            // Same reasoning as in wrap(): an init refusal is the enclave rejecting the key, not a
+            // sensor problem. At unlock time Unusable feeds the refusal streak instead of being
+            // written off as a one-off failure forever.
+            return@withContext BiometricResult.Unusable
         }
         when (val auth = authenticate(cipher, prompt)) {
             is Auth.Success -> try {
