@@ -1,0 +1,14 @@
+<resources>
+    <string name="vnc_connecting">正在连接…</string>
+    <string name="vnc_session_closed">会话已结束</string>
+    <string name="vnc_connection_lost">连接已断开</string>
+    <string name="vnc_connect_failed">连接失败</string>
+    <string name="vnc_quality">画质</string>
+    <string name="vnc_quality_auto">自动</string>
+    <string name="vnc_quality_low">低</string>
+    <string name="vnc_quality_medium">中</string>
+    <string name="vnc_quality_high">高</string>
+    <string name="vnc_view_only">仅查看</string>
+    <string name="vnc_resize_to_window">调整为窗口大小</string>
+    <string name="vnc_reset_zoom">重置缩放</string>
+</resources>

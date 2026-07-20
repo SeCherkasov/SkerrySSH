@@ -41,6 +41,9 @@ import kotlinx.serialization.Serializable
  * client sends `keepalive@openssh.com` so NAT/firewall tables don't expire an idle connection
  * (OpenSSH's `ServerAliveInterval`). 0 disables it. SSH-only (Telnet/Serial ignore it). Default 30
  * also covers old saved files (field absent).
+ *
+ * [vncResizeToWindow] remembers the VNC session's "Resize to window" toggle across restarts.
+ * VNC-only; toggled from the live session's graphics menu, not the edit form (which preserves it).
  */
 @Serializable
 data class Host(
@@ -56,4 +59,5 @@ data class Host(
     val connectionType: ConnectionType = ConnectionType.SSH,
     val jumpHostId: String? = null,
     val keepAliveSeconds: Int = 30,
+    val vncResizeToWindow: Boolean = false,
 )

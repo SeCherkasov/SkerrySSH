@@ -77,10 +77,19 @@ class HostManagerController(
                 connectionType = draft.connectionType,
                 jumpHostId = draft.jumpHostId,
                 keepAliveSeconds = draft.keepAliveSeconds,
+                // Not a form field — toggled from the live VNC session; a form save must not reset it.
+                vncResizeToWindow = find(id)?.vncResizeToWindow ?: false,
             ),
         )
         hosts = store.all()
         return id
+    }
+
+    /** Persist the VNC "Resize to window" toggle changed from a live session (unknown id: no-op). */
+    fun setVncResizeToWindow(id: String, enabled: Boolean) {
+        val host = find(id) ?: return
+        store.put(host.copy(vncResizeToWindow = enabled))
+        hosts = store.all()
     }
 
     fun delete(id: String) {

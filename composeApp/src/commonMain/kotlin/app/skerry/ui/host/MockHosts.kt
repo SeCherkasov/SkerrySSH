@@ -1,6 +1,7 @@
 package app.skerry.ui.host
 
 import androidx.compose.ui.graphics.Color
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.ui.design.D
 
 /**
@@ -12,7 +13,12 @@ enum class HostStatus(val color: Color, val glow: Boolean) {
     On(D.moss, true), Off(D.faint, false), Warn(D.sunset, false),
 }
 
-data class MockHost(val name: String, val status: HostStatus, val badge: String? = null)
+data class MockHost(
+    val name: String,
+    val status: HostStatus,
+    val badge: String? = null,
+    val connectionType: ConnectionType = ConnectionType.SSH,
+)
 data class HostGroup(val name: String, val hosts: List<MockHost>)
 
 val HOST_GROUPS = listOf(
@@ -31,13 +37,15 @@ val HOST_GROUPS = listOf(
             MockHost("staging-api", HostStatus.Off),
         ),
     ),
+    // Mixed protocols, so the preview exercises the row's protocol icon the way a real catalog does.
     HostGroup(
         "Homelab",
         listOf(
             MockHost("homelab-pi", HostStatus.On, "DEV"),
-            MockHost("nas-truenas", HostStatus.Warn, "DEV"),
-            MockHost("router-opnsense", HostStatus.Off),
-            MockHost("k3s-control", HostStatus.Off),
+            MockHost("nas-truenas", HostStatus.Warn, "DEV", ConnectionType.MOSH),
+            MockHost("router-opnsense", HostStatus.Off, connectionType = ConnectionType.TELNET),
+            MockHost("k3s-control", HostStatus.Off, connectionType = ConnectionType.SERIAL),
+            MockHost("lab-desktop", HostStatus.Off, connectionType = ConnectionType.VNC),
         ),
     ),
 )
