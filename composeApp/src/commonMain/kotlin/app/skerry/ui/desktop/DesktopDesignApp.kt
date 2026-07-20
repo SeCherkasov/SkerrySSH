@@ -91,7 +91,9 @@ import app.skerry.ui.host.GroupDialog as GroupEditDialog
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.session.BroadcastPanel
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
@@ -626,7 +628,7 @@ private fun DesktopChrome(
         val onRootKey = remember(snippets, sessions, state) {
             { event: KeyEvent ->
                 if (event.type != KeyEventType.KeyDown) false
-                else if (state.appOverlay != null || state.modalOpen || state.settingsOpen) false
+                else if (state.appOverlay != null || state.modalOpen || state.settingsOpen || state.broadcastOpen) false
                 else {
                     val shortcut = matchDesktopShortcut(
                         event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
@@ -647,6 +649,13 @@ private fun DesktopChrome(
                 }
                 HLine()
                 StatusBar()
+            }
+            if (state.broadcastOpen) {
+                BroadcastPanel(
+                    controller = state.broadcast,
+                    targets = broadcastTargets(sessions),
+                    onDismiss = state::closeBroadcast,
+                )
             }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost)
             if (state.settingsOpen) SettingsPanel(state)
@@ -812,6 +821,7 @@ private fun runDesktopShortcut(
             state.showView(DesktopView.Sftp)
         }
         DesktopShortcut.Lock -> onLock()
+        DesktopShortcut.Broadcast -> state.openBroadcast()
         DesktopShortcut.FocusAiBar -> state.requestAiBarFocus()
     }
     return true

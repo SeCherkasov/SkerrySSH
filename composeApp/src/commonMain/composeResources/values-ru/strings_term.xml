@@ -81,4 +81,13 @@
     <string name="mosh_err_udp">mosh-server запущен, но ответ по UDP-порту %1$s не пришёл. Скорее всего, файрвол блокирует UDP-диапазон Mosh 60000–61000 на сервере или по пути. Учтите: Mosh требует прямой UDP-доступ к хосту — через jump-хосты он не проходит.</string>
     <string name="mosh_err_bootstrap">mosh-server не смог запуститься на хосте: %1$s</string>
     <string name="mosh_err_bootstrap_no_output">mosh-server не смог запуститься на хосте (без вывода). Проверьте, что Mosh установлен и запускается на сервере.</string>
+    <string name="term_broadcast_title">Broadcast</string>
+    <string name="term_broadcast_subtitle">Одна команда сразу в несколько сессий</string>
+    <string name="term_broadcast_placeholder">Команда для всех сессий…</string>
+    <string name="term_broadcast_send">Отправить</string>
+    <string name="term_broadcast_select_all">Выбрать все</string>
+    <string name="term_broadcast_clear">Снять</string>
+    <string name="term_broadcast_none">Нет подключённых сессий</string>
+    <string name="term_broadcast_selected">Выбрано %1$s из %2$s</string>
+    <string name="term_broadcast_sent">Отправлено: %1$s</string>
 </resources>

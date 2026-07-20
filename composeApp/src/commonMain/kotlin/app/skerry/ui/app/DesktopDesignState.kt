@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.vault.AutoLockDuration
+import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
@@ -187,6 +188,16 @@ class DesktopDesignState(
 
     var locked: Boolean by mutableStateOf(false); private set
     var modalOpen: Boolean by mutableStateOf(false); private set
+
+    /** Whether the broadcast panel (⌘B / Ctrl+Shift+B) is open. */
+    var broadcastOpen: Boolean by mutableStateOf(false); private set
+
+    /**
+     * Which sessions a broadcast addresses. Lives here, not in the panel, so a selection survives
+     * closing and reopening it — re-picking eight hosts for every command would make the feature
+     * unusable.
+     */
+    val broadcast = BroadcastController()
     var settingsOpen: Boolean by mutableStateOf(false); private set
 
     /** Whether the sync setup onboarding modal is open (Settings → Sync → "Set up sync"). */
@@ -352,6 +363,8 @@ class DesktopDesignState(
     fun requestCloseSplit(parentId: String) { pendingClose = PendingClose.Split(parentId) }
     fun dismissClose() { pendingClose = null }
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
+    fun openBroadcast() { broadcastOpen = true }
+    fun closeBroadcast() { broadcastOpen = false }
     fun openSettings() { settingsOpen = true }
     fun closeSettings() { settingsOpen = false }
     fun openSyncSetup() { syncSetupOpen = true }
