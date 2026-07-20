@@ -170,6 +170,30 @@ class SyncCoordinatorPasswordReplaceTest {
     }
 
     @Test
+    fun `dismissing the confirmation resolves the paused connect instead of only hiding it`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val sut = coordinator(vault, FakeAccountClient(existingAccountPassword = accountPassword))
+        var closed = false
+        try {
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            // Esc on the desktop modal (and leaving the mobile screen): it must decline the replace, not
+            // leave the connect paused with the
+            // kept password alive and the status stuck on NeedsPasswordReplaceConfirm ("Syncing…" forever).
+            dismissPasswordReplace(sut) { closed = true }.invoke()
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.Disabled } }
+            assertTrue(closed, "the modal still closes")
+            // Nothing left pending: a stale confirm (reopened dialog, queued tap) can't re-key the vault.
+            sut.confirmPasswordReplace()
+            assertTrue(sut.status.value is SyncStatus.Disabled, "a stale confirm must be a no-op, not a re-connect")
+            assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "local vault password must be untouched")
+        } finally {
+            sut.close()
+        }
+    }
+
+    @Test
     fun `connecting with the vault password creates the account without prompting`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()

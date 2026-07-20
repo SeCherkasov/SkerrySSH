@@ -67,11 +67,22 @@ fun PasswordReplaceConfirm(sync: SyncCoordinator, accountId: String) {
     }
 }
 
+/**
+ * Dismissing the confirmation (Esc — a scrim click is deliberately swallowed, see [ModalScrim]) declines the
+ * replace, it doesn't just hide the modal: the paused
+ * connect would otherwise keep holding the typed password and leave the status on
+ * [SyncStatus.NeedsPasswordReplaceConfirm] — a sync indicator stuck on "Syncing…" with no way back to it.
+ */
+fun dismissPasswordReplace(sync: SyncCoordinator, onDismiss: () -> Unit): () -> Unit = {
+    sync.cancelPasswordReplace()
+    onDismiss()
+}
+
 /** [PasswordReplaceConfirm] as a standalone desktop modal (same card chrome as [SyncSetupDialog]). */
 @Composable
 fun PasswordReplaceConfirmDialog(sync: SyncCoordinator, accountId: String, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
-    ModalScrim(onDismiss = onDismiss, scrimColor = Color(0xB3060E16)) {
+    ModalScrim(onDismiss = dismissPasswordReplace(sync, onDismiss), scrimColor = Color(0xB3060E16)) {
         Column(
             Modifier
                 .widthIn(max = 440.dp)
