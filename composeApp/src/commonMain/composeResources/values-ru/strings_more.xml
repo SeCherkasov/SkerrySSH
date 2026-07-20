@@ -18,6 +18,6 @@
     <string name="more_biometric_prompt_cancel">Отмена</string>
     <string name="more_biometric_prompt_subtitle">Подтвердите биометрию, чтобы разблокировать Skerry без ввода мастер-пароля.</string>
     <string name="more_biometric_verify_title">Проверка разблокировки</string>
-    <string name="more_biometric_verify_subtitle">Ещё одно касание — Skerry убедится, что устройство действительно может открыть хранилище.</string>
+    <string name="more_biometric_verify_subtitle">Ещё одно касание — проверяем разблокировку.</string>
     <string name="more_about">О приложении</string>
 </resources>
