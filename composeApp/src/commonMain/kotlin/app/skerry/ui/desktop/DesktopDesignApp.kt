@@ -100,6 +100,7 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncIndicatorLevel
 import app.skerry.ui.sync.syncIndicatorLocalized
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
@@ -118,6 +119,8 @@ import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_this_session
+import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_record_start
 import app.skerry.ui.generated.resources.shell_disconnect_title
 import app.skerry.ui.generated.resources.shell_disconnect_message
 import app.skerry.ui.generated.resources.shell_disconnect
@@ -146,6 +149,7 @@ import app.skerry.ui.app.DesktopView
 import app.skerry.ui.design.Dot
 import app.skerry.ui.app.FeatureFlags
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalConnectHost
@@ -647,6 +651,14 @@ private fun DesktopChrome(
                 }
                 HLine()
                 StatusBar()
+            }
+            state.recordingNotice?.let { outcome ->
+                NoticeDialog(
+                    title = stringResource(Res.string.term_record_start),
+                    message = recordingOutcomeMessage(outcome),
+                    buttonLabel = stringResource(Res.string.term_ai_dismiss),
+                    onDismiss = state::dismissRecordingNotice,
+                )
             }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost)
             if (state.settingsOpen) SettingsPanel(state)

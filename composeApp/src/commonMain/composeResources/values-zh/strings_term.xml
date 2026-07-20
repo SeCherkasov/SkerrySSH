@@ -81,4 +81,10 @@
     <string name="mosh_err_udp">mosh-server 已启动，但 UDP 端口 %1$s 没有回复。防火墙可能在服务器端或途中阻止了 Mosh UDP 范围 60000–61000。注意：Mosh 需要到主机的直接 UDP 路径 — 不通过跳板主机中继。</string>
     <string name="mosh_err_bootstrap">mosh-server 在主机上启动失败：%1$s</string>
     <string name="mosh_err_bootstrap_no_output">mosh-server 在主机上启动失败（无输出）。请检查服务器上是否已安装并可以运行 Mosh。</string>
+    <string name="term_record_start">录制会话</string>
+    <string name="term_record_stop">停止并保存录制</string>
+    <string name="term_record_active">录制中</string>
+    <string name="term_record_truncated">录制已停止：已达大小上限</string>
+    <string name="term_record_empty">没有录制到内容</string>
+    <string name="term_record_saved">录制已保存</string>
 </resources>

@@ -103,6 +103,8 @@ private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modif
         IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
         // Quick snippet launch into the active session without leaving for the Snippets section.
         SnippetPaletteButton(active)
+        // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
+        RecordSessionButton(active) { state.showRecordingNotice(it) }
         // Lit while the info panel is open — the only action here with a visible on/off state.
         IconBtn("info", onClick = state::toggleInfo, tint = if (state.infoPanel) D.cyanBright else D.dim)
         // Power: closes the active session (live path) with a confirmation prompt

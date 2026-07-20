@@ -17,6 +17,7 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
+import app.skerry.ui.terminal.RecordingOutcome
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
@@ -187,6 +188,12 @@ class DesktopDesignState(
 
     var locked: Boolean by mutableStateOf(false); private set
     var modalOpen: Boolean by mutableStateOf(false); private set
+
+    /**
+     * Outcome of the last finished session recording, shown as a notice; `null` when there is
+     * nothing to report. A silent stop would leave the user unsure whether the file was written.
+     */
+    var recordingNotice: RecordingOutcome? by mutableStateOf(null); private set
     var settingsOpen: Boolean by mutableStateOf(false); private set
 
     /** Whether the sync setup onboarding modal is open (Settings → Sync → "Set up sync"). */
@@ -352,6 +359,8 @@ class DesktopDesignState(
     fun requestCloseSplit(parentId: String) { pendingClose = PendingClose.Split(parentId) }
     fun dismissClose() { pendingClose = null }
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
+    fun showRecordingNotice(outcome: RecordingOutcome) { recordingNotice = outcome.takeIf { it.worthReporting } }
+    fun dismissRecordingNotice() { recordingNotice = null }
     fun openSettings() { settingsOpen = true }
     fun closeSettings() { settingsOpen = false }
     fun openSyncSetup() { syncSetupOpen = true }

@@ -81,4 +81,10 @@
     <string name="mosh_err_udp">mosh-server запущен, но ответ по UDP-порту %1$s не пришёл. Скорее всего, файрвол блокирует UDP-диапазон Mosh 60000–61000 на сервере или по пути. Учтите: Mosh требует прямой UDP-доступ к хосту — через jump-хосты он не проходит.</string>
     <string name="mosh_err_bootstrap">mosh-server не смог запуститься на хосте: %1$s</string>
     <string name="mosh_err_bootstrap_no_output">mosh-server не смог запуститься на хосте (без вывода). Проверьте, что Mosh установлен и запускается на сервере.</string>
+    <string name="term_record_start">Записать сессию</string>
+    <string name="term_record_stop">Остановить и сохранить запись</string>
+    <string name="term_record_active">Идёт запись</string>
+    <string name="term_record_truncated">Запись остановлена: достигнут предел размера</string>
+    <string name="term_record_empty">Записывать было нечего</string>
+    <string name="term_record_saved">Запись сохранена</string>
 </resources>
