@@ -22,6 +22,7 @@ import app.skerry.shared.ssh.SshTransport
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -545,6 +546,24 @@ class ConnectionControllerTest {
 
         assertEquals(2, conn.roundTrips)
         scope.cancel()
+    }
+
+    @Test
+    fun `disconnect stops the port-forward telemetry poller`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(target, SshAuth.Password("pw"))
+        controller.openPortForwards()
+
+        controller.disconnect()
+
+        // The forward controller polls on the shared controller scope (it outlives the session), so
+        // disconnect must cancel the poll job — otherwise every closed session leaks a live loop.
+        // Check before cancel, but cancel unconditionally: a leaked poller re-schedules forever and
+        // would hang runTest's idle-wait.
+        val leaked = scope.coroutineContext[Job]!!.children.any { it.isActive }
+        scope.cancel()
+        assertFalse(leaked)
     }
 
     @Test

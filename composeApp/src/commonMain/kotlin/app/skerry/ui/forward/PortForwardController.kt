@@ -99,15 +99,19 @@ class PortForwardController(
 
     private var nextId = 0L
 
-    init {
-        // Telemetry polling runs on the session scope: for each active forward, samples byte
-        // counters and derives rate (bytes/s) from the delta. Exits via isActive on scope cancel.
-        scope.launch {
-            while (isActive) {
-                delay(pollIntervalMillis)
-                pollTelemetry()
-            }
+    // Telemetry polling: for each active forward, samples byte counters and derives rate (bytes/s)
+    // from the delta. [scope] is the shared controller scope that outlives the session, so session
+    // teardown must call [stop] — nothing cancels this job otherwise.
+    private val pollJob = scope.launch {
+        while (isActive) {
+            delay(pollIntervalMillis)
+            pollTelemetry()
         }
+    }
+
+    /** Stops the telemetry poller. Session teardown; the controller is not reusable afterwards. */
+    fun stop() {
+        pollJob.cancel()
     }
 
     internal fun pollTelemetry() {
