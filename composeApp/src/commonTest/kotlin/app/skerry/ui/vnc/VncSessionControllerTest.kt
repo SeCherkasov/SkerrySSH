@@ -29,6 +29,7 @@ open class FakeVncSession(
     val cutText = mutableListOf<String>()
     val localCursor = mutableListOf<Boolean>()
     val fullUpdates = mutableListOf<Boolean>()
+    val desktopSizes = mutableListOf<Pair<Int, Int>>()
     var closed = false
 
     override suspend fun sendPointer(event: VncPointerEvent) { pointers += event }
@@ -36,6 +37,7 @@ open class FakeVncSession(
     override suspend fun sendClientCutText(text: String) { cutText += text }
     override suspend fun requestUpdate(incremental: Boolean) { fullUpdates += incremental }
     override suspend fun setQuality(quality: VncQuality) {}
+    override suspend fun setDesktopSize(width: Int, height: Int) { desktopSizes += width to height }
     override suspend fun setLocalCursor(enabled: Boolean) { localCursor += enabled }
     override suspend fun close() { closed = true }
 }

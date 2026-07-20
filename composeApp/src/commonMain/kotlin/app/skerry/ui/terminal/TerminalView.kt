@@ -1,5 +1,8 @@
 package app.skerry.ui.terminal
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,8 +84,13 @@ private val PANE_HEADER_HEIGHT = 40.dp
 @Composable
 fun TerminalView(state: DesktopDesignState) {
     Row(Modifier.fillMaxSize()) {
-        // Hidden entirely when collapsed; the expand/collapse toggle sits on the icon rail (SidebarToggle).
-        if (!state.sidebarHidden) HostsSidebar(state)
+        // Slides in/out when toggled from the icon rail (SidebarToggle); expandFrom = End keeps the
+        // right edge leading, so the panel visually emerges from under the rail instead of popping.
+        AnimatedVisibility(
+            visible = !state.sidebarHidden,
+            enter = expandHorizontally(expandFrom = Alignment.End),
+            exit = shrinkHorizontally(shrinkTowards = Alignment.End),
+        ) { HostsSidebar(state) }
         Column(Modifier.weight(1f).fillMaxHeight()) {
             // Shared live AI bar controller (or null): one instance for the overlay layer and
             // input row; key() recreates it when the active host/policy changes. Off/mock -> null

@@ -1,5 +1,6 @@
 package app.skerry.ui.vnc
 
+import androidx.compose.ui.unit.IntSize
 import app.skerry.shared.vnc.VncFramebuffer
 import app.skerry.shared.vnc.VncPointerEvent
 import app.skerry.shared.vnc.VncQuality
@@ -9,9 +10,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -126,6 +129,123 @@ class VncScreenStateTest {
 
         // Reaching here at all is the assertion: an escaping exception would have failed the test.
         assertTrue(screen.viewOnly)
+        scope.cancel()
+    }
+
+    @Test
+    fun remote_resize_follows_the_viewport_after_a_debounce() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
+        val session = FakeVncSession(updates = updates)
+        val screen = VncScreenState(session, scope)
+
+        assertFalse(screen.canResizeRemote)
+        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        assertTrue(screen.canResizeRemote)
+
+        screen.onViewportSize(IntSize(1280, 720))
+        screen.toggleRemoteResize()
+        assertTrue(session.desktopSizes.isEmpty()) // debounced, not instant
+        advanceUntilIdle()
+        assertEquals(1280 to 720, session.desktopSizes.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun rapid_viewport_changes_collapse_into_the_last_request() = runTest {
+        // A window drag-resize spews sizes; only the one the user settles on may reach the server.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
+        val session = FakeVncSession(updates = updates)
+        val screen = VncScreenState(session, scope)
+        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        screen.toggleRemoteResize()
+
+        screen.onViewportSize(IntSize(100, 100))
+        screen.onViewportSize(IntSize(200, 200))
+        screen.onViewportSize(IntSize(300, 300))
+        advanceUntilIdle()
+        assertEquals(listOf(300 to 300), session.desktopSizes)
+        scope.cancel()
+    }
+
+    @Test
+    fun no_request_when_the_viewport_already_matches_the_desktop() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
+        val session = FakeVncSession(framebuffer = VncFramebuffer(2, 1), updates = updates)
+        val screen = VncScreenState(session, scope)
+        updates.emit(VncUpdate.SetDesktopSizeSupported)
+
+        screen.onViewportSize(IntSize(2, 1))
+        screen.toggleRemoteResize()
+        advanceUntilIdle()
+        assertTrue(session.desktopSizes.isEmpty())
+        scope.cancel()
+    }
+
+    @Test
+    fun server_answering_with_a_different_size_does_not_retrigger_a_request() = runTest {
+        // Many servers clamp a requested size to a supported mode. The answer arriving as a Resize
+        // must not bounce back as another SetDesktopSize — that would be a client↔server resize loop.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
+        val session = FakeVncSession(updates = updates)
+        val screen = VncScreenState(session, scope)
+        updates.emit(VncUpdate.SetDesktopSizeSupported)
+
+        screen.onViewportSize(IntSize(1000, 700))
+        screen.toggleRemoteResize()
+        advanceUntilIdle()
+        assertEquals(listOf(1000 to 700), session.desktopSizes)
+
+        updates.emit(VncUpdate.Resize(1024, 704))
+        advanceUntilIdle()
+        assertEquals(listOf(1000 to 700), session.desktopSizes)
+        scope.cancel()
+    }
+
+    @Test
+    fun initial_remote_resize_kicks_in_when_the_server_advertises_support() = runTest {
+        // Restoring the saved per-host flag: the session starts with the toggle on, and the resize
+        // must fire as soon as the server turns out to support it — without any user interaction.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
+        val session = FakeVncSession(updates = updates)
+        val screen = VncScreenState(session, scope, remoteResizeInitial = true)
+
+        screen.onViewportSize(IntSize(1280, 720))
+        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        advanceUntilIdle()
+        assertEquals(listOf(1280 to 720), session.desktopSizes)
+        scope.cancel()
+    }
+
+    @Test
+    fun toggling_remote_resize_reports_to_the_callback() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val reported = mutableListOf<Boolean>()
+        val screen = VncScreenState(FakeVncSession(), scope, onRemoteResizeChanged = { reported += it })
+
+        screen.toggleRemoteResize()
+        screen.toggleRemoteResize()
+        assertEquals(listOf(true, false), reported)
+        scope.cancel()
+    }
+
+    @Test
+    fun turning_remote_resize_off_cancels_the_pending_request() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
+        val session = FakeVncSession(updates = updates)
+        val screen = VncScreenState(session, scope)
+        updates.emit(VncUpdate.SetDesktopSizeSupported)
+
+        screen.toggleRemoteResize()
+        screen.onViewportSize(IntSize(1280, 720))
+        screen.toggleRemoteResize() // off again before the debounce fires
+        advanceUntilIdle()
+        assertTrue(session.desktopSizes.isEmpty())
         scope.cancel()
     }
 

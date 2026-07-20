@@ -1,5 +1,8 @@
 package app.skerry.ui.vnc
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,7 +31,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -48,12 +50,14 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.vnc.VncQuality
+import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.terminal.HostsSidebar
 import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
 import kotlin.math.roundToInt
@@ -64,24 +68,36 @@ import kotlin.math.roundToInt
  * top-level view (Viewport routes [app.skerry.ui.session.SessionView.Vnc] here).
  */
 @Composable
-fun VncView() {
+fun VncView(state: DesktopDesignState) {
     val sessions = LocalSessions.current
     val vnc = sessions?.active?.vncController ?: return
-    when (val ui = vnc.uiState) {
-        is VncUiState.Connecting -> CenterNotice("hourglass_empty", "Connecting…")
-        is VncUiState.Connected -> Box(Modifier.fillMaxSize()) {
-            VncSurface(ui.screen)
-            Box(Modifier.align(Alignment.TopEnd)) { VncGraphicsBar(ui.screen) }
+    Box(Modifier.fillMaxSize()) {
+        when (val ui = vnc.uiState) {
+            is VncUiState.Connecting -> CenterNotice("hourglass_empty", "Connecting…")
+            is VncUiState.Connected -> Box(Modifier.fillMaxSize()) {
+                VncSurface(ui.screen)
+                Box(Modifier.align(Alignment.TopEnd)) { VncGraphicsBar(ui.screen) }
+            }
+            is VncUiState.Error -> CenterNotice("error", ui.message, color = D.sunset)
+            is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
+                VncSurface(ui.screen, interactive = false)
+                CenterNotice(
+                    "link_off",
+                    if (ui.cleanExit) "Session closed" else "Connection lost",
+                    color = D.sunset,
+                )
+            }
         }
-        is VncUiState.Error -> CenterNotice("error", ui.message, color = D.sunset)
-        is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
-            VncSurface(ui.screen, interactive = false)
-            CenterNotice(
-                "link_off",
-                if (ui.cleanExit) "Session closed" else "Connection lost",
-                color = D.sunset,
-            )
-        }
+        // Slide-over hosts drawer (rail chevron): overlays the framebuffer instead of shrinking it —
+        // a layout resize would ripple to the remote desktop when "Resize to window" is on.
+        // clipToBounds: slide transitions draw outside the node's bounds, so without it the panel
+        // rides in from off-screen across the icon rail instead of emerging at the work-area edge.
+        AnimatedVisibility(
+            visible = state.vncSidebar,
+            modifier = Modifier.align(Alignment.CenterStart).clipToBounds(),
+            enter = slideInHorizontally { -it },
+            exit = slideOutHorizontally { -it },
+        ) { HostsSidebar(state) }
     }
 }
 
@@ -104,7 +120,10 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
     var pointerPos by remember { mutableStateOf<Offset?>(null) }
 
     // clipToBounds: a zoomed framebuffer must never draw outside its own area onto the app chrome.
-    var mod = Modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged { canvasSize = it }
+    var mod = Modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged {
+        canvasSize = it
+        screen.onViewportSize(it)
+    }
     // Something remote already tracks the mouse — our sprite, or a cursor the server painted into the
     // framebuffer — so the OS pointer on top would be a second one. See [shouldHideLocalCursor].
     if (shouldHideLocalCursor(interactive, screen.viewOnly, pointerOverImage)) {
@@ -124,6 +143,10 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
                             pointerOverImage = false
                             continue
                         }
+                        // Reclaim the keyboard on any click into the surface (as TerminalScreen
+                        // does): the graphics menu / other chrome may have taken focus, and the
+                        // one-shot requestFocus at session start never runs again.
+                        if (event.type == PointerEventType.Press) focus.requestFocus()
                         val geom = fitGeometry(
                             canvasSize.width.toFloat(), canvasSize.height.toFloat(),
                             screen.desktopSize.width, screen.desktopSize.height,
@@ -182,7 +205,16 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
             @Suppress("UNUSED_EXPRESSION") frame // captured so the draw invalidates when it changes
-            drawFramebuffer(screen, sprite, pointerPos)
+            drawFramebuffer(screen)
+        }
+        // The cursor sprite lives on its OWN canvas: pointerPos changes on every raw mouse move, and
+        // only this layer reads it (inside the draw block), so a move redraws just the small sprite.
+        // In one canvas with the framebuffer, every mouse-pixel step re-filtered the whole frame at
+        // canvas resolution — enough to pin a core at fullscreen on a software-Skia backend.
+        if (sprite != null) {
+            Canvas(Modifier.fillMaxSize()) {
+                pointerPos?.let { drawCursor(screen, sprite, it) }
+            }
         }
     }
 
@@ -204,10 +236,10 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
 }
 
 /**
- * Fit-to-window draw: preserve aspect ratio, center, nearest-neighbor for crisp pixels. [sprite] is
- * the remote cursor drawn on top at [pointerPos] (both null = nothing to draw there).
+ * Fit-to-window draw: preserve aspect ratio, center, filter per [framebufferFilterQuality] — crisp
+ * nearest-neighbor at 1:1/integer zoom, bilinear at fractional scales.
  */
-private fun DrawScope.drawFramebuffer(screen: VncScreenState, sprite: VncCursorImage?, pointerPos: Offset?) {
+private fun DrawScope.drawFramebuffer(screen: VncScreenState) {
     val image = screen.imageBitmap
     val geom = fitGeometry(
         size.width, size.height, image.width, image.height,
@@ -218,9 +250,21 @@ private fun DrawScope.drawFramebuffer(screen: VncScreenState, sprite: VncCursorI
         image = image,
         dstOffset = IntOffset(geom.offsetX.toInt(), geom.offsetY.toInt()),
         dstSize = IntSize(geom.dstWidth, geom.dstHeight),
-        filterQuality = FilterQuality.None,
+        filterQuality = framebufferFilterQuality(geom.scale),
     )
-    if (sprite == null || pointerPos == null) return
+}
+
+/**
+ * The remote cursor [sprite] at [pointerPos], on the cursor-only layer. Geometry comes from
+ * [VncScreenState.desktopSize] (not the bitmap) so this layer never touches — and never invalidates
+ * on — the framebuffer image itself.
+ */
+private fun DrawScope.drawCursor(screen: VncScreenState, sprite: VncCursorImage, pointerPos: Offset) {
+    val geom = fitGeometry(
+        size.width, size.height, screen.desktopSize.width, screen.desktopSize.height,
+        screen.userScale, screen.userOffset.x, screen.userOffset.y,
+    )
+    if (geom.scale <= 0f) return
     val at = cursorTopLeft(geom, pointerPos.x, pointerPos.y, sprite.hotspotX, sprite.hotspotY) ?: return
     // Scaled and filtered like the framebuffer it sits on: a cursor is remote pixels too, so under
     // zoom it grows with them rather than staying a lone sharp sprite on a blown-up screen.
@@ -228,7 +272,7 @@ private fun DrawScope.drawFramebuffer(screen: VncScreenState, sprite: VncCursorI
         image = sprite.bitmap,
         dstOffset = IntOffset(at.x.roundToInt(), at.y.roundToInt()),
         dstSize = IntSize((sprite.width * geom.scale).roundToInt(), (sprite.height * geom.scale).roundToInt()),
-        filterQuality = FilterQuality.None,
+        filterQuality = framebufferFilterQuality(geom.scale),
     )
 }
 
@@ -243,6 +287,9 @@ private fun VncGraphicsBar(screen: VncScreenState) {
         AnchoredDropdown(
             expanded = open,
             onDismiss = { open = false },
+            // The menu must not steal the keyboard from the VNC surface — remote typing would die
+            // until the user clicks the picture again.
+            focusable = false,
             trigger = {
                 Box(
                     Modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.45f))
@@ -263,6 +310,10 @@ private fun VncGraphicsBar(screen: VncScreenState) {
                     // desktop instead), so the fit is always 1:1 and the control would be a no-op.
                     // Mobile keeps it — pinch-zoom is real there.
                     VncMenuRow("View only", selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
+                    // Only offered once the server has said it accepts SetDesktopSize.
+                    if (screen.canResizeRemote) {
+                        VncMenuRow("Resize to window", selected = screen.remoteResize, icon = if (screen.remoteResize) "check_box" else "check_box_outline_blank") { screen.toggleRemoteResize() }
+                    }
                 }
             },
         )

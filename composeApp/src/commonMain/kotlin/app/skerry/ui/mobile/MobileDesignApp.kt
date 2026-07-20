@@ -350,7 +350,11 @@ private fun MobileChrome(
                 // "ask every time" (no bound secret) prompts for one first.
                 val cred = credentials?.find(host.credentialId)
                 if (cred != null) {
-                    sessions?.openVnc(host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth())
+                    sessions?.openVnc(
+                        host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
+                        remoteResize = host.vncResizeToWindow,
+                        onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                    )
                     if (sessions != null) state.push(MobileRoute.Vnc)
                 } else {
                     pendingVnc = host
@@ -467,7 +471,11 @@ private fun MobileChrome(
                     onConnect = { pw ->
                         pendingVnc = null
                         val auth = if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw)
-                        sessions?.openVnc(host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth)
+                        sessions?.openVnc(
+                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
+                            remoteResize = host.vncResizeToWindow,
+                            onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                        )
                         if (sessions != null) state.push(MobileRoute.Vnc)
                     },
                 )

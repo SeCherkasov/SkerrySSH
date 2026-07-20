@@ -102,4 +102,70 @@ class VncTcpTransportTest {
         }
         Unit
     }
+
+    @Test
+    fun `a resize triggers a full framebuffer request`() = runBlocking {
+        // After a resize the framebuffer content is undefined (RFB DesktopSize semantics), so the
+        // follow-up request must be non-incremental — an incremental one could leave the new,
+        // larger screen mostly black until something changes remotely.
+        val followUp = CompletableFuture<Int>() // incremental flag of the request after the resize
+        serve { socket ->
+            val out = socket.getOutputStream()
+            val din = DataInputStream(socket.getInputStream())
+            out.write("RFB 003.008\n".encodeToByteArray()); out.flush()
+            din.readFully(ByteArray(12))
+            out.write(byteArrayOf(1, RfbCodec.SEC_NONE.toByte())); out.flush()
+            din.read()
+            out.write(u32(0)); out.flush()
+            din.read() // ClientInit
+            out.write(u16(2)); out.write(u16(1)); out.write(ByteArray(16))
+            out.write(u32(1)); out.write("d".encodeToByteArray()); out.flush()
+            // A resize-only update: one DesktopSize pseudo-rect to 4x2.
+            out.write(byteArrayOf(0, 0)); out.write(u16(1))
+            out.write(u16(0)); out.write(u16(0)); out.write(u16(4)); out.write(u16(2))
+            out.write(u32(RfbCodec.ENC_DESKTOP_SIZE)); out.flush()
+            // Parse the client stream until the SECOND FramebufferUpdateRequest (the first is the
+            // initial full request from the handshake; the second reacts to the resize).
+            var requests = 0
+            while (!followUp.isDone) {
+                when (din.read()) {
+                    0 -> din.readFully(ByteArray(19))                       // SetPixelFormat
+                    2 -> {                                                  // SetEncodings
+                        din.readFully(ByteArray(1))
+                        val n = din.readUnsignedShort()
+                        din.readFully(ByteArray(4 * n))
+                    }
+                    3 -> {                                                  // FramebufferUpdateRequest
+                        val body = ByteArray(9)
+                        din.readFully(body)
+                        requests++
+                        if (requests == 2) followUp.complete(body[0].toInt())
+                    }
+                    else -> break                                           // EOF / unexpected
+                }
+            }
+        }
+
+        val transport = VncTcpTransport()
+        val session = transport.connect(
+            SshTarget(host = server.inetAddress.hostAddress, port = server.localPort, username = ""),
+            VncAuth.None,
+        )
+        val sawResize = CompletableFuture<Unit>()
+        // collect, not first{}: cancelling on the Resize would close the socket before the transport
+        // gets to write the follow-up request this test is about.
+        val collector = launch(Dispatchers.IO) {
+            runCatching {
+                session.updates.collect { if (it is VncUpdate.Resize) sawResize.complete(Unit) }
+            }.onFailure { sawResize.completeExceptionally(it) }
+        }
+        try {
+            withContext(Dispatchers.IO) { sawResize.get(TIMEOUT_MS, TimeUnit.MILLISECONDS) }
+            assertEquals(0, withContext(Dispatchers.IO) { followUp.get(TIMEOUT_MS, TimeUnit.MILLISECONDS) })
+        } finally {
+            collector.cancel()
+            session.close()
+        }
+        Unit
+    }
 }

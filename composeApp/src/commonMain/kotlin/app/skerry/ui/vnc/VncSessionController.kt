@@ -60,8 +60,17 @@ class VncSessionController(
     private var sessionScope: CoroutineScope? = null
     private var session: VncSession? = null
 
-    /** Connect to [target] with [auth]. Ignored if a connect is already in progress or live. */
-    fun connect(target: SshTarget, auth: VncAuth) {
+    /**
+     * Connect to [target] with [auth]. Ignored if a connect is already in progress or live.
+     * [remoteResize] seeds the "Resize to window" toggle from the host profile;
+     * [onRemoteResizeChanged] reports the user changing it (so the profile can be updated).
+     */
+    fun connect(
+        target: SshTarget,
+        auth: VncAuth,
+        remoteResize: Boolean = false,
+        onRemoteResizeChanged: (Boolean) -> Unit = {},
+    ) {
         if (uiState is VncUiState.Connected) return
         uiState = VncUiState.Connecting
         connectJob = scope.launch {
@@ -70,7 +79,11 @@ class VncSessionController(
                 val sScope = newSessionScope()
                 session = opened
                 sessionScope = sScope
-                val screen = VncScreenState(opened, sScope)
+                val screen = VncScreenState(
+                    opened, sScope,
+                    remoteResizeInitial = remoteResize,
+                    onRemoteResizeChanged = onRemoteResizeChanged,
+                )
                 uiState = VncUiState.Connected(screen)
                 watchForClose(screen, sScope)
             } catch (e: CancellationException) {

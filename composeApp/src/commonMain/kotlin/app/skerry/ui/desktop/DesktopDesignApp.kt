@@ -549,7 +549,11 @@ private fun DesktopChrome(
                 // "ask every time" (no bound secret) prompts for one first. No ProxyJump/host-key path.
                 val cred = credentials?.find(host.credentialId)
                 if (cred != null) {
-                    sessions?.openVnc(host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth())
+                    sessions?.openVnc(
+                        host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
+                        remoteResize = host.vncResizeToWindow,
+                        onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                    )
                 } else {
                     pendingVncHost = host
                 }
@@ -673,7 +677,11 @@ private fun DesktopChrome(
                     onConnect = { pw ->
                         pendingVncHost = null
                         val auth = if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw)
-                        sessions?.openVnc(host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth)
+                        sessions?.openVnc(
+                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
+                            remoteResize = host.vncResizeToWindow,
+                            onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                        )
                     },
                 )
             }
@@ -1088,9 +1096,14 @@ private fun IconRail(state: DesktopDesignState) {
     ) {
         // Collapse/expand toggle for the terminal's hosts sidebar: lives on the rail (not in the
         // sidebar header) and only while the terminal view is on screen. Deliberately shorter than
-        // the 38dp view buttons — an auxiliary control, not a view.
+        // the 38dp view buttons — an auxiliary control, not a view. VNC maps to the same rail item
+        // but drives its own slide-over drawer (closed by default, overlays the framebuffer).
         if (state.appOverlay == null && currentSessionView == DesktopView.Terminal) {
-            SidebarToggle(state)
+            if (sessions?.active?.view == SessionView.Vnc) {
+                SidebarToggle(hidden = !state.vncSidebar, onToggle = state::toggleVncSidebar)
+            } else {
+                SidebarToggle(hidden = state.sidebarHidden, onToggle = state::toggleSidebar)
+            }
         }
         RAIL.forEach { item ->
             val active = if (state.appOverlay != null) item.view == state.appOverlay
@@ -1116,9 +1129,9 @@ private fun IconRail(state: DesktopDesignState) {
     }
 }
 
-/** Short rail button that hides/restores the terminal's hosts sidebar (chevron flips with state). */
+/** Short rail button that hides/restores the left hosts panel (chevron flips with state). */
 @Composable
-private fun SidebarToggle(state: DesktopDesignState) {
+private fun SidebarToggle(hidden: Boolean, onToggle: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     Box(
@@ -1128,10 +1141,10 @@ private fun SidebarToggle(state: DesktopDesignState) {
             .clip(RoundedCornerShape(6.dp))
             .hoverable(interaction)
             .background(if (hovered) D.cyan.copy(alpha = 0.06f) else Color.Transparent)
-            .clickable(onClick = state::toggleSidebar),
+            .clickable(onClick = onToggle),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(if (state.sidebarHidden) "chevron_right" else "chevron_left", size = 17.sp, color = if (hovered) D.dim else D.faint)
+        Sym(if (hidden) "chevron_right" else "chevron_left", size = 17.sp, color = if (hovered) D.dim else D.faint)
     }
 }
 

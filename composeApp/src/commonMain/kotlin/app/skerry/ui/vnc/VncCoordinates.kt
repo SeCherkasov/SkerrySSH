@@ -1,6 +1,8 @@
 package app.skerry.ui.vnc
 
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.unit.IntOffset
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -39,6 +41,19 @@ data class FitGeometry(
  * [canvasHeight] canvas. [userScale] (>=1 typically) zooms in and [userOffsetX]/[userOffsetY] pan;
  * the defaults reproduce a plain centered fit.
  */
+/**
+ * Filter for drawing the framebuffer at [scale]: 1:1 and integer zooms keep nearest-neighbor (hard
+ * pixel edges), any fractional scale is resampled bilinearly — nearest there duplicates some pixel
+ * rows and drops others, which shreds remote text and icons. Medium (bilinear + mipmaps), not High
+ * (bicubic): the resample covers the whole canvas on every framebuffer update, and a fullscreen
+ * bicubic pass is ~4× the taps for no visible gain at these scales.
+ */
+fun framebufferFilterQuality(scale: Float): FilterQuality {
+    if (scale <= 0f) return FilterQuality.None
+    val nearest = scale.roundToInt()
+    return if (nearest >= 1 && abs(scale - nearest) < 0.001f) FilterQuality.None else FilterQuality.Medium
+}
+
 fun fitGeometry(
     canvasWidth: Float,
     canvasHeight: Float,

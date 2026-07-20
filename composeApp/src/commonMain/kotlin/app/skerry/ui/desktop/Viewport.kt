@@ -35,7 +35,7 @@ fun Viewport(state: DesktopDesignState) {
             when (view) {
                 SessionView.Terminal -> TerminalView(state)
                 SessionView.Sftp -> SftpView()
-                SessionView.Vnc -> VncView()
+                SessionView.Vnc -> VncView(state)
             }
         }
     }

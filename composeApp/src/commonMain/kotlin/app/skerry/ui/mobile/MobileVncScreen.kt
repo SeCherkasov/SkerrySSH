@@ -151,6 +151,8 @@ private fun MobileVncGraphics(screen: VncScreenState) {
     AnchoredDropdown(
         expanded = open,
         onDismiss = { open = false },
+        // Must not steal focus: with the IME field open, a focusable popup would drop the keyboard.
+        focusable = false,
         trigger = { MobileVncIcon("tune") { open = !open } },
         menu = { width ->
             Column(
@@ -163,6 +165,10 @@ private fun MobileVncGraphics(screen: VncScreenState) {
                 }
                 HLine(modifier = Modifier.padding(vertical = 4.dp))
                 MobileVncMenuRow("View only", selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
+                // Only offered once the server has said it accepts SetDesktopSize.
+                if (screen.canResizeRemote) {
+                    MobileVncMenuRow("Resize to window", selected = screen.remoteResize, icon = if (screen.remoteResize) "check_box" else "check_box_outline_blank") { screen.toggleRemoteResize() }
+                }
                 MobileVncMenuRow("Reset zoom", selected = false, icon = "fit_screen") { screen.resetZoom(); open = false }
             }
         },
