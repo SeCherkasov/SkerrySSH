@@ -184,6 +184,8 @@ class TeamsCoordinator(
                 keyStore.remove(gone)
                 teamVaults.reset(gone)
             }
+            // A cached invite of a vanished team holds teamKey material — drop it with the team.
+            verifiedInvites.update { cached -> cached.filterKeys { it in liveIds } }
             onTeamsChanged()
             maybeRecoverKeys()
         }
@@ -565,7 +567,7 @@ class TeamsCoordinator(
         }
     }
 
-    private class VerifiedInvite(val payload: TeamInvitePayload)
+    internal class VerifiedInvite(val payload: TeamInvitePayload)
 
     /**
      * Open the invite envelope for [teamId] and verify the inviter's signature and binding. Returns
@@ -585,7 +587,7 @@ class TeamsCoordinator(
         }
     }
 
-    private fun cachedInvite(teamId: String): VerifiedInvite? = verifiedInvites.value[teamId]
+    internal fun cachedInvite(teamId: String): VerifiedInvite? = verifiedInvites.value[teamId]
 
     /** Open the team vault under [key] (no stale-file handling — used where the exact key is known). */
     private fun openTeamVault(teamId: String, key: DataKey): Vault? {
