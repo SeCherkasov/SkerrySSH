@@ -41,11 +41,20 @@ import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vnc_connect_failed
+import app.skerry.ui.generated.resources.vnc_connecting
+import app.skerry.ui.generated.resources.vnc_quality
+import app.skerry.ui.generated.resources.vnc_reset_zoom
+import app.skerry.ui.generated.resources.vnc_resize_to_window
+import app.skerry.ui.generated.resources.vnc_view_only
 import app.skerry.ui.vnc.VncScreenState
 import app.skerry.ui.vnc.VncSurface
 import app.skerry.ui.vnc.VncUiState
 import app.skerry.ui.vnc.keySymFor
+import app.skerry.ui.vnc.label
 import androidx.compose.ui.input.key.Key
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Mobile VNC (remote-desktop) screen: a top bar (back / server name / keyboard / disconnect) over
@@ -83,9 +92,9 @@ fun MobileVncScreen(state: MobileDesignState) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val ui = vnc?.uiState) {
                 is VncUiState.Connected -> MobileVncBody(ui.screen, keyboardOn) { keyboardOn = false }
-                is VncUiState.Error -> CenterText(ui.message, D.sunset)
+                is VncUiState.Error -> CenterText(ui.message.ifBlank { stringResource(Res.string.vnc_connect_failed) }, D.sunset)
                 is VncUiState.Disconnected -> MobileVncBody(ui.screen, keyboardOn = false) {}
-                else -> CenterText("Connecting…", D.dim)
+                else -> CenterText(stringResource(Res.string.vnc_connecting), D.dim)
             }
         }
     }
@@ -159,17 +168,17 @@ private fun MobileVncGraphics(screen: VncScreenState) {
                 Modifier.width(width.coerceAtLeast(200.dp)).clip(RoundedCornerShape(11.dp))
                     .background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(vertical = 4.dp),
             ) {
-                Txt("Quality", color = D.faint, size = 11.sp, modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 2.dp))
+                Txt(stringResource(Res.string.vnc_quality), color = D.faint, size = 11.sp, modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 2.dp))
                 VncQuality.entries.forEach { q ->
-                    MobileVncMenuRow(q.name, selected = screen.quality == q) { screen.applyQuality(q) }
+                    MobileVncMenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
                 }
                 HLine(modifier = Modifier.padding(vertical = 4.dp))
-                MobileVncMenuRow("View only", selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
+                MobileVncMenuRow(stringResource(Res.string.vnc_view_only), selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
                 // Only offered once the server has said it accepts SetDesktopSize.
                 if (screen.canResizeRemote) {
-                    MobileVncMenuRow("Resize to window", selected = screen.remoteResize, icon = if (screen.remoteResize) "check_box" else "check_box_outline_blank") { screen.toggleRemoteResize() }
+                    MobileVncMenuRow(stringResource(Res.string.vnc_resize_to_window), selected = screen.remoteResize, icon = if (screen.remoteResize) "check_box" else "check_box_outline_blank") { screen.toggleRemoteResize() }
                 }
-                MobileVncMenuRow("Reset zoom", selected = false, icon = "fit_screen") { screen.resetZoom(); open = false }
+                MobileVncMenuRow(stringResource(Res.string.vnc_reset_zoom), selected = false, icon = "fit_screen") { screen.resetZoom(); open = false }
             }
         },
     )
