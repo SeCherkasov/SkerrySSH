@@ -50,7 +50,6 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.vnc_connect_failed
 import app.skerry.ui.generated.resources.vnc_connecting
 import app.skerry.ui.generated.resources.vnc_connection_lost
 import app.skerry.ui.generated.resources.vnc_quality
@@ -66,6 +65,7 @@ import app.skerry.ui.vnc.VncUiState
 import app.skerry.ui.vnc.keySymFor
 import app.skerry.ui.vnc.label
 import androidx.compose.ui.input.key.Key
+import app.skerry.ui.vnc.vncFailureText
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
@@ -105,7 +105,7 @@ fun MobileVncScreen(state: MobileDesignState) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (val ui = vnc?.uiState) {
             is VncUiState.Connected -> VncTouchSurface(ui.screen)
-            is VncUiState.Error -> CenterText(ui.message.ifBlank { stringResource(Res.string.vnc_connect_failed) }, D.sunset)
+            is VncUiState.Error -> CenterText(vncFailureText(ui.failure), D.sunset)
             is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 VncTouchSurface(ui.screen, interactive = false)
                 CenterText(

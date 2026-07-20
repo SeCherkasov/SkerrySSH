@@ -9,17 +9,20 @@ import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
 import app.skerry.shared.ssh.RemoteForwardSpec
 import app.skerry.shared.ssh.SshConnection
-import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.ptail_forward_raise_failed
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Forward direction: local (`-L`), remote (`-R`), or dynamic SOCKS (`-D`). */
 enum class ForwardDirection { Local, Remote, Dynamic }
+
+/** Typed, user-facing reason a forward could not be raised; the UI maps it to localized text. */
+enum class ForwardFailure {
+    /** The listener never came up: port busy or denied, or the server refused the request. */
+    RaiseFailed,
+}
 
 /** State of a single forward in the list. */
 sealed interface ForwardStatus {
@@ -29,8 +32,8 @@ sealed interface ForwardStatus {
     /** Forward is active; [boundPort] is the actual listener port (assigned if requested as `0`). */
     data class Active(val boundPort: Int) : ForwardStatus
 
-    /** Failed to start; [message] is user-facing. */
-    data class Failed(val message: String) : ForwardStatus
+    /** Failed to start; [failure] is the typed reason, localized by the UI. */
+    data class Failed(val failure: ForwardFailure) : ForwardStatus
 }
 
 /**
@@ -166,10 +169,11 @@ class PortForwardController(
                 entry.status = ForwardStatus.Active(forward.boundPort)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Caught broadly (not just the expected PortForwardException) so an unexpected sshj
                 // exception doesn't crash the shared session scope; it lands on the row as Failed.
-                entry.status = ForwardStatus.Failed(e.message ?: getString(Res.string.ptail_forward_raise_failed))
+                // The library text carries addresses/internals, so it never reaches the UI.
+                entry.status = ForwardStatus.Failed(ForwardFailure.RaiseFailed)
             }
         }
     }

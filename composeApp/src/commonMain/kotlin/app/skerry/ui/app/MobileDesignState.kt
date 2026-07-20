@@ -26,11 +26,12 @@ import app.skerry.ui.terminal.TerminalThemes
  * No Files tab: SFTP opens as a push screen ([MobileRoute.Files]) from a host card's SFTP button —
  * a separate root tab would duplicate the terminal.
  */
-enum class MobileTab(val icon: String, val label: String) {
-    Hosts("dns", "Hosts"),
-    Snippets("code_blocks", "Snippets"),
-    Vault("vpn_key", "Vault"),
-    More("more_horiz", "More"),
+// Labels are not part of the enum: they are localized in the tab bar (nav_tab_* resources).
+enum class MobileTab(val icon: String) {
+    Hosts("dns"),
+    Snippets("code_blocks"),
+    Vault("vpn_key"),
+    More("more_horiz"),
 }
 
 /**

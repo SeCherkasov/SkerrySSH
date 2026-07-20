@@ -12,7 +12,6 @@
     <string name="settings_revoke">Revoke</string>
     <string name="settings_change">Change</string>
     <string name="settings_manage">Manage</string>
-    <string name="settings_on">On</string>
 
     <!-- AI section -->
     <string name="settings_ai_title">AI</string>
@@ -50,7 +49,19 @@
     <string name="settings_ai_local_cancel">Cancel</string>
     <string name="settings_ai_local_delete">Delete</string>
     <string name="settings_ai_local_retry">Retry</string>
+    <string name="settings_ai_local_error_network">Network error — the download will resume from where it stopped.</string>
+    <string name="settings_ai_local_error_integrity">The downloaded file failed verification. Try again.</string>
+    <string name="settings_ai_local_error_unknown">Model download failed. Try again.</string>
     <string name="settings_ai_prompt_placeholder_needs_model">Download the on-device model first</string>
+
+    <!-- AI request failures (quick chat and the terminal AI bar) -->
+    <string name="settings_ai_error_unauthorized">Invalid API key — check it in AI settings.</string>
+    <string name="settings_ai_error_rate_limited">Rate limited by the provider. Try again shortly.</string>
+    <string name="settings_ai_error_network">Network error reaching the AI provider.</string>
+    <string name="settings_ai_error_invalid_request">The provider rejected the request (check model/params).</string>
+    <string name="settings_ai_error_protocol">Unexpected response from the AI provider.</string>
+    <string name="settings_ai_error_unknown">AI request failed. Try again.</string>
+    <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">Sanitize secrets before sending</string>
     <string name="settings_ai_sanitize_desc">Strip obvious passwords, tokens and keys from prompts before they reach external providers.</string>
     <string name="settings_ai_preview">Preview prompt before sending</string>
@@ -119,7 +130,6 @@
     <string name="settings_autolock_30m">After 30 minutes</string>
     <string name="settings_autolock_never">Never</string>
     <string name="settings_security_2fa">Two-factor authentication</string>
-    <string name="settings_enabled">● enabled</string>
     <string name="settings_security_2fa_desc">TOTP via an authenticator app.</string>
     <string name="settings_recent_security_events">RECENT SECURITY EVENTS</string>
     <string name="settings_security_no_events">No security events yet.</string>
@@ -129,6 +139,8 @@
     <string name="settings_event_biometric_disabled">Biometric unlock disabled</string>
     <string name="settings_event_unlocked_biometric">Unlocked with biometrics</string>
     <string name="settings_event_device_paired">New device paired</string>
+    <string name="settings_event_with_detail">%1$s: %2$s</string>
+    <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">today %1$s</string>
     <string name="settings_time_yesterday">yesterday %1$s</string>
     <string name="settings_time_days_ago">%1$d days ago</string>
@@ -140,7 +152,6 @@
     <string name="settings_change_pw_confirm">Confirm new password</string>
     <string name="settings_change_pw_submit">Change password</string>
     <string name="settings_change_pw_err_wrong">Current password is incorrect.</string>
-    <string name="settings_change_pw_ok">Master password changed.</string>
 
     <!-- Keyboard section -->
     <string name="settings_keyboard_title">Keyboard</string>

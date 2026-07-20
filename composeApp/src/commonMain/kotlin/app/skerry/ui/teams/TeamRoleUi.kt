@@ -34,6 +34,7 @@ import app.skerry.ui.generated.resources.lib_teams_event_invite
 import app.skerry.ui.generated.resources.lib_teams_event_remove
 import app.skerry.ui.generated.resources.lib_teams_event_role_change
 import app.skerry.ui.generated.resources.lib_teams_event_share
+import app.skerry.ui.generated.resources.lib_teams_event_unknown
 import app.skerry.ui.generated.resources.lib_teams_history_empty
 import app.skerry.ui.generated.resources.lib_teams_history_title
 import app.skerry.ui.generated.resources.lib_teams_role_admin
@@ -70,7 +71,7 @@ internal fun roleBadgeColors(role: TeamRole): Pair<Color, Color> = when (role) {
     TeamRole.VIEWER -> D.dim to Color(0x0DFFFFFF)
 }
 
-/** Localized audit event summary; unknown events shown verbatim. */
+/** Localized audit event summary; an unknown code goes into a localized fallback as a detail. */
 @Composable
 internal fun teamEventLabel(event: String): String = when (event) {
     "team.create" -> stringResource(Res.string.lib_teams_event_create)
@@ -80,7 +81,7 @@ internal fun teamEventLabel(event: String): String = when (event) {
     "team.role_change" -> stringResource(Res.string.lib_teams_event_role_change)
     "team.push" -> stringResource(Res.string.lib_teams_event_share)
     "team.delete" -> stringResource(Res.string.lib_teams_event_delete)
-    else -> event
+    else -> stringResource(Res.string.lib_teams_event_unknown, event)
 }
 
 /** Member role/status badge (shared visual language for desktop and mobile). */

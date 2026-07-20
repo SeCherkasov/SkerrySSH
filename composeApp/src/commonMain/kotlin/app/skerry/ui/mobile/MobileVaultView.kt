@@ -65,6 +65,8 @@ import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
 import app.skerry.ui.generated.resources.vault_subtitle_password
 import app.skerry.ui.generated.resources.vault_subtitle_private_key
 import app.skerry.ui.generated.resources.vault_title
+import app.skerry.ui.generated.resources.vtail_meta_fingerprint
+import app.skerry.ui.generated.resources.vtail_meta_principals
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -392,11 +394,15 @@ private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: Fon
             }
             val meta = when (credential.secret) {
                 is CredentialSecret.PrivateKey ->
-                    if (keyInfo != null) "${shortFingerprint(keyInfo.fingerprintSha256)} · $usedBy" else usedBy
+                    if (keyInfo != null) {
+                        stringResource(Res.string.vtail_meta_fingerprint, shortFingerprint(keyInfo.fingerprintSha256), usedBy)
+                    } else {
+                        usedBy
+                    }
                 is CredentialSecret.Certificate -> when {
                     certInfo == null -> stringResource(Res.string.vault_meta_certificate, usedBy)
                     certInfo.principals.isEmpty() -> stringResource(Res.string.vault_meta_any_principal, usedBy)
-                    else -> "${certInfo.principals.joinToString(", ")} · $usedBy"
+                    else -> stringResource(Res.string.vtail_meta_principals, certInfo.principals.joinToString(", "), usedBy)
                 }
                 is CredentialSecret.Password -> stringResource(Res.string.vault_meta_password, usedBy)
             }

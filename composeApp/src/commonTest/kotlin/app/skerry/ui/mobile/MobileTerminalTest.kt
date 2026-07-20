@@ -4,6 +4,9 @@ import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.forward.RateParts
+import app.skerry.ui.forward.RateUnit
+import app.skerry.ui.forward.rateParts
 import app.skerry.ui.terminal.TerminalScreenState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -19,7 +22,7 @@ import app.skerry.ui.terminal.arrowSequence
 /** Pure logic for the mobile terminal screen: status line, Connect decision, sticky-ctrl. */
 class MobileTerminalTest {
 
-    private fun connected(): ConnectionUiState.Connected {
+    private fun screen(): TerminalScreenState {
         val session = object : TerminalSession {
             override val state: StateFlow<TerminalState> = MutableStateFlow(TerminalState.Open)
             override val output: Flow<ByteArray> = emptyFlow()
@@ -27,18 +30,26 @@ class MobileTerminalTest {
             override suspend fun resize(size: PtySize) {}
             override suspend fun close() {}
         }
-        return ConnectionUiState.Connected(TerminalScreenState(session, CoroutineScope(Job())))
+        return TerminalScreenState(session, CoroutineScope(Job()))
     }
+
+    private fun connected(): ConnectionUiState.Connected = ConnectionUiState.Connected(screen())
+
+    private fun disconnected(cleanExit: Boolean) =
+        ConnectionUiState.Disconnected(screen(), reconnecting = false, attempt = 0, cleanExit = cleanExit)
 
     // Header status line
 
     @Test
-    fun status_text_reflects_connection_state() {
-        assertEquals("connected", mobileTerminalStatusText(connected()))
-        assertEquals("connecting…", mobileTerminalStatusText(ConnectionUiState.Connecting))
-        assertEquals("disconnected", mobileTerminalStatusText(ConnectionUiState.Error("boom")))
-        assertEquals("no session", mobileTerminalStatusText(ConnectionUiState.Form))
-        assertEquals("no session", mobileTerminalStatusText(null))
+    fun status_reflects_connection_state() {
+        assertEquals(MobileTerminalStatus.Connected, mobileTerminalStatus(connected()))
+        assertEquals(MobileTerminalStatus.Connecting, mobileTerminalStatus(ConnectionUiState.Connecting))
+        assertEquals(MobileTerminalStatus.Disconnected, mobileTerminalStatus(ConnectionUiState.Error("boom")))
+        assertEquals(MobileTerminalStatus.NoSession, mobileTerminalStatus(ConnectionUiState.Form))
+        assertEquals(MobileTerminalStatus.NoSession, mobileTerminalStatus(null))
+        // Clean shell exit reads as "closed", a transport drop as "disconnected".
+        assertEquals(MobileTerminalStatus.Closed, mobileTerminalStatus(disconnected(cleanExit = true)))
+        assertEquals(MobileTerminalStatus.Disconnected, mobileTerminalStatus(disconnected(cleanExit = false)))
     }
 
     // Header status-bar metrics (RTT/throughput).
@@ -51,11 +62,10 @@ class MobileTerminalTest {
     }
 
     @Test
-    fun rate_label_humanizes_or_dash_before_first_sample() {
-        // Humanized B/s, "—" until a sample exists.
-        assertEquals("0 B/s", mobileRateLabel(0))
-        assertEquals("1 KB/s", mobileRateLabel(1024))
-        assertEquals("—", mobileRateLabel(null))
+    fun rate_parts_scale_the_header_throughput() {
+        // mobileRateLabel itself is @Composable (localized unit template), so the split is asserted here.
+        assertEquals(RateParts(RateUnit.Bytes, 0), rateParts(0))
+        assertEquals(RateParts(RateUnit.KB, 1), rateParts(1024))
     }
 
     // Decision on Connect tap

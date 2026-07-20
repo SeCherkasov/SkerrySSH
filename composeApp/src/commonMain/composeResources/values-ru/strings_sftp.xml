@@ -59,6 +59,6 @@
     <!-- Подтверждение перезаписи: в приёмнике уже есть объекты с такими именами -->
     <string name="sftp_overwrite_q">Перезаписать существующие?</string>
     <string name="sftp_overwrite_one">%1$s уже есть в каталоге-приёмнике.</string>
-    <string name="sftp_overwrite_many">%1$d объектов уже есть в каталоге-приёмнике — они будут перезаписаны.</string>
+    <string name="sftp_overwrite_many">В каталоге-приёмнике уже есть объектов: %1$d — они будут перезаписаны.</string>
     <string name="sftp_overwrite">Перезаписать</string>
 </resources>

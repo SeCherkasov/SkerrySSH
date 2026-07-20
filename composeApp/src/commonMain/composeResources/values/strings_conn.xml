@@ -84,4 +84,19 @@
     <string name="conn_test_connected">Connected</string>
     <string name="conn_test_rtt_ms">%1$d ms</string>
     <string name="conn_test_incomplete">Enter host, username and credentials to test</string>
+
+    <string name="conn_test_err_auth">Authentication failed</string>
+    <string name="conn_test_err_host_key">Host key rejected</string>
+    <string name="conn_test_err_connection">Connection failed</string>
+    <string name="conn_error_failed">Couldn't connect</string>
+    <string name="conn_error_failed_detail">Couldn't connect (%1$s)</string>
+
+    <string name="conn_tunnel_error_host_missing">Host not found</string>
+    <string name="conn_tunnel_error_no_credential">No saved credential</string>
+
+    <string name="conn_serial_err_unsupported">Serial ports are not available on this device.</string>
+    <string name="conn_serial_err_not_found">Port %1$s not found. Reconnect the device or pick another port.</string>
+    <string name="conn_serial_err_permission">Access to port %1$s was denied.</string>
+    <string name="conn_serial_err_open">Port %1$s could not be opened — it may be in use by another program.</string>
+    <string name="conn_serial_err_configure">Port %1$s rejected the selected speed or frame format.</string>
 </resources>

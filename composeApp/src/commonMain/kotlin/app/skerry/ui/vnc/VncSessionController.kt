@@ -27,8 +27,11 @@ sealed interface VncUiState {
     /** Session is live; [screen] is the framebuffer + input bridge. */
     data class Connected(val screen: VncScreenState) : VncUiState
 
-    /** Connect failed; [message] is shown to the user (blank → the UI shows a generic localized "failed to connect"). */
-    data class Error(val message: String) : VncUiState
+    /**
+     * Connect failed. [failure] is the localization contract — the raw [detail] (wire diagnostics,
+     * always English) is for logs, never the message shown on its own.
+     */
+    data class Error(val failure: VncFailure, val detail: String = "") : VncUiState
 
     /**
      * The session closed not on our initiative (server drop / EOF). [screen] is the frozen last
@@ -90,8 +93,8 @@ class VncSessionController(
                 throw e
             } catch (e: Exception) {
                 releaseSession()
-                // Blank message → the UI substitutes a localized generic (controllers can't resolve resources).
-                uiState = VncUiState.Error(e.message ?: "")
+                // Typed reason for the UI; the wire text stays as diagnostics only.
+                uiState = VncUiState.Error(vncFailureOf(e), e.message.orEmpty())
             }
         }
     }

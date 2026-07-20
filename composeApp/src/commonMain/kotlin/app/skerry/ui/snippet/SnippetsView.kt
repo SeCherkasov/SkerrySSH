@@ -84,6 +84,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
@@ -523,7 +524,7 @@ private fun MockSnippetRow(snippet: MockSnippet, mono: FontFamily) {
 
 @Composable
 private fun FieldLabelSnip(text: String) {
-    Txt(text.uppercase(), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
+    Txt(labelUppercase(text), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
 }
 
 /** Single-line editable field ([SnipInput] style plus placeholder and input). */

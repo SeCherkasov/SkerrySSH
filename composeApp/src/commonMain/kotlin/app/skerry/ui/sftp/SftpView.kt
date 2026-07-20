@@ -67,8 +67,11 @@ import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.PathJumpField
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.TransferState
+import app.skerry.ui.files.fileBrowserFailureText
 import app.skerry.ui.files.platformLocalBrowser
+import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_file_fallback
 import app.skerry.ui.generated.resources.ftail_fkey_copy
 import app.skerry.ui.generated.resources.ftail_fkey_delete
 import app.skerry.ui.generated.resources.ftail_fkey_edit
@@ -79,6 +82,8 @@ import app.skerry.ui.generated.resources.ftail_fkey_refresh
 import app.skerry.ui.generated.resources.ftail_fkey_rename
 import app.skerry.ui.generated.resources.ftail_fkey_view
 import app.skerry.ui.generated.resources.ftail_open_failed
+import app.skerry.ui.generated.resources.ftail_transfer_counter
+import app.skerry.ui.generated.resources.ftail_transfer_progress
 import app.skerry.ui.generated.resources.sftp_already_exists
 import app.skerry.ui.generated.resources.sftp_cancel
 import app.skerry.ui.generated.resources.sftp_copy
@@ -128,6 +133,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSftpPrefs
 import app.skerry.ui.design.MeterBar
@@ -241,8 +247,9 @@ private fun LiveSftpView(
             coord = controller.openTransferCoordinator(platformLocalBrowser(), subtitle)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            openError = e.message ?: openFailedMsg
+        } catch (_: Exception) {
+            // sshj/transport text carries addresses and internals — only the localized reason is shown.
+            openError = openFailedMsg
         }
     }
 
@@ -623,7 +630,7 @@ private fun LivePane(
         ) {
             Sym(icon, size = 16.sp, color = if (active) iconColor else D.faint)
             Txt(
-                label.uppercase(),
+                labelUppercase(label),
                 color = if (active) D.cyanBright else D.faint,
                 size = 11.sp,
                 weight = FontWeight.SemiBold,
@@ -642,7 +649,8 @@ private fun LivePane(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val st = pane.state) {
                 FilePaneState.Loading -> PaneNotice("sync", stringResource(Res.string.sftp_loading), null, D.faint)
-                is FilePaneState.Error -> PaneNotice("error", stringResource(Res.string.sftp_error), st.message, D.sunset)
+                is FilePaneState.Error ->
+                    PaneNotice("error", stringResource(Res.string.sftp_error), fileBrowserFailureText(st.failure), D.sunset)
                 is FilePaneState.Loaded -> LivePaneList(
                     pane = pane,
                     entries = st.entries,
@@ -926,12 +934,16 @@ private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismi
             ) {
                 val up = transfer.direction == TransferDirection.Upload
                 Sym(if (up) "upload" else "download", size = 16.sp, color = D.cyan)
-                val counter = if (transfer.fileCount > 1) " (${transfer.fileIndex}/${transfer.fileCount})" else ""
-                Txt(transfer.name + counter, color = D.textBright, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val title = if (transfer.fileCount > 1) {
+                    stringResource(Res.string.ftail_transfer_counter, transfer.name, transfer.fileIndex, transfer.fileCount)
+                } else {
+                    transfer.name
+                }
+                Txt(title, color = D.textBright, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val fraction = if (transfer.total > 0) transfer.transferred.toFloat() / transfer.total else 0f
                 MeterBar(fraction, D.cyan, Modifier.weight(1f))
                 val tail = if (transfer.total > 0) {
-                    "${humanSize(transfer.transferred)} / ${humanSize(transfer.total)}"
+                    stringResource(Res.string.ftail_transfer_progress, humanSize(transfer.transferred), humanSize(transfer.total))
                 } else {
                     humanSize(transfer.transferred)
                 }
@@ -948,7 +960,11 @@ private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismi
             ) {
                 Sym("error", size = 16.sp, color = D.sunset)
                 Txt(
-                    stringResource(Res.string.sftp_transfer_error, transfer.name, transfer.message),
+                    stringResource(
+                        Res.string.sftp_transfer_error,
+                        transfer.name.ifBlank { stringResource(Res.string.ftail_file_fallback) },
+                        transferFailureText(transfer.failure),
+                    ),
                     color = D.sunset,
                     size = 11.5.sp,
                     maxLines = 2,

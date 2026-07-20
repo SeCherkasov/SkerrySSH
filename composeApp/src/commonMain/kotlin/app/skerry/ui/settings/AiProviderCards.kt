@@ -28,12 +28,14 @@ import app.skerry.shared.ai.local.LocalModelCatalog
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.ai.LocalModelController
 import app.skerry.ui.ai.LocalModelStatus
+import app.skerry.ui.ai.localModelFailureMessage
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_transfer_progress
 import app.skerry.ui.generated.resources.settings_ai_badge_private
 import app.skerry.ui.generated.resources.settings_ai_default_provider
 import app.skerry.ui.generated.resources.settings_ai_default_provider_desc
@@ -44,6 +46,7 @@ import app.skerry.ui.generated.resources.settings_ai_local_download
 import app.skerry.ui.generated.resources.settings_ai_local_ready
 import app.skerry.ui.generated.resources.settings_ai_local_retry
 import app.skerry.ui.generated.resources.settings_ai_local_verifying
+import app.skerry.ui.generated.resources.settings_ai_model_meta
 import app.skerry.ui.generated.resources.settings_ai_provider_byok
 import app.skerry.ui.generated.resources.settings_ai_provider_byok_desc
 import app.skerry.ui.generated.resources.settings_ai_provider_device
@@ -127,7 +130,7 @@ private fun LocalModelRow(ai: AiAssistantController, models: LocalModelControlle
             }
             Column(Modifier.weight(1f)) {
                 Txt(model.displayName, color = D.text, size = 12.5.sp, weight = FontWeight.Medium)
-                Txt("${humanSize(model.sizeBytes)} · ${model.license}", color = D.dim, size = 10.5.sp, modifier = Modifier.padding(top = 1.dp))
+                Txt(stringResource(Res.string.settings_ai_model_meta, humanSize(model.sizeBytes), model.license), color = D.dim, size = 10.5.sp, modifier = Modifier.padding(top = 1.dp))
             }
             ModelActions(models, model, status)
         }
@@ -139,13 +142,13 @@ private fun LocalModelRow(ai: AiAssistantController, models: LocalModelControlle
                 Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(D.cyan))
             }
             Txt(
-                "${humanSize(status.downloadedBytes)} / ${humanSize(status.totalBytes)}",
+                stringResource(Res.string.ftail_transfer_progress, humanSize(status.downloadedBytes), humanSize(status.totalBytes)),
                 color = D.dim, size = 10.sp,
                 modifier = Modifier.align(Alignment.End).padding(top = 4.dp),
             )
         }
         if (status is LocalModelStatus.Failed) {
-            Txt(status.message, color = D.storm, size = 10.5.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 6.dp))
+            Txt(localModelFailureMessage(status.failure), color = D.storm, size = 10.5.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
