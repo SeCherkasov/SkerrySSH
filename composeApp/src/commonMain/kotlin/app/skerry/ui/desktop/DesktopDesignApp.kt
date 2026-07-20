@@ -73,6 +73,7 @@ import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
@@ -99,6 +100,7 @@ import androidx.compose.runtime.collectAsState
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncIndicatorLevel
 import app.skerry.ui.sync.syncIndicatorLocalized
+import app.skerry.ui.terminal.CommandPalette
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -160,6 +162,7 @@ import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSftpPrefs
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
@@ -341,10 +344,11 @@ fun DesktopDesignApp(
     // built from the live transport — one shell per tab, like in [app.skerry.ui.mobile.MobileApp].
     // We close our own graph on dispose; an externally-owned one belongs to the caller and is left alone.
     val scope = rememberCoroutineScope()
+    // Per-host terminal command history persistence (autocomplete + the command palette) on top of
+    // the encrypted vault. Hoisted out of the sessions factory: the palette reads it directly.
+    val termHistory = remember(vault) { vault?.let { VaultTerminalHistoryStore(it) } }
     val liveSessions = sessions ?: remember(transport, vncTransport, scope, vault) {
         transport?.let { t ->
-            // Per-host terminal command history persistence (for autocomplete) on top of the encrypted vault.
-            val termHistory = vault?.let { VaultTerminalHistoryStore(it) }
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
@@ -430,6 +434,7 @@ fun DesktopDesignApp(
         LocalTestTransport provides (testTransport ?: transport),
         LocalTunnels provides tunnels,
         LocalSnippets provides snippets,
+        LocalTerminalHistory provides termHistory,
         LocalFeatures provides features,
         LocalSftpPrefs provides sftpPrefs,
         // Terminal appearance from settings: font + size, read by [app.skerry.ui.terminal.TerminalScreen].
@@ -492,6 +497,7 @@ private fun DesktopChrome(
     customGroupsProvider: () -> List<String>,
     windowChrome: WindowChrome? = null,
 ) {
+    val termHistory = LocalTerminalHistory.current
     // Keychain secrets live in the open vault — behind the master-password gate we first fire
     // [onVaultUnlocked], then reload (secrets + synced empty folders).
     LaunchedEffect(credentials) {
@@ -626,7 +632,7 @@ private fun DesktopChrome(
         val onRootKey = remember(snippets, sessions, state) {
             { event: KeyEvent ->
                 if (event.type != KeyEventType.KeyDown) false
-                else if (state.appOverlay != null || state.modalOpen || state.settingsOpen) false
+                else if (state.appOverlay != null || state.modalOpen || state.settingsOpen || state.commandPaletteOpen) false
                 else {
                     val shortcut = matchDesktopShortcut(
                         event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
@@ -647,6 +653,18 @@ private fun DesktopChrome(
                 }
                 HLine()
                 StatusBar()
+            }
+            if (state.commandPaletteOpen) {
+                val liveTerminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+                CommandPalette(
+                    history = termHistory,
+                    currentKey = sessions?.active?.controller?.historyKey,
+                    onPick = { command ->
+                        liveTerminal?.applyHistoryCommand(command)
+                        state.closeCommandPalette()
+                    },
+                    onDismiss = state::closeCommandPalette,
+                )
             }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost)
             if (state.settingsOpen) SettingsPanel(state)
@@ -812,6 +830,12 @@ private fun runDesktopShortcut(
             state.showView(DesktopView.Sftp)
         }
         DesktopShortcut.Lock -> onLock()
+        // Only over a live terminal: the palette inserts into it, so with nothing to insert into the
+        // key falls through (to the snippet hotkey) instead of opening a dead-end overlay.
+        DesktopShortcut.CommandPalette -> {
+            if (sessions?.active?.controller?.uiState !is ConnectionUiState.Connected) return false
+            state.openCommandPalette()
+        }
         DesktopShortcut.FocusAiBar -> state.requestAiBarFocus()
     }
     return true

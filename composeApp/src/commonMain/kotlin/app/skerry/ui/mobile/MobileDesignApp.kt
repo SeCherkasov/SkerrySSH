@@ -69,6 +69,7 @@ import app.skerry.ui.app.LocalOpenSftp
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
@@ -124,10 +125,11 @@ fun MobileDesignApp(
     // the live transport — one shell per session.
     // Dispose our own graph; an externally supplied one is the caller's, leave it alone.
     val scope = rememberCoroutineScope()
+    // Per-host terminal command history over the encrypted vault: autocomplete writes it, the
+    // command palette reads every host's. Hoisted out of the sessions factory so both can see it.
+    val termHistory = remember(deps.vault) { deps.vault?.let { VaultTerminalHistoryStore(it) } }
     val liveSessions = sessions ?: remember(deps.transport, scope, deps.vault) {
         deps.transport?.let { t ->
-            // Per-host terminal command history persistence (for autocomplete) over the encrypted vault.
-            val termHistory = deps.vault?.let { VaultTerminalHistoryStore(it) }
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
@@ -256,6 +258,7 @@ fun MobileDesignApp(
         LocalTunnels provides deps.tunnels,
         // Saved snippets — Snippets tab (command library + run into the active terminal).
         LocalSnippets provides deps.snippets,
+        LocalTerminalHistory provides termHistory,
         // Vault + biometrics — for the More screen's "unlock with biometrics" toggle (enable/reconfigure).
         LocalVault provides deps.vault,
         LocalVaultBiometrics provides deps.biometrics,

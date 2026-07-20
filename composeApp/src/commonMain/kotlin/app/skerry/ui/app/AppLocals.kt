@@ -5,6 +5,7 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.SecurityLog
@@ -140,6 +141,13 @@ val LocalTunnels: ProvidableCompositionLocal<TunnelManager?> = staticComposition
  * Supplied by [DesktopDesignApp] (snippets are plain config, not vault-gated).
  */
 val LocalSnippets: ProvidableCompositionLocal<SnippetManager?> = staticCompositionLocalOf { null }
+
+/**
+ * Per-host terminal command history over the encrypted vault: the sessions graph writes it for
+ * autocomplete, the command palette reads every host's at once. `null` — mock path/preview without a
+ * vault, where the palette has nothing to show.
+ */
+val LocalTerminalHistory: ProvidableCompositionLocal<TerminalHistoryStore?> = staticCompositionLocalOf { null }
 
 /**
  * Snippet "Run on host" action: open/reuse a session to [Host] and run the given command right after
