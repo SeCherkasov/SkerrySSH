@@ -319,7 +319,7 @@ class VaultGateControllerTest {
     fun `disableBiometric clears the artifact and biometricEnabled`() = runTest {
         // A pre-seeded artifact makes biometrics "enabled" at start, without going through enable.
         val artifacts = FakeArtifacts().apply {
-            write(BioArtifact(formatVersion = 2, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
+            write(BioArtifact(formatVersion = 1, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
         }
         val controller = gate(FakeVault(exists = true), biometrics(BiometricAvailability.Available, artifacts))
         assertTrue(controller.biometricEnabled)
@@ -586,7 +586,7 @@ class VaultGateControllerTest {
     fun `disableBiometric records a BiometricDisabled event when it was enabled`() {
         val log = RecordingSecurityLog()
         val artifacts = FakeArtifacts().apply {
-            write(BioArtifact(formatVersion = 2, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
+            write(BioArtifact(formatVersion = 1, alias = "test-device", deviceId = "test-device", wrappedBio = ByteArray(16)))
         }
         val controller = gate(
             FakeVault(exists = true),
@@ -656,7 +656,7 @@ private fun biometricsForUnlock(
     val artifacts = FakeArtifacts().apply {
         write(
             BioArtifact(
-                formatVersion = 2,
+                formatVersion = 1,
                 alias = "skerry.vault.bio.test-device",
                 deviceId = "test-device",
                 wrappedBio = ByteArray(16),
