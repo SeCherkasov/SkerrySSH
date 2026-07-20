@@ -1,0 +1,87 @@
+<resources>
+    <string name="conn_title_new">新建连接</string>
+    <string name="conn_title_edit">编辑连接</string>
+    <string name="conn_subtitle_new">配置一个新的连接。凭据使用你的主密码加密。</string>
+    <string name="conn_subtitle_edit">更新此连接的配置。凭据使用主密码加密。</string>
+    <string name="conn_subtitle_mobile">凭据使用主密码加密，仅存储在此设备上。</string>
+
+    <string name="conn_field_name">名称</string>
+    <string name="conn_field_protocol">协议</string>
+    <string name="conn_field_host_address">主机地址</string>
+    <string name="conn_field_device">设备</string>
+    <string name="conn_field_port">端口</string>
+    <string name="conn_field_baud">波特率</string>
+    <string name="conn_field_username">用户名</string>
+    <string name="conn_field_authentication">认证方式</string>
+    <string name="conn_field_group">分组</string>
+    <string name="conn_field_tags">标签</string>
+    <string name="conn_field_jump_host">跳板主机</string>
+    <string name="conn_field_keep_alive">保活</string>
+    <string name="conn_field_ai_policy">此连接的 AI 策略</string>
+    <string name="conn_field_ai_policy_short">AI 策略</string>
+
+    <string name="conn_policy_strict_title">严格 — 生产环境安全</string>
+    <string name="conn_policy_strict_desc">此主机禁用云端 AI；不会向任何提供商发送数据。仅使用本地设备端模型。</string>
+    <string name="conn_policy_strict_short">严格</string>
+    <string name="conn_policy_balanced_title">均衡 — 允许云端</string>
+    <string name="conn_policy_balanced_desc">启用云端 AI。每个提示在发送前会剥离密钥信息。</string>
+    <string name="conn_policy_balanced_short">均衡</string>
+    <string name="conn_policy_permissive_title">宽松 — 开发/家庭实验室</string>
+    <string name="conn_policy_permissive_desc">启用云端 AI。提示原样发送，不剥离密钥。</string>
+    <string name="conn_policy_permissive_short">宽松</string>
+    <string name="conn_policy_off_title">关闭 — 无 AI</string>
+    <string name="conn_policy_off_desc">为此连接禁用 AI 功能。</string>
+    <string name="conn_policy_off_short">关闭</string>
+
+    <string name="conn_protocol_ssh">SSH</string>
+    <string name="conn_protocol_mosh">Mosh</string>
+    <string name="conn_protocol_telnet">Telnet</string>
+    <string name="conn_protocol_serial">串口</string>
+    <string name="conn_protocol_vnc">VNC</string>
+    <string name="conn_telnet_plaintext_warning">Telnet 未加密 — 凭据和会话数据以明文传输。除非在可信网络中，否则请使用 SSH。</string>
+    <string name="conn_vnc_plaintext_warning">VNC (RFB) 未加密 — 屏幕画面和输入以明文传输。请在可信网络中使用或通过 SSH 隧道连接。</string>
+
+    <string name="conn_jump_none">无 — 直连</string>
+    <string name="conn_jump_error_title">跳板主机不可用</string>
+    <string name="conn_jump_error_missing">此配置引用的跳板主机已不存在。请在配置设置中选择另一个。</string>
+    <string name="conn_jump_error_not_ssh">引用的跳板主机不是 SSH 配置，无法建立隧道。</string>
+    <string name="conn_jump_error_no_credential">跳板主机没有保存的密钥。请先在其配置中添加密码或密钥。</string>
+    <string name="conn_jump_error_cycle">跳板主机引用形成循环。请在配置设置中修复链路。</string>
+    <string name="conn_jump_error_ok">确定</string>
+    <string name="conn_keepalive_off">关闭</string>
+    <string name="conn_keepalive_every">每 %1$d 秒</string>
+
+    <string name="conn_cancel">取消</string>
+    <string name="conn_test">测试</string>
+    <string name="conn_save">保存</string>
+    <string name="conn_save_changes">保存更改</string>
+    <string name="conn_save_connection">保存连接</string>
+    <string name="conn_create">创建</string>
+    <string name="conn_footer_encrypted">已加密 · 仅存储在此设备</string>
+
+    <string name="conn_auth_ask">每次询问</string>
+    <string name="conn_auth_password">密码</string>
+    <string name="conn_auth_private_key">私钥</string>
+    <string name="conn_auth_select_credential">选择凭据…</string>
+    <string name="conn_auth_existing_saved">%1$s（已保存）</string>
+    <string name="conn_auth_ask_desc">连接时询问密码</string>
+    <string name="conn_auth_password_option">密码…</string>
+    <string name="conn_auth_password_desc">在保险库中存储密码</string>
+    <string name="conn_auth_key_option">粘贴私钥…</string>
+    <string name="conn_auth_key_desc">在保险库中存储 SSH 密钥</string>
+    <string name="conn_auth_password_placeholder">要存储的密码</string>
+    <string name="conn_auth_passphrase_placeholder">密钥口令（可选）</string>
+
+    <string name="conn_group_none">无分组</string>
+    <string name="conn_group_new">新建分组…</string>
+    <string name="conn_group_new_title">新建分组</string>
+    <string name="conn_group_rename_title">重命名分组</string>
+    <string name="conn_group_rename_hint">此分组中的主机将随新名称移动。</string>
+    <string name="conn_group_delete">删除分组</string>
+    <string name="conn_tag_add_placeholder">添加标签…</string>
+
+    <string name="conn_test_checking">正在测试连接…</string>
+    <string name="conn_test_connected">已连接</string>
+    <string name="conn_test_rtt_ms">%1$d 毫秒</string>
+    <string name="conn_test_incomplete">请输入主机、用户名和凭据以进行测试</string>
+</resources>

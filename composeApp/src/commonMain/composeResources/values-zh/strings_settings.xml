@@ -1,0 +1,177 @@
+<resources>
+    <!-- 设置面板。键以 settings_ 为前缀以避免冲突 -->
+
+    <!-- 导航栏 -->
+    <string name="settings_nav_header">设置</string>
+
+    <!-- 共享操作标签 -->
+    <string name="settings_save">保存</string>
+    <string name="settings_clear">清除</string>
+    <string name="settings_confirm">确认</string>
+    <string name="settings_cancel">取消</string>
+    <string name="settings_revoke">撤销</string>
+    <string name="settings_change">更改</string>
+    <string name="settings_manage">管理</string>
+    <string name="settings_on">开</string>
+
+    <!-- AI 部分 -->
+    <string name="settings_ai_title">AI</string>
+    <string name="settings_ai_live_subtitle">选择 AI 运行位置：本设备、通过你自己的 OpenAI 兼容密钥 (BYOK)——或完全关闭。密钥加密存储在保险库中，仅发送到你配置的提供商。</string>
+    <string name="settings_ai_field_api_key">OPENAI API 密钥</string>
+    <string name="settings_ai_field_model">模型</string>
+    <string name="settings_ai_field_endpoint">端点</string>
+    <string name="settings_ai_placeholder_api_key">sk-…</string>
+    <string name="settings_ai_placeholder_model">gpt-4o-mini</string>
+    <string name="settings_ai_placeholder_endpoint">https://api.openai.com/v1</string>
+    <string name="settings_ai_key_saved">密钥已保存</string>
+    <string name="settings_ai_not_configured">尚未配置</string>
+    <string name="settings_ai_quick_chat">快速聊天</string>
+    <string name="settings_ai_quick_chat_desc">向助手提问以验证连接。</string>
+    <string name="settings_ai_prompt_placeholder_ready">询问 ssh、scp、隧道相关问题…</string>
+    <string name="settings_ai_prompt_placeholder_needs_key">请先保存 API 密钥</string>
+    <string name="settings_ai_sending">发送中…</string>
+    <string name="settings_ai_ask">提问</string>
+    <string name="settings_ai_mock_subtitle">配置 AI 运行位置。默认在本设备——你的命令永不离开 Skerry。每个连接可单独覆盖这些设置。</string>
+    <string name="settings_ai_default_provider">默认 AI 提供商</string>
+    <string name="settings_ai_default_provider_desc">用于无特定覆盖的连接。</string>
+    <string name="settings_ai_provider_device">本设备</string>
+    <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 GB · 就绪。数据永不离开你的设备。</string>
+    <string name="settings_ai_badge_private">私密</string>
+    <string name="settings_ai_provider_byok">我的 API 密钥 (BYOK)</string>
+    <string name="settings_ai_provider_byok_desc">使用你的 OpenAI、Anthropic 或 OpenRouter 密钥。你直接向提供商付费。</string>
+    <string name="settings_ai_provider_off">关闭——无 AI</string>
+    <string name="settings_ai_provider_off_desc">在所有地方禁用助手。不会发送任何数据。</string>
+    <string name="settings_ai_off_note">AI 已关闭：终端助手和快速聊天已隐藏。请在上述选择一个提供商以恢复。</string>
+    <!-- 本地模型卡片 -->
+    <string name="settings_ai_local_desc">完全离线运行助手。数据永不离开你的设备。</string>
+    <string name="settings_ai_local_ready">就绪</string>
+    <string name="settings_ai_local_verifying">验证中…</string>
+    <string name="settings_ai_local_download">下载</string>
+    <string name="settings_ai_local_cancel">取消</string>
+    <string name="settings_ai_local_delete">删除</string>
+    <string name="settings_ai_local_retry">重试</string>
+    <string name="settings_ai_prompt_placeholder_needs_model">请先下载本地模型</string>
+    <string name="settings_ai_sanitize">发送前清除敏感信息</string>
+    <string name="settings_ai_sanitize_desc">在发送到外部提供商前，从提示中移除明显的密码、令牌和密钥。</string>
+    <string name="settings_ai_preview">发送前预览提示</string>
+    <string name="settings_ai_preview_desc">显示发送给外部提供商的精确文本，高亮被清除的内容。可在传输前编辑或取消。</string>
+    <string name="settings_ai_confirm">运行 AI 建议前确认</string>
+    <string name="settings_ai_confirm_desc">每条 AI 建议的命令都需要手动点击确认。防止来自恶意服务器的提示注入。</string>
+
+    <!-- 终端部分 -->
+    <string name="settings_terminal_title">终端</string>
+    <string name="settings_terminal_subtitle">选择主题和字体；调整滚动缓冲和终端行为。</string>
+    <string name="settings_terminal_section_font">字体</string>
+    <string name="settings_terminal_section_behavior">行为</string>
+    <string name="settings_terminal_scrollback">滚动缓冲</string>
+    <string name="settings_terminal_scrollback_desc">每个会话保留的行数。</string>
+    <string name="settings_terminal_cursor_style">光标样式</string>
+    <string name="settings_terminal_cursor_block_blink">方块（闪烁）</string>
+    <string name="settings_terminal_cursor_block_steady">方块</string>
+    <string name="settings_terminal_cursor_underline_blink">下划线（闪烁）</string>
+    <string name="settings_terminal_cursor_underline_steady">下划线</string>
+    <string name="settings_terminal_cursor_bar_blink">竖线（闪烁）</string>
+    <string name="settings_terminal_cursor_bar_steady">竖线</string>
+    <string name="settings_terminal_show_title">在标签页上显示终端标题</string>
+    <string name="settings_terminal_show_title_desc">允许连接的终端程序重命名标签页（如运行中的程序名）。关闭——标签页始终显示保存的主机名。</string>
+    <string name="settings_terminal_clipboard_write">允许服务器写入剪贴板 (OSC 52)</string>
+    <string name="settings_terminal_clipboard_write_desc">允许连接的终端程序覆盖系统剪贴板（tmux/vim 的复制功能使用）。默认关闭——恶意主机可能将攻击者控制的文本插入你粘贴的内容中。</string>
+
+    <!-- 同步部分 -->
+    <string name="settings_disconnect">断开连接</string>
+    <string name="settings_reconnect">重新连接</string>
+    <string name="settings_set_up_sync">设置同步</string>
+    <string name="settings_linked_devices">已关联设备</string>
+    <string name="settings_loading_devices">加载设备列表…</string>
+    <string name="settings_devices_load_failed">无法加载设备列表。请尝试立即同步。</string>
+    <string name="settings_only_this_device">目前仅此设备。</string>
+    <string name="settings_device_sub_current">已关联 · 此设备</string>
+    <string name="settings_device_sub_other">已关联设备</string>
+    <string name="settings_this_device">● 此设备</string>
+    <string name="settings_link_device">关联设备</string>
+    <string name="settings_sync_title">同步</string>
+    <string name="settings_sync_subtitle">端到端加密跨设备同步。Skerry 永远不会看到你的明文数据。</string>
+    <string name="settings_sync_now">立即同步</string>
+    <string name="settings_what_syncs">同步内容</string>
+    <string name="settings_hosts_groups">主机和分组</string>
+    <string name="settings_snippets">片段</string>
+    <string name="settings_sync_connected">已连接</string>
+    <string name="settings_sync_pushed_pulled">本会话已推送 %1$d · 已拉取 %2$d</string>
+    <string name="settings_sync_syncing">同步中…</string>
+    <string name="settings_sync_syncing_desc">正在与同步服务器通信。</string>
+    <string name="settings_sync_error">同步错误</string>
+
+    <!-- 安全部分 -->
+    <string name="settings_security_title">安全</string>
+    <string name="settings_security_subtitle">主密码、自动锁定和双因素认证保护你的保险库。</string>
+    <string name="settings_security_master_password">主密码</string>
+    <string name="settings_security_master_password_desc">保护你的保险库。</string>
+    <string name="settings_security_pw_changed_today">今天已更改。</string>
+    <string name="settings_security_pw_changed_yesterday">昨天已更改。</string>
+    <string name="settings_security_pw_changed_days">上次更改于 %1$d 天前。</string>
+    <string name="settings_security_touch_id">使用 Touch ID 解锁</string>
+    <string name="settings_security_touch_id_desc">使用生物识别代替输入主密码。</string>
+    <string name="settings_security_auto_lock">自动锁定</string>
+    <string name="settings_security_auto_lock_desc">闲置后锁定 Skerry。</string>
+    <string name="settings_autolock_1m">1 分钟后</string>
+    <string name="settings_autolock_5m">5 分钟后</string>
+    <string name="settings_autolock_15m">15 分钟后</string>
+    <string name="settings_autolock_30m">30 分钟后</string>
+    <string name="settings_autolock_never">从不</string>
+    <string name="settings_security_2fa">双因素认证</string>
+    <string name="settings_enabled">● 已启用</string>
+    <string name="settings_security_2fa_desc">通过身份验证器应用使用 TOTP。</string>
+    <string name="settings_recent_security_events">最近安全事件</string>
+    <string name="settings_security_no_events">暂无安全事件。</string>
+    <string name="settings_event_vault_created">保险库已创建</string>
+    <string name="settings_event_password_changed">主密码已更改</string>
+    <string name="settings_event_biometric_enabled">生物识别解锁已启用</string>
+    <string name="settings_event_biometric_disabled">生物识别解锁已禁用</string>
+    <string name="settings_event_unlocked_biometric">通过生物识别解锁</string>
+    <string name="settings_event_device_paired">新设备已配对</string>
+    <string name="settings_time_today">今天 %1$s</string>
+    <string name="settings_time_yesterday">昨天 %1$s</string>
+    <string name="settings_time_days_ago">%1$d 天前</string>
+
+    <!-- 更改主密码对话框 -->
+    <string name="settings_change_pw_title">更改主密码</string>
+    <string name="settings_change_pw_current">当前密码</string>
+    <string name="settings_change_pw_new">新密码</string>
+    <string name="settings_change_pw_confirm">确认新密码</string>
+    <string name="settings_change_pw_submit">更改密码</string>
+    <string name="settings_change_pw_err_wrong">当前密码不正确。</string>
+    <string name="settings_change_pw_ok">主密码已更改。</string>
+
+    <!-- 键盘部分 -->
+    <string name="settings_keyboard_title">键盘</string>
+    <string name="settings_keyboard_subtitle">快捷键适配你的平台。终端快捷键在会话聚焦时生效。</string>
+    <string name="settings_kb_new_connection">新建连接</string>
+    <string name="settings_kb_command_palette">命令面板 / 搜索</string>
+    <string name="settings_kb_split_terminal">分割终端</string>
+    <string name="settings_kb_next_prev_tab">下一个 / 上一个标签页</string>
+    <string name="settings_kb_select_tab_number">按数字选择标签页</string>
+    <string name="settings_kb_focus_ai">聚焦 AI 栏</string>
+    <string name="settings_kb_open_sftp">打开 SFTP</string>
+    <string name="settings_kb_lock">锁定 Skerry</string>
+    <string name="settings_kb_accept_autocomplete">接受自动补全建议</string>
+    <string name="settings_kb_cycle_suggestions">循环切换建议</string>
+    <string name="settings_kb_search_history">搜索命令历史</string>
+    <string name="settings_kb_copy_selection">复制选中内容</string>
+    <string name="settings_kb_paste">粘贴</string>
+    <string name="settings_kb_global">全局</string>
+    <string name="settings_kb_terminal_group">终端和自动补全</string>
+    <string name="settings_badge_soon">即将推出</string>
+
+    <!-- 关于部分 -->
+    <string name="settings_about_version">版本 %1$s</string>
+    <string name="settings_about_tagline">一款隐私优先的 SSH 客户端。本地 AI、端到端加密同步，以及尊重你隐私的终端。</string>
+    <string name="settings_about_whats_new">更新日志</string>
+    <string name="settings_about_documentation">文档</string>
+    <string name="settings_about_licenses">开源许可</string>
+    <string name="settings_about_footer">开源之海 · © 2026 Skerry</string>
+    <string name="settings_about_check_updates">检查更新</string>
+    <string name="settings_about_check_updates_desc">Skerry 每天检查一次 GitHub Releases API 获取最新版本。不发送其他数据。</string>
+    <string name="settings_about_update_available">版本 %1$s 可用</string>
+    <string name="settings_about_update_open">打开发布页面</string>
+    <string name="settings_update_status">更新 %1$s</string>
+</resources>

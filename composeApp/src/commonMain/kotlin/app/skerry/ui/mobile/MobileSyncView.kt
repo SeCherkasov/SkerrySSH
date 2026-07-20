@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.sync.RemoteDevice
 import app.skerry.ui.sync.AccountIdentityBlock
+import app.skerry.ui.sync.PasswordReplaceConfirm
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupBody
 import app.skerry.ui.sync.SyncStatus
@@ -210,6 +212,16 @@ private fun SyncBody(sync: SyncCoordinator) {
             MobileLinkDeviceSection(sync)
             MobileWhatSyncs(sync)
             MobileLinkedDevices(sync)
+        }
+        // Connecting hit an existing account under a different password → confirm re-keying this device
+        // to the account password before adopting it (issue #28).
+        is SyncStatus.NeedsPasswordReplaceConfirm -> {
+            // Mobile shows the confirmation inline, so there's no dismiss callback to hang the decline on
+            // (desktop declines on Esc). Any exit — header back, system back/gesture, tab switch — must
+            // decline it: a pending replace left behind keeps the typed password in memory and strands the
+            // status on "Syncing…". Leaving on confirm/cancel is a no-op — both clear the pending first.
+            DisposableEffect(Unit) { onDispose { sync.cancelPasswordReplace() } }
+            PasswordReplaceConfirm(sync, s.accountId)
         }
         // One shared SyncSetupBody call site for all form states: separate when-branches would be
         // separate composition slots, and a Disabled → Failed transition would still reset the

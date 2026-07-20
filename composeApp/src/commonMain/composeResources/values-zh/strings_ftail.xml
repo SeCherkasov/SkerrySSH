@@ -1,0 +1,22 @@
+<resources>
+    <!-- SFTP / 文件传输尾部：延迟的非 @Composable 字符串（F 键面板标签 + 控制器错误） -->
+
+    <!-- F 键面板标签（mc/Total Commander 底栏） -->
+    <string name="ftail_fkey_rename">重命名</string>
+    <string name="ftail_fkey_view">查看</string>
+    <string name="ftail_fkey_edit">编辑</string>
+    <string name="ftail_fkey_copy">复制</string>
+    <string name="ftail_fkey_move">移动</string>
+    <string name="ftail_fkey_mkdir">新建目录</string>
+    <string name="ftail_fkey_delete">删除</string>
+    <string name="ftail_fkey_refresh">刷新</string>
+    <string name="ftail_fkey_quit">退出</string>
+
+    <!-- 控制器 / 副作用错误回退 -->
+    <string name="ftail_open_failed">打开 SFTP 失败</string>
+    <string name="ftail_transfer_error">传输错误</string>
+    <string name="ftail_sftp_error">SFTP 错误</string>
+    <string name="ftail_file_pane_error">文件面板错误</string>
+    <string name="ftail_delete_source_failed">移动后删除源文件失败</string>
+    <string name="ftail_file_fallback">文件</string>
+</resources>

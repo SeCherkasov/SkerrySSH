@@ -15,7 +15,10 @@ enum class UiLanguage(val id: String, val localeTag: String?, val displayName: S
     English("en", "en", "English"),
 
     /** Russian. */
-    Russian("ru", "ru", "Русский");
+    Russian("ru", "ru", "Русский"),
+
+    /** Simplified Chinese. */
+    Chinese("zh", "zh", "简体中文");
 
     companion object {
         val DEFAULT = System
@@ -30,5 +33,8 @@ enum class UiLanguage(val id: String, val localeTag: String?, val displayName: S
  * locale tag ([LocalAppLocale]). Maps the resolved tag, not the selected [UiLanguage], since
  * [UiLanguage.System] is already resolved to the actual OS locale by that point.
  */
-fun aiResponseLanguageName(localeTag: String): String =
-    if (localeTag.startsWith("ru", ignoreCase = true)) "Russian" else "English"
+fun aiResponseLanguageName(localeTag: String): String = when {
+    localeTag.startsWith("ru", ignoreCase = true) -> "Russian"
+    localeTag.startsWith("zh", ignoreCase = true) -> "Chinese"
+    else -> "English"
+}

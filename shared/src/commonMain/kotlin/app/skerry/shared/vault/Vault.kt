@@ -224,4 +224,20 @@ interface Vault {
      * password to the clipboard — without unlocking again. The password is wiped.
      */
     fun verifyPassword(password: CharArray): Boolean
+
+    /**
+     * Re-wrap the CURRENT dataKey under [password], leaving the key and the records alone: the vault
+     * starts unlocking with [password] and nothing else changes. Requires an unlocked vault; `false` if
+     * the vault is locked or the implementation doesn't support it.
+     *
+     * Unlike [changePassword] this does not verify an old password — the caller must have established the
+     * user's intent by other means. The one such caller is the sync connect flow (issue #28), which needs
+     * the vault to end up on the account password after the user confirmed exactly that, in the case
+     * [adoptDataKey] refuses to help with: the account key already IS this vault's key, so there is no key
+     * to adopt, only a wrap to redo. The password is wiped.
+     */
+    fun rewrapUnder(password: CharArray): Boolean {
+        password.fill(' ')
+        return false
+    }
 }

@@ -1,0 +1,14 @@
+<resources>
+    <string name="ptail_dynamic_proxy">动态代理</string>
+    <string name="ptail_ports_active">%1$d 活动</string>
+    <string name="ptail_all_verified">全部已验证</string>
+    <string name="ptail_changed">%1$d 已变更</string>
+    <string name="ptail_type_local">本地</string>
+    <string name="ptail_type_remote">远程</string>
+    <string name="ptail_type_socks">SOCKS</string>
+    <string name="ptail_err_host_not_trusted">主机密钥不可信</string>
+    <string name="ptail_err_auth_failed">认证失败</string>
+    <string name="ptail_err_forward_failed">端口转发失败</string>
+    <string name="ptail_err_connection_failed">连接失败</string>
+    <string name="ptail_forward_raise_failed">无法启动端口转发</string>
+</resources>
