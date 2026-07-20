@@ -36,7 +36,7 @@ data class AccountCardModel(
  */
 fun accountCardModel(status: SyncStatus?, serverUrl: String? = null): AccountCardModel = when (status) {
     null, SyncStatus.Disabled -> localVaultCard("Encrypted on this device")
-    SyncStatus.Busy -> localVaultCard("Syncing…")
+    SyncStatus.Busy, is SyncStatus.NeedsPasswordReplaceConfirm -> localVaultCard("Syncing…")
     is SyncStatus.Online -> AccountCardModel(
         initials = accountInitials(status.accountId),
         title = status.accountId,
@@ -65,7 +65,7 @@ private fun localVaultCard(subtitle: String) =
 @Composable
 fun accountCardModelLocalized(status: SyncStatus?, serverUrl: String? = null): AccountCardModel = when (status) {
     null, SyncStatus.Disabled -> localizedLocalVaultCard(stringResource(Res.string.stail_encrypted_on_device))
-    SyncStatus.Busy -> localizedLocalVaultCard(stringResource(Res.string.stail_syncing))
+    SyncStatus.Busy, is SyncStatus.NeedsPasswordReplaceConfirm -> localizedLocalVaultCard(stringResource(Res.string.stail_syncing))
     is SyncStatus.Online -> AccountCardModel(
         initials = accountInitials(status.accountId),
         title = status.accountId,

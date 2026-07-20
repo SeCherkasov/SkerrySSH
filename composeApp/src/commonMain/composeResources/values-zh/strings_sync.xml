@@ -104,7 +104,7 @@
 
     <!-- SyncStatus.Failed 原因 -->
     <string name="sync_fail_vault_locked">保险库已锁定</string>
-    <string name="sync_fail_unauthorized">主密码或账户错误</string>
+    <string name="sync_fail_unauthorized">密码或账户错误。若要新建账户，请使用此保险库的密码。</string>
     <string name="sync_fail_account_not_found">未找到账户</string>
     <string name="sync_fail_account_exists">账户已存在</string>
     <string name="sync_fail_pairing_expired">配对码已过期</string>
@@ -119,6 +119,12 @@
     <string name="sync_fail_save_settings">无法保存同步设置</string>
     <string name="sync_fail_sync">同步失败</string>
     <string name="sync_fail_revoke">无法撤销设备</string>
+
+    <!-- issue #28: 连接到使用其他密码的现有账户会将本设备改用该密码 -->
+    <string name="sync_password_replace_title">使用账户密码？</string>
+    <string name="sync_password_replace_body">账户「%1$s」使用其他密码保护。若要同步，此设备将改用您的账户密码解锁。</string>
+    <string name="sync_password_replace_confirm">使用账户密码</string>
+    <string name="sync_password_replace_cancel">取消</string>
 
     <!-- Teams 邀请的账户标识符（设置 → 同步 / 移动端同步） -->
     <string name="sync_account_id_label">账户 ID</string>
