@@ -99,7 +99,7 @@
 
     <!-- Причины SyncStatus.Failed (typed reason → текст; техническая деталь добавляется после двоеточия) -->
     <string name="sync_fail_vault_locked">Хранилище заблокировано</string>
-    <string name="sync_fail_unauthorized">Неверный мастер-пароль или аккаунт</string>
+    <string name="sync_fail_unauthorized">Неверный пароль или аккаунт. Для нового аккаунта введите пароль этого хранилища.</string>
     <string name="sync_fail_account_not_found">Аккаунт не найден</string>
     <string name="sync_fail_account_exists">Аккаунт уже существует</string>
     <string name="sync_fail_pairing_expired">Код паринга истёк</string>
@@ -114,6 +114,12 @@
     <string name="sync_fail_save_settings">Не удалось сохранить настройки синхронизации</string>
     <string name="sync_fail_sync">Ошибка синхронизации</string>
     <string name="sync_fail_revoke">Не удалось отозвать устройство</string>
+
+    <!-- issue #28: подключение к существующему аккаунту с другим паролём меняет пароль этого устройства -->
+    <string name="sync_password_replace_title">Использовать пароль аккаунта?</string>
+    <string name="sync_password_replace_body">Аккаунт «%1$s» защищён другим паролём. Чтобы синхронизировать, это устройство будет разблокироваться паролём аккаунта.</string>
+    <string name="sync_password_replace_confirm">Использовать пароль аккаунта</string>
+    <string name="sync_password_replace_cancel">Отмена</string>
 
     <!-- Идентификаторы аккаунта для Teams-приглашений (Settings → Sync / mobile Sync) -->
     <string name="sync_account_id_label">ID аккаунта</string>

@@ -107,6 +107,14 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
         sync.connect(url, acc, pw, keepConnected)
     }
 
+    // Connecting hit an existing account under a different password (issue #28): swap the form for the
+    // re-key confirmation. Placed after the state above so connecting/LaunchedEffect persist and still
+    // close this dialog once the confirmed re-connect reaches Online.
+    (status as? SyncStatus.NeedsPasswordReplaceConfirm)?.let { pending ->
+        PasswordReplaceConfirmDialog(sync, pending.accountId, onDismiss)
+        return
+    }
+
     // ModalScrim (not a hand-rolled Box): registers in ModalPresence so the settings scrim below
     // (this dialog is composed as its sibling at the app root) doesn't reclaim focus and strip the
     // caret from these fields. Esc dismisses; a stray scrim click doesn't (a half-typed master

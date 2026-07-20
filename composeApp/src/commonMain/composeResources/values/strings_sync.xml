@@ -99,7 +99,7 @@
 
     <!-- Причины SyncStatus.Failed (typed reason → текст; техническая деталь добавляется после двоеточия) -->
     <string name="sync_fail_vault_locked">Vault is locked</string>
-    <string name="sync_fail_unauthorized">Wrong master password or account</string>
+    <string name="sync_fail_unauthorized">Wrong password or account. For a new account, use this vault's password.</string>
     <string name="sync_fail_account_not_found">Account not found</string>
     <string name="sync_fail_account_exists">Account already exists</string>
     <string name="sync_fail_pairing_expired">Pairing code expired</string>
@@ -114,6 +114,12 @@
     <string name="sync_fail_save_settings">Couldn't save sync settings</string>
     <string name="sync_fail_sync">Sync failed</string>
     <string name="sync_fail_revoke">Couldn't revoke the device</string>
+
+    <!-- issue #28: joining an existing account whose password differs re-keys this device to it -->
+    <string name="sync_password_replace_title">Use your account password?</string>
+    <string name="sync_password_replace_body">The account “%1$s” is protected by a different password. To sync, this device will start unlocking with your account password.</string>
+    <string name="sync_password_replace_confirm">Use account password</string>
+    <string name="sync_password_replace_cancel">Cancel</string>
 
     <!-- Идентификаторы аккаунта для Teams-приглашений (Settings → Sync / mobile Sync) -->
     <string name="sync_account_id_label">Account ID</string>
