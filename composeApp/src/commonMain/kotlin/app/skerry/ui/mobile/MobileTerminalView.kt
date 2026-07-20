@@ -1,5 +1,8 @@
 package app.skerry.ui.mobile
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,7 +15,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -32,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -51,6 +57,8 @@ import app.skerry.ui.ai.aiBlockedMessage
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
+import app.skerry.ui.immersive.ImmersiveScreen
+import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
@@ -85,6 +93,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.terminal.arrowSequence
 import app.skerry.ui.session.sessionDotColor
+import kotlinx.coroutines.delay
 
 /** Terminal key panel background (`#0E1A24`). Keys — white 6%, monospaced. */
 private val KeybarBg = Color(0xFF0E1A24)
@@ -93,6 +102,11 @@ private val KeyCapFg = Color(0xFFC9D6DE)
 
 /** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
 private const val ESC = "\u001b"
+
+private const val HEADER_AUTO_HIDE_MS = 3000L
+// Where the header's reveal strip starts and how tall it is: clear of the system's edge-swipe zone.
+private val SYSTEM_EDGE_GESTURE = 40.dp
+private val TOP_EDGE_STRIP = 72.dp
 
 /**
  * Full-screen mobile terminal push-screen (a live SSH session over the PTY core). Header with host name
@@ -127,6 +141,14 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // sticky-ctrl is lifted to screen level so the key panel's arming also affects soft-keyboard input
     // (the IME path bypasses the panel). Reset on session change.
     var ctrlArmed by remember(active?.id) { mutableStateOf(false) }
+    // The AI input is off by default and raised by the sparkle key: on a phone it is a whole row of
+    // screen that most sessions never use, and the terminal wants every line it can get.
+    var aiOpen by remember(active?.id) { mutableStateOf(false) }
+    // Session chrome auto-hides like the VNC screen's bar; a swipe down near the top brings it back.
+    var headerVisible by remember(active?.id) { mutableStateOf(true) }
+    // See MobileVncScreen: keyed into the auto-hide effect so a swipe restarts the timer even when
+    // the header is already up.
+    var revealNonce by remember(active?.id) { mutableStateOf(0) }
     // Callbacks are stabilized by remember (keyed on session), else a fresh lambda per PTY chunk would
     // repaint the key panel/terminal for nothing. `ctrlArmed` is compose-state, so the lambda body sees
     // its live value even through remember.
@@ -152,16 +174,20 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
 
+    ImmersiveScreen()
+    // Held open while a sheet launched from it is up: the header is where they were opened from, and
+    // hiding it under an open menu reads as the app losing its place.
+    LaunchedEffect(headerVisible, menuOpen, paletteOpen, revealNonce) {
+        if (headerVisible && !menuOpen && !paletteOpen) {
+            delay(HEADER_AUTO_HIDE_MS)
+            headerVisible = false
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(D.terminalBg)) {
-        Column(Modifier.fillMaxSize()) {
-            MobileTerminalHeader(
-                title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
-                status = active?.controller?.uiState,
-                controller = active?.controller,
-                onBack = state::pop,
-                onMenu = { menuOpen = true },
-                onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
-            )
+        // imePadding here, not at the app root: this screen opts out of the root safeDrawing padding
+        // to run edge to edge, so lifting the content above the soft keyboard is its own job now.
+        Column(Modifier.fillMaxSize().imePadding()) {
             when (val st = active?.controller?.uiState) {
                 null, ConnectionUiState.Form ->
                     MobileTerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_mobile_open_host_connect))
@@ -188,9 +214,18 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             imeTransform = imeTransform,
                         )
                     }
-                    // The always-present bar row — command/status inside it (no jump).
-                    if (aiController != null) MobileAiBarInput(aiController, st.terminal)
-                    MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
+                    // Raised by the sparkle key; a pending suggestion forces it open so a command the
+                    // model proposed can never be waiting behind a collapsed bar.
+                    if (aiController != null && (aiOpen || aiController.pending != null)) {
+                        MobileAiBarInput(aiController, st.terminal)
+                    }
+                    MobileKeybar(
+                        st.terminal,
+                        ctrlArmed,
+                        onCtrlArmedChange = setCtrlArmed,
+                        aiOpen = aiOpen,
+                        onToggleAi = if (aiController != null) ({ aiOpen = !aiOpen }) else null,
+                    )
                 }
                 is ConnectionUiState.Error ->
                     MobileTerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = D.sunset)
@@ -199,6 +234,32 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 is ConnectionUiState.Disconnected ->
                     TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
             }
+        }
+        // Swipe down near the top brings the header back. Starts below the edge: a swipe from the very
+        // edge is the system's own gesture for restoring the hidden bars and never reaches us.
+        Box(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .padding(top = SYSTEM_EDGE_GESTURE).height(TOP_EDGE_STRIP)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { _, dy ->
+                        if (dy > 0f) { headerVisible = true; revealNonce++ }
+                    }
+                },
+        )
+        AnimatedVisibility(
+            visible = headerVisible,
+            modifier = Modifier.align(Alignment.TopCenter),
+            enter = slideInVertically { -it },
+            exit = slideOutVertically { -it },
+        ) {
+            MobileTerminalHeader(
+                title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
+                status = active?.controller?.uiState,
+                controller = active?.controller,
+                onBack = state::pop,
+                onMenu = { menuOpen = true },
+                onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
+            )
         }
         if (paletteOpen && snippets != null && activeTerminal != null) {
             MobileSnippetRunSheet(
@@ -469,6 +530,8 @@ private fun MobileKeybar(
     terminal: TerminalScreenState,
     ctrlArmed: Boolean,
     onCtrlArmedChange: (Boolean) -> Unit,
+    aiOpen: Boolean = false,
+    onToggleAi: (() -> Unit)? = null,
 ) {
     val plain = { seq: String -> terminal.sendUserInput(seq); onCtrlArmedChange(false) }
     val char = { c: String ->
@@ -484,6 +547,8 @@ private fun MobileKeybar(
         Modifier
             .fillMaxWidth()
             .background(KeybarBg)
+            // The screen runs edge to edge, so the panel keeps itself off the navigation bar.
+            .hiddenSystemBarsPadding(top = false, bottom = true)
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -499,6 +564,8 @@ private fun MobileKeybar(
             KeyCap("insert", accent = true) { terminal.reverseSearchAccept(); onCtrlArmedChange(false) }
             return@Row
         }
+        // The AI input lives behind this key instead of taking a permanent row (see MobileAiBarInput).
+        if (onToggleAi != null) KeyCapIcon("auto_awesome", accent = aiOpen) { onToggleAi() }
         KeyCap("esc") { plain(ESC) }
         // Tab with an autocomplete suggestion — accept it; otherwise a normal tab to the PTY.
         KeyCap("tab") {
@@ -552,16 +619,16 @@ private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = fal
 
 /** Icon panel key (arrows). */
 @Composable
-private fun KeyCapIcon(icon: String, onClick: () -> Unit) {
+private fun KeyCapIcon(icon: String, accent: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier
             .clip(RoundedCornerShape(7.dp))
-            .background(KeyCapBg)
+            .background(if (accent) D.cyan14 else KeyCapBg)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(icon, size = 16.sp, color = KeyCapFg)
+        Sym(icon, size = 16.sp, color = if (accent) D.cyanBright else KeyCapFg)
     }
 }
 
