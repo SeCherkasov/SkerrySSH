@@ -158,6 +158,10 @@
     <string name="settings_keyboard_subtitle">快捷键适配你的平台。终端快捷键在会话聚焦时生效。</string>
     <string name="settings_kb_new_connection">新建连接</string>
     <string name="settings_kb_command_palette">命令面板 / 搜索</string>
+    <string name="settings_kb_snippet_palette">片段面板</string>
+    <string name="settings_kb_broadcast">广播到多个会话</string>
+    <string name="settings_kb_record_session">录制会话（开始／停止）</string>
+    <string name="settings_kb_play_recording">播放录制</string>
     <string name="settings_kb_split_terminal">分割终端</string>
     <string name="settings_kb_next_prev_tab">下一个 / 上一个标签页</string>
     <string name="settings_kb_select_tab_number">按数字选择标签页</string>

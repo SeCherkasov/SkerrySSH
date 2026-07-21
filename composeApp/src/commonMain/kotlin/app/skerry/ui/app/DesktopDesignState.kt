@@ -423,6 +423,21 @@ class DesktopDesignState(
     val aiBarFocusRequests: SharedFlow<Unit> = _aiBarFocusRequests
     fun requestAiBarFocus() { _aiBarFocusRequests.tryEmit(Unit) }
 
+    // Hotkeys for the toolbar buttons that own their own state (snippet palette popup, recording
+    // toggle, file picker). Same one-shot signal as the AI bar above rather than a flag on the
+    // state: a boolean would have to be reset by the button and could re-fire on recomposition.
+    private val _snippetPaletteRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val snippetPaletteRequests: SharedFlow<Unit> = _snippetPaletteRequests
+    fun requestSnippetPalette() { _snippetPaletteRequests.tryEmit(Unit) }
+
+    private val _recordingToggleRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val recordingToggleRequests: SharedFlow<Unit> = _recordingToggleRequests
+    fun requestRecordingToggle() { _recordingToggleRequests.tryEmit(Unit) }
+
+    private val _castOpenRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val castOpenRequests: SharedFlow<Unit> = _castOpenRequests
+    fun requestCastOpen() { _castOpenRequests.tryEmit(Unit) }
+
     /** Whether folder [name] is collapsed (its host list hidden). */
     fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
 
