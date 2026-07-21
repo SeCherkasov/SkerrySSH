@@ -102,4 +102,7 @@
     <string name="conn_serial_err_permission">Access to port %1$s was denied.</string>
     <string name="conn_serial_err_open">Port %1$s could not be opened — it may be in use by another program.</string>
     <string name="conn_serial_err_configure">Port %1$s rejected the selected speed or frame format.</string>
+    <string name="conn_agent_keys_all">All keys in the agent</string>
+    <string name="conn_agent_keys_title">Keys this host may use</string>
+    <string name="conn_agent_keys_hint">Forwarding hands the far side a live agent. Limit it to the keys this host actually needs.</string>
 </resources>

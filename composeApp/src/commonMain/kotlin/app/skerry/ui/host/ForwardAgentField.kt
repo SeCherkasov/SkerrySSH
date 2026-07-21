@@ -1,5 +1,8 @@
 package app.skerry.ui.host
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,10 +15,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.LocalSshAgent
 import app.skerry.ui.design.D
+import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.agent_no_keys
+import app.skerry.ui.generated.resources.conn_agent_keys_all
+import app.skerry.ui.generated.resources.conn_agent_keys_hint
+import app.skerry.ui.generated.resources.conn_agent_keys_title
 import app.skerry.ui.generated.resources.conn_field_forward_agent
 import app.skerry.ui.generated.resources.conn_forward_agent_desc
 import app.skerry.ui.generated.resources.conn_forward_agent_off
@@ -65,5 +72,61 @@ private fun ForwardAgentToggle(
             )
         }
         Toggle(form.forwardAgent, { form.forwardAgent = !form.forwardAgent })
+    }
+    // Which keys go with the forwarding is part of the same decision, so it belongs here rather
+    // than in Settings — where the user cannot see which host they are deciding for.
+    if (form.forwardAgent && agentOn) AgentKeyPicker(form, titleSize, descSize)
+}
+
+/**
+ * Per-host key set. Empty selection in the profile means "every key in the agent" — what a profile
+ * made before this setting existed says, and what OpenSSH does, since its agent has no per-host
+ * sets at all. Ticking any key narrows the host to exactly those.
+ */
+@Composable
+private fun AgentKeyPicker(
+    form: NewConnectionFormState,
+    titleSize: androidx.compose.ui.unit.TextUnit,
+    descSize: androidx.compose.ui.unit.TextUnit,
+) {
+    val keys = LocalSshAgent.current?.agentKeys.orEmpty().filter { it.agentEnabled }
+    if (keys.isEmpty()) return
+    val chosen = form.agentKeyIds
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        Txt(stringResource(Res.string.conn_agent_keys_title), color = D.text, size = titleSize)
+        Txt(
+            stringResource(Res.string.conn_agent_keys_hint),
+            color = D.dim,
+            size = descSize,
+            modifier = Modifier.padding(top = 3.dp, bottom = 6.dp),
+        )
+        AgentKeyChoice(
+            label = stringResource(Res.string.conn_agent_keys_all),
+            checked = chosen.isEmpty(),
+            size = descSize,
+            onClick = { form.agentKeyIds = emptyList() },
+        )
+        keys.forEach { key ->
+            AgentKeyChoice(
+                label = key.label,
+                checked = key.id in chosen,
+                size = descSize,
+                onClick = {
+                    form.agentKeyIds = if (key.id in chosen) chosen - key.id else chosen + key.id
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun AgentKeyChoice(label: String, checked: Boolean, size: androidx.compose.ui.unit.TextUnit, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Sym(if (checked) "check_box" else "check_box_outline_blank", size = 16.sp, color = if (checked) D.cyan else D.faint)
+        Txt(label, color = if (checked) D.text else D.dim, size = size)
     }
 }

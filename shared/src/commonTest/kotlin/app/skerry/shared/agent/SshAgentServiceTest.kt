@@ -16,10 +16,14 @@ private class FakeKeys(
 ) : SshAgentKeys {
     var signedData: ByteArray? = null
     var signedFlags: Int? = null
+    var listedScope: SshAgentScope? = null
 
-    override suspend fun identities(): List<SshAgentIdentity> = identities
+    override suspend fun identities(scope: SshAgentScope): List<SshAgentIdentity> {
+        listedScope = scope
+        return identities
+    }
 
-    override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int): SshAgentSignature? {
+    override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int, scope: SshAgentScope): SshAgentSignature? {
         signedData = data
         signedFlags = flags
         return signature.takeIf { identities.any { id -> id.keyBlob.contentEquals(keyBlob) } }
@@ -179,6 +183,28 @@ class SshAgentServiceTest {
         SshAgentService(keys, confirm = { asked = true; true }).handle(byteArrayOf(11), ORIGIN)
 
         assertFalse(asked)
+    }
+
+
+    @Test
+    fun `passes the host's key set down to the keyring`() = runTest {
+        // Which keys a host may use is the host's setting; the service only carries it through, so
+        // the keyring stays the single place that decides what a key request can reach.
+        val scope = SshAgentScope(setOf("deploy"))
+        val keys = FakeKeys()
+
+        SshAgentService(keys).handle(byteArrayOf(11), ORIGIN, scope)
+
+        assertEquals(scope, keys.listedScope)
+    }
+
+    @Test
+    fun `a request with no host restriction sees every key in the agent`() = runTest {
+        val keys = FakeKeys()
+
+        SshAgentService(keys).handle(byteArrayOf(11), ORIGIN)
+
+        assertEquals(SshAgentScope.All, keys.listedScope)
     }
 
     @Test

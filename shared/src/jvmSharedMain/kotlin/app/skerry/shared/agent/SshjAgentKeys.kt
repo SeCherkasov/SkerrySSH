@@ -37,11 +37,11 @@ class SshjAgentKeys(
     private var cache: Map<String, LoadedKey> = emptyMap()
     private var epoch = 0
 
-    override suspend fun identities(): List<SshAgentIdentity> =
-        load().flatMap { key -> key.keyBlobs.map { SshAgentIdentity(it, key.comment) } }
+    override suspend fun identities(scope: SshAgentScope): List<SshAgentIdentity> =
+        load(scope).flatMap { key -> key.keyBlobs.map { SshAgentIdentity(it, key.comment) } }
 
-    override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int): SshAgentSignature? {
-        val key = load().firstOrNull { key -> key.keyBlobs.any { it.contentEquals(keyBlob) } } ?: return null
+    override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int, scope: SshAgentScope): SshAgentSignature? {
+        val key = load(scope).firstOrNull { key -> key.keyBlobs.any { it.contentEquals(keyBlob) } } ?: return null
         return withContext(dispatcher) {
             val signature = signatureFor(key.type, flags) ?: return@withContext null
             runCatching {
@@ -65,8 +65,13 @@ class SshjAgentKeys(
         epoch++
     }
 
-    private suspend fun load(): List<LoadedKey> = withContext(dispatcher) {
-        val wanted = material()
+    /**
+     * Parsed keys this caller may use. The cache is keyed by credential id and shared by every
+     * caller; [scope] filters what comes OUT of it, so narrowing one host's set never costs another
+     * host a re-parse.
+     */
+    private suspend fun load(scope: SshAgentScope): List<LoadedKey> = withContext(dispatcher) {
+        val wanted = material().filter { scope.allows(it.id) }
         val (snapshot, startedAt) = synchronized(lock) { cache to epoch }
         val loaded = wanted.mapNotNull { entry ->
             snapshot[entry.id]?.takeIf { it.matches(entry) } ?: parse(entry)

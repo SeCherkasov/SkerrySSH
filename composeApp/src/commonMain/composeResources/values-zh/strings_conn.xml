@@ -102,4 +102,7 @@
     <string name="conn_serial_err_permission">访问端口 %1$s 被拒绝。</string>
     <string name="conn_serial_err_open">无法打开端口 %1$s — 它可能正被其他程序占用。</string>
     <string name="conn_serial_err_configure">端口 %1$s 拒绝了所选的速率或帧格式。</string>
+    <string name="conn_agent_keys_all">代理中的全部密钥</string>
+    <string name="conn_agent_keys_title">此主机可用的密钥</string>
+    <string name="conn_agent_keys_hint">转发相当于把可用的代理交给远端。请只保留该主机确实需要的密钥。</string>
 </resources>

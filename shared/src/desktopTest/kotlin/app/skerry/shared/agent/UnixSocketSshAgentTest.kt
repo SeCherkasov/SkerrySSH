@@ -42,8 +42,8 @@ class UnixSocketSshAgentTest {
     private fun start(identities: List<SshAgentIdentity>): Path {
         dir = Files.createTempDirectory("skerry-agent-test")
         val keys = object : SshAgentKeys {
-            override suspend fun identities() = identities
-            override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int): SshAgentSignature? = null
+            override suspend fun identities(scope: SshAgentScope) = identities
+            override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int, scope: SshAgentScope): SshAgentSignature? = null
         }
         // Own dispatcher: the shared agent one is capped and other suites in this JVM park readers
         // on it, which would leave this listener's accept() waiting for a free thread.

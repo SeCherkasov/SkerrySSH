@@ -374,4 +374,27 @@ class NewConnectionFormStateTest {
         val f = NewConnectionFormState.fromHost(host)
         assertEquals(listOf("prod", "db"), f.tags)
     }
+
+    @Test
+    fun `keeps the host's agent key set through save and reopen`() {
+        // The set is the host's, not the agent's: reopening the profile must show what was chosen,
+        // and an untouched profile must keep meaning "every key in the agent".
+        val form = NewConnectionFormState().apply {
+            name = "bastion"
+            address = "10.0.0.1"
+            username = "ops"
+            forwardAgent = true
+            agentKeyIds = listOf("deploy")
+        }
+
+        val draft = form.toDraft(credentialId = null)
+        assertEquals(listOf("deploy"), draft.agentKeyIds)
+
+        val host = Host(
+            id = "h1", label = draft.label, address = draft.address, username = draft.username,
+            forwardAgent = draft.forwardAgent, agentKeyIds = draft.agentKeyIds,
+        )
+        assertEquals(listOf("deploy"), NewConnectionFormState.fromHost(host).agentKeyIds)
+        assertEquals(emptyList(), NewConnectionFormState.fromHost(host.copy(agentKeyIds = emptyList())).agentKeyIds)
+    }
 }

@@ -102,4 +102,7 @@
     <string name="conn_serial_err_permission">Доступ к порту %1$s запрещён.</string>
     <string name="conn_serial_err_open">Не удалось открыть порт %1$s — возможно, он занят другой программой.</string>
     <string name="conn_serial_err_configure">Порт %1$s не принял выбранную скорость или формат кадра.</string>
+    <string name="conn_agent_keys_all">Все ключи агента</string>
+    <string name="conn_agent_keys_title">Ключи, доступные этому хосту</string>
+    <string name="conn_agent_keys_hint">Проброс отдаёт удалённой стороне живого агента. Оставьте только те ключи, которые нужны этому хосту.</string>
 </resources>

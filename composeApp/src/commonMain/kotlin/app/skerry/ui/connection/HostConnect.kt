@@ -24,6 +24,7 @@ fun Host.toTarget(jump: SshJump? = null): SshTarget =
     SshTarget(
         host = address, port = port, username = username, connectionType = connectionType,
         jump = jump, keepAliveSeconds = keepAliveSeconds, forwardAgent = forwardAgent,
+        agentKeyIds = agentKeyIds,
     )
 
 /** `user@addr:port` string — the session's tab/title label. */

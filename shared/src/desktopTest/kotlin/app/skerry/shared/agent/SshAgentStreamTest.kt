@@ -28,8 +28,8 @@ class SshAgentStreamTest {
     fun tearDown() = scope.cancel()
 
     private val keys = object : SshAgentKeys {
-        override suspend fun identities() = identities
-        override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int): SshAgentSignature? = null
+        override suspend fun identities(scope: SshAgentScope) = identities
+        override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int, scope: SshAgentScope): SshAgentSignature? = null
     }
 
     /** Wire both directions to the serving loop and hand back the peer's ends. */

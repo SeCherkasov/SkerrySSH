@@ -1,6 +1,7 @@
 package app.skerry.shared.ssh
 
 import app.skerry.shared.agent.SshAgentOrigin
+import app.skerry.shared.agent.SshAgentScope
 import app.skerry.shared.agent.SshAgentService
 import app.skerry.shared.agent.SshjAgentForwarder
 import java.io.IOException
@@ -76,7 +77,13 @@ class SshjTransport(
         // business opening channels back to our keys. The origin is the address the user dialed, so
         // the activity list can name who asked (in memory only — see SshAgentService).
         val agentForwarder = agent?.takeIf { target.forwardAgent }?.let { service ->
-            SshjAgentForwarder(client.connection, service, SshAgentOrigin.Session(target.host))
+            SshjAgentForwarder(
+                client.connection,
+                service,
+                SshAgentOrigin.Session(target.host),
+                // Empty means the profile never narrowed the set, which is "every key in the agent".
+                SshAgentScope(target.agentKeyIds.takeIf { it.isNotEmpty() }?.toSet()),
+            )
                 .also { client.connection.attach(it) }
         }
         return SshjConnection(

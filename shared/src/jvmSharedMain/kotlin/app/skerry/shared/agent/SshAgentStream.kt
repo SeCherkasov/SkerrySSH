@@ -42,6 +42,7 @@ internal suspend fun serveSshAgent(
     output: OutputStream,
     service: SshAgentService,
     origin: SshAgentOrigin,
+    scope: SshAgentScope = SshAgentScope.All,
 ) {
     try {
         while (true) {
@@ -52,7 +53,7 @@ internal suspend fun serveSshAgent(
                 (header[3].toInt() and 0xFF)
             if (length <= 0 || length > SshAgentCodec.MAX_MESSAGE_BYTES) return
             val request = runInterruptible { input.readFullyOrNull(length) } ?: return
-            val response = service.handle(request, origin)
+            val response = service.handle(request, origin, scope)
             runInterruptible {
                 output.write(SshAgentCodec.frame(response))
                 output.flush()

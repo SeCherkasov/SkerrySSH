@@ -49,6 +49,11 @@ data class SshTarget(
     val jump: SshJump? = null,
     val keepAliveSeconds: Int = 0,
     val forwardAgent: Boolean = false,
+    /**
+     * Vault key ids this host may reach through the forwarded agent; empty = every key in the
+     * agent. See [app.skerry.shared.agent.SshAgentScope].
+     */
+    val agentKeyIds: List<String> = emptyList(),
 )
 
 /**

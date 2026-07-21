@@ -98,6 +98,9 @@ class NewConnectionFormState {
     /** Forward the built-in SSH agent into this host's shell; see [Host.forwardAgent]. */
     var forwardAgent: Boolean by mutableStateOf(false)
 
+    /** Vault keys this host may use through the agent; empty = every key in it ([Host.agentKeyIds]). */
+    var agentKeyIds: List<String> by mutableStateOf(emptyList())
+
     // Auth: mode plus fields for each kind (kept side by side so switching doesn't lose input).
     var authMode: AuthMode by mutableStateOf(AuthMode.ASK)
     var existingCredentialId: String? by mutableStateOf(null)
@@ -208,6 +211,7 @@ class NewConnectionFormState {
         jumpHostId = jumpHostId,
         keepAliveSeconds = keepAliveSeconds,
         forwardAgent = forwardAgent,
+        agentKeyIds = agentKeyIds,
     )
 
     companion object {
@@ -238,6 +242,7 @@ class NewConnectionFormState {
             jumpHostId = host.jumpHostId
             keepAliveSeconds = host.keepAliveSeconds
             forwardAgent = host.forwardAgent
+            agentKeyIds = host.agentKeyIds
             if (host.credentialId != null) {
                 authMode = AuthMode.EXISTING
                 existingCredentialId = host.credentialId

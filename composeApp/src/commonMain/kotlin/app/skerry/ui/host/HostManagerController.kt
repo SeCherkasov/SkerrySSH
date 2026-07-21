@@ -28,6 +28,7 @@ data class HostDraft(
     val jumpHostId: String? = null,
     val keepAliveSeconds: Int = 30,
     val forwardAgent: Boolean = false,
+    val agentKeyIds: List<String> = emptyList(),
 )
 
 /**
@@ -79,6 +80,7 @@ class HostManagerController(
                 jumpHostId = draft.jumpHostId,
                 keepAliveSeconds = draft.keepAliveSeconds,
                 forwardAgent = draft.forwardAgent,
+                agentKeyIds = draft.agentKeyIds,
                 // Not a form field — toggled from the live VNC session; a form save must not reset it.
                 vncResizeToWindow = find(id)?.vncResizeToWindow ?: false,
             ),

@@ -67,4 +67,10 @@ data class Host(
     val keepAliveSeconds: Int = 30,
     val vncResizeToWindow: Boolean = false,
     val forwardAgent: Boolean = false,
+    /**
+     * Which vault keys this host may use through the forwarded agent (credential ids). Empty means
+     * every key in the agent, which is what a profile made before this setting existed says — and
+     * what OpenSSH does, since its agent has no per-host sets at all.
+     */
+    val agentKeyIds: List<String> = emptyList(),
 )

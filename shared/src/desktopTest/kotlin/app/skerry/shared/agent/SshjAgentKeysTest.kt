@@ -187,6 +187,30 @@ class SshjAgentKeysTest {
     }
 
     @Test
+    fun `a host restricted to one key sees only that key`() = runTest {
+        // Forwarding hands the far side a live agent. A host limited to its deploy key must not be
+        // able to enumerate — let alone use — the rest of the keyring.
+        val deploy = generator.generate(SshKeyType.ED25519, comment = "")
+        val personal = generator.generate(SshKeyType.ED25519, comment = "")
+        val keys = SshjAgentKeys({
+            listOf(
+                material(deploy.privateKeyPem, id = "deploy", comment = "deploy key"),
+                material(personal.privateKeyPem, id = "personal", comment = "personal key"),
+            )
+        })
+        val scope = SshAgentScope(setOf("deploy"))
+
+        assertEquals(listOf("deploy key"), keys.identities(scope).map { it.comment })
+        assertNotNull(keys.sign(publicBlob(deploy.info.publicKeyOpenSsh), challenge, 0, scope))
+        assertNull(
+            keys.sign(publicBlob(personal.info.publicKeyOpenSsh), challenge, 0, scope),
+            "a key outside the host's set was used",
+        )
+        // The same keyring still serves everything to a caller that was not narrowed.
+        assertEquals(2, keys.identities().size)
+    }
+
+    @Test
     fun `refuses a key it does not hold`() = runTest {
         val mine = generator.generate(SshKeyType.ED25519, comment = "")
         val other = generator.generate(SshKeyType.ED25519, comment = "")

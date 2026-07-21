@@ -31,7 +31,11 @@ class SshAgentService(
      * Never throws for peer-controlled input: anything unparseable, oversized or unsupported is a
      * plain `SSH_AGENT_FAILURE`, which is all the protocol can say anyway.
      */
-    suspend fun handle(request: ByteArray, origin: SshAgentOrigin): ByteArray {
+    suspend fun handle(
+        request: ByteArray,
+        origin: SshAgentOrigin,
+        scope: SshAgentScope = SshAgentScope.All,
+    ): ByteArray {
         if (request.size > SshAgentCodec.MAX_MESSAGE_BYTES) return refuse(origin)
         val parsed = try {
             SshAgentCodec.parseRequest(request)
@@ -39,8 +43,8 @@ class SshAgentService(
             return refuse(origin)
         }
         return when (parsed) {
-            is SshAgentRequest.ListIdentities -> list(origin)
-            is SshAgentRequest.Sign -> sign(parsed, origin)
+            is SshAgentRequest.ListIdentities -> list(origin, scope)
+            is SshAgentRequest.Sign -> sign(parsed, origin, scope)
             // Answered, but NOT reported: OpenSSH sends `session-bind@openssh.com` before every
             // single login, so recording these would stamp a "Refused" on every successful
             // connection and drown the entries that mean something.
@@ -51,11 +55,11 @@ class SshAgentService(
     /** Record something the agent did outside a request (e.g. a server refusing forwarding). */
     fun note(origin: SshAgentOrigin, action: SshAgentAction) = report(origin, action, null)
 
-    private suspend fun list(origin: SshAgentOrigin): ByteArray {
+    private suspend fun list(origin: SshAgentOrigin, scope: SshAgentScope): ByteArray {
         // Same contract as sign(): the keyring reads the vault, and an unexpected failure there
         // must come back as a protocol refusal rather than killing the serving coroutine.
         val identities = try {
-            keys.identities()
+            keys.identities(scope)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             return refuse(origin)
@@ -64,12 +68,12 @@ class SshAgentService(
         return SshAgentCodec.identitiesAnswer(identities)
     }
 
-    private suspend fun sign(request: SshAgentRequest.Sign, origin: SshAgentOrigin): ByteArray {
+    private suspend fun sign(request: SshAgentRequest.Sign, origin: SshAgentOrigin, scope: SshAgentScope): ByteArray {
         // Resolve the key before asking anything: a blob we do not hold is refused outright, so a
         // remote cannot raise confirmation prompts by naming keys at random. The listing is served
         // from the keyring's cache, so this costs nothing per request.
         val identity = try {
-            keys.identities().firstOrNull { it.keyBlob.contentEquals(request.keyBlob) }
+            keys.identities(scope).firstOrNull { it.keyBlob.contentEquals(request.keyBlob) }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             null
@@ -92,7 +96,7 @@ class SshAgentService(
         // The keyring is the only place that decides whether a key may be used; an unknown blob
         // (or a key the user has not put in the agent) comes back null and is refused here.
         val signature = try {
-            keys.sign(request.keyBlob, request.data, request.flags)
+            keys.sign(request.keyBlob, request.data, request.flags, scope)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             null
@@ -117,14 +121,38 @@ class SshAgentService(
  */
 interface SshAgentKeys {
     /** Keys currently offered — empty when the agent is off or the vault is locked. */
-    suspend fun identities(): List<SshAgentIdentity>
+    suspend fun identities(scope: SshAgentScope = SshAgentScope.All): List<SshAgentIdentity>
 
     /**
      * Sign [data] with the key identified by [keyBlob], honouring the `rsa-sha2-*` request
      * [flags]. `null` = we do not hold that key (or may not use it), which the caller turns into a
      * protocol failure.
      */
-    suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int): SshAgentSignature?
+    suspend fun sign(
+        keyBlob: ByteArray,
+        data: ByteArray,
+        flags: Int,
+        scope: SshAgentScope = SshAgentScope.All,
+    ): SshAgentSignature?
+}
+
+/**
+ * Which of the agent's keys a caller may reach.
+ *
+ * A forwarded session gets the set its host profile allows; the local socket and anything that does
+ * not narrow it get [All]. Restricting per host matters because forwarding hands the far side a
+ * live agent: without this, every server the user forwards to could ask for a signature by ANY key
+ * in the agent, and see the names of all of them.
+ *
+ * [allowedKeyIds] is `null` for "no restriction" — an EMPTY set would be a host allowed nothing,
+ * which is a different (and legitimate) answer.
+ */
+data class SshAgentScope(val allowedKeyIds: Set<String>? = null) {
+    fun allows(keyId: String): Boolean = allowedKeyIds?.contains(keyId) ?: true
+
+    companion object {
+        val All = SshAgentScope()
+    }
 }
 
 /** A produced signature: the ssh-wire blob plus the comment of the key that made it (for the audit). */

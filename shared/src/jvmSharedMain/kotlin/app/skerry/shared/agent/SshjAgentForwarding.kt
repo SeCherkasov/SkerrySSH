@@ -64,6 +64,8 @@ internal class SshjAgentForwarder(
     private val conn: Connection,
     private val service: SshAgentService,
     private val origin: SshAgentOrigin,
+    // Which of the agent's keys this session may reach — the host profile's setting.
+    private val keyScope: SshAgentScope = SshAgentScope.All,
 ) : ForwardedChannelOpener {
 
     // Own scope, not a session scope passed in: this object is created inside the transport, below
@@ -110,7 +112,7 @@ internal class SshjAgentForwarder(
         channel.confirm()
         scope.launch {
             try {
-                serveSshAgent(channel.inputStream, channel.outputStream, service, origin)
+                serveSshAgent(channel.inputStream, channel.outputStream, service, origin, keyScope)
             } finally {
                 openChannels.decrementAndGet()
                 runCatching { channel.close() }
