@@ -61,4 +61,18 @@
     <string name="sftp_overwrite_one">%1$s already exists in the destination.</string>
     <string name="sftp_overwrite_many">%1$d items already exist in the destination and will be overwritten.</string>
     <string name="sftp_overwrite">Overwrite</string>
+
+    <!-- Built-in viewer/editor (F3/F4) -->
+    <string name="sftp_edit_title">Edit</string>
+    <string name="sftp_edit_title_view">View</string>
+    <string name="sftp_edit_readonly">read-only</string>
+    <string name="sftp_edit_modified">modified</string>
+    <string name="sftp_edit_saving">Saving…</string>
+    <string name="sftp_edit_find">Search:</string>
+    <string name="sftp_edit_not_found">not found</string>
+    <string name="sftp_edit_discard_q">Discard changes?</string>
+    <string name="sftp_edit_discard_body">«%1$s» has unsaved changes. Closing now loses them.</string>
+    <string name="sftp_edit_discard">Discard</string>
+    <string name="sftp_edit_conflict_q">File changed on the source?</string>
+    <string name="sftp_edit_conflict_body">«%1$s» changed after you opened it. Saving overwrites those changes with your version.</string>
 </resources>

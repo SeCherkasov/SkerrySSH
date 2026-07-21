@@ -15,7 +15,7 @@ import app.skerry.shared.sftp.SftpException
 class SftpFileBrowser(
     private val sftp: SftpClient,
     override val label: String,
-) : FileBrowser {
+) : FileContentBrowser {
 
     override suspend fun realpath(path: String): String = guard { sftp.realpath(path) }
 
@@ -58,6 +58,28 @@ class SftpFileBrowser(
     }
 
     override suspend fun rename(from: String, to: String): Unit = guard { sftp.rename(from, to) }
+
+    override suspend fun stat(path: String): FileItem? = guard { sftp.stat(path)?.toFileItem() }
+
+    /**
+     * The server's reported size is checked first, so an oversized file is never fetched, and the cap
+     * is passed down to [SftpClient.read] which also enforces it while streaming — the size is
+     * server-controlled, so a missing/understated one must not turn into an unbounded allocation.
+     * The final check on the returned bytes covers a client that ignores the limit.
+     */
+    override suspend fun readFile(path: String, maxBytes: Long): ByteArray = guard {
+        val reported = sftp.stat(path)?.size
+        if (reported != null && reported > maxBytes) {
+            throw FileBrowserException(FileBrowserFailure.TooLarge, detail = "$reported > $maxBytes")
+        }
+        val data = sftp.read(path, maxBytes)
+        if (data.size > maxBytes) {
+            throw FileBrowserException(FileBrowserFailure.TooLarge, detail = "${data.size} > $maxBytes")
+        }
+        data
+    }
+
+    override suspend fun writeFile(path: String, data: ByteArray): Unit = guard { sftp.write(path, data) }
 
     private suspend fun <T> guard(block: suspend () -> T): T =
         try {

@@ -61,4 +61,18 @@
     <string name="sftp_overwrite_one">%1$s 在目标位置已存在。</string>
     <string name="sftp_overwrite_many">%1$d 个项目在目标位置已存在，将被覆盖。</string>
     <string name="sftp_overwrite">覆盖</string>
+
+    <!-- 内置查看器/编辑器（F3/F4） -->
+    <string name="sftp_edit_title">编辑</string>
+    <string name="sftp_edit_title_view">查看</string>
+    <string name="sftp_edit_readonly">只读</string>
+    <string name="sftp_edit_modified">已修改</string>
+    <string name="sftp_edit_saving">正在保存…</string>
+    <string name="sftp_edit_find">查找：</string>
+    <string name="sftp_edit_not_found">未找到</string>
+    <string name="sftp_edit_discard_q">放弃更改？</string>
+    <string name="sftp_edit_discard_body">「%1$s」有未保存的更改，现在关闭将会丢失。</string>
+    <string name="sftp_edit_discard">放弃</string>
+    <string name="sftp_edit_conflict_q">文件在源端已被修改？</string>
+    <string name="sftp_edit_conflict_body">「%1$s」在你打开之后发生了变化。保存将用你的版本覆盖这些更改。</string>
 </resources>

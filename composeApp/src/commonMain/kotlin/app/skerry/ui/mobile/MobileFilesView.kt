@@ -40,6 +40,8 @@ import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.files.FileEditController
+import app.skerry.ui.files.FileEditorScreen
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.PathJumpField
@@ -50,6 +52,8 @@ import app.skerry.ui.files.platformLocalBrowser
 import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ftail_file_fallback
+import app.skerry.ui.generated.resources.ftail_fkey_edit
+import app.skerry.ui.generated.resources.ftail_fkey_view
 import app.skerry.ui.generated.resources.ftail_local_label
 import app.skerry.ui.generated.resources.ftail_open_failed
 import app.skerry.ui.generated.resources.sftp_connecting
@@ -136,6 +140,9 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
     var fabOpen by remember(controller) { mutableStateOf(false) }
+    // Built-in viewer/editor over the cursored file (long-press menu). The controller comes from the
+    // coordinator (session scope), so closing the modal never cancels a save in flight.
+    var editor by remember(controller) { mutableStateOf<FileEditController?>(null) }
     // UI scope only for the native file picker (FAB Upload); the transfer itself lives on the
     // session scope inside the coordinator and survives the view leaving composition.
     val uiScope = rememberCoroutineScope()
@@ -154,6 +161,19 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     }
 
     val c = coord
+    val openEditor = editor
+    // Built-in viewer/editor (long-press → View/Edit): takes over the screen instead of opening a
+    // dialog, so it gets the full height and the same chrome as the file list.
+    if (openEditor != null) {
+        FileEditorScreen(
+            controller = openEditor,
+            onClose = { editor = null },
+            modifier = Modifier.fillMaxSize(),
+            // No function keys on touch: Save/Close sit in the header instead.
+            showKeyBar = false,
+        )
+        return
+    }
     Box(Modifier.fillMaxSize().background(D.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobileFilesTitle(onBack)
@@ -187,11 +207,18 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                         pane.label.ifBlank { stringResource(Res.string.ftail_local_label) },
                         pane.path,
                         mono, onGoToPath = pane::goToPath)
+                    // View/Edit a remote file in place (parity with desktop F3/F4).
+                    val openEditor = remember(c) {
+                        { item: FileItem, readOnly: Boolean ->
+                            editor = c.openEditor(fromLocal = false, item = item, readOnly = readOnly)
+                        }
+                    }
                     MobileLivePane(
                         pane = pane,
                         mono = mono,
                         onTransfer = onTransfer,
                         onDownloadHere = downloadHere,
+                        onOpenEditor = openEditor,
                         modifier = Modifier.weight(1f),
                     )
                     MobileTransferCard(c.transfer, mono, onDismiss = c::clearTransfer)
@@ -269,6 +296,7 @@ private fun MobileLivePane(
     mono: FontFamily,
     onTransfer: (FileItem) -> Unit,
     onDownloadHere: ((FileItem) -> Unit)?,
+    onOpenEditor: (FileItem, Boolean) -> Unit,
     modifier: Modifier,
 ) {
     var renaming by remember(pane) { mutableStateOf<FileItem?>(null) }
@@ -304,6 +332,7 @@ private fun MobileLivePane(
                             mono = mono,
                             onClick = { if (isDir) pane.open(entry) else onTransfer(entry) },
                             onDownloadHere = if (!isDir && onDownloadHere != null) ({ onDownloadHere(entry) }) else null,
+                            onOpenEditor = if (entry.type == FileItemType.File) ({ readOnly -> onOpenEditor(entry, readOnly) }) else null,
                             onRename = { renaming = entry },
                             onDelete = { deleting = entry },
                         )
@@ -344,6 +373,7 @@ private fun MobileFileRow(
     mono: FontFamily,
     onClick: () -> Unit,
     onDownloadHere: (() -> Unit)?,
+    onOpenEditor: ((Boolean) -> Unit)?,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -372,6 +402,10 @@ private fun MobileFileRow(
             actions = buildList {
                 onDownloadHere?.let { dl ->
                     add(MobileSheetAction(stringResource(Res.string.sftp_download_to_device), onClick = dl, icon = "download"))
+                }
+                onOpenEditor?.let { open ->
+                    add(MobileSheetAction(stringResource(Res.string.ftail_fkey_view), onClick = { open(true) }, icon = "visibility"))
+                    add(MobileSheetAction(stringResource(Res.string.ftail_fkey_edit), onClick = { open(false) }, icon = "edit_note"))
                 }
                 add(MobileSheetAction(stringResource(Res.string.sftp_rename), onClick = onRename, icon = "edit"))
                 add(MobileSheetAction(stringResource(Res.string.sftp_delete), onClick = onDelete, icon = "delete", danger = true))

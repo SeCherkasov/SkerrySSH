@@ -24,15 +24,28 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_fkey_copy
+import app.skerry.ui.generated.resources.ftail_fkey_delete
+import app.skerry.ui.generated.resources.ftail_fkey_edit
+import app.skerry.ui.generated.resources.ftail_fkey_mkdir
+import app.skerry.ui.generated.resources.ftail_fkey_move
+import app.skerry.ui.generated.resources.ftail_fkey_quit
+import app.skerry.ui.generated.resources.ftail_fkey_refresh
+import app.skerry.ui.generated.resources.ftail_fkey_rename
+import app.skerry.ui.generated.resources.ftail_fkey_save
+import app.skerry.ui.generated.resources.ftail_fkey_search
+import app.skerry.ui.generated.resources.ftail_fkey_view
 import app.skerry.ui.generated.resources.settings_badge_soon
 import app.skerry.ui.generated.resources.settings_kb_accept_autocomplete
 import app.skerry.ui.generated.resources.settings_kb_broadcast
+import app.skerry.ui.generated.resources.settings_kb_editor_group
 import app.skerry.ui.generated.resources.settings_kb_command_palette
-import app.skerry.ui.generated.resources.settings_kb_play_recording
-import app.skerry.ui.generated.resources.settings_kb_record_session
-import app.skerry.ui.generated.resources.settings_kb_snippet_palette
 import app.skerry.ui.generated.resources.settings_kb_copy_selection
 import app.skerry.ui.generated.resources.settings_kb_cycle_suggestions
+import app.skerry.ui.generated.resources.settings_kb_files_group
+import app.skerry.ui.generated.resources.settings_kb_files_hidden
+import app.skerry.ui.generated.resources.settings_kb_files_save
+import app.skerry.ui.generated.resources.settings_kb_files_switch_pane
 import app.skerry.ui.generated.resources.settings_kb_focus_ai
 import app.skerry.ui.generated.resources.settings_kb_global
 import app.skerry.ui.generated.resources.settings_kb_lock
@@ -40,8 +53,11 @@ import app.skerry.ui.generated.resources.settings_kb_new_connection
 import app.skerry.ui.generated.resources.settings_kb_next_prev_tab
 import app.skerry.ui.generated.resources.settings_kb_open_sftp
 import app.skerry.ui.generated.resources.settings_kb_paste
+import app.skerry.ui.generated.resources.settings_kb_play_recording
+import app.skerry.ui.generated.resources.settings_kb_record_session
 import app.skerry.ui.generated.resources.settings_kb_search_history
 import app.skerry.ui.generated.resources.settings_kb_select_tab_number
+import app.skerry.ui.generated.resources.settings_kb_snippet_palette
 import app.skerry.ui.generated.resources.settings_kb_split_terminal
 import app.skerry.ui.generated.resources.settings_kb_terminal_group
 import app.skerry.ui.generated.resources.settings_keyboard_subtitle
@@ -90,11 +106,42 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_paste), "${ctrlShift("V")} / ${shift("Insert")}", live = true),
     )
 
+    // File panel (SFTP view) F-keys, mc/Total Commander style — the same labels the bottom bar uses.
+    // Ctrl+S belongs to the built-in editor opened by F4.
+    val files = listOf(
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_rename), "F2", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_view), "F3", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_edit), "F4", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_copy), "F5", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_move), "F6", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_mkdir), "F7", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_delete), "F8", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_refresh), "F9", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_quit), "F10", live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_files_switch_pane), "Tab", live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_files_hidden), ctrl("H"), live = true),
+    )
+    // The built-in viewer/editor (F3/F4) opens inside the file panel and redefines the same bar of
+    // function keys while it is there, so its keys are listed as their own group.
+    val editor = listOf(
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_save), "F2", live = true),
+        // The editor takes ⌘S on macOS (what a mac user reaches for) and Ctrl+S elsewhere — not the
+        // app-wide mod() chord, which is Ctrl+Shift+ on Linux/Windows.
+        KeyboardBinding(stringResource(Res.string.settings_kb_files_save), if (mac) "⌘S" else "Ctrl+S", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_edit), "F4", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_search), "F7", live = true),
+        KeyboardBinding(stringResource(Res.string.ftail_fkey_quit), "F10 / Esc", live = true),
+    )
+
     val mono = LocalFonts.current.mono
     KeyboardGroupLabel(stringResource(Res.string.settings_kb_global), top = 4.dp)
     global.forEach { KeyboardRow(it, mono) }
     KeyboardGroupLabel(stringResource(Res.string.settings_kb_terminal_group), top = 18.dp)
     terminal.forEach { KeyboardRow(it, mono) }
+    KeyboardGroupLabel(stringResource(Res.string.settings_kb_files_group), top = 18.dp)
+    files.forEach { KeyboardRow(it, mono) }
+    KeyboardGroupLabel(stringResource(Res.string.settings_kb_editor_group), top = 18.dp)
+    editor.forEach { KeyboardRow(it, mono) }
 }
 
 @Composable

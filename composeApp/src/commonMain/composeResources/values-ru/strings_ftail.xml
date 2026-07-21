@@ -11,6 +11,8 @@
     <string name="ftail_fkey_delete">Удалить</string>
     <string name="ftail_fkey_refresh">Обновить</string>
     <string name="ftail_fkey_quit">Выход</string>
+    <string name="ftail_fkey_save">Сохранить</string>
+    <string name="ftail_fkey_search">Поиск</string>
 
     <!-- Резервные сообщения об ошибках контроллеров/эффектов -->
     <string name="ftail_open_failed">Не удалось открыть SFTP</string>
@@ -24,6 +26,13 @@
     <string name="ftail_err_illegal_name">Недопустимое имя в списке файлов</string>
     <string name="ftail_err_open_source">Не удалось открыть выбранный файл</string>
     <string name="ftail_err_open_target">Не удалось открыть файл для записи</string>
+    <string name="ftail_err_too_large">Файл слишком большой, чтобы открыть его</string>
+
+    <!-- Ошибки просмотрщика/редактора (F3/F4) -->
+    <string name="ftail_edit_err_read">Не удалось прочитать файл</string>
+    <string name="ftail_edit_err_too_large">Файл слишком большой для редактора</string>
+    <string name="ftail_edit_err_binary">Двоичный файл — его нельзя править как текст</string>
+    <string name="ftail_edit_err_write">Не удалось сохранить файл</string>
 
     <!-- Локальная файловая система: подпись панели и «хлебных крошек» -->
     <string name="ftail_local_label">Это устройство</string>

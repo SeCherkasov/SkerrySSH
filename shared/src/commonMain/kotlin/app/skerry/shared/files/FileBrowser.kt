@@ -65,6 +65,37 @@ interface FileBrowser {
 }
 
 /**
+ * A [FileBrowser] that can also read and write a whole file — what the built-in viewer/editor
+ * (F3/F4) needs on top of navigation. Split from [FileBrowser] because the panel controller works
+ * with navigation alone; both production sources (local FS and SFTP) implement this.
+ */
+interface FileContentBrowser : FileBrowser {
+
+    /**
+     * Metadata for one object, or `null` if [path] doesn't exist. Used to detect a file changed
+     * underneath the editor (size/mtime) before overwriting it.
+     * @throws FileBrowserException if the source can't be queried at all (connection/access)
+     */
+    suspend fun stat(path: String): FileItem?
+
+    /**
+     * Reads file [path] entirely into memory, refusing anything over [maxBytes]
+     * ([FileBrowserFailure.TooLarge]). The cap is checked against the reported size *and* the bytes
+     * actually read, so a source understating the size can't blow up memory.
+     * @throws FileBrowserException if the path is missing, is a directory, access is denied, or the file is too large
+     */
+    suspend fun readFile(path: String, maxBytes: Long): ByteArray
+
+    /**
+     * Writes [data] to file [path], creating or truncating it in place (the parent must exist).
+     * In place, not write-to-temp-and-rename: the inode survives, so permissions/owner/hard links
+     * are preserved and SFTP servers that refuse `rename` onto an existing path still work.
+     * @throws FileBrowserException if access is denied, the parent is missing, or [path] is a directory
+     */
+    suspend fun writeFile(path: String, data: ByteArray)
+}
+
+/**
  * Typed, user-facing reason for a [FileBrowserException]. The UI maps it to a localized string;
  * platform text (okio/sshj/OS) is never shown as the primary message.
  */
@@ -83,6 +114,9 @@ enum class FileBrowserFailure {
 
     /** The chosen save target could not be opened for writing. */
     OpenTarget,
+
+    /** The file is larger than the caller's cap (whole-file read for the viewer/editor). */
+    TooLarge,
 }
 
 /**

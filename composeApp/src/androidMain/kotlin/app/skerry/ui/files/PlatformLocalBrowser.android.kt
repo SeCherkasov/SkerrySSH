@@ -1,6 +1,6 @@
 package app.skerry.ui.files
 
-import app.skerry.shared.files.FileBrowser
+import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.LocalFileBrowser
 import app.skerry.ui.sftp.SafBridge
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +16,7 @@ import okio.FileSystem
  * Context comes from [SafBridge] (set by the Activity in `onCreate`); falls back to the external
  * storage root before that. `getExternalFilesDir` creates the directory on first access.
  */
-actual fun platformLocalBrowser(): FileBrowser {
+actual fun platformLocalBrowser(): FileContentBrowser {
     val ctx = SafBridge.context()
     val home = ctx?.getExternalFilesDir(null)?.absolutePath
         ?: ctx?.filesDir?.absolutePath

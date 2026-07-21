@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.FileBrowserException
 import app.skerry.shared.files.FileBrowserFailure
+import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.sftp.SftpClient
@@ -15,6 +16,8 @@ import app.skerry.ui.sftp.DownloadTarget
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.UploadSource
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -45,7 +48,8 @@ private fun FileBrowserFailure.toTransferFailure(): FileTransferFailure = when (
     FileBrowserFailure.IllegalName -> FileTransferFailure.IllegalName
     FileBrowserFailure.OpenSource -> FileTransferFailure.OpenSource
     FileBrowserFailure.OpenTarget -> FileTransferFailure.OpenTarget
-    FileBrowserFailure.LocalIo, FileBrowserFailure.Sftp -> FileTransferFailure.Transfer
+    FileBrowserFailure.LocalIo, FileBrowserFailure.Sftp, FileBrowserFailure.TooLarge ->
+        FileTransferFailure.Transfer
 }
 
 /** Cross-pane batch transfer state, for the bottom transfer bar. */
@@ -93,9 +97,9 @@ class OverwriteConflict(val names: List<String>, val proceed: () -> Unit)
 class TransferCoordinator(
     private val sftp: SftpClient,
     val local: FilePaneController,
-    private val localBrowser: FileBrowser,
+    private val localBrowser: FileContentBrowser,
     val remote: FilePaneController,
-    private val remoteBrowser: FileBrowser,
+    private val remoteBrowser: FileContentBrowser,
     private val scope: CoroutineScope,
 ) {
     var transfer: TransferState by mutableStateOf(TransferState.Idle)
@@ -115,6 +119,19 @@ class TransferCoordinator(
      * as [FilePaneController].
      */
     private var busy = false
+
+    /**
+     * Held for the duration of an editor's write ([openEditor]). The session's teardown waits on it
+     * ([awaitEditorWrites]) before closing the SFTP channel: an editor save runs on this scope and
+     * outlives the editor UI, so closing the tab mid-save would otherwise cut the channel with the
+     * remote file already truncated and the new content only half written.
+     */
+    private val editorWrites = Mutex()
+
+    /** Suspends until no editor write is in flight. Called before the transport is closed. */
+    suspend fun awaitEditorWrites() {
+        editorWrites.withLock { }
+    }
 
     /**
      * Uploads the local pane's selection into the remote pane's current directory. Files are
@@ -269,6 +286,29 @@ class TransferCoordinator(
             transfer = TransferState.Idle
             remote.refresh()
         }
+    }
+
+    /**
+     * Editor/viewer (F3/F4) over [item] of the [fromLocal] pane's source. The controller runs on the
+     * coordinator's scope (the session's), so a save in flight survives the editor UI leaving
+     * composition — a cancelled write would leave the file truncated. The pane reloads after each
+     * successful save so the listing shows the new size/mtime.
+     */
+    fun openEditor(fromLocal: Boolean, item: FileItem, readOnly: Boolean): FileEditController? {
+        val pane = if (fromLocal) local else remote
+        // Path rebuilt from the pane's directory + a validated name, never the listing's own
+        // `item.path`: on the remote side that value is server-controlled, and trusting it would let
+        // a hostile listing redirect the read — and the save — to another file entirely. An entry
+        // whose name isn't usable as a path component simply doesn't open.
+        if (isUnsafeListingName(item.name)) return null
+        return FileEditController(
+            writeGuard = { write -> editorWrites.withLock { write() } },
+            source = if (fromLocal) localBrowser else remoteBrowser,
+            item = item.copy(path = childPath(pane.path, item.name)),
+            readOnly = readOnly,
+            scope = scope,
+            onSaved = { pane.refresh() },
+        ).also { it.open() }
     }
 
     /** Closes the transfer bar (resets to [TransferState.Idle]); doesn't touch an active transfer. */

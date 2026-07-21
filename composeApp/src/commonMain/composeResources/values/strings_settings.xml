@@ -179,6 +179,11 @@
     <string name="settings_kb_paste">Paste</string>
     <string name="settings_kb_global">GLOBAL</string>
     <string name="settings_kb_terminal_group">TERMINAL &amp; AUTOCOMPLETE</string>
+    <string name="settings_kb_files_group">FILE PANEL</string>
+    <string name="settings_kb_editor_group">FILE VIEWER / EDITOR</string>
+    <string name="settings_kb_files_switch_pane">Switch pane</string>
+    <string name="settings_kb_files_hidden">Show hidden files</string>
+    <string name="settings_kb_files_save">Save the file being edited</string>
     <string name="settings_badge_soon">SOON</string>
 
     <!-- About section -->

@@ -11,6 +11,8 @@
     <string name="ftail_fkey_delete">删除</string>
     <string name="ftail_fkey_refresh">刷新</string>
     <string name="ftail_fkey_quit">退出</string>
+    <string name="ftail_fkey_save">保存</string>
+    <string name="ftail_fkey_search">搜索</string>
 
     <!-- 控制器 / 副作用错误回退 -->
     <string name="ftail_open_failed">打开 SFTP 失败</string>
@@ -24,6 +26,13 @@
     <string name="ftail_err_illegal_name">列表中的文件名不安全</string>
     <string name="ftail_err_open_source">无法打开所选文件</string>
     <string name="ftail_err_open_target">无法打开保存目标</string>
+    <string name="ftail_err_too_large">文件太大，无法打开</string>
+
+    <!-- 查看器/编辑器（F3/F4）失败原因 -->
+    <string name="ftail_edit_err_read">读取文件失败</string>
+    <string name="ftail_edit_err_too_large">文件太大，编辑器无法打开</string>
+    <string name="ftail_edit_err_binary">二进制文件 — 无法按文本编辑</string>
+    <string name="ftail_edit_err_write">保存文件失败</string>
 
     <!-- 本地文件系统：面板标题与路径导航中的名称 -->
     <string name="ftail_local_label">本设备</string>

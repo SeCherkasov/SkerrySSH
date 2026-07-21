@@ -179,6 +179,11 @@
     <string name="settings_kb_paste">Вставить</string>
     <string name="settings_kb_global">ОБЩИЕ</string>
     <string name="settings_kb_terminal_group">ТЕРМИНАЛ И АВТОДОПОЛНЕНИЕ</string>
+    <string name="settings_kb_files_group">ФАЙЛОВАЯ ПАНЕЛЬ</string>
+    <string name="settings_kb_editor_group">ПРОСМОТР И ПРАВКА ФАЙЛА</string>
+    <string name="settings_kb_files_switch_pane">Переключить панель</string>
+    <string name="settings_kb_files_hidden">Показывать скрытые файлы</string>
+    <string name="settings_kb_files_save">Сохранить редактируемый файл</string>
     <string name="settings_badge_soon">СКОРО</string>
 
     <!-- Раздел About -->

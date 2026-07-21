@@ -5,7 +5,21 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import app.skerry.shared.files.FileContentBrowser
+import app.skerry.shared.files.FileItem
+import app.skerry.shared.files.FileItemType
 import app.skerry.shared.host.Host
+import app.skerry.ui.design.D
+import app.skerry.ui.files.FileEditController
+import app.skerry.ui.files.FileEditorScreen
 import app.skerry.shared.host.HostStore
 import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.shared.sftp.SftpClient
@@ -175,6 +189,9 @@ fun main() {
         "unlock" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}, onForgotPassword = {}) } } } }
         "corrupted" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopCorruptedScreen(onReset = {}) } } } }
         "reset" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopResetScreen(onConfirm = {}, onCancel = {}) } } } }
+        // The F4 editor is a modal opened by a key press, which an offscreen render can't send, and
+        // a Dialog has no platform layer here — so its card ([FileEditorPanel]) is rendered directly.
+        "editor" -> { { GateScreenPreview { EditorPreview() } } }
         else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, windowChrome = windowChrome) } }
     }
 
@@ -292,6 +309,44 @@ private fun seedFakeHome() {
 }
 
 /** Design font provider for standalone screen renders, bypassing [DesktopDesignApp]. */
+/** Canned nginx.conf for the [FileEditorPanel] preview, over an in-memory source. */
+@Composable
+private fun EditorPreview() {
+    val scope = rememberCoroutineScope()
+    val controller = remember {
+        val text = """
+            server {
+                listen 443 ssl http2;
+                server_name skerry.app;
+
+                ssl_certificate     /etc/letsencrypt/live/skerry.app/fullchain.pem;
+                ssl_certificate_key /etc/letsencrypt/live/skerry.app/privkey.pem;
+
+                location / {
+                    proxy_pass http://127.0.0.1:8080;
+                    proxy_set_header Host ${'$'}host;
+                }
+            }
+        """.trimIndent()
+        val item = FileItem("nginx.conf", "/etc/nginx/sites-enabled/nginx.conf", FileItemType.File, text.length.toLong(), 0)
+        FileEditController(PreviewFileSource(item, text), item, readOnly = false, scope = scope).also { it.open() }
+    }
+    FileEditorScreen(controller, onClose = {}, modifier = Modifier.fillMaxSize())
+}
+
+/** In-memory single-file source for [EditorPreview]. */
+private class PreviewFileSource(private val item: FileItem, private val text: String) : FileContentBrowser {
+    override val label = "prod-web-01"
+    override suspend fun realpath(path: String) = path
+    override suspend fun list(path: String): List<FileItem> = emptyList()
+    override suspend fun mkdir(path: String) = Unit
+    override suspend fun delete(item: FileItem) = Unit
+    override suspend fun rename(from: String, to: String) = Unit
+    override suspend fun stat(path: String): FileItem = item
+    override suspend fun readFile(path: String, maxBytes: Long): ByteArray = text.encodeToByteArray()
+    override suspend fun writeFile(path: String, data: ByteArray) = Unit
+}
+
 @Composable
 private fun GateScreenPreview(body: @Composable () -> Unit) {
     val fonts = DesignFonts(
@@ -694,7 +749,7 @@ private class FakeSftpClient : SftpClient {
     override suspend fun list(path: String): List<SftpEntry> = listing
     override suspend fun stat(path: String): SftpEntry? = null
     override suspend fun realpath(path: String): String = "/var/www"
-    override suspend fun read(path: String): ByteArray = ByteArray(0)
+    override suspend fun read(path: String, maxBytes: Long): ByteArray = ByteArray(0)
     override suspend fun write(path: String, data: ByteArray) = Unit
     override suspend fun download(remotePath: String, localPath: String, onProgress: SftpProgress) = Unit
     override suspend fun upload(localPath: String, remotePath: String, onProgress: SftpProgress) = Unit

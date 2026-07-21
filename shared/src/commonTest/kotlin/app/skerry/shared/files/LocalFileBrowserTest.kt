@@ -127,4 +127,60 @@ class LocalFileBrowserTest {
 
         assertFailsWith<FileBrowserException> { browser().delete(item) }
     }
+
+    @Test
+    fun `stat returns metadata for a file and null for a missing path`() = runTest {
+        fs.createDirectories("/dir".toPath())
+        fs.write("/dir/a.txt".toPath()) { writeUtf8("hello") }
+
+        val item = browser().stat("/dir/a.txt")
+
+        assertEquals("a.txt", item?.name)
+        assertEquals("/dir/a.txt", item?.path)
+        assertEquals(5, item?.size)
+        assertEquals(FileItemType.File, item?.type)
+        assertNull(browser().stat("/dir/missing"))
+    }
+
+    @Test
+    fun `readFile returns the file bytes`() = runTest {
+        fs.createDirectories("/dir".toPath())
+        fs.write("/dir/a.txt".toPath()) { writeUtf8("hello") }
+
+        assertEquals("hello", browser().readFile("/dir/a.txt", maxBytes = 1024).decodeToString())
+    }
+
+    @Test
+    fun `readFile refuses a file larger than the cap`() = runTest {
+        fs.createDirectories("/dir".toPath())
+        fs.write("/dir/big.log".toPath()) { write(ByteArray(5_000)) }
+
+        val e = assertFailsWith<FileBrowserException> { browser().readFile("/dir/big.log", maxBytes = 1024) }
+
+        assertEquals(FileBrowserFailure.TooLarge, e.failure)
+    }
+
+    @Test
+    fun `readFile of a missing path throws FileBrowserException`() = runTest {
+        val e = assertFailsWith<FileBrowserException> { browser().readFile("/dir/nope", maxBytes = 1024) }
+
+        assertEquals(FileBrowserFailure.LocalIo, e.failure)
+    }
+
+    @Test
+    fun `writeFile creates and truncates the file`() = runTest {
+        fs.createDirectories("/dir".toPath())
+        fs.write("/dir/a.txt".toPath()) { writeUtf8("a longer previous content") }
+
+        browser().writeFile("/dir/a.txt", "new".encodeToByteArray())
+
+        assertEquals("new", fs.read("/dir/a.txt".toPath()) { readUtf8() })
+    }
+
+    @Test
+    fun `writeFile into a missing directory throws FileBrowserException`() = runTest {
+        val e = assertFailsWith<FileBrowserException> { browser().writeFile("/nope/a.txt", ByteArray(1)) }
+
+        assertEquals(FileBrowserFailure.LocalIo, e.failure)
+    }
 }
