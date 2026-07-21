@@ -21,6 +21,8 @@ import app.skerry.ui.design.D
 import app.skerry.ui.files.FileEditController
 import app.skerry.ui.files.FileEditorScreen
 import app.skerry.shared.host.HostStore
+import app.skerry.shared.terminal.Asciicast
+import app.skerry.shared.terminal.CastEvent
 import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
@@ -167,6 +169,8 @@ fun main() {
         seedFakeHome()
         sessions?.setActiveView(SessionView.Sftp)
     }
+    // A recording plays in its own tab, so it can't be reached through the rail: open one directly.
+    if (viewName == "Player") sessions?.openPlayer("deploy.cast", seededCast())
     val knownHosts = if (live) seededKnownHosts() else null
     val tunnels = if (live && hosts != null) seededTunnels(hosts) else null
     val ai = if (live) seededAi() else null
@@ -452,6 +456,22 @@ private class InMemoryVault : Vault {
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = true
     override fun verifyPassword(password: CharArray): Boolean = true
 }
+
+/** A short canned recording for the player render (`view=Player`). */
+private fun seededCast(): Asciicast = Asciicast(
+    columns = 138,
+    rows = 30,
+    title = "deploy.cast",
+    events = listOf(
+        CastEvent(0.0, "\u001b[36mroot@prod-web-01\u001b[0m:~# ./deploy.sh\r\n"),
+        CastEvent(0.2, "  \u001b[32m✓\u001b[0m build      12.4s\r\n"),
+        CastEvent(0.4, "  \u001b[32m✓\u001b[0m tests      31.2s\r\n"),
+        CastEvent(0.6, "  \u001b[32m✓\u001b[0m rollout     4.8s\r\n"),
+        CastEvent(0.8, "\r\ndeployed \u001b[1mv0.1.9\u001b[0m to 3 nodes\r\n"),
+        // Full-width rule: shows at a glance whether the recording fills the pane edge to edge.
+        CastEvent(1.0, "\u001b[2m" + "\u2500".repeat(138) + "\u001b[0m"),
+    ),
+)
 
 /**
  * Tunnel manager over an in-memory store and the fake transport, so the offscreen Ports render

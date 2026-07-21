@@ -16,6 +16,44 @@ class TerminalGeometryTest {
     private val metrics = TerminalMetrics(cellWidth = 8f, cellHeight = 18f)
 
     @Test
+    fun `fit scale grows the font when the pane is wider than the recording`() {
+        // 80 cols x 24 rows at 8x18 px = 640x432; a 1280x864 pane (no padding) fits it twice over.
+        val scale = fitFontScale(1280f, 864f, paddingPx = 0f, metrics = metrics, cols = 80, rows = 24)
+        assertEquals(2f, scale)
+    }
+
+    @Test
+    fun `fit scale takes the tighter axis and honors padding`() {
+        // Width alone would allow 2x, height only 1.5x — the whole grid has to fit.
+        // Content area 1280x648: width allows 1280/640 = 2x, height only 648/432 = 1.5x.
+        val scale = fitFontScale(1290f, 658f, paddingPx = 5f, metrics = metrics, cols = 80, rows = 24)
+        assertEquals(1.5f, scale)
+    }
+
+    @Test
+    fun `fit scale shrinks the font when the pane is narrower than the recording`() {
+        // A 138-col recording in a 640px-wide pane: scaled down instead of wrapping its lines.
+        val scale = fitFontScale(640f, 2000f, paddingPx = 0f, metrics = metrics, cols = 138, rows = 24)
+        assertTrue(scale < 1f, "expected a shrink, got $scale")
+        assertTrue(138 * metrics.cellWidth * scale <= 640f)
+    }
+
+    @Test
+    fun `fit scale is 1 before the viewport or grid is known`() {
+        assertEquals(1f, fitFontScale(0f, 0f, paddingPx = 0f, metrics = metrics, cols = 80, rows = 24))
+        assertEquals(1f, fitFontScale(800f, 600f, paddingPx = 0f, metrics = metrics, cols = 0, rows = 0))
+        // Padding larger than the pane leaves no content area.
+        assertEquals(1f, fitFontScale(10f, 10f, paddingPx = 20f, metrics = metrics, cols = 80, rows = 24))
+    }
+
+    @Test
+    fun `fit scale is clamped for extreme geometries`() {
+        // A 1x1 "recording" in a huge pane would otherwise blow the font up past any usable size.
+        assertEquals(4f, fitFontScale(10_000f, 10_000f, paddingPx = 0f, metrics = metrics, cols = 1, rows = 1))
+        assertEquals(0.3f, fitFontScale(100f, 100f, paddingPx = 0f, metrics = metrics, cols = 1000, rows = 500))
+    }
+
+    @Test
     fun `offset inside the first cell maps to origin`() {
         assertEquals(TerminalPos(0, 0), cellAtOffset(x = 1f, y = 2f, metrics = metrics))
     }

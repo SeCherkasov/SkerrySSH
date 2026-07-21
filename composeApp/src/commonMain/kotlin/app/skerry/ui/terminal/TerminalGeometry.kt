@@ -15,6 +15,34 @@ data class TerminalMetrics(
     val cellHeight: Float,
 )
 
+/** Bounds for [fitFontScale]: a recording is never blown up or shrunk past readability. */
+private val FIT_FONT_SCALE_RANGE = 0.3f..4f
+
+/**
+ * Font scale that makes a fixed [cols]×[rows] grid fill the viewport, given [metrics] measured at
+ * the unscaled font size. Used by the recording player: a recording has the geometry it was taken
+ * at, so instead of re-flowing it into the pane (empty columns on the right in a wide window,
+ * wrapped lines in a narrow one) the glyphs are scaled and the grid is kept.
+ *
+ * The smaller of the two axis ratios wins — the whole grid has to fit — and the result is clamped
+ * to [FIT_FONT_SCALE_RANGE]. A viewport or grid that isn't measured yet gives 1 (no scaling).
+ */
+fun fitFontScale(
+    viewportWidthPx: Float,
+    viewportHeightPx: Float,
+    paddingPx: Float,
+    metrics: TerminalMetrics,
+    cols: Int,
+    rows: Int,
+): Float {
+    if (cols <= 0 || rows <= 0 || metrics.cellWidth <= 0f || metrics.cellHeight <= 0f) return 1f
+    val contentW = viewportWidthPx - 2 * paddingPx
+    val contentH = viewportHeightPx - 2 * paddingPx
+    if (contentW <= 0f || contentH <= 0f) return 1f
+    val scale = minOf(contentW / (cols * metrics.cellWidth), contentH / (rows * metrics.cellHeight))
+    return scale.coerceIn(FIT_FONT_SCALE_RANGE.start, FIT_FONT_SCALE_RANGE.endInclusive)
+}
+
 /**
  * Columns and rows that fit in the terminal viewport. Padding on both sides ([paddingPx]) is
  * subtracted from the viewport size, and the remainder is divided by cell size (floored — a partial

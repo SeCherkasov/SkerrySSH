@@ -6,18 +6,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
+import app.skerry.shared.terminal.Asciicast
 import app.skerry.shared.vnc.VncAuth
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.terminal.CastPlayback
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.vnc.VncSessionController
 
 /**
  * Sub-view of a session (tab-scoped): what's shown in its work area. Tunnels are not included here;
  * they're a global section, see [app.skerry.ui.app.DesktopView.isAppLevel]. [Vnc] is a
- * framebuffer tab (remote desktop) — it has no terminal/SFTP sub-views.
+ * framebuffer tab (remote desktop) and [Player] a recording being replayed — neither has
+ * terminal/SFTP sub-views.
  */
-enum class SessionView { Terminal, Sftp, Vnc }
+enum class SessionView { Terminal, Sftp, Vnc, Player }
 
 /**
  * One open session — a titlebar tab. Owns its own [ConnectionController] (one shell per session).
@@ -43,12 +46,21 @@ class Session(
      * so the many `session.controller` read-sites (split/status/close) stay total. See [isVnc].
      */
     val vncController: VncSessionController? = null,
+    /**
+     * Set only for player tabs (a recording being watched): when non-null, this tab replays a
+     * `.cast` instead of holding a connection, and [controller] is an idle, unused terminal
+     * controller kept so the many `session.controller` read-sites stay total. See [isPlayer].
+     */
+    val playback: CastPlayback? = null,
 ) {
     var hostId: String? by mutableStateOf(hostId)
         private set
 
     /** Whether this is a VNC (remote-desktop) tab rather than a terminal one. */
     val isVnc: Boolean get() = vncController != null
+
+    /** Whether this tab replays a recording rather than holding a session. */
+    val isPlayer: Boolean get() = playback != null
     var title: String by mutableStateOf(title)
         private set
     var subtitle: String by mutableStateOf(subtitle)
@@ -77,7 +89,8 @@ class Session(
      * [ConnectionUiState.Form]). Created by the "+" button; the first connection fills it. A tab
      * with a host already bound does not become blank again after [ConnectionController.disconnect].
      */
-    val isBlank: Boolean get() = hostId == null && vncController == null && controller.uiState is ConnectionUiState.Form
+    val isBlank: Boolean get() = hostId == null && vncController == null && playback == null &&
+        controller.uiState is ConnectionUiState.Form
 
     internal fun setView(v: SessionView) { view = v }
 
@@ -253,10 +266,29 @@ class SessionsController(
         return session.id
     }
 
-    /** Switch the active tab's sub-view (Terminal/SFTP); no-op on a VNC tab or with no active tab. */
+    /**
+     * Open a recording in its own tab (never reuses a blank one), locked to [SessionView.Player].
+     * A player tab lives beside the sessions instead of over them, so a shell stays reachable while
+     * a recording is watched. [title] is the tab label, resolved by the caller (the recording's own
+     * title, else a localized default). Returns the new tab's id.
+     */
+    fun openPlayer(title: String, cast: Asciicast): String {
+        // An idle terminal controller keeps `session.controller` non-null for the shared read-sites.
+        val session = Session(
+            newId(), hostId = null, title = title, subtitle = "", controllerFactory(),
+            playback = CastPlayback(cast),
+        )
+        session.setView(SessionView.Player)
+        sessions = sessions + session
+        activeId = session.id
+        return session.id
+    }
+
+    /** Switch the active tab's sub-view (Terminal/SFTP); no-op on a VNC/player tab or with none active. */
     fun setActiveView(view: SessionView) {
         val tab = active ?: return
-        if (tab.isVnc) return // VNC tabs are locked to the framebuffer view
+        // VNC and player tabs are locked to their own view — there is no shell behind them.
+        if (tab.isVnc || tab.isPlayer) return
         tab.setView(view)
     }
 
@@ -320,6 +352,7 @@ class SessionsController(
         if (index < 0) return
         sessions[index].controller.disconnect()
         sessions[index].vncController?.disconnect()
+        sessions[index].playback?.stop()
         sessions[index].splitSession?.controller?.disconnect()
         val remaining = sessions.toMutableList().apply { removeAt(index) }
         if (activeId == id) {
@@ -338,6 +371,7 @@ class SessionsController(
         sessions.forEach {
             it.controller.disconnect()
             it.vncController?.disconnect()
+            it.playback?.stop()
             it.splitSession?.controller?.disconnect()
         }
         sessions = emptyList()

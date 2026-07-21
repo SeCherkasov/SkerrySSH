@@ -658,7 +658,8 @@ private fun DesktopChrome(
                 HLine()
                 StatusBar()
             }
-            // The player owns the whole work area while it is open; Esc (via ModalScrim) closes it.
+            // Mock/preview only: with live sessions a recording opens in its own tab (SessionView.Player),
+            // and this state is never set. Esc (via ModalScrim) closes the overlay.
             state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }
             if (state.castInvalid) {
                 NoticeDialog(
@@ -1004,7 +1005,10 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                     val focused = if (s.splitOpen && s.focusedSplit) s.splitSession ?: s else s
                     SessionTabChip(
                         name = focused.tabTitle(state.showTerminalTitleOnTabs),
-                        dot = sessionDotColor(focused.controller.uiState),
+                        // A recording tab has no connection: its dot and accent are sunset, so it
+                        // never reads as a live (or dead) session.
+                        dot = if (s.isPlayer) D.sunset else sessionDotColor(focused.controller.uiState),
+                        accent = if (s.isPlayer) D.sunset else D.cyan,
                         split = s.splitOpen,
                         active = s.id == sessions.activeId,
                         onClick = { sessions.activate(s.id) },
@@ -1076,6 +1080,9 @@ private fun SessionTabChip(
     onClose: () -> Unit,
     split: Boolean = false,
     dragging: Boolean = false,
+    // Chip accent (strip/border/background tint). Sessions use cyan; a recording tab is sunset, so a
+    // replay is never mistaken for a live shell at a glance.
+    accent: Color = D.cyan,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(8.dp)
@@ -1083,6 +1090,10 @@ private fun SessionTabChip(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val showClose = active || hovered
+    // Accent tints: the same 10%/20% steps the cyan tokens use, so a non-default accent keeps the
+    // chip's weight instead of turning into a solid block.
+    val accentBg = accent.copy(alpha = 0.10f)
+    val accentBorder = accent.copy(alpha = 0.20f)
     Row(
         modifier
             // Dim a dragged chip (alpha) so it reads as "lifted" out of the row.
@@ -1091,17 +1102,17 @@ private fun SessionTabChip(
             .clip(shape)
             .background(
                 when {
-                    active -> D.cyan10
+                    active -> accentBg
                     hovered -> Color(0x1FFFFFFF)
                     else -> D.card
                 },
             )
-            .border(1.dp, if (active) D.cyan20 else D.line, shape)
+            .border(1.dp, if (active) accentBorder else D.line, shape)
             // Accent strip on the active tab's top edge (editor tab style). drawBehind renders over the
             // background/border but under content; doesn't inflate the chip's width.
             .then(
                 if (active) {
-                    Modifier.drawBehind { drawRect(D.cyan, size = Size(size.width, 2.dp.toPx())) }
+                    Modifier.drawBehind { drawRect(accent, size = Size(size.width, 2.dp.toPx())) }
                 } else {
                     Modifier
                 },
@@ -1113,7 +1124,7 @@ private fun SessionTabChip(
     ) {
         Dot(dot)
         // Split marker: the tab holds two panes.
-        if (split) Sym("splitscreen_right", size = 13.sp, color = if (active) D.cyan else D.faint)
+        if (split) Sym("splitscreen_right", size = 13.sp, color = if (active) accent else D.faint)
         Txt(
             name,
             color = if (active) D.text else D.dim,
@@ -1155,8 +1166,11 @@ private fun IconRail(state: DesktopDesignState) {
         // Collapse/expand toggle for the terminal's hosts sidebar: lives on the rail (not in the
         // sidebar header) and only while the terminal view is on screen. Deliberately shorter than
         // the 38dp view buttons — an auxiliary control, not a view. VNC maps to the same rail item
-        // but drives its own slide-over drawer (closed by default, overlays the framebuffer).
-        if (state.appOverlay == null && currentSessionView == DesktopView.Terminal) {
+        // but drives its own slide-over drawer (closed by default, overlays the framebuffer). A
+        // player tab has no sidebar at all — there is no host behind a recording.
+        if (state.appOverlay == null && currentSessionView == DesktopView.Terminal &&
+            sessions?.active?.view != SessionView.Player
+        ) {
             if (sessions?.active?.view == SessionView.Vnc) {
                 SidebarToggle(hidden = !state.vncSidebar, onToggle = state::toggleVncSidebar)
             } else {
