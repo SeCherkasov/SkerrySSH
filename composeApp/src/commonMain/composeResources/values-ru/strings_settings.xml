@@ -158,6 +158,10 @@
     <string name="settings_keyboard_subtitle">Горячие клавиши подстраиваются под вашу платформу. Терминальные привязки работают, когда сессия в фокусе.</string>
     <string name="settings_kb_new_connection">Новое подключение</string>
     <string name="settings_kb_command_palette">Палитра команд / поиск</string>
+    <string name="settings_kb_snippet_palette">Палитра сниппетов</string>
+    <string name="settings_kb_broadcast">Broadcast по сессиям</string>
+    <string name="settings_kb_record_session">Запись сессии (старт / стоп)</string>
+    <string name="settings_kb_play_recording">Воспроизвести запись</string>
     <string name="settings_kb_split_terminal">Разделить терминал</string>
     <string name="settings_kb_next_prev_tab">Следующая / предыдущая вкладка</string>
     <string name="settings_kb_select_tab_number">Выбрать вкладку по номеру</string>

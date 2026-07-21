@@ -1,7 +1,10 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.getValue
 import app.skerry.shared.terminal.castFileName
 import app.skerry.shared.terminal.recordingStamp
 import app.skerry.ui.design.D
@@ -9,6 +12,7 @@ import app.skerry.ui.design.IconBtn
 import app.skerry.ui.session.Session
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.vault.exportTextFile
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -17,16 +21,20 @@ import kotlinx.coroutines.launch
  *
  * Nothing is written until the user picks a file: a recording holds whatever the server printed, so
  * it must not land on disk as a side effect of clicking a toolbar button.
+ *
+ * [requests] is the hotkey channel (⌘R / Ctrl+Shift+R): the shell can't toggle recording itself,
+ * because start/stop lives on the terminal state this button holds.
  */
 @Composable
-fun RecordSessionButton(session: Session?, onDone: (RecordingOutcome) -> Unit) {
+fun RecordSessionButton(
+    session: Session?,
+    requests: SharedFlow<Unit>? = null,
+    onDone: (RecordingOutcome) -> Unit,
+) {
     val terminal = (session?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val scope = rememberCoroutineScope()
     val recording = terminal?.recording == true
-    IconBtn(
-        name = if (recording) "stop_circle" else "radio_button_checked",
-        tint = if (recording) D.sunset else D.dim,
-        onClick = onClick@{
+    val toggle = onClick@{
             val live = terminal ?: return@onClick
             if (!live.recording) {
                 live.startRecording(session.displayTitle.ifBlank { session.subtitle })
@@ -49,7 +57,15 @@ fun RecordSessionButton(session: Session?, onDone: (RecordingOutcome) -> Unit) {
                     },
                 )
             }
-        },
+        }
+    // The hotkey does exactly what a click does. rememberUpdatedState so a collector started for an
+    // earlier session doesn't keep toggling a terminal that is no longer on screen.
+    val currentToggle by rememberUpdatedState(toggle)
+    LaunchedEffect(requests) { requests?.collect { currentToggle() } }
+    IconBtn(
+        name = if (recording) "stop_circle" else "radio_button_checked",
+        tint = if (recording) D.sunset else D.dim,
+        onClick = toggle,
     )
 }
 

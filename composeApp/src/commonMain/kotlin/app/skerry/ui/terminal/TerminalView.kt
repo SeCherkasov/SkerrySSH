@@ -102,12 +102,12 @@ private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modif
         // Tunnels is a global section, always opens as an overlay.
         IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
         // Quick snippet launch into the active session without leaving for the Snippets section.
-        SnippetPaletteButton(active)
+        SnippetPaletteButton(active, state.snippetPaletteRequests)
         // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
-        RecordSessionButton(active) { state.showRecordingNotice(it) }
+        RecordSessionButton(active, state.recordingToggleRequests) { state.showRecordingNotice(it) }
         // Plays a .cast back over the shell. Not tied to a session (a recording is watched, not run),
         // which is why it sits here rather than behind a connected-only guard.
-        PlayRecordingButton { state.showCast(it) }
+        PlayRecordingButton(state.castOpenRequests) { state.showCast(it) }
         // Lit while the info panel is open — the only action here with a visible on/off state.
         IconBtn("info", onClick = state::toggleInfo, tint = if (state.infoPanel) D.cyanBright else D.dim)
         // Power: closes the active session (live path) with a confirmation prompt

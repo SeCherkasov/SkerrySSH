@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.LocalSnippets
+import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
@@ -61,11 +62,14 @@ import org.jetbrains.compose.resources.stringResource
 // Snippet palette: quickly run a saved command in the active terminal directly from the toolbar.
 
 @Composable
-internal fun SnippetPaletteButton(active: Session?) {
+internal fun SnippetPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
     val manager = LocalSnippets.current
     val terminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     // Keyed on active: switching tabs must not leave the palette open over a different toolbar.
     var open by remember(active) { mutableStateOf(false) }
+    // Hotkey channel (⌘S / Ctrl+Shift+S). It only opens: with nothing to run into, the palette would
+    // be a dead-end popup, so the key falls through to whatever else wants it.
+    LaunchedEffect(requests, terminal) { requests?.collect { if (terminal != null) open = true } }
     if (manager == null) return
     Box {
         // Nowhere to run without a connected session — the button is dimmed and doesn't open.
