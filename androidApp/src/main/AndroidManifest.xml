@@ -28,6 +28,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Local model inference runs in its own process: llama.cpp aborts the process instead of
+             throwing (issue #37), and here that costs one answer rather than the app with every open
+             SSH session. Not exported — only this app binds it. -->
+        <service
+            android:name="app.skerry.shared.ai.local.LlmHostService"
+            android:exported="false"
+            android:process=":llm" />
     </application>
 
 </manifest>

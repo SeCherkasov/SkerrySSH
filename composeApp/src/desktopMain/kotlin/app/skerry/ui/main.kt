@@ -39,7 +39,10 @@ import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.tunnel.VaultTunnelStore
 import app.skerry.ui.sync.FileSyncConfigStore
 import app.skerry.shared.ai.AiSettingsStore
-import app.skerry.shared.ai.local.LlamatikRuntime
+import app.skerry.shared.ai.local.IsolatedLlmRuntime
+import app.skerry.shared.ai.local.LlmHostCommandLine
+import app.skerry.shared.ai.local.LlmHostMain
+import app.skerry.shared.ai.local.ProcessLlmHostLauncher
 import app.skerry.shared.ai.local.LocalModelStore
 import app.skerry.shared.ai.local.ModelDownloader
 import app.skerry.ui.ai.LocalAiDeps
@@ -271,7 +274,10 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val localAi = LocalAiDeps(
         store = localModelStore,
         downloader = ModelDownloader(FileSystem.SYSTEM, localModelStore),
-        runtime = LlamatikRuntime(contextLength = 4096),
+        // Inference runs in a child JVM: llama.cpp aborts the process on some inputs and corrupts
+        // memory when loaded next to Skia/AWT (issue #37). Out of process, a native crash costs one
+        // answer instead of every open SSH session.
+        runtime = IsolatedLlmRuntime(ProcessLlmHostLauncher(contextLength = 4096)),
     )
     val ai = AiAssistantController(
         initialSettings = aiSettingsStore.load(),
@@ -369,7 +375,11 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     )
 }
 
-fun main() {
+fun main(args: Array<String>) {
+    // Started as the isolated inference host (issue #37): serve llama.cpp and nothing else — no
+    // vault, no window. A packaged build has no bundled `java` to spawn, so the app re-launches its
+    // own launcher with this flag; the branch must come before anything touches AWT or Skia.
+    if (LlmHostCommandLine.isHostRun(args)) return LlmHostMain.main(args)
     // libsodium (ionspin) requires async init before the first VaultCrypto call; on desktop startup
     // this is done blocking so the dependency graph is already built and ready.
     runBlocking { initializeVaultCrypto() }

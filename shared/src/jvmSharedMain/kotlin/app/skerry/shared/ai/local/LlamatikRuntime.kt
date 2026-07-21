@@ -19,7 +19,13 @@ import okio.Path
 
 /**
  * [LocalLlmRuntime] over Llamatik (llama.cpp, GGUF), one implementation shared by desktop and
- * Android (the KMP artifact bundles both natives). `LlamaBridge` is a global singleton native
+ * Android (the KMP artifact bundles both natives).
+ *
+ * **Runs inside the isolated inference host, never in the app process** — see [IsolatedLlmRuntime]
+ * and issue #37: the native library corrupts memory when it is loaded after Skia/AWT, and it aborts
+ * the process rather than throwing. The app talks to it across a process boundary.
+ *
+ * `LlamaBridge` is a global singleton native
  * library with a single loaded model and global generation state, so:
  * - one runtime instance per process (the model stays resident between requests, reloaded only
  *   on file change);
@@ -45,8 +51,10 @@ class LlamatikRuntime(
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 try {
-                    ensureLoaded(modelPath)
+                    // Params first: contextLength/numThreads are read when the context is built,
+                    // so setting them after the load would only take effect on the next model.
                     applyParams(request)
+                    ensureLoaded(modelPath)
                     val prompt = renderPrompt(request.messages)
                     var failure: String? = null
                     LlamaBridge.generateStream(
