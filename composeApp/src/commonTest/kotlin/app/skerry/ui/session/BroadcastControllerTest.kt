@@ -14,7 +14,10 @@ class BroadcastControllerTest {
     private fun targets(vararg ids: String): Pair<List<BroadcastTarget>, Map<String, Recorder>> {
         val recorders = ids.associateWith { Recorder() }
         val list = ids.map { id ->
-            BroadcastTarget(id = id, label = "host-$id", send = { text -> recorders.getValue(id).sent += text })
+            BroadcastTarget(id = id, label = "host-$id", send = { text ->
+                recorders.getValue(id).sent += text
+                true
+            })
         }
         return list to recorders
     }
@@ -103,7 +106,22 @@ class BroadcastControllerTest {
         val recorder = Recorder()
         val all = listOf(
             BroadcastTarget("bad", "host-bad", send = { error("channel is gone") }),
-            BroadcastTarget("good", "host-good", send = { recorder.sent += it }),
+            BroadcastTarget("good", "host-good", send = { recorder.sent += it; true }),
+        )
+        c.selectAll(all)
+
+        assertEquals(1, c.send("ls", all))
+        assertEquals(listOf("ls\n"), recorder.sent)
+    }
+
+    @Test
+    fun a_target_that_did_not_take_the_command_is_not_counted_as_delivered() {
+        val c = BroadcastController()
+        val recorder = Recorder()
+        val all = listOf(
+            // Transport dropped a moment ago: the session is still on screen but takes nothing.
+            BroadcastTarget("dead", "host-dead", send = { false }),
+            BroadcastTarget("live", "host-live", send = { recorder.sent += it; true }),
         )
         c.selectAll(all)
 

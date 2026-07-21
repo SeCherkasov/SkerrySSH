@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +55,11 @@ import app.skerry.ui.generated.resources.term_palette_title
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 
 /**
  * Command palette (⌘K / Ctrl+Shift+K): fuzzy search over the command history of every host, with
@@ -108,16 +111,18 @@ internal fun CommandPalette(
         ) {
             Txt(stringResource(Res.string.term_palette_title), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
             PaletteSearch(query, { query = it }, mono, searchFocus)
-            Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
+            // Lazy, not a scrolling Column: the list runs to [commandSuggestions]'s cap of 200 and
+            // is rebuilt on every keystroke, so only the visible rows should be laid out.
+            LazyColumn(Modifier.heightIn(max = 360.dp).padding(top = 6.dp)) {
                 if (records == null) {
                     // Still loading; an empty box beats flashing "no commands" for a frame.
                 } else if (suggestions.isEmpty()) {
-                    Txt(stringResource(Res.string.term_palette_empty), color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+                    item {
+                        Txt(stringResource(Res.string.term_palette_empty), color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+                    }
                 } else {
-                    suggestions.forEach { suggestion ->
-                        key(suggestion.command) {
-                            CommandRow(suggestion, mono) { onPick(suggestion.command) }
-                        }
+                    items(suggestions, key = { it.command }) { suggestion ->
+                        CommandRow(suggestion, mono) { onPick(suggestion.command) }
                     }
                 }
             }
@@ -149,6 +154,19 @@ private fun PaletteSearch(value: String, onValueChange: (String) -> Unit, mono: 
     }
 }
 
+/**
+ * The command with the characters the query matched picked out — what makes a fuzzy hit readable
+ * ("dcp" matching `docker compose pull`). Positions come from the matcher, which is the only thing
+ * that knows which characters they were.
+ */
+internal fun highlightMatches(suggestion: CommandSuggestion): AnnotatedString = buildAnnotatedString {
+    append(suggestion.command)
+    val hit = SpanStyle(color = D.cyanBright, fontWeight = FontWeight.SemiBold)
+    for (i in suggestion.positions) {
+        if (i in suggestion.command.indices) addStyle(hit, i, i + 1)
+    }
+}
+
 @Composable
 private fun CommandRow(suggestion: CommandSuggestion, mono: FontFamily, onClick: () -> Unit) {
     Row(
@@ -156,7 +174,7 @@ private fun CommandRow(suggestion: CommandSuggestion, mono: FontFamily, onClick:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Txt(suggestion.command, color = D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+        Txt(highlightMatches(suggestion), color = D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
         val origin = when {
             suggestion.fromCurrentHost -> stringResource(Res.string.term_palette_this_host)
             else -> suggestion.hostLabel

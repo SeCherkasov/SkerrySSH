@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +39,9 @@ import app.skerry.ui.generated.resources.term_palette_title
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.terminal.highlightMatches
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 
 /**
  * Command palette on mobile: the desktop overlay ([app.skerry.ui.terminal.CommandPalette]) as a
@@ -66,33 +67,41 @@ internal fun MobileCommandPaletteSheet(
     }
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.75f) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Txt(stringResource(Res.string.term_palette_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            MobileFormInput(query, { query = it }, stringResource(Res.string.term_palette_placeholder))
-            if (records != null && suggestions.isEmpty()) {
-                Txt(stringResource(Res.string.term_palette_empty), color = D.faint, size = 13.sp)
+        // Lazy, not a scrolling Column: the list runs to [commandSuggestions]'s cap of 200 and is
+        // rebuilt on every keystroke, so only the visible rows should be laid out.
+        LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item {
+                Txt(stringResource(Res.string.term_palette_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
             }
-            suggestions.forEach { suggestion ->
-                key(suggestion.command) {
-                    val onClick = remember(suggestion.command) { { onPick(suggestion.command) } }
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(D.card)
-                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-                            .padding(horizontal = 12.dp, vertical = 11.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Txt(suggestion.command, color = D.text, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
-                        val origin = if (suggestion.fromCurrentHost) stringResource(Res.string.term_palette_this_host) else suggestion.hostLabel
-                        if (origin != null) Txt(origin, color = if (suggestion.fromCurrentHost) D.cyanBright else D.faint, size = 10.sp)
-                    }
+            item {
+                MobileFormInput(query, { query = it }, stringResource(Res.string.term_palette_placeholder))
+            }
+            if (records != null && suggestions.isEmpty()) {
+                item {
+                    Txt(stringResource(Res.string.term_palette_empty), color = D.faint, size = 13.sp)
                 }
             }
-            Txt(stringResource(Res.string.term_palette_hint), color = D.faint, size = 11.sp)
-            Spacer(Modifier.height(4.dp))
+            items(suggestions, key = { it.command }) { suggestion ->
+                val onClick = remember(suggestion.command) { { onPick(suggestion.command) } }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(D.card)
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Txt(highlightMatches(suggestion), color = D.text, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+                    val origin = if (suggestion.fromCurrentHost) stringResource(Res.string.term_palette_this_host) else suggestion.hostLabel
+                    if (origin != null) Txt(origin, color = if (suggestion.fromCurrentHost) D.cyanBright else D.faint, size = 10.sp)
+                }
+            }
+            item {
+                Txt(stringResource(Res.string.term_palette_hint), color = D.faint, size = 11.sp)
+                Spacer(Modifier.height(4.dp))
+            }
         }
     }
 }

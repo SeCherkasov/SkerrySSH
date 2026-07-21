@@ -75,6 +75,8 @@ import app.skerry.ui.generated.resources.lib_snippets_save
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_select_or_create
 import app.skerry.ui.generated.resources.lib_snippets_shortcut_conflict
+import app.skerry.ui.generated.resources.lib_snippets_shortcut_reserved
+import app.skerry.ui.desktop.matchDesktopShortcut
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
@@ -224,11 +226,20 @@ private fun SnippetEditor(
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
                 // Conflict is checked against other snippets (this one's own shortcut isn't a
                 // conflict); the UI prevents assigning the same chord twice, which
-                // [SnippetManager.forShortcut] doesn't guarantee on read.
+                // [SnippetManager.forShortcut] doesn't guarantee on read. Shell hotkeys are checked
+                // too: they run first and consume the event, so a snippet on one would never fire.
                 val conflict = remember(manager.snippets, form.shortcut, entry?.id) {
                     form.shortcut?.let { manager.shortcutConflict(it, entry?.id) }
                 }
-                ShortcutField(form.shortcut, mono, conflictLabel = conflict?.snippet?.label) { form.shortcut = it }
+                val reserved = remember(form.shortcut) {
+                    form.shortcut?.let { matchDesktopShortcut(it) != null } == true
+                }
+                val conflictText = when {
+                    reserved -> stringResource(Res.string.lib_snippets_shortcut_reserved)
+                    conflict != null -> stringResource(Res.string.lib_snippets_shortcut_conflict, conflict.snippet.label)
+                    else -> null
+                }
+                ShortcutField(form.shortcut, mono, conflictText = conflictText) { form.shortcut = it }
             }
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrimaryButton(
@@ -345,10 +356,10 @@ private fun SnipTagPill(tag: String, onRemove: () -> Unit) {
 // --- Snippet hotkey capture ---
 
 @Composable
-private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: String?, onCapture: (String?) -> Unit) {
+private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String?, onCapture: (String?) -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
-    val hasConflict = conflictLabel != null
+    val hasConflict = conflictText != null
     Column {
         Box(
             Modifier
@@ -377,11 +388,11 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: Strin
             val text = value ?: if (focused) stringResource(Res.string.lib_snippets_press_keys) else "—"
             Txt(text, color = if (value != null) D.text else D.faint, size = 13.sp, font = mono)
         }
-        // The chord may already be assigned to another snippet; the assignment still takes
-        // effect, we just warn — saving is never blocked.
-        if (conflictLabel != null) {
+        // The chord may already be taken (by another snippet or by the shell); the assignment still
+        // takes effect, we just warn — saving is never blocked.
+        if (conflictText != null) {
             Txt(
-                stringResource(Res.string.lib_snippets_shortcut_conflict, conflictLabel),
+                conflictText,
                 color = D.storm, size = 11.sp,
                 modifier = Modifier.padding(top = 6.dp),
             )
