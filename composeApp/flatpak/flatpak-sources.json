@@ -113,171 +113,185 @@
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation-jvm/1.9.4/runtime-annotation-jvm-1.9.4.jar",
-    "sha512": "d7584a09724a239e1df22dd3b7fe9d2ce9ef8924bc7281952312e4d3b63a63dd8b132e77a5683dae346af25e8006e8ce462b29929707584080ff537688717252",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation-jvm/1.9.4",
-    "dest-filename": "runtime-annotation-jvm-1.9.4.jar"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation-jvm/1.11.1/runtime-annotation-jvm-1.11.1.jar",
+    "sha512": "8e669556eba6ed47fadd9ff631b0f0dc530615e2b926d3073afdbd05ab4a7195936f07bca7357ec1de7ca3244537a9c052ebcaf3d0dcb106cc4c84978e14d846",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation-jvm/1.11.1",
+    "dest-filename": "runtime-annotation-jvm-1.11.1.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation-jvm/1.9.4/runtime-annotation-jvm-1.9.4.module",
-    "sha512": "b10ff1c2c0694c7fdac8342fcfc60d089ca3b501a1b41c02a586d6ddbbad8fad72fb738435cc3d061526f2b5b359734c12fa9e8189cbb0fcdb8b5ee0837f24a7",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation-jvm/1.9.4",
-    "dest-filename": "runtime-annotation-jvm-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation-jvm/1.11.1/runtime-annotation-jvm-1.11.1.module",
+    "sha512": "17050ebaf85617dcae11ea920d9e00588b8d3d46b4987d7bcf4208e36c60a18a11d3041b2c36ea29221422be9cff2d6b3b5e9226f13ad8eba0e5109de66dd8e3",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation-jvm/1.11.1",
+    "dest-filename": "runtime-annotation-jvm-1.11.1.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation-jvm/1.9.4/runtime-annotation-jvm-1.9.4.pom",
-    "sha512": "1a8b1709cfab06865570a42c27fe7a48e1826e4ff2d5e2a159932df9a4680ed3255dcff4cd986f4aa60c0142eb8f3f131c6c14cd8ab78ddc1ec13326476d3df4",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation-jvm/1.9.4",
-    "dest-filename": "runtime-annotation-jvm-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation-jvm/1.11.1/runtime-annotation-jvm-1.11.1.pom",
+    "sha512": "f0f3c7ad15f404c39c55a2e0923ed2c7e67503c10aec19b3d38f4501352c7adbdd648ed3fbfcf2af93104d2a30a56b8ee1030cabbfa43172aba5064d5f4597f4",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation-jvm/1.11.1",
+    "dest-filename": "runtime-annotation-jvm-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation/1.9.4/runtime-annotation-1.9.4.module",
-    "sha512": "f9d801220ac661faa9eb126faf9d428ca2dd78a47fb578ba593b92d992a596eca4143b01abd8ba902e22235bff607850bc63e57ed09ff879ca09b00129241df0",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation/1.9.4",
-    "dest-filename": "runtime-annotation-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation/1.11.1/runtime-annotation-1.11.1.module",
+    "sha512": "d616df2988aa7be97b666b70dfa04d7adbd6f2ea68b2d30f067825f4f58a0352a945fbf35486c5676230bd6feca08489e68f43bcbf945f09fdbe495e24f1faa1",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation/1.11.1",
+    "dest-filename": "runtime-annotation-1.11.1.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation/1.9.4/runtime-annotation-1.9.4.pom",
-    "sha512": "090cd55434388e01ce04bfdcb33fa1116e8a392db5be1b69ff2d1b9ea7d9774a21e7b202d36ed0e413a65bc4ace4a5cf7d0744f38807ae307b61c12ee4a54864",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation/1.9.4",
-    "dest-filename": "runtime-annotation-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation/1.11.1/runtime-annotation-1.11.1.pom",
+    "sha512": "074211fd5c04c0c5a1b91d5177fa1f06113132ec683eb612adc47b5158a421282dcc20f60a88c9d9e8d2061fbf83419f24e1c8d86b75f8e585d9bd194e3b0bb6",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation/1.11.1",
+    "dest-filename": "runtime-annotation-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation/1.9.4/../../runtime-annotation-jvm/1.9.4/runtime-annotation-jvm-1.9.4.module",
-    "sha512": "b10ff1c2c0694c7fdac8342fcfc60d089ca3b501a1b41c02a586d6ddbbad8fad72fb738435cc3d061526f2b5b359734c12fa9e8189cbb0fcdb8b5ee0837f24a7",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation/1.9.4/../../runtime-annotation-jvm/1.9.4",
-    "dest-filename": "runtime-annotation-jvm-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-annotation/1.11.1/../../runtime-annotation-jvm/1.11.1/runtime-annotation-jvm-1.11.1.module",
+    "sha512": "17050ebaf85617dcae11ea920d9e00588b8d3d46b4987d7bcf4208e36c60a18a11d3041b2c36ea29221422be9cff2d6b3b5e9226f13ad8eba0e5109de66dd8e3",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-annotation/1.11.1/../../runtime-annotation-jvm/1.11.1",
+    "dest-filename": "runtime-annotation-jvm-1.11.1.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-desktop/1.9.4/runtime-desktop-1.9.4.jar",
-    "sha512": "fd3504f8966eeba5e52c32df6e64412356af07acee627d369dca0823f2eced2ec7b37d53e8a8f44d229b0ff8ef081708ba5e3a59a7ada34d685b6b90d543bd40",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-desktop/1.9.4",
-    "dest-filename": "runtime-desktop-1.9.4.jar"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-desktop/1.11.1/runtime-desktop-1.11.1.jar",
+    "sha512": "a428b52a3dee5320ef15c498f2897542459fcb9d48d33083eef9a7c478503c14afaf24ceb9b6134c10a77bd3292c7a80a07e47d3cf6e51569de7308832d8ad70",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-desktop/1.11.1",
+    "dest-filename": "runtime-desktop-1.11.1.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-desktop/1.9.4/runtime-desktop-1.9.4.module",
-    "sha512": "97fd663657c9fd8e71abe69d5856b29a7d9ba8a6ce7f9f34872681f185e87b899ef16211123c467f2b9998909fbdead2d04cf4c779c19b3be8f0bd9ec860c7b5",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-desktop/1.9.4",
-    "dest-filename": "runtime-desktop-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-desktop/1.11.1/runtime-desktop-1.11.1.module",
+    "sha512": "442e5dd12322d1a183747b41606b77cb8f28094fb7a4ba2585fe972560e9e1432ce4950574417dbd432397d66bb7a54dbeef1591402f7c55c1323f9979d0ef1a",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-desktop/1.11.1",
+    "dest-filename": "runtime-desktop-1.11.1.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-desktop/1.9.4/runtime-desktop-1.9.4.pom",
-    "sha512": "c40817d1e9bb5d3309bfeda62126df92faa61c8e2482d786757aa2ab41b5aabb272c9738b16ef1adbc22a3ac689079fb8c1eaf19914b466fe48559d1620c39e3",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-desktop/1.9.4",
-    "dest-filename": "runtime-desktop-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-desktop/1.11.1/runtime-desktop-1.11.1.pom",
+    "sha512": "c7ca91a0681b5d73a693fb32355bc43652996ade58ac89e823b7a75f2ffee980989d2923be72cf6fc5cb0a27e0c3a36cf7c2e72e7102594fcc6d5c0c9861729f",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-desktop/1.11.1",
+    "dest-filename": "runtime-desktop-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-lint/1.9.4/runtime-lint-1.9.4.pom",
-    "sha512": "95fe9ee1a8f19435df0de9a7c214494d9de582e1fce505f589eb325a3a36073f434bf1ea7b2f7e900986d02a2fe237ca3c89bf31055966ad30a2d80ca31cf7ad",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-lint/1.9.4",
-    "dest-filename": "runtime-lint-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-lint/1.11.1/runtime-lint-1.11.1.pom",
+    "sha512": "8a6ec129444d3f088383a7c8ee01f01e4519ed105404e67a200d210360ede256435b4eb9ef1809a7d0aebe435faf76c5896998282f527355291afa540e6715df",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-lint/1.11.1",
+    "dest-filename": "runtime-lint-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-livedata/1.9.4/runtime-livedata-1.9.4.pom",
-    "sha512": "dcfba23e32f8f1470db9a89cd50c1a623aab7de4f7cde7d7785f25b9d9a1f4558d65f2a94c21ed98e6700821bb177a554bdc8a1a11b60a003c727d2ae1e16b43",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-livedata/1.9.4",
-    "dest-filename": "runtime-livedata-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-livedata/1.11.1/runtime-livedata-1.11.1.pom",
+    "sha512": "4e76a4f227ff45f497cc80e78a6d34174612f9e1482d6806a5b15cf7bc0bddff196df607b31f499227997fcd8a2fcc158ab75e715f4e0b41fb1d2c8c881776d3",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-livedata/1.11.1",
+    "dest-filename": "runtime-livedata-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-rxjava2/1.9.4/runtime-rxjava2-1.9.4.pom",
-    "sha512": "526a97a2489025d310571a7b8c9a408297a9c8bcf0151089124fa60c0432530bc6d8bb8d54364a39192d3679ed5169392bc8e00ad4d2d44a95dea29543178211",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-rxjava2/1.9.4",
-    "dest-filename": "runtime-rxjava2-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-retain-lint/1.11.1/runtime-retain-lint-1.11.1.pom",
+    "sha512": "393767b09e74a7ed89d5b72a3c461c7903f6f03fab55d079a1d271851ca5925350a995ba8ca80f2ca1c8ed41b438ed5ad1dd750d0fcbedb7223632c762ee9829",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-retain-lint/1.11.1",
+    "dest-filename": "runtime-retain-lint-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-rxjava3/1.9.4/runtime-rxjava3-1.9.4.pom",
-    "sha512": "c2326e625d9ac90fb7420c3e37846113af390c0e5d901e9a58d78af1b1f3e4ac0afcd9bdcdf5d444c95d7fdb95c56a3e73db45f226c7d76745a16bdda4f4028d",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-rxjava3/1.9.4",
-    "dest-filename": "runtime-rxjava3-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-retain/1.11.1/runtime-retain-1.11.1.pom",
+    "sha512": "43c970c485807383c8024319e33eedbd0e9be680f7f520b2e0613433ae9fa32169415c4796e94633152f6b3fccef417fb3566795ef27d8d8a9212a831eb4a2cb",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-retain/1.11.1",
+    "dest-filename": "runtime-retain-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable-desktop/1.9.4/runtime-saveable-desktop-1.9.4.jar",
-    "sha512": "9814214310df60273ac4594a69364a029ff169694c7c39718546e3a1413cc2518cb0c552d552da43cc7b0cc836012bcb313680a5f9202aea83b65db116d1cb54",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable-desktop/1.9.4",
-    "dest-filename": "runtime-saveable-desktop-1.9.4.jar"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-rxjava2/1.11.1/runtime-rxjava2-1.11.1.pom",
+    "sha512": "439cec5ca38b26af65a0b7d4ca83ec8f13fcdddc45ac4c4868cd0b7e0ed4cb5b6a9461a721fe364a31ef883c4cfe52f89bec7ab7da1a2649e6541379cfd1efcb",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-rxjava2/1.11.1",
+    "dest-filename": "runtime-rxjava2-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable-desktop/1.9.4/runtime-saveable-desktop-1.9.4.module",
-    "sha512": "b3ff6b95d78986b868d03557ee9ad22797ae0a8b0211cfedb811d12864f5e990f11db4f75499adc505fc46572320683acab207956042f7e095ca5be12fdd548c",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable-desktop/1.9.4",
-    "dest-filename": "runtime-saveable-desktop-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-rxjava3/1.11.1/runtime-rxjava3-1.11.1.pom",
+    "sha512": "21c37b8b9ba56be344986c9c406a158a0d7041a9e0d9a604f099f86c6d5e6d4c91f97480d936c7290f08c12df0a9b03a9ba4f9fc7c1b9da5c9379d8f8aa0668d",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-rxjava3/1.11.1",
+    "dest-filename": "runtime-rxjava3-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable-desktop/1.9.4/runtime-saveable-desktop-1.9.4.pom",
-    "sha512": "3936f8410a8383563d7f1c5632829afa62abce7bfca1b658d3dd6986dfd29d3a821d45245c308e2189ba5a98d0a410e50015e5ce049397141e451764cdc38b4e",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable-desktop/1.9.4",
-    "dest-filename": "runtime-saveable-desktop-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable-desktop/1.11.1/runtime-saveable-desktop-1.11.1.jar",
+    "sha512": "a5e651c0395c1254854361d3623f70dafa75bbf66fccd71645cb65ea17ef161f730861172551e674fdcba172bc2e5e3cb62408d36825461793fa1193923f4732",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable-desktop/1.11.1",
+    "dest-filename": "runtime-saveable-desktop-1.11.1.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable-lint/1.9.4/runtime-saveable-lint-1.9.4.pom",
-    "sha512": "f3fad2edefcd3609aa1b8b10281957125a6b98aaa1ba18336c172bebc3dc07afee073c70b12b36c3df9b97b0e5670d620be5e57ab60008a1adb7107c493bdc35",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable-lint/1.9.4",
-    "dest-filename": "runtime-saveable-lint-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable-desktop/1.11.1/runtime-saveable-desktop-1.11.1.module",
+    "sha512": "dcd5884265a7b1193427711486791d8606e124ca616b4a2dca966ecd0f652bbca14b915a409ed2ef846a176e2f6e13f795105c2b4c2d06578a1e9c56853c7a96",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable-desktop/1.11.1",
+    "dest-filename": "runtime-saveable-desktop-1.11.1.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable/1.9.4/runtime-saveable-1.9.4.module",
-    "sha512": "364778b4731492e960183d7334e520f38f3d2c66feaf109a97826a0c80f91ac1f74578e88d15b44b81d5ba97336c73f1c7961fd5e7dce0ff727e21c81c1aadb9",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable/1.9.4",
-    "dest-filename": "runtime-saveable-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable-desktop/1.11.1/runtime-saveable-desktop-1.11.1.pom",
+    "sha512": "4287907309181138bac9b652bb7cb35b2bcf7d89eb742ad2aa21e5a7ab601d3afcb7d46683b04cc0fd884220179ef639076b8f99fa70543e197478a3b466f353",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable-desktop/1.11.1",
+    "dest-filename": "runtime-saveable-desktop-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable/1.9.4/runtime-saveable-1.9.4.pom",
-    "sha512": "f4f78b02b3936bfb0d640913d29dc57e525155c354f933b5cad1d437739d15b7c24030b0b390a8a6569d56861782030f054b0774f895f110df9cf5fdc6739b78",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable/1.9.4",
-    "dest-filename": "runtime-saveable-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable-lint/1.11.1/runtime-saveable-lint-1.11.1.pom",
+    "sha512": "4497daf7c50c0cdc1b0bc8bbbf90e94a1e4890391a4e7a15a8f4a66d49ca38a8d27d90b62a2bef2aa68833f50ea14969ef450a43f6d7f0291608d7b792da3279",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable-lint/1.11.1",
+    "dest-filename": "runtime-saveable-lint-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable/1.9.4/../../runtime-saveable-desktop/1.9.4/runtime-saveable-desktop-1.9.4.module",
-    "sha512": "b3ff6b95d78986b868d03557ee9ad22797ae0a8b0211cfedb811d12864f5e990f11db4f75499adc505fc46572320683acab207956042f7e095ca5be12fdd548c",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable/1.9.4/../../runtime-saveable-desktop/1.9.4",
-    "dest-filename": "runtime-saveable-desktop-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable/1.11.1/runtime-saveable-1.11.1.module",
+    "sha512": "179c2ca02fe5fffb9e085a1bf490992b5c5b033c2b96bff82f57e95483fe51d43107654b48f3d7f5787b65493c912c734f693fed0a8b1201a52d3423bb9e4a9a",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable/1.11.1",
+    "dest-filename": "runtime-saveable-1.11.1.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-tracing/1.9.4/runtime-tracing-1.9.4.pom",
-    "sha512": "70c2fe10c74115f0a8e21525b63678138399d592197be385ca7835ee477f91deaa48477055d83305031edf3d33cce36caacc6b9e1220b90f01ace8d9868bffdf",
-    "dest": "offline-repository/androidx/compose/runtime/runtime-tracing/1.9.4",
-    "dest-filename": "runtime-tracing-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable/1.11.1/runtime-saveable-1.11.1.pom",
+    "sha512": "6607ee6b65903e58cb1a44b1a57b1b74605263521374fe029a49f7bb44d0021a2a0f7950ba41a6fa4693be9ecda80db56348263279e92f383ab5696fe1cf89f5",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable/1.11.1",
+    "dest-filename": "runtime-saveable-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime/1.9.4/runtime-1.9.4.module",
-    "sha512": "d66b3694232416e75a8cf203e3f088da72e9400f3f2c9a4c458ce51247f658d7a94dd2e88a4de20c495a8735bfff87673ee3bc4cc83de8b4b1f71fd4ea11dd3c",
-    "dest": "offline-repository/androidx/compose/runtime/runtime/1.9.4",
-    "dest-filename": "runtime-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-saveable/1.11.1/../../runtime-saveable-desktop/1.11.1/runtime-saveable-desktop-1.11.1.module",
+    "sha512": "dcd5884265a7b1193427711486791d8606e124ca616b4a2dca966ecd0f652bbca14b915a409ed2ef846a176e2f6e13f795105c2b4c2d06578a1e9c56853c7a96",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-saveable/1.11.1/../../runtime-saveable-desktop/1.11.1",
+    "dest-filename": "runtime-saveable-desktop-1.11.1.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime/1.9.4/runtime-1.9.4.pom",
-    "sha512": "50973d821af51e2f7a6ffd023fa7f079876ce5aede86d978b7b57dae4749be85418ffe4d394217447688a834c76175729f86ee2c5c3905f4a0c8f4bc5cc4cdca",
-    "dest": "offline-repository/androidx/compose/runtime/runtime/1.9.4",
-    "dest-filename": "runtime-1.9.4.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime-tracing/1.11.1/runtime-tracing-1.11.1.pom",
+    "sha512": "34cc49dc275733acc1b6b7b0b9722f1d6efde4038efdbd156ab066bc3c75861320f190a7f6d28b7f99da0ebc2c643c8f17486a159b31b10d1546d88bd1b23110",
+    "dest": "offline-repository/androidx/compose/runtime/runtime-tracing/1.11.1",
+    "dest-filename": "runtime-tracing-1.11.1.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime/1.9.4/../../runtime-desktop/1.9.4/runtime-desktop-1.9.4.module",
-    "sha512": "97fd663657c9fd8e71abe69d5856b29a7d9ba8a6ce7f9f34872681f185e87b899ef16211123c467f2b9998909fbdead2d04cf4c779c19b3be8f0bd9ec860c7b5",
-    "dest": "offline-repository/androidx/compose/runtime/runtime/1.9.4/../../runtime-desktop/1.9.4",
-    "dest-filename": "runtime-desktop-1.9.4.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime/1.11.1/runtime-1.11.1.module",
+    "sha512": "d1d80b9c756cfe70c7a2bbd5c7ec7c3aed54524bfc6b88fd9a0c27a6035c66a3e159f8f719c43093cd4d2f13511773edee2998909b383b9c91a5b1d778c76b73",
+    "dest": "offline-repository/androidx/compose/runtime/runtime/1.11.1",
+    "dest-filename": "runtime-1.11.1.module"
+  },
+  {
+    "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime/1.11.1/runtime-1.11.1.pom",
+    "sha512": "6954ddf0656285fe3a38718236ba03674b01deadb2606e24c44a2944eac7efc856f4ca7633610c66103c2a819b3780b0f24c650b2915abf40ddb1d9823b81fcd",
+    "dest": "offline-repository/androidx/compose/runtime/runtime/1.11.1",
+    "dest-filename": "runtime-1.11.1.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/compose/runtime/runtime/1.11.1/../../runtime-desktop/1.11.1/runtime-desktop-1.11.1.module",
+    "sha512": "442e5dd12322d1a183747b41606b77cb8f28094fb7a4ba2585fe972560e9e1432ce4950574417dbd432397d66bb7a54dbeef1591402f7c55c1323f9979d0ef1a",
+    "dest": "offline-repository/androidx/compose/runtime/runtime/1.11.1/../../runtime-desktop/1.11.1",
+    "dest-filename": "runtime-desktop-1.11.1.module"
   },
   {
     "type": "file",
@@ -309,325 +323,360 @@
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common-java8/2.10.0/lifecycle-common-java8-2.10.0.pom",
-    "sha512": "053199fb688e4ca8ffc4e3065ba9b2c0ac19f4ee61f9830ee2a355c94df80d61c2dd16e3999a3233d9c31b777f4fb91f86dc966955ed4644d2c202bf759fbe7e",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-common-java8/2.10.0",
-    "dest-filename": "lifecycle-common-java8-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common-java8/2.11.0/lifecycle-common-java8-2.11.0.pom",
+    "sha512": "abe93b06bc984526c19e0d5b0ff10f9e77f62091eb44c7ec212418e46998ca028c2a6419b7f29148d6e425adc66cab8f6c0556afda79b05167ada39ba7434305",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-common-java8/2.11.0",
+    "dest-filename": "lifecycle-common-java8-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common-jvm/2.10.0/lifecycle-common-jvm-2.10.0.jar",
-    "sha512": "f76e1b7c81e2046772314eacb73f04f37e44b58879aedd3b163cc45033e10c020d06d0544316a004f12e1db59633bb9629b1618f79f649866f79e519fc05ba0d",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-common-jvm/2.10.0",
-    "dest-filename": "lifecycle-common-jvm-2.10.0.jar"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common-jvm/2.11.0/lifecycle-common-jvm-2.11.0.jar",
+    "sha512": "6712963b15c7c5a0efcc6e8bea9c0c37dd3e27dcc92049ef557f56ebc0725e0bc4e91bc521b94cc694824ab72bdf54bca9923fa249c88cde14700b9952b1cb57",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-common-jvm/2.11.0",
+    "dest-filename": "lifecycle-common-jvm-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common-jvm/2.10.0/lifecycle-common-jvm-2.10.0.module",
-    "sha512": "bb12f462dab0bd24daed5edb7a73e9786482803779b76f83fbedec7c2e176d0f1ee9a3866a339e5e3f31ccb37f6a9624523227647968d1451fd5ec45ad0f139f",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-common-jvm/2.10.0",
-    "dest-filename": "lifecycle-common-jvm-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common-jvm/2.11.0/lifecycle-common-jvm-2.11.0.module",
+    "sha512": "e5270fd7ba3208249239d04c9a1c8c052744f7a0873d38fc3b0f063024ab9d4f30cb5f40785021eedca7cc2a04b9d6de4296642e70854a35bfbccb055c1efbec",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-common-jvm/2.11.0",
+    "dest-filename": "lifecycle-common-jvm-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common-jvm/2.10.0/lifecycle-common-jvm-2.10.0.pom",
-    "sha512": "7e728b188dcc9f3421da3bd97bc09b0b702935e7e0836d74294a57c876d78e5335ab6ed09eb155c4d3af3abe82c90ee2ffb238ff1744bd1f5650bba5899987d7",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-common-jvm/2.10.0",
-    "dest-filename": "lifecycle-common-jvm-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common-jvm/2.11.0/lifecycle-common-jvm-2.11.0.pom",
+    "sha512": "024b057d88fc6988c78ec7e3f69a11796f1638be3d951d0b2bf2b958f286241934dc171d053ccb785d79d7123c46edacaf376740ec267a661c3fe7a5d52de912",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-common-jvm/2.11.0",
+    "dest-filename": "lifecycle-common-jvm-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.10.0/lifecycle-common-2.10.0.module",
-    "sha512": "ac5c75661c7267cc2ea4605e560c81344d47ce4880ba2a4a4f3a34715c2ecad983b1d1b8735c85c41084252f3ed36770a979905591af1e280bfe35629420657e",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-common/2.10.0",
-    "dest-filename": "lifecycle-common-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.11.0/lifecycle-common-2.11.0.module",
+    "sha512": "795623bae71aa04e86761099c681e5f6cc6d8397d2ae73fe046caa5dccbe4eb9d4b51c795d26955aa42728cc9d00794fcb406b69050b69dd1ac09dac6f26c2c5",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-common/2.11.0",
+    "dest-filename": "lifecycle-common-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.10.0/lifecycle-common-2.10.0.pom",
-    "sha512": "f256b8fbdbff62361940189bf62cccc9f310d2db9101332e61fb8e06ea2425b2d1efc1376cb9fcb6bb96bd013d761307cf77955aa8f5592326f74a58bef9cf76",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-common/2.10.0",
-    "dest-filename": "lifecycle-common-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.11.0/lifecycle-common-2.11.0.pom",
+    "sha512": "e3a6a85184de286895ee8f4184644a6112ebf60256f347aa19bfbc9c1e2230364b9a3eaa4bd57a1b5ff99cc1f00eceeaebd9fe67536222b1d69657ee37482cb8",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-common/2.11.0",
+    "dest-filename": "lifecycle-common-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.10.0/../../lifecycle-common-jvm/2.10.0/lifecycle-common-jvm-2.10.0.module",
-    "sha512": "bb12f462dab0bd24daed5edb7a73e9786482803779b76f83fbedec7c2e176d0f1ee9a3866a339e5e3f31ccb37f6a9624523227647968d1451fd5ec45ad0f139f",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-common/2.10.0/../../lifecycle-common-jvm/2.10.0",
-    "dest-filename": "lifecycle-common-jvm-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-common/2.11.0/../../lifecycle-common-jvm/2.11.0/lifecycle-common-jvm-2.11.0.module",
+    "sha512": "e5270fd7ba3208249239d04c9a1c8c052744f7a0873d38fc3b0f063024ab9d4f30cb5f40785021eedca7cc2a04b9d6de4296642e70854a35bfbccb055c1efbec",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-common/2.11.0/../../lifecycle-common-jvm/2.11.0",
+    "dest-filename": "lifecycle-common-jvm-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-compiler/2.10.0/lifecycle-compiler-2.10.0.pom",
-    "sha512": "638c2ad46067870e715092559f3263cba3454a5c1a4a301fc5f1bd9735d2fba0849e8325daa490d69cf5a2a3761864a0e6ef3f19356dad07dedfefe0d76d55b2",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-compiler/2.10.0",
-    "dest-filename": "lifecycle-compiler-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-compiler/2.11.0/lifecycle-compiler-2.11.0.pom",
+    "sha512": "c0acfc82ffbb44042c6c88ae8a5faa3c8207d65d2dcf3c880ede7d0edf97513633a3965a8969127c6a8241fedf601297c18a560235c6572e047f4d6a601ac8b1",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-compiler/2.11.0",
+    "dest-filename": "lifecycle-compiler-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-core-ktx/2.10.0/lifecycle-livedata-core-ktx-2.10.0.pom",
-    "sha512": "c8ae186ee66c798fe85102b077ac02a27f8d89ae43a12b36950ef4f65b35c6ef06d6e6d0e5e78733ea44c433d8920b28b9838a1e881435863405b61bec771933",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-livedata-core-ktx/2.10.0",
-    "dest-filename": "lifecycle-livedata-core-ktx-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-core-ktx/2.11.0/lifecycle-livedata-core-ktx-2.11.0.pom",
+    "sha512": "a763ea403ca9071cc2ecb3f612c56b1aa415688e2068cc66996a8267c301f9c75d130c14a057808552351e83e0bbed9395991d12caebde5a89f63e4fb72be398",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-livedata-core-ktx/2.11.0",
+    "dest-filename": "lifecycle-livedata-core-ktx-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-core/2.10.0/lifecycle-livedata-core-2.10.0.pom",
-    "sha512": "84e7b160b047138555ec19da57156bde99da1de18d1892d0fd82397b7880ae21fb815d4823456a3274dff54ea7093696cb128d39bfa40a983815ee49460d0ba3",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-livedata-core/2.10.0",
-    "dest-filename": "lifecycle-livedata-core-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-core/2.11.0/lifecycle-livedata-core-2.11.0.pom",
+    "sha512": "53c9295472819a0b349caff148ed0559565692a2bca9ea830ffe409ee87cde3493f49c25d48b39e700d5057920fec53777a15c3714acfe479c0bcca1b7c6ce1c",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-livedata-core/2.11.0",
+    "dest-filename": "lifecycle-livedata-core-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-ktx/2.10.0/lifecycle-livedata-ktx-2.10.0.pom",
-    "sha512": "7809f26d8c639c3b1fbaaa7cfabd420572cb77ba15d3c3e5dca4fb91d9140ba9412dc64185cadd314148e9243e83a5e53bfa90d36901f581a9f64ff17f30bf41",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-livedata-ktx/2.10.0",
-    "dest-filename": "lifecycle-livedata-ktx-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata-ktx/2.11.0/lifecycle-livedata-ktx-2.11.0.pom",
+    "sha512": "aca0309bd2bca15f17decba831746eef9337486b6568fd750906d9c444c129bac57c9cb2114f3646426269ee9ac3d6eca8ac0907f29510dae68506a4dcff07e2",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-livedata-ktx/2.11.0",
+    "dest-filename": "lifecycle-livedata-ktx-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata/2.10.0/lifecycle-livedata-2.10.0.pom",
-    "sha512": "7f46f7c563097b63ff6e4824366ed0d9d615f6c134b7a578c389ae370581fbad46440fd0aaa5331476a611c0f17962013d989275d42944a736eb6bfcc8ee7866",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-livedata/2.10.0",
-    "dest-filename": "lifecycle-livedata-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-livedata/2.11.0/lifecycle-livedata-2.11.0.pom",
+    "sha512": "167d8825046b5e0f226e102b7101c0defa84d39314daabce4727fa0aa9c80773f0da90dc380d44a50b3d5a08de95b2c8860ad36e594ebd27ae5e448bc345e79d",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-livedata/2.11.0",
+    "dest-filename": "lifecycle-livedata-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-process/2.10.0/lifecycle-process-2.10.0.pom",
-    "sha512": "14e86dc8a9d141c98af0bcdff866d0f01b6b1afd852adf2d19c0c093208591ce868eea1bb1eaeb8adba42dc2f5ea16428e7ba3b70f45ea2e6d635b7cfcb9433f",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-process/2.10.0",
-    "dest-filename": "lifecycle-process-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-process/2.11.0/lifecycle-process-2.11.0.pom",
+    "sha512": "a655952d66512fc661880c7272bf5eb72a28571bfe558c62e00e50b9081cdeb26fb09aeec5f20c55e5e2b1a20664d4090ffb2ee5ba422425e22f5ef93285e71f",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-process/2.11.0",
+    "dest-filename": "lifecycle-process-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-reactivestreams-ktx/2.10.0/lifecycle-reactivestreams-ktx-2.10.0.pom",
-    "sha512": "a9c9a14d57f0200205c81766d38b49f1bec639dcc1776a7d2d096d61f39cf4a8344fcfc8bed0eeabb26c7895dca43de7db76356e1480a49bc5f891dd90476649",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-reactivestreams-ktx/2.10.0",
-    "dest-filename": "lifecycle-reactivestreams-ktx-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-reactivestreams-ktx/2.11.0/lifecycle-reactivestreams-ktx-2.11.0.pom",
+    "sha512": "586ec3be5cebb5cff364176f90e2032fc01845e192ea3ecfb491ba9d1e7a5831332edf324a888e6b76602aa3a0775d8213c892a21d70d1953bebb2cbb38bb20c",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-reactivestreams-ktx/2.11.0",
+    "dest-filename": "lifecycle-reactivestreams-ktx-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-reactivestreams/2.10.0/lifecycle-reactivestreams-2.10.0.pom",
-    "sha512": "556e17b5d09c4d4d8c74ff94b0e6d7905c18d3db3229e09a381f107f98f51234bddf2fa3f791d14074729f7dafcdcf31cad281bbed54172c1eaa518a02a533f6",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-reactivestreams/2.10.0",
-    "dest-filename": "lifecycle-reactivestreams-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-reactivestreams/2.11.0/lifecycle-reactivestreams-2.11.0.pom",
+    "sha512": "8a8d10fb039337fda43ae105d65d6515dfe8e95c9f01c524e614524e0d8a46144021e448e650b7e8357946373bc2335fd48192dab49e546ddc33587313c7a86a",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-reactivestreams/2.11.0",
+    "dest-filename": "lifecycle-reactivestreams-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0/lifecycle-runtime-compose-desktop-2.10.0.jar",
-    "sha512": "953bed967097b6d77d971810e980b12188817c10cc84f1e9337555803ee64d700fb57330a0d1a71381b5cb982b71a876ae49e7875a0ea7548e23b8606242c5fa",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-desktop-2.10.0.jar"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0/lifecycle-runtime-compose-desktop-2.11.0.jar",
+    "sha512": "34c99cbc8a5fbdab2fd7ae61642d21e2255ca62d9f110f85c5603956e3091e715094bcb294c97eef7ee63c498aa0a26e4d11e23a52742bdea4c88b9a8b11464a",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-desktop-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0/lifecycle-runtime-compose-desktop-2.10.0.module",
-    "sha512": "9f9a399e57cadfd38ae80a48fea2b48f14d2aa94945c03ca4df05c0f3263f86948d0782f985fe010f88deea0b29e642f8b7d11e5537c803291d1714bf8ae0444",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-desktop-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0/lifecycle-runtime-compose-desktop-2.11.0.module",
+    "sha512": "cb8fad3591f33eca3cb77bf8084a8767afd63071b192f6210e482f5447570a4e094761b0842d923e71781528c2211b0c95a5cac7c485fbc2744ac8f3266e94ce",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0/lifecycle-runtime-compose-desktop-2.10.0.pom",
-    "sha512": "03a1bcee42fdbc295cd55848893b30a8c0074c84c56422a7c1a3f8b0b21c7cf098d495ba37d2aa9041808a93c1e4077c0eb26d343841b38269f891dcc5e35b39",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-desktop-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0/lifecycle-runtime-compose-desktop-2.11.0.pom",
+    "sha512": "2f73ebc4a8549b1e6ae78858330e58c4ba721890581fc23f9d995e6c57551f5875ffaab0ab04d31f539de1a7666e1834dcc4aeaf1a3f4529da806d6d0593fac0",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-desktop-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose/2.10.0/lifecycle-runtime-compose-2.10.0.module",
-    "sha512": "4fada9a4b76d47357ae774e0afb06906bac6e2fcb67d68c50317a6c6db1aae2b5cd92f8dd0e218e16e99a830a434ea6513e5fd413722bb0fcfb1971b03d9468d",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose/2.11.0/lifecycle-runtime-compose-2.11.0.module",
+    "sha512": "72f777a26a3a700e48d01aed5b64d864f93bd5d4ff26e339b8dd7c2acf65ee0ed98ae537409176f2c64e10c7cffef8d6e06d220553e88ceda3c710da35423f47",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose/2.10.0/lifecycle-runtime-compose-2.10.0.pom",
-    "sha512": "fe8de0d5268879be5c92b1d424e6bb3353883b13eb0f92a64155510775ad4ecef3fc6dde95a1b0da64968c3ea4a7be738288d10ba21090ee2e5c32c67583e68b",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose/2.11.0/lifecycle-runtime-compose-2.11.0.pom",
+    "sha512": "42cdeacec058c24dd534122bbbcd7a48db1fa5a1d9452630d895735bd2fdedea20aa353bcc1de3501899587aa6c74d3d798dcb9ed36695ee50acc683bfa004a8",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose/2.10.0/../../lifecycle-runtime-compose-desktop/2.10.0/lifecycle-runtime-compose-desktop-2.10.0.module",
-    "sha512": "9f9a399e57cadfd38ae80a48fea2b48f14d2aa94945c03ca4df05c0f3263f86948d0782f985fe010f88deea0b29e642f8b7d11e5537c803291d1714bf8ae0444",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose/2.10.0/../../lifecycle-runtime-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-desktop-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-compose/2.11.0/../../lifecycle-runtime-compose-desktop/2.11.0/lifecycle-runtime-compose-desktop-2.11.0.module",
+    "sha512": "cb8fad3591f33eca3cb77bf8084a8767afd63071b192f6210e482f5447570a4e094761b0842d923e71781528c2211b0c95a5cac7c485fbc2744ac8f3266e94ce",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-compose/2.11.0/../../lifecycle-runtime-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-desktop/2.10.0/lifecycle-runtime-desktop-2.10.0.jar",
-    "sha512": "9be252b90d8eb700bd32057e18fc4a75c7c186870109f49a0cf8815595d7efb9529e0f676c9dbe2cfbc5481a4bc5d2f676fdcc7e703f3e995ac51016b3593a2f",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-desktop-2.10.0.jar"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0/lifecycle-runtime-desktop-2.11.0.jar",
+    "sha512": "dd1763e19b576f8e237078a342d6b45c3639137480edd604c3da24e8120bc8159e336687b96529a1f37610ab3b2483b3d5933a6a1f023ff0c25766971437a86f",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-desktop-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-desktop/2.10.0/lifecycle-runtime-desktop-2.10.0.module",
-    "sha512": "8234672f1c88fadf13aa5cb20e7e6a1de7db610b3b2970f47c24d243ed3ef0e011c549d6ee6e9a086e11492198585b303ccaee003e699e6b521ecd6e4c95b4ac",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-desktop-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0/lifecycle-runtime-desktop-2.11.0.module",
+    "sha512": "b52204d6b0824b1539e3d875f0cc124b2817f8dcaaec39e08d4c2d502affcc8fc6b97a30518ca14c3f0b328a0456a2911bdb80f075d49413c899e5a76504213e",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-desktop/2.10.0/lifecycle-runtime-desktop-2.10.0.pom",
-    "sha512": "33e133a3632335ad4bb50271f06a99a58c0997ed30cbce16887c603f5fe8471faf85ed6e2d78cdbbe0d9d4d3f1e1307c99cf09eaaae9de631208aacb91379d6d",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-desktop-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0/lifecycle-runtime-desktop-2.11.0.pom",
+    "sha512": "39524099f11b90fdf02e7f2c592365742680cd958b79423cefca5d2cf2e5ca9193c83c6a00f183bdd9afbbb417a58d3b159b4d4de44f70e143a4f29bba8cbf38",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-desktop-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-ktx/2.10.0/lifecycle-runtime-ktx-2.10.0.pom",
-    "sha512": "6eb836ee7b6c1dcccb7c6e743d3eef3c2e92a1d65487200adc6c0f94e6307ad5829f2a1dd562a843d0d3c6279ed861968f6194d42374a3d75885d0e24086d542",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-ktx/2.10.0",
-    "dest-filename": "lifecycle-runtime-ktx-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-ktx/2.11.0/lifecycle-runtime-ktx-2.11.0.pom",
+    "sha512": "ddd0fd00c7c75a90d324b2140d5b6ec163eb4cbf1b7aec8c0b9b1eed92c424da8ce3dfb395c035ca02f749e9d7dfc6fe481fcc8ea70c43a52a03af1bc82e41a9",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-ktx/2.11.0",
+    "dest-filename": "lifecycle-runtime-ktx-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-testing/2.10.0/lifecycle-runtime-testing-2.10.0.pom",
-    "sha512": "38196128ee51889a20a0368e0227c4bf4de3931606f224e76575bdc582b30fb41df20d7c70c17bd353438052c4e13d3544cadf4a62ec161dc06dc38ade93eb5e",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-testing/2.10.0",
-    "dest-filename": "lifecycle-runtime-testing-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime-testing/2.11.0/lifecycle-runtime-testing-2.11.0.pom",
+    "sha512": "7d59c9c98c6984c2f41a5187e3969e6dfa85d65f5a3cc0fdb6d90156b566434f4ea14ec340390ae6c3e456ff828126867e9b669287cb437db900307bfaf5962f",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime-testing/2.11.0",
+    "dest-filename": "lifecycle-runtime-testing-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.10.0/lifecycle-runtime-2.10.0.module",
-    "sha512": "adf40679d4feb484239ab792be1713466ffa30c024ca1caad9cabd5bfae88b0f09a8cea41f8b10cb68aad5c3ad9d8a1a3ed3bd54a12dfe47da14c68973da7855",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime/2.10.0",
-    "dest-filename": "lifecycle-runtime-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.11.0/lifecycle-runtime-2.11.0.module",
+    "sha512": "aec5f78f0be7d3cf08be52574d2d16e637f69036fd4158dd77e53ece51fb0db93d3717fc3b3c9e660006cbb0b60e6aef822f3bd09a1fca6e6fe6623813f57fd8",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime/2.11.0",
+    "dest-filename": "lifecycle-runtime-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.10.0/lifecycle-runtime-2.10.0.pom",
-    "sha512": "d6595fc66eaf874b23b90fe4b4f7631313d14aca70a31c6cc6a9aea1feeb28b23739f52763d42a171167dbaf889a56d8b0f5f58913a0fba44fb60b82e2be4057",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime/2.10.0",
-    "dest-filename": "lifecycle-runtime-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.11.0/lifecycle-runtime-2.11.0.pom",
+    "sha512": "8864cb766b712a91ed5e4da2cf9986da039be0f31924e48b15bc5915060f2c160d5d63693d3127c7d946f844a622512d91a97cf4cba8575d056b32d19a30f625",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime/2.11.0",
+    "dest-filename": "lifecycle-runtime-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.10.0/../../lifecycle-runtime-desktop/2.10.0/lifecycle-runtime-desktop-2.10.0.module",
-    "sha512": "8234672f1c88fadf13aa5cb20e7e6a1de7db610b3b2970f47c24d243ed3ef0e011c549d6ee6e9a086e11492198585b303ccaee003e699e6b521ecd6e4c95b4ac",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime/2.10.0/../../lifecycle-runtime-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-desktop-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/2.11.0/../../lifecycle-runtime-desktop/2.11.0/lifecycle-runtime-desktop-2.11.0.module",
+    "sha512": "b52204d6b0824b1539e3d875f0cc124b2817f8dcaaec39e08d4c2d502affcc8fc6b97a30518ca14c3f0b328a0456a2911bdb80f075d49413c899e5a76504213e",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-runtime/2.11.0/../../lifecycle-runtime-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-service/2.10.0/lifecycle-service-2.10.0.pom",
-    "sha512": "81e60b4a089365a1c5be3c343969f93819b8ac675c5ed1d79f0370f9c26da2662c7e8fe996be7160809f7e79eef1cd6e19ed7df97c4189a1e6682cfb5a2e6861",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-service/2.10.0",
-    "dest-filename": "lifecycle-service-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-service/2.11.0/lifecycle-service-2.11.0.pom",
+    "sha512": "3f7b8ce9a6f902e3604aa198d6238451bdbf46d28b0bbd47f9b2e9d40ab5dd124a84037ac5a12b3f3ce8ffefd5bc6f49bb2f7ffe471ef7e313e8dfcc858e8747",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-service/2.11.0",
+    "dest-filename": "lifecycle-service-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-compose/2.10.0/lifecycle-viewmodel-compose-2.10.0.pom",
-    "sha512": "c730307a9d967abc42ac1392239ccaa14422547215c125c0ce4212508d64fe98de206ad4dd10603cae736060a09cd02ff4c5a81061b95e804aed9017f78ca3a8",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-compose/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-compose-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0/lifecycle-viewmodel-compose-desktop-2.11.0.jar",
+    "sha512": "e2eb63dd641cefa178daffa86b95f87e7efd2b010a2a411d67f8c04f5d0da555a81d695ccd7d4b3506256c3603213569ff2e040c279dfe861138faf7d29704fd",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-desktop/2.10.0/lifecycle-viewmodel-desktop-2.10.0.jar",
-    "sha512": "8e39a75f7d0ded2f104ba51d11e52045dd32503b3a1e6b8cd33a84b7cffe1c69cc1fd160346a04290666968cce38c022dcca90977c371c73cbc16fb53e106a69",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-desktop-2.10.0.jar"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0/lifecycle-viewmodel-compose-desktop-2.11.0.module",
+    "sha512": "5ea4fff28357a63e88487753f179b60498319c03189c5280a80a1fb068405ee91c267187b36a908ca0a7362239ee35f89b597d523d948fabf5751604a20b3da6",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-desktop/2.10.0/lifecycle-viewmodel-desktop-2.10.0.module",
-    "sha512": "fea96db0080d50107b3cd52bb5357b53d4697a353ae02d7096c20a8655eb13314ce2b466e93c84c5acac18f75713815b80ba0cca4a2b11fba97a4eada7d7e460",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-desktop-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0/lifecycle-viewmodel-compose-desktop-2.11.0.pom",
+    "sha512": "659a40bc66c31c8cb79e8d2cd49400ab7bebd0aa0ada5d23272e2acdea2a454e2a5fb91cf0d824d41157db13a5dde3aaabc002ddc0646f49eb963a2e4802dd0b",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-desktop/2.10.0/lifecycle-viewmodel-desktop-2.10.0.pom",
-    "sha512": "8156fbc7ea4deb5d7de32d1c8039d4ecc008e776b592ec03f312f9b192b9a23fb8a022642f1464206fb5284bdb1603f9fdc3a5c5b5e460656f9aad5a67f7d91d",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-desktop-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0/lifecycle-viewmodel-compose-2.11.0.module",
+    "sha512": "36ae502d87f9c51b4fc45580fae653250518e51bc59c2e2893b6c219e61c4e126e01dcff57d63e45f835161277f833aea2c9df8e58dea3c2a69abee7c23bae90",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-ktx/2.10.0/lifecycle-viewmodel-ktx-2.10.0.pom",
-    "sha512": "560ca250850a304e3c995a7afbc987eb8e62f8a5de67395582147522cad4ace9c4e931b60cba3a9764af0c90e64e9cd15f364e33d18cb5b283a13dc0d49ab93b",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-ktx/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-ktx-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0/lifecycle-viewmodel-compose-2.11.0.pom",
+    "sha512": "16b63c8f56446c6a0d24ca2c44c4e864c88be47a71a8f975f1b1a8a6e52390482a1f97ed994faf8d533f49a9c765787405100278e7200aa6ecb1530c31dc178c",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-navigation3/2.10.0/lifecycle-viewmodel-navigation3-2.10.0.pom",
-    "sha512": "c3b5b5dbcf8432406e57d6a4a30a45e7d470a3ee892bfc4b20bd8eba44e41a85ee784c4eb6fa0534817171ed967897f2a32daeeab358527ae1ef711388f484e2",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-navigation3/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-navigation3-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0/../../lifecycle-viewmodel-compose-desktop/2.11.0/lifecycle-viewmodel-compose-desktop-2.11.0.module",
+    "sha512": "5ea4fff28357a63e88487753f179b60498319c03189c5280a80a1fb068405ee91c267187b36a908ca0a7362239ee35f89b597d523d948fabf5751604a20b3da6",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0/../../lifecycle-viewmodel-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.10.0/lifecycle-viewmodel-savedstate-desktop-2.10.0.jar",
-    "sha512": "29b33e08eed599060cc16a2a20d0af7bf14d3abd42a30a5c50027bfe13ac600a735492b9759862f69deba519210b9e898967c96834cad45a0d9430655db43dfc",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.10.0.jar"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0/lifecycle-viewmodel-desktop-2.11.0.jar",
+    "sha512": "33468032b332a2e8189f8e62aba3af7641cf421f562cd7eef20a6df7b8b955556f8b423e4e0afd44963a5da79106ae806de184aa8263af8e69da1b2700b14d37",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-desktop-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.10.0/lifecycle-viewmodel-savedstate-desktop-2.10.0.module",
-    "sha512": "ce7e2ee545c26e8a3ac842430a253840591f6df4a450ceea0e26888fc186fa97a1d0d113c835e4727feeaae41576034224002dd6df9f0de63ba45cedcc9d982d",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0/lifecycle-viewmodel-desktop-2.11.0.module",
+    "sha512": "28f9becc4ecb99b861fe94f28896701fe6b985aa0da73b13dbc1cd1bf5ef05287c11ae0ab2b5b954ab8dd313db5f5683a89b7afe439d78d9eb927dc99ce63379",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.10.0/lifecycle-viewmodel-savedstate-desktop-2.10.0.pom",
-    "sha512": "9c9898b8300c22110af0567383d6430045dec884cd136e35dfafee3c1807914b8eecb0ebfe09c75fd00b63ade5ef8d3c96d483ab3d9904f3f0ec7301284c2aca",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0/lifecycle-viewmodel-desktop-2.11.0.pom",
+    "sha512": "22ccd7b7d826f2ec9cabfafd0e2cc6e94612b3bf200bb5cc08c36b2e8adc88edcd301f55fe8c29fb0619122534fe52d2cd78036b5f783ee0a32a386a8eaa1523",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-desktop-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0/lifecycle-viewmodel-savedstate-2.10.0.module",
-    "sha512": "549c382b5c8eac8ad91e8181f6819e72922a1b5b4f189dbe349e50ddb65df1581e3f81140a5cc4422e9c2ceef197a0c3b7318ef5fd1371d03e22b483639bd788",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-savedstate-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-ktx/2.11.0/lifecycle-viewmodel-ktx-2.11.0.pom",
+    "sha512": "1df90c8c4c41b0ba03e5d124deece5447eec9e2518b034a95bff68117d89483395745bc738ec2f585675e607da327af6174297ae252297e138b0c41c5f7b96ef",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-ktx/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-ktx-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0/lifecycle-viewmodel-savedstate-2.10.0.pom",
-    "sha512": "e532fbb1a72cf17cf96748493db98f2e3e05c16ed4469cf9ceb11bc187c8c68f37a15b3ce679956a91db053e07c954f0ab730ab9834be81a7ab3651dcd61961f",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-savedstate-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-navigation3/2.11.0/lifecycle-viewmodel-navigation3-2.11.0.pom",
+    "sha512": "03e87866686c6ced1e9e392d903c011bd1e21d791aa40cccdca271791423c051cf8ab9c0a85ed3a76781c5c525bcb62159709ae2b367e56b477048c67f804498",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-navigation3/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-navigation3-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0/../../lifecycle-viewmodel-savedstate-desktop/2.10.0/lifecycle-viewmodel-savedstate-desktop-2.10.0.module",
-    "sha512": "ce7e2ee545c26e8a3ac842430a253840591f6df4a450ceea0e26888fc186fa97a1d0d113c835e4727feeaae41576034224002dd6df9f0de63ba45cedcc9d982d",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0/../../lifecycle-viewmodel-savedstate-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0/lifecycle-viewmodel-savedstate-desktop-2.11.0.jar",
+    "sha512": "4e71d4f4b84f4a62a61f7006bfa67163835c2f06a3d78188bb6dea4f062ce7f4bfcf8124315d3d46fff3ab283447ed922d444f394c87b0a5a9c657aafe612207",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-testing/2.10.0/lifecycle-viewmodel-testing-2.10.0.pom",
-    "sha512": "cefee8b04193f2dcc5d4456a96ff32fe410c7e3c4679899e882494662672f85e6913b5c413ac20d08ccd90398c4b1e9fbb49924f812f910e3a0330859bf84dc9",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-testing/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-testing-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0/lifecycle-viewmodel-savedstate-desktop-2.11.0.module",
+    "sha512": "e0dce533d2319ddcf5b4827cdb7fd5403d26d907d8ea553d24ac6689d4d81326afb17ddaa7158feb8e81f17545be75a99e3598074c0dd56ecb86a95e93513e22",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.10.0/lifecycle-viewmodel-2.10.0.module",
-    "sha512": "7d0082f4ea456206a5c46492c47c0e68fc127f662b084fe8e980c97275f62397a47d01d701cd966971b991b02a18a251f017bcb55bdae57033ac79d3a934b7da",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0/lifecycle-viewmodel-savedstate-desktop-2.11.0.pom",
+    "sha512": "b635b8727d1bf8194549f069f3378705fe8010f9c5211bd6efb57723ec76907a4c942668900c3c6ea64241d9ad1e477a7e832df59f1a35ee131dab7ae6fe3400",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.10.0/lifecycle-viewmodel-2.10.0.pom",
-    "sha512": "1f8778c87c83e5f9017106089226e3a74c1a781ef2f392dd2d9d78badf8cbcec49018632db3c997cf9d32a8970981c3583f96d07b6a2e118eb903e8e19ba5691",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-2.10.0.pom"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0/lifecycle-viewmodel-savedstate-2.11.0.module",
+    "sha512": "4db6ff19d36ff09fb533836e5940a9fd4bc4017ce15dca13700347e02be2821669cbb7b79a426f0a0f625ea25ea83897df7e5ff95bc499382ef783b9ddb9c673",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.10.0/../../lifecycle-viewmodel-desktop/2.10.0/lifecycle-viewmodel-desktop-2.10.0.module",
-    "sha512": "fea96db0080d50107b3cd52bb5357b53d4697a353ae02d7096c20a8655eb13314ce2b466e93c84c5acac18f75713815b80ba0cca4a2b11fba97a4eada7d7e460",
-    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel/2.10.0/../../lifecycle-viewmodel-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-desktop-2.10.0.module"
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0/lifecycle-viewmodel-savedstate-2.11.0.pom",
+    "sha512": "0ba8389d6777c46789a19edf7a85eb6bede5c1ba7f47e5662e52e97fbc1058bce47126db240f9864d163831accb780cc3833fd3625206e22faa716e2f4bcb078",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0/../../lifecycle-viewmodel-savedstate-desktop/2.11.0/lifecycle-viewmodel-savedstate-desktop-2.11.0.module",
+    "sha512": "e0dce533d2319ddcf5b4827cdb7fd5403d26d907d8ea553d24ac6689d4d81326afb17ddaa7158feb8e81f17545be75a99e3598074c0dd56ecb86a95e93513e22",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0/../../lifecycle-viewmodel-savedstate-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel-testing/2.11.0/lifecycle-viewmodel-testing-2.11.0.pom",
+    "sha512": "10d1597662969e21afbb14905c7b9c1697079aca6ffa2a62f31ca48802882ef3252a49061057667c9765cf97eb8f328e8cfd27f0fe5fb5b55d75736cb5cfd3db",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel-testing/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-testing-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.11.0/lifecycle-viewmodel-2.11.0.module",
+    "sha512": "0efc12c9f80817ccd4392a7b62a5f502c425cb09506aba630333166a35d095239c8ce027555dd8cd40588dc11c1c0efdf7855c102b509c4b320649c73f142271",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.11.0/lifecycle-viewmodel-2.11.0.pom",
+    "sha512": "bd004d06fe7713b3300cc85a25e9723d05e544d69b902447baff6e962de8cbbee08412998d5ddb6d9bc00ceeed8e11eb6a0c03cf9bba67acb6f6622115f933f0",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-viewmodel/2.11.0/../../lifecycle-viewmodel-desktop/2.11.0/lifecycle-viewmodel-desktop-2.11.0.module",
+    "sha512": "28f9becc4ecb99b861fe94f28896701fe6b985aa0da73b13dbc1cd1bf5ef05287c11ae0ab2b5b954ab8dd313db5f5683a89b7afe439d78d9eb927dc99ce63379",
+    "dest": "offline-repository/androidx/lifecycle/lifecycle-viewmodel/2.11.0/../../lifecycle-viewmodel-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-desktop-2.11.0.module"
   },
   {
     "type": "file",
@@ -3207,143 +3256,262 @@
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-common/2.10.0/lifecycle-common-2.10.0.module",
-    "sha512": "50e5a3a894e7bbbed8d85554dc1137912ff70e7a456ddb629109bad0c8a90ef30a226df11e195434872bdc34812ec8d731245e540c34b88d4ce64d9c5aca1247",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-common/2.10.0",
-    "dest-filename": "lifecycle-common-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-common-jvm/2.11.0/lifecycle-common-jvm-2.11.0.jar",
+    "sha512": "fa9c5b475a1673b93be711d40cefb742333a219d22f4e1306a0d89257af2ad22911c529cd2aa4396533f33bda2ca2702c7a67125c37a0477a85cda60624437cd",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-common-jvm/2.11.0",
+    "dest-filename": "lifecycle-common-jvm-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-common/2.10.0/lifecycle-common-2.10.0.pom",
-    "sha512": "0737b2189cf4839448fe5938d947511d7a9990ce809000123a827ce41ffca2ed92cdcb2c0b791563057631418f38340bf54da781d4f78eeb181c669f67f32626",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-common/2.10.0",
-    "dest-filename": "lifecycle-common-2.10.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-common-jvm/2.11.0/lifecycle-common-jvm-2.11.0.module",
+    "sha512": "caa976f37ed53a4931fe4e79ffba70569d0d8f83c9025b0ab4a212a61c8dbd9c6a1459513ba81ea94c48ce38cc4b94ed250be2520fdf810ddaee1430a25ce0c7",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-common-jvm/2.11.0",
+    "dest-filename": "lifecycle-common-jvm-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0/lifecycle-runtime-compose-desktop-2.10.0.jar",
-    "sha512": "b068d6f9311bf7c25e1ef85039a4fe53b9bff57257375a5465d158681ad4e084e6b6784f2a983b4825ead4ff310c8eff91e140083e0917c10bd1fb438c7125fc",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-desktop-2.10.0.jar"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-common-jvm/2.11.0/lifecycle-common-jvm-2.11.0.pom",
+    "sha512": "7a0a816cd0a878ce8d9194a2dc5341b547dbe636b544274488ba6bde432b66deacb3e5442b4657e7c6f16506fd0da92738cb88a11b1e5b72f4678a75a1305141",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-common-jvm/2.11.0",
+    "dest-filename": "lifecycle-common-jvm-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0/lifecycle-runtime-compose-desktop-2.10.0.module",
-    "sha512": "0e92780d1705d50341249bf4f606e73d8e26a0eccaf84619baff0e7542ae8583d042a584ef9c5552e8c0edf2e86378c279a7d5ac06196e9dd766a8622d30c884",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-desktop-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-common/2.11.0/lifecycle-common-2.11.0.module",
+    "sha512": "b69b1096df77407e44efea33bf08338ea20e4a972a4008763a72699d38756b3cb9c25cacd2932dd486b735da564727f8c0007c89c4197dbfd4908021efb3211e",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-common/2.11.0",
+    "dest-filename": "lifecycle-common-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0/lifecycle-runtime-compose-desktop-2.10.0.pom",
-    "sha512": "a43b5baa29639fe46f0eeaf7d78956afa1f37c370e8e866f073d982d142601fbf0f2762000a3017ccde02a600c744bab781696e6b65e6fe370d7ee0802096dc3",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-desktop-2.10.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-common/2.11.0/lifecycle-common-2.11.0.pom",
+    "sha512": "94da46c9fc68e7112bd6ee8d12173e47e5a281c51b0d1e440bf44f9c1c8d94560cd2bd205cf1350c7ffa72e717de492a9912daf86c1d995c3f09999571ecebe6",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-common/2.11.0",
+    "dest-filename": "lifecycle-common-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.10.0/lifecycle-runtime-compose-2.10.0.module",
-    "sha512": "94e8e0e32a050471d7b307cf52e06b1f0da0ae707584d116c414777839087f2ba997f514b6e3a3f761a6ce0931e276e865217efb84b62c3c49f7f2c694e21a1b",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-common/2.11.0/../../lifecycle-common-jvm/2.11.0/lifecycle-common-jvm-2.11.0.module",
+    "sha512": "caa976f37ed53a4931fe4e79ffba70569d0d8f83c9025b0ab4a212a61c8dbd9c6a1459513ba81ea94c48ce38cc4b94ed250be2520fdf810ddaee1430a25ce0c7",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-common/2.11.0/../../lifecycle-common-jvm/2.11.0",
+    "dest-filename": "lifecycle-common-jvm-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.10.0/lifecycle-runtime-compose-2.10.0.pom",
-    "sha512": "652088d6b17eb9f165368ea3a3cd7c2383cc166a0a1d1516e99f1e7dfeb339830909205688b7c0e213d0f5c8f510ec27bcc1567a5bcc07a859b598d89ff45a4d",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-2.10.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0/lifecycle-runtime-compose-desktop-2.11.0.jar",
+    "sha512": "8000d757bec80aa31e132df87b1b0f0c1399a27db3354192170c1df9d2b26e39094ed8f15a9d276d86e95bbde858c3e90c984b50c163c063107faa528aa7a5ff",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-desktop-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.10.0/../../lifecycle-runtime-compose-desktop/2.10.0/lifecycle-runtime-compose-desktop-2.10.0.module",
-    "sha512": "0e92780d1705d50341249bf4f606e73d8e26a0eccaf84619baff0e7542ae8583d042a584ef9c5552e8c0edf2e86378c279a7d5ac06196e9dd766a8622d30c884",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.10.0/../../lifecycle-runtime-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-runtime-compose-desktop-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0/lifecycle-runtime-compose-desktop-2.11.0.module",
+    "sha512": "8cb7a3ad00002ae6eeb6ac04c8413b4380ca860965427335e76042ae50f225e50b8978f383ed7a6077da8ec7e3ff2aca95c3892bc94a4822d8563dda094bcbe5",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.10.0/lifecycle-runtime-2.10.0.module",
-    "sha512": "30d0cbdd3112e3d0f028f9f6faae6fbba2573aee91316e02479d9d13e0f709f84a5b83ebad12a2bbc901300bdb3b93f6a63b6c55aa969ea874e8b2173a625213",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.10.0",
-    "dest-filename": "lifecycle-runtime-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0/lifecycle-runtime-compose-desktop-2.11.0.pom",
+    "sha512": "6a494797afc93100e8e6cdf4412ace71af5d5e824ef92e886d8c1011bc7f99a59ddfc21b6c227b306ab789787a32ed36ea4851875fe3df68a01cf3cb406c2ed7",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-desktop-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.10.0/lifecycle-runtime-2.10.0.pom",
-    "sha512": "4d97a8884ad8dfff8fa22487480cc1ee102e14b168c080c766c1badd466ef996c192a26a0182947093f8878710a9f651dcc98b8fae026668f408d3472d8c2aa0",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.10.0",
-    "dest-filename": "lifecycle-runtime-2.10.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.11.0/lifecycle-runtime-compose-2.11.0.module",
+    "sha512": "361cd9094324eb70108a9b646309a92db2773c67f17c474bfa8f6e4b232738dc071734a036fb9fdb1d6c6e69b39f5bc3ad623dffb381aacaf74c934aaff9f727",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.10.0/lifecycle-viewmodel-compose-desktop-2.10.0.jar",
-    "sha512": "a64f841007732eef3feaa0d347f1a251b38383ab1a9c9903227fb624172ac62f108d6292529e5c9351db75d979007da12abbf6a1d1433865d2a168d358967659",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.10.0.jar"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.11.0/lifecycle-runtime-compose-2.11.0.pom",
+    "sha512": "0048edcd32aaa759f2c5ca0acde044bf589a0a8740d37f689382e2ce282e2eb8e3b2937a58dd8445a0f07768e5e99dfb899f3f042ed3c3980dd0b8eee5a9b45d",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.10.0/lifecycle-viewmodel-compose-desktop-2.10.0.module",
-    "sha512": "ea8c18b518bfddab6a907753ed9ad226c0bb8a7c3349c5acdf7c312daaa152f7e7998464d466e4b0aebac9f74b2d497bc284ef8f785cf5fb676041cf9541cc5b",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.11.0/../../lifecycle-runtime-compose-desktop/2.11.0/lifecycle-runtime-compose-desktop-2.11.0.module",
+    "sha512": "8cb7a3ad00002ae6eeb6ac04c8413b4380ca860965427335e76042ae50f225e50b8978f383ed7a6077da8ec7e3ff2aca95c3892bc94a4822d8563dda094bcbe5",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-compose/2.11.0/../../lifecycle-runtime-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-compose-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.10.0/lifecycle-viewmodel-compose-desktop-2.10.0.pom",
-    "sha512": "78cd47d97743dacc9cb4747d6b161f12d8a510df6f602171ad59f6a0b788fb00fd3e79800252b20c3848b3ab45f37dacbb7bfbdfb28e3e23141b375b079a1741",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.10.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0/lifecycle-runtime-desktop-2.11.0.jar",
+    "sha512": "e7b031b5adb15a5dade297882c9d7bbacc3073e59beaceb29f3d8d384b79424a9cbaa9b9c1de083d5d96d81fe1b54cc1eaa0e709d63113589d3237c3f0741efd",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-desktop-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.10.0/lifecycle-viewmodel-compose-2.10.0.module",
-    "sha512": "4532b7e12193d712a3bcdc357ca1d8d2e464cc494151f46a5a1632e62b9537bf2b3a2e64e7ad53e374ec86fc188fcf0064a5683f9952bcfdcd2d8dae6b26605c",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-compose-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0/lifecycle-runtime-desktop-2.11.0.module",
+    "sha512": "ee2c901abd953adf200a1820793d4a824a2b667a91b0d9682cf74090461674911fe20bd21e495dbcd663987c681a08d59daa14c9986f09a7eab77042e67486f5",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.10.0/lifecycle-viewmodel-compose-2.10.0.pom",
-    "sha512": "57bfab8aa2d8c6a075191e9e4d42245d184ebef7723709dde046b44e6cd9fd4269a50b30952d1a29ff0a5a20f10996204f59e85cd92fe9f3ef10b4d71bf1d808",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-compose-2.10.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0/lifecycle-runtime-desktop-2.11.0.pom",
+    "sha512": "73aab1ab7548c964b8daa2093b05e068c88bea6104364f070edd2f9b7c9b02ad9c7f41b098ccf6db498680b0a663aba969b8a9783c376f6a0fd2d12f09111407",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-desktop-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.10.0/../../lifecycle-viewmodel-compose-desktop/2.10.0/lifecycle-viewmodel-compose-desktop-2.10.0.module",
-    "sha512": "ea8c18b518bfddab6a907753ed9ad226c0bb8a7c3349c5acdf7c312daaa152f7e7998464d466e4b0aebac9f74b2d497bc284ef8f785cf5fb676041cf9541cc5b",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.10.0/../../lifecycle-viewmodel-compose-desktop/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.11.0/lifecycle-runtime-2.11.0.module",
+    "sha512": "4d447113f1fedceb364bff866d9aefcf318fb5a9c13470658b9b3b6d14a6a2c927fb237932b07a8fc206e97ba3d00521a520e0540de6656779b591860142f574",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.11.0",
+    "dest-filename": "lifecycle-runtime-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0/lifecycle-viewmodel-savedstate-2.10.0.module",
-    "sha512": "96a31bc0a79ae10dab0af3668db171e61767b52e482b3dfb8af0fb3b25463c7e9f846790fbc573742bf7194af70e78b7ac58cfc28a5c0214b3a5edd9917aa4c9",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-savedstate-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.11.0/lifecycle-runtime-2.11.0.pom",
+    "sha512": "ebb329331551e594efcb22e96eedf96bfaa61cbbfca98d4b20ccc7e534c8266685b074176a0be299491c76ba362b40d4b9f343989b219ce6106c1f5c0c298bc2",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.11.0",
+    "dest-filename": "lifecycle-runtime-2.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0/lifecycle-viewmodel-savedstate-2.10.0.pom",
-    "sha512": "53087cb4989a5ac34149f683304d8afa306deace602d767e5a09294ebebaec5a24e9a66a752eacd50674b8a2b0370af4fa4435d19a671d9f8e924999c0652f02",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-savedstate-2.10.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.11.0/../../lifecycle-runtime-desktop/2.11.0/lifecycle-runtime-desktop-2.11.0.module",
+    "sha512": "ee2c901abd953adf200a1820793d4a824a2b667a91b0d9682cf74090461674911fe20bd21e495dbcd663987c681a08d59daa14c9986f09a7eab77042e67486f5",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-runtime/2.11.0/../../lifecycle-runtime-desktop/2.11.0",
+    "dest-filename": "lifecycle-runtime-desktop-2.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.10.0/lifecycle-viewmodel-2.10.0.module",
-    "sha512": "e66e3c8fa49f7409bab9b05b73c935d1c7bef60c9d5643faf443b9f30fef9068d1e4624280fe69ddd23d0794a3c56c261f0f5349e7d9a4ee2f71049e8fbb3714",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-2.10.0.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0/lifecycle-viewmodel-compose-desktop-2.11.0.jar",
+    "sha512": "370fb02e0fe7dca65d696ea97e2fb27758554ab428c9753a7fc4251b22fd69a2f6309f35b17e4cf4bdd891f34cdc867b5f8793b44d90ea67a0f5ac67de04954e",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.10.0/lifecycle-viewmodel-2.10.0.pom",
-    "sha512": "6a80030a9814a59ae20d38c574456195954c61152d4d295e91f9c1d1746bea4ae21669c39f1681b30d7464b2835011e2536dcb9b233c676f5d12a11972d77309",
-    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.10.0",
-    "dest-filename": "lifecycle-viewmodel-2.10.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0/lifecycle-viewmodel-compose-desktop-2.11.0.module",
+    "sha512": "3c1f391603d2570cdb4549768f3542f423bbb8d2b370b0331d56a418296b114de70126618fb439fbc0eff3e7307f6a689de60b34c2cc79301d10823862e7cb8a",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0/lifecycle-viewmodel-compose-desktop-2.11.0.pom",
+    "sha512": "aec401f8a1297b0faba40657f883a6f1766091981cdc13d6b75900facb3bdd21d67b988eff7c573d5ce76bc97a3f798ba981722cda9cf372a9f3108ddcd048c5",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0/lifecycle-viewmodel-compose-2.11.0.module",
+    "sha512": "176ffd75800b2a8df8681e6be39123fc35f912309074c13b00a425c00f0e01ff853c916fa2eabbccc570f5c9ad0c6218ad94bf93631b0a8af0b0b3b63abf8581",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0/lifecycle-viewmodel-compose-2.11.0.pom",
+    "sha512": "ca1555a4be3d3d4152b5bb1acef8b266d2fb958d1ba97d38801a1c8e91d5dc07af618407552253b1b5a6aab6252bfbdd268b6062d7ffedb45346a85b79b438be",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0/../../lifecycle-viewmodel-compose-desktop/2.11.0/lifecycle-viewmodel-compose-desktop-2.11.0.module",
+    "sha512": "3c1f391603d2570cdb4549768f3542f423bbb8d2b370b0331d56a418296b114de70126618fb439fbc0eff3e7307f6a689de60b34c2cc79301d10823862e7cb8a",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-compose/2.11.0/../../lifecycle-viewmodel-compose-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-compose-desktop-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0/lifecycle-viewmodel-desktop-2.11.0.jar",
+    "sha512": "11d6baed525c1ea739b3e1a75e44a1e643d72e547c19e0385c385dac316237c3cf3319af48d7663c09a618a7b9acac9df374155a0e8bb7e7518e2fb27c4ed86b",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-desktop-2.11.0.jar"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0/lifecycle-viewmodel-desktop-2.11.0.module",
+    "sha512": "955b9a730c1076cb86dae81a036d11c793d57d19ad14813e21906f58f84ebe1037cc2fe5f3d19b622ab750888bbf641132ae450fe6472822f90ed265211aec4f",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-desktop-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0/lifecycle-viewmodel-desktop-2.11.0.pom",
+    "sha512": "da4e5623074949ff831c62b6c8e93332c12b511e60d65e9a560bc2811ca8be10ec89b9ed5e9f21701225051ae490c83c250c1b88a635098925c124beb1e8fd82",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-desktop-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-navigation3/2.11.0/lifecycle-viewmodel-navigation3-2.11.0.pom",
+    "sha512": "947009172767680b3ccdc707eb827862528931353a795e7c3d3b7312fd22bee3372cf84276f46637112b8825a3b93c263f7a7519b5538aeb55526a15f44c7926",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-navigation3/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-navigation3-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0/lifecycle-viewmodel-savedstate-desktop-2.11.0.jar",
+    "sha512": "c03383571a7674c2ce0a8b7124ea38d14631959c2266e91b84b2af6856365547bafeb96f1ac7a82a6b0f57681b642f32b7c9800ca29f05e58276d0de53f651d2",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.11.0.jar"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0/lifecycle-viewmodel-savedstate-desktop-2.11.0.module",
+    "sha512": "398258d37face281c500dec75df441f3139a541a196739169ffee7154d76e3bc1e8ee9c80c02c632a05568831846022f5fbbfc835fa6a2eadb2a463a9cc4b67e",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0/lifecycle-viewmodel-savedstate-desktop-2.11.0.pom",
+    "sha512": "653a701203323b4c1ab1d058cebbb88eb45489dd671acbdd916970c60b043734c5092f6332cf279c6d44974a68d75c9704c55a7ce4b64a9b35b2cf2334943697",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0/lifecycle-viewmodel-savedstate-2.11.0.module",
+    "sha512": "f014fa65ac7ec331064dd299cc5c4ac099bd8764209b2595c606cc0f8740664af0f554a3bb47aa82b407a071030fc0c83344426f3e90f9b585f4135251717b61",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0/lifecycle-viewmodel-savedstate-2.11.0.pom",
+    "sha512": "7f84a77235256f5b289b1ca08f14078e1d6f73f20fff492578087ee91f8ce881c32be94dea30c84482bff797114d75429cc8ccb306e005766a596472cea3b2c5",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0/../../lifecycle-viewmodel-savedstate-desktop/2.11.0/lifecycle-viewmodel-savedstate-desktop-2.11.0.module",
+    "sha512": "398258d37face281c500dec75df441f3139a541a196739169ffee7154d76e3bc1e8ee9c80c02c632a05568831846022f5fbbfc835fa6a2eadb2a463a9cc4b67e",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel-savedstate/2.11.0/../../lifecycle-viewmodel-savedstate-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-savedstate-desktop-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.11.0/lifecycle-viewmodel-2.11.0.module",
+    "sha512": "c7b1bcb998832aed181398c6ec5a91424a58a371bd1f569833131407f453207fb4b05a5365dff86e87a16a95bd37b70e3312027e7c8e6b9f916b4f5aa86d6db9",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-2.11.0.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.11.0/lifecycle-viewmodel-2.11.0.pom",
+    "sha512": "8b49eab45b4d61270007315164ed7dcf85896df9442b6c910e3ee21c7d659f94351e3c2ade245dfad367a0e14f324ee0b614299b73272fc2c496247d16f2db8b",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-2.11.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.11.0/../../lifecycle-viewmodel-desktop/2.11.0/lifecycle-viewmodel-desktop-2.11.0.module",
+    "sha512": "955b9a730c1076cb86dae81a036d11c793d57d19ad14813e21906f58f84ebe1037cc2fe5f3d19b622ab750888bbf641132ae450fe6472822f90ed265211aec4f",
+    "dest": "offline-repository/org/jetbrains/androidx/lifecycle/lifecycle-viewmodel/2.11.0/../../lifecycle-viewmodel-desktop/2.11.0",
+    "dest-filename": "lifecycle-viewmodel-desktop-2.11.0.module"
   },
   {
     "type": "file",
@@ -3893,87 +4061,87 @@
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-desktop/1.9.3/runtime-desktop-1.9.3.jar",
-    "sha512": "cec8fcf3ef05065a8ebc31311d6fc3b2029717d8942560ba2aeabe66e5bb08da4d440bc4ec72479d078a555cfc19eef3848cb730b344a46e3b29a9a1e4011a30",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-desktop/1.9.3",
-    "dest-filename": "runtime-desktop-1.9.3.jar"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-desktop/1.11.0/runtime-desktop-1.11.0.jar",
+    "sha512": "82deab772f419edd20321f802d0397ef2e21b97444ad173edc2867aa75dd3cebb751111dd0e67f944a3f2bd19783aac3ccbdfca636c27721570682fe5a364896",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-desktop/1.11.0",
+    "dest-filename": "runtime-desktop-1.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-desktop/1.9.3/runtime-desktop-1.9.3.module",
-    "sha512": "74970e27c56c6b09296887f1af1b4f1ea5d71e5ec5ec8e823dbefd50c63ca32d4fea4e816a3d9eb4f9155e0c930c99342428aba3a84d304d539c3d58025b3b0d",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-desktop/1.9.3",
-    "dest-filename": "runtime-desktop-1.9.3.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-desktop/1.11.0/runtime-desktop-1.11.0.module",
+    "sha512": "439d37df9bc6cfce3c3f81de11f6905e38c2d60bee144e921558666a26f471280a947e90e54c564e6075fdc6bba5ae8907304a962416e75224a5b0f347bafb90",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-desktop/1.11.0",
+    "dest-filename": "runtime-desktop-1.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-desktop/1.9.3/runtime-desktop-1.9.3.pom",
-    "sha512": "45954a61c0703d011f3527a8c8b820ea0b2b6eb980e1705373d8b0d8a49c5b70b86c81c4573eabeadd29881023823cee1d34afc283c8b8692cfea4402565d088",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-desktop/1.9.3",
-    "dest-filename": "runtime-desktop-1.9.3.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-desktop/1.11.0/runtime-desktop-1.11.0.pom",
+    "sha512": "83ea3581af9eb215d1a7b091214285dd749a16fddca96443eb9586770754c0028c2de8abee73a99b778a91c2d442ba2a8d1e0f0b06c7787674f6b4f0fa7b8e46",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-desktop/1.11.0",
+    "dest-filename": "runtime-desktop-1.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.9.3/runtime-saveable-desktop-1.9.3.jar",
-    "sha512": "9bfa029d2cff9a1d5c0cf01a74ba6ae50da585be27af2f1a63c3b059f7b37ef85bd8dfa21775e87bb4e6dd8654ffd90c8077f826ada81489dd7e3af0ad8519fb",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.9.3",
-    "dest-filename": "runtime-saveable-desktop-1.9.3.jar"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.11.0/runtime-saveable-desktop-1.11.0.jar",
+    "sha512": "db8a7dbbf90ff5db7160fb6805dc874fcafa70ab7b99ad646bc15174577f7d0ddbaeabd1b8b94fc1d1b154592dbb4ed9392341cef17c7f2ab63d25d8c85c82fc",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.11.0",
+    "dest-filename": "runtime-saveable-desktop-1.11.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.9.3/runtime-saveable-desktop-1.9.3.module",
-    "sha512": "3f828b5d45da085feb5bde1e0e4319849ef3f2e63b7bae564407598bea6db8f8868f5a31d6ec51f6d67f7dd097d18aa3efe5458bf6cf8afe687799d8b31681f9",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.9.3",
-    "dest-filename": "runtime-saveable-desktop-1.9.3.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.11.0/runtime-saveable-desktop-1.11.0.module",
+    "sha512": "68c17b2e329aa7c6b5dc75e6dab940105f3c9884de8067beccc2e2ba983901686bc120adabcfa83043dee0f4fb8ec4b1b70880e9315f759559cdbd3914845c3b",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.11.0",
+    "dest-filename": "runtime-saveable-desktop-1.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.9.3/runtime-saveable-desktop-1.9.3.pom",
-    "sha512": "c2ddee1f5062b7f4f716fa749a6b3acc8058e0f9728f2f4782c967a62e59dc4f7d730d19d1a16040d3f1d3d6c32adb22b588aad6da2bed17c090c39ed0dea547",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.9.3",
-    "dest-filename": "runtime-saveable-desktop-1.9.3.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.11.0/runtime-saveable-desktop-1.11.0.pom",
+    "sha512": "a9276d11085f6160bf1d5024ed17ec804a8320cd31ee27fbc28a8f4bbb367e3e99cb73269f1d228803c9b9c734afb2cc7a6d9e3bf8fdc383c191e40154fde416",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable-desktop/1.11.0",
+    "dest-filename": "runtime-saveable-desktop-1.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable/1.9.3/runtime-saveable-1.9.3.module",
-    "sha512": "5589bbcab0d5d6f1aad2705bbcf046225ffcc6971a2afdbe6b1680e5f84a4a2774b63e3c5629fb838eb1b132b1524f584ba0ccd83d963ee6ee964e49717fdd8d",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable/1.9.3",
-    "dest-filename": "runtime-saveable-1.9.3.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable/1.11.0/runtime-saveable-1.11.0.module",
+    "sha512": "5ead8e1b68b3e75d529a9378ca0fe59daa7250e2d7dc696e5f0e1bfa28c6b7e99292fe1e6e6604ef386558b0154d4f857e2763a59ff52b3a6dbff8c1a1c086b0",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable/1.11.0",
+    "dest-filename": "runtime-saveable-1.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable/1.9.3/runtime-saveable-1.9.3.pom",
-    "sha512": "fcdd0fcaff7f3038c75ba3c3921952e48bc74c94cec923cdc5ad291c38ef4de4ab7e0d44ed58950f0873f833992b0986e7c08d2910f5ab40b693330a989c941f",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable/1.9.3",
-    "dest-filename": "runtime-saveable-1.9.3.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable/1.11.0/runtime-saveable-1.11.0.pom",
+    "sha512": "ddaeec0940ab41c9f5bfa3ad0b13c9bc07d879852d68b7cb2c3b5ef941bc347347b24764308e05aff9f0d1da98a42a8ed6632a88a3c3d1f6f1147741cca7ba2f",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable/1.11.0",
+    "dest-filename": "runtime-saveable-1.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable/1.9.3/../../runtime-saveable-desktop/1.9.3/runtime-saveable-desktop-1.9.3.module",
-    "sha512": "3f828b5d45da085feb5bde1e0e4319849ef3f2e63b7bae564407598bea6db8f8868f5a31d6ec51f6d67f7dd097d18aa3efe5458bf6cf8afe687799d8b31681f9",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable/1.9.3/../../runtime-saveable-desktop/1.9.3",
-    "dest-filename": "runtime-saveable-desktop-1.9.3.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime-saveable/1.11.0/../../runtime-saveable-desktop/1.11.0/runtime-saveable-desktop-1.11.0.module",
+    "sha512": "68c17b2e329aa7c6b5dc75e6dab940105f3c9884de8067beccc2e2ba983901686bc120adabcfa83043dee0f4fb8ec4b1b70880e9315f759559cdbd3914845c3b",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime-saveable/1.11.0/../../runtime-saveable-desktop/1.11.0",
+    "dest-filename": "runtime-saveable-desktop-1.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime/1.9.3/runtime-1.9.3.module",
-    "sha512": "cbdfb21eab0ee3ff63cb18e6f37c99a574e204b235572a790129fcb58637344e77a9cb8df068a419995355712101ff5d70a49a1fa9ab61fb8ad212b1b3e2e498",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime/1.9.3",
-    "dest-filename": "runtime-1.9.3.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime/1.11.0/runtime-1.11.0.module",
+    "sha512": "07f16ebfcc88e00289e62b56b47b796b92ce9bdae42c42f7c79bad342cdbf09085f88aa49378f74b32c79c43b52ff3842664c90e74b70a56e2c5ca8bf9d443d1",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime/1.11.0",
+    "dest-filename": "runtime-1.11.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime/1.9.3/runtime-1.9.3.pom",
-    "sha512": "5eea444e20f41f03a25ad168a87e5057c2c0a77225bf381802694b4372257c40eaa3bdcdb826ecaffe68826228f13d81b37b388d92a2bedeecb1af317bcea5bb",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime/1.9.3",
-    "dest-filename": "runtime-1.9.3.pom"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime/1.11.0/runtime-1.11.0.pom",
+    "sha512": "cb30cc9b51e1978bd0f11c5862ceb6bee393e103587f2356f3cf0058951fcd3bf8243a87479243f3cab12dfe7e5c07d2a7ad1d01e54c6355f4a9f48f49096c46",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime/1.11.0",
+    "dest-filename": "runtime-1.11.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime/1.9.3/../../runtime-desktop/1.9.3/runtime-desktop-1.9.3.module",
-    "sha512": "74970e27c56c6b09296887f1af1b4f1ea5d71e5ec5ec8e823dbefd50c63ca32d4fea4e816a3d9eb4f9155e0c930c99342428aba3a84d304d539c3d58025b3b0d",
-    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime/1.9.3/../../runtime-desktop/1.9.3",
-    "dest-filename": "runtime-desktop-1.9.3.module"
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/compose/runtime/runtime/1.11.0/../../runtime-desktop/1.11.0/runtime-desktop-1.11.0.module",
+    "sha512": "439d37df9bc6cfce3c3f81de11f6905e38c2d60bee144e921558666a26f471280a947e90e54c564e6075fdc6bba5ae8907304a962416e75224a5b0f347bafb90",
+    "dest": "offline-repository/org/jetbrains/compose/runtime/runtime/1.11.0/../../runtime-desktop/1.11.0",
+    "dest-filename": "runtime-desktop-1.11.0.module"
   },
   {
     "type": "file",
@@ -5339,13 +5507,6 @@
     "sha512": "3ab4c957626e6b751fc159b5637270789e620e41078026e53ae761e657e6c0053ca9a141ba031f23f8868868d5696e479c19660a70f55a0da7dbff135c995bca",
     "dest": "offline-repository/org/jetbrains/kotlin/kotlin-stdlib/2.2.10",
     "dest-filename": "kotlin-stdlib-2.2.10.pom"
-  },
-  {
-    "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.2.20/kotlin-stdlib-2.2.20.pom",
-    "sha512": "24e048e39ba8ac1fd249c8276a7024e4ec03fabc10b95c5cc5f8c996ea6e7a29e48457091cae0c1e59985d1f439878b7f12fe77314de14b02824dd986dbdb8ca",
-    "dest": "offline-repository/org/jetbrains/kotlin/kotlin-stdlib/2.2.20",
-    "dest-filename": "kotlin-stdlib-2.2.20.pom"
   },
   {
     "type": "file",
