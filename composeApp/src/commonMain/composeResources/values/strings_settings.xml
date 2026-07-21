@@ -61,6 +61,7 @@
     <string name="settings_ai_error_invalid_request">The provider rejected the request (check model/params).</string>
     <string name="settings_ai_error_protocol">Unexpected response from the AI provider.</string>
     <string name="settings_ai_error_unknown">AI request failed. Try again.</string>
+    <string name="settings_ai_error_engine_crashed">The local model engine stopped unexpectedly. Try again.</string>
     <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">Sanitize secrets before sending</string>
     <string name="settings_ai_sanitize_desc">Strip obvious passwords, tokens and keys from prompts before they reach external providers.</string>

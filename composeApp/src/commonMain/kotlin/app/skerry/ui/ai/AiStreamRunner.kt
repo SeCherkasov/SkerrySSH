@@ -21,6 +21,9 @@ enum class AiFailure {
     NETWORK,
     INVALID_REQUEST,
     PROTOCOL,
+
+    /** The isolated local-inference host died; the rest of the app is unaffected. */
+    ENGINE_CRASHED,
     UNKNOWN,
 }
 
@@ -31,6 +34,7 @@ internal fun AiException.toFailure(): AiFailure = when (kind) {
     AiException.Kind.NETWORK -> AiFailure.NETWORK
     AiException.Kind.INVALID_REQUEST -> AiFailure.INVALID_REQUEST
     AiException.Kind.PROTOCOL -> AiFailure.PROTOCOL
+    AiException.Kind.ENGINE_CRASHED -> AiFailure.ENGINE_CRASHED
 }
 
 /**
