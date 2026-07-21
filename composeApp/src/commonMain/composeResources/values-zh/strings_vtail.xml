@@ -5,6 +5,8 @@
     <string name="vtail_bio_enable_title">启用生物识别</string>
     <string name="vtail_bio_enable_cancel">取消</string>
     <string name="vtail_bio_enable_subtitle">确认你的生物识别以绑定保险库解锁。</string>
+    <string name="vtail_bio_verify_title">检查生物识别解锁</string>
+    <string name="vtail_bio_verify_subtitle">再触摸一次以确认解锁可用。</string>
     <string name="vtail_bio_unlock_title">解锁 Skerry</string>
     <string name="vtail_bio_unlock_cancel">输入密码</string>
     <string name="vtail_bio_unlock_subtitle">确认你的生物识别以打开保险库。</string>
@@ -23,6 +25,9 @@
     <string name="vtail_error_wrong_password">主密码错误。</string>
     <string name="vtail_error_corrupted">保险库文件损坏或无法读取。</string>
     <string name="vtail_error_biometric_reset">生物识别已重置 — 请使用主密码登录。</string>
+    <string name="vtail_error_biometric_failed">生物识别失败 — 请输入主密码。</string>
+    <string name="vtail_error_biometric_locked_out">生物识别已锁定 — 请输入主密码。</string>
+    <string name="vtail_error_biometric_unsupported">此手机不支持生物识别解锁 — 请输入主密码。</string>
 
     <!-- 密钥卡片\"被使用\"片段，单数 / 复数 -->
     <string name="vtail_used_by_one">被 1 台主机使用</string>

@@ -5,6 +5,8 @@
     <string name="vtail_bio_enable_title">Включить биометрию</string>
     <string name="vtail_bio_enable_cancel">Отмена</string>
     <string name="vtail_bio_enable_subtitle">Подтвердите биометрию, чтобы привязать разблокировку хранилища</string>
+    <string name="vtail_bio_verify_title">Проверка разблокировки</string>
+    <string name="vtail_bio_verify_subtitle">Ещё одно касание — проверяем разблокировку</string>
     <string name="vtail_bio_unlock_title">Разблокировать Skerry</string>
     <string name="vtail_bio_unlock_cancel">Ввести пароль</string>
     <string name="vtail_bio_unlock_subtitle">Подтвердите биометрию, чтобы открыть хранилище</string>
@@ -23,6 +25,9 @@
     <string name="vtail_error_wrong_password">Неверный мастер-пароль.</string>
     <string name="vtail_error_corrupted">Файл хранилища повреждён или не читается.</string>
     <string name="vtail_error_biometric_reset">Биометрия сброшена — войдите мастер-паролем.</string>
+    <string name="vtail_error_biometric_failed">Биометрия не сработала — введите мастер-пароль.</string>
+    <string name="vtail_error_biometric_locked_out">Биометрия заблокирована — введите мастер-пароль.</string>
+    <string name="vtail_error_biometric_unsupported">Биометрия на этом телефоне не работает — введите мастер-пароль.</string>
 
     <!-- Фрагмент «используется» на карточке секрета, ед./мн. (ключи готовы; проводка блокируется VaultPresentationTest). -->
     <string name="vtail_used_by_one">используется 1 хостом</string>

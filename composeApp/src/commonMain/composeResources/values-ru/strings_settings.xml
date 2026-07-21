@@ -122,6 +122,9 @@
     <string name="settings_security_pw_changed_days">Последнее изменение %1$d дн. назад.</string>
     <string name="settings_security_touch_id">Разблокировка по Touch ID</string>
     <string name="settings_security_touch_id_desc">Использовать биометрию вместо ввода мастер-пароля.</string>
+    <string name="settings_security_touch_id_unsupported">Этот телефон не может открыть хранилище по биометрии.</string>
+    <string name="settings_security_touch_id_recheck">Проверить снова</string>
+    <string name="settings_security_touch_id_weak_binding">Включено с ослабленной привязкой ключа — биометрия по-прежнему нужна.</string>
     <string name="settings_security_auto_lock">Автоблокировка</string>
     <string name="settings_security_auto_lock_desc">Блокировать Skerry после простоя.</string>
     <string name="settings_autolock_1m">Через 1 минуту</string>

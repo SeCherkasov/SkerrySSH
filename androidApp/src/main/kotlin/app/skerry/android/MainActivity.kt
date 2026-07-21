@@ -25,6 +25,7 @@ import app.skerry.shared.tunnel.VaultTunnelStore
 import app.skerry.shared.vault.AndroidBiometricKeyStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileBioArtifactStore
+import app.skerry.shared.vault.FileBiometricSupportStore
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
@@ -346,6 +347,13 @@ class MainActivity : FragmentActivity() {
             keyStore = AndroidBiometricKeyStore(applicationContext) { activityRef.get() },
             artifacts = FileBioArtifactStore(dir.resolve("vault.bio").absolutePath.toPath(), FileSystem.SYSTEM),
             deviceId = deviceId(dir),
+            // Verdict for devices whose keystore never authorizes an auth-bound key (#23): persisted so
+            // the settings row explains itself instead of offering a setup that cannot work.
+            support = FileBiometricSupportStore(
+                dir.resolve("vault.bio.unsupported").absolutePath.toPath(),
+                FileSystem.SYSTEM,
+                deviceId(dir),
+            ),
         )
         // Global tunnels: saved forwards. Activated via a separate probe transport (read-only verifier)
         // so only an already-trusted host can be enabled, no silent TOFU here. Host/secret resolution

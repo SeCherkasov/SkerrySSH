@@ -61,6 +61,8 @@ import app.skerry.ui.generated.resources.more_ai_subtitle_local
 import app.skerry.ui.generated.resources.more_biometric_prompt_cancel
 import app.skerry.ui.generated.resources.more_biometric_prompt_subtitle
 import app.skerry.ui.generated.resources.more_biometric_prompt_title
+import app.skerry.ui.generated.resources.more_biometric_verify_subtitle
+import app.skerry.ui.generated.resources.more_biometric_verify_title
 import app.skerry.ui.generated.resources.more_known_hosts
 import app.skerry.ui.generated.resources.more_lock
 import app.skerry.ui.generated.resources.more_port_forwarding
@@ -104,6 +106,9 @@ import app.skerry.ui.generated.resources.settings_security_title
 import app.skerry.ui.generated.resources.settings_update_status
 import app.skerry.ui.generated.resources.settings_security_touch_id
 import app.skerry.ui.generated.resources.settings_security_touch_id_desc
+import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
+import app.skerry.ui.generated.resources.settings_security_touch_id_unsupported
+import app.skerry.ui.generated.resources.settings_security_touch_id_weak_binding
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -316,18 +321,43 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 }
                 MobileSecurityDivider()
 
-                // Biometric unlock: row shows only when the factor is available (nothing to configure otherwise).
-                if (controller != null && controller.canEnableBiometric()) {
+                // Biometric unlock: row shows only when the factor is available (nothing to configure
+                // otherwise). A device whose enclave refuses to decrypt the vault (#23) gets the reason
+                // and a re-check instead of a toggle that can't work.
+                if (controller != null && controller.biometricUnsupported) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Txt(stringResource(Res.string.settings_security_touch_id), color = D.faint, size = 14.5.sp)
+                            Txt(stringResource(Res.string.settings_security_touch_id_unsupported), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                        }
+                        Txt(
+                            stringResource(Res.string.settings_security_touch_id_recheck),
+                            color = D.cyanBright,
+                            size = 13.sp,
+                            weight = FontWeight.Medium,
+                            modifier = Modifier.clickable { controller.recheckBiometricSupport(); reload++ },
+                        )
+                    }
+                    MobileSecurityDivider()
+                } else if (controller != null && controller.canEnableBiometric()) {
                     // Prompt strings resolved in composable scope (stringResource can't be called in the onToggle lambda).
                     val enablePrompt = BiometricPrompt(
                         title = stringResource(Res.string.more_biometric_prompt_title),
                         cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
                         subtitle = stringResource(Res.string.more_biometric_prompt_subtitle),
                     )
+                    val verifyPrompt = BiometricPrompt(
+                        title = stringResource(Res.string.more_biometric_verify_title),
+                        cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
+                        subtitle = stringResource(Res.string.more_biometric_verify_subtitle),
+                    )
                     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
                             Txt(stringResource(Res.string.settings_security_touch_id), color = D.text, size = 14.5.sp)
-                            Txt(stringResource(Res.string.settings_security_touch_id_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                            // Same subtitle slot admits a weaker key binding when the device took one.
+                            val desc = if (controller.biometricReducedBinding) Res.string.settings_security_touch_id_weak_binding
+                            else Res.string.settings_security_touch_id_desc
+                            Txt(stringResource(desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                         }
                         Toggle(
                             on = controller.biometricEnabled,
@@ -335,7 +365,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                                 if (controller.biometricInFlight) return@Toggle
                                 scope.launch {
                                     if (controller.biometricEnabled) controller.disableBiometric()
-                                    else controller.enableBiometric(enablePrompt)
+                                    else controller.enableBiometric(enablePrompt, verifyPrompt)
                                     reload++
                                 }
                             },

@@ -5,6 +5,8 @@
     <string name="vtail_bio_enable_title">Enable biometrics</string>
     <string name="vtail_bio_enable_cancel">Cancel</string>
     <string name="vtail_bio_enable_subtitle">Confirm your biometrics to bind vault unlock.</string>
+    <string name="vtail_bio_verify_title">Check biometric unlock</string>
+    <string name="vtail_bio_verify_subtitle">One more touch to check that unlock works.</string>
     <string name="vtail_bio_unlock_title">Unlock Skerry</string>
     <string name="vtail_bio_unlock_cancel">Enter password</string>
     <string name="vtail_bio_unlock_subtitle">Confirm your biometrics to open the vault.</string>
@@ -23,6 +25,9 @@
     <string name="vtail_error_wrong_password">Wrong master password.</string>
     <string name="vtail_error_corrupted">The vault file is corrupted or unreadable.</string>
     <string name="vtail_error_biometric_reset">Biometrics were reset — sign in with your master password.</string>
+    <string name="vtail_error_biometric_failed">Biometrics didn't work — enter your master password.</string>
+    <string name="vtail_error_biometric_locked_out">Biometrics locked for now — enter your master password.</string>
+    <string name="vtail_error_biometric_unsupported">Biometrics won't work on this phone — use your master password.</string>
 
     <!-- Secret card "used by" fragment, singular / plural (keys ready; wiring blocked by VaultPresentationTest). -->
     <string name="vtail_used_by_one">used by 1 host</string>

@@ -3,6 +3,8 @@ package app.skerry.ui.vault
 import app.skerry.shared.vault.BioArtifact
 import app.skerry.shared.vault.BioArtifactStore
 import app.skerry.shared.vault.BiometricAvailability
+import app.skerry.shared.vault.BiometricKeyHardening
+import app.skerry.shared.vault.BiometricSupportStore
 import app.skerry.shared.vault.BiometricKeyStore
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.BiometricResult
@@ -331,6 +333,107 @@ class VaultGateControllerTest {
     }
 
     @Test
+    fun `biometric unlock failure surfaces a hint instead of failing silently`() = runTest {
+        // Xiaomi/MIUI-style quirk downstream (or lockout/hw error) surfaces as BiometricUnlockResult.Failed.
+        // The user tapped the sensor and nothing visibly happened before — now we show a "use password" hint.
+        val controller = gate(
+            FakeVault(exists = true),
+            biometricsForUnlock(BiometricResult.Failed),
+        )
+
+        controller.unlockWithBiometric(PROMPT)
+
+        assertEquals(VaultGateState.NeedsUnlock, controller.state)
+        assertEquals(VaultGateError.BiometricFailed, controller.error)
+    }
+
+    @Test
+    fun `biometric unlock unavailable surfaces the same hint`() = runTest {
+        val controller = gate(
+            FakeVault(exists = true),
+            // Availability short-circuits to Unavailable before unwrap is ever called, so the
+            // scripted unwrap outcome is irrelevant here — left at its default.
+            biometricsForUnlock(availability = BiometricAvailability.NotEnrolled),
+        )
+
+        controller.unlockWithBiometric(PROMPT)
+
+        assertEquals(VaultGateState.NeedsUnlock, controller.state)
+        assertEquals(VaultGateError.BiometricFailed, controller.error)
+    }
+
+    @Test
+    fun `biometric unlock lockout surfaces a distinct locked-out hint`() = runTest {
+        // Too many attempts: the sensor works, the user just has to wait. A dedicated message avoids
+        // implying the hardware is broken — and it must differ from the generic BiometricFailed hint.
+        val controller = gate(
+            FakeVault(exists = true),
+            biometricsForUnlock(BiometricResult.LockedOut),
+        )
+
+        controller.unlockWithBiometric(PROMPT)
+
+        assertEquals(VaultGateState.NeedsUnlock, controller.state)
+        assertEquals(VaultGateError.BiometricLockedOut, controller.error)
+    }
+
+    @Test
+    fun `a repeated enclave refusal turns the toggle inert instead of failing silently`() = runTest {
+        // #23 at unlock time: the fingerprint is accepted, the enclave refuses the key. One refusal reads
+        // as an ordinary failure (it could be a keystore hiccup); a streak disables biometrics, tells the
+        // user why, and stops onboarding from offering a setup this device can't complete.
+        val support = BiometricSupportStore.Volatile()
+        val controller = gate(
+            FakeVault(exists = true),
+            biometricsForUnlock(BiometricResult.Unusable, support = support),
+        )
+
+        controller.unlockWithBiometric(PROMPT)
+        assertEquals(VaultGateError.BiometricFailed, controller.error)
+        assertFalse(controller.biometricUnsupported)
+
+        controller.unlockWithBiometric(PROMPT)
+
+        assertEquals(VaultGateState.NeedsUnlock, controller.state)
+        assertEquals(VaultGateError.BiometricUnsupported, controller.error)
+        assertTrue(controller.biometricUnsupported)
+        assertFalse(controller.biometricEnabled)
+        assertFalse(controller.canEnableBiometric(), "onboarding must not offer what the device can't do")
+    }
+
+    @Test
+    fun `re-checking biometric support clears the verdict and the message`() = runTest {
+        // A ROM update can fix the enclave, so the verdict is never final — the user can ask again.
+        val support = BiometricSupportStore.Volatile()
+        val controller = gate(
+            FakeVault(exists = true),
+            biometricsForUnlock(BiometricResult.Unusable, support = support),
+        )
+        controller.unlockWithBiometric(PROMPT)
+        controller.unlockWithBiometric(PROMPT)
+
+        controller.recheckBiometricSupport()
+
+        assertFalse(controller.biometricUnsupported)
+        assertNull(controller.error)
+        assertTrue(controller.canEnableBiometric())
+    }
+
+    @Test
+    fun `biometric unlock cancellation stays silent`() = runTest {
+        // The user dismissed the prompt on purpose (negative button) — an error there would be noise.
+        val controller = gate(
+            FakeVault(exists = true),
+            biometricsForUnlock(BiometricResult.Cancelled),
+        )
+
+        controller.unlockWithBiometric(PROMPT)
+
+        assertEquals(VaultGateState.NeedsUnlock, controller.state)
+        assertNull(controller.error)
+    }
+
+    @Test
     fun `create offers biometric enrollment when the device can enable it`() {
         val controller = gate(
             FakeVault(exists = false),
@@ -587,6 +690,34 @@ private fun biometrics(
 ): VaultBiometrics = VaultBiometrics(vault, FakeKeyStore(availability), artifacts, deviceId = "test-device")
 
 /**
+ * A [VaultBiometrics] that is already enabled (valid `vault.bio` seeded for `test-device`) and whose
+ * next unwrap yields [unwrapOutcome] — lets the gate tests drive biometric-unlock failure/cancel paths.
+ */
+private fun biometricsForUnlock(
+    unwrapOutcome: BiometricResult<ByteArray> = BiometricResult.Failed,
+    availability: BiometricAvailability = BiometricAvailability.Available,
+    support: BiometricSupportStore = BiometricSupportStore.Volatile(),
+): VaultBiometrics {
+    val artifacts = FakeArtifacts().apply {
+        write(
+            BioArtifact(
+                formatVersion = 1,
+                alias = "skerry.vault.bio.test-device",
+                deviceId = "test-device",
+                wrappedBio = ByteArray(16),
+            ),
+        )
+    }
+    return VaultBiometrics(
+        FakeVault(exists = true),
+        FakeKeyStore(availability, unwrapOutcome),
+        artifacts,
+        deviceId = "test-device",
+        support = support,
+    )
+}
+
+/**
  * In-memory [Vault] for gate tests: models the create/unlock/lock lifecycle and wipes the passed
  * password (like the file-backed implementation). CRUD is not exercised by the gate controller.
  */
@@ -656,16 +787,21 @@ private class FakeVault(
     override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = false
 }
 
-/** Fake secure-enclave: [availability] controls availability, wrap/unwrap are identity ops. */
+/**
+ * Fake secure-enclave: [availability] controls availability, wrap/unwrap are identity ops. When
+ * [unwrapOutcome] is set the next unwrap returns it verbatim (to script failure/cancel unlock paths).
+ */
 private class FakeKeyStore(
     private val availability: BiometricAvailability,
+    private val unwrapOutcome: BiometricResult<ByteArray>? = null,
 ) : BiometricKeyStore {
     override fun availability(): BiometricAvailability = availability
-    override suspend fun ensureKey(alias: String): Boolean = availability == BiometricAvailability.Available
+    override suspend fun ensureKey(alias: String, hardening: BiometricKeyHardening): Boolean =
+        availability == BiometricAvailability.Available
     override suspend fun wrap(alias: String, plaintext: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray> =
         BiometricResult.Success(plaintext.copyOf())
     override suspend fun unwrap(alias: String, wrapped: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray> =
-        BiometricResult.Success(wrapped.copyOf())
+        unwrapOutcome ?: BiometricResult.Success(wrapped.copyOf())
     override fun deleteKey(alias: String) = Unit
 }
 

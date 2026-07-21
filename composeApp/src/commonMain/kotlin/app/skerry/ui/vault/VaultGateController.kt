@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.vault.BiometricAvailability
+import app.skerry.shared.vault.BiometricKeyHardening
 import app.skerry.shared.vault.BiometricEnableResult
 import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.BiometricUnlockResult
@@ -103,6 +104,15 @@ enum class VaultGateError {
 
     /** Biometrics reset (new fingerprint/face) — it's disabled, the master password is needed. */
     BiometricReset,
+
+    /** Biometric unlock didn't succeed (hardware error / OEM quirk) — fall back to the password. */
+    BiometricFailed,
+
+    /** Sensor temporarily locked after too many attempts — wait and use the master password meanwhile. */
+    BiometricLockedOut,
+
+    /** This device's secure hardware can't decrypt the vault — biometrics is off, password only (#23). */
+    BiometricUnsupported,
 }
 
 /**
@@ -169,6 +179,23 @@ class VaultGateController(
 
     /** Whether biometrics is enabled for this vault (reactive — the toggle updates the UI). */
     var biometricEnabled: Boolean by mutableStateOf(biometrics?.isEnabled() == true)
+        private set
+
+    /**
+     * The device proved it can't decrypt the vault with a biometrics-protected key (#23). The toggle
+     * stays visible but inert, with an explanation and a re-check ([recheckBiometricSupport]) — a
+     * silently missing row would read as "Skerry has no biometrics", which isn't what happened.
+     */
+    var biometricUnsupported: Boolean by mutableStateOf(biometrics?.isUnsupported() == true)
+        private set
+
+    /**
+     * Biometrics is enabled, but only on a rung that had to drop "the key is unusable while the device
+     * is locked" ([BiometricKeyHardening.Relaxed]) — the strongest configurations weren't honoured here.
+     * Per-operation biometric auth still guards the key; the UI says so anyway, because a downgrade the
+     * user never chose shouldn't be invisible.
+     */
+    var biometricReducedBinding: Boolean by mutableStateOf(biometrics?.reducedBinding() == true)
         private set
 
     /** User activity counter — idle auto-lock restarts when it changes. */
@@ -346,14 +373,18 @@ class VaultGateController(
     fun canUnlockWithBiometric(): Boolean =
         biometrics?.let { it.availability() == BiometricAvailability.Available && it.isEnabled() } == true
 
-    /** Whether enabling biometrics can be offered (hardware present and a factor enrolled). */
+    /**
+     * Whether enabling biometrics can be offered (hardware present, a factor enrolled, and the device
+     * not already known to be incapable of it). Onboarding skips the offer when this is false; the
+     * settings row also renders on [biometricUnsupported], to explain rather than vanish.
+     */
     fun canEnableBiometric(): Boolean =
-        biometrics?.let { it.availability() == BiometricAvailability.Available } == true
+        biometrics?.let { it.availability() == BiometricAvailability.Available } == true && !biometricUnsupported
 
     /**
      * Unlock with biometrics. Success → [VaultGateState.Unlocked]. Key invalidation disables biometrics
-     * and asks for the password ([VaultGateError.BiometricReset]). Cancel/failure — stay silently on the
-     * password form with no error. [prompt] (localized strings) comes from the UI.
+     * and asks for the password ([VaultGateError.BiometricReset]). Failure/unavailability surface a
+     * "use your password" hint; cancellation stays silent. [prompt] (localized strings) comes from the UI.
      */
     suspend fun unlockWithBiometric(prompt: BiometricPrompt) {
         val bio = biometrics ?: return
@@ -370,25 +401,66 @@ class VaultGateController(
                     error = VaultGateError.BiometricReset
                 }
                 BiometricUnlockResult.Corrupted -> state = VaultGateState.Corrupted
-                // Cancelled / Failed / Unavailable / NotEnabled — stay on the password form silently.
-                else -> Unit
+                // The enclave stopped honouring the key — biometrics is off for good on this device
+                // until the user re-checks it (see biometricUnsupported).
+                BiometricUnlockResult.Unsupported -> {
+                    biometricEnabled = false
+                    biometricUnsupported = true
+                    error = VaultGateError.BiometricUnsupported
+                }
+                // A silent failure looks like the tap did nothing — surface a "use your password" hint.
+                BiometricUnlockResult.Failed,
+                BiometricUnlockResult.Unavailable,
+                -> error = VaultGateError.BiometricFailed
+                BiometricUnlockResult.LockedOut -> error = VaultGateError.BiometricLockedOut
+                // Deliberate dismissal stays silent — a message there would just be noise.
+                BiometricUnlockResult.Cancelled,
+                BiometricUnlockResult.NotEnabled,
+                -> Unit
             }
         } finally {
             biometricInFlight = false
         }
     }
 
-    /** Enable biometrics (vault already unlocked). `true` if enabled. */
-    suspend fun enableBiometric(prompt: BiometricPrompt): Boolean {
+    /**
+     * Enable biometrics (vault already unlocked). `true` if enabled. [verifyPrompt] labels the second
+     * prompt of the round-trip check ([VaultBiometrics.enable]) — the one that proves this device can
+     * actually decrypt the vault; a device that fails it lands in [biometricUnsupported].
+     */
+    suspend fun enableBiometric(prompt: BiometricPrompt, verifyPrompt: BiometricPrompt = prompt): Boolean {
         val bio = biometrics ?: return false
         biometricInFlight = true
         return try {
-            val enabled = bio.enable(prompt) == BiometricEnableResult.Enabled
-            biometricEnabled = bio.isEnabled()
-            if (enabled) securityLog?.record(SecurityEventType.BiometricEnabled)
-            enabled
+            val result = bio.enable(prompt, verifyPrompt)
+            // Both answers come off disk; enable() is called straight from a click handler.
+            withContext(kdfDispatcher) {
+                biometricEnabled = bio.isEnabled()
+                biometricUnsupported = bio.isUnsupported()
+                biometricReducedBinding = bio.reducedBinding()
+            }
+            if (result == BiometricEnableResult.Enabled) securityLog?.record(SecurityEventType.BiometricEnabled)
+            result == BiometricEnableResult.Enabled
         } finally {
             biometricInFlight = false
+        }
+    }
+
+    /**
+     * Drop the "this device can't do biometrics" verdict so the next [enableBiometric] walks the whole
+     * hardening ladder again — a ROM update or a reboot can fix an enclave that used to refuse the key.
+     * The verdict lives in a file, so the erase runs on [kdfDispatcher], not in the click handler;
+     * the row flips immediately (Compose state is safe to write from any thread).
+     */
+    fun recheckBiometricSupport() {
+        val bio = biometrics ?: return
+        biometricUnsupported = false
+        if (error == VaultGateError.BiometricUnsupported) error = null
+        scope.launch {
+            biometricUnsupported = withContext(kdfDispatcher) {
+                bio.forgetUnsupported()
+                bio.isUnsupported()
+            }
         }
     }
 
@@ -398,6 +470,7 @@ class VaultGateController(
         val wasEnabled = bio.isEnabled()
         bio.disable()
         biometricEnabled = bio.isEnabled()
+        biometricReducedBinding = false
         // Record the event only if biometrics was actually enabled (disable is idempotent).
         if (wasEnabled && !biometricEnabled) securityLog?.record(SecurityEventType.BiometricDisabled)
     }
@@ -439,3 +512,7 @@ class VaultGateController(
         if (state == VaultGateState.OfferBiometric) state = VaultGateState.Unlocked
     }
 }
+
+/** Whether the current enrollment sits on the weakest rung of the hardening ladder (see [VaultGateController.biometricReducedBinding]). */
+private fun VaultBiometrics.reducedBinding(): Boolean =
+    isEnabled() && enrolledHardening() == BiometricKeyHardening.Relaxed

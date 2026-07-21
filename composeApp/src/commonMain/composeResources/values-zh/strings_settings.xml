@@ -122,6 +122,9 @@
     <string name="settings_security_pw_changed_days">上次更改于 %1$d 天前。</string>
     <string name="settings_security_touch_id">使用 Touch ID 解锁</string>
     <string name="settings_security_touch_id_desc">使用生物识别代替输入主密码。</string>
+    <string name="settings_security_touch_id_unsupported">此手机无法通过生物识别解锁保险库。</string>
+    <string name="settings_security_touch_id_recheck">重新检查</string>
+    <string name="settings_security_touch_id_weak_binding">已启用，但密钥绑定较弱 — 仍需生物识别。</string>
     <string name="settings_security_auto_lock">自动锁定</string>
     <string name="settings_security_auto_lock_desc">闲置后锁定 Skerry。</string>
     <string name="settings_autolock_1m">1 分钟后</string>

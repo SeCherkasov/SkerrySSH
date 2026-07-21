@@ -47,6 +47,8 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.more_biometric_prompt_cancel
 import app.skerry.ui.generated.resources.more_biometric_prompt_subtitle
 import app.skerry.ui.generated.resources.more_biometric_prompt_title
+import app.skerry.ui.generated.resources.more_biometric_verify_subtitle
+import app.skerry.ui.generated.resources.more_biometric_verify_title
 import app.skerry.ui.generated.resources.settings_autolock_15m
 import app.skerry.ui.generated.resources.settings_autolock_1m
 import app.skerry.ui.generated.resources.settings_autolock_30m
@@ -85,6 +87,9 @@ import app.skerry.ui.generated.resources.settings_security_subtitle
 import app.skerry.ui.generated.resources.settings_security_title
 import app.skerry.ui.generated.resources.settings_security_touch_id
 import app.skerry.ui.generated.resources.settings_security_touch_id_desc
+import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
+import app.skerry.ui.generated.resources.settings_security_touch_id_unsupported
+import app.skerry.ui.generated.resources.settings_security_touch_id_weak_binding
 import app.skerry.ui.generated.resources.settings_time_days_ago
 import app.skerry.ui.generated.resources.settings_time_today
 import app.skerry.ui.generated.resources.settings_time_yesterday
@@ -135,25 +140,53 @@ internal fun SecuritySection(
     HLine()
 
     // Biometric unlock row only shown when biometrics are available on the device (e.g. hidden on
-    // headless desktop Linux — nothing to configure).
+    // headless desktop Linux — nothing to configure). A device whose enclave refuses to decrypt the
+    // vault (#23) keeps the row, off and inert, with the reason and a re-check — dropping it silently
+    // would read as "Skerry has no biometrics".
     val scope = rememberCoroutineScope()
-    if (controller != null && controller.canEnableBiometric()) {
-        // Prompt strings resolved in composable scope (stringResource can't be called in onToggle);
-        // shares the mobile prompt wording (MobileMoreView) — the same system dialog.
+    if (controller != null && controller.biometricUnsupported) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Txt(stringResource(Res.string.settings_security_touch_id), color = D.faint, size = 13.sp, weight = FontWeight.Medium)
+                Txt(
+                    stringResource(Res.string.settings_security_touch_id_unsupported),
+                    color = D.dim,
+                    size = 11.5.sp,
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+            }
+            GhostButton(
+                stringResource(Res.string.settings_security_touch_id_recheck),
+                onClick = { controller.recheckBiometricSupport() },
+            )
+        }
+        HLine()
+    } else if (controller != null && controller.canEnableBiometric()) {
+        // Prompt strings are resolved here (stringResource needs composable scope) and handed to the
+        // coroutine below; they share the mobile prompt wording (MobileMoreView) — the same system
+        // dialog. The second one labels the round-trip check that enable() performs.
         val enablePrompt = BiometricPrompt(
             title = stringResource(Res.string.more_biometric_prompt_title),
             cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
             subtitle = stringResource(Res.string.more_biometric_prompt_subtitle),
         )
+        val verifyPrompt = BiometricPrompt(
+            title = stringResource(Res.string.more_biometric_verify_title),
+            cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
+            subtitle = stringResource(Res.string.more_biometric_verify_subtitle),
+        )
         SettingToggleRow(
             stringResource(Res.string.settings_security_touch_id),
-            stringResource(Res.string.settings_security_touch_id_desc),
+            // The subtitle doubles as the place to admit a weaker key binding when that's what the
+            // device would take (see VaultGateController.biometricReducedBinding).
+            if (controller.biometricReducedBinding) stringResource(Res.string.settings_security_touch_id_weak_binding)
+            else stringResource(Res.string.settings_security_touch_id_desc),
             on = controller.biometricEnabled,
             onToggle = {
                 if (controller.biometricInFlight) return@SettingToggleRow
                 scope.launch {
                     if (controller.biometricEnabled) controller.disableBiometric()
-                    else controller.enableBiometric(enablePrompt)
+                    else controller.enableBiometric(enablePrompt, verifyPrompt)
                     onBiometricToggled()
                 }
             },

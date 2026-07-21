@@ -22,10 +22,28 @@ enum class BiometricAvailability {
 }
 
 /**
+ * How hard the `bioKey` is tied to the device's secure hardware. Tried in ladder order (see
+ * [BiometricKeyStore.hardeningLadder]): the strongest configuration the device actually honours
+ * wins. Some OEM keystores accept a key at generation time and then never authorize operations on
+ * it (see #23) — the ladder is what turns that dead end into a working, if slightly weaker, key.
+ */
+enum class BiometricKeyHardening {
+    /** Strongest available: StrongBox when present, key unusable while the device is locked. */
+    Strongest,
+
+    /** No StrongBox — the key lives in the TEE. Still unusable while the device is locked. */
+    NoStrongBox,
+
+    /** TEE without the "device must be unlocked" requirement — last rung before giving up. */
+    Relaxed,
+}
+
+/**
  * Outcome of a biometric operation gated by the system prompt. Parameterized by the payload
  * ([Success.value]) — `ByteArray` for `wrap`/`unwrap`. Failure cases are split so orchestration
  * can distinguish "silently fall back to password" (`Cancelled`/`Failed`) from "key invalidated,
- * biometrics must be recreated" (`KeyInvalidated`, e.g. a new fingerprint was enrolled).
+ * biometrics must be recreated" (`KeyInvalidated`, e.g. a new fingerprint was enrolled) and from
+ * "this device can never do it" ([Unusable]).
  */
 sealed interface BiometricResult<out T> {
     data class Success<T>(val value: T) : BiometricResult<T>
@@ -35,6 +53,27 @@ sealed interface BiometricResult<out T> {
 
     /** Biometric match failed / sensor error — fall back to the master password. */
     data object Failed : BiometricResult<Nothing>
+
+    /** Sensor locked out after too many attempts — tell the user to wait, fall back to the password. */
+    data object LockedOut : BiometricResult<Nothing>
+
+    /**
+     * The biometric auth itself succeeded, but the enclave refused to run the operation with the
+     * authorized key (no `CryptoObject` handed back, or the cipher threw afterwards). Reported by
+     * OEM keystores that accept an auth-bound key and then never authorize it (#23) — biometrics
+     * cannot decrypt the vault under this key configuration, so the caller either drops to the next
+     * [BiometricKeyHardening] rung or disables biometrics for good.
+     */
+    data object Unusable : BiometricResult<Nothing>
+
+    /**
+     * Authenticated decryption came back with a bad tag: the wrapper doesn't match the key. Normally
+     * that means a stale or tampered artifact — but an enclave that answers this for a wrapper the
+     * same key produced seconds ago is describing itself, not the data (#23: HyperOS StrongBox
+     * returns KeyMint `VERIFICATION_FAILED` on `finish`, which the platform surfaces as a bad tag).
+     * Only the caller knows which of the two it is looking at, so the classification lives there.
+     */
+    data object TagMismatch : BiometricResult<Nothing>
 
     /**
      * `bioKey` was irreversibly invalidated by the platform (biometric enrollment changed).
@@ -70,10 +109,19 @@ interface BiometricKeyStore {
     fun availability(): BiometricAvailability
 
     /**
-     * Idempotently create a non-extractable `bioKey` under [alias] in secure storage. `false` if
-     * it can't be created (no hardware/not enrolled) — the caller aborts enabling biometrics.
+     * Configurations to try when creating the `bioKey`, strongest first. A platform with a single
+     * configuration returns one element; the caller walks the list until a rung survives the
+     * round-trip check in [VaultBiometrics.enable].
      */
-    suspend fun ensureKey(alias: String): Boolean
+    fun hardeningLadder(): List<BiometricKeyHardening> = listOf(BiometricKeyHardening.Strongest)
+
+    /**
+     * Idempotently create a non-extractable `bioKey` under [alias] in secure storage, configured
+     * per [hardening]. `false` if it can't be created (no hardware/not enrolled, or the platform
+     * rejects this rung) — the caller moves on to the next rung or aborts enabling biometrics.
+     * An existing key is kept as is: to switch rungs, [deleteKey] first.
+     */
+    suspend fun ensureKey(alias: String, hardening: BiometricKeyHardening = BiometricKeyHardening.Strongest): Boolean
 
     /** Show the prompt and, on success, wrap [plaintext] with the [alias] key. */
     suspend fun wrap(alias: String, plaintext: ByteArray, prompt: BiometricPrompt): BiometricResult<ByteArray>
