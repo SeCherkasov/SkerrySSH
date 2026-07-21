@@ -3,7 +3,26 @@ package app.skerry.shared.agent
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runInterruptible
+
+/**
+ * Threads the agent may take from the shared IO pool, across every carrier and every session.
+ *
+ * Each served connection parks one thread in a blocking read for as long as the peer keeps it open,
+ * and the peers are untrusted: a server the user forwards to can open agent channels and then go
+ * quiet. Without a ceiling those reads would eat `Dispatchers.IO`, which the whole app shares with
+ * SFTP, tunnels and every other session — so a single hostile host could stall features that have
+ * nothing to do with the agent. A deadline is not an option instead: a legitimate `ssh` holds its
+ * agent connection open, idle, for the life of the remote shell.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal val agentDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(MAX_AGENT_THREADS)
+
+/** See [agentDispatcher]. Generous next to what one user's own tooling opens, tiny next to the pool. */
+private const val MAX_AGENT_THREADS = 16
 
 /**
  * Serve the agent protocol over one byte stream pair until the peer goes away. Shared by both

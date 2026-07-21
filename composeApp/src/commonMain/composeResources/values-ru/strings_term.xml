@@ -112,4 +112,7 @@
     <string name="term_broadcast_none">Нет подключённых сессий</string>
     <string name="term_broadcast_selected">Выбрано %1$s из %2$s</string>
     <string name="term_broadcast_sent">Отправлено: %1$s</string>
+    <string name="term_info_agent">Агент</string>
+    <string name="term_agent_active">проброшен</string>
+    <string name="term_agent_refused">сервер отклонил</string>
 </resources>

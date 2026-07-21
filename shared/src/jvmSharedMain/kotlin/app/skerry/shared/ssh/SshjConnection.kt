@@ -10,6 +10,7 @@ import java.io.InputStream
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
@@ -39,6 +40,12 @@ internal class SshjConnection(
 
     override val isConnected: Boolean
         get() = client.isConnected && client.isAuthenticated
+
+    // Written on the IO thread that opens the shell, read from the UI (info panel) — hence the
+    // atomic reference rather than a plain field.
+    private val agentForwardingState = AtomicReference(SshAgentForwarding.None)
+
+    override val agentForwarding: SshAgentForwarding get() = agentForwardingState.get()
 
     override suspend fun exec(command: String): ExecResult = withContext(Dispatchers.IO) {
         try {
@@ -111,7 +118,8 @@ internal class SshjConnection(
         val forwarder = agentForwarder ?: return client.startSession()
         val session = AgentSessionChannel(client.connection, client.remoteCharset)
         session.open()
-        forwarder.requestOn(session)
+        val granted = forwarder.requestOn(session)
+        agentForwardingState.set(if (granted) SshAgentForwarding.Active else SshAgentForwarding.Refused)
         return session
     }
 

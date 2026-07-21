@@ -10,7 +10,7 @@
     <string name="agent_key_certificate">证书</string>
     <string name="agent_socket">代理套接字</string>
     <string name="agent_socket_desc">通过 SSH_AUTH_SOCK 为本地程序（ssh、git、scp）提供服务。</string>
-    <string name="agent_socket_hint">在你的 shell 中执行：</string>
+    <string name="agent_socket_hint">将 SSH_AUTH_SOCK 指向：</string>
     <string name="agent_socket_copy">复制</string>
     <string name="agent_socket_failed">无法打开套接字。请检查配置目录是否可写。</string>
     <string name="agent_socket_unsupported">此系统不支持仅所有者可访问的 unix 套接字，因此代理套接字不可用。</string>
@@ -27,4 +27,6 @@
     <string name="agent_more_off">已关闭</string>
     <string name="agent_socket_section">本地访问</string>
     <string name="agent_subtitle_mobile">密钥留在保险库中，会话只获得签名，而不会拿到密钥本身。</string>
+    <string name="agent_socket_needs_agent">请先在上方启用代理，才能为本地程序提供服务。</string>
+    <string name="agent_no_keys">代理中没有密钥 — 请在下方添加</string>
 </resources>

@@ -18,7 +18,7 @@
     <string name="conn_field_jump_host">跳板主机</string>
     <string name="conn_field_keep_alive">保活</string>
     <string name="conn_field_forward_agent">代理转发</string>
-    <string name="conn_forward_agent_desc">允许该主机使用 SSH 代理中的密钥</string>
+    <string name="conn_forward_agent_desc">让该主机上的 ssh/git 用留在本机的密钥继续跳转</string>
     <string name="conn_forward_agent_off">SSH 代理已关闭 — 请在设置中启用</string>
     <string name="conn_field_ai_policy">此连接的 AI 策略</string>
     <string name="conn_field_ai_policy_short">AI 策略</string>

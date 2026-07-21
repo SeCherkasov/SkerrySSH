@@ -96,7 +96,8 @@ Building it yourself is also easy — see [Building from source](#building-from-
 
 ## Features
 
-- **Connections** — SSH with jump hosts (ProxyJump) and SSH certificates; SFTP (dual-pane
+- **Connections** — SSH with jump hosts (ProxyJump) and SSH certificates; built-in SSH agent
+  with per-host forwarding (and `SSH_AUTH_SOCK` for local tools on desktop); SFTP (dual-pane
   commander); port forwarding: local, remote, dynamic/SOCKS; Telnet; serial (desktop and
   Android USB-OTG).
 - **Terminal** — custom grid emulation, session tabs with split view, SSH auto-reconnect,

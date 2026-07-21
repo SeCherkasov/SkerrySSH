@@ -503,8 +503,8 @@ private fun seededKnownHosts(): KnownHostsController {
  */
 private fun seededAgent(credentials: CredentialManagerController): app.skerry.ui.agent.SshAgentController {
     val log = app.skerry.shared.agent.SshAgentActivityLog(clock = { "2026-07-21T09:12:00Z" })
-    log.record(app.skerry.shared.agent.SshAgentUsage(app.skerry.shared.agent.SshAgentOrigin.Session("bastion.internal"), app.skerry.shared.agent.SshAgentAction.Signed, "Deploy key"))
-    log.record(app.skerry.shared.agent.SshAgentUsage(app.skerry.shared.agent.SshAgentOrigin.LocalSocket, app.skerry.shared.agent.SshAgentAction.Listed, null))
+    log.record(app.skerry.shared.agent.SshAgentUsage(app.skerry.shared.agent.SshAgentOrigin.Session("bastion.internal"), app.skerry.shared.agent.SshAgentAction.Signed, "Deploy key")) {}
+    log.record(app.skerry.shared.agent.SshAgentUsage(app.skerry.shared.agent.SshAgentOrigin.LocalSocket, app.skerry.shared.agent.SshAgentAction.Listed, null)) {}
     val socket = object : app.skerry.ui.agent.SshAgentSocket {
         override val isSupported = true
         override fun start() = "/run/user/1000/skerry/agent/agent.sock"

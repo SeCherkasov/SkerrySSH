@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,6 +27,7 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.jumpRouteLabel
+import app.skerry.shared.ssh.SshAgentForwarding
 import app.skerry.ui.connection.shortCipher
 import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
@@ -37,7 +39,10 @@ import app.skerry.ui.generated.resources.term_auth_ask
 import app.skerry.ui.generated.resources.term_auth_certificate
 import app.skerry.ui.generated.resources.term_auth_identity
 import app.skerry.ui.generated.resources.term_auth_password
+import app.skerry.ui.generated.resources.term_agent_active
+import app.skerry.ui.generated.resources.term_agent_refused
 import app.skerry.ui.generated.resources.term_info_address
+import app.skerry.ui.generated.resources.term_info_agent
 import app.skerry.ui.generated.resources.term_info_auth
 import app.skerry.ui.generated.resources.term_info_cipher
 import app.skerry.ui.generated.resources.term_info_host
@@ -108,6 +113,15 @@ internal fun InfoPanel() {
             }
             InfoRow(stringResource(Res.string.term_info_auth), authValue, mono)
             InfoRow(stringResource(Res.string.term_info_cipher), if (live) (shortCipher(active?.controller?.cipher) ?: "…") else "aes256-gcm", mono)
+            // Agent forwarding is shown only when the profile asked for it: silence would leave the
+            // user guessing why `ssh` on the far side still wants a password.
+            when (if (live) active?.controller?.agentForwarding else SshAgentForwarding.None) {
+                SshAgentForwarding.Active ->
+                    InfoRow(stringResource(Res.string.term_info_agent), stringResource(Res.string.term_agent_active), mono)
+                SshAgentForwarding.Refused ->
+                    InfoRow(stringResource(Res.string.term_info_agent), stringResource(Res.string.term_agent_refused), mono, valueColor = D.sunset)
+                else -> Unit
+            }
             InfoRow(stringResource(Res.string.term_info_uptime), if (live) (liveMetrics?.uptimeSeconds?.let { formatUptime(it) } ?: "…") else "04:12:45", mono)
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
@@ -132,10 +146,10 @@ internal fun InfoPanel() {
 }
 
 @Composable
-private fun InfoRow(label: String, value: String, mono: FontFamily) {
+private fun InfoRow(label: String, value: String, mono: FontFamily, valueColor: Color = D.textBright) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Txt(label, color = D.faint, size = 11.5.sp)
-        Txt(value, color = D.textBright, size = 11.5.sp, font = mono)
+        Txt(value, color = valueColor, size = 11.5.sp, font = mono)
     }
 }
 

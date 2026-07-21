@@ -10,11 +10,13 @@ import java.nio.channels.SocketChannel
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 
@@ -36,10 +38,20 @@ class UnixSocketSshAgent(
     private val directory: Path,
     private val service: SshAgentService,
     parentScope: CoroutineScope,
+    // Defaults to the agent's bounded slice of the IO pool ([agentDispatcher]); injectable so a
+    // test gets threads of its own instead of queueing behind another test's parked readers.
+    dispatcher: CoroutineDispatcher = agentDispatcher,
 ) {
-    // Own child scope on the IO dispatcher: accept() and the per-connection read loops are
-    // blocking, and cancelling this scope must not take the caller's scope with it.
-    private val scope = CoroutineScope(SupervisorJob(parentScope.coroutineContext[Job]) + Dispatchers.IO)
+    // Own child scope: accept() and the per-connection read loops are blocking, and cancelling this
+    // scope must not take the caller's scope with it.
+    private val scope = CoroutineScope(SupervisorJob(parentScope.coroutineContext[Job]) + dispatcher)
+
+    // Connections being served right now. Any local process can open them, and each parks a thread
+    // in a blocking read, so the listener needs its own ceiling as the forwarder has. The channels
+    // are held (not just counted) because cancelling the serving coroutine is not enough to end a
+    // read that is already blocked — closing the channel underneath it is what unblocks it.
+    private val openConnections = AtomicInteger()
+    private val clients = ConcurrentHashMap.newKeySet<SocketChannel>()
 
     private var channel: ServerSocketChannel? = null
     private var acceptJob: Job? = null
@@ -60,8 +72,13 @@ class UnixSocketSshAgent(
         PrivateConfig.ensureDir(directory)
         val path = directory.resolve(SOCKET_NAME)
         // A socket file left behind by a crash would make bind() fail with "address already in
-        // use". It is inside our own 0700 directory, so nothing else can have put it there.
-        Files.deleteIfExists(path)
+        // use", so it has to go — but only once it is certain nobody is listening on it. A second
+        // running copy of Skerry shares this path, and unlinking its socket would leave it serving
+        // an unreachable inode while new clients silently landed on a different key set.
+        if (Files.exists(path)) {
+            if (isAlive(path)) throw IOException("another SSH agent is already listening on this socket")
+            Files.deleteIfExists(path)
+        }
         val server = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
         try {
             server.bind(UnixDomainSocketAddress.of(path))
@@ -80,8 +97,15 @@ class UnixSocketSshAgent(
     fun stop() {
         val path = socketPath
         socketPath = null
-        acceptJob?.cancel()
         acceptJob = null
+        // Cancel the CHILDREN, not the scope: a cancelled scope could never be restarted, and the
+        // user can switch the socket back on.
+        scope.coroutineContext.cancelChildren()
+        // Then close what those coroutines are blocked on. A client that keeps its connection open
+        // without sending anything (a long-lived `ssh`) sits in a read that cancellation alone does
+        // not end, and would hold a thread and an fd for the rest of the app's life.
+        clients.forEach { runCatching { it.close() } }
+        clients.clear()
         // Closing the channel is what unblocks accept(); the coroutine is already cancelled, but a
         // blocking accept only returns once the channel is gone.
         runCatching { channel?.close() }
@@ -96,6 +120,12 @@ class UnixSocketSshAgent(
             } catch (e: IOException) {
                 return // channel closed by stop(), or the listener died
             }
+            if (openConnections.get() >= MAX_CONNECTIONS) {
+                runCatching { client.close() }
+                continue
+            }
+            openConnections.incrementAndGet()
+            clients += client
             scope.launch { serve(client) }
         }
     }
@@ -109,12 +139,22 @@ class UnixSocketSshAgent(
                 SshAgentOrigin.LocalSocket,
             )
         } finally {
+            openConnections.decrementAndGet()
+            clients -= client
             runCatching { client.close() }
         }
     }
 
+    /** Is somebody already serving this socket? A refused connection means the file is stale. */
+    private fun isAlive(path: Path): Boolean = runCatching {
+        SocketChannel.open(UnixDomainSocketAddress.of(path)).use { true }
+    }.getOrDefault(false)
+
     companion object {
         private const val SOCKET_NAME = "agent.sock"
+
+        /** Connections served at once; see [openConnections]. */
+        private const val MAX_CONNECTIONS = 8
 
         /**
          * Whether a unix socket with owner-only permissions can be created here. False on

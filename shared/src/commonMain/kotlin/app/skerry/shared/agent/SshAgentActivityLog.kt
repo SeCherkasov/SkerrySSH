@@ -20,11 +20,15 @@ class SshAgentActivityLog(
     private val lock = SynchronizedObject()
     private val entries = ArrayDeque<SshAgentActivity>()
 
-    /** Record one use; returns the list as it now looks (newest first), ready to publish. */
-    fun record(usage: SshAgentUsage): List<SshAgentActivity> = synchronized(lock) {
+    /**
+     * Record one use and hand the resulting list (newest first) to [publish] — still under the
+     * lock, so two concurrent requests cannot publish their snapshots out of order and leave the
+     * UI showing the older one.
+     */
+    fun record(usage: SshAgentUsage, publish: (List<SshAgentActivity>) -> Unit): Unit = synchronized(lock) {
         entries.addFirst(SshAgentActivity(usage.origin, usage.action, usage.keyComment, clock()))
         while (entries.size > max) entries.removeLast()
-        entries.toList()
+        publish(entries.toList())
     }
 
     /** Current entries, newest first. */

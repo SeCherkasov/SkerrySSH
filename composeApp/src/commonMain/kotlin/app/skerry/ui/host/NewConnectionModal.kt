@@ -92,9 +92,7 @@ import app.skerry.ui.generated.resources.conn_field_device
 import app.skerry.ui.generated.resources.conn_field_group
 import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_jump_host
-import app.skerry.ui.generated.resources.conn_field_forward_agent
 import app.skerry.ui.generated.resources.conn_field_keep_alive
-import app.skerry.ui.generated.resources.conn_forward_agent_desc
 import app.skerry.ui.generated.resources.conn_field_name
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol

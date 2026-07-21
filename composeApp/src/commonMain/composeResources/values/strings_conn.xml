@@ -18,7 +18,7 @@
     <string name="conn_field_jump_host">Jump host</string>
     <string name="conn_field_keep_alive">Keep-alive</string>
     <string name="conn_field_forward_agent">Agent forwarding</string>
-    <string name="conn_forward_agent_desc">Let this host use the keys in the SSH agent</string>
+    <string name="conn_forward_agent_desc">So ssh/git on that host can hop onward with a key that stays here</string>
     <string name="conn_forward_agent_off">The SSH agent is off — turn it on in Settings</string>
     <string name="conn_field_ai_policy">AI policy for this connection</string>
     <string name="conn_field_ai_policy_short">AI policy</string>

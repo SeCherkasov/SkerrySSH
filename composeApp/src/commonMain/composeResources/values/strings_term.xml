@@ -112,4 +112,7 @@
     <string name="term_broadcast_none">No connected sessions</string>
     <string name="term_broadcast_selected">%1$s of %2$s selected</string>
     <string name="term_broadcast_sent">Sent to %1$s</string>
+    <string name="term_info_agent">Agent</string>
+    <string name="term_agent_active">forwarded</string>
+    <string name="term_agent_refused">refused by server</string>
 </resources>

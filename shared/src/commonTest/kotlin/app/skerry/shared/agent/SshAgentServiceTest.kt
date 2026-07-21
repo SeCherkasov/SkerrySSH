@@ -79,6 +79,17 @@ class SshAgentServiceTest {
     }
 
     @Test
+    fun `routine unsupported requests are answered but not recorded`() = runTest {
+        // OpenSSH sends session-bind@openssh.com before every login; recording it would stamp a
+        // "Refused" on every successful connection and bury the entries that matter.
+        val uses = mutableListOf<SshAgentUsage>()
+        val response = SshAgentService(FakeKeys()) { uses += it }.handle(byteArrayOf(27), ORIGIN)
+
+        assertContentEquals(SshAgentCodec.failure(), response)
+        assertTrue(uses.isEmpty(), "routine protocol chatter was recorded: \${uses.map { it.action }}")
+    }
+
+    @Test
     fun `refuses a malformed request without throwing`() = runTest {
         val service = SshAgentService(FakeKeys())
         assertContentEquals(SshAgentCodec.failure(), service.handle(ByteArray(0), ORIGIN))

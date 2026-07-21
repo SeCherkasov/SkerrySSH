@@ -3,14 +3,14 @@
     <string name="agent_title">SSH agent</string>
     <string name="agent_subtitle">Hold keys in the vault and let a session — or another program on this machine — sign with them, without ever handing over the key itself.</string>
     <string name="agent_enable">Enable agent</string>
-    <string name="agent_enable_desc">Off, the agent answers with an empty key list everywhere.</string>
+    <string name="agent_enable_desc">When off, the agent answers every request with an empty key list.</string>
     <string name="agent_keys">KEYS IN THE AGENT</string>
     <string name="agent_keys_empty">No keys in the keychain yet. Add a private key or certificate in Vault.</string>
     <string name="agent_key_private">Private key</string>
     <string name="agent_key_certificate">Certificate</string>
     <string name="agent_socket">Agent socket</string>
     <string name="agent_socket_desc">Serve local programs (ssh, git, scp) over SSH_AUTH_SOCK.</string>
-    <string name="agent_socket_hint">Export this in your shell:</string>
+    <string name="agent_socket_hint">Point SSH_AUTH_SOCK at:</string>
     <string name="agent_socket_copy">Copy</string>
     <string name="agent_socket_failed">The socket could not be opened. Check that the config directory is writable.</string>
     <string name="agent_socket_unsupported">This system has no unix sockets with owner-only access, so the agent socket is unavailable.</string>
@@ -27,4 +27,6 @@
     <string name="agent_more_off">Off</string>
     <string name="agent_socket_section">LOCAL ACCESS</string>
     <string name="agent_subtitle_mobile">Hold keys in the vault and let a session sign with them, without ever handing over the key itself.</string>
+    <string name="agent_socket_needs_agent">Turn the agent on above to serve local programs.</string>
+    <string name="agent_no_keys">No keys in the agent — add one below</string>
 </resources>

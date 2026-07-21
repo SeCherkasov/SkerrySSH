@@ -39,10 +39,10 @@ class SshjAgentKeys(
     private var epoch = 0
 
     override suspend fun identities(): List<SshAgentIdentity> =
-        load().map { SshAgentIdentity(it.keyBlob, it.comment) }
+        load().flatMap { key -> key.keyBlobs.map { SshAgentIdentity(it, key.comment) } }
 
     override suspend fun sign(keyBlob: ByteArray, data: ByteArray, flags: Int): SshAgentSignature? {
-        val key = load().firstOrNull { it.keyBlob.contentEquals(keyBlob) } ?: return null
+        val key = load().firstOrNull { key -> key.keyBlobs.any { it.contentEquals(keyBlob) } } ?: return null
         return withContext(dispatcher) {
             val signature = signatureFor(key.type, flags) ?: return@withContext null
             runCatching {
@@ -93,19 +93,25 @@ class SshjAgentKeys(
         val pwdf = entry.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
         // SSHClient opens no connection here; `use` just frees the parsing resources (as in
         // BouncyCastleSshKeyGenerator.inspect). Both key halves are taken inside the block.
-        val (privateKey, publicBlob) = SSHClient().use { client ->
+        val (privateKey, publicKey) = SSHClient().use { client ->
             val keys = client.loadKeys(entry.privateKeyPem, null, pwdf)
-            keys.private to Buffer.PlainBuffer().putPublicKey(keys.public).compactData
+            keys.private to keys.public
         }
+        val publicBlob = Buffer.PlainBuffer().putPublicKey(publicKey).compactData
         LoadedKey(
             id = entry.id,
             comment = entry.comment,
-            // A certificate credential offers the certificate itself: its base64 field already IS
-            // the ssh-wire public blob, so it needs no re-encoding. Possession is still proven with
-            // the private key below.
-            keyBlob = entry.certificate?.let { certificateBlob(it) } ?: publicBlob,
+            // A certificate credential offers BOTH identities, as `ssh-add` does: the certificate
+            // (its base64 field already IS the ssh-wire blob, no re-encoding needed) and the plain
+            // key behind it. Offering only the certificate would lock the user out of every server
+            // that knows the key but does not trust the CA. A certificate that cannot be parsed
+            // costs only itself — the plain key is still offered.
+            keyBlobs = listOfNotNull(entry.certificate?.let { runCatching { certificateBlob(it) }.getOrNull() }, publicBlob),
             privateKey = privateKey,
-            type = KeyType.fromKey(privateKey),
+            // Type comes from the PUBLIC half: sshj can classify a private key for RSA/Ed25519 but
+            // not always for EC (a provider that reports the algorithm differently drops it to
+            // UNKNOWN), and an unclassified key would silently refuse to sign.
+            type = KeyType.fromKey(publicKey),
             pem = entry.privateKeyPem,
             passphrase = entry.passphrase,
             certificate = entry.certificate,
@@ -124,9 +130,11 @@ class SshjAgentKeys(
      * the agent answers what was asked for, it does not pick the policy.
      */
     private fun signatureFor(type: KeyType, flags: Int): Signature? = when (type) {
+        // SHA-256 is tested first, as OpenSSH's own agent does: a client that (wrongly) sets both
+        // flags gets the algorithm it names in the userauth request, not the other one.
         KeyType.RSA -> when {
-            flags and SshAgentCodec.FLAG_RSA_SHA2_512 != 0 -> SignatureRSA.FactoryRSASHA512().create()
             flags and SshAgentCodec.FLAG_RSA_SHA2_256 != 0 -> SignatureRSA.FactoryRSASHA256().create()
+            flags and SshAgentCodec.FLAG_RSA_SHA2_512 != 0 -> SignatureRSA.FactoryRSASHA512().create()
             else -> SignatureRSA.FactorySSHRSA().create()
         }
         KeyType.ED25519 -> SignatureEdDSA.Factory().create()
@@ -140,7 +148,8 @@ class SshjAgentKeys(
     private class LoadedKey(
         val id: String,
         val comment: String,
-        val keyBlob: ByteArray,
+        /** Wire blobs this key answers to: the certificate (if any) first, then the plain key. */
+        val keyBlobs: List<ByteArray>,
         val privateKey: PrivateKey,
         val type: KeyType,
         private val pem: String,

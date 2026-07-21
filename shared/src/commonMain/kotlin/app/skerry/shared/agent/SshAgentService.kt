@@ -31,18 +31,30 @@ class SshAgentService(
             return refuse(origin)
         }
         return when (parsed) {
-            is SshAgentRequest.ListIdentities -> {
-                val identities = keys.identities()
-                report(origin, SshAgentAction.Listed, null)
-                SshAgentCodec.identitiesAnswer(identities)
-            }
+            is SshAgentRequest.ListIdentities -> list(origin)
             is SshAgentRequest.Sign -> sign(parsed, origin)
-            is SshAgentRequest.Unsupported -> refuse(origin)
+            // Answered, but NOT reported: OpenSSH sends `session-bind@openssh.com` before every
+            // single login, so recording these would stamp a "Refused" on every successful
+            // connection and drown the entries that mean something.
+            is SshAgentRequest.Unsupported -> SshAgentCodec.failure()
         }
     }
 
     /** Record something the agent did outside a request (e.g. a server refusing forwarding). */
     fun note(origin: SshAgentOrigin, action: SshAgentAction) = report(origin, action, null)
+
+    private suspend fun list(origin: SshAgentOrigin): ByteArray {
+        // Same contract as sign(): the keyring reads the vault, and an unexpected failure there
+        // must come back as a protocol refusal rather than killing the serving coroutine.
+        val identities = try {
+            keys.identities()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            return refuse(origin)
+        }
+        report(origin, SshAgentAction.Listed, null)
+        return SshAgentCodec.identitiesAnswer(identities)
+    }
 
     private suspend fun sign(request: SshAgentRequest.Sign, origin: SshAgentOrigin): ByteArray {
         // The keyring is the only place that decides whether a key may be used; an unknown blob

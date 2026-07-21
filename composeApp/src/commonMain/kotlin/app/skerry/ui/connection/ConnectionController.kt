@@ -11,6 +11,7 @@ import app.skerry.shared.serial.SerialProblem
 import app.skerry.shared.serial.SerialUnavailableException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.SshAgentForwarding
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
@@ -154,6 +155,14 @@ class ConnectionController(
         private set
 
     /**
+     * Whether the live session's shell got the SSH agent forwarded into it, and — the point of
+     * showing it at all — whether the server refused. Snapshot state like [cipher]: the info panel
+     * has to redraw when the session appears or resets.
+     */
+    var agentForwarding: SshAgentForwarding by mutableStateOf(SshAgentForwarding.None)
+        private set
+
+    /**
      * History key of the live session (see [terminalHistoryKey]), or `null` while not connected.
      * The command palette reads it to put this host's commands first. Snapshot state so the palette
      * sees the key appear when a session connects under it.
@@ -242,6 +251,9 @@ class ConnectionController(
             shellChannel = channel
             cipher = conn.cipher
             serverVersion = conn.serverVersion
+            // Read after openShell: the request rides the shell's session channel, so before that
+            // the connection has nothing to report.
+            agentForwarding = conn.agentForwarding
             sessionScope = sScope
             // Command history for autocomplete: load for this host and attach a snapshot-persist
             // hook on every committed command (runs on the controller's IO scope, not the UI thread).
@@ -560,6 +572,7 @@ class ConnectionController(
         shellChannel = null
         cipher = null
         serverVersion = null
+        agentForwarding = SshAgentForwarding.None
         if (sftp != null) closeSftpQuietly(sftp)
         if (conn != null) closeConnectionQuietly(conn)
     }

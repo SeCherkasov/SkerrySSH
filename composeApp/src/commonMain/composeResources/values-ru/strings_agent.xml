@@ -10,7 +10,7 @@
     <string name="agent_key_certificate">Сертификат</string>
     <string name="agent_socket">Сокет агента</string>
     <string name="agent_socket_desc">Обслуживать локальные программы (ssh, git, scp) через SSH_AUTH_SOCK.</string>
-    <string name="agent_socket_hint">Выполните в своей оболочке:</string>
+    <string name="agent_socket_hint">Укажите в SSH_AUTH_SOCK:</string>
     <string name="agent_socket_copy">Копировать</string>
     <string name="agent_socket_failed">Не удалось открыть сокет. Проверьте, доступен ли каталог конфигурации для записи.</string>
     <string name="agent_socket_unsupported">В этой системе нет unix-сокетов с доступом только для владельца, поэтому сокет агента недоступен.</string>
@@ -20,11 +20,13 @@
     <string name="agent_activity_listed">Запрошен список ключей</string>
     <string name="agent_activity_signed">Подпись</string>
     <string name="agent_activity_refused">Отказано</string>
-    <string name="agent_activity_denied">Сервер отклонил форвардинг</string>
+    <string name="agent_activity_denied">Сервер отклонил проброс агента</string>
     <string name="agent_origin_session">сессия к %1$s</string>
     <string name="agent_origin_socket">локальная программа</string>
     <string name="agent_more_on">Включён</string>
     <string name="agent_more_off">Выключен</string>
     <string name="agent_socket_section">ЛОКАЛЬНЫЙ ДОСТУП</string>
     <string name="agent_subtitle_mobile">Ключи остаются в хранилище, а сессия получает подпись, но не сам ключ.</string>
+    <string name="agent_socket_needs_agent">Включите агента выше, чтобы обслуживать локальные программы.</string>
+    <string name="agent_no_keys">В агенте нет ключей — добавьте ниже</string>
 </resources>

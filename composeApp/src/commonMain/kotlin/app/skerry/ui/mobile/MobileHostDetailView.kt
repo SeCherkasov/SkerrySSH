@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.agent_more_on
+import app.skerry.ui.generated.resources.conn_field_forward_agent
 import app.skerry.ui.generated.resources.shtail_host_address
 import app.skerry.ui.generated.resources.shtail_host_ask_on_connect
 import app.skerry.ui.generated.resources.shtail_host_auth
@@ -83,6 +85,8 @@ fun mobileHostDetailRows(host: Host, findHost: (String) -> Host? = { null }): Li
         mono = false,
     ),
     jumpRouteLabel(host, findHost)?.let { HostDetailRow(stringResource(Res.string.shtail_host_jump), it, mono = false) },
+    // Only when it is on: a row saying "off" on every other host would be noise.
+    if (host.forwardAgent) HostDetailRow(stringResource(Res.string.conn_field_forward_agent), stringResource(Res.string.agent_more_on), mono = false) else null,
     HostDetailRow(stringResource(Res.string.shtail_host_group), host.group?.takeIf { it.isNotBlank() } ?: ungroupedLabel(), mono = false),
 )
 

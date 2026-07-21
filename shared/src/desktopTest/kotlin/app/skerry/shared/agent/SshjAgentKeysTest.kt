@@ -94,6 +94,37 @@ class SshjAgentKeysTest {
     }
 
     @Test
+    fun `a certificate is offered together with the plain key behind it`() = runTest {
+        // `ssh-add` offers both: a server that trusts the CA takes the certificate, one that only
+        // has the key in authorized_keys takes the key. Offering the certificate alone would lock
+        // the user out of every host that is not CA-enrolled.
+        val generated = generator.generate(SshKeyType.ED25519, comment = "")
+        val plain = publicBlob(generated.info.publicKeyOpenSsh)
+        val certBlob = "test certificate blob".encodeToByteArray()
+        val certificate = "ssh-ed25519-cert-v01@openssh.com " + Base64.getEncoder().encodeToString(certBlob)
+        val keys = SshjAgentKeys({
+            listOf(SshAgentKeyMaterial(id = "c1", comment = "ca key", privateKeyPem = generated.privateKeyPem, certificate = certificate))
+        })
+
+        val offered = keys.identities()
+        assertEquals(listOf("ca key", "ca key"), offered.map { it.comment })
+        assertContentEquals(certBlob, offered.first().keyBlob)
+        assertContentEquals(plain, offered.last().keyBlob)
+        // Possession is proven by the same private key whichever blob the server picked.
+        assertEquals("ssh-ed25519", verify(publicKeyOf(plain), challenge, assertNotNull(keys.sign(certBlob, challenge, 0)).blob))
+    }
+
+    @Test
+    fun `a damaged certificate costs only itself, not the key`() = runTest {
+        val generated = generator.generate(SshKeyType.ED25519, comment = "")
+        val keys = SshjAgentKeys({
+            listOf(SshAgentKeyMaterial(id = "c1", comment = "ca key", privateKeyPem = generated.privateKeyPem, certificate = "not-a-certificate"))
+        })
+
+        assertContentEquals(publicBlob(generated.info.publicKeyOpenSsh), keys.identities().single().keyBlob)
+    }
+
+    @Test
     fun `refuses a key it does not hold`() = runTest {
         val mine = generator.generate(SshKeyType.ED25519, comment = "")
         val other = generator.generate(SshKeyType.ED25519, comment = "")

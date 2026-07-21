@@ -62,6 +62,9 @@ class SshAgentController(
     /** Whether a local agent socket is possible at all here (desktop, POSIX filesystem). */
     val socketSupported: Boolean get() = socket?.isSupported == true
 
+    /** Whether the agent would offer anything at all right now (on, unlocked, at least one key). */
+    val hasKeys: Boolean get() = keyMaterial().isNotEmpty()
+
     /** Keychain secrets that can act as agent keys — passwords cannot. */
     val agentKeys: List<Credential>
         get() = credentials.credentials.filter { it.secret !is CredentialSecret.Password }
@@ -119,7 +122,7 @@ class SshAgentController(
 
     /** Record one thing the agent did (called from the agent's own threads). */
     fun record(usage: SshAgentUsage) {
-        activity = activityLog.record(usage)
+        activityLog.record(usage) { activity = it }
     }
 
     /** Vault locked: forget parsed keys and stop serving until it is opened again. */

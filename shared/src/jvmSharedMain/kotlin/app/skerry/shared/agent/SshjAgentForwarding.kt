@@ -3,8 +3,8 @@ package app.skerry.shared.agent
 import java.io.IOException
 import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -15,12 +15,19 @@ import net.schmizz.sshj.connection.ConnectionException
 import net.schmizz.sshj.connection.channel.direct.SessionChannel
 import net.schmizz.sshj.connection.channel.forwarded.AbstractForwardedChannel
 import net.schmizz.sshj.connection.channel.forwarded.ForwardedChannelOpener
+import net.schmizz.sshj.connection.channel.OpenFailException
 
 /** Channel type the server opens back to us to reach the agent (OpenSSH's name). */
 private const val AGENT_CHANNEL_TYPE = "auth-agent@openssh.com"
 
 /** Session request that asks the server to set `SSH_AUTH_SOCK` for the remote shell. */
 private const val AGENT_REQUEST_TYPE = "auth-agent-req@openssh.com"
+
+/**
+ * Agent channels one session may have open at once. A remote running several `ssh` processes in
+ * parallel needs a handful; a server that opens more than this is not doing anything a shell does.
+ */
+private const val MAX_CHANNELS_PER_SESSION = 8
 
 /**
  * Session channel that can ask for agent forwarding. sshj has no agent support at all (0.40), and
@@ -61,21 +68,28 @@ internal class SshjAgentForwarder(
 
     // Own scope, not a session scope passed in: this object is created inside the transport, below
     // the UI layer, and each channel is a blocking read loop that must be cancellable as a group.
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // The dispatcher is the agent's bounded slice of the IO pool (see [agentDispatcher]).
+    private val scope = CoroutineScope(SupervisorJob() + agentDispatcher)
+
+    // How many of this server's agent channels are being served right now. The server decides how
+    // many to open, so it needs a ceiling of its own: without one, a single session could take the
+    // agent's whole thread budget and starve the other sessions (and the local socket).
+    private val openChannels = AtomicInteger()
 
     override fun getChannelType(): String = AGENT_CHANNEL_TYPE
 
     /**
      * Ask the server to forward the agent to [session]. A server with `AllowAgentForwarding no`
      * answers CHANNEL_FAILURE, which must not cost the user their shell: the refusal is recorded
-     * for the activity list and the session continues without an agent.
+     * for the activity list, reported to the session (info panel) and the shell opens anyway.
+     * @return whether the server granted it
      */
-    fun requestOn(session: AgentSessionChannel) {
-        try {
-            session.requestAgentForwarding()
-        } catch (e: IOException) {
-            service.note(origin, SshAgentAction.ForwardingDenied)
-        }
+    fun requestOn(session: AgentSessionChannel): Boolean = try {
+        session.requestAgentForwarding()
+        true
+    } catch (e: IOException) {
+        service.note(origin, SshAgentAction.ForwardingDenied)
+        false
     }
 
     override fun handleOpen(buf: SSHPacket) {
@@ -84,6 +98,13 @@ internal class SshjAgentForwarder(
         } catch (e: Buffer.BufferException) {
             throw ConnectionException(e)
         }
+        // Over the ceiling: refuse before confirming, so the server learns it cannot open more
+        // instead of holding a channel we never read.
+        if (openChannels.get() >= MAX_CHANNELS_PER_SESSION) {
+            runCatching { channel.reject(OpenFailException.Reason.RESOURCE_SHORTAGE, "too many agent channels") }
+            return
+        }
+        openChannels.incrementAndGet()
         // confirm() attaches the channel and sends the open confirmation; data can arrive the moment
         // it returns, so the serving coroutine starts right after.
         channel.confirm()
@@ -91,6 +112,7 @@ internal class SshjAgentForwarder(
             try {
                 serveSshAgent(channel.inputStream, channel.outputStream, service, origin)
             } finally {
+                openChannels.decrementAndGet()
                 runCatching { channel.close() }
             }
         }

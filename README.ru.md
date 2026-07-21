@@ -96,7 +96,8 @@ macOS)** и **Android**, паритет фич между платформами
 
 ## Возможности
 
-- **Подключения** — SSH с jump-хостами (ProxyJump) и SSH-сертификатами; SFTP (двухпанельный
+- **Подключения** — SSH с jump-хостами (ProxyJump) и SSH-сертификатами; встроенный SSH-агент
+  с пробросом по хостам (и `SSH_AUTH_SOCK` для локальных утилит на десктопе); SFTP (двухпанельный
   commander); port forwarding: local, remote, dynamic/SOCKS; Telnet; serial (desktop и
   Android USB-OTG).
 - **Терминал** — своя grid-эмуляция, вкладки со split view, авто-реконнект SSH, поиск по

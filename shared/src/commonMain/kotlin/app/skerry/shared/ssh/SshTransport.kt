@@ -122,6 +122,15 @@ interface SshConnection {
     val serverVersion: String? get() = null
 
     /**
+     * Whether this session's shell got the SSH agent forwarded into it. Only meaningful once the
+     * shell is open, and only for a target that asked ([SshTarget.forwardAgent]) — a server may
+     * refuse (`AllowAgentForwarding no`), and the user has to be able to see that instead of
+     * wondering why `ssh` on the far side asks for a password. Default [SshAgentForwarding.None]
+     * (fakes/tests, other transports).
+     */
+    val agentForwarding: SshAgentForwarding get() = SshAgentForwarding.None
+
+    /**
      * Measure round-trip time to the server (ms): sends a keep-alive request and waits for a
      * response, returning `null` if the connection is dead or no reply arrives in a reasonable time.
      * Each call is one round-trip (and incidentally keeps the connection alive). Default `null`
@@ -228,6 +237,18 @@ data class ExecResult(
     val stdout: String,
     val stderr: String,
 )
+
+/** State of SSH agent forwarding for a session's shell; see [SshConnection.agentForwarding]. */
+enum class SshAgentForwarding {
+    /** Not asked for (the profile has it off, or no agent is configured). */
+    None,
+
+    /** Asked for and granted: the remote shell has an `SSH_AUTH_SOCK` pointing back here. */
+    Active,
+
+    /** Asked for and refused by the server. The session is fine; onward hops are not. */
+    Refused,
+}
 
 open class SshException(message: String, cause: Throwable? = null) : Exception(message, cause)
 

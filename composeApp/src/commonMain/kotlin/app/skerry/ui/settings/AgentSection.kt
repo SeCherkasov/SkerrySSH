@@ -46,6 +46,7 @@ import app.skerry.ui.generated.resources.agent_socket_copy
 import app.skerry.ui.generated.resources.agent_socket_desc
 import app.skerry.ui.generated.resources.agent_socket_failed
 import app.skerry.ui.generated.resources.agent_socket_hint
+import app.skerry.ui.generated.resources.agent_socket_needs_agent
 import app.skerry.ui.generated.resources.agent_socket_section
 import app.skerry.ui.generated.resources.agent_socket_unsupported
 import app.skerry.ui.generated.resources.agent_subtitle
@@ -94,6 +95,10 @@ internal fun AgentSection(controller: SshAgentController?) {
             on = controller?.socketEnabled == true,
             onToggle = { controller?.exposeSocket(controller.socketEnabled != true) },
         )
+        // A socket switch with the agent off would sit there "on" and serve nothing.
+        if (controller?.socketEnabled == true && !controller.enabled) {
+            Txt(stringResource(Res.string.agent_socket_needs_agent), color = D.amber, size = 11.5.sp, modifier = Modifier.padding(top = 4.dp))
+        }
         controller?.socketPath?.let { path -> SocketPathRow(path) }
         if (controller?.socketFailed == true) {
             Txt(stringResource(Res.string.agent_socket_failed), color = D.storm, size = 11.5.sp, modifier = Modifier.padding(top = 4.dp))

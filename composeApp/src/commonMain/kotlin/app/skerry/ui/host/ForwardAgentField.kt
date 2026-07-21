@@ -15,6 +15,7 @@ import app.skerry.ui.design.D
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.agent_no_keys
 import app.skerry.ui.generated.resources.conn_field_forward_agent
 import app.skerry.ui.generated.resources.conn_forward_agent_desc
 import app.skerry.ui.generated.resources.conn_forward_agent_off
@@ -40,7 +41,15 @@ private fun ForwardAgentToggle(
     titleSize: androidx.compose.ui.unit.TextUnit,
     descSize: androidx.compose.ui.unit.TextUnit,
 ) {
-    val agentOn = LocalSshAgent.current?.enabled == true
+    val agent = LocalSshAgent.current
+    val agentOn = agent?.enabled == true
+    // An agent with no keys in it forwards an empty list, and the remote falls back to a password
+    // prompt with nothing to explain it — say so where the switch is.
+    val warning = when {
+        !agentOn -> Res.string.conn_forward_agent_off
+        !agent.hasKeys -> Res.string.agent_no_keys
+        else -> null
+    }
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -49,9 +58,8 @@ private fun ForwardAgentToggle(
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.conn_field_forward_agent), color = D.text, size = titleSize)
             Txt(
-                if (agentOn) stringResource(Res.string.conn_forward_agent_desc)
-                else stringResource(Res.string.conn_forward_agent_off),
-                color = if (agentOn) D.dim else D.amber,
+                stringResource(warning ?: Res.string.conn_forward_agent_desc),
+                color = if (warning == null) D.dim else D.amber,
                 size = descSize,
                 modifier = Modifier.padding(top = 3.dp),
             )

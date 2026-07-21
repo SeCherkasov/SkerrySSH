@@ -112,4 +112,7 @@
     <string name="term_broadcast_none">没有已连接的会话</string>
     <string name="term_broadcast_selected">已选 %1$s / %2$s</string>
     <string name="term_broadcast_sent">已发送到 %1$s</string>
+    <string name="term_info_agent">代理</string>
+    <string name="term_agent_active">已转发</string>
+    <string name="term_agent_refused">服务器已拒绝</string>
 </resources>
