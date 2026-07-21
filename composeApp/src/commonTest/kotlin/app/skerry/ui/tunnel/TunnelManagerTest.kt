@@ -41,7 +41,7 @@ class TunnelManagerTest {
     private fun managerWith(
         transport: SshTransport,
         store: TunnelStore = FakeTunnelStore(),
-        resolve: (Tunnel) -> TunnelResolution = { TunnelResolution.Ready(target, auth) },
+        resolve: (String) -> TunnelResolution = { TunnelResolution.Ready(target, auth) },
         ids: List<String> = List(20) { "id-$it" },
     ): TunnelManager {
         val scope = TestScope(UnconfinedTestDispatcher())
@@ -220,6 +220,20 @@ class TunnelManagerTest {
         manager.closeAll()
 
         assertTrue(manager.tunnels.all { it.status == TunnelStatus.Inactive })
+    }
+
+    @Test
+    fun `closeAll also drops the service scan`() = runTest {
+        // closeAll is what a vault lock calls: a scan result left behind would keep listing a host's
+        // services behind the lock screen, and an in-flight one holds a connection opened with the
+        // decrypted secret.
+        val manager = managerWith(FakeTunnelTransport(FakeTunnelConnection(localPort = 50040)))
+        manager.services.scan("h1")
+
+        manager.closeAll()
+
+        assertEquals(ServiceScanState.Idle, manager.services.state)
+        assertNull(manager.services.scannedHostId)
     }
 
     @Test

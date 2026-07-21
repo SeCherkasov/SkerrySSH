@@ -49,17 +49,17 @@ fun buildTunnelDraft(
 }
 
 /**
- * Resolves a saved tunnel to connection parameters (for the [TunnelManager] production lambda).
- * Host is looked up by [Tunnel.hostId], credential by [Host.credentialId] in the unlocked vault;
- * the host's ProxyJump chain (if any) is resolved too, so tunnels ride the same route as sessions.
+ * Resolves a host to connection parameters (for the [TunnelManager] production lambda). The host is
+ * looked up by id, its credential by [Host.credentialId] in the unlocked vault; the host's ProxyJump
+ * chain (if any) is resolved too, so tunnels and service scans ride the same route as sessions.
  * Failures are typed ([TunnelUnavailable]) — this runs outside the composition, the view localizes.
  */
-fun resolveTunnel(
-    tunnel: app.skerry.shared.tunnel.Tunnel,
+fun resolveTunnelHost(
+    hostId: String,
     findHost: (String) -> Host?,
     findCredential: (String?) -> Credential?,
 ): TunnelResolution {
-    val host = findHost(tunnel.hostId) ?: return TunnelResolution.Unavailable(TunnelUnavailable.HostNotFound)
+    val host = findHost(hostId) ?: return TunnelResolution.Unavailable(TunnelUnavailable.HostNotFound)
     val credential = findCredential(host.credentialId)
         ?: return TunnelResolution.Unavailable(TunnelUnavailable.NoCredential)
     val jump = when (val chain = resolveJumpChain(host, findHost, findCredential)) {

@@ -73,7 +73,7 @@ class TunnelFormTest {
     @Test
     fun `resolve returns Ready with target and auth`() {
         val r = assertIs<TunnelResolution.Ready>(
-            resolveTunnel(tunnel, findHost = { host }, findCredential = { credential }),
+            resolveTunnelHost(tunnel.hostId, findHost = { host }, findCredential = { credential }),
         )
         assertEquals("10.0.0.5", r.target.host)
         assertEquals("deploy", r.target.username)
@@ -83,7 +83,7 @@ class TunnelFormTest {
     @Test
     fun `resolve reports missing host`() {
         val r = assertIs<TunnelResolution.Unavailable>(
-            resolveTunnel(tunnel, findHost = { null }, findCredential = { credential }),
+            resolveTunnelHost(tunnel.hostId, findHost = { null }, findCredential = { credential }),
         )
         assertEquals(TunnelUnavailable.HostNotFound, r.reason)
     }
@@ -91,7 +91,7 @@ class TunnelFormTest {
     @Test
     fun `resolve reports missing credential`() {
         val r = assertIs<TunnelResolution.Unavailable>(
-            resolveTunnel(tunnel, findHost = { host }, findCredential = { null }),
+            resolveTunnelHost(tunnel.hostId, findHost = { host }, findCredential = { null }),
         )
         assertEquals(TunnelUnavailable.NoCredential, r.reason)
     }
@@ -106,7 +106,7 @@ class TunnelFormTest {
             "c2" to Credential("c2", "gate@bastion", CredentialSecret.Password("jump-pw")),
         )
         val r = assertIs<TunnelResolution.Ready>(
-            resolveTunnel(tunnel, findHost = { hosts[it] }, findCredential = { creds[it] }),
+            resolveTunnelHost(tunnel.hostId, findHost = { hosts[it] }, findCredential = { creds[it] }),
         )
         assertEquals("bastion.example.com", r.target.jump?.host)
         assertEquals("gate", r.target.jump?.username)
@@ -118,7 +118,7 @@ class TunnelFormTest {
         val jumped = host.copy(jumpHostId = "j1")
         val hosts = mapOf("h1" to jumped, "j1" to bastion)
         val r = assertIs<TunnelResolution.Unavailable>(
-            resolveTunnel(tunnel, findHost = { hosts[it] }, findCredential = { if (it == "c1") credential else null }),
+            resolveTunnelHost(tunnel.hostId, findHost = { hosts[it] }, findCredential = { if (it == "c1") credential else null }),
         )
         assertEquals(TunnelUnavailable.Jump(JumpChainProblem.NO_CREDENTIAL), r.reason)
     }
