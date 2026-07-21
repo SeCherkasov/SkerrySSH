@@ -27,6 +27,13 @@ import app.skerry.shared.ssh.KnownHostsStore
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.tunnel.Tunnel
+import app.skerry.shared.tunnel.TunnelDirection
+import app.skerry.shared.tunnel.TunnelStore
+import app.skerry.ui.tunnel.SERVICE_SCAN_COMMAND
+import app.skerry.ui.tunnel.TunnelManager
+import app.skerry.ui.tunnel.TunnelResolution
+import app.skerry.ui.tunnel.TunnelUnavailable
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.SshjCertificateInspector
 import app.skerry.shared.vault.CredentialStore
@@ -147,6 +154,7 @@ fun main() {
         sessions?.setActiveView(SessionView.Sftp)
     }
     val knownHosts = if (live) seededKnownHosts() else null
+    val tunnels = if (live && hosts != null) seededTunnels(hosts) else null
     val ai = if (live) seededAi() else null
     // Built once outside the content lambda: recomposition must not recreate the controller
     // (a fresh instance would restart its async check and the notice would never settle).
@@ -167,7 +175,7 @@ fun main() {
         "unlock" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopUnlockScreen(error = null, canUseBiometric = true, onUnlock = {}, onBiometric = {}, onForgotPassword = {}) } } } }
         "corrupted" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopCorruptedScreen(onReset = {}) } } } }
         "reset" -> { { GateScreenPreview { LockWindowChrome(windowChrome) { DesktopResetScreen(onConfirm = {}, onCancel = {}) } } } }
-        else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, ai = ai, updates = updates, windowChrome = windowChrome) } }
+        else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, windowChrome = windowChrome) } }
     }
 
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
@@ -209,7 +217,7 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     // Key generator/inspector: the Vault tab uses it to compute fingerprints of seeded keys in live mode.
     val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
     val deps = if (hosts != null) {
-        AppDependencies(hosts = hosts, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator)
+        AppDependencies(hosts = hosts, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, tunnels = seededTunnels(hosts))
     } else {
         AppDependencies()
     }
@@ -391,6 +399,47 @@ private class InMemoryVault : Vault {
 }
 
 /**
+ * Tunnel manager over an in-memory store and the fake transport, so the offscreen Ports render
+ * shows the live table (one active forward with its browser link) and a real service scan against
+ * [FakeSshConnection]'s canned `ss` output.
+ */
+private fun seededTunnels(hosts: HostManagerController): TunnelManager {
+    val store = object : TunnelStore {
+        private val entries = mutableListOf<Tunnel>()
+        override fun all(): List<Tunnel> = entries.toList()
+        override fun put(tunnel: Tunnel) {
+            val i = entries.indexOfFirst { it.id == tunnel.id }
+            if (i >= 0) entries[i] = tunnel else entries += tunnel
+        }
+        override fun remove(id: String) { entries.removeAll { it.id == id } }
+    }
+    val hostIds = hosts.hosts.map { it.id }
+    fun hostAt(i: Int) = hostIds.getOrElse(i) { hostIds.first() }
+    store.put(Tunnel("t1", "web tunnel", hostAt(0), TunnelDirection.Local, "127.0.0.1", 8080, "10.0.0.5", 80))
+    store.put(Tunnel("t2", "app callback", hostAt(1), TunnelDirection.Remote, "0.0.0.0", 9000, "localhost", 3000))
+    store.put(Tunnel("t3", "socks", hostAt(2), TunnelDirection.Dynamic, "127.0.0.1", 1080, null, null))
+    var next = 0
+    val manager = TunnelManager(
+        store = store,
+        transport = fakeTransport(),
+        resolve = { hostId ->
+            val host = hosts.find(hostId)
+            if (host == null) {
+                TunnelResolution.Unavailable(TunnelUnavailable.HostNotFound)
+            } else {
+                TunnelResolution.Ready(host.toTarget(), SshAuth.Password("demo"))
+            }
+        },
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    ) { "seed-${next++}" }
+    manager.activate("t1")
+    // -Dskerry.screenshot.portsScan=true renders the Services panel instead of the tunnel editor
+    // (the offscreen scene can't press Find services / Scan itself).
+    if (System.getProperty("skerry.screenshot.portsScan", "false").toBoolean()) manager.services.scan(hostAt(0))
+    return manager
+}
+
+/**
  * Known-hosts manager with demo keys and one unresolved key-change event, so the offscreen render
  * shows a live table (firstSeen/Verified), a warning, and a fingerprint comparison panel with real
  * components ([KnownHostsController] -> [KnownHostsView]). In-memory, no files.
@@ -523,6 +572,15 @@ private fun seededSessions(hosts: HostManagerController): SessionsController {
     return sessions
 }
 
+private val SEEDED_SS_OUTPUT = """
+    State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+    LISTEN 0      128            0.0.0.0:22        0.0.0.0:*    users:(("sshd",pid=640,fd=3))
+    LISTEN 0      511            0.0.0.0:80        0.0.0.0:*    users:(("nginx",pid=901,fd=6))
+    LISTEN 0      4096         127.0.0.1:5432      0.0.0.0:*    users:(("postgres",pid=812,fd=5))
+    LISTEN 0      511          127.0.0.1:6379      0.0.0.0:*    users:(("redis-server",pid=733,fd=7))
+    LISTEN 0      128             0.0.0.0:8080     0.0.0.0:*    users:(("java",pid=1204,fd=41))
+""".trimIndent()
+
 /** Fake SSH transport: the shell emits a canned banner+listing, then hangs until cancelled. */
 private fun fakeTransport(): SshTransport = object : SshTransport {
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection = FakeConnection(target)
@@ -539,6 +597,9 @@ private class FakeConnection(private val target: SshTarget) : SshConnection {
     private var polls = 0
 
     override suspend fun exec(command: String): ExecResult {
+        // Service discovery asks a different question than the metrics poll; answer it with canned
+        // `ss -ltnp` output so the offscreen Ports render shows a real scan result.
+        if (command == SERVICE_SCAN_COMMAND) return ExecResult(0, SEEDED_SS_OUTPUT, "")
         val tick = polls++
         return ExecResult(
             exitCode = 0,

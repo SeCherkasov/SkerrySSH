@@ -68,7 +68,7 @@ import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.tunnel.TunnelManager
-import app.skerry.ui.tunnel.resolveTunnel
+import app.skerry.ui.tunnel.resolveTunnelHost
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.vault.ResetScope
 import kotlinx.coroutines.CoroutineScope
@@ -259,7 +259,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val tunnels = TunnelManager(
         store = VaultTunnelStore(vault),
         transport = tunnelTransport,
-        resolve = { resolveTunnel(it, findHost = hosts::find, findCredential = credentials::find) },
+        resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
         scope = tunnelScope,
     ) { UUID.randomUUID().toString() }
     // Saved snippets: the command library is SNIPPET records in the vault (commands may contain

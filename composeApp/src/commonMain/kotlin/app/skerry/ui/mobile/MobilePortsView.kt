@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -44,16 +45,24 @@ import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.rateFraction
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.tunnel.ListeningService
+import app.skerry.ui.tunnel.ServiceScanState
 import app.skerry.ui.tunnel.TunnelEntry
 import app.skerry.ui.tunnel.TunnelFormState
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.TunnelStatus
+import app.skerry.ui.tunnel.forwardedPorts
+import app.skerry.ui.tunnel.serviceLabel
+import app.skerry.ui.tunnel.serviceScanFailureText
+import app.skerry.ui.tunnel.serviceTunnelDraft
+import app.skerry.ui.tunnel.tunnelBrowserUrl
 import app.skerry.ui.tunnel.tunnelFailureText
 import app.skerry.ui.tunnel.badgeColors
 import app.skerry.ui.tunnel.badgeLabel
 import app.skerry.ui.tunnel.displayLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ports_add_tunnel_below
+import app.skerry.ui.generated.resources.ports_already_forwarded
 import app.skerry.ui.generated.resources.ports_changes_apply_after_restart
 import app.skerry.ui.generated.resources.ports_edit
 import app.skerry.ui.generated.resources.ports_edit_tunnel
@@ -64,15 +73,25 @@ import app.skerry.ui.generated.resources.ports_field_name
 import app.skerry.ui.generated.resources.ports_field_port
 import app.skerry.ui.generated.resources.ports_field_type
 import app.skerry.ui.generated.resources.ports_field_via_host
+import app.skerry.ui.generated.resources.ports_find_services
+import app.skerry.ui.generated.resources.ports_forward
 import app.skerry.ui.generated.resources.ports_new_tunnel
 import app.skerry.ui.generated.resources.ports_no_saved_hosts
+import app.skerry.ui.generated.resources.ports_no_services
 import app.skerry.ui.generated.resources.ports_no_tunnels_yet
 import app.skerry.ui.generated.resources.ports_ph_web_tunnel
+import app.skerry.ui.generated.resources.ports_pick_host_to_scan
 import app.skerry.ui.generated.resources.ports_port_forwarding
 import app.skerry.ui.generated.resources.ports_remove
 import app.skerry.ui.generated.resources.ports_remove_tunnel
 import app.skerry.ui.generated.resources.ports_save_tunnel
+import app.skerry.ui.generated.resources.ports_scan
+import app.skerry.ui.generated.resources.ports_scanning
 import app.skerry.ui.generated.resources.ports_select_host
+import app.skerry.ui.generated.resources.ports_service_port
+import app.skerry.ui.generated.resources.ports_services_hint
+import app.skerry.ui.generated.resources.ports_services_title
+import app.skerry.ui.generated.resources.ports_services_unsupported
 import app.skerry.ui.generated.resources.ports_socks_hint
 import app.skerry.ui.generated.resources.ports_tunnel
 import app.skerry.ui.generated.resources.ports_via
@@ -104,6 +123,9 @@ fun MobilePortsScreen(state: MobileDesignState) {
     // Open editor: null when closed, else the edited tunnel's id or "" for a new one. Kept at
     // screen level since the sheet is a full-screen overlay in the root Box.
     var editorFor by remember { mutableStateOf<String?>(null) }
+    // Discovery survives leaving and re-entering the screen (desktop does the same): the sheet
+    // reopens on whatever the scan still holds, and only closing it resets the scan.
+    var discovering by remember { mutableStateOf(manager?.services?.state != ServiceScanState.Idle) }
     Box(Modifier.fillMaxSize().background(D.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobilePushHeader(stringResource(Res.string.ports_port_forwarding), onBack = state::pop, plainBack = true)
@@ -116,6 +138,7 @@ fun MobilePortsScreen(state: MobileDesignState) {
                     mono = mono,
                     onNew = { editorFor = "" },
                     onEdit = { editorFor = it },
+                    onDiscover = { discovering = true },
                 )
             }
         }
@@ -126,6 +149,14 @@ fun MobilePortsScreen(state: MobileDesignState) {
                 mono = mono,
                 existing = editorFor?.takeIf { it.isNotEmpty() }?.let { id -> manager.tunnels.firstOrNull { it.id == id } },
                 onDismiss = { editorFor = null },
+            )
+        }
+        if (manager != null && discovering) {
+            MobileServicesSheet(
+                manager = manager,
+                hosts = hosts,
+                mono = mono,
+                onDismiss = { discovering = false; manager.services.reset() },
             )
         }
     }
@@ -140,6 +171,7 @@ private fun LiveMobilePortsBody(
     mono: FontFamily,
     onNew: () -> Unit,
     onEdit: (String) -> Unit,
+    onDiscover: () -> Unit,
 ) {
     val tunnels = manager.tunnels
 
@@ -177,6 +209,7 @@ private fun LiveMobilePortsBody(
             }
         }
         MobileNewTunnelButton(onClick = onNew)
+        MobileDashedButton(stringResource(Res.string.ports_find_services), icon = "radar", onClick = onDiscover)
         Spacer(Modifier.height(30.dp))
     }
 }
@@ -212,6 +245,20 @@ private fun LiveTunnelCard(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Badge(t.direction.badgeLabel(), bg = bg, fg = fg, radius = 4, size = 9.5.sp)
             Txt(stringResource(Res.string.ports_via, via), color = D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
+            // Only a live local forward has something to open; -R listens on the server, -D is SOCKS.
+            tunnelBrowserUrl(entry)?.let { url ->
+                val uriHandler = LocalUriHandler.current
+                Sym(
+                    "open_in_new",
+                    size = 18.sp,
+                    color = D.cyanBright,
+                    // A failing system handler must not throw into the composition.
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { runCatching { uriHandler.openUri(url) } }.padding(end = 4.dp),
+                )
+            }
             TunnelStatusControl(entry, onToggle)
         }
         Spacer(Modifier.height(10.dp))
@@ -380,6 +427,128 @@ private fun MobileTunnelEditorSheet(
         }
 }
 
+/**
+ * Bottom sheet for service discovery: pick a saved host, scan it for listening TCP ports, forward
+ * one in a tap (saved and raised right away). Mirrors the desktop Services panel.
+ */
+@Composable
+private fun MobileServicesSheet(
+    manager: TunnelManager,
+    hosts: HostManagerController?,
+    mono: FontFamily,
+    onDismiss: () -> Unit,
+) {
+    val scan = manager.services
+    val hostList = hosts?.hosts ?: emptyList()
+    var hostId by remember { mutableStateOf(scan.scannedHostId ?: hostList.firstOrNull()?.id) }
+    val hostName = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label }
+        ?: stringResource(Res.string.ports_select_host)
+
+    MobileBottomSheet(
+        onDismiss = onDismiss,
+        panelModifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Sym("radar", size = 22.sp, color = D.cyanBright)
+                Txt(stringResource(Res.string.ports_services_title), color = D.text, size = 20.sp, weight = FontWeight.Bold)
+            }
+            Sym(
+                "close",
+                size = 24.sp,
+                color = D.dim,
+                modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Txt(stringResource(Res.string.ports_services_hint), color = D.faint, size = 12.sp, lineHeight = 17.sp)
+        Spacer(Modifier.height(16.dp))
+        MobileFormField(stringResource(Res.string.ports_field_via_host)) {
+            MobileHostPicker(hostName, hostList.map { it.id to it.label }) { hostId = it }
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (hostId != null) D.cyan else D.cyan.copy(alpha = 0.4f))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                    hostId?.let { scan.scan(it) }
+                }
+                .padding(15.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Txt(stringResource(Res.string.ports_scan), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(16.dp))
+        when (val state = scan.state) {
+            ServiceScanState.Idle -> MobileScanNote(stringResource(Res.string.ports_pick_host_to_scan), D.faint)
+            ServiceScanState.Scanning -> MobileScanNote(stringResource(Res.string.ports_scanning), D.amber)
+            ServiceScanState.Unsupported -> MobileScanNote(stringResource(Res.string.ports_services_unsupported), D.dim)
+            is ServiceScanState.Failed -> MobileScanNote(serviceScanFailureText(state), D.sunset)
+            is ServiceScanState.Ready -> {
+                val scanned = scan.scannedHostId
+                if (state.services.isEmpty() || scanned == null) {
+                    MobileScanNote(stringResource(Res.string.ports_no_services), D.faint)
+                } else {
+                    val taken = forwardedPorts(manager.tunnels.map { it.tunnel }, scanned)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        state.services.forEach { service ->
+                            MobileServiceRow(
+                                service = service,
+                                mono = mono,
+                                forwarded = service.port in taken,
+                                onForward = { label -> manager.activate(manager.save(serviceTunnelDraft(service, scanned, label))) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MobileScanNote(text: String, color: Color) {
+    Txt(text, color = color, size = 13.sp, lineHeight = 18.sp)
+}
+
+/** One discovered service in the sheet: port, owning process, and the one-tap forward action. */
+@Composable
+private fun MobileServiceRow(service: ListeningService, mono: FontFamily, forwarded: Boolean, onForward: (String) -> Unit) {
+    // Name for the tunnel when the host didn't disclose the process; localized here, since the
+    // draft is built outside the composition.
+    val fallback = stringResource(Res.string.ports_service_port, service.port)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(D.card)
+            .border(1.dp, D.cyan08, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Txt("${service.port}", color = D.textBright, size = 14.sp, font = mono, modifier = Modifier.width(58.dp))
+        Txt(serviceLabel(service), color = D.dim, size = 13.sp, modifier = Modifier.weight(1f))
+        if (forwarded) {
+            Txt(stringResource(Res.string.ports_already_forwarded), color = D.moss, size = 12.sp)
+        } else {
+            Txt(
+                stringResource(Res.string.ports_forward),
+                color = D.cyanBright,
+                size = 13.sp,
+                weight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onForward(fallback) }
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
 /** Host picker in the sheet: menu opens directly below the trigger, matching its width (via [AnchoredDropdown]). */
 @Composable
 private fun MobileHostPicker(current: String, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
@@ -473,9 +642,9 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
 
 // New tunnel button.
 
-/** Dashed "New tunnel" button (cyan border, add icon). */
+/** Outlined full-width action under the tunnel list (cyan border, leading icon). */
 @Composable
-private fun MobileNewTunnelButton(onClick: () -> Unit) {
+private fun MobileDashedButton(label: String, icon: String, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -486,10 +655,14 @@ private fun MobileNewTunnelButton(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
     ) {
-        Sym("add", size = 19.sp, color = D.cyanBright)
-        Txt(stringResource(Res.string.ports_new_tunnel), color = D.cyanBright, size = 14.sp, weight = FontWeight.Medium)
+        Sym(icon, size = 19.sp, color = D.cyanBright)
+        Txt(label, color = D.cyanBright, size = 14.sp, weight = FontWeight.Medium)
     }
 }
+
+@Composable
+private fun MobileNewTunnelButton(onClick: () -> Unit) =
+    MobileDashedButton(stringResource(Res.string.ports_new_tunnel), icon = "add", onClick = onClick)
 
 /** Throughput row in the editor sheet: arrow + bar + text. */
 @Composable

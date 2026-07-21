@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +46,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ports_active_tunnel_one
 import app.skerry.ui.generated.resources.ports_active_tunnels_other
 import app.skerry.ui.generated.resources.ports_add_tunnel_right
+import app.skerry.ui.generated.resources.ports_already_forwarded
 import app.skerry.ui.generated.resources.ports_changes_apply_after_restart
 import app.skerry.ui.generated.resources.ports_col_active
 import app.skerry.ui.generated.resources.ports_col_destination
@@ -59,10 +61,15 @@ import app.skerry.ui.generated.resources.ports_field_name
 import app.skerry.ui.generated.resources.ports_field_port
 import app.skerry.ui.generated.resources.ports_field_type
 import app.skerry.ui.generated.resources.ports_field_via_host
+import app.skerry.ui.generated.resources.ports_find_services
+import app.skerry.ui.generated.resources.ports_forward
 import app.skerry.ui.generated.resources.ports_new_tunnel
 import app.skerry.ui.generated.resources.ports_no_saved_hosts
+import app.skerry.ui.generated.resources.ports_no_services
 import app.skerry.ui.generated.resources.ports_no_tunnels_yet
+import app.skerry.ui.generated.resources.ports_open_in_browser
 import app.skerry.ui.generated.resources.ports_ph_web_tunnel
+import app.skerry.ui.generated.resources.ports_pick_host_to_scan
 import app.skerry.ui.generated.resources.ports_port_forwarding
 import app.skerry.ui.generated.resources.ports_remove
 import app.skerry.ui.generated.resources.ports_remove_active_message
@@ -70,7 +77,13 @@ import app.skerry.ui.generated.resources.ports_remove_confirm_title
 import app.skerry.ui.generated.resources.ports_remove_inactive_message
 import app.skerry.ui.generated.resources.ports_save
 import app.skerry.ui.generated.resources.ports_saved_tunnels_subtitle
+import app.skerry.ui.generated.resources.ports_scan
+import app.skerry.ui.generated.resources.ports_scanning
 import app.skerry.ui.generated.resources.ports_select_host
+import app.skerry.ui.generated.resources.ports_service_port
+import app.skerry.ui.generated.resources.ports_services_hint
+import app.skerry.ui.generated.resources.ports_services_title
+import app.skerry.ui.generated.resources.ports_services_unsupported
 import app.skerry.ui.generated.resources.ports_socks_hint
 import app.skerry.ui.generated.resources.ports_tunnel_detail
 import org.jetbrains.compose.resources.stringResource
@@ -115,9 +128,13 @@ fun TunnelsView() {
     val manager = LocalTunnels.current
     val hosts = LocalHosts.current
 
-    // Right-panel state: selected tunnel and "create new" mode (New tunnel button).
+    // Right-panel state: selected tunnel, "create new" mode (New tunnel button), and service
+    // discovery, which takes over the same panel.
     var selectedId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
+    // Discovery survives leaving and re-entering the section: the panel reopens on whatever the
+    // scan still holds, and only closing it (which resets the scan) puts the editor back.
+    var discovering by remember { mutableStateOf(manager?.services?.state != ServiceScanState.Idle) }
 
     Column(Modifier.fillMaxSize().background(D.bg)) {
         Row(
@@ -132,7 +149,14 @@ fun TunnelsView() {
                     color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            PrimaryButton(stringResource(Res.string.ports_new_tunnel), onClick = { adding = true; selectedId = null }, icon = "add")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                GhostButton(stringResource(Res.string.ports_find_services), onClick = { discovering = true }, icon = "radar")
+                PrimaryButton(
+                    stringResource(Res.string.ports_new_tunnel),
+                    onClick = { adding = true; selectedId = null; discovering = false },
+                    icon = "add",
+                )
+            }
         }
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -144,12 +168,14 @@ fun TunnelsView() {
                     hosts = hosts,
                     mono = mono,
                     adding = adding,
+                    discovering = discovering,
                     selectedId = selectedId,
-                    onSelect = { selectedId = it; adding = false },
+                    onSelect = { selectedId = it; adding = false; discovering = false },
+                    onCloseDiscovery = { discovering = false; manager.services.reset() },
                     // After deletion, returns to "New tunnel" mode instead of jumping to an
                     // arbitrary remaining tunnel: selectedId still holds the removed id, and
                     // without resetting it, selected would resolve via firstOrNull().
-                    onNew = { selectedId = null; adding = true },
+                    onNew = { selectedId = null; adding = true; discovering = false },
                 )
             }
         }
@@ -164,8 +190,10 @@ private fun GlobalTunnelsBody(
     hosts: HostManagerController?,
     mono: FontFamily,
     adding: Boolean,
+    discovering: Boolean,
     selectedId: String?,
     onSelect: (String) -> Unit,
+    onCloseDiscovery: () -> Unit,
     onNew: () -> Unit,
 ) {
     val tunnels = manager.tunnels
@@ -221,14 +249,18 @@ private fun GlobalTunnelsBody(
                 }
             }
             VLine(D.line)
-            TunnelEditor(
-                manager = manager,
-                hosts = hosts,
-                mono = mono,
-                existing = if (showNew) null else selected,
-                onSaved = { onSelect(it) },
-                onRequestRemove = { selected?.let { pendingRemove = it } },
-            )
+            if (discovering) {
+                ServicesPanel(manager = manager, hosts = hosts, mono = mono, onClose = onCloseDiscovery)
+            } else {
+                TunnelEditor(
+                    manager = manager,
+                    hosts = hosts,
+                    mono = mono,
+                    existing = if (showNew) null else selected,
+                    onSaved = { onSelect(it) },
+                    onRequestRemove = { selected?.let { pendingRemove = it } },
+                )
+            }
         }
         pendingRemove?.let { entry ->
             ConfirmActionDialog(
@@ -282,7 +314,8 @@ private fun TunnelRowGlobal(
             Box(Modifier.width(20.dp)) { Sym(arrow, size = 16.sp, color = D.faint) }
             Txt(dest ?: stringResource(Res.string.ports_dynamic_proxy), color = if (dest == null || dim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
             Txt(via, color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.width(110.dp))
-            Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
+            Row(Modifier.width(84.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                OpenInBrowserAction(entry)
                 ActiveCellGlobal(entry, onToggle)
             }
         }
@@ -298,6 +331,23 @@ private fun sourceText(entry: TunnelEntry): String {
     return "${entry.tunnel.bindHost}:$port"
 }
 
+/**
+ * Opens a live local forward in the browser. Only shown when there is something to open: `-R`
+ * listens on the server and `-D` is a SOCKS proxy, so neither gets a link.
+ */
+@Composable
+private fun OpenInBrowserAction(entry: TunnelEntry) {
+    val url = tunnelBrowserUrl(entry) ?: return
+    val uriHandler = LocalUriHandler.current
+    Sym(
+        "open_in_new",
+        size = 15.sp,
+        color = D.cyanBright,
+        // A failing system handler must not throw into the composition (see AboutSection).
+        modifier = Modifier.clickable { runCatching { uriHandler.openUri(url) } },
+    )
+}
+
 /** ACTIVE cell: on toggle when active, hourglass while connecting, otherwise off toggle (activate/retry). */
 @Composable
 private fun ActiveCellGlobal(entry: TunnelEntry, onToggle: () -> Unit) {
@@ -305,6 +355,108 @@ private fun ActiveCellGlobal(entry: TunnelEntry, onToggle: () -> Unit) {
         is TunnelStatus.Active -> Toggle(on = true, onToggle = onToggle)
         TunnelStatus.Connecting -> Sym("hourglass_top", size = 16.sp, color = D.amber)
         else -> Toggle(on = false, onToggle = onToggle)
+    }
+}
+
+/**
+ * Service discovery panel: pick a saved host, scan it for listening TCP ports, and forward one in a
+ * tap (a local forward is created and activated right away). Occupies the editor's column — the two
+ * are alternative uses of the same panel, never both at once.
+ */
+@Composable
+private fun ServicesPanel(
+    manager: TunnelManager,
+    hosts: HostManagerController?,
+    mono: FontFamily,
+    onClose: () -> Unit,
+) {
+    val scan = manager.services
+    val hostList = hosts?.hosts ?: emptyList()
+    var hostId by remember { mutableStateOf(scan.scannedHostId ?: hostList.firstOrNull()?.id) }
+    val hostLabel = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label }
+        ?: stringResource(Res.string.ports_select_host)
+
+    Column(
+        Modifier.width(308.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Sym("radar", size = 16.sp, color = D.cyanBright)
+                Txt(stringResource(Res.string.ports_services_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            }
+            Sym("close", size = 16.sp, color = D.faint, modifier = Modifier.clickable(onClick = onClose))
+        }
+        Txt(stringResource(Res.string.ports_services_hint), color = D.faint, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(bottom = 14.dp))
+        FieldLabel(stringResource(Res.string.ports_field_via_host))
+        HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { hostId = it })
+        Box(Modifier.padding(bottom = 12.dp))
+        PrimaryButton(
+            label = stringResource(Res.string.ports_scan),
+            onClick = { hostId?.let { scan.scan(it) } },
+            modifier = Modifier.fillMaxWidth(),
+            icon = "radar",
+            bg = if (hostId != null) D.cyan else Color(0x14FFFFFF),
+            fg = if (hostId != null) Color(0xFF0A1A26) else D.faint,
+        )
+        Box(Modifier.padding(bottom = 14.dp))
+        when (val state = scan.state) {
+            ServiceScanState.Idle -> ScanNote(stringResource(Res.string.ports_pick_host_to_scan), D.faint)
+            ServiceScanState.Scanning -> ScanNote(stringResource(Res.string.ports_scanning), D.amber)
+            ServiceScanState.Unsupported -> ScanNote(stringResource(Res.string.ports_services_unsupported), D.dim)
+            is ServiceScanState.Failed -> ScanNote(serviceScanFailureText(state), D.sunset)
+            is ServiceScanState.Ready -> {
+                val scanned = scan.scannedHostId
+                if (state.services.isEmpty() || scanned == null) {
+                    ScanNote(stringResource(Res.string.ports_no_services), D.faint)
+                } else {
+                    val taken = forwardedPorts(manager.tunnels.map { it.tunnel }, scanned)
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        state.services.forEach { service ->
+                            ServiceRow(
+                                service = service,
+                                mono = mono,
+                                forwarded = service.port in taken,
+                                // Saved and raised in one go — the point of the panel is not to
+                                // land in the editor with fields pre-filled.
+                                onForward = { label -> manager.activate(manager.save(serviceTunnelDraft(service, scanned, label))) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanNote(text: String, color: Color) {
+    Txt(text, color = color, size = 11.5.sp, lineHeight = 16.sp)
+}
+
+/** One discovered service: port, owning process, and the one-tap forward action. */
+@Composable
+private fun ServiceRow(service: ListeningService, mono: FontFamily, forwarded: Boolean, onForward: (String) -> Unit) {
+    // Name for the tunnel when the host didn't disclose the process; localized here, since the
+    // draft is built outside the composition.
+    val fallback = stringResource(Res.string.ports_service_port, service.port)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan08, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Txt("${service.port}", color = D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.width(46.dp))
+        Txt(serviceLabel(service), color = D.dim, size = 11.5.sp, modifier = Modifier.weight(1f))
+        if (forwarded) {
+            Txt(stringResource(Res.string.ports_already_forwarded), color = D.moss, size = 10.5.sp)
+        } else {
+            Txt(
+                stringResource(Res.string.ports_forward),
+                color = D.cyanBright,
+                size = 10.5.sp,
+                weight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { onForward(fallback) }.padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+        }
     }
 }
 
@@ -364,6 +516,18 @@ private fun TunnelEditor(
             Txt(stringResource(Res.string.ports_socks_hint), color = D.faint, size = 11.sp, lineHeight = 15.sp)
         }
         if (existing != null && existing.status is TunnelStatus.Active) {
+            tunnelBrowserUrl(existing)?.let { url ->
+                val uriHandler = LocalUriHandler.current
+                Box(Modifier.padding(bottom = 14.dp))
+                GhostButton(
+                    stringResource(Res.string.ports_open_in_browser),
+                    onClick = { runCatching { uriHandler.openUri(url) } },
+                    icon = "open_in_new",
+                    fg = D.cyanBright,
+                    border = D.cyan20,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Box(Modifier.padding(bottom = 16.dp))
             FieldLabel(stringResource(Res.string.ports_field_live_throughput))
             ThroughputRow("arrow_upward", D.cyanBright, rateFraction(existing.upRate), humanRate(existing.upRate), mono)
@@ -495,7 +659,7 @@ private fun TunnelHeaderRow() {
         Box(Modifier.width(20.dp))
         HeaderCell(stringResource(Res.string.ports_col_destination), Modifier.weight(1f))
         HeaderCell(stringResource(Res.string.ports_col_via_host), Modifier.width(110.dp))
-        HeaderCell(stringResource(Res.string.ports_col_active), Modifier.width(56.dp), end = true)
+        HeaderCell(stringResource(Res.string.ports_col_active), Modifier.width(84.dp), end = true)
     }
 }
 
@@ -521,7 +685,7 @@ private fun TunnelRow(rule: TunnelRule) {
         Box(Modifier.width(20.dp)) { Sym(rule.arrow, size = 16.sp, color = D.faint) }
         Txt(rule.dest, color = if (rule.destDim) D.dim else D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
         Txt(rule.via, color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.width(110.dp))
-        Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
+        Box(Modifier.width(84.dp), contentAlignment = Alignment.CenterEnd) {
             Toggle(rule.active, onToggle = {})
         }
     }
