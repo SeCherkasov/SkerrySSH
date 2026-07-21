@@ -19,6 +19,8 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
+import app.skerry.shared.terminal.Asciicast
+import app.skerry.ui.terminal.CastOpenResult
 import app.skerry.ui.terminal.RecordingOutcome
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
@@ -196,6 +198,12 @@ class DesktopDesignState(
      * nothing to report. A silent stop would leave the user unsure whether the file was written.
      */
     var recordingNotice: RecordingOutcome? by mutableStateOf(null); private set
+
+    /** Recording being played back over the shell, or `null` when the player is closed. */
+    var castRecording: Asciicast? by mutableStateOf(null); private set
+
+    /** Whether the last picked file turned out not to be a recording (shown as a notice). */
+    var castInvalid: Boolean by mutableStateOf(false); private set
     /** Whether the command palette (⌘K / Ctrl+Shift+K) is open over the active session. */
     var commandPaletteOpen: Boolean by mutableStateOf(false); private set
 
@@ -382,6 +390,15 @@ class DesktopDesignState(
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
     fun showRecordingNotice(outcome: RecordingOutcome) { recordingNotice = outcome.takeIf { it.worthReporting } }
     fun dismissRecordingNotice() { recordingNotice = null }
+    fun showCast(result: CastOpenResult) {
+        when (result) {
+            is CastOpenResult.Loaded -> castRecording = result.cast
+            CastOpenResult.Invalid -> castInvalid = true
+            CastOpenResult.Cancelled -> Unit // the user backed out; nothing to report
+        }
+    }
+    fun closeCast() { castRecording = null }
+    fun dismissCastError() { castInvalid = false }
     fun openCommandPalette() { commandPaletteOpen = true }
     fun closeCommandPalette() { commandPaletteOpen = false }
     fun openBroadcast() { broadcastOpen = true }

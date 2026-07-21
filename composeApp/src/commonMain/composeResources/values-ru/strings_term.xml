@@ -92,6 +92,17 @@
     <string name="term_record_truncated">Запись остановлена: достигнут предел размера</string>
     <string name="term_record_empty">Записывать было нечего</string>
     <string name="term_record_saved">Запись сохранена</string>
+    <string name="term_player_open">Воспроизвести запись</string>
+    <string name="term_player_title">Запись сессии</string>
+    <string name="term_player_invalid">Это не запись в формате asciicast v2</string>
+    <string name="term_player_empty">В этой записи нечего воспроизводить</string>
+    <string name="term_player_truncated">Запись очень длинная — загружено только начало</string>
+    <string name="term_player_play">Воспроизвести</string>
+    <string name="term_player_pause">Пауза</string>
+    <string name="term_player_replay">Сначала</string>
+    <string name="term_player_close">Закрыть</string>
+    <string name="term_player_speed">%1$s×</string>
+    <string name="term_player_loading">Открываем запись…</string>
     <string name="term_broadcast_title">Broadcast</string>
     <string name="term_broadcast_subtitle">Одна команда сразу в несколько сессий</string>
     <string name="term_broadcast_placeholder">Команда для всех сессий…</string>

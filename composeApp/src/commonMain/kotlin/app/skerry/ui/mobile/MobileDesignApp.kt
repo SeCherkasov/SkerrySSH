@@ -46,6 +46,11 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.SyncOnboardingScreen
+import app.skerry.ui.design.NoticeDialog
+import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_player_invalid
+import app.skerry.ui.generated.resources.term_player_title
+import app.skerry.ui.terminal.CastPlayerOverlay
 import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.LocalTerminalTheme
 import app.skerry.ui.terminal.TerminalAppearance
@@ -444,6 +449,17 @@ private fun MobileChrome(
             }
             if (state.sheetNewConn) {
                 MobileNewConnectionSheet(state)
+            }
+            // Recording player: an overlay over whatever screen is up, so a recording can be watched
+            // from More without an open session (desktop toolbar parity).
+            state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }
+            if (state.castInvalid) {
+                NoticeDialog(
+                    title = stringResource(Res.string.term_player_title),
+                    message = stringResource(Res.string.term_player_invalid),
+                    buttonLabel = stringResource(Res.string.term_ai_dismiss),
+                    onDismiss = state::dismissCastError,
+                )
             }
             // Pencil icon on a folder header → Rename/Delete group dialog. The controller edits
             // profiles (renameGroup/deleteGroup), the store syncs collapsed state. Desktop GroupDialog parity.

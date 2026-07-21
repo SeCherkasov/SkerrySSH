@@ -92,6 +92,17 @@
     <string name="term_record_truncated">录制已停止：已达大小上限</string>
     <string name="term_record_empty">没有录制到内容</string>
     <string name="term_record_saved">录制已保存</string>
+    <string name="term_player_open">播放录制</string>
+    <string name="term_player_title">会话录制</string>
+    <string name="term_player_invalid">该文件不是 asciicast v2 录制</string>
+    <string name="term_player_empty">此录制没有可播放的内容</string>
+    <string name="term_player_truncated">录制过长——仅加载了开头部分</string>
+    <string name="term_player_play">播放</string>
+    <string name="term_player_pause">暂停</string>
+    <string name="term_player_replay">重新播放</string>
+    <string name="term_player_close">关闭</string>
+    <string name="term_player_speed">%1$s×</string>
+    <string name="term_player_loading">正在打开录制…</string>
     <string name="term_broadcast_title">广播</string>
     <string name="term_broadcast_subtitle">一条命令同时发送到多个会话</string>
     <string name="term_broadcast_placeholder">要在所有会话中运行的命令…</string>
