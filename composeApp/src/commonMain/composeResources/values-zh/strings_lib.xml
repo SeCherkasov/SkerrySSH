@@ -44,6 +44,7 @@
     <string name="lib_snippets_add_tag">添加标签…</string>
     <string name="lib_snippets_press_keys">按键…</string>
     <string name="lib_snippets_shortcut_conflict">已被 \"%1$s\" 使用</string>
+    <string name="lib_snippets_shortcut_reserved">已被 Skerry 快捷键占用（设置 → 键盘）</string>
     <string name="lib_snippets_select_or_create">选择一个片段或新建一个。</string>
     <string name="lib_snippets_save">保存</string>
     <string name="lib_snippets_delete">删除</string>

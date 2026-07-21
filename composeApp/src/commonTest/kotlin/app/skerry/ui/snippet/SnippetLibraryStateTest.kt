@@ -53,6 +53,20 @@ class SnippetLibraryStateTest {
     }
 
     @Test
+    fun a_chip_shows_one_section_even_when_a_snippet_carries_other_tags() {
+        val multi = listOf(
+            entry("Deploy", listOf("prod", "db")),
+            entry("Dump", listOf("db")),
+        )
+        val s = SnippetLibraryState()
+        s.activeChip = "prod"
+
+        // Grouping the filtered list again would split "Deploy" back out under "db" and show it twice.
+        assertEquals(listOf("prod"), s.categories(multi).map { it.name })
+        assertEquals(listOf("Deploy"), s.categories(multi).single().snippets.map { it.snippet.label })
+    }
+
+    @Test
     fun toggle_collapses_and_expands_a_category() {
         val s = SnippetLibraryState()
 

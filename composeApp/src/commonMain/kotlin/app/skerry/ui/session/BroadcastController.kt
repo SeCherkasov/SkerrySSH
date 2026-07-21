@@ -7,13 +7,13 @@ import androidx.compose.runtime.setValue
 
 /**
  * One session a broadcast can address: its [id], the [label] shown in the picker, and [send] —
- * writing to that session's terminal. The controller never touches [Session] itself, so broadcasting
- * is testable without a live transport.
+ * writing to that session's terminal, returning whether the session was still live enough to take it.
+ * The controller never touches [Session] itself, so broadcasting is testable without a live transport.
  */
 data class BroadcastTarget(
     val id: String,
     val label: String,
-    val send: (String) -> Unit,
+    val send: (String) -> Boolean,
 )
 
 /**
@@ -59,7 +59,9 @@ class BroadcastController {
         var delivered = 0
         for (target in targets) {
             if (target.id !in selectedIds) continue
-            runCatching { target.send(text + "\n") }.onSuccess { delivered++ }
+            // The target reports it: a write into the terminal's outbound queue always succeeds, so
+            // counting the call itself would report a host whose transport just died as reached.
+            if (runCatching { target.send(text + "\n") }.getOrDefault(false)) delivered++
         }
         return delivered
     }

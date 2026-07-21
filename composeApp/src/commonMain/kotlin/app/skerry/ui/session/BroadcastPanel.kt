@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.D
@@ -75,7 +76,14 @@ internal fun broadcastTargets(sessions: SessionsController?): List<BroadcastTarg
                 BroadcastTarget(
                     id = candidate.id,
                     label = candidate.displayTitle.ifBlank { candidate.subtitle },
-                    send = { text -> it.typeInput(text) },
+                    send = { text ->
+                        // Delivery is judged on the session's state, not on the write: typeInput
+                        // hands bytes to an unbounded queue and never fails, so a host whose
+                        // transport dropped a moment ago would still be counted as reached.
+                        val live = it.state.value is TerminalState.Open
+                        if (live) it.typeInput(text)
+                        live
+                    },
                 )
             }
         }

@@ -108,4 +108,19 @@ class DesktopShortcutsTest {
         assertNull(match(key = Key.One))
         assertNull(match(shift = true, key = Key.D))
     }
+
+    @Test
+    fun `a formatted chord is recognized as reserved by the shell`() {
+        // What the snippet editor stores, matched back against the shell's own shortcuts.
+        assertEquals(DesktopShortcut.ToggleRecording, matchDesktopShortcut("Ctrl+Shift+R"))
+        assertEquals(DesktopShortcut.SnippetPalette, matchDesktopShortcut("Meta+S"))
+        assertEquals(DesktopShortcut.SelectTab(0), matchDesktopShortcut("Alt+1"))
+    }
+
+    @Test
+    fun `a free chord is not reserved`() {
+        assertNull(matchDesktopShortcut("Ctrl+Shift+X"))
+        assertNull(matchDesktopShortcut("Ctrl+G"))
+        assertNull(matchDesktopShortcut("nonsense"))
+    }
 }

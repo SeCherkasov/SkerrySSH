@@ -44,6 +44,7 @@
     <string name="lib_snippets_add_tag">добавить тег…</string>
     <string name="lib_snippets_press_keys">Нажмите клавиши…</string>
     <string name="lib_snippets_shortcut_conflict">Уже используется в \"%1$s\"</string>
+    <string name="lib_snippets_shortcut_reserved">Занято горячей клавишей Skerry (Настройки → Клавиатура)</string>
     <string name="lib_snippets_select_or_create">Выберите сниппет или создайте новый.</string>
     <string name="lib_snippets_save">Сохранить</string>
     <string name="lib_snippets_delete">Удалить</string>

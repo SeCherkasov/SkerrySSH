@@ -238,6 +238,45 @@ class SessionsControllerTest {
     }
 
     @Test
+    fun `broadcastTargets covers connected tabs and their split panes`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a", title = "alpha")
+        sessions.open(hostId = "host-b", title = "beta")
+        sessions.activate(a)
+        sessions.toggleSplit()
+        sessions.connectSplit(parentId = a, hostId = "host-c")
+
+        val targets = broadcastTargets(sessions)
+
+        // Each pane is its own shell, so the split is a target in its own right.
+        assertEquals(3, targets.size)
+        assertEquals(listOf("alpha", "beta"), targets.map { it.label }.filter { it == "alpha" || it == "beta" })
+        assertTrue(targets.map { it.id }.contains(sessions.active!!.splitSession!!.id))
+        scope.cancel()
+    }
+
+    @Test
+    fun `broadcastTargets skips a session that is not connected`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.toggleSplit() // split area open but nothing connected into it
+
+        assertEquals(listOf(a), broadcastTargets(sessions).map { it.id })
+        scope.cancel()
+    }
+
+    @Test
+    fun `broadcastTargets excludes VNC tabs and an absent controller`() = runTest {
+        val vncTransport = FakeVncTransport()
+        val (sessions, scope) = sessionsWithVnc(vncTransport)
+        sessions.openVnc(hostId = "host-a") // no shell to type into
+
+        assertTrue(broadcastTargets(sessions).isEmpty())
+        assertTrue(broadcastTargets(null).isEmpty())
+        scope.cancel()
+    }
+
+    @Test
     fun `connectSplit does not add the secondary session to the tab list`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")

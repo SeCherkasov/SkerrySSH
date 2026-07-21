@@ -1,6 +1,7 @@
 package app.skerry.ui.desktop
 
 import androidx.compose.ui.input.key.Key
+import app.skerry.ui.snippet.SnippetShortcut
 
 /**
  * A global hotkey of the desktop shell (titlebar/rail/sessions), recognized from a key chord.
@@ -88,6 +89,24 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
         Key.Slash -> DesktopShortcut.FocusAiBar
         else -> null
     }
+}
+
+/**
+ * The shell hotkey a [SnippetShortcut]-formatted chord ("Ctrl+Shift+R") stands for, or `null` if the
+ * chord is free. The root key handler runs shell shortcuts before snippet ones and consumes the
+ * event, so a snippet bound to a reserved chord would never fire: the editor warns instead of
+ * letting the binding die silently.
+ */
+fun matchDesktopShortcut(combo: String): DesktopShortcut? {
+    val parts = combo.split('+')
+    val key = SnippetShortcut.keyFor(parts.last()) ?: return null
+    return matchDesktopShortcut(
+        ctrl = "Ctrl" in parts,
+        shift = "Shift" in parts,
+        alt = "Alt" in parts,
+        meta = "Meta" in parts,
+        key = key,
+    )
 }
 
 /** Tab index (0-based) for the top-row digit key 1..9, else `null`. */

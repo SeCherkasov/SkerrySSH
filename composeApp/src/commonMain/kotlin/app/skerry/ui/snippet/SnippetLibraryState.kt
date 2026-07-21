@@ -36,8 +36,20 @@ class SnippetLibraryState {
     fun visible(all: List<SnippetEntry>): List<SnippetEntry> =
         filterSnippets(all, activeChip = effectiveChip(all), query = query)
 
-    /** Sections to render for [all], already narrowed by [visible]. */
-    fun categories(all: List<SnippetEntry>): List<SnippetCategory> = groupSnippetsByCategory(visible(all))
+    /**
+     * Sections to render for [all], already narrowed by [visible]. With a chip active the view *is*
+     * one category, so it renders as a single section: re-grouping the filtered list would split a
+     * snippet that carries several tags back out under its other tags and show it twice.
+     */
+    fun categories(all: List<SnippetEntry>): List<SnippetCategory> {
+        val chip = effectiveChip(all)
+        val shown = filterSnippets(all, activeChip = chip, query = query)
+        return when {
+            chip == ALL_SNIPPETS_CHIP -> groupSnippetsByCategory(shown)
+            shown.isEmpty() -> emptyList()
+            else -> listOf(SnippetCategory(chip, shown))
+        }
+    }
 
     /** Chips to render: `All` plus the categories present in [all] (unaffected by the search text). */
     fun chips(all: List<SnippetEntry>): List<String> = snippetCategoryChips(all)

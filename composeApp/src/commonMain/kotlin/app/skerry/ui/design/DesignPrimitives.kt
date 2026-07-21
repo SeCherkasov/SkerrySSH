@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.text.AnnotatedString
 
 /**
  * Base text on the UI font (Space Grotesk by default). Thin wrapper over [BasicText] so
@@ -88,6 +89,28 @@ fun Txt(
             lineHeight = lineHeight,
             textAlign = align,
         ),
+    )
+}
+
+/** [Txt] for pre-styled text (search-match highlighting): same defaults, spans of the string win. */
+@Composable
+fun Txt(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = D.text,
+    size: TextUnit = 13.sp,
+    weight: FontWeight = FontWeight.Normal,
+    font: FontFamily? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+) {
+    val family = font ?: LocalFonts.current.ui
+    BasicText(
+        text = text,
+        modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
+        style = TextStyle(color = color, fontSize = size, fontWeight = weight, fontFamily = family),
     )
 }
 

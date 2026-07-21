@@ -44,6 +44,7 @@ import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_starter_pack
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.runtime.key
 
 /**
  * Snippet library sidebar: search, category chips and the snippet list grouped into collapsible
@@ -112,15 +113,19 @@ private fun SnippetChipRow(chips: List<String>, library: SnippetLibraryState) {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         chips.forEach { chip ->
-            val active = chip == library.activeChip
-            ChipButton(
-                label = snippetChipLabel(chip),
-                color = if (active) D.cyan else D.dim,
-                filled = active,
-                size = 11.sp,
-                verticalPadding = 4.dp,
-                onClick = { library.activeChip = chip },
-            )
+            // Keyed like the mobile row: categories are sorted, so editing tags reorders the chips
+            // and unkeyed slots would carry the previous chip's interaction state.
+            key(chip) {
+                val active = chip == library.activeChip
+                ChipButton(
+                    label = snippetChipLabel(chip),
+                    color = if (active) D.cyan else D.dim,
+                    filled = active,
+                    size = 11.sp,
+                    verticalPadding = 4.dp,
+                    onClick = { library.activeChip = chip },
+                )
+            }
         }
     }
 }

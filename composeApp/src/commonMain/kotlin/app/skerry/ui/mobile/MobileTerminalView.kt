@@ -363,15 +363,17 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             label = stringResource(if (recording) Res.string.term_record_stop else Res.string.term_record_start),
                             onClick = {
                                 menuOpen = false
-                                if (!recording) {
-                                    activeTerminal.startRecording(active?.displayTitle ?: active?.subtitle)
-                                } else {
-                                    val truncated = activeTerminal.recordingTruncated
-                                    val cast = activeTerminal.stopRecording()
-                                    if (cast == null || !cast.contains('\n')) {
-                                        recordingNotice = RecordingOutcome.Empty
+                                // Start/stop go through the terminal's command loop, so both run in
+                                // a coroutine rather than inline in the click.
+                                scope.launch {
+                                    if (!recording) {
+                                        activeTerminal.startRecording(active?.displayTitle ?: active?.subtitle)
                                     } else {
-                                        scope.launch {
+                                        val truncated = activeTerminal.recordingTruncated
+                                        val cast = activeTerminal.stopRecording()
+                                        if (cast == null || !cast.contains('\n')) {
+                                            recordingNotice = RecordingOutcome.Empty
+                                        } else {
                                             val name = castFileName(active?.displayTitle.orEmpty().ifBlank { active?.subtitle.orEmpty() }, recordingStamp())
                                             val saved = exportTextFile(name, cast)
                                             recordingNotice = when {

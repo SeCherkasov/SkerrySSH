@@ -44,6 +44,7 @@
     <string name="lib_snippets_add_tag">add tag…</string>
     <string name="lib_snippets_press_keys">Press keys…</string>
     <string name="lib_snippets_shortcut_conflict">Already used by \"%1$s\"</string>
+    <string name="lib_snippets_shortcut_reserved">Reserved by a Skerry shortcut (Settings → Keyboard)</string>
     <string name="lib_snippets_select_or_create">Select a snippet or create a new one.</string>
     <string name="lib_snippets_save">Save</string>
     <string name="lib_snippets_delete">Delete</string>

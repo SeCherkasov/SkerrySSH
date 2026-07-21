@@ -423,6 +423,9 @@ class ConnectionController(
         lastTarget = null
         // Cancelled before Connected — discard the not-yet-fired one-shot action (Run on host).
         pendingOnConnected = null
+        // Stop pointing at the disconnected host: a palette opened later must not attribute its
+        // commands to a session that is gone.
+        historyKey = null
         releaseSessionResources()
         uiState = ConnectionUiState.Form
     }
