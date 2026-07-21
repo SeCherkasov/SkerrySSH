@@ -868,6 +868,10 @@ private fun runDesktopShortcut(
         }
         DesktopShortcut.Lock -> onLock()
         DesktopShortcut.Broadcast -> state.openBroadcast()
+        // These three live in toolbar buttons that own their state; the shortcut nudges them.
+        DesktopShortcut.SnippetPalette -> state.requestSnippetPalette()
+        DesktopShortcut.ToggleRecording -> state.requestRecordingToggle()
+        DesktopShortcut.PlayRecording -> state.requestCastOpen()
         // Only over a live terminal: the palette inserts into it, so with nothing to insert into the
         // key falls through (to the snippet hotkey) instead of opening a dead-end overlay.
         DesktopShortcut.CommandPalette -> {

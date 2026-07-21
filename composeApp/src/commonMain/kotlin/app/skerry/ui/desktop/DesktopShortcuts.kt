@@ -29,6 +29,15 @@ sealed interface DesktopShortcut {
     /** Open the broadcast panel: one command into several sessions (⌘B / Ctrl+Shift+B). */
     data object Broadcast : DesktopShortcut
 
+    /** Open the snippet palette over the active session (⌘S / Ctrl+Shift+S). */
+    data object SnippetPalette : DesktopShortcut
+
+    /** Start or stop recording the active session (⌘R / Ctrl+Shift+R). */
+    data object ToggleRecording : DesktopShortcut
+
+    /** Open a .cast recording in the player (⌘P / Ctrl+Shift+P). */
+    data object PlayRecording : DesktopShortcut
+
     /** Next tab (Ctrl+Tab). */
     data object NextTab : DesktopShortcut
 
@@ -73,6 +82,9 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
         Key.L -> DesktopShortcut.Lock
         Key.K -> DesktopShortcut.CommandPalette
         Key.B -> DesktopShortcut.Broadcast
+        Key.S -> DesktopShortcut.SnippetPalette
+        Key.R -> DesktopShortcut.ToggleRecording
+        Key.P -> DesktopShortcut.PlayRecording
         Key.Slash -> DesktopShortcut.FocusAiBar
         else -> null
     }

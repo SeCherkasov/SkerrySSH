@@ -49,6 +49,28 @@ class DesktopShortcutsTest {
     }
 
     @Test
+    fun `the snippet palette is on the app modifier plus S`() {
+        assertEquals(DesktopShortcut.SnippetPalette, match(meta = true, key = Key.S))
+        assertEquals(DesktopShortcut.SnippetPalette, match(ctrl = true, shift = true, key = Key.S))
+        assertNull(match(ctrl = true, key = Key.S)) // plain Ctrl+S is the terminal's flow control
+    }
+
+    @Test
+    fun `session recording is on the app modifier plus R`() {
+        assertEquals(DesktopShortcut.ToggleRecording, match(meta = true, key = Key.R))
+        assertEquals(DesktopShortcut.ToggleRecording, match(ctrl = true, shift = true, key = Key.R))
+        // Plain Ctrl+R is reverse history search in the shell — it must not be stolen.
+        assertNull(match(ctrl = true, key = Key.R))
+    }
+
+    @Test
+    fun `the recording player is on the app modifier plus P`() {
+        assertEquals(DesktopShortcut.PlayRecording, match(meta = true, key = Key.P))
+        assertEquals(DesktopShortcut.PlayRecording, match(ctrl = true, shift = true, key = Key.P))
+        assertNull(match(ctrl = true, key = Key.P))
+    }
+
+    @Test
     fun `app modifier on macOS is Cmd alone`() {
         assertEquals(DesktopShortcut.NewConnection, match(meta = true, key = Key.N))
         assertEquals(DesktopShortcut.SplitTerminal, match(meta = true, key = Key.D))

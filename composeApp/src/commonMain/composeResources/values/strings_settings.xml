@@ -158,6 +158,10 @@
     <string name="settings_keyboard_subtitle">Shortcuts adapt to your platform. Terminal bindings apply while a session is focused.</string>
     <string name="settings_kb_new_connection">New connection</string>
     <string name="settings_kb_command_palette">Command palette / search</string>
+    <string name="settings_kb_snippet_palette">Snippet palette</string>
+    <string name="settings_kb_broadcast">Broadcast to sessions</string>
+    <string name="settings_kb_record_session">Record session (start / stop)</string>
+    <string name="settings_kb_play_recording">Play a recording</string>
     <string name="settings_kb_split_terminal">Split terminal</string>
     <string name="settings_kb_next_prev_tab">Next / previous tab</string>
     <string name="settings_kb_select_tab_number">Select tab by number</string>
