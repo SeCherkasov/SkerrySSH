@@ -92,6 +92,17 @@
     <string name="term_record_truncated">Recording stopped: size limit reached</string>
     <string name="term_record_empty">Nothing was recorded</string>
     <string name="term_record_saved">Recording saved</string>
+    <string name="term_player_open">Play a recording</string>
+    <string name="term_player_title">Recording</string>
+    <string name="term_player_invalid">This file is not an asciicast v2 recording</string>
+    <string name="term_player_empty">This recording has nothing to play</string>
+    <string name="term_player_truncated">Recording is very long — only the first part is loaded</string>
+    <string name="term_player_play">Play</string>
+    <string name="term_player_pause">Pause</string>
+    <string name="term_player_replay">Play again</string>
+    <string name="term_player_close">Close</string>
+    <string name="term_player_speed">%1$s×</string>
+    <string name="term_player_loading">Opening the recording…</string>
     <string name="term_broadcast_title">Broadcast</string>
     <string name="term_broadcast_subtitle">Run one command on several sessions</string>
     <string name="term_broadcast_placeholder">Command to run everywhere…</string>

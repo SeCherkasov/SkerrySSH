@@ -104,6 +104,7 @@ import app.skerry.ui.sync.SyncIndicatorLevel
 import app.skerry.ui.sync.syncIndicatorLocalized
 import app.skerry.ui.terminal.CommandPalette
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.CastPlayerOverlay
 import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -124,6 +125,8 @@ import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_this_session
 import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_player_invalid
+import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.generated.resources.term_record_start
 import app.skerry.ui.generated.resources.shell_disconnect_title
 import app.skerry.ui.generated.resources.shell_disconnect_message
@@ -640,7 +643,7 @@ private fun DesktopChrome(
                 if (event.type != KeyEventType.KeyDown) false
                 else if (
                     state.appOverlay != null || state.modalOpen || state.settingsOpen ||
-                    state.commandPaletteOpen || state.broadcastOpen
+                    state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null
                 ) false
                 else {
                     val shortcut = matchDesktopShortcut(
@@ -662,6 +665,16 @@ private fun DesktopChrome(
                 }
                 HLine()
                 StatusBar()
+            }
+            // The player owns the whole work area while it is open; Esc (via ModalScrim) closes it.
+            state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }
+            if (state.castInvalid) {
+                NoticeDialog(
+                    title = stringResource(Res.string.term_player_title),
+                    message = stringResource(Res.string.term_player_invalid),
+                    buttonLabel = stringResource(Res.string.term_ai_dismiss),
+                    onDismiss = state::dismissCastError,
+                )
             }
             state.recordingNotice?.let { outcome ->
                 NoticeDialog(
