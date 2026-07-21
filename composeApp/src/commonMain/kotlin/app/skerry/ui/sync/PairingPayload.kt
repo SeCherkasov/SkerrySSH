@@ -89,9 +89,11 @@ class PairingPayload(
         }
 
         /**
-         * `http(s)://` followed by a non-empty authority. The scheme alone isn't enough: a truncation
-         * can leave a bare `https://`, which would sail through to [SyncCoordinator.claimPairing] and
-         * surface as an unactionable network error instead of "doesn't look like a pairing code".
+         * `http(s)://` followed by an authority that actually names a host. The scheme alone isn't
+         * enough: a truncation can leave a bare `https://`, which would sail through to
+         * [SyncCoordinator.claimPairing] and surface as an unactionable network error instead of
+         * "doesn't look like a pairing code". Userinfo and port are stripped before the check, so
+         * `https://:8443` and `https://user@` fail it too; an IPv6 literal keeps its bracket and passes.
          */
         private fun hasHttpHost(url: String): Boolean {
             val authority = when {
@@ -99,7 +101,7 @@ class PairingPayload(
                 url.startsWith("http://") -> url.removePrefix("http://")
                 else -> return false
             }
-            return authority.substringBefore('/').isNotEmpty()
+            return authority.substringBefore('/').substringAfterLast('@').substringBefore(':').isNotBlank()
         }
     }
 }

@@ -15,6 +15,7 @@ import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.initializeVaultCrypto
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -47,10 +48,14 @@ class SyncCoordinatorLockPauseTest {
     private val account = "maya"
     private val password = "vault-A"
 
-    /** Registers any account and reports how many live-pull subscriptions are collecting right now. */
-    private class WatchCountingClient : SyncClient {
+    /**
+     * Registers any account and reports how many live-pull subscriptions are collecting right now.
+     * [registerGate], when given, holds `register` open so a connect can be caught mid-flight.
+     */
+    private class WatchCountingClient(private val registerGate: CompletableDeferred<Unit>? = null) : SyncClient {
         val watchers = AtomicInteger(0)
         val peakWatchers = AtomicInteger(0)
+        val registering = CompletableDeferred<Unit>()
 
         override fun changes(session: SyncSession): Flow<SyncSignal> = flow {
             watchers.incrementAndGet()
@@ -62,8 +67,11 @@ class SyncCoordinatorLockPauseTest {
             }
         }
 
-        override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession =
-            SyncSession(accountId, accessToken = "access", refreshToken = "refresh")
+        override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession {
+            registering.complete(Unit)
+            registerGate?.await()
+            return SyncSession(accountId, accessToken = "access", refreshToken = "refresh")
+        }
 
         override suspend fun ping(): Boolean = true
         override suspend fun close() {}
@@ -117,6 +125,54 @@ class SyncCoordinatorLockPauseTest {
             withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
             withTimeout(5_000) { while (client.watchers.get() == 0) delay(10) }
             assertEquals(1, client.peakWatchers.get(), "resume must not stack a second live-pull subscription")
+        } finally {
+            sut.close()
+        }
+    }
+
+    @Test
+    fun `locking during a connect stops the subscriptions that connect publishes`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val gate = CompletableDeferred<Unit>()
+        val client = WatchCountingClient(registerGate = gate)
+        val sut = coordinator(vault, client)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            withTimeout(30_000) { client.registering.await() } // the connect now holds opMutex
+
+            // The vault locks mid-connect. The pause queues behind the connect on opMutex and tears down
+            // what it published; without that, live sync survives the lock unnoticed.
+            vault.lock()
+            sut.pauseForLock()
+            gate.complete(Unit)
+
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.Configured } }
+            withTimeout(5_000) { while (client.watchers.get() != 0) delay(10) }
+            delay(200) // and it stays down: nothing restarts them behind the lock screen
+            assertEquals(0, client.watchers.get())
+            assertTrue(sut.status.value is SyncStatus.Configured)
+        } finally {
+            sut.close()
+        }
+    }
+
+    @Test
+    fun `a connect that starts after the pause does not publish a live session`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = WatchCountingClient()
+        val sut = coordinator(vault, client)
+        try {
+            // The other ordering of the same race: the pause wins opMutex first and finds no session to
+            // stop, so the connect behind it has to undo its own live half — nothing else is left to.
+            sut.pauseForLock()
+            delay(100) // let the pause run to completion, so it cannot tear the connect down for us
+            sut.connect(serverUrl, account, password.toCharArray())
+
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.Configured } }
+            delay(200)
+            assertEquals(0, client.watchers.get(), "no live-pull may survive behind a locked vault")
         } finally {
             sut.close()
         }

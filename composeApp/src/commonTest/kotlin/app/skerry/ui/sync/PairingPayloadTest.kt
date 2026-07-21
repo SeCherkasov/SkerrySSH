@@ -72,6 +72,24 @@ class PairingPayloadTest {
         assertNull(PairingPayload.decode(PairingPayload("https://", "code", ByteArray(32) { 1 }).encode()))
         assertNull(PairingPayload.decode(PairingPayload("http://", "code", ByteArray(32) { 1 }).encode()))
         assertNull(PairingPayload.decode(PairingPayload("https:///pairing", "code", ByteArray(32) { 1 }).encode()))
+        // Same hole, one character wider: an authority made only of separators or blanks names no host.
+        assertNull(PairingPayload.decode(PairingPayload("https:// ", "code", ByteArray(32) { 1 }).encode()))
+        assertNull(PairingPayload.decode(PairingPayload("https://:8443", "code", ByteArray(32) { 1 }).encode()))
+        assertNull(PairingPayload.decode(PairingPayload("https://user@", "code", ByteArray(32) { 1 }).encode()))
+    }
+
+    @Test
+    fun `decode accepts the address forms a real server can have`() {
+        listOf(
+            "https://sync.example.com",
+            "https://sync.example.com:8443/base",
+            "http://192.168.1.5:8080",
+            "https://[::1]:8443",
+            "https://user@sync.example.com",
+        ).forEach { url ->
+            val payload = PairingPayload(url, "code", ByteArray(32) { 1 })
+            assertEquals(payload, PairingPayload.decode(payload.encode()), url)
+        }
     }
 
     @Test

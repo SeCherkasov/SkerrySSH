@@ -532,6 +532,13 @@ class SyncCoordinator(
         // startWatch/startLocalPush have cancelled and joined the subscriptions that were using it, and
         // under syncMutex so it can't be closed out from under an in-flight sync.
         if (superseded != null) syncMutex.withLock { runCatching { superseded.close() } }
+        // The vault may have locked while this operation held opMutex: [pauseForLock] then ran first,
+        // found no session to stop and left the flag for us. Undo the live half right here — otherwise
+        // the subscriptions just published would outlive the lock with nothing left to cancel them.
+        if (lockPaused) {
+            stopSubscriptions()
+            _status.value = SyncStatus.Configured(config.serverUrl, config.accountId)
+        }
     }
 
     /**
