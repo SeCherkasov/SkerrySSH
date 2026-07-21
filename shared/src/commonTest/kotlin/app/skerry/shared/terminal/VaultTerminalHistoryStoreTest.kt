@@ -50,6 +50,40 @@ class VaultTerminalHistoryStoreTest {
     }
 
     @Test
+    fun `all returns every host's history for cross-host search`() {
+        val vault = FakeVault()
+        val store = VaultTerminalHistoryStore(vault)
+        store.save("h1", listOf("uptime"), label = "root@alpha")
+        store.save("h2", listOf("whoami"))
+
+        val all = store.all()
+
+        assertEquals(setOf("h1", "h2"), all.map { it.key }.toSet())
+        assertEquals("root@alpha", all.single { it.key == "h1" }.label)
+        assertEquals(null, all.single { it.key == "h2" }.label)
+    }
+
+    @Test
+    fun `all is empty on a locked vault`() {
+        val vault = FakeVault()
+        VaultTerminalHistoryStore(vault).save("h1", listOf("uptime"))
+        vault.locked = true
+
+        assertEquals(emptyList(), VaultTerminalHistoryStore(vault).all())
+    }
+
+    @Test
+    fun `saving without a label keeps the one already stored`() {
+        val vault = FakeVault()
+        val store = VaultTerminalHistoryStore(vault)
+        store.save("h1", listOf("uptime"), label = "root@alpha")
+
+        store.save("h1", listOf("ls", "uptime"))
+
+        assertEquals("root@alpha", store.all().single().label)
+    }
+
+    @Test
     fun `terminal history never syncs regardless of flags`() {
         assertFalse(SyncSettings(syncHosts = true, syncSnippets = true).shouldSync(RecordType.TERMINAL_HISTORY))
         assertTrue(SyncSettings().shouldSync(RecordType.SETTINGS)) // control: settings still syncs

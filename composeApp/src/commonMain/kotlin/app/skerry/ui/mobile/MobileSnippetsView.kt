@@ -37,6 +37,7 @@ import app.skerry.ui.snippet.SnippetDraft
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetFormState
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.snippet.installStarterPack
 import app.skerry.ui.snippet.matches
 import app.skerry.ui.snippet.snippetTagSuggestions
 import app.skerry.ui.generated.resources.Res
@@ -44,6 +45,7 @@ import app.skerry.ui.generated.resources.lib_snippets_add_tag
 import app.skerry.ui.generated.resources.lib_snippets_delete
 import app.skerry.ui.generated.resources.lib_snippets_edit
 import app.skerry.ui.generated.resources.lib_snippets_empty_mobile
+import app.skerry.ui.generated.resources.lib_snippets_starter_pack
 import app.skerry.ui.generated.resources.lib_snippets_field_command
 import app.skerry.ui.generated.resources.lib_snippets_field_name
 import app.skerry.ui.generated.resources.lib_snippets_field_tags
@@ -58,6 +60,7 @@ import app.skerry.ui.generated.resources.lib_snippets_screen_title
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalSessions
@@ -115,21 +118,24 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                 MobileScreenTitle(stringResource(Res.string.lib_snippets_screen_title))
             }
             if (snippets.isEmpty()) {
-                Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 30.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 30.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
                     Txt(stringResource(Res.string.lib_snippets_empty_mobile), color = D.faint, size = 13.sp)
+                    ChipButton(
+                        label = stringResource(Res.string.lib_snippets_starter_pack),
+                        color = D.cyan,
+                        onClick = { manager.installStarterPack() },
+                    )
                 }
             } else {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    snippets.forEach { entry ->
-                        key(entry.id) {
-                            val onClick = remember(entry.id) { { editing = entry; adding = false } }
-                            MobileSnippetCard(entry.snippet, mono, onClick)
-                        }
-                    }
-                }
+                MobileSnippetLibrary(
+                    all = snippets,
+                    library = state.snippetLibrary,
+                    mono = mono,
+                    onEdit = { entry -> editing = entry; adding = false },
+                )
             }
             Spacer(Modifier.height(96.dp))
         }
@@ -167,7 +173,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
 }
 
 @Composable
-private fun MobileSnippetCard(snippet: Snippet, mono: FontFamily, onClick: () -> Unit) {
+internal fun MobileSnippetCard(snippet: Snippet, mono: FontFamily, onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()

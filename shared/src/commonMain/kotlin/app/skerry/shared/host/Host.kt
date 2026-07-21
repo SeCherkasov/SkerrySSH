@@ -16,7 +16,8 @@ import kotlinx.serialization.Serializable
  * the password is entered at connect time.
  *
  * [tags] are optional labels for filtering the host list (#prod/#docker chips). Stored in canonical
- * form (no `#`, lowercase, deduplicated, ≤ [MAX_TAG_LENGTH]) via [normalizeTag]; [group] (folder) and
+ * form (no `#`, lowercase, deduplicated, ≤ [app.skerry.shared.tag.MAX_TAG_LENGTH]) via
+ * [app.skerry.shared.tag.normalizeTag]; [group] (folder) and
  * [tags] (labels) are independent.
  *
  * [aiPolicy] is the per-host AI policy ("AI under policy" principle). Default [AiPolicy.Strict] is
