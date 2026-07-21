@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +25,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.Asciicast
+import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.ModalScrim
@@ -35,31 +38,21 @@ import app.skerry.ui.generated.resources.term_player_empty
 import app.skerry.ui.generated.resources.term_player_speed
 import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.generated.resources.term_player_truncated
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Plays a recording over the current screen: the same terminal renderer a live session uses, plus
- * a transport bar (play/pause, replay, seekable progress, speed).
+ * Plays a recording over the current screen (mobile, and the desktop mock without live sessions):
+ * the same terminal renderer a live session uses, plus a transport bar.
  *
- * Playback is driven by a [CastPlayer] posing as the session, so nothing here knows it isn't live.
- * The player's scope is owned by this composable and cancelled on dispose — closing the overlay
- * must stop the replay coroutine, not leave it feeding a screen nobody looks at.
+ * The playback is owned by this composable and stopped on dispose — closing the overlay must stop
+ * the replay coroutine, not leave it feeding a screen nobody looks at. On the desktop a recording
+ * opens in its own tab instead, where the session owns it ([CastPlayerView]).
  */
 @Composable
 fun CastPlayerOverlay(cast: Asciicast, onDismiss: () -> Unit) {
-    // Default, not Main, exactly like a live session ([ConnectionController]): the terminal state
-    // feeds the ANSI parser from this scope, and a seek hands it every event up to the target in one
-    // chunk. On the main dispatcher that parse freezes the UI (an ANR on Android) for a long take.
-    val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-    val player = remember(cast) { CastPlayer(cast, scope) }
-    val terminal = remember(player) { TerminalScreenState(player, scope) }
-    DisposableEffect(player) { onDispose { scope.cancel() } }
-    // Start playing as soon as the recording is on screen — opening it is the request to watch it.
-    LaunchedEffect(player) { player.play() }
+    val playback = remember(cast) { CastPlayback(cast) }
+    DisposableEffect(playback) { onDispose { playback.stop() } }
+    LaunchedEffect(playback) { playback.start() }
 
     ModalScrim(onDismiss = onDismiss) {
         Column(
@@ -71,31 +64,65 @@ fun CastPlayerOverlay(cast: Asciicast, onDismiss: () -> Unit) {
                 .background(D.surface)
                 .border(1.dp, D.lineStrong, RoundedCornerShape(10.dp)),
         ) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Txt(cast.title ?: stringResource(Res.string.term_player_title), color = D.textBright, size = 13.sp, weight = FontWeight.SemiBold)
-                    if (cast.truncated) Txt(stringResource(Res.string.term_player_truncated), color = D.amber, size = 11.sp)
-                }
-                IconBtn("close", onClick = onDismiss)
-            }
-            Box(Modifier.weight(1f).fillMaxWidth().background(D.terminalBg)) {
-                if (cast.events.isEmpty()) {
-                    Txt(
-                        stringResource(Res.string.term_player_empty),
-                        color = D.faint,
-                        size = 12.sp,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                } else {
-                    TerminalScreen(terminal, Modifier.fillMaxSize())
-                }
-            }
-            TransportBar(player)
+            CastPlayerContent(playback, onClose = onDismiss)
         }
     }
+}
+
+/**
+ * A recording as a work-area view: the player tab's content ([app.skerry.ui.session.SessionView.Player]).
+ * Playback lives on the tab ([app.skerry.ui.session.Session.playback]), so switching tabs pauses
+ * nothing and coming back continues where the recording stood; closing the tab stops it.
+ */
+@Composable
+fun CastPlayerView() {
+    val playback = LocalSessions.current?.active?.playback ?: return
+    // Start on first display only ([CastPlayback.start]) — returning to the tab must not rewind.
+    LaunchedEffect(playback) { playback.start() }
+    Column(Modifier.fillMaxSize().background(D.surface)) {
+        CastPlayerContent(playback, onClose = null)
+    }
+}
+
+/**
+ * Title strip, the replayed terminal and the transport bar. [onClose] draws a close button (the
+ * overlay's only way out); in a tab the chip's own cross closes it, so it is `null` there.
+ *
+ * Playback is driven by a [CastPlayer] posing as the session, so nothing here knows it isn't live.
+ */
+@Composable
+private fun ColumnScope.CastPlayerContent(playback: CastPlayback, onClose: (() -> Unit)?) {
+    val cast = playback.cast
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Txt(cast.title ?: stringResource(Res.string.term_player_title), color = D.textBright, size = 13.sp, weight = FontWeight.SemiBold)
+            if (cast.truncated) Txt(stringResource(Res.string.term_player_truncated), color = D.amber, size = 11.sp)
+        }
+        if (onClose != null) IconBtn("close", onClick = onClose)
+    }
+    Box(Modifier.weight(1f).fillMaxWidth().background(D.terminalBg)) {
+        if (cast.events.isEmpty()) {
+            Txt(
+                stringResource(Res.string.term_player_empty),
+                color = D.faint,
+                size = 12.sp,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        } else {
+            // Pinned to the geometry the recording was taken at, with the font scaled to fill the
+            // pane: re-flowing a recording would leave empty columns in a wide window and wrap its
+            // lines in a narrow one.
+            TerminalScreen(
+                playback.terminal,
+                Modifier.fillMaxSize(),
+                fixedGrid = PtySize(cols = cast.columns, rows = cast.rows),
+            )
+        }
+    }
+    TransportBar(playback.player)
 }
 
 /** Play/pause, replay, seekable progress and speed — everything the player is driven by. */

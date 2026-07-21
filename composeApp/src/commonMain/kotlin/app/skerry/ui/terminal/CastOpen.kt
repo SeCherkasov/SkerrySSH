@@ -8,7 +8,8 @@ import kotlinx.coroutines.withContext
 
 /** What came back from "Play a recording": a recording, nothing (cancelled), or an unusable file. */
 sealed interface CastOpenResult {
-    data class Loaded(val cast: Asciicast) : CastOpenResult
+    /** [fileName] is the picked file's name — the player tab is labelled with it. */
+    data class Loaded(val cast: Asciicast, val fileName: String) : CastOpenResult
 
     data object Cancelled : CastOpenResult
 
@@ -21,7 +22,7 @@ sealed interface CastOpenResult {
  * recording is megabytes of JSON lines, and the picker returns on the UI dispatcher.
  */
 suspend fun openCastFile(): CastOpenResult {
-    val text = importTextFile() ?: return CastOpenResult.Cancelled
-    val cast = withContext(Dispatchers.Default) { parseAsciicast(text) } ?: return CastOpenResult.Invalid
-    return CastOpenResult.Loaded(cast)
+    val file = importTextFile() ?: return CastOpenResult.Cancelled
+    val cast = withContext(Dispatchers.Default) { parseAsciicast(file.text) } ?: return CastOpenResult.Invalid
+    return CastOpenResult.Loaded(cast, file.name)
 }

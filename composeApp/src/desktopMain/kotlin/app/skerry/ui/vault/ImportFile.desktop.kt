@@ -15,7 +15,7 @@ import org.jetbrains.compose.resources.getString
  * The modal dialog runs a nested EDT event loop, so it is shown on [Dispatchers.Swing] and the read
  * happens on IO. A file over [maxBytes] is rejected before it is read.
  */
-actual suspend fun importTextFile(maxBytes: Int): String? {
+actual suspend fun importTextFile(maxBytes: Int): ImportedFile? {
     val title = getString(Res.string.term_player_open)
     val path = withContext(Dispatchers.Swing) {
         val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD).apply { isVisible = true }
@@ -26,7 +26,7 @@ actual suspend fun importTextFile(maxBytes: Int): String? {
     return withContext(Dispatchers.IO) {
         runCatching {
             val file = File(path)
-            if (file.length() > maxBytes) null else file.readText()
+            if (file.length() > maxBytes) null else ImportedFile(file.name, file.readText())
         }.getOrNull()
     }
 }

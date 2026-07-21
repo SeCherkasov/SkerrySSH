@@ -12,6 +12,8 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.terminal.Asciicast
+import app.skerry.shared.terminal.CastEvent
 import app.skerry.shared.vnc.VncAuth
 import app.skerry.shared.vnc.VncFramebuffer
 import app.skerry.shared.vnc.VncPointerEvent
@@ -589,6 +591,68 @@ class SessionsControllerTest {
 
         assertTrue(sessions.sessions.isEmpty())
         assertTrue(vncTransport.sessions.single().closed)
+        scope.cancel()
+    }
+
+    // Player tabs
+
+    private val cast = Asciicast(80, 24, "deploy", listOf(CastEvent(0.0, "hi")))
+
+    @Test
+    fun `openPlayer opens a player tab locked to the Player view`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+
+        val id = sessions.openPlayer("deploy", cast)
+
+        assertEquals(id, sessions.activeId)
+        val tab = sessions.active!!
+        assertTrue(tab.isPlayer)
+        assertFalse(tab.isBlank) // a player tab is not an empty tab waiting for a connection
+        assertEquals(SessionView.Player, tab.view)
+        assertEquals(cast, tab.playback?.cast)
+
+        sessions.setActiveView(SessionView.Sftp) // no-op on a player tab
+        assertEquals(SessionView.Player, tab.view)
+        sessions.close(id)
+        scope.cancel()
+    }
+
+    @Test
+    fun `openPlayer opens a fresh tab instead of reusing a blank one`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val blank = sessions.openBlank()
+
+        val id = sessions.openPlayer("deploy", cast)
+
+        assertTrue(id != blank)
+        assertEquals(2, sessions.sessions.size)
+        sessions.close(id)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing a player tab stops its playback`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val id = sessions.openPlayer("deploy", cast)
+        val playback = sessions.active!!.playback!!
+
+        sessions.close(id)
+
+        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(playback.stopped)
+        scope.cancel()
+    }
+
+    @Test
+    fun `disconnectAll stops playback too`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        sessions.openPlayer("deploy", cast)
+        val playback = sessions.active!!.playback!!
+
+        sessions.disconnectAll()
+
+        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(playback.stopped)
         scope.cancel()
     }
 
