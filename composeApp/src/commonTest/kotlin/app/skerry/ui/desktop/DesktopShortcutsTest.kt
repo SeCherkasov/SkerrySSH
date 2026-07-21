@@ -42,6 +42,13 @@ class DesktopShortcutsTest {
     }
 
     @Test
+    fun `broadcast is on the app modifier plus B`() {
+        assertEquals(DesktopShortcut.Broadcast, match(meta = true, key = Key.B))
+        assertEquals(DesktopShortcut.Broadcast, match(ctrl = true, shift = true, key = Key.B))
+        assertNull(match(ctrl = true, key = Key.B)) // plain Ctrl+B belongs to the terminal
+    }
+
+    @Test
     fun `app modifier on macOS is Cmd alone`() {
         assertEquals(DesktopShortcut.NewConnection, match(meta = true, key = Key.N))
         assertEquals(DesktopShortcut.SplitTerminal, match(meta = true, key = Key.D))

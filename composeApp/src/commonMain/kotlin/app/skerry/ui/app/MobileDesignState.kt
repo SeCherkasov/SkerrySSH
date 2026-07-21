@@ -14,6 +14,7 @@ import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.terminal.TerminalCursorStyle
@@ -164,6 +165,12 @@ class MobileDesignState(
         route = null
         selectedHostId = null
     }
+
+    /**
+     * Which sessions a broadcast addresses. Held here, not in the sheet, so a selection survives
+     * closing and reopening it (see [app.skerry.ui.session.BroadcastController]).
+     */
+    val broadcast = BroadcastController()
 
     /**
      * View state of the snippet library (search, category chip, collapsed sections). Lives here so

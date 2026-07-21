@@ -86,4 +86,13 @@
     <string name="mosh_err_udp">mosh-server 已启动，但 UDP 端口 %1$s 没有回复。防火墙可能在服务器端或途中阻止了 Mosh UDP 范围 60000–61000。注意：Mosh 需要到主机的直接 UDP 路径 — 不通过跳板主机中继。</string>
     <string name="mosh_err_bootstrap">mosh-server 在主机上启动失败：%1$s</string>
     <string name="mosh_err_bootstrap_no_output">mosh-server 在主机上启动失败（无输出）。请检查服务器上是否已安装并可以运行 Mosh。</string>
+    <string name="term_broadcast_title">广播</string>
+    <string name="term_broadcast_subtitle">一条命令同时发送到多个会话</string>
+    <string name="term_broadcast_placeholder">要在所有会话中运行的命令…</string>
+    <string name="term_broadcast_send">发送</string>
+    <string name="term_broadcast_select_all">全选</string>
+    <string name="term_broadcast_clear">清除</string>
+    <string name="term_broadcast_none">没有已连接的会话</string>
+    <string name="term_broadcast_selected">已选 %1$s / %2$s</string>
+    <string name="term_broadcast_sent">已发送到 %1$s</string>
 </resources>

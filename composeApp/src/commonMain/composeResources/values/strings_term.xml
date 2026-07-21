@@ -86,4 +86,13 @@
     <string name="mosh_err_udp">mosh-server started, but no reply came back on UDP port %1$s. A firewall is likely blocking the Mosh UDP range 60000–61000 on the server or on the way. Note: Mosh needs a direct UDP path to the host — it does not relay through jump hosts.</string>
     <string name="mosh_err_bootstrap">mosh-server failed to start on the host: %1$s</string>
     <string name="mosh_err_bootstrap_no_output">mosh-server failed to start on the host (no output). Check that Mosh is installed and runnable on the server.</string>
+    <string name="term_broadcast_title">Broadcast</string>
+    <string name="term_broadcast_subtitle">Run one command on several sessions</string>
+    <string name="term_broadcast_placeholder">Command to run everywhere…</string>
+    <string name="term_broadcast_send">Send</string>
+    <string name="term_broadcast_select_all">Select all</string>
+    <string name="term_broadcast_clear">Clear</string>
+    <string name="term_broadcast_none">No connected sessions</string>
+    <string name="term_broadcast_selected">%1$s of %2$s selected</string>
+    <string name="term_broadcast_sent">Sent to %1$s</string>
 </resources>

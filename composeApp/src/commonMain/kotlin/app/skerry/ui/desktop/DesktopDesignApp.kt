@@ -92,7 +92,9 @@ import app.skerry.ui.host.GroupDialog as GroupEditDialog
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.session.BroadcastPanel
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
@@ -632,7 +634,10 @@ private fun DesktopChrome(
         val onRootKey = remember(snippets, sessions, state) {
             { event: KeyEvent ->
                 if (event.type != KeyEventType.KeyDown) false
-                else if (state.appOverlay != null || state.modalOpen || state.settingsOpen || state.commandPaletteOpen) false
+                else if (
+                    state.appOverlay != null || state.modalOpen || state.settingsOpen ||
+                    state.commandPaletteOpen || state.broadcastOpen
+                ) false
                 else {
                     val shortcut = matchDesktopShortcut(
                         event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
@@ -653,6 +658,13 @@ private fun DesktopChrome(
                 }
                 HLine()
                 StatusBar()
+            }
+            if (state.broadcastOpen) {
+                BroadcastPanel(
+                    controller = state.broadcast,
+                    targets = broadcastTargets(sessions),
+                    onDismiss = state::closeBroadcast,
+                )
             }
             if (state.commandPaletteOpen) {
                 val liveTerminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
@@ -830,6 +842,7 @@ private fun runDesktopShortcut(
             state.showView(DesktopView.Sftp)
         }
         DesktopShortcut.Lock -> onLock()
+        DesktopShortcut.Broadcast -> state.openBroadcast()
         // Only over a live terminal: the palette inserts into it, so with nothing to insert into the
         // key falls through (to the snippet hotkey) instead of opening a dead-end overlay.
         DesktopShortcut.CommandPalette -> {
