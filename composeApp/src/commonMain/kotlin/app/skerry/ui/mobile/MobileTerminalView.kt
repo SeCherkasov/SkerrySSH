@@ -68,6 +68,7 @@ import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
 import app.skerry.ui.generated.resources.term_monitor_title
+import app.skerry.ui.generated.resources.term_palette_title
 import app.skerry.ui.generated.resources.term_no_active_session
 import app.skerry.ui.generated.resources.term_mobile_open_host_connect
 import app.skerry.ui.generated.resources.term_connecting
@@ -92,6 +93,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -176,6 +178,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     var menuOpen by remember(active?.id) { mutableStateOf(false) }
     // Host monitor sheet (desktop info-panel parity) — raised from the same menu, connected only.
     var monitorOpen by remember(active?.id) { mutableStateOf(false) }
+    // Command history palette (desktop ⌘K parity) — same menu, connected only.
+    var historyOpen by remember(active?.id) { mutableStateOf(false) }
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
@@ -277,6 +281,14 @@ fun MobileTerminalScreen(state: MobileDesignState) {
         if (monitorOpen && active?.controller != null && activeTerminal != null) {
             MobileHostMonitorSheet(active.controller, onDismiss = { monitorOpen = false })
         }
+        if (historyOpen && activeTerminal != null) {
+            MobileCommandPaletteSheet(
+                history = LocalTerminalHistory.current,
+                currentKey = active?.controller?.historyKey,
+                onPick = { command -> activeTerminal.applyHistoryCommand(command); historyOpen = false },
+                onDismiss = { historyOpen = false },
+            )
+        }
         if (menuOpen && onDisconnect != null) {
             MobileBottomSheet(
                 onDismiss = { menuOpen = false },
@@ -291,6 +303,13 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             onClick = { menuOpen = false; monitorOpen = true },
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             icon = "monitoring",
+                            filled = false,
+                        )
+                        MobileSheetButton(
+                            label = stringResource(Res.string.term_palette_title),
+                            onClick = { menuOpen = false; historyOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "history",
                             filled = false,
                         )
                     }
