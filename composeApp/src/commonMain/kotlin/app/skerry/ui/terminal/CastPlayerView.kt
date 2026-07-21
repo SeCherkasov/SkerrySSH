@@ -51,7 +51,10 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun CastPlayerOverlay(cast: Asciicast, onDismiss: () -> Unit) {
-    val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main) }
+    // Default, not Main, exactly like a live session ([ConnectionController]): the terminal state
+    // feeds the ANSI parser from this scope, and a seek hands it every event up to the target in one
+    // chunk. On the main dispatcher that parse freezes the UI (an ANR on Android) for a long take.
+    val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
     val player = remember(cast) { CastPlayer(cast, scope) }
     val terminal = remember(player) { TerminalScreenState(player, scope) }
     DisposableEffect(player) { onDispose { scope.cancel() } }

@@ -34,19 +34,21 @@ fun RecordSessionButton(
     val terminal = (session?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val scope = rememberCoroutineScope()
     val recording = terminal?.recording == true
-    val toggle = onClick@{
-            val live = terminal ?: return@onClick
-            if (!live.recording) {
-                live.startRecording(session.displayTitle.ifBlank { session.subtitle })
-                return@onClick
-            }
-            val truncated = live.recordingTruncated
-            val cast = live.stopRecording()
-            if (cast == null || live.recordingWasEmpty(cast)) {
-                onDone(RecordingOutcome.Empty)
-                return@onClick
-            }
+    // Start/stop go through the terminal's command loop (it owns the recorder), so the whole toggle
+    // runs in a coroutine rather than inline in the click.
+    val toggle = {
             scope.launch {
+                val live = terminal ?: return@launch
+                if (!live.recording) {
+                    live.startRecording(session.displayTitle.ifBlank { session.subtitle })
+                    return@launch
+                }
+                val truncated = live.recordingTruncated
+                val cast = live.stopRecording()
+                if (cast == null || live.recordingWasEmpty(cast)) {
+                    onDone(RecordingOutcome.Empty)
+                    return@launch
+                }
                 val name = castFileName(session.displayTitle.ifBlank { session.subtitle }, recordingStamp())
                 val saved = exportTextFile(name, cast)
                 onDone(
@@ -57,6 +59,7 @@ fun RecordSessionButton(
                     },
                 )
             }
+            Unit
         }
     // The hotkey does exactly what a click does. rememberUpdatedState so a collector started for an
     // earlier session doesn't keep toggling a terminal that is no longer on screen.
