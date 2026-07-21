@@ -84,6 +84,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.vault.AddPasswordDialog
+import app.skerry.ui.vault.AgentBadge
 import app.skerry.ui.design.Badge
 import app.skerry.ui.vault.CertificateDetailBody
 import app.skerry.ui.design.D
@@ -391,6 +392,7 @@ private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: Fon
                     }
                     is CredentialSecret.Password -> Unit
                 }
+                AgentBadge(credential, size = 9.sp)
             }
             val meta = when (credential.secret) {
                 is CredentialSecret.PrivateKey ->

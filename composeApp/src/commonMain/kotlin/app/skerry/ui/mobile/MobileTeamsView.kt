@@ -422,7 +422,7 @@ private fun MobileTeamDetail(
         if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
     }
 
-    MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_members))
+    MobileSectionLabel(stringResource(Res.string.lib_teams_members))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         members.forEach { m ->
             val modifiable = canManage && m.accountId != team.ownerAccountId && canModifyMember(team.role, m.role)
@@ -436,7 +436,7 @@ private fun MobileTeamDetail(
         }
     }
 
-    MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
+    MobileSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
     sharedHosts.forEach { host ->
         MobileSharedRow(host.label, "${host.username}@${host.address}", canUnshare = canWrite) { onUnshare(host.id) }
@@ -445,7 +445,7 @@ private fun MobileTeamDetail(
         GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
     }
 
-    MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size))
+    MobileSectionLabel(stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size))
     if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
     sharedSnippets.forEach { snippet ->
         MobileSharedRow(snippet.label, snippet.command, canUnshare = canWrite) { onUnshare(snippet.id) }
@@ -463,10 +463,6 @@ private fun MobileTeamDetail(
     }
 }
 
-@Composable
-private fun MobileTeamsSectionLabel(text: String) {
-    Txt(text.uppercase(), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 24.dp, bottom = 10.dp))
-}
 
 @Composable
 private fun MobileTeamChip(team: TeamUi, active: Boolean, onClick: () -> Unit) {

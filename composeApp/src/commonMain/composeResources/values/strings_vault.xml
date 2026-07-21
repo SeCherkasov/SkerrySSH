@@ -113,4 +113,5 @@
     <string name="vault_reset_scope_everything_subtitle">Also delete host profiles, known_hosts and settings.</string>
     <string name="vault_reset_confirm_label">Type %1$s to confirm</string>
     <string name="vault_reset_confirm_button">Reset permanently</string>
+    <string name="vault_badge_agent">in agent</string>
 </resources>

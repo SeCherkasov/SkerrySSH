@@ -5,6 +5,8 @@ import java.io.IOException
 import java.net.StandardProtocolFamily
 import java.net.UnixDomainSocketAddress
 import java.nio.channels.Channels
+import java.nio.channels.SelectionKey
+import java.nio.channels.Selector
 import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
 import java.nio.file.FileSystems
@@ -54,7 +56,20 @@ class UnixSocketSshAgent(
     private val clients = ConcurrentHashMap.newKeySet<SocketChannel>()
 
     private var channel: ServerSocketChannel? = null
+    private var selector: Selector? = null
     private var acceptJob: Job? = null
+
+    // Guards the handover of an accepted connection into [clients]. A client can be connected (the
+    // kernel completes a unix-socket connect before anything calls accept) while stop() is running:
+    // without this, it would be registered after stop() emptied the set and served on past the
+    // switch-off, holding a thread in a blocking read for the rest of the app's life.
+    private val lock = Any()
+    private var listening = false
+
+    // Which round of start()/stop() we are in. A connection accepted by the previous round's loop
+    // could otherwise be handed to a socket the user has since switched off and on again, and be
+    // served as if it belonged to the new one.
+    private var generation = 0
 
     /** Path of the socket while it is listening, `null` when stopped. */
     var socketPath: Path? = null
@@ -87,9 +102,28 @@ class UnixSocketSshAgent(
             runCatching { server.close() }
             throw e
         }
+        // Accept through a selector rather than a blocking accept(): stop() then has a wakeup() that
+        // is guaranteed to end the loop. A thread parked in a blocking accept() is only woken as a
+        // side effect of closing the channel, and while it sits there the listening descriptor stays
+        // open — a client that connected but had not been accepted yet would keep waiting for an
+        // answer from an agent that is already switched off.
+        val selector = Selector.open()
+        try {
+            server.configureBlocking(false)
+            server.register(selector, SelectionKey.OP_ACCEPT)
+        } catch (e: IOException) {
+            runCatching { selector.close() }
+            runCatching { server.close() }
+            throw e
+        }
         channel = server
+        this.selector = selector
         socketPath = path
-        acceptJob = scope.launch { accept(server) }
+        val round = synchronized(lock) {
+            listening = true
+            ++generation
+        }
+        acceptJob = scope.launch { accept(server, selector, round) }
         return path
     }
 
@@ -104,29 +138,54 @@ class UnixSocketSshAgent(
         // Then close what those coroutines are blocked on. A client that keeps its connection open
         // without sending anything (a long-lived `ssh`) sits in a read that cancellation alone does
         // not end, and would hold a thread and an fd for the rest of the app's life.
-        clients.forEach { runCatching { it.close() } }
-        clients.clear()
-        // Closing the channel is what unblocks accept(); the coroutine is already cancelled, but a
-        // blocking accept only returns once the channel is gone.
+        synchronized(lock) {
+            listening = false
+            clients.forEach { runCatching { it.close() } }
+            clients.clear()
+        }
+        // wakeup() ends the select the accept loop sits in (cancellation alone does not), and closing
+        // the listening channel releases its descriptor, which resets whatever the kernel had queued
+        // behind it — a client that connected without being accepted gets an answer, not a hang.
+        selector?.let { runCatching { it.wakeup() } }
         runCatching { channel?.close() }
+        runCatching { selector?.close() }
         channel = null
+        selector = null
         path?.let { runCatching { Files.deleteIfExists(it) } }
     }
 
-    private suspend fun accept(server: ServerSocketChannel) {
+    private suspend fun accept(server: ServerSocketChannel, selector: Selector, round: Int) {
         while (true) {
-            val client = try {
-                runInterruptible { server.accept() }
+            try {
+                runInterruptible { selector.select() }
             } catch (e: IOException) {
-                return // channel closed by stop(), or the listener died
+                return // selector or channel closed by stop()
             }
-            if (openConnections.get() >= MAX_CONNECTIONS) {
-                runCatching { client.close() }
-                continue
+            selector.selectedKeys().clear()
+            while (true) {
+                // Non-blocking: null means the batch is drained and we go back to select().
+                val client = try {
+                    server.accept() ?: break
+                } catch (e: IOException) {
+                    return // the listening channel is gone
+                }
+                val accepted = synchronized(lock) {
+                    if (!listening || generation != round || openConnections.get() >= MAX_CONNECTIONS) false
+                    else {
+                        openConnections.incrementAndGet()
+                        clients += client
+                        true
+                    }
+                }
+                if (!accepted) {
+                    // Over the ceiling, or this round is over (socket switched off, possibly back
+                    // on since) — either way the client is closed, not served.
+                    runCatching { client.close() }
+                    if (synchronized(lock) { !listening || generation != round }) return
+                    continue
+                }
+                scope.launch { serve(client) }
             }
-            openConnections.incrementAndGet()
-            clients += client
-            scope.launch { serve(client) }
         }
     }
 

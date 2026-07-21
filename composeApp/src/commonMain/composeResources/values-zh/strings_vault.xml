@@ -113,4 +113,5 @@
     <string name="vault_reset_scope_everything_subtitle">同时删除主机配置、known_hosts 和设置。</string>
     <string name="vault_reset_confirm_label">输入 %1$s 以确认</string>
     <string name="vault_reset_confirm_button">永久重置</string>
+    <string name="vault_badge_agent">代理中</string>
 </resources>

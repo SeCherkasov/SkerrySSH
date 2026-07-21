@@ -34,6 +34,23 @@ import app.skerry.ui.design.Txt
  * source of truth instead of per-screen copies (new-connection sheet, snippets, ports, AI settings).
  */
 
+/**
+ * Group heading on a mobile settings screen ("KEYS IN THE AGENT", "MEMBERS"). Uppercased here, so a
+ * screen can pass a resource in whatever case it is written in. The desktop
+ * [app.skerry.ui.settings.SectionLabel] stays separate: same idea, denser layout.
+ */
+@Composable
+internal fun MobileSectionLabel(text: String) {
+    Txt(
+        text.uppercase(),
+        color = D.faint,
+        size = 10.5.sp,
+        weight = FontWeight.SemiBold,
+        letterSpacing = 0.6.sp,
+        modifier = Modifier.padding(top = 22.dp, bottom = 9.dp),
+    )
+}
+
 /** Field label (uppercase) + content. */
 @Composable
 internal fun MobileFormField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {

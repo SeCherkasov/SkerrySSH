@@ -127,6 +127,23 @@ class UnixSocketSshAgentTest {
     }
 
     @Test
+    fun `a client from the previous round is not served after a restart`() {
+        // Switching the socket off and straight back on is one click in Settings; a connection that
+        // belonged to the old listener must end with it, not be picked up by the new one.
+        val path = start(emptyList())
+        SocketChannel.open(StandardProtocolFamily.UNIX).use { channel ->
+            channel.connect(UnixDomainSocketAddress.of(path))
+            val input = Channels.newInputStream(channel)
+            agent?.stop()
+            agent?.start()
+
+            val eof = withDeadline { runCatching { input.read() }.getOrDefault(-1) }
+
+            assertEquals(-1, eof, "a connection from before the restart is still being served")
+        }
+    }
+
+    @Test
     fun `stop removes the socket`() {
         val path = start(emptyList())
         assertTrue(Files.exists(path))

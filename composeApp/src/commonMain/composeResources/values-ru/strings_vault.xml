@@ -113,4 +113,5 @@
     <string name="vault_reset_scope_everything_subtitle">Также удалить профили хостов, known_hosts и настройки.</string>
     <string name="vault_reset_confirm_label">Впишите %1$s для подтверждения</string>
     <string name="vault_reset_confirm_button">Сбросить безвозвратно</string>
+    <string name="vault_badge_agent">в агенте</string>
 </resources>

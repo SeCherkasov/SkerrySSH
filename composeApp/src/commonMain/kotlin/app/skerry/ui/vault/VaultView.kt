@@ -451,6 +451,7 @@ private fun LiveSecretCard(
                         Txt(credential.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
                         info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp) }
                         if (info?.expired == true) Badge(stringResource(Res.string.vault_badge_expired), bg = D.sunset.copy(alpha = 0.16f), fg = D.sunset, radius = 3, size = 9.5.sp)
+                        AgentBadge(credential)
                     }
                     val meta = when {
                         info == null -> stringResource(Res.string.vault_meta_certificate, usedBy)
@@ -467,6 +468,7 @@ private fun LiveSecretCard(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Txt(credential.label, color = D.text, size = 13.5.sp, weight = FontWeight.SemiBold)
                         info?.keyTypeLabel?.let { Badge(it, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp) }
+                        AgentBadge(credential)
                     }
                     val meta = if (info != null) {
                         stringResource(Res.string.vtail_meta_fingerprint, shortFingerprint(info.fingerprintSha256), usedBy)
