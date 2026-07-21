@@ -10,6 +10,8 @@ import app.skerry.shared.terminal.CommandHistory
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.DEFAULT_MAX_SCROLLBACK
 import app.skerry.shared.terminal.MouseButton
+import app.skerry.shared.terminal.SessionRecorder
+import app.skerry.shared.terminal.epochMillis
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
@@ -137,6 +139,46 @@ class TerminalScreenState(
     var selection: TerminalSelection? by mutableStateOf(null)
         private set
 
+    // Session recording (asciinema v2). Written only by the single output collector below; the UI
+    // reads [recording] to draw the indicator. Held in memory until the user exports it — see
+    // [SessionRecorder] on why it is bounded rather than streamed to disk.
+    private var recorder: SessionRecorder? = null
+
+    /** Whether this session is being recorded. */
+    var recording: Boolean by mutableStateOf(false)
+        private set
+
+    /** Whether the running recording hit its size limit and stopped collecting. */
+    val recordingTruncated: Boolean get() = recorder?.truncated == true
+
+    /**
+     * Start recording this session's output. [title] names the recording in the asciicast header
+     * (the host label). Recording while already recording keeps the existing take.
+     */
+    fun startRecording(title: String?) {
+        if (recorder != null) return
+        val startedAt = epochMillis()
+        recorder = SessionRecorder(
+            columns = cols,
+            rows = rows,
+            startedAtEpochSeconds = startedAt / 1000,
+            title = title,
+            now = ::epochMillis,
+        )
+        recording = true
+    }
+
+    /**
+     * Stop recording and return the asciicast, or `null` if nothing was being recorded. The caller
+     * exports it; nothing is written to disk here.
+     */
+    fun stopRecording(): String? {
+        val cast = recorder?.finish()
+        recorder = null
+        recording = false
+        return cast
+    }
+
     /**
      * DECCKM (application-cursor-keys) mode from the emulator: apps like vim/less/htop enable it,
      * and arrow keys must then be sent as SS3 (`ESC O A`) instead of CSI. Read by the UI when
@@ -223,7 +265,10 @@ class TerminalScreenState(
         // in `for (cmd in commands)`.
         scope.launch {
             try {
-                session.output.collect { chunk -> commands.send(TerminalCommand.Feed(chunk)) }
+                session.output.collect { chunk ->
+                    recorder?.record(chunk)
+                    commands.send(TerminalCommand.Feed(chunk))
+                }
             } finally {
                 commands.close()
             }

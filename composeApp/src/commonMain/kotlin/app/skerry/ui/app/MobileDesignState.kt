@@ -17,6 +17,8 @@ import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.vault.AutoLockDuration
+import app.skerry.shared.terminal.Asciicast
+import app.skerry.ui.terminal.CastOpenResult
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
@@ -178,6 +180,24 @@ class MobileDesignState(
      * [app.skerry.ui.snippet.SnippetLibraryState]).
      */
     val snippetLibrary = SnippetLibraryState()
+
+    /** Recording being played back over the app, or `null` when the player is closed. */
+    var castRecording: Asciicast? by mutableStateOf(null); private set
+
+    /** Whether the last picked file turned out not to be a recording (shown as a notice). */
+    var castInvalid: Boolean by mutableStateOf(false); private set
+
+    fun showCast(result: CastOpenResult) {
+        when (result) {
+            is CastOpenResult.Loaded -> castRecording = result.cast
+            CastOpenResult.Invalid -> castInvalid = true
+            CastOpenResult.Cancelled -> Unit // the user backed out; nothing to report
+        }
+    }
+
+    fun closeCast() { castRecording = null }
+
+    fun dismissCastError() { castInvalid = false }
 
     /** Names of collapsed host-list folders (their host list is hidden). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set

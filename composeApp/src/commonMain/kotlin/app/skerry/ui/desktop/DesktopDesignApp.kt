@@ -104,6 +104,8 @@ import app.skerry.ui.sync.SyncIndicatorLevel
 import app.skerry.ui.sync.syncIndicatorLocalized
 import app.skerry.ui.terminal.CommandPalette
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.CastPlayerOverlay
+import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
@@ -122,6 +124,10 @@ import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_this_session
+import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_player_invalid
+import app.skerry.ui.generated.resources.term_player_title
+import app.skerry.ui.generated.resources.term_record_start
 import app.skerry.ui.generated.resources.shell_disconnect_title
 import app.skerry.ui.generated.resources.shell_disconnect_message
 import app.skerry.ui.generated.resources.shell_disconnect
@@ -150,6 +156,7 @@ import app.skerry.ui.app.DesktopView
 import app.skerry.ui.design.Dot
 import app.skerry.ui.app.FeatureFlags
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalConnectHost
@@ -636,7 +643,7 @@ private fun DesktopChrome(
                 if (event.type != KeyEventType.KeyDown) false
                 else if (
                     state.appOverlay != null || state.modalOpen || state.settingsOpen ||
-                    state.commandPaletteOpen || state.broadcastOpen
+                    state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null
                 ) false
                 else {
                     val shortcut = matchDesktopShortcut(
@@ -658,6 +665,24 @@ private fun DesktopChrome(
                 }
                 HLine()
                 StatusBar()
+            }
+            // The player owns the whole work area while it is open; Esc (via ModalScrim) closes it.
+            state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }
+            if (state.castInvalid) {
+                NoticeDialog(
+                    title = stringResource(Res.string.term_player_title),
+                    message = stringResource(Res.string.term_player_invalid),
+                    buttonLabel = stringResource(Res.string.term_ai_dismiss),
+                    onDismiss = state::dismissCastError,
+                )
+            }
+            state.recordingNotice?.let { outcome ->
+                NoticeDialog(
+                    title = stringResource(Res.string.term_record_start),
+                    message = recordingOutcomeMessage(outcome),
+                    buttonLabel = stringResource(Res.string.term_ai_dismiss),
+                    onDismiss = state::dismissRecordingNotice,
+                )
             }
             if (state.broadcastOpen) {
                 BroadcastPanel(
