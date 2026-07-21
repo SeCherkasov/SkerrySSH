@@ -153,6 +153,14 @@ class ConnectionController(
     var serverVersion: String? by mutableStateOf(null)
         private set
 
+    /**
+     * History key of the live session (see [terminalHistoryKey]), or `null` while not connected.
+     * The command palette reads it to put this host's commands first. Snapshot state so the palette
+     * sees the key appear when a session connects under it.
+     */
+    var historyKey: String? by mutableStateOf(null)
+        private set
+
     private var connectJob: Job? = null
     // Target/auth of the last connect — used by auto-reconnect after a drop (reconnects to the same target).
     private var lastTarget: SshTarget? = null
@@ -240,6 +248,7 @@ class ConnectionController(
             val historyKey = terminalHistoryKey(
                 target.connectionType.name, target.username, target.host, target.port,
             )
+            this.historyKey = historyKey
             val loadedHistory = history?.load(historyKey).orEmpty()
             // Snapshot terminal settings at connect time: they apply to the new session.
             val prefs = terminalPrefs()
@@ -253,8 +262,10 @@ class ConnectionController(
                 clipboardWriteEnabled = prefs.clipboardWriteEnabled,
                 onHistoryChanged = history?.let { store ->
                     // Moves the write off the UI thread onto the controller's scope (Default):
-                    // commands are infrequent and the write is small.
-                    { snapshot -> scope.launch { store.save(historyKey, snapshot) } }
+                    // commands are infrequent and the write is small. The label rides along so the
+                    // command palette can name the host a command came from.
+                    val label = "${target.username}@${target.host}"
+                    { snapshot -> scope.launch { store.save(historyKey, snapshot, label) } }
                 },
             )
             // Keep-alive per the profile's cadence (0 = off, SSH-only): pings run from the moment

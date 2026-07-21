@@ -10,6 +10,7 @@ import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -189,6 +190,9 @@ class DesktopDesignState(
     var locked: Boolean by mutableStateOf(false); private set
     var modalOpen: Boolean by mutableStateOf(false); private set
 
+    /** Whether the command palette (⌘K / Ctrl+Shift+K) is open over the active session. */
+    var commandPaletteOpen: Boolean by mutableStateOf(false); private set
+
     /** Whether the broadcast panel (⌘B / Ctrl+Shift+B) is open. */
     var broadcastOpen: Boolean by mutableStateOf(false); private set
 
@@ -217,6 +221,13 @@ class DesktopDesignState(
      */
     var vncSidebar: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
+
+    /**
+     * View state of the snippet library (search, category chip, collapsed sections). Lives here so
+     * leaving the Snippets section and coming back doesn't reset the view; not persisted across
+     * restarts (see [app.skerry.ui.snippet.SnippetLibraryState]).
+     */
+    val snippetLibrary = SnippetLibraryState()
 
     /** Names of collapsed host folders in the sidebar (their host lists are hidden). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
@@ -363,6 +374,8 @@ class DesktopDesignState(
     fun requestCloseSplit(parentId: String) { pendingClose = PendingClose.Split(parentId) }
     fun dismissClose() { pendingClose = null }
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
+    fun openCommandPalette() { commandPaletteOpen = true }
+    fun closeCommandPalette() { commandPaletteOpen = false }
     fun openBroadcast() { broadcastOpen = true }
     fun closeBroadcast() { broadcastOpen = false }
     fun openSettings() { settingsOpen = true }

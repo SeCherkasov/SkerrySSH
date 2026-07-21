@@ -34,6 +34,14 @@ class DesktopShortcutsTest {
     }
 
     @Test
+    fun `the command palette is on the app modifier plus K`() {
+        assertEquals(DesktopShortcut.CommandPalette, match(meta = true, key = Key.K))
+        assertEquals(DesktopShortcut.CommandPalette, match(ctrl = true, shift = true, key = Key.K))
+        // Plain Ctrl+K stays with the terminal (readline kill-line).
+        assertNull(match(ctrl = true, key = Key.K))
+    }
+
+    @Test
     fun `broadcast is on the app modifier plus B`() {
         assertEquals(DesktopShortcut.Broadcast, match(meta = true, key = Key.B))
         assertEquals(DesktopShortcut.Broadcast, match(ctrl = true, shift = true, key = Key.B))

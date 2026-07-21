@@ -10,6 +10,11 @@
     <string name="term_no_active_session">Нет активной сессии</string>
     <string name="term_run_snippet_placeholder">Запустить сниппет…</string>
     <string name="term_no_snippets_yet">Пока нет сниппетов</string>
+    <string name="term_palette_title">История команд</string>
+    <string name="term_palette_placeholder">Поиск по командам…</string>
+    <string name="term_palette_empty">Команды пока не записаны</string>
+    <string name="term_palette_hint">Enter вставит команду в терминал, но не выполнит её</string>
+    <string name="term_palette_this_host">этот хост</string>
     <string name="term_no_matches">Нет совпадений</string>
     <string name="term_untitled">Без названия</string>
     <string name="term_notice_pick_host_to_connect">Выберите хост в боковой панели, чтобы подключиться.</string>
