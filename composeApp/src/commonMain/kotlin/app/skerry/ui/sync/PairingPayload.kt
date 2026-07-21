@@ -83,9 +83,25 @@ class PairingPayload(
                 // would burn a one-time code on a truncated QR. A wrong key length or invalid URL
                 // scheme (a tampered QR) is a decode failure, not a burned code.
                 if (transferKey.size != TRANSFER_KEY_SIZE) return@runCatching null
-                if (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) return@runCatching null
+                if (!hasHttpHost(serverUrl)) return@runCatching null
                 PairingPayload(serverUrl, code, transferKey)
             }.getOrNull()
+        }
+
+        /**
+         * `http(s)://` followed by an authority that actually names a host. The scheme alone isn't
+         * enough: a truncation can leave a bare `https://`, which would sail through to
+         * [SyncCoordinator.claimPairing] and surface as an unactionable network error instead of
+         * "doesn't look like a pairing code". Userinfo and port are stripped before the check, so
+         * `https://:8443` and `https://user@` fail it too; an IPv6 literal keeps its bracket and passes.
+         */
+        private fun hasHttpHost(url: String): Boolean {
+            val authority = when {
+                url.startsWith("https://") -> url.removePrefix("https://")
+                url.startsWith("http://") -> url.removePrefix("http://")
+                else -> return false
+            }
+            return authority.substringBefore('/').substringAfterLast('@').substringBefore(':').isNotBlank()
         }
     }
 }

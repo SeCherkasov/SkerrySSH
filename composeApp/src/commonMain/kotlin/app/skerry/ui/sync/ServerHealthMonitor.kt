@@ -1,6 +1,7 @@
 package app.skerry.ui.sync
 
 import app.skerry.shared.sync.SyncClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -56,7 +57,16 @@ internal class ServerHealthMonitor(
                         return@collectLatest
                     }
                     while (true) {
-                        val ok = runCatching { clientFor(url).ping() }.getOrDefault(false)
+                        // Not runCatching: it would swallow CancellationException and report a cancelled
+                        // ping (scope teardown, target change) as "server down" — on a StateFlow that
+                        // outlives the scope, so the indicator would stay stuck on it.
+                        val ok = try {
+                            clientFor(url).ping()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            false
+                        }
                         _reachable.value =
                             if (ok) ServerReachable.REACHABLE else ServerReachable.UNREACHABLE
                         delay(pollMs)

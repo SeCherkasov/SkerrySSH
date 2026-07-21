@@ -207,10 +207,13 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -
     var reload by remember { mutableStateOf(0) }
     LaunchedEffect(sync, reload) {
         loading = true
-        // Revoked devices are hidden (server keeps the row with revoked=true); current device first
-        // (sortedByDescending is stable, so the rest keep their order).
-        devices = sync.listDevices().filter { !it.revoked }.sortedByDescending { it.current }
-        loading = false
+        try {
+            // Revoked devices are hidden (server keeps the row with revoked=true); current device first
+            // (sortedByDescending is stable, so the rest keep their order).
+            devices = sync.listDevices().filter { !it.revoked }.sortedByDescending { it.current }
+        } finally {
+            loading = false // never strand the spinner, whichever way the load ends
+        }
     }
 
     Txt(stringResource(Res.string.settings_linked_devices), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))

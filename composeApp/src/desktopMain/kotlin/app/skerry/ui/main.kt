@@ -312,8 +312,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val onVaultUnlocked: () -> Unit = {
         // Vault opened, so reload managers (including AI BYOK settings) from decrypted records.
         reloadManagers()
-        // keep-connected: vault opened means a dataKey exists, so the sync session can be silently restored.
-        sync.restoreSession()
+        // Resume the live sync paused by the lock, or — on a cold start with keep-connected — silently
+        // restore the session (the open vault means a dataKey to unseal the refresh token with).
+        sync.resumeAfterUnlock()
     }
     // External cleanup on an irreversible vault reset (forgotten password / corrupted file). The
     // vault file is already erased by the controller (Vault.reset) and now locked, so

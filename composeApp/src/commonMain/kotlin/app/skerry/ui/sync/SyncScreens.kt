@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -158,10 +159,25 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     SyncStatusNotice("sync", D.cyanBright, stringResource(Res.string.sync_connecting), stringResource(Res.string.sync_connecting_sub))
                 }
+                // Connecting hit an existing account under a different password (issue #28): the connect
+                // is paused until the user decides. Without this the form here just snapped back to idle
+                // — no notice, no buttons, nothing explaining why nothing happened (issue #30).
+                // Shown above the form rather than replacing it, so the typed server/account survive a
+                // decline; submit is disabled meanwhile, like during Busy.
+                val pendingReplace = status as? SyncStatus.NeedsPasswordReplaceConfirm
+                if (pendingReplace != null) {
+                    // No dismiss callback to hang the decline on (this is a full screen, not a modal), so
+                    // leaving onboarding declines: a pending replace left behind keeps the typed password
+                    // in memory and strands the status.
+                    DisposableEffect(Unit) { onDispose { sync.cancelPasswordReplace() } }
+                    Spacer(Modifier.height(8.dp))
+                    PasswordReplaceConfirm(sync, pendingReplace.accountId)
+                    Spacer(Modifier.height(16.dp))
+                }
                 SyncSetupBody(
                     sync,
                     errorMessage = (status as? SyncStatus.Failed)?.let { syncFailureText(it) },
-                    busy = busy,
+                    busy = busy || pendingReplace != null,
                 )
             }
         }

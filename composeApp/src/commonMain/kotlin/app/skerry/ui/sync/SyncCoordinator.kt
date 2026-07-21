@@ -291,6 +291,12 @@ class SyncCoordinator(
     @Volatile
     private var pushJob: Job? = null
 
+    // Set by [pauseForLock], cleared by [resumeAfterUnlock]: which of the two the coordinator should end
+    // up obeying when they queue up behind a long operation holding [opMutex], regardless of the order
+    // their coroutines get dispatched in.
+    @Volatile
+    private var lockPaused = false
+
     // Serializes all sync cycles: launched by activateSession, manual syncNow, WS live-pull (watchJob),
     // and auto-push of local edits (pushJob) — on Dispatchers.Default they'd otherwise run in parallel
     // and race on the cursor ([syncState]) and [_status] (two engines read cursor=N, both write
@@ -512,6 +518,7 @@ class SyncCoordinator(
         config: SyncConfig,
         resetCursor: Boolean,
     ) {
+        val superseded = client?.takeIf { it !== syncClient }
         client = syncClient
         session = newSession
         if (resetCursor) syncState.setCursor(config.accountId, 0)
@@ -520,6 +527,18 @@ class SyncCoordinator(
         runSync()
         startWatch()
         startLocalPush()
+        // Reconnecting over a live session (switching accounts, a confirmed password replace) leaves the
+        // previous Ktor client with its socket pool: only disconnect used to close one. Closed last, once
+        // startWatch/startLocalPush have cancelled and joined the subscriptions that were using it, and
+        // under syncMutex so it can't be closed out from under an in-flight sync.
+        if (superseded != null) syncMutex.withLock { runCatching { superseded.close() } }
+        // The vault may have locked while this operation held opMutex: [pauseForLock] then ran first,
+        // found no session to stop and left the flag for us. Undo the live half right here — otherwise
+        // the subscriptions just published would outlive the lock with nothing left to cancel them.
+        if (lockPaused) {
+            stopSubscriptions()
+            _status.value = SyncStatus.Configured(config.serverUrl, config.accountId)
+        }
     }
 
     /**
@@ -958,15 +977,9 @@ class SyncCoordinator(
         // tears down its result entirely (invariant: no live client after disconnect).
         scope.launch {
             opMutex.withLock {
-                // First cancel both live subscriptions and wait for them to stop: cancel() only sends a
-                // signal, and their collect might be mid-runSync() — without join its finishing runSync
-                // would write Online after the Disabled set below (status stuck on Online with client==null).
-                watchJob?.cancel()
-                pushJob?.cancel()
-                watchJob?.join()
-                pushJob?.join()
-                watchJob = null
-                pushJob = null
+                // First cancel both live subscriptions and wait for them to stop, so a finishing runSync
+                // can't write Online after the Disabled set below (status stuck on Online, client==null).
+                stopSubscriptions()
                 // close() and nulling client/session under syncMutex: manual syncNow() launches runSync()
                 // and isn't tracked/cancelled anywhere, so without the lock disconnect could close the Ktor
                 // client during its own in-flight request. withLock waits for the current runSync; the next
@@ -988,6 +1001,71 @@ class SyncCoordinator(
                 _status.value = SyncStatus.Disabled
             }
         }
+    }
+
+    /**
+     * Suspend live sync for the duration of a vault lock (from `onBeforeLock`, so it covers the manual
+     * lock and both automatic ones): stop the WS live-pull and the local-push subscription. Everything
+     * needed to come back — the client, the session, the saved link — is kept, so [resumeAfterUnlock]
+     * doesn't ask for a password. This is NOT [disconnect]: that one erases the link.
+     *
+     * Without it both subscriptions keep running against a vault that can no longer decrypt: every WS
+     * signal drives a [runSync] that throws inside the vault, the status parks on Failed, and the WS
+     * retry loop keeps reconnecting on a 60s backoff for nothing. The health ping deliberately keeps
+     * running (see [ServerHealthMonitor]) — reachability doesn't depend on the vault.
+     */
+    fun pauseForLock() {
+        // Set synchronously, before the launch: [resumeAfterUnlock] clears it, so an unlock that beats
+        // this coroutine to opMutex (a long connect holding the lock across lock+unlock) cancels the
+        // pause instead of tearing down the session the resume just kept.
+        lockPaused = true
+        // No early return on a null session: a connect in flight holds opMutex and would publish its
+        // subscriptions after the lock, with nothing left to stop them. Queueing behind it stops them.
+        scope.launch {
+            opMutex.withLock {
+                if (!lockPaused || session == null) return@withLock
+                stopSubscriptions()
+                // The link is intact, only the live half is gone: Configured is exactly that state.
+                configStore.load()?.let { _status.value = SyncStatus.Configured(it.serverUrl, it.accountId) }
+            }
+        }
+    }
+
+    /**
+     * Bring sync back after the vault is unlocked. A session paused by [pauseForLock] is still in
+     * memory — resubscribe and pull what was missed; otherwise (cold start) fall back to
+     * [restoreSession]. Called from `onVaultUnlocked` on both platforms.
+     */
+    fun resumeAfterUnlock() {
+        lockPaused = false
+        if (session == null) {
+            restoreSession()
+            return
+        }
+        scope.launch {
+            opMutex.withLock {
+                // A disconnect or a fresh connect may have run while we waited for the mutex; a
+                // reconnect has already restarted the subscriptions itself.
+                if (lockPaused || session == null || watchJob != null) return@withLock
+                runSync()
+                startWatch()
+                startLocalPush()
+            }
+        }
+    }
+
+    /**
+     * Cancel and await both live subscriptions. cancel() only signals — a collect might be mid-[runSync],
+     * and without the join its finishing cycle would write a status after the caller set its own.
+     * Under [opMutex] like every other write to these fields.
+     */
+    private suspend fun stopSubscriptions() {
+        watchJob?.cancel()
+        pushJob?.cancel()
+        watchJob?.join()
+        pushJob?.join()
+        watchJob = null
+        pushJob = null
     }
 
     /**

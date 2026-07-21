@@ -433,13 +433,14 @@ class MainActivity : FragmentActivity() {
         // A missing team key (dropped by an older client's delta sync) is only fixed by a full re-pull.
         teams.onKeyMissing = { sync.recoverFullPull() }
         sync.onTeamSignal = teams::onSignal
-        // Manager reload and sync session restore on unlock (restoreSession manages its own scope).
+        // Manager reload and sync resume on unlock (the coordinator manages its own scope): the live
+        // sync paused by the lock comes back, a cold start restores the keep-connected session instead.
         onVaultUnlocked = {
             hosts.reload()
             snippets.reload()
             tunnels.reload()
             knownHosts.refresh()
-            sync.restoreSession()
+            sync.resumeAfterUnlock()
         }
         // Clears data outside the vault on reset. The vault file is already wiped and locked, so
         // credentials aren't touched here (secrets reload when a new vault is created). Host
