@@ -55,8 +55,10 @@ fun DesktopView.asSessionView(): SessionView = when (this) {
 fun SessionView.asDesktopView(): DesktopView = when (this) {
     SessionView.Terminal -> DesktopView.Terminal
     SessionView.Sftp -> DesktopView.Sftp
-    // VNC has no dedicated rail item (it's a work-area view, like Terminal); don't highlight one.
+    // VNC and the recording player have no dedicated rail item (they're work-area views, like
+    // Terminal); don't highlight one.
     SessionView.Vnc -> DesktopView.Terminal
+    SessionView.Player -> DesktopView.Terminal
 }
 
 /** Settings panel tabs. */
