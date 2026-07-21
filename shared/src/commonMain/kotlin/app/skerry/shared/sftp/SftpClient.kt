@@ -32,10 +32,12 @@ interface SftpClient {
     suspend fun realpath(path: String): String
 
     /**
-     * Reads file [path] entirely into memory (small files only).
-     * @throws SftpException path doesn't exist, is a directory, or lacks permission
+     * Reads file [path] entirely into memory (small files only), refusing anything over [maxBytes].
+     * The limit is enforced while streaming, not just against the size the server reports: a server
+     * is free to understate the size (or report `0`, as special files do) and then keep sending.
+     * @throws SftpException path doesn't exist, is a directory, lacks permission, or exceeds [maxBytes]
      */
-    suspend fun read(path: String): ByteArray
+    suspend fun read(path: String, maxBytes: Long = SFTP_MAX_READ_BYTES): ByteArray
 
     /**
      * Writes [data] to file [path], creating or truncating it. The parent directory must exist.
@@ -122,6 +124,12 @@ data class SftpEntry(
     val modifiedEpochSeconds: Long,
     val permissions: Int,
 )
+
+/**
+ * Default whole-file read cap ([SftpClient.read]), 64 MiB: a backstop against reading a huge file
+ * into memory when the caller doesn't set its own, smaller limit.
+ */
+const val SFTP_MAX_READ_BYTES: Long = 64L * 1024 * 1024
 
 /** SFTP operation error: missing path/permission, wrong object type, or channel failure. */
 class SftpException(message: String, cause: Throwable? = null) : Exception(message, cause)

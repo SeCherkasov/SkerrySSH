@@ -9,6 +9,7 @@ import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.UploadSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -16,7 +17,9 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val LHOME = "/local/home"
@@ -409,5 +412,82 @@ class TransferCoordinatorTest {
         // The library text ("disk full") never reaches the bar — only the typed reason does.
         val failed = assertIs<TransferState.Failed>(r.coordinator.transfer)
         assertEquals(FileTransferFailure.Transfer, failed.failure)
+    }
+
+    @Test
+    fun `openEditor loads the cursored remote file through the pane's source`() = runTest {
+        val remote = remoteFake().apply { seedContent("$RHOME/nginx.conf", "server {}\n") }
+        val r = rig(remote = remote)
+        r.remote.refresh(); advanceUntilIdle()
+
+        val editor = r.coordinator.openEditor(fromLocal = false, item = r.remote.entry("nginx.conf"), readOnly = false)
+        advanceUntilIdle()
+
+        assertNotNull(editor)
+        assertEquals("server {}\n", (editor.state as FileEditState.Ready).text)
+    }
+
+    @Test
+    fun `openEditor rebuilds the path from the pane directory instead of the listing path`() = runTest {
+        // A hostile server can put any path in a listing entry; the editor must read (and later
+        // write) the file under the directory actually being browsed.
+        val remote = remoteFake().apply {
+            seedContent("$RHOME/nginx.conf", "real\n")
+            seedDir("/etc")
+            seedContent("/etc/shadow", "secret\n")
+        }
+        val r = rig(remote = remote)
+        r.remote.refresh(); advanceUntilIdle()
+        val forged = r.remote.entry("nginx.conf").copy(path = "/etc/shadow")
+        remote.contentCalls.clear()
+
+        val editor = r.coordinator.openEditor(fromLocal = false, item = forged, readOnly = false)
+        advanceUntilIdle()
+
+        assertEquals("real\n", (editor!!.state as FileEditState.Ready).text)
+        assertTrue(remote.contentCalls.none { it.endsWith("/etc/shadow") }, "must not touch the forged path")
+
+        editor.edit("changed\n")
+        editor.save()
+        advanceUntilIdle()
+
+        assertEquals("changed\n", remote.contentOf("$RHOME/nginx.conf"))
+        assertEquals("secret\n", remote.contentOf("/etc/shadow"))
+    }
+
+    @Test
+    fun `openEditor refuses a listing entry whose name is not a plain path component`() = runTest {
+        val r = rig()
+        val hostile = r.remote.entry("r.txt").copy(name = "../../etc/shadow")
+
+        assertNull(r.coordinator.openEditor(fromLocal = false, item = hostile, readOnly = false))
+    }
+
+    @Test
+    fun `awaitEditorWrites suspends until the editor's save has finished`() = runTest {
+        // Session teardown closes the SFTP channel; an editor save runs on the session scope and
+        // outlives the editor UI, so the close must wait — an interrupted write truncates the file.
+        val remote = remoteFake().apply { seedContent("$RHOME/nginx.conf", "before\n") }
+        val r = rig(remote = remote)
+        r.remote.refresh(); advanceUntilIdle()
+        val editor = r.coordinator.openEditor(fromLocal = false, item = r.remote.entry("nginx.conf"), readOnly = false)!!
+        advanceUntilIdle()
+        editor.edit("after\n")
+        remote.writeGate = CompletableDeferred()
+
+        editor.save()
+        advanceUntilIdle()
+
+        var released = false
+        val waiter = scope().launch { r.coordinator.awaitEditorWrites(); released = true }
+        advanceUntilIdle()
+        assertFalse(released, "teardown must not proceed while a save is in flight")
+
+        remote.writeGate!!.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(released)
+        assertEquals("after\n", remote.contentOf("$RHOME/nginx.conf"))
+        waiter.cancel()
     }
 }

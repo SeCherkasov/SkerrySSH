@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -114,6 +115,56 @@ class SftpFileBrowserTest {
     }
 
     @Test
+    fun `stat maps an entry and reports a missing path as null`() = runTest {
+        client.stats["/d/a.txt"] = SftpEntry("a.txt", "/d/a.txt", SftpEntryType.File, 42, 200, 0)
+
+        val item = browser().stat("/d/a.txt")
+
+        assertEquals("a.txt", item?.name)
+        assertEquals(42, item?.size)
+        assertEquals(200, item?.modifiedEpochSeconds)
+        assertEquals(FileItemType.File, item?.type)
+        assertNull(browser().stat("/d/missing"))
+    }
+
+    @Test
+    fun `readFile returns the file bytes`() = runTest {
+        client.contents["/d/a.txt"] = "hello".encodeToByteArray()
+
+        assertEquals("hello", browser().readFile("/d/a.txt", maxBytes = 1024).decodeToString())
+    }
+
+    @Test
+    fun `readFile refuses a file larger than the cap without reading it`() = runTest {
+        client.stats["/d/big.log"] = SftpEntry("big.log", "/d/big.log", SftpEntryType.File, 5_000, 0, 0)
+        client.contents["/d/big.log"] = ByteArray(5_000)
+
+        val e = assertFailsWith<FileBrowserException> { browser().readFile("/d/big.log", maxBytes = 1024) }
+
+        assertEquals(FileBrowserFailure.TooLarge, e.failure)
+        assertFalse("read:/d/big.log" in client.calls)
+    }
+
+    @Test
+    fun `readFile refuses oversized content even when the server understated the size`() = runTest {
+        // A server may report any size it likes: the cap must also hold against the bytes actually read.
+        client.stats["/d/liar"] = SftpEntry("liar", "/d/liar", SftpEntryType.File, 1, 0, 0)
+        client.contents["/d/liar"] = ByteArray(5_000)
+
+        val e = assertFailsWith<FileBrowserException> { browser().readFile("/d/liar", maxBytes = 1024) }
+
+        assertEquals(FileBrowserFailure.TooLarge, e.failure)
+    }
+
+    @Test
+    fun `writeFile is delegated`() = runTest {
+        browser().writeFile("/d/a.txt", "new".encodeToByteArray())
+
+        assertTrue("write:/d/a.txt" in client.calls)
+        assertEquals("new", client.contents["/d/a.txt"]?.decodeToString())
+    }
+
+    @Test
     fun `sftp errors are wrapped in FileBrowserException`() = runTest {
         client.failList = true
 
@@ -136,6 +187,8 @@ private class RecordingSftp : SftpClient {
     val calls = mutableListOf<String>()
     var listResult: List<SftpEntry> = emptyList()
     val listings = mutableMapOf<String, List<SftpEntry>>()
+    val stats = mutableMapOf<String, SftpEntry>()
+    val contents = mutableMapOf<String, ByteArray>()
     var failList = false
     var cancelList = false
 
@@ -146,14 +199,25 @@ private class RecordingSftp : SftpClient {
         return listings[path] ?: listResult
     }
 
-    override suspend fun stat(path: String): SftpEntry? = null
+    override suspend fun stat(path: String): SftpEntry? {
+        calls += "stat:$path"
+        return stats[path] ?: contents[path]?.let { SftpEntry(path.substringAfterLast('/'), path, SftpEntryType.File, it.size.toLong(), 0, 0) }
+    }
+
     override suspend fun realpath(path: String): String {
         calls += "realpath:$path"
         return "/resolved$path"
     }
 
-    override suspend fun read(path: String): ByteArray = ByteArray(0)
-    override suspend fun write(path: String, data: ByteArray) {}
+    override suspend fun read(path: String, maxBytes: Long): ByteArray {
+        calls += "read:$path"
+        return contents[path] ?: throw SftpException("No file $path")
+    }
+
+    override suspend fun write(path: String, data: ByteArray) {
+        calls += "write:$path"
+        contents[path] = data
+    }
     override suspend fun download(remotePath: String, localPath: String, onProgress: SftpProgress) {}
     override suspend fun upload(localPath: String, remotePath: String, onProgress: SftpProgress) {}
     override suspend fun mkdir(path: String) { calls += "mkdir:$path" }

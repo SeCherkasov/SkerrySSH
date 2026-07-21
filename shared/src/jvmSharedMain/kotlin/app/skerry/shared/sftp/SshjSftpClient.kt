@@ -1,6 +1,8 @@
 package app.skerry.shared.sftp
 
+import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.util.EnumSet
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
@@ -21,9 +23,10 @@ import net.schmizz.sshj.xfer.TransferListener
  * (`SFTPException`) and disconnects (`IOException`) are wrapped in [SftpException]; the one
  * exception is [stat], where "no such file" is `null`, not an error.
  *
- * [maxReadBytes] caps [read] by the file's **reported** size, guarding against OOM from
- * accidentally opening a multi-gigabyte file. Special files reporting size zero (`/dev/zero`
- * etc.) aren't covered by this — that needs a streaming limit, not implemented yet.
+ * [maxReadBytes] is the channel's own ceiling for [read]; the effective limit is the smaller of it
+ * and the caller's `maxBytes`. It is enforced both against the reported size (so an honestly-large
+ * file isn't fetched at all) and while streaming (so a server understating the size — `0` for
+ * `/dev/zero` and friends — can't grow the buffer without bound).
  */
 internal class SshjSftpClient(
     private val sftp: SFTPClient,
@@ -61,13 +64,14 @@ internal class SshjSftpClient(
         sftp.canonicalize(path)
     }
 
-    override suspend fun read(path: String): ByteArray = io("Failed to read file $path") {
+    override suspend fun read(path: String, maxBytes: Long): ByteArray = io("Failed to read file $path") {
+        val cap = minOf(maxBytes, maxReadBytes)
         sftp.open(path).use { file ->
             val size = file.length()
-            if (size > maxReadBytes) {
-                throw SftpException("File $path is too large to read whole: $size B (limit $maxReadBytes B)")
+            if (size > cap) {
+                throw SftpException("File $path is too large to read whole: $size B (limit $cap B)")
             }
-            file.RemoteFileInputStream().use { it.readBytes() }
+            file.RemoteFileInputStream().use { readAtMost(it, cap, path) }
         }
     }
 
@@ -165,9 +169,28 @@ internal class SshjSftpClient(
         }
 
     private companion object {
-        /** Default read cap for [read] (64 MiB). */
-        const val DEFAULT_MAX_READ_BYTES = 64L * 1024 * 1024
+        /** Default channel-level read cap for [read]; the shared contract's [SFTP_MAX_READ_BYTES]. */
+        const val DEFAULT_MAX_READ_BYTES = SFTP_MAX_READ_BYTES
     }
+}
+
+/**
+ * Reads [input] fully but never past [cap] bytes, so a source that understates its size (or streams
+ * endlessly, as a special file does) can't grow the buffer without bound. Overshooting is an error,
+ * not a truncation: silently returning a cut-off file would be corruption the moment it's saved back.
+ */
+internal fun readAtMost(input: InputStream, cap: Long, label: String): ByteArray {
+    val out = ByteArrayOutputStream()
+    val chunk = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        val n = input.read(chunk)
+        if (n < 0) break
+        total += n
+        if (total > cap) throw SftpException("File $label is larger than the read limit of $cap B")
+        out.write(chunk, 0, n)
+    }
+    return out.toByteArray()
 }
 
 /** sshj listing entry to [SftpEntry] (name and path come from the server response). */

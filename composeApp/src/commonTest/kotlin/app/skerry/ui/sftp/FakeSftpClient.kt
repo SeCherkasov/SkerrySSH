@@ -10,9 +10,9 @@ import kotlinx.coroutines.CompletableDeferred
 /**
  * In-memory [SftpClient] for panel controller tests: models a directory/file tree with POSIX
  * path semantics (`.`/`..` normalization, `/` separator). Covers the operations the panel calls
- * ([list]/[realpath]/[stat]/[mkdir]/[rmdir]/[remove]/[rename]); [read]/[write] are stubs (the
- * directory panel controller doesn't use download/upload). Not thread-safe; tests run it on a
- * single test dispatcher.
+ * ([list]/[realpath]/[stat]/[mkdir]/[rmdir]/[remove]/[rename]) plus whole-file [read]/[write] over
+ * an in-memory content map (seeded with [seedContent]). Not thread-safe; tests run it on a single
+ * test dispatcher.
  *
  * Seeded via [seedDir]/[seedFile] after construction; the start directory [startDir] exists
  * immediately (init creates it and its ancestors), and [realpath] of `.` resolves to it.
@@ -54,9 +54,42 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
 
     override suspend fun realpath(path: String): String = realpathSync(path)
 
-    override suspend fun read(path: String): ByteArray = throw UnsupportedOperationException()
+    /** File contents for [read]/[write]; a seeded file with no content reads as empty. */
+    private val contents = mutableMapOf<String, ByteArray>()
 
-    override suspend fun write(path: String, data: ByteArray): Unit = throw UnsupportedOperationException()
+    /** Paths passed to [read]/[write], in order — for asserting which file an editor touched. */
+    val contentCalls = mutableListOf<String>()
+
+    /** Seeds [path] with [text] (and registers the file), for whole-file read tests. */
+    fun seedContent(path: String, text: String) {
+        val norm = realpathSync(path)
+        val bytes = text.encodeToByteArray()
+        seedFile(norm, size = bytes.size.toLong())
+        contents[norm] = bytes
+    }
+
+    /** Current content of [path], as written by [write]. */
+    fun contentOf(path: String): String? = contents[realpathSync(path)]?.decodeToString()
+
+    override suspend fun read(path: String, maxBytes: Long): ByteArray {
+        val norm = realpathSync(path)
+        contentCalls += "read:$norm"
+        val entry = children[parentOf(norm)]?.get(nameOf(norm)) ?: throw SftpException("No file $path")
+        if (entry.type == SftpEntryType.Directory) throw SftpException("$path is a directory, not a file")
+        return contents[norm] ?: ByteArray(0)
+    }
+
+    /** When set, [write] blocks until it completes — lets a test observe a save in flight. */
+    var writeGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun write(path: String, data: ByteArray) {
+        writeGate?.await()
+        val norm = realpathSync(path)
+        contentCalls += "write:$norm"
+        if (children[parentOf(norm)] == null) throw SftpException("No parent for $path")
+        contents[norm] = data
+        seedFile(norm, size = data.size.toLong())
+    }
 
     /** Last download call: (remotePath, localPath). For controller test assertions. */
     var lastDownload: Pair<String, String>? = null

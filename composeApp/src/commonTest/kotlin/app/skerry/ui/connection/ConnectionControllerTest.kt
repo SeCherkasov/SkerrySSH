@@ -1,6 +1,6 @@
 package app.skerry.ui.connection
 
-import app.skerry.shared.files.FileBrowser
+import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
@@ -721,7 +721,7 @@ private class RecordingSftpClient : SftpClient {
     override suspend fun list(path: String): List<SftpEntry> = emptyList()
     override suspend fun stat(path: String): SftpEntry? = null
     override suspend fun realpath(path: String): String = "/"
-    override suspend fun read(path: String): ByteArray = ByteArray(0)
+    override suspend fun read(path: String, maxBytes: Long): ByteArray = ByteArray(0)
     override suspend fun write(path: String, data: ByteArray) = Unit
     override suspend fun download(remotePath: String, localPath: String, onProgress: SftpProgress) = Unit
     override suspend fun upload(localPath: String, remotePath: String, onProgress: SftpProgress) = Unit
@@ -735,13 +735,16 @@ private class RecordingSftpClient : SftpClient {
 }
 
 /** Local file browser stub for the coordinator's left pane: only identity matters. */
-private class FakeFileBrowser : FileBrowser {
+private class FakeFileBrowser : FileContentBrowser {
     override val label: String = "local"
     override suspend fun realpath(path: String): String = "/"
     override suspend fun list(path: String): List<FileItem> = emptyList()
     override suspend fun mkdir(path: String) = Unit
     override suspend fun delete(item: FileItem) = Unit
     override suspend fun rename(from: String, to: String) = Unit
+    override suspend fun stat(path: String): FileItem? = null
+    override suspend fun readFile(path: String, maxBytes: Long): ByteArray = ByteArray(0)
+    override suspend fun writeFile(path: String, data: ByteArray) = Unit
 }
 
 /** Counts openShell calls — verifies a repeated connect doesn't open a second shell. */

@@ -11,6 +11,8 @@
     <string name="ftail_fkey_delete">Delete</string>
     <string name="ftail_fkey_refresh">Refresh</string>
     <string name="ftail_fkey_quit">Quit</string>
+    <string name="ftail_fkey_save">Save</string>
+    <string name="ftail_fkey_search">Search</string>
 
     <!-- Controller / effect error fallbacks -->
     <string name="ftail_open_failed">Failed to open SFTP</string>
@@ -24,6 +26,13 @@
     <string name="ftail_err_illegal_name">Unsafe name in the listing</string>
     <string name="ftail_err_open_source">Failed to open the selected file</string>
     <string name="ftail_err_open_target">Failed to open the save target</string>
+    <string name="ftail_err_too_large">File is too large to open</string>
+
+    <!-- Viewer/editor (F3/F4) failures -->
+    <string name="ftail_edit_err_read">Failed to read the file</string>
+    <string name="ftail_edit_err_too_large">File is too large for the editor</string>
+    <string name="ftail_edit_err_binary">Binary file — cannot be edited as text</string>
+    <string name="ftail_edit_err_write">Failed to save the file</string>
 
     <!-- Local filesystem source, shown in the pane header and breadcrumbs -->
     <string name="ftail_local_label">This device</string>
