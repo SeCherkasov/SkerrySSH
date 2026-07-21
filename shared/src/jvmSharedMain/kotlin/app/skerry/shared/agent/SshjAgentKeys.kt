@@ -1,19 +1,18 @@
 package app.skerry.shared.agent
 
 import app.skerry.shared.ssh.ensureCryptoProvider
+import app.skerry.shared.ssh.loadSshKeyPair
 import com.hierynomus.sshj.signature.SignatureEdDSA
 import java.security.PrivateKey
 import java.util.Base64
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
 import net.schmizz.sshj.signature.Signature
 import net.schmizz.sshj.signature.SignatureECDSA
 import net.schmizz.sshj.signature.SignatureRSA
-import net.schmizz.sshj.userauth.password.PasswordUtils
 
 /**
  * [SshAgentKeys] over the vault's keys, parsed with the same stack the transport authenticates
@@ -90,13 +89,10 @@ class SshjAgentKeys(
         // Android's system BouncyCastle is stripped down and cannot parse PEM keys; register the
         // full provider first (idempotent, no-op on desktop) — as the transport and key generator do.
         ensureCryptoProvider()
-        val pwdf = entry.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-        // SSHClient opens no connection here; `use` just frees the parsing resources (as in
-        // BouncyCastleSshKeyGenerator.inspect). Both key halves are taken inside the block.
-        val (privateKey, publicKey) = SSHClient().use { client ->
-            val keys = client.loadKeys(entry.privateKeyPem, null, pwdf)
-            keys.private to keys.public
-        }
+        // Every stored shape goes through the shared loader, PKCS#8 included ([loadSshKeyPair]).
+        val pair = loadSshKeyPair(entry.privateKeyPem, entry.passphrase)
+        val privateKey = pair.private
+        val publicKey = pair.public
         val publicBlob = Buffer.PlainBuffer().putPublicKey(publicKey).compactData
         LoadedKey(
             id = entry.id,

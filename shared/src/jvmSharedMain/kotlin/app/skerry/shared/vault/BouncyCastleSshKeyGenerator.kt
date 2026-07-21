@@ -1,10 +1,9 @@
 package app.skerry.shared.vault
 
 import app.skerry.shared.ssh.ensureCryptoProvider
-import net.schmizz.sshj.SSHClient
+import app.skerry.shared.ssh.loadSshKeyPair
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
-import net.schmizz.sshj.userauth.password.PasswordUtils
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.generators.RSAKeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
@@ -22,7 +21,7 @@ import java.util.Base64
  * JVM SSH key generator on BouncyCastle (lightweight crypto API), shared by desktop and Android.
  * Encodes the pair in the format sshj reads on connect ([SshjTransport]):
  *  - ED25519 → private key as `openssh-key-v1` (PEM `OPENSSH PRIVATE KEY`);
- *  - RSA-4096 → PKCS#1 (PEM `RSA PRIVATE KEY`) — both parsed by [SSHClient.loadKeys].
+ *  - RSA-4096 → PKCS#1 (PEM `RSA PRIVATE KEY`) — both parsed by [loadSshKeyPair].
  *
  * The public part (`authorized_keys` line + SHA256 fingerprint) is derived from the ssh-wire
  * encoding of the public key, matching OpenSSH's fingerprint. Keys are generated without a
@@ -64,9 +63,9 @@ class BouncyCastleSshKeyGenerator(
         // sshj loadKeys goes through the JCE "BC" provider, stripped down on Android, which breaks
         // PEM parsing. Register the full provider before parsing (idempotent).
         ensureCryptoProvider()
-        val pwdf = passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-        // SSHClient is Closeable; loadKeys opens no connection but resources are freed via use.
-        val publicKey = SSHClient().use { it.loadKeys(privateKeyPem, null, pwdf).public }
+        // Shared loader, so a key the vault accepts is a key the transport and the agent can use —
+        // PKCS#8 included, which sshj alone cannot read ([loadSshKeyPair]).
+        val publicKey = loadSshKeyPair(privateKeyPem, passphrase).public
         val publicBlob = Buffer.PlainBuffer().putPublicKey(publicKey).compactData
         SshPublicKeyInfo(
             // The PEM comment isn't recoverable; line has no trailing comment.

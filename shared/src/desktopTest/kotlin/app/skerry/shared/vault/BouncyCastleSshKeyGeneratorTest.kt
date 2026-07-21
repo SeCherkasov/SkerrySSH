@@ -79,4 +79,22 @@ class BouncyCastleSshKeyGeneratorTest {
         assertNull(gen.inspect("not a pem at all"))
         assertNull(gen.inspect(""))
     }
+
+    @Test
+    fun `inspects a pkcs8 key instead of calling it damaged`() {
+        // A pasted `BEGIN PRIVATE KEY` must show its type and fingerprint like any other key; sshj
+        // alone cannot parse it, so this covers the shared loader's fallback.
+        val pair = java.security.KeyPairGenerator.getInstance("EC")
+            .apply { initialize(java.security.spec.ECGenParameterSpec("secp256r1")) }
+            .generateKeyPair()
+        val pem = "-----BEGIN PRIVATE KEY-----\n" +
+            Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(pair.private.encoded) +
+            "\n-----END PRIVATE KEY-----\n"
+
+        val info = gen.inspect(pem, passphrase = null)
+
+        assertEquals("ECDSA-SHA2-NISTP256", info?.keyTypeLabel)
+        assertTrue(info!!.publicKeyOpenSsh.startsWith("ecdsa-sha2-nistp256 "))
+        assertTrue(info.fingerprintSha256.startsWith("SHA256:"))
+    }
 }

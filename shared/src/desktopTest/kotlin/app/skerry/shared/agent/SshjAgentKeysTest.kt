@@ -37,6 +37,16 @@ class SshjAgentKeysTest {
         val buffer = Buffer.PlainBuffer(blob)
         val algorithm = buffer.readString()
         val raw = buffer.readBytes()
+        // ECDSA on the wire is `mpint r || mpint s`, not the DER sequence JCA expects, so it is
+        // checked with the same decoder an sshj server uses rather than being re-encoded here.
+        if (algorithm.startsWith("ecdsa-")) {
+            val ecdsa = net.schmizz.sshj.signature.SignatureECDSA.Factory256().create()
+            ecdsa.initVerify(key)
+            ecdsa.update(data)
+            // extractSig wants the whole `algorithm || signature` blob, not the unwrapped half.
+            assertTrue(ecdsa.verify(blob), "signature does not verify under the offered key ($algorithm)")
+            return algorithm
+        }
         val jca = java.security.Signature.getInstance(
             when (algorithm) {
                 "ssh-ed25519" -> "Ed25519"
@@ -91,6 +101,58 @@ class SshjAgentKeysTest {
             "rsa-sha2-512",
             verify(key, challenge, assertNotNull(keys.sign(blob, challenge, SshAgentCodec.FLAG_RSA_SHA2_512)).blob),
         )
+    }
+
+    @Test
+    fun `signs a challenge with an ecdsa key`() = runTest {
+        // Skerry generates ED25519/RSA, but a user can paste an ECDSA key from elsewhere, and the
+        // agent must sign with it: the signature type comes from the PUBLIC half, because sshj
+        // classifies an EC private key as UNKNOWN and would silently refuse.
+        val (pem, publicLine) = ecdsaKey()
+        val keys = SshjAgentKeys({ listOf(material(pem)) })
+        val blob = keys.identities().single().keyBlob
+
+        assertContentEquals(publicBlob(publicLine), blob)
+        val signature = assertNotNull(keys.sign(blob, challenge, flags = 0))
+        assertEquals("ecdsa-sha2-nistp256", verify(publicKeyOf(blob), challenge, signature.blob))
+    }
+
+    @Test
+    fun `signs with a pkcs8 key, the shape sshj cannot read on its own`() = runTest {
+        // What `openssl genpkey` and most cloud consoles hand out. Before the shared loader such a
+        // key was simply invisible to the agent.
+        val pair = java.security.KeyPairGenerator.getInstance("EC")
+            .apply { initialize(java.security.spec.ECGenParameterSpec("secp256r1")) }
+            .generateKeyPair()
+        val pem = "-----BEGIN PRIVATE KEY-----\n" +
+            Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(pair.private.encoded) +
+            "\n-----END PRIVATE KEY-----\n"
+        val keys = SshjAgentKeys({ listOf(material(pem)) })
+        val blob = keys.identities().single().keyBlob
+
+        val signature = assertNotNull(keys.sign(blob, challenge, flags = 0))
+        assertEquals("ecdsa-sha2-nistp256", verify(publicKeyOf(blob), challenge, signature.blob))
+    }
+
+    /**
+     * A real P-256 key in the shape `ssh-keygen -t ecdsa` writes today: `openssh-key-v1` in an
+     * `OPENSSH PRIVATE KEY` PEM. (BouncyCastle's `encodePrivateKey` emits that container for EC —
+     * not the SEC1 DER an `EC PRIVATE KEY` header would promise, which is why the header matters.)
+     * Returned with its `authorized_keys` line, as ground truth for what the agent offers.
+     */
+    private fun ecdsaKey(): Pair<String, String> {
+        val generator = org.bouncycastle.crypto.generators.ECKeyPairGenerator().apply {
+            val curve = org.bouncycastle.asn1.x9.ECNamedCurveTable.getByName("P-256")
+            val domain = org.bouncycastle.crypto.params.ECDomainParameters(curve.curve, curve.g, curve.n, curve.h)
+            init(org.bouncycastle.crypto.params.ECKeyGenerationParameters(domain, java.security.SecureRandom()))
+        }
+        val pair = generator.generateKeyPair()
+        val der = org.bouncycastle.crypto.util.OpenSSHPrivateKeyUtil.encodePrivateKey(pair.private)
+        val pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n" +
+            Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(der) +
+            "\n-----END OPENSSH PRIVATE KEY-----\n"
+        val blob = org.bouncycastle.crypto.util.OpenSSHPublicKeyUtil.encodePublicKey(pair.public)
+        return pem to "ecdsa-sha2-nistp256 ${Base64.getEncoder().encodeToString(blob)}"
     }
 
     @Test

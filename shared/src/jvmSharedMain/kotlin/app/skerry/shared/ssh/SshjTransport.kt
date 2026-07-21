@@ -19,7 +19,6 @@ import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.userauth.UserAuthException
-import net.schmizz.sshj.userauth.password.PasswordUtils
 
 /**
  * Desktop implementation of [SshTransport] over sshj (JVM).
@@ -173,11 +172,9 @@ class SshjTransport(
             when (auth) {
                 is SshAuth.Password -> client.authPassword(username, auth.secret)
                 is SshAuth.PublicKey -> {
-                    // loadKeys treats the strings as key content (not a path); passphrase is a
-                    // one-off PasswordFinder. sshj detects the format (OpenSSH/PKCS) itself.
-                    val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-                    val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
-                    client.authPublickey(username, keys)
+                    // The shared loader takes the PEM as key content (not a path) and covers every
+                    // stored shape, PKCS#8 included ([loadSshKeyPair]).
+                    client.authPublickey(username, keyProvider(loadAuthKey(auth.privateKeyPem, auth.passphrase)))
                 }
                 is SshAuth.Certificate -> {
                     // Cert auth: possession is proven by the private key from PEM, while the
@@ -185,8 +182,7 @@ class SshjTransport(
                     // sshj doesn't stitch these together from strings on its own (only from
                     // sibling files), so we build the KeyProvider by hand: private from PEM,
                     // public as Certificate, type as *_CERT.
-                    val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-                    val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
+                    val keys = loadAuthKey(auth.privateKeyPem, auth.passphrase)
                     client.authPublickey(username, certificateKeyProvider(keys, auth.certificate))
                 }
             }
@@ -259,7 +255,14 @@ internal fun ensureCryptoProvider() {
  * type). The type is taken from the string's first field (`ssh-…-cert-v01@openssh.com`) — that's
  * `*_CERT`, and sshj uses it to send the server the cert blob.
  */
-private fun certificateKeyProvider(privateKeys: KeyProvider, certificate: String): KeyProvider {
+/** sshj's view of an already-parsed pair: type comes from the public half (EC needs that). */
+private fun keyProvider(pair: java.security.KeyPair): KeyProvider = object : KeyProvider {
+    override fun getPrivate(): PrivateKey = pair.private
+    override fun getPublic(): PublicKey = pair.public
+    override fun getType(): KeyType = KeyType.fromKey(pair.public)
+}
+
+private fun certificateKeyProvider(privateKeys: java.security.KeyPair, certificate: String): KeyProvider {
     val fields = certificate.trim().split(Regex("\\s+"))
     // A malformed/truncated cert string (missing second field, invalid base64, garbage wire data)
     // must not escape as an unhandled IndexOutOfBounds/IllegalArgument past the auth handlers —
