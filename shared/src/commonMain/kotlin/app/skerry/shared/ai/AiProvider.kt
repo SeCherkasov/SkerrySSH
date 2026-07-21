@@ -51,7 +51,8 @@ interface AiProvider {
     suspend fun close()
 }
 
-/** AI provider error: network, auth, rate limit, invalid request, or protocol. */
+/** AI provider error: network, auth, rate limit, invalid request, protocol, or a dead local engine. */
 class AiException(val kind: Kind, message: String, cause: Throwable? = null) : Exception(message, cause) {
-    enum class Kind { NETWORK, UNAUTHORIZED, RATE_LIMITED, INVALID_REQUEST, PROTOCOL }
+    /** [ENGINE_CRASHED] is local-only: the isolated inference host died (see `IsolatedLlmRuntime`). */
+    enum class Kind { NETWORK, UNAUTHORIZED, RATE_LIMITED, INVALID_REQUEST, PROTOCOL, ENGINE_CRASHED }
 }

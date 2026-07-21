@@ -2,6 +2,7 @@ package app.skerry.ui.ai
 
 import androidx.compose.runtime.Composable
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.settings_ai_error_engine_crashed
 import app.skerry.ui.generated.resources.settings_ai_error_invalid_request
 import app.skerry.ui.generated.resources.settings_ai_error_network
 import app.skerry.ui.generated.resources.settings_ai_error_protocol
@@ -22,6 +23,7 @@ fun aiFailureMessage(failure: AiFailure): String = stringResource(
         AiFailure.NETWORK -> Res.string.settings_ai_error_network
         AiFailure.INVALID_REQUEST -> Res.string.settings_ai_error_invalid_request
         AiFailure.PROTOCOL -> Res.string.settings_ai_error_protocol
+        AiFailure.ENGINE_CRASHED -> Res.string.settings_ai_error_engine_crashed
         AiFailure.UNKNOWN -> Res.string.settings_ai_error_unknown
     },
 )

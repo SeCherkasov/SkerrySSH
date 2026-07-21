@@ -61,6 +61,7 @@
     <string name="settings_ai_error_invalid_request">提供商拒绝了该请求（请检查模型和参数）。</string>
     <string name="settings_ai_error_protocol">AI 提供商返回了意外的响应。</string>
     <string name="settings_ai_error_unknown">AI 请求失败。请重试。</string>
+    <string name="settings_ai_error_engine_crashed">本地模型引擎意外停止。请重试。</string>
     <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">发送前清除敏感信息</string>
     <string name="settings_ai_sanitize_desc">在发送到外部提供商前，从提示中移除明显的密码、令牌和密钥。</string>

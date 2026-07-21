@@ -8,8 +8,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
-import app.skerry.shared.ai.local.LlamatikRuntime
+import app.skerry.shared.ai.local.IsolatedLlmRuntime
 import app.skerry.shared.ai.local.LocalModelStore
+import app.skerry.shared.ai.local.ServiceLlmHostLauncher
 import app.skerry.shared.ai.local.ModelDownloader
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
@@ -476,13 +477,14 @@ class MainActivity : FragmentActivity() {
             tunnels.reload()
         }
         // Local AI: GGUF models in the private filesDir/models (allowBackup=false so gigabyte-sized
-        // weights don't break cloud backup); inference via Llamatik/llama.cpp arm64. ctx 2048 keeps the
+        // weights don't break cloud backup); inference via Llamatik/llama.cpp arm64 in the ":llm"
+        // process (LlmHostService) so a native abort doesn't take the app down. ctx 2048 keeps the
         // KV cache within a few hundred MiB on phone-class RAM.
         val localModelStore = LocalModelStore(FileSystem.SYSTEM, dir.resolve("models").absolutePath.toPath())
         val localAi = LocalAiDeps(
             store = localModelStore,
             downloader = ModelDownloader(FileSystem.SYSTEM, localModelStore),
-            runtime = LlamatikRuntime(contextLength = 2048),
+            runtime = IsolatedLlmRuntime(ServiceLlmHostLauncher(this, contextLength = 2048)),
         )
         return AppDependencies(
             transport = transport,
