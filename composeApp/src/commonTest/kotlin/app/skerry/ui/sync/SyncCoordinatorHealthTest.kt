@@ -22,8 +22,10 @@ import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
 import app.skerry.shared.vault.VaultRecord
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -73,8 +75,29 @@ class SyncCoordinatorHealthTest {
         withTimeout(3_000) { sut.serverReachable.first { it == ServerReachable.UNKNOWN } }
     }
 
+    @Test
+    fun shutdown_during_a_ping_does_not_report_the_server_down() = runBlocking {
+        val client = HangingPingClient()
+        val sut = SyncCoordinator({ client }, StubCrypto(), StubVault(), configStore = configuredStore())
+        withTimeout(3_000) { client.pinging.first { it } }
+        // Cancelling the scope cancels the in-flight ping. Cancellation is not "the server is down":
+        // swallowing it here would leave the indicator (a StateFlow outliving the scope) on UNREACHABLE.
+        sut.close()
+        delay(200)
+        assertEquals(ServerReachable.UNKNOWN, sut.serverReachable.value)
+    }
+
     private fun configuredStore() = InMemorySyncConfigStore().apply {
         save(SyncConfig(serverUrl = "https://sync.test", accountId = "maya", deviceId = "dev-1"))
+    }
+}
+
+/** Client whose [ping] never answers, so it is still in flight when the scope is cancelled. */
+private class HangingPingClient : SyncClient by FakePingClient(reachable = true) {
+    val pinging = MutableStateFlow(false)
+    override suspend fun ping(): Boolean {
+        pinging.value = true
+        awaitCancellation()
     }
 }
 

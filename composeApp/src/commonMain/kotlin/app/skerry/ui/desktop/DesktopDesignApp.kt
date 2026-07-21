@@ -470,7 +470,7 @@ fun DesktopDesignApp(
                 // and restarts the idle timer; Never (idleMs == null) turns it off.
                 autoLockIdleMs = state.autoLock.idleMs,
                 // Runs on EVERY lock, including the two automatic ones that bypass the lock action.
-                onBeforeLock = { tearDownForLock(tunnels, sessions) },
+                onBeforeLock = { tearDownForLock(tunnels, sessions, sync) },
                 onReset = onVaultReset,
                 // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
                 // the coordinator creates the vault under the chosen password itself and accepts the account key.

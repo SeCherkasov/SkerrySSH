@@ -66,6 +66,15 @@ class PairingPayloadTest {
     }
 
     @Test
+    fun `decode rejects a server url without a host`() {
+        // A truncated QR can leave a bare scheme. The prefix check alone accepts it, and the claim
+        // then dies on a network error the user can't act on instead of the honest "not a pairing code".
+        assertNull(PairingPayload.decode(PairingPayload("https://", "code", ByteArray(32) { 1 }).encode()))
+        assertNull(PairingPayload.decode(PairingPayload("http://", "code", ByteArray(32) { 1 }).encode()))
+        assertNull(PairingPayload.decode(PairingPayload("https:///pairing", "code", ByteArray(32) { 1 }).encode()))
+    }
+
+    @Test
     fun `toString does not leak the transfer key or code`() {
         val s = PairingPayload("https://h", "secret-code", ByteArray(32) { 1 }).toString()
 

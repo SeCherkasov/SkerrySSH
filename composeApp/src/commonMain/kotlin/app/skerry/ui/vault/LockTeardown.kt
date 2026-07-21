@@ -1,6 +1,7 @@
 package app.skerry.ui.vault
 
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
 
 /**
@@ -15,12 +16,17 @@ import app.skerry.ui.tunnel.TunnelManager
  * the tabs are still there after unlocking — but their saved credentials are cleared, because an
  * auto-reconnect after a lock would re-authenticate with a stale secret against a locked vault.
  *
+ * Sync is paused, not disconnected ([SyncCoordinator.pauseForLock] — the link and the session stay, only
+ * the live subscriptions stop): behind a lock every sync cycle would throw inside the vault while the WS
+ * kept retrying. [SyncCoordinator.resumeAfterUnlock] is the other half, wired to `onVaultUnlocked`.
+ *
  * Shared by desktop and Android so the two can't drift apart on which of these gets forgotten.
  */
-fun tearDownForLock(tunnels: TunnelManager?, sessions: SessionsController?) {
+fun tearDownForLock(tunnels: TunnelManager?, sessions: SessionsController?, sync: SyncCoordinator?) {
     tunnels?.closeAll()
     sessions?.sessions?.forEach { session ->
         session.controller.clearReconnectCredentials()
         session.splitSession?.controller?.clearReconnectCredentials()
     }
+    sync?.pauseForLock()
 }
