@@ -37,4 +37,5 @@
     <string name="agent_prompt_hint">No answer within two minutes refuses the request.</string>
     <string name="agent_prompt_allow">Allow once</string>
     <string name="agent_prompt_deny">Refuse</string>
+    <string name="agent_keys_desc">This is what the agent holds. Which of these a forwarded host may use is chosen in the host itself.</string>
 </resources>

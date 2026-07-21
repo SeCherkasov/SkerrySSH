@@ -37,4 +37,5 @@
     <string name="agent_prompt_hint">两分钟内未回应将拒绝该请求。</string>
     <string name="agent_prompt_allow">允许一次</string>
     <string name="agent_prompt_deny">拒绝</string>
+    <string name="agent_keys_desc">这些是代理持有的密钥。转发时具体主机可用哪些，在主机设置中选择。</string>
 </resources>

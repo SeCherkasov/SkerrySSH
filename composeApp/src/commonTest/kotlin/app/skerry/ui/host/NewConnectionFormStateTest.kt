@@ -397,4 +397,30 @@ class NewConnectionFormStateTest {
         assertEquals(listOf("deploy"), NewConnectionFormState.fromHost(host).agentKeyIds)
         assertEquals(emptyList(), NewConnectionFormState.fromHost(host.copy(agentKeyIds = emptyList())).agentKeyIds)
     }
+
+    @Test
+    fun `choosing a key for a host also puts it in the agent`() {
+        // Otherwise the profile would name a key the agent does not hold, and forwarding would
+        // quietly offer nothing — the user would have to guess that Settings needs a second visit.
+        val form = NewConnectionFormState()
+        val putInAgent = mutableListOf<String>()
+
+        form.toggleAgentKey("deploy") { putInAgent += it }
+
+        assertEquals(listOf("deploy"), form.agentKeyIds)
+        assertEquals(listOf("deploy"), putInAgent)
+    }
+
+    @Test
+    fun `unticking a key leaves it in the agent for everyone else`() {
+        // Other hosts and the local socket may still be using it; this host just stops naming it.
+        val form = NewConnectionFormState()
+        val putInAgent = mutableListOf<String>()
+        form.toggleAgentKey("deploy") { putInAgent += it }
+
+        form.toggleAgentKey("deploy") { putInAgent += it }
+
+        assertTrue(form.agentKeyIds.isEmpty())
+        assertEquals(listOf("deploy"), putInAgent, "unticking must not touch the agent")
+    }
 }

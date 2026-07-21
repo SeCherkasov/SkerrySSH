@@ -101,6 +101,21 @@ class NewConnectionFormState {
     /** Vault keys this host may use through the agent; empty = every key in it ([Host.agentKeyIds]). */
     var agentKeyIds: List<String> by mutableStateOf(emptyList())
 
+    /**
+     * Tick or untick one key for this host. Ticking also puts it in the agent ([addToAgent]) —
+     * otherwise the profile would name a key the agent does not hold, and forwarding would quietly
+     * offer nothing. Unticking leaves the agent alone: other hosts (and the local socket) may still
+     * be using that key.
+     */
+    fun toggleAgentKey(id: String, addToAgent: (String) -> Unit) {
+        agentKeyIds = if (id in agentKeyIds) {
+            agentKeyIds - id
+        } else {
+            addToAgent(id)
+            agentKeyIds + id
+        }
+    }
+
     // Auth: mode plus fields for each kind (kept side by side so switching doesn't lose input).
     var authMode: AuthMode by mutableStateOf(AuthMode.ASK)
     var existingCredentialId: String? by mutableStateOf(null)

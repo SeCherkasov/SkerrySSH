@@ -89,7 +89,10 @@ private fun AgentKeyPicker(
     titleSize: androidx.compose.ui.unit.TextUnit,
     descSize: androidx.compose.ui.unit.TextUnit,
 ) {
-    val keys = LocalSshAgent.current?.agentKeys.orEmpty().filter { it.agentEnabled }
+    val agent = LocalSshAgent.current
+    // Every key-shaped secret in the vault, not just the ones already in the agent: ticking one
+    // here puts it in the agent, so the user never has to go to Settings and back.
+    val keys = agent?.agentKeys.orEmpty()
     if (keys.isEmpty()) return
     val chosen = form.agentKeyIds
     Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
@@ -111,9 +114,7 @@ private fun AgentKeyPicker(
                 label = key.label,
                 checked = key.id in chosen,
                 size = descSize,
-                onClick = {
-                    form.agentKeyIds = if (key.id in chosen) chosen - key.id else chosen + key.id
-                },
+                onClick = { form.toggleAgentKey(key.id) { agent?.setKeyInAgent(it, true) } },
             )
         }
     }

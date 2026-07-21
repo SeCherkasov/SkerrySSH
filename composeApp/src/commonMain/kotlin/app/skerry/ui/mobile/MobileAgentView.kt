@@ -35,6 +35,7 @@ import app.skerry.ui.generated.resources.agent_enable_desc
 import app.skerry.ui.generated.resources.agent_key_certificate
 import app.skerry.ui.generated.resources.agent_key_private
 import app.skerry.ui.generated.resources.agent_keys
+import app.skerry.ui.generated.resources.agent_keys_desc
 import app.skerry.ui.generated.resources.agent_keys_empty
 import app.skerry.ui.generated.resources.agent_subtitle_mobile
 import app.skerry.ui.generated.resources.agent_title
@@ -74,6 +75,7 @@ fun MobileAgentScreen(state: MobileDesignState) {
             )
 
             MobileSectionLabel(stringResource(Res.string.agent_keys))
+            Txt(stringResource(Res.string.agent_keys_desc), color = D.faint, size = 11.sp, modifier = Modifier.padding(bottom = 6.dp))
             val keys = controller?.agentKeys.orEmpty()
             if (keys.isEmpty()) {
                 Txt(stringResource(Res.string.agent_keys_empty), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))

@@ -37,4 +37,5 @@
     <string name="agent_prompt_hint">Без ответа в течение двух минут запрос будет отклонён.</string>
     <string name="agent_prompt_allow">Разрешить один раз</string>
     <string name="agent_prompt_deny">Отклонить</string>
+    <string name="agent_keys_desc">Это то, что держит агент. Какие из них достанутся конкретному хосту, выбирается в самом хосте.</string>
 </resources>
