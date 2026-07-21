@@ -66,9 +66,11 @@ import app.skerry.ui.generated.resources.settings_change_pw_title
 import app.skerry.ui.generated.resources.settings_event_biometric_disabled
 import app.skerry.ui.generated.resources.settings_event_biometric_enabled
 import app.skerry.ui.generated.resources.settings_event_device_paired
+import app.skerry.ui.generated.resources.settings_event_line
 import app.skerry.ui.generated.resources.settings_event_password_changed
 import app.skerry.ui.generated.resources.settings_event_unlocked_biometric
 import app.skerry.ui.generated.resources.settings_event_vault_created
+import app.skerry.ui.generated.resources.settings_event_with_detail
 import app.skerry.ui.generated.resources.settings_manage
 import app.skerry.ui.generated.resources.settings_recent_security_events
 import app.skerry.ui.generated.resources.settings_security_2fa
@@ -161,7 +163,8 @@ internal fun SecuritySection(
         HLine()
     } else if (controller != null && controller.canEnableBiometric()) {
         // Prompt strings are resolved here (stringResource needs composable scope) and handed to the
-        // coroutine below; the second one labels the round-trip check that enable() performs.
+        // coroutine below; they share the mobile prompt wording (MobileMoreView) — the same system
+        // dialog. The second one labels the round-trip check that enable() performs.
         val enablePrompt = BiometricPrompt(
             title = stringResource(Res.string.more_biometric_prompt_title),
             cancelLabel = stringResource(Res.string.more_biometric_prompt_cancel),
@@ -247,8 +250,8 @@ internal fun masterPasswordSubtitle(lastChangeAt: String?): String {
 @Composable
 internal fun securityEventLine(event: SecurityEvent): String {
     val label = event.type.eventLabel()
-    val head = event.detail?.let { "$label: $it" } ?: label
-    return "$head · ${securityEventTime(event.at)}"
+    val head = event.detail?.let { stringResource(Res.string.settings_event_with_detail, label, it) } ?: label
+    return stringResource(Res.string.settings_event_line, head, securityEventTime(event.at))
 }
 
 /** Localized event type label. */

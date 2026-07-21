@@ -56,28 +56,28 @@ class ConnectionTestTest {
     }
 
     @Test
-    fun `auth failure maps to friendly message`() = runTest {
+    fun `auth failure maps to a typed reason`() = runTest {
         val status = runConnectionTest(ProbeTransport(error = SshAuthenticationException("denied")), target, auth)
-        assertEquals(ConnectionTestStatus.Failure("Authentication failed"), status)
+        assertEquals(ConnectionTestStatus.Failure(ConnectionTestProblem.AuthenticationFailed), status)
     }
 
     @Test
-    fun `host key rejection maps to friendly message`() = runTest {
+    fun `host key rejection maps to a typed reason`() = runTest {
         val status = runConnectionTest(ProbeTransport(error = SshHostKeyRejectedException("bad key")), target, auth)
-        assertEquals(ConnectionTestStatus.Failure("Host key rejected"), status)
+        assertEquals(ConnectionTestStatus.Failure(ConnectionTestProblem.HostKeyRejected), status)
     }
 
     @Test
-    fun `connection error maps to generic message without leaking transport detail`() = runTest {
+    fun `connection error maps to a generic typed reason without leaking transport detail`() = runTest {
         // Raw exception text (address/library internals) is never surfaced in the UI — generic only.
         val status = runConnectionTest(ProbeTransport(error = SshConnectionException("no route to 10.0.0.1:22")), target, auth)
-        assertEquals(ConnectionTestStatus.Failure("Connection failed"), status)
+        assertEquals(ConnectionTestStatus.Failure(ConnectionTestProblem.ConnectionFailed), status)
     }
 
     @Test
-    fun `unexpected error maps to generic message`() = runTest {
+    fun `unexpected error maps to a generic typed reason`() = runTest {
         val status = runConnectionTest(ProbeTransport(error = IllegalStateException("library internals")), target, auth)
-        assertEquals(ConnectionTestStatus.Failure("Connection failed"), status)
+        assertEquals(ConnectionTestStatus.Failure(ConnectionTestProblem.ConnectionFailed), status)
     }
 
     // Controller: status transitions

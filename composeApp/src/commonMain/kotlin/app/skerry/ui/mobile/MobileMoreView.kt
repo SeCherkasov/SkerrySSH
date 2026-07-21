@@ -118,6 +118,10 @@ import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.Badge
 import app.skerry.ui.settings.ChangeMasterPasswordDialog
 import app.skerry.ui.design.D
+import app.skerry.ui.generated.resources.term_player_open
+import app.skerry.ui.terminal.openCastFile
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import app.skerry.ui.app.AppVersion
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalUpdates
@@ -192,6 +196,13 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
                 updateVersion?.let { stringResource(Res.string.settings_update_status, it) } ?: AppVersion.VERSION,
                 if (updateVersion != null) D.amber else D.dim,
                 onClick = { state.push(MobileRoute.About) },
+            )
+            // Recording player: opens a .cast picker. Lives here because watching a recording needs no
+            // session — the terminal menu would hide it behind a live connection.
+            val playerScope = rememberCoroutineScope()
+            MoreRow(
+                "play_circle", D.cyanBright, stringResource(Res.string.term_player_open), null, D.dim,
+                onClick = { playerScope.launch { state.showCast(openCastFile()) } },
             )
             MoreRow("lock", D.sunset, stringResource(Res.string.more_lock), null, D.dim, labelColor = D.sunset, divider = false, onClick = onLock)
         }

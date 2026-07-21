@@ -37,4 +37,8 @@
     <string name="vtail_category_ssh_keys">SSH-ключи</string>
     <string name="vtail_category_passwords">Пароли</string>
     <string name="vtail_category_certificates">Сертификаты</string>
+
+    <!-- Строка метаданных карточки секрета: %1$s — принципалы сертификата / отпечаток ключа, %2$s — фрагмент «используется». -->
+    <string name="vtail_meta_principals">%1$s · %2$s</string>
+    <string name="vtail_meta_fingerprint">%1$s · %2$s</string>
 </resources>

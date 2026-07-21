@@ -77,14 +77,20 @@ class HostMetricsTest {
     }
 
     @Test
-    fun returns_null_when_disk_section_missing() {
+    fun survives_a_missing_disk_section() {
+        // One unreadable section must not throw away the rest of the snapshot: a host whose df
+        // output is unusable still reports CPU and memory (and would otherwise be declared unable
+        // to serve metrics at all after a few polls).
         val out = """
             cpu  100 0 100 800 0 0 0 0
             cpu  150 0 150 900 0 0 0 0
             @MEM
             Mem:  4000000000 2100000000 1000000000
         """.trimIndent()
-        assertNull(parseHostMetrics(out))
+        val m = parseHostMetrics(out)!!
+        assertEquals(50, m.cpuPercent)
+        assertEquals(0, m.diskPercent)
+        assertTrue(m.disks.isEmpty())
     }
 
     @Test

@@ -217,4 +217,7 @@ tasks.register<JavaExec>("screenshotDesign") {
 // offline Flatpak build, which sets -Dskerry.offlineRepo, never resolves it. See the root build.
 if (System.getProperty("skerry.offlineRepo") == null) {
     pluginManager.apply("org.jetbrains.kotlinx.kover")
+    // Compose Hot Reload — same online-only gate: adds the dev `hotRunJvm` task (live UI reload on
+    // the desktop target). Never applied in the offline packaging build (no dev tasks needed there).
+    pluginManager.apply("org.jetbrains.compose.hot-reload")
 }

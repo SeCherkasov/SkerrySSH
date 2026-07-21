@@ -478,6 +478,24 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `disconnect stops the metrics poller`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(target, SshAuth.Password("pw"))
+        controller.openMetrics()
+        testScheduler.advanceTimeBy(1)
+        val pollsWhileConnected = conn.execCalls
+
+        controller.disconnect()
+        testScheduler.advanceTimeBy(30_000)
+
+        // The poller lives on the session scope: dropping the session must end the round-trips,
+        // not leave a loop polling a dead connection.
+        assertEquals(pollsWhileConnected, conn.execCalls)
+        scope.cancel()
+    }
+
+    @Test
     fun `openMetrics without a live connection fails`() = runTest {
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))
         assertEquals(ConnectionUiState.Form, controller.uiState)
@@ -676,7 +694,12 @@ private class FakeSshConnection(
         roundTrips++
         return roundTripResult
     }
-    override suspend fun exec(command: String): ExecResult = throw UnsupportedOperationException()
+    /** Metrics polling round-trips: parsable output, so the poller keeps running while connected. */
+    var execCalls = 0
+    override suspend fun exec(command: String): ExecResult {
+        execCalls++
+        return ExecResult(0, "cpu  1 0 1 8 0 0 0 0\n@MEM\nMem: 400 200 200\n@DISK\n/dev/sda1 100 87 13 87% /", "")
+    }
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = channel
     override suspend fun openSftp(): SftpClient {
         openSftpCalls++

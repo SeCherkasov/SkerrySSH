@@ -41,4 +41,11 @@ object SnippetShortcut {
 
     private fun keyName(key: Key): String? =
         letters[key] ?: digits[key] ?: functionKeys[key]
+
+    private val byName: Map<String, Key> by lazy {
+        (letters + digits + functionKeys).entries.associate { (k, name) -> name to k }
+    }
+
+    /** The [Key] a [format]ted name stands for, or `null` if it isn't one Skerry can bind. */
+    fun keyFor(name: String): Key? = byName[name]
 }

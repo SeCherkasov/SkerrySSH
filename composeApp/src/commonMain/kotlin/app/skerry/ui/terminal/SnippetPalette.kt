@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.LocalSnippets
+import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
@@ -50,17 +51,25 @@ import app.skerry.ui.generated.resources.term_untitled
 import app.skerry.ui.session.Session
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.snippet.UNCATEGORIZED_KEY
+import app.skerry.ui.snippet.groupSnippetsByCategory
+import app.skerry.ui.snippet.hasCategories
 import app.skerry.ui.snippet.matches
+import app.skerry.ui.snippet.snippetTagLabel
+import app.skerry.ui.snippet.uncategorizedSnippetsLabel
 import org.jetbrains.compose.resources.stringResource
 
 // Snippet palette: quickly run a saved command in the active terminal directly from the toolbar.
 
 @Composable
-internal fun SnippetPaletteButton(active: Session?) {
+internal fun SnippetPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
     val manager = LocalSnippets.current
     val terminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     // Keyed on active: switching tabs must not leave the palette open over a different toolbar.
     var open by remember(active) { mutableStateOf(false) }
+    // Hotkey channel (⌘S / Ctrl+Shift+S). It only opens: with nothing to run into, the palette would
+    // be a dead-end popup, so the key falls through to whatever else wants it.
+    LaunchedEffect(requests, terminal) { requests?.collect { if (terminal != null) open = true } }
     if (manager == null) return
     Box {
         // Nowhere to run without a connected session — the button is dimmed and doesn't open.
@@ -107,11 +116,29 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
         Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
             if (filtered.isEmpty()) {
                 Txt(if (all.isEmpty()) stringResource(Res.string.term_no_snippets_yet) else stringResource(Res.string.term_no_matches), color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+            } else if (hasCategories(filtered)) {
+                // Same category split as the library, so a command is two steps away instead of a
+                // scroll. No chips or collapsing here — the palette is keyboard-driven and ephemeral.
+                groupSnippetsByCategory(filtered).forEach { category ->
+                    key(category.name) {
+                        PaletteCategoryCaption(category.name)
+                        category.snippets.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+                    }
+                }
             } else {
                 filtered.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
             }
         }
     }
+}
+
+@Composable
+private fun PaletteCategoryCaption(name: String) {
+    Txt(
+        if (name == UNCATEGORIZED_KEY) uncategorizedSnippetsLabel() else snippetTagLabel(name),
+        color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
+        modifier = Modifier.padding(start = 9.dp, top = 7.dp, bottom = 2.dp),
+    )
 }
 
 @Composable

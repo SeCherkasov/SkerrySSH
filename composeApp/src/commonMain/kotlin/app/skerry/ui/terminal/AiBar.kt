@@ -39,6 +39,8 @@ import app.skerry.shared.ai.CommandRisk
 import app.skerry.ui.ai.AiNotice
 import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.ai.aiBlockedMessage
+import app.skerry.ui.ai.aiFailureMessage
+import app.skerry.ui.ai.shortLabel
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.ChipButton
@@ -47,6 +49,7 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_ai_ask_placeholder
 import app.skerry.ui.generated.resources.term_ai_confirm_run
@@ -161,7 +164,7 @@ internal fun AiBarInput(
                         is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = D.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         is AiNotice.Ask -> Txt(notice.question, color = D.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         AiNotice.Rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = D.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Error -> Txt(notice.message, color = D.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = D.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     else -> {
                         if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_placeholder), color = D.dim, size = 13.sp)
@@ -194,7 +197,7 @@ internal fun AiBarInput(
                 controller.notice != null ->
                     AiActionChip(stringResource(Res.string.term_ai_dismiss), D.faint, onClick = { controller.dismiss() })
                 else -> {
-                    AiBarTag("verified_user", controller.policy.name.uppercase(), mono)
+                    AiBarTag("verified_user", labelUppercase(controller.policy.shortLabel()), mono)
                     Box(
                         Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.cyan)
                             .clickable(enabled = !controller.busy) { submit() },

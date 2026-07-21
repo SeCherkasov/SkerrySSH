@@ -6,9 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.host.Host
-import app.skerry.shared.host.MAX_TAGS_PER_HOST
-import app.skerry.shared.host.normalizeTag
+import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
+import app.skerry.shared.tag.normalizeTag
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -57,7 +58,8 @@ class NewConnectionFormState {
      * Switch transport. If [port] still equals the previous type's default (user hasn't touched
      * it), substitute the new type's default: SSH/Mosh->22, Telnet->23, Serial->9600 (baud).
      * Otherwise the value is kept. Leaving the SSH-auth family drops the jump host (ProxyJump
-     * needs the SSH hop). [keepAliveSeconds] is deliberately kept: unlike a jump reference it's
+     * needs the SSH hop); switching to VNC additionally drops key/selected-secret auth (see
+     * [dropNonVncAuth]). [keepAliveSeconds] is deliberately kept: unlike a jump reference it's
      * harmless on other profiles (the session layer gates on SSH), and the choice survives
      * toggling back to SSH.
      */
@@ -67,7 +69,21 @@ class NewConnectionFormState {
             port = defaultPortFor(type).toString()
         }
         if (!type.usesSshAuth) jumpHostId = null
+        if (type.isVnc) dropNonVncAuth()
         connectionType = type
+    }
+
+    /**
+     * VNC auth is password-only: leftover key state — or an already-picked saved secret, possibly
+     * a key the form can't tell apart by id — would silently degrade to no auth at connect
+     * (`toVncAuth` maps non-password secrets to `VncAuth.None`), so both reset to Ask. A
+     * new-password entry stays: it's valid for VNC as-is.
+     */
+    private fun dropNonVncAuth() {
+        if (authMode == AuthMode.NEW_KEY || authMode == AuthMode.EXISTING) authMode = AuthMode.ASK
+        existingCredentialId = null
+        privateKeyPem = ""
+        passphrase = ""
     }
 
     /** Saved SSH profile to tunnel through (ProxyJump), `null` — connect directly. */
@@ -97,8 +113,8 @@ class NewConnectionFormState {
     fun addTag(raw: String) {
         val additions = raw.split(',').mapNotNull(::normalizeTag)
         if (additions.isEmpty()) return
-        // Cap on tag count (guards against pasting thousands of labels): drop beyond [MAX_TAGS_PER_HOST].
-        tags = LinkedHashSet(tags).apply { addAll(additions) }.take(MAX_TAGS_PER_HOST)
+        // Cap on tag count (guards against pasting thousands of labels): drop beyond [MAX_TAGS_PER_RECORD].
+        tags = LinkedHashSet(tags).apply { addAll(additions) }.take(MAX_TAGS_PER_RECORD)
     }
 
     /** Remove a tag (value is already canonical, the one rendered on the pill). */
@@ -135,6 +151,9 @@ class NewConnectionFormState {
             return when (connectionType) {
                 ConnectionType.SSH, ConnectionType.MOSH -> base && username.isNotBlank() && authValid
                 ConnectionType.TELNET, ConnectionType.SERIAL -> base
+                // VNC authenticates with an optional password (no username): base + a valid auth
+                // choice (Ask / a stored password), same secret resolution as SSH minus the username.
+                ConnectionType.VNC -> base && authValid
             }
         }
 
@@ -148,8 +167,9 @@ class NewConnectionFormState {
      * (writes to the vault); if it returns `null`, there's no attachment.
      */
     fun resolveCredentialId(saveCredential: (CredentialDraft) -> String?): String? = when {
-        // Telnet/Serial have no auth, no secret gets attached.
-        !connectionType.usesSshAuth -> null
+        // Telnet/Serial have no auth, no secret gets attached. VNC does authenticate (password),
+        // so it takes the same secret-resolution path as SSH below (the UI just hides the key option).
+        !connectionType.usesSshAuth && !connectionType.isVnc -> null
         else -> when (authMode) {
             AuthMode.ASK -> null
             AuthMode.EXISTING -> existingCredentialId
@@ -184,11 +204,12 @@ class NewConnectionFormState {
     )
 
     companion object {
-        /** Default port/speed by type: SSH/Mosh->22 (the SSH hop's port), Telnet->23, Serial->9600 (baud). */
+        /** Default port/speed by type: SSH/Mosh->22 (the SSH hop's port), Telnet->23, Serial->9600 (baud), VNC->5900 (RFB display :0). */
         fun defaultPortFor(type: ConnectionType): Int = when (type) {
             ConnectionType.SSH, ConnectionType.MOSH -> 22
             ConnectionType.TELNET -> 23
             ConnectionType.SERIAL -> 9600
+            ConnectionType.VNC -> 5900
         }
 
         /**

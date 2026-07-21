@@ -2,8 +2,11 @@ package app.skerry.ui.mobile
 
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
+import app.skerry.ui.sftp.SizeParts
+import app.skerry.ui.sftp.SizeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 /** Pure logic for the mobile Files screen: screen mode, row meta/icons, path breadcrumb. */
 class MobileFilesTest {
@@ -43,11 +46,11 @@ class MobileFilesTest {
     // Row meta caption (direct projection of FileItem)
 
     @Test
-    fun row_meta_shows_human_size_for_files_and_empty_for_dirs() {
-        assertEquals("3.0 KB", mobileFileRowMeta(item("nginx.conf", FileItemType.File, size = 3072)))
-        assertEquals("112 B", mobileFileRowMeta(item("robots.txt", FileItemType.File, size = 112)))
-        // The model has no permissions or item count for directories; meta stays empty.
-        assertEquals("", mobileFileRowMeta(item("html", FileItemType.Directory)))
+    fun row_meta_shows_size_for_files_and_nothing_for_dirs() {
+        assertEquals(SizeParts(SizeUnit.KB, 3, 0), mobileFileRowMeta(item("nginx.conf", FileItemType.File, size = 3072)))
+        assertEquals(SizeParts(SizeUnit.Bytes, 112), mobileFileRowMeta(item("robots.txt", FileItemType.File, size = 112)))
+        // The model has no permissions or item count for directories; the row has no subtitle.
+        assertNull(mobileFileRowMeta(item("html", FileItemType.Directory)))
     }
 
     // Row leading icon

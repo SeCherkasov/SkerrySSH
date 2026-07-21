@@ -11,4 +11,12 @@
     <string name="ptail_err_forward_failed">Port forwarding failed</string>
     <string name="ptail_err_connection_failed">Connection failed</string>
     <string name="ptail_forward_raise_failed">Couldn't start port forward</string>
+
+    <!-- SOURCE cell of a remote (-R) forward: the server owns the listener -->
+    <string name="ptail_source_server">server:%1$d</string>
+
+    <!-- Throughput templates: unit name and decimal separator are part of the translation -->
+    <string name="ptail_rate_bytes">%1$d B/s</string>
+    <string name="ptail_rate_kb">%1$d KB/s</string>
+    <string name="ptail_rate_mb">%1$d.%2$d MB/s</string>
 </resources>

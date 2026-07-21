@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android platform resources only (launcher label). The app's UI strings live in
+  composeApp/src/commonMain/composeResources — this file exists so the manifest has no hardcoded
+  text and a locale-specific launcher label stays possible.
+-->
+<resources>
+    <string name="app_name">Skerry</string>
+</resources>

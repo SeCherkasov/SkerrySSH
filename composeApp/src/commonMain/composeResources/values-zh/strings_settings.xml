@@ -12,7 +12,6 @@
     <string name="settings_revoke">撤销</string>
     <string name="settings_change">更改</string>
     <string name="settings_manage">管理</string>
-    <string name="settings_on">开</string>
 
     <!-- AI 部分 -->
     <string name="settings_ai_title">AI</string>
@@ -50,7 +49,19 @@
     <string name="settings_ai_local_cancel">取消</string>
     <string name="settings_ai_local_delete">删除</string>
     <string name="settings_ai_local_retry">重试</string>
+    <string name="settings_ai_local_error_network">网络错误 — 下载将从中断处继续。</string>
+    <string name="settings_ai_local_error_integrity">下载的文件未通过校验。请重试。</string>
+    <string name="settings_ai_local_error_unknown">模型下载失败。请重试。</string>
     <string name="settings_ai_prompt_placeholder_needs_model">请先下载本地模型</string>
+
+    <!-- AI 请求错误（快速聊天和终端 AI 栏） -->
+    <string name="settings_ai_error_unauthorized">API 密钥无效 — 请在 AI 设置中检查。</string>
+    <string name="settings_ai_error_rate_limited">提供商已限流。请稍后重试。</string>
+    <string name="settings_ai_error_network">连接 AI 提供商时发生网络错误。</string>
+    <string name="settings_ai_error_invalid_request">提供商拒绝了该请求（请检查模型和参数）。</string>
+    <string name="settings_ai_error_protocol">AI 提供商返回了意外的响应。</string>
+    <string name="settings_ai_error_unknown">AI 请求失败。请重试。</string>
+    <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">发送前清除敏感信息</string>
     <string name="settings_ai_sanitize_desc">在发送到外部提供商前，从提示中移除明显的密码、令牌和密钥。</string>
     <string name="settings_ai_preview">发送前预览提示</string>
@@ -122,7 +133,6 @@
     <string name="settings_autolock_30m">30 分钟后</string>
     <string name="settings_autolock_never">从不</string>
     <string name="settings_security_2fa">双因素认证</string>
-    <string name="settings_enabled">● 已启用</string>
     <string name="settings_security_2fa_desc">通过身份验证器应用使用 TOTP。</string>
     <string name="settings_recent_security_events">最近安全事件</string>
     <string name="settings_security_no_events">暂无安全事件。</string>
@@ -132,6 +142,8 @@
     <string name="settings_event_biometric_disabled">生物识别解锁已禁用</string>
     <string name="settings_event_unlocked_biometric">通过生物识别解锁</string>
     <string name="settings_event_device_paired">新设备已配对</string>
+    <string name="settings_event_with_detail">%1$s：%2$s</string>
+    <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">今天 %1$s</string>
     <string name="settings_time_yesterday">昨天 %1$s</string>
     <string name="settings_time_days_ago">%1$d 天前</string>
@@ -143,13 +155,16 @@
     <string name="settings_change_pw_confirm">确认新密码</string>
     <string name="settings_change_pw_submit">更改密码</string>
     <string name="settings_change_pw_err_wrong">当前密码不正确。</string>
-    <string name="settings_change_pw_ok">主密码已更改。</string>
 
     <!-- 键盘部分 -->
     <string name="settings_keyboard_title">键盘</string>
     <string name="settings_keyboard_subtitle">快捷键适配你的平台。终端快捷键在会话聚焦时生效。</string>
     <string name="settings_kb_new_connection">新建连接</string>
     <string name="settings_kb_command_palette">命令面板 / 搜索</string>
+    <string name="settings_kb_snippet_palette">片段面板</string>
+    <string name="settings_kb_broadcast">广播到多个会话</string>
+    <string name="settings_kb_record_session">录制会话（开始／停止）</string>
+    <string name="settings_kb_play_recording">播放录制</string>
     <string name="settings_kb_split_terminal">分割终端</string>
     <string name="settings_kb_next_prev_tab">下一个 / 上一个标签页</string>
     <string name="settings_kb_select_tab_number">按数字选择标签页</string>

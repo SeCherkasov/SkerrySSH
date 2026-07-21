@@ -54,28 +54,28 @@ class AiStreamRunnerTest {
     fun `maps AiException to a friendly message and still closes the provider`() = runTest {
         val provider = ScriptedProvider(failWith = AiException(AiException.Kind.UNAUTHORIZED, "401"))
         val runner = AiStreamRunner({ provider }, this)
-        var error: String? = null
+        var error: AiFailure? = null
         var completed: String? = null
 
         runner.launch(config, emptyList(), onDelta = { }, onComplete = { completed = it },
             onError = { error = it }, onFinally = { })
         advanceUntilIdle()
 
-        assertEquals(AiException(AiException.Kind.UNAUTHORIZED, "401").friendlyMessage(), error)
+        assertEquals(AiFailure.UNAUTHORIZED, error)
         assertNull(completed)
         assertTrue(provider.closed)
     }
 
     @Test
-    fun `maps an unexpected exception to a generic message`() = runTest {
+    fun `maps an unexpected exception to a generic failure`() = runTest {
         val runner = AiStreamRunner({ ScriptedProvider(failWith = RuntimeException("boom")) }, this)
-        var error: String? = null
+        var error: AiFailure? = null
 
         runner.launch(config, emptyList(), onDelta = { }, onComplete = { },
             onError = { error = it }, onFinally = { })
         advanceUntilIdle()
 
-        assertEquals("AI request failed: boom", error)
+        assertEquals(AiFailure.UNKNOWN, error)
     }
 
     @Test
@@ -89,7 +89,7 @@ class AiStreamRunnerTest {
             override suspend fun close() {}
         }
         val runner = AiStreamRunner({ provider }, this)
-        var error: String? = null
+        var error: AiFailure? = null
         var finallyCalled = false
 
         val job = runner.launch(config, emptyList(), onDelta = { }, onComplete = { },

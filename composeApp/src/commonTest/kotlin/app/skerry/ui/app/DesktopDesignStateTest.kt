@@ -37,6 +37,16 @@ class DesktopDesignStateTest {
     }
 
     @Test
+    fun vnc_sidebar_starts_closed_and_toggles() {
+        val s = DesktopDesignState()
+        assertFalse(s.vncSidebar)
+        s.toggleVncSidebar()
+        assertTrue(s.vncSidebar)
+        s.toggleVncSidebar()
+        assertFalse(s.vncSidebar)
+    }
+
+    @Test
     fun host_search_query_starts_empty_and_updates() {
         val s = DesktopDesignState()
         assertEquals("", s.hostSearchQuery)

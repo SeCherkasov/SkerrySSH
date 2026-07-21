@@ -683,16 +683,20 @@ fun TerminalScreen(
                     state.cycleSuggestion()
                     return@onPreviewKeyEvent true
                 }
-                // Ctrl+Shift+C — copy the selection (Ctrl+C stays SIGINT for the shell).
-                if (event.isCtrlPressed && event.isShiftPressed && event.key == Key.C) {
-                    copySelection()
-                    return@onPreviewKeyEvent true
-                }
-                // Ctrl+Shift+V and Shift+Insert — paste from the clipboard (bracketed-paste if the app enabled it).
-                if ((event.isCtrlPressed && event.isShiftPressed && event.key == Key.V) ||
-                    (event.isShiftPressed && event.key == Key.Insert)
-                ) {
-                    pasteFromClipboard()
+                // Clipboard chords: Ctrl+Shift+C/V and the X11 pair Ctrl+Insert / Shift+Insert.
+                // Plain Ctrl+C stays SIGINT and bare Insert stays CSI 2~ — see [clipboardChord].
+                val clipboard = clipboardChord(
+                    ctrl = event.isCtrlPressed,
+                    shift = event.isShiftPressed,
+                    alt = event.isAltPressed,
+                    insertKey = event.isInsertKey(),
+                    key = event.key,
+                )
+                if (clipboard != null) {
+                    when (clipboard) {
+                        ClipboardChord.Copy -> copySelection()
+                        ClipboardChord.Paste -> pasteFromClipboard()
+                    }
                     return@onPreviewKeyEvent true
                 }
                 val bytes = mapTerminalKey(

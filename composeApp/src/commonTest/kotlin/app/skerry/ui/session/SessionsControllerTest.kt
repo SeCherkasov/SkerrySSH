@@ -12,10 +12,19 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vnc.VncAuth
+import app.skerry.shared.vnc.VncFramebuffer
+import app.skerry.shared.vnc.VncPointerEvent
+import app.skerry.shared.vnc.VncQuality
+import app.skerry.shared.vnc.VncSession
+import app.skerry.shared.vnc.VncTransport
+import app.skerry.shared.vnc.VncUpdate
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.vnc.VncSessionController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -225,6 +234,45 @@ class SessionsControllerTest {
         // independent controller, separate from the main session
         assertTrue(secondary.controller !== parent.controller)
         assertIs<ConnectionUiState.Connected>(secondary.controller.uiState)
+        scope.cancel()
+    }
+
+    @Test
+    fun `broadcastTargets covers connected tabs and their split panes`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a", title = "alpha")
+        sessions.open(hostId = "host-b", title = "beta")
+        sessions.activate(a)
+        sessions.toggleSplit()
+        sessions.connectSplit(parentId = a, hostId = "host-c")
+
+        val targets = broadcastTargets(sessions)
+
+        // Each pane is its own shell, so the split is a target in its own right.
+        assertEquals(3, targets.size)
+        assertEquals(listOf("alpha", "beta"), targets.map { it.label }.filter { it == "alpha" || it == "beta" })
+        assertTrue(targets.map { it.id }.contains(sessions.active!!.splitSession!!.id))
+        scope.cancel()
+    }
+
+    @Test
+    fun `broadcastTargets skips a session that is not connected`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.toggleSplit() // split area open but nothing connected into it
+
+        assertEquals(listOf(a), broadcastTargets(sessions).map { it.id })
+        scope.cancel()
+    }
+
+    @Test
+    fun `broadcastTargets excludes VNC tabs and an absent controller`() = runTest {
+        val vncTransport = FakeVncTransport()
+        val (sessions, scope) = sessionsWithVnc(vncTransport)
+        sessions.openVnc(hostId = "host-a") // no shell to type into
+
+        assertTrue(broadcastTargets(sessions).isEmpty())
+        assertTrue(broadcastTargets(null).isEmpty())
         scope.cancel()
     }
 
@@ -451,6 +499,99 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
+    // VNC tabs
+
+    private fun TestScope.sessionsWithVnc(
+        vncTransport: FakeVncTransport,
+    ): Pair<SessionsController, CoroutineScope> {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        var n = 0
+        val controller = SessionsController(
+            newId = { "s${n++}" },
+            controllerFactory = {
+                ConnectionController(
+                    transport = FakeTransport(),
+                    scope = scope,
+                    newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
+                )
+            },
+            vncControllerFactory = { VncSessionController(vncTransport, scope) },
+        )
+        return controller to scope
+    }
+
+    private fun SessionsController.openVnc(hostId: String?) =
+        openVnc(hostId = hostId, title = hostId ?: "", subtitle = "h:5900", target = target, auth = VncAuth.None)
+
+    @Test
+    fun `openVnc opens a connected VNC tab locked to the Vnc view`() = runTest {
+        val vncTransport = FakeVncTransport()
+        val (sessions, scope) = sessionsWithVnc(vncTransport)
+
+        val id = sessions.openVnc(hostId = "host-a")
+
+        assertEquals(id, sessions.activeId)
+        val tab = sessions.active!!
+        assertTrue(tab.isVnc)
+        assertFalse(tab.isBlank)
+        assertEquals(SessionView.Vnc, tab.view)
+        assertEquals(1, vncTransport.sessions.size)
+
+        sessions.setActiveView(SessionView.Sftp) // no-op on a VNC tab
+        assertEquals(SessionView.Vnc, tab.view)
+        scope.cancel()
+    }
+
+    @Test
+    fun `openVnc without a VNC factory is a no-op returning null`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport()) // no vncControllerFactory wired
+
+        val id = sessions.openVnc(hostId = "host-a")
+
+        assertNull(id)
+        assertTrue(sessions.sessions.isEmpty())
+        scope.cancel()
+    }
+
+    @Test
+    fun `openVnc opens a fresh tab instead of reusing a blank one`() = runTest {
+        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
+        val blank = sessions.openBlank()
+
+        val id = sessions.openVnc(hostId = "host-a")
+
+        assertTrue(id != blank)
+        assertEquals(2, sessions.sessions.size)
+        assertEquals(id, sessions.activeId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing a VNC tab closes its session`() = runTest {
+        val vncTransport = FakeVncTransport()
+        val (sessions, scope) = sessionsWithVnc(vncTransport)
+        val id = sessions.openVnc(hostId = "host-a")!!
+
+        sessions.close(id)
+
+        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(vncTransport.sessions.single().closed)
+        scope.cancel()
+    }
+
+    @Test
+    fun `disconnectAll closes VNC sessions too`() = runTest {
+        val vncTransport = FakeVncTransport()
+        val (sessions, scope) = sessionsWithVnc(vncTransport)
+        sessions.openVnc(hostId = "host-a")
+
+        sessions.disconnectAll()
+
+        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(vncTransport.sessions.single().closed)
+        scope.cancel()
+    }
+
     @Test
     fun `effectiveTabTitle prefers live OSC title over fallback`() {
         assertEquals("vim ~/app", effectiveTabTitle(liveTitle = "vim ~/app", fallback = "web-1"))
@@ -461,6 +602,35 @@ class SessionsControllerTest {
         assertEquals("web-1", effectiveTabTitle(liveTitle = null, fallback = "web-1"))
         assertEquals("web-1", effectiveTabTitle(liveTitle = "", fallback = "web-1"))
         assertEquals("web-1", effectiveTabTitle(liveTitle = "   ", fallback = "web-1"))
+    }
+}
+
+/** VNC transport that returns a fresh fake session on each connect; list is used to verify closes. */
+private class FakeVncTransport : VncTransport {
+    val sessions = mutableListOf<FakeVncSession>()
+    override suspend fun connect(target: SshTarget, auth: VncAuth): VncSession =
+        FakeVncSession().also { sessions += it }
+}
+
+private class FakeVncSession : VncSession {
+    var closed = false
+        private set
+
+    override val serverName = "desk"
+    override val framebuffer = VncFramebuffer(1, 1)
+
+    // Never emits: keeps the read loop parked (like a quiet server) until the scope is cancelled.
+    override val updates: Flow<VncUpdate> = flow { awaitCancellation() }
+
+    override suspend fun sendPointer(event: VncPointerEvent) {}
+    override suspend fun sendKey(keySym: Long, down: Boolean) {}
+    override suspend fun sendClientCutText(text: String) {}
+    override suspend fun requestUpdate(incremental: Boolean) {}
+    override suspend fun setQuality(quality: VncQuality) {}
+    override suspend fun setDesktopSize(width: Int, height: Int) {}
+    override suspend fun setLocalCursor(enabled: Boolean) {}
+    override suspend fun close() {
+        closed = true
     }
 }
 

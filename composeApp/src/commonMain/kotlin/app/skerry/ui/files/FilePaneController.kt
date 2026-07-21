@@ -6,13 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.FileBrowserException
+import app.skerry.shared.files.FileBrowserFailure
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
-import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.ftail_file_pane_error
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Listing state of a single file pane (local or remote). */
@@ -23,8 +21,8 @@ sealed interface FilePaneState {
     /** Listing loaded; [entries] sorted directories-first, then by name. */
     data class Loaded(val entries: List<FileItem>) : FilePaneState
 
-    /** Last operation/load failed; [message] is user-facing. */
-    data class Error(val message: String) : FilePaneState
+    /** Last operation/load failed; [failure] is the typed reason, localized by the UI. */
+    data class Error(val failure: FileBrowserFailure) : FilePaneState
 }
 
 /**
@@ -41,6 +39,7 @@ class FilePaneController(
     private val browser: FileBrowser,
     private val scope: CoroutineScope,
 ) {
+    /** Source label for headers/breadcrumbs; blank for the local FS — the UI substitutes a localized name. */
     val label: String get() = browser.label
 
     var path: String by mutableStateOf("/")
@@ -157,7 +156,7 @@ class FilePaneController(
             // Deletes via a path rebuilt from [path] + a validated name, not server-controlled item.path.
             val name = item.name
             if (isUnsafeListingName(name)) {
-                throw FileBrowserException("Illegal name in listing: $name")
+                throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
             }
             browser.delete(item.copy(path = childPath(name)))
         }
@@ -396,7 +395,7 @@ class FilePaneController(
             rawEntries = raw
             FilePaneState.Loaded(visible(raw))
         } catch (e: FileBrowserException) {
-            FilePaneState.Error(e.message ?: getString(Res.string.ftail_file_pane_error))
+            FilePaneState.Error(e.failure)
         }
 
     /** Filters the listing by [showHidden]; hidden entries start with a dot. */
@@ -431,7 +430,7 @@ class FilePaneController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FileBrowserException) {
-                state = FilePaneState.Error(e.message ?: getString(Res.string.ftail_file_pane_error))
+                state = FilePaneState.Error(e.failure)
             } finally {
                 busy = false
             }

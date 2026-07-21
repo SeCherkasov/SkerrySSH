@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.usesSshAuth
+import app.skerry.shared.ssh.isVnc
+import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.nav.PlatformBackHandler
@@ -87,6 +89,7 @@ import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_mosh
 import app.skerry.ui.generated.resources.conn_protocol_ssh
 import app.skerry.ui.generated.resources.conn_protocol_telnet
+import app.skerry.ui.generated.resources.conn_protocol_vnc
 import app.skerry.ui.generated.resources.conn_save
 import app.skerry.ui.generated.resources.conn_save_changes
 import app.skerry.ui.generated.resources.conn_save_connection
@@ -239,6 +242,14 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     MobileFormField(stringResource(Res.string.conn_field_keep_alive)) { MobileKeepAlivePicker(form) }
                     Spacer(Modifier.height(14.dp))
                 }
+            } else if (form.connectionType.isVnc) {
+                // VNC: a password (no username), plus the RFB port. No jump host / keep-alive.
+                MobileFormField(stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
+                    MobileFormInput(form.port, { form.port = it }, "5900", keyboardType = KeyboardType.Number)
+                }
+                Spacer(Modifier.height(14.dp))
+                MobileFormField(stringResource(Res.string.conn_field_authentication)) { MobileAuthPicker(form, allowKey = false) }
+                Spacer(Modifier.height(14.dp))
             } else {
                 // Telnet/Serial: no authentication; show only port/baud.
                 MobileFormField(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
@@ -267,7 +278,8 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 )
             }
 
-            if (LocalFeatures.current.ai || LocalAi.current != null) {
+            // AI policy: not for VNC (a remote desktop has no shell for AI to act on).
+            if (!form.connectionType.isVnc && (LocalFeatures.current.ai || LocalAi.current != null)) {
                 Spacer(Modifier.height(14.dp))
                 MobileFormField(stringResource(Res.string.conn_field_ai_policy_short)) { AiPolicyPills(form) }
             }
@@ -339,6 +351,7 @@ private fun MobileProtocolPicker(form: NewConnectionFormState) {
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_mosh), form.connectionType == ConnectionType.MOSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.MOSH) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_telnet), form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_serial), form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
+        MobileProtocolSegment(stringResource(Res.string.conn_protocol_vnc), form.connectionType == ConnectionType.VNC, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.VNC) }
     }
 }
 
@@ -363,9 +376,12 @@ private fun MobileProtocolSegment(label: String, selected: Boolean, modifier: Mo
  * non-saving options remain.
  */
 @Composable
-private fun MobileAuthPicker(form: NewConnectionFormState) {
+private fun MobileAuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
     val credentials = LocalCredentials.current
-    val saved = credentials?.credentials ?: emptyList()
+    // VNC (allowKey = false) can only use a password secret: a key/certificate would silently map
+    // to no auth at connect (toVncAuth), so those are not offered.
+    val saved = (credentials?.credentials ?: emptyList())
+        .filter { allowKey || it.secret is CredentialSecret.Password }
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
         AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)
@@ -411,8 +427,11 @@ private fun MobileAuthPicker(form: NewConnectionFormState) {
                     MobileAuthOption("password", stringResource(Res.string.conn_auth_password_option), stringResource(Res.string.conn_auth_password_desc), form.authMode == AuthMode.NEW_PASSWORD) {
                         form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false
                     }
-                    MobileAuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
-                        form.authMode = AuthMode.NEW_KEY; menuOpen = false
+                    // VNC has no key auth (allowKey = false): RFB VNC-Auth is password-only.
+                    if (allowKey) {
+                        MobileAuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
+                            form.authMode = AuthMode.NEW_KEY; menuOpen = false
+                        }
                     }
                     // Divider before saved secrets (parity with desktop AuthPicker).
                     if (saved.isNotEmpty()) {

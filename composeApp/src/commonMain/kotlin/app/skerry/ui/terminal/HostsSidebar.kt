@@ -93,6 +93,7 @@ import app.skerry.ui.host.groupHostsByFolder
 import app.skerry.ui.host.hostBoundsAnchor
 import app.skerry.ui.host.hostChipLabel
 import app.skerry.ui.host.hostTagChips
+import app.skerry.ui.host.icon
 import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -333,10 +334,6 @@ private fun RecentSectionHeader() {
     )
 }
 
-/**
- * Recent-connection row: history icon + host name ([Host.label]) with a `user@address` secondary
- * caption below it. Click reconnects via [LocalConnectHost], same path as clicking a catalog row.
- */
 @Composable
 private fun TeamHostsSectionHeader() {
     Txt(
@@ -412,7 +409,7 @@ private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onTog
     }
 }
 
-/** Shared team host row, like [RecentHostRow] but with a share icon. */
+/** Shared team host row, like [RecentHostRow]; the team-vault origin is marked by the section header. */
 @Composable
 private fun TeamHostRow(host: Host, mono: FontFamily) {
     val connect = LocalConnectHost.current
@@ -427,7 +424,7 @@ private fun TeamHostRow(host: Host, mono: FontFamily) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym("lan", size = 14.sp, color = D.faint)
+        Sym(host.connectionType.icon, size = 14.sp, color = D.faint)
         Column(Modifier.weight(1f)) {
             Txt(host.label, color = D.dim, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Txt("${host.username}@${host.address}", color = D.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -435,6 +432,11 @@ private fun TeamHostRow(host: Host, mono: FontFamily) {
     }
 }
 
+/**
+ * Recent-connection row: protocol icon + host name ([Host.label]) with a `user@address` secondary
+ * caption below it. History is already stated by the section header, so the icon marks the protocol
+ * instead. Click reconnects via [LocalConnectHost], same path as clicking a catalog row.
+ */
 @Composable
 private fun RecentHostRow(host: Host, mono: FontFamily) {
     val connect = LocalConnectHost.current
@@ -451,7 +453,7 @@ private fun RecentHostRow(host: Host, mono: FontFamily) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym("history", size = 14.sp, color = D.faint)
+        Sym(host.connectionType.icon, size = 14.sp, color = D.faint)
         Column(Modifier.weight(1f)) {
             Txt(
                 host.label,
@@ -568,6 +570,7 @@ private fun LiveHostFolder(
                             badge = null,
                             onClick = onClick,
                             mono = mono,
+                            icon = host.connectionType.icon,
                             // Host object, for the "Run snippet..." menu item (runs a snippet on this host).
                             host = host,
                             // Edit/delete the profile via the context menu (right-click/long-press).
@@ -605,16 +608,20 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
         badge = host.badge,
         onClick = { state.selectHost(host.name) },
         mono = mono,
+        icon = host.connectionType.icon,
     )
 }
 
 /**
- * Shared host row for the sidebar (mock and live catalog): status dot + name + optional badge.
- * Clicking the row connects ([onClick]). When [onEdit]/[onDelete] are provided (live catalog) or a
- * snippet can be run on the host ([host] != null and [LocalSnippets] is present), a trailing "⋮"
- * button opens a menu (Run snippet.../Edit/Delete); its click is intercepted before [onClick], so
- * opening the menu doesn't trigger a connection. "Run snippet..." opens the snippet picker and runs
- * it on [host] via [LocalRunSnippetOnHost].
+ * Shared host row for the sidebar (mock and live catalog): status dot + protocol icon + name +
+ * optional badge. [icon] is the profile's [app.skerry.ui.host.icon] and stays [D.faint] — the two
+ * markers read as separate axes, colour for session status and shape for protocol. Clicking the row
+ * connects ([onClick]). When
+ * [onEdit]/[onDelete] are provided (live catalog) or a snippet can be run on the host ([host] !=
+ * null and [LocalSnippets] is present), a trailing "⋮" button opens a menu (Run snippet.../Edit/
+ * Delete); its click is intercepted before [onClick], so opening the menu doesn't trigger a
+ * connection. "Run snippet..." opens the snippet picker and runs it on [host] via
+ * [LocalRunSnippetOnHost].
  */
 @Composable
 private fun HostEntryRow(
@@ -624,6 +631,7 @@ private fun HostEntryRow(
     badge: String?,
     onClick: () -> Unit,
     mono: FontFamily,
+    icon: String,
     host: Host? = null,
     onEdit: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
@@ -645,7 +653,13 @@ private fun HostEntryRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Dot(dot)
-        Txt(label, color = if (selected) D.cyanBright else D.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+        Sym(icon, size = 13.sp, color = D.faint)
+        Txt(
+            label,
+            color = if (selected) D.cyanBright else D.dim, size = 11.5.sp, font = mono,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         if (badge != null) {
             val strict = badge == "STRICT"
             Badge(badge, bg = if (strict) D.strictBg else D.devBg, fg = if (strict) D.strictFg else D.moss)

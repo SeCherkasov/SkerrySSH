@@ -75,6 +75,8 @@ import app.skerry.ui.generated.resources.lib_snippets_save
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_select_or_create
 import app.skerry.ui.generated.resources.lib_snippets_shortcut_conflict
+import app.skerry.ui.generated.resources.lib_snippets_shortcut_reserved
+import app.skerry.ui.desktop.matchDesktopShortcut
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
@@ -84,6 +86,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
@@ -114,57 +117,30 @@ fun SnippetsView(state: DesktopDesignState) {
         MockSnippetsView(mono)
         return
     }
-    LiveSnippetsView(manager, mono)
+    LiveSnippetsView(manager, state.snippetLibrary, mono)
 }
 
 // Live path: snippet library plus editor on the right.
 
 @Composable
-private fun LiveSnippetsView(manager: SnippetManager, mono: FontFamily) {
+private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibraryState, mono: FontFamily) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
 
     val all = manager.snippets
-    val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
     // Selected snippet: explicit selectedId, else the first in the list (unless adding).
     val selected = if (adding) null else (manager.find(selectedId) ?: all.firstOrNull())
 
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
-            Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
-                SnipSearchField(query, { query = it }, mono)
-            }
-            HLine()
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 8.dp)) {
-                Txt(stringResource(Res.string.lib_snippets_library), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp))
-                if (filtered.isEmpty()) {
-                    Txt(
-                        if (all.isEmpty()) stringResource(Res.string.lib_snippets_empty) else stringResource(Res.string.lib_snippets_no_matches),
-                        color = D.faint, size = 11.5.sp, font = mono,
-                        modifier = Modifier.padding(start = 10.dp, top = 6.dp),
-                    )
-                } else {
-                    Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        filtered.forEach { entry ->
-                            // onClick keyed by id stays stable; otherwise selecting a row would
-                            // recreate lambdas for all rows and redraw them.
-                            val onClick = remember(entry.id) { { selectedId = entry.id; adding = false } }
-                            LiveSnippetRow(
-                                entry = entry,
-                                selected = !adding && entry.id == selected?.id,
-                                mono = mono,
-                                onClick = onClick,
-                            )
-                        }
-                    }
-                }
-            }
-            HLine()
-            Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                PrimaryButton(stringResource(Res.string.lib_snippets_new), onClick = { adding = true; selectedId = null }, icon = "add", modifier = Modifier.fillMaxWidth())
-            }
-        }
+        SnippetLibrarySidebar(
+            all = all,
+            library = library,
+            selectedId = if (adding) null else selected?.id,
+            mono = mono,
+            onSelect = { id -> selectedId = id; adding = false },
+            onNew = { adding = true; selectedId = null },
+            onInstallStarterPack = { manager.installStarterPack() },
+        )
         VLine(D.line)
         Box(Modifier.weight(1f).fillMaxHeight().background(D.bg)) {
             if (!adding && selected == null) {
@@ -191,26 +167,6 @@ internal fun SnippetEntry.matches(query: String): Boolean {
     return snippet.label.lowercase().contains(q) ||
         snippet.command.lowercase().contains(q) ||
         snippet.tags.any { it.lowercase().contains(q) }
-}
-
-@Composable
-private fun LiveSnippetRow(entry: SnippetEntry, selected: Boolean, mono: FontFamily, onClick: () -> Unit) {
-    val s = entry.snippet
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(7.dp))
-            .background(if (selected) D.cyan10 else Color.Transparent)
-            .border(1.dp, if (selected) D.cyan.copy(alpha = 0.18f) else Color.Transparent, RoundedCornerShape(7.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 9.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Sym("code_blocks", size = 15.sp, color = if (selected) D.cyanBright else D.dim)
-            Txt(s.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = if (selected) D.cyanBright else D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
-        }
-        Txt(s.command, color = if (selected) D.dim else D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
-    }
 }
 
 @Composable
@@ -270,11 +226,20 @@ private fun SnippetEditor(
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
                 // Conflict is checked against other snippets (this one's own shortcut isn't a
                 // conflict); the UI prevents assigning the same chord twice, which
-                // [SnippetManager.forShortcut] doesn't guarantee on read.
+                // [SnippetManager.forShortcut] doesn't guarantee on read. Shell hotkeys are checked
+                // too: they run first and consume the event, so a snippet on one would never fire.
                 val conflict = remember(manager.snippets, form.shortcut, entry?.id) {
                     form.shortcut?.let { manager.shortcutConflict(it, entry?.id) }
                 }
-                ShortcutField(form.shortcut, mono, conflictLabel = conflict?.snippet?.label) { form.shortcut = it }
+                val reserved = remember(form.shortcut) {
+                    form.shortcut?.let { matchDesktopShortcut(it) != null } == true
+                }
+                val conflictText = when {
+                    reserved -> stringResource(Res.string.lib_snippets_shortcut_reserved)
+                    conflict != null -> stringResource(Res.string.lib_snippets_shortcut_conflict, conflict.snippet.label)
+                    else -> null
+                }
+                ShortcutField(form.shortcut, mono, conflictText = conflictText) { form.shortcut = it }
             }
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrimaryButton(
@@ -391,10 +356,10 @@ private fun SnipTagPill(tag: String, onRemove: () -> Unit) {
 // --- Snippet hotkey capture ---
 
 @Composable
-private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: String?, onCapture: (String?) -> Unit) {
+private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String?, onCapture: (String?) -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
-    val hasConflict = conflictLabel != null
+    val hasConflict = conflictText != null
     Column {
         Box(
             Modifier
@@ -423,11 +388,11 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictLabel: Strin
             val text = value ?: if (focused) stringResource(Res.string.lib_snippets_press_keys) else "—"
             Txt(text, color = if (value != null) D.text else D.faint, size = 13.sp, font = mono)
         }
-        // The chord may already be assigned to another snippet; the assignment still takes
-        // effect, we just warn — saving is never blocked.
-        if (conflictLabel != null) {
+        // The chord may already be taken (by another snippet or by the shell); the assignment still
+        // takes effect, we just warn — saving is never blocked.
+        if (conflictText != null) {
             Txt(
-                stringResource(Res.string.lib_snippets_shortcut_conflict, conflictLabel),
+                conflictText,
                 color = D.storm, size = 11.sp,
                 modifier = Modifier.padding(top = 6.dp),
             )
@@ -523,7 +488,7 @@ private fun MockSnippetRow(snippet: MockSnippet, mono: FontFamily) {
 
 @Composable
 private fun FieldLabelSnip(text: String) {
-    Txt(text.uppercase(), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
+    Txt(labelUppercase(text), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
 }
 
 /** Single-line editable field ([SnipInput] style plus placeholder and input). */
@@ -560,33 +525,6 @@ private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, pla
             Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(D.terminalBg).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
                 if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp, font = mono)
                 inner()
-            }
-        },
-    )
-}
-
-/** Library search field. */
-@Composable
-private fun SnipSearchField(value: String, onValueChange: (String) -> Unit, mono: FontFamily) {
-    val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
-        modifier = Modifier.fillMaxWidth(),
-        decorationBox = { inner ->
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Color(0x08FFFFFF)).border(1.dp, D.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("search", size = 16.sp, color = D.faint)
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(stringResource(Res.string.lib_snippets_search), color = D.faint, size = 12.5.sp, font = mono)
-                    inner()
-                }
             }
         },
     )

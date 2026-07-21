@@ -1,0 +1,16 @@
+<resources>
+    <string name="vnc_connecting">Подключение…</string>
+    <string name="vnc_session_closed">Сессия завершена</string>
+    <string name="vnc_connection_lost">Соединение потеряно</string>
+    <string name="vnc_connect_failed">Не удалось подключиться</string>
+    <string name="vnc_error_auth">Сервер требует способ аутентификации, который Skerry не поддерживает.</string>
+    <string name="vnc_error_protocol">Сервер прислал неожиданный VNC-поток.</string>
+    <string name="vnc_quality">Качество</string>
+    <string name="vnc_quality_auto">Авто</string>
+    <string name="vnc_quality_low">Низкое</string>
+    <string name="vnc_quality_medium">Среднее</string>
+    <string name="vnc_quality_high">Высокое</string>
+    <string name="vnc_view_only">Только просмотр</string>
+    <string name="vnc_resize_to_window">Подгонять под окно</string>
+    <string name="vnc_reset_zoom">Сбросить масштаб</string>
+</resources>

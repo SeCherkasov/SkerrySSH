@@ -14,7 +14,6 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -61,7 +60,7 @@ class AiAssistantControllerTest {
         advanceUntilIdle()
 
         assertEquals(1, c.turns.size)
-        assertNotNull(c.error)
+        assertEquals(AiFailure.UNAUTHORIZED, c.error)
         assertFalse(c.busy)
     }
 

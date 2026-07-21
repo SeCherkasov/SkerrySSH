@@ -1,5 +1,8 @@
 package app.skerry.ui.mobile
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,7 +15,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -27,11 +32,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -48,14 +55,26 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.ai.AiNotice
 import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.ai.aiBlockedMessage
+import app.skerry.ui.ai.aiFailureMessage
+import app.skerry.ui.ai.shortLabel
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
+import app.skerry.ui.design.labelUppercase
+import app.skerry.ui.immersive.ImmersiveScreen
+import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.RecordingOutcome
+import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
+import app.skerry.ui.generated.resources.term_broadcast_title
+import app.skerry.ui.generated.resources.term_monitor_title
+import app.skerry.ui.generated.resources.term_record_start
+import app.skerry.ui.generated.resources.term_record_stop
+import app.skerry.ui.generated.resources.term_palette_title
 import app.skerry.ui.generated.resources.term_no_active_session
 import app.skerry.ui.generated.resources.term_mobile_open_host_connect
 import app.skerry.ui.generated.resources.term_connecting
@@ -75,16 +94,24 @@ import app.skerry.ui.app.AiPolicy
 import app.skerry.ui.terminal.ArrowKey
 import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
+import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.terminal.arrowSequence
+import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.sessionDotColor
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import app.skerry.shared.terminal.castFileName
+import app.skerry.shared.terminal.recordingStamp
+import app.skerry.ui.vault.exportTextFile
 
 /** Terminal key panel background (`#0E1A24`). Keys — white 6%, monospaced. */
 private val KeybarBg = Color(0xFF0E1A24)
@@ -93,6 +120,11 @@ private val KeyCapFg = Color(0xFFC9D6DE)
 
 /** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
 private const val ESC = "\u001b"
+
+private const val HEADER_AUTO_HIDE_MS = 3000L
+// Where the header's reveal strip starts and how tall it is: clear of the system's edge-swipe zone.
+private val SYSTEM_EDGE_GESTURE = 40.dp
+private val TOP_EDGE_STRIP = 72.dp
 
 /**
  * Full-screen mobile terminal push-screen (a live SSH session over the PTY core). Header with host name
@@ -127,6 +159,14 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // sticky-ctrl is lifted to screen level so the key panel's arming also affects soft-keyboard input
     // (the IME path bypasses the panel). Reset on session change.
     var ctrlArmed by remember(active?.id) { mutableStateOf(false) }
+    // The AI input is off by default and raised by the sparkle key: on a phone it is a whole row of
+    // screen that most sessions never use, and the terminal wants every line it can get.
+    var aiOpen by remember(active?.id) { mutableStateOf(false) }
+    // Session chrome auto-hides like the VNC screen's bar; a swipe down near the top brings it back.
+    var headerVisible by remember(active?.id) { mutableStateOf(true) }
+    // See MobileVncScreen: keyed into the auto-hide effect so a swipe restarts the timer even when
+    // the header is already up.
+    var revealNonce by remember(active?.id) { mutableStateOf(0) }
     // Callbacks are stabilized by remember (keyed on session), else a fresh lambda per PTY chunk would
     // repaint the key panel/terminal for nothing. `ctrlArmed` is compose-state, so the lambda body sees
     // its live value even through remember.
@@ -148,20 +188,34 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // [MobileActionSheet] Popup: over an open soft keyboard a Popup measures against the shrunk window and
     // hangs at the old keyboard line with a gap below. Inline lives in the same window with live insets.
     var menuOpen by remember(active?.id) { mutableStateOf(false) }
+    // Host monitor sheet (desktop info-panel parity) — raised from the same menu, connected only.
+    var monitorOpen by remember(active?.id) { mutableStateOf(false) }
+    // Outcome of the last finished recording, shown as a notice (desktop parity). null = nothing to say.
+    var recordingNotice by remember(active?.id) { mutableStateOf<RecordingOutcome?>(null) }
+    val scope = rememberCoroutineScope()
+    // Broadcast sheet (desktop ⌘B parity): one command into several sessions. Not keyed on the
+    // session — it addresses all of them, and the selection lives on the shell state.
+    var broadcastOpen by remember { mutableStateOf(false) }
+    // Command history palette (desktop ⌘K parity) — same menu, connected only.
+    var historyOpen by remember(active?.id) { mutableStateOf(false) }
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
 
+    ImmersiveScreen()
+    // Held open while a sheet launched from it is up: the header is where they were opened from, and
+    // hiding it under an open menu reads as the app losing its place.
+    LaunchedEffect(headerVisible, menuOpen, paletteOpen, revealNonce) {
+        if (headerVisible && !menuOpen && !paletteOpen) {
+            delay(HEADER_AUTO_HIDE_MS)
+            headerVisible = false
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(D.terminalBg)) {
-        Column(Modifier.fillMaxSize()) {
-            MobileTerminalHeader(
-                title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
-                status = active?.controller?.uiState,
-                controller = active?.controller,
-                onBack = state::pop,
-                onMenu = { menuOpen = true },
-                onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
-            )
+        // imePadding here, not at the app root: this screen opts out of the root safeDrawing padding
+        // to run edge to edge, so lifting the content above the soft keyboard is its own job now.
+        Column(Modifier.fillMaxSize().imePadding()) {
             when (val st = active?.controller?.uiState) {
                 null, ConnectionUiState.Form ->
                     MobileTerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_mobile_open_host_connect))
@@ -188,9 +242,18 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             imeTransform = imeTransform,
                         )
                     }
-                    // The always-present bar row — command/status inside it (no jump).
-                    if (aiController != null) MobileAiBarInput(aiController, st.terminal)
-                    MobileKeybar(st.terminal, ctrlArmed, onCtrlArmedChange = setCtrlArmed)
+                    // Raised by the sparkle key; a pending suggestion forces it open so a command the
+                    // model proposed can never be waiting behind a collapsed bar.
+                    if (aiController != null && (aiOpen || aiController.pending != null)) {
+                        MobileAiBarInput(aiController, st.terminal)
+                    }
+                    MobileKeybar(
+                        st.terminal,
+                        ctrlArmed,
+                        onCtrlArmedChange = setCtrlArmed,
+                        aiOpen = aiOpen,
+                        onToggleAi = if (aiController != null) ({ aiOpen = !aiOpen }) else null,
+                    )
                 }
                 is ConnectionUiState.Error ->
                     MobileTerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = D.sunset)
@@ -200,11 +263,63 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
             }
         }
+        // Swipe down near the top brings the header back. Starts below the edge: a swipe from the very
+        // edge is the system's own gesture for restoring the hidden bars and never reaches us.
+        Box(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                .padding(top = SYSTEM_EDGE_GESTURE).height(TOP_EDGE_STRIP)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { _, dy ->
+                        if (dy > 0f) { headerVisible = true; revealNonce++ }
+                    }
+                },
+        )
+        AnimatedVisibility(
+            visible = headerVisible,
+            modifier = Modifier.align(Alignment.TopCenter),
+            enter = slideInVertically { -it },
+            exit = slideOutVertically { -it },
+        ) {
+            MobileTerminalHeader(
+                title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
+                status = active?.controller?.uiState,
+                controller = active?.controller,
+                onBack = state::pop,
+                onMenu = { menuOpen = true },
+                onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
+            )
+        }
         if (paletteOpen && snippets != null && activeTerminal != null) {
             MobileSnippetRunSheet(
                 manager = snippets,
                 onRun = { entry -> snippets.run(entry.id) { text -> activeTerminal.sendUserInput(text) }; paletteOpen = false },
                 onDismiss = { paletteOpen = false },
+            )
+        }
+        if (monitorOpen && active?.controller != null && activeTerminal != null) {
+            MobileHostMonitorSheet(active.controller, onDismiss = { monitorOpen = false })
+        }
+        recordingNotice?.let { outcome ->
+            NoticeDialog(
+                title = stringResource(Res.string.term_record_start),
+                message = recordingOutcomeMessage(outcome),
+                buttonLabel = stringResource(Res.string.term_ai_dismiss),
+                onDismiss = { recordingNotice = null },
+            )
+        }
+        if (broadcastOpen) {
+            MobileBroadcastSheet(
+                controller = state.broadcast,
+                targets = broadcastTargets(sessions),
+                onDismiss = { broadcastOpen = false },
+            )
+        }
+        if (historyOpen && activeTerminal != null) {
+            MobileCommandPaletteSheet(
+                history = LocalTerminalHistory.current,
+                currentKey = active?.controller?.historyKey,
+                onPick = { command -> activeTerminal.applyHistoryCommand(command); historyOpen = false },
+                onDismiss = { historyOpen = false },
             )
         }
         if (menuOpen && onDisconnect != null) {
@@ -215,6 +330,66 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 Txt(active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    if (activeTerminal != null) {
+                        MobileSheetButton(
+                            label = stringResource(Res.string.term_monitor_title),
+                            onClick = { menuOpen = false; monitorOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "monitoring",
+                            filled = false,
+                        )
+                        MobileSheetButton(
+                            label = stringResource(Res.string.term_palette_title),
+                            onClick = { menuOpen = false; historyOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "history",
+                            filled = false,
+                        )
+                    }
+                    if (activeTerminal != null) {
+                        MobileSheetButton(
+                            label = stringResource(Res.string.term_broadcast_title),
+                            onClick = { menuOpen = false; broadcastOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "campaign",
+                            filled = false,
+                        )
+                    }
+                    if (activeTerminal != null) {
+                        // Recording toggle: stopping opens a Save-As for the .cast; nothing is
+                        // written until the user picks a file.
+                        val recording = activeTerminal.recording
+                        MobileSheetButton(
+                            label = stringResource(if (recording) Res.string.term_record_stop else Res.string.term_record_start),
+                            onClick = {
+                                menuOpen = false
+                                // Start/stop go through the terminal's command loop, so both run in
+                                // a coroutine rather than inline in the click.
+                                scope.launch {
+                                    if (!recording) {
+                                        activeTerminal.startRecording(active?.displayTitle ?: active?.subtitle)
+                                    } else {
+                                        val truncated = activeTerminal.recordingTruncated
+                                        val cast = activeTerminal.stopRecording()
+                                        if (cast == null || !cast.contains('\n')) {
+                                            recordingNotice = RecordingOutcome.Empty
+                                        } else {
+                                            val name = castFileName(active?.displayTitle.orEmpty().ifBlank { active?.subtitle.orEmpty() }, recordingStamp())
+                                            val saved = exportTextFile(name, cast)
+                                            recordingNotice = when {
+                                                !saved -> null
+                                                truncated -> RecordingOutcome.SavedTruncated
+                                                else -> RecordingOutcome.Saved
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = if (recording) "stop_circle" else "radio_button_checked",
+                            filled = false,
+                        )
+                    }
                     MobileSheetButton(
                         label = stringResource(Res.string.term_disconnect),
                         onClick = { menuOpen = false; onDisconnect() },
@@ -280,7 +455,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                         is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         is AiNotice.Ask -> Txt(notice.question, color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         AiNotice.Rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Error -> Txt(notice.message, color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     else -> {
                         if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = D.dim, size = 13.sp)
@@ -308,7 +483,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                 controller.notice != null ->
                     MobileAiChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
                 else -> {
-                    Txt(controller.policy.name.uppercase(), color = D.faint, size = 10.sp, font = mono)
+                    Txt(labelUppercase(controller.policy.shortLabel()), color = D.faint, size = 10.sp, font = mono)
                     Box(
                         Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(D.cyan)
                             .clickable(enabled = !controller.busy) { submit() },
@@ -389,7 +564,7 @@ private fun MobileTerminalHeader(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Dot(sessionDotColor(status))
-                        Txt(mobileTerminalStatusText(status), color = sessionDotColor(status), size = 10.5.sp)
+                        Txt(mobileTerminalStatusText(mobileTerminalStatus(status)), color = sessionDotColor(status), size = 10.5.sp)
                     }
                     // Live metrics of the active session (desktop status-bar parity) — only when connected.
                     if (connected) {
@@ -469,6 +644,8 @@ private fun MobileKeybar(
     terminal: TerminalScreenState,
     ctrlArmed: Boolean,
     onCtrlArmedChange: (Boolean) -> Unit,
+    aiOpen: Boolean = false,
+    onToggleAi: (() -> Unit)? = null,
 ) {
     val plain = { seq: String -> terminal.sendUserInput(seq); onCtrlArmedChange(false) }
     val char = { c: String ->
@@ -484,6 +661,8 @@ private fun MobileKeybar(
         Modifier
             .fillMaxWidth()
             .background(KeybarBg)
+            // The screen runs edge to edge, so the panel keeps itself off the navigation bar.
+            .hiddenSystemBarsPadding(top = false, bottom = true)
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -499,6 +678,8 @@ private fun MobileKeybar(
             KeyCap("insert", accent = true) { terminal.reverseSearchAccept(); onCtrlArmedChange(false) }
             return@Row
         }
+        // The AI input lives behind this key instead of taking a permanent row (see MobileAiBarInput).
+        if (onToggleAi != null) KeyCapIcon("auto_awesome", accent = aiOpen) { onToggleAi() }
         KeyCap("esc") { plain(ESC) }
         // Tab with an autocomplete suggestion — accept it; otherwise a normal tab to the PTY.
         KeyCap("tab") {
@@ -552,16 +733,16 @@ private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = fal
 
 /** Icon panel key (arrows). */
 @Composable
-private fun KeyCapIcon(icon: String, onClick: () -> Unit) {
+private fun KeyCapIcon(icon: String, accent: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier
             .clip(RoundedCornerShape(7.dp))
-            .background(KeyCapBg)
+            .background(if (accent) D.cyan14 else KeyCapBg)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(icon, size = 16.sp, color = KeyCapFg)
+        Sym(icon, size = 16.sp, color = if (accent) D.cyanBright else KeyCapFg)
     }
 }
 

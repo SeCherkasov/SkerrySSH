@@ -73,6 +73,7 @@ import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
@@ -82,14 +83,18 @@ import app.skerry.ui.connection.JumpErrorDialog
 import app.skerry.ui.connection.jumpRouteLabel
 import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.forward.humanRate
+import app.skerry.shared.ssh.isVnc
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
+import app.skerry.ui.connection.toVncAuth
 import app.skerry.ui.app.GroupDialog
 import app.skerry.ui.host.GroupDialog as GroupEditDialog
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.session.BroadcastPanel
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetShortcut
@@ -97,7 +102,10 @@ import androidx.compose.runtime.collectAsState
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncIndicatorLevel
 import app.skerry.ui.sync.syncIndicatorLocalized
+import app.skerry.ui.terminal.CommandPalette
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
+import app.skerry.ui.terminal.CastPlayerOverlay
+import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_SCROLLBACK
@@ -116,6 +124,10 @@ import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_this_session
+import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_player_invalid
+import app.skerry.ui.generated.resources.term_player_title
+import app.skerry.ui.generated.resources.term_record_start
 import app.skerry.ui.generated.resources.shell_disconnect_title
 import app.skerry.ui.generated.resources.shell_disconnect_message
 import app.skerry.ui.generated.resources.shell_disconnect
@@ -144,6 +156,7 @@ import app.skerry.ui.app.DesktopView
 import app.skerry.ui.design.Dot
 import app.skerry.ui.app.FeatureFlags
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalConnectHost
@@ -158,6 +171,7 @@ import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSftpPrefs
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
@@ -278,6 +292,9 @@ fun DesktopDesignApp(
     securityLog: SecurityLog? = null,
     hosts: HostManagerController? = null,
     transport: SshTransport? = null,
+    // VNC (RFB) transport for remote-desktop tabs — separate from the SSH-shaped [transport] because
+    // VNC is a framebuffer protocol (see VncTransport). `null` in mock/preview (no VNC tabs).
+    vncTransport: app.skerry.shared.vnc.VncTransport? = null,
     // Transport for the one-off "Test connection": separate from [transport] (live sessions), because a
     // probe must not add the host key to known_hosts (read-only verifier). `null` — use [transport]
     // (offscreen render/preview, where there's no enroll side effect). See main.kt.
@@ -336,13 +353,15 @@ fun DesktopDesignApp(
     // built from the live transport — one shell per tab, like in [app.skerry.ui.mobile.MobileApp].
     // We close our own graph on dispose; an externally-owned one belongs to the caller and is left alone.
     val scope = rememberCoroutineScope()
-    val liveSessions = sessions ?: remember(transport, scope, vault) {
+    // Per-host terminal command history persistence (autocomplete + the command palette) on top of
+    // the encrypted vault. Hoisted out of the sessions factory: the palette reads it directly.
+    val termHistory = remember(vault) { vault?.let { VaultTerminalHistoryStore(it) } }
+    val liveSessions = sessions ?: remember(transport, vncTransport, scope, vault) {
         transport?.let { t ->
-            // Per-host terminal command history persistence (for autocomplete) on top of the encrypted vault.
-            val termHistory = vault?.let { VaultTerminalHistoryStore(it) }
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
+                vncControllerFactory = vncTransport?.let { vt -> { app.skerry.ui.vnc.VncSessionController(vt, scope) } },
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
@@ -424,6 +443,7 @@ fun DesktopDesignApp(
         LocalTestTransport provides (testTransport ?: transport),
         LocalTunnels provides tunnels,
         LocalSnippets provides snippets,
+        LocalTerminalHistory provides termHistory,
         LocalFeatures provides features,
         LocalSftpPrefs provides sftpPrefs,
         // Terminal appearance from settings: font + size, read by [app.skerry.ui.terminal.TerminalScreen].
@@ -486,6 +506,7 @@ private fun DesktopChrome(
     customGroupsProvider: () -> List<String>,
     windowChrome: WindowChrome? = null,
 ) {
+    val termHistory = LocalTerminalHistory.current
     // Keychain secrets live in the open vault — behind the master-password gate we first fire
     // [onVaultUnlocked], then reload (secrets + synced empty folders).
     LaunchedEffect(credentials) {
@@ -499,6 +520,8 @@ private fun DesktopChrome(
     // chosen, not at submit — otherwise switching tabs while typing the password would open the split
     // in the wrong place) / snippet's "Run on host" (also remembers the command).
     var pendingAuth by remember { mutableStateOf<PendingAuth?>(null) }
+    // VNC "ask every time": a host with no stored password prompts before opening the framebuffer tab.
+    var pendingVncHost by remember { mutableStateOf<Host?>(null) }
 
     // ProxyJump chain resolution failed for the clicked host — connecting would either dial
     // forever or silently go direct, so a notice is shown instead ([JumpErrorDialog]).
@@ -535,7 +558,25 @@ private fun DesktopChrome(
     // Stable connect lambdas: without remember they'd be recreated on every recomposition and,
     // flowing into a staticCompositionLocalOf, would invalidate all consumers of [LocalConnectHost] etc.
     val connectHost = remember(sessions, credentials, hostManager, state) {
-        { host: Host -> connectOrAsk(PendingAuth.NewTab(host)) }
+        { host: Host ->
+            if (host.connectionType.isVnc) {
+                // VNC opens a framebuffer tab (not a terminal). A stored password is used directly;
+                // "ask every time" (no bound secret) prompts for one first. No ProxyJump/host-key path.
+                val cred = credentials?.find(host.credentialId)
+                if (cred != null) {
+                    sessions?.openVnc(
+                        host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
+                        remoteResize = host.vncResizeToWindow,
+                        onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                    )
+                } else {
+                    pendingVncHost = host
+                }
+                Unit
+            } else {
+                connectOrAsk(PendingAuth.NewTab(host))
+            }
+        }
     }
 
     // Snippet's "Run on host": open a session to the host and run the command once connected.
@@ -600,7 +641,10 @@ private fun DesktopChrome(
         val onRootKey = remember(snippets, sessions, state) {
             { event: KeyEvent ->
                 if (event.type != KeyEventType.KeyDown) false
-                else if (state.appOverlay != null || state.modalOpen || state.settingsOpen) false
+                else if (
+                    state.appOverlay != null || state.modalOpen || state.settingsOpen ||
+                    state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null
+                ) false
                 else {
                     val shortcut = matchDesktopShortcut(
                         event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
@@ -622,6 +666,43 @@ private fun DesktopChrome(
                 HLine()
                 StatusBar()
             }
+            // The player owns the whole work area while it is open; Esc (via ModalScrim) closes it.
+            state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }
+            if (state.castInvalid) {
+                NoticeDialog(
+                    title = stringResource(Res.string.term_player_title),
+                    message = stringResource(Res.string.term_player_invalid),
+                    buttonLabel = stringResource(Res.string.term_ai_dismiss),
+                    onDismiss = state::dismissCastError,
+                )
+            }
+            state.recordingNotice?.let { outcome ->
+                NoticeDialog(
+                    title = stringResource(Res.string.term_record_start),
+                    message = recordingOutcomeMessage(outcome),
+                    buttonLabel = stringResource(Res.string.term_ai_dismiss),
+                    onDismiss = state::dismissRecordingNotice,
+                )
+            }
+            if (state.broadcastOpen) {
+                BroadcastPanel(
+                    controller = state.broadcast,
+                    targets = broadcastTargets(sessions),
+                    onDismiss = state::closeBroadcast,
+                )
+            }
+            if (state.commandPaletteOpen) {
+                val liveTerminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+                CommandPalette(
+                    history = termHistory,
+                    currentKey = sessions?.active?.controller?.historyKey,
+                    onPick = { command ->
+                        liveTerminal?.applyHistoryCommand(command)
+                        state.closeCommandPalette()
+                    },
+                    onDismiss = state::closeCommandPalette,
+                )
+            }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost)
             if (state.settingsOpen) SettingsPanel(state)
             // Sync onboarding modal over settings: appears via "Set up sync", closes itself on a
@@ -639,6 +720,23 @@ private fun DesktopChrome(
                     onConnect = { pw ->
                         pendingAuth = null
                         openResolved(pending, SshAuth.Password(pw))
+                    },
+                )
+            }
+            // VNC password prompt ("ask every time"): an empty entry means the server needs no password
+            // (security type None); a non-empty one is the VNC-Auth password.
+            pendingVncHost?.let { host ->
+                DesktopPasswordDialog(
+                    host = host,
+                    onDismiss = { pendingVncHost = null },
+                    onConnect = { pw ->
+                        pendingVncHost = null
+                        val auth = if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw)
+                        sessions?.openVnc(
+                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
+                            remoteResize = host.vncResizeToWindow,
+                            onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                        )
                     },
                 )
             }
@@ -769,6 +867,17 @@ private fun runDesktopShortcut(
             state.showView(DesktopView.Sftp)
         }
         DesktopShortcut.Lock -> onLock()
+        DesktopShortcut.Broadcast -> state.openBroadcast()
+        // These three live in toolbar buttons that own their state; the shortcut nudges them.
+        DesktopShortcut.SnippetPalette -> state.requestSnippetPalette()
+        DesktopShortcut.ToggleRecording -> state.requestRecordingToggle()
+        DesktopShortcut.PlayRecording -> state.requestCastOpen()
+        // Only over a live terminal: the palette inserts into it, so with nothing to insert into the
+        // key falls through (to the snippet hotkey) instead of opening a dead-end overlay.
+        DesktopShortcut.CommandPalette -> {
+            if (sessions?.active?.controller?.uiState !is ConnectionUiState.Connected) return false
+            state.openCommandPalette()
+        }
         DesktopShortcut.FocusAiBar -> state.requestAiBarFocus()
     }
     return true
@@ -1053,9 +1162,14 @@ private fun IconRail(state: DesktopDesignState) {
     ) {
         // Collapse/expand toggle for the terminal's hosts sidebar: lives on the rail (not in the
         // sidebar header) and only while the terminal view is on screen. Deliberately shorter than
-        // the 38dp view buttons — an auxiliary control, not a view.
+        // the 38dp view buttons — an auxiliary control, not a view. VNC maps to the same rail item
+        // but drives its own slide-over drawer (closed by default, overlays the framebuffer).
         if (state.appOverlay == null && currentSessionView == DesktopView.Terminal) {
-            SidebarToggle(state)
+            if (sessions?.active?.view == SessionView.Vnc) {
+                SidebarToggle(hidden = !state.vncSidebar, onToggle = state::toggleVncSidebar)
+            } else {
+                SidebarToggle(hidden = state.sidebarHidden, onToggle = state::toggleSidebar)
+            }
         }
         RAIL.forEach { item ->
             val active = if (state.appOverlay != null) item.view == state.appOverlay
@@ -1081,9 +1195,9 @@ private fun IconRail(state: DesktopDesignState) {
     }
 }
 
-/** Short rail button that hides/restores the terminal's hosts sidebar (chevron flips with state). */
+/** Short rail button that hides/restores the left hosts panel (chevron flips with state). */
 @Composable
-private fun SidebarToggle(state: DesktopDesignState) {
+private fun SidebarToggle(hidden: Boolean, onToggle: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     Box(
@@ -1093,10 +1207,10 @@ private fun SidebarToggle(state: DesktopDesignState) {
             .clip(RoundedCornerShape(6.dp))
             .hoverable(interaction)
             .background(if (hovered) D.cyan.copy(alpha = 0.06f) else Color.Transparent)
-            .clickable(onClick = state::toggleSidebar),
+            .clickable(onClick = onToggle),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(if (state.sidebarHidden) "chevron_right" else "chevron_left", size = 17.sp, color = if (hovered) D.dim else D.faint)
+        Sym(if (hidden) "chevron_right" else "chevron_left", size = 17.sp, color = if (hovered) D.dim else D.faint)
     }
 }
 

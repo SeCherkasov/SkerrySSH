@@ -57,6 +57,29 @@ class HostManagerControllerTest {
     }
 
     @Test
+    fun `set vnc resize flag persists on the stored host`() {
+        val store = FakeHostStore(Host("1", "a", "a.local", 5901, "u"))
+        val controller = HostManagerController(store) { error("must not be called") }
+
+        controller.setVncResizeToWindow("1", true)
+
+        assertEquals(true, controller.find("1")?.vncResizeToWindow)
+        assertEquals(true, store.all().single().vncResizeToWindow)
+    }
+
+    @Test
+    fun `editing a host in the form preserves the vnc resize flag`() {
+        // The flag is toggled from session chrome, not the edit form — a form save (draft has no
+        // such field) must not silently reset it.
+        val store = FakeHostStore(Host("1", "a", "a.local", 5901, "u", vncResizeToWindow = true))
+        val controller = HostManagerController(store) { error("must not be called") }
+
+        controller.save(HostDraft(id = "1", label = "renamed", address = "a.local", port = 5901, username = "u"))
+
+        assertEquals(true, controller.find("1")?.vncResizeToWindow)
+    }
+
+    @Test
     fun `save carries the credential reference through to the stored host`() {
         val store = FakeHostStore()
         val controller = HostManagerController(store) { "gen-id" }

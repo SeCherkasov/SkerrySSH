@@ -27,5 +27,9 @@ class RoutingTransport(
             ConnectionType.MOSH -> mosh.connect(target, auth)
             ConnectionType.TELNET -> telnet.connect(target, auth)
             ConnectionType.SERIAL -> serial.connect(target, auth)
+            // VNC is a framebuffer protocol, not a shell/terminal one — it has its own transport
+            // (app.skerry.shared.vnc.VncTransport) and never reaches this SSH-shaped router.
+            ConnectionType.VNC ->
+                throw IllegalArgumentException("VNC is not an SSH transport; use VncTransport")
         }
 }

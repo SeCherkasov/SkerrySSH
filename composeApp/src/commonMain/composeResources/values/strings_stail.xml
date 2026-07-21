@@ -17,4 +17,10 @@
     <string name="stail_reenroll_prompt_title">Re-enable biometric unlock</string>
     <string name="stail_reenroll_prompt_cancel">Cancel</string>
     <string name="stail_reenroll_prompt_subtitle">Confirm your biometrics to bind quick unlock to the new account key.</string>
+
+    <!-- Sync failures (SyncFailureReason) — see syncFailureText -->
+    <string name="stail_sync_fail_rekey">Couldn't re-key the vault to the account password</string>
+    <string name="stail_sync_fail_key_adopt">Couldn't adopt the account key</string>
+    <!-- %1$s — localized reason, %2$s — raw technical detail (server/library message) -->
+    <string name="stail_sync_fail_detail">%1$s (%2$s)</string>
 </resources>

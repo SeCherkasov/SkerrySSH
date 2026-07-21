@@ -34,6 +34,43 @@ class DesktopShortcutsTest {
     }
 
     @Test
+    fun `the command palette is on the app modifier plus K`() {
+        assertEquals(DesktopShortcut.CommandPalette, match(meta = true, key = Key.K))
+        assertEquals(DesktopShortcut.CommandPalette, match(ctrl = true, shift = true, key = Key.K))
+        // Plain Ctrl+K stays with the terminal (readline kill-line).
+        assertNull(match(ctrl = true, key = Key.K))
+    }
+
+    @Test
+    fun `broadcast is on the app modifier plus B`() {
+        assertEquals(DesktopShortcut.Broadcast, match(meta = true, key = Key.B))
+        assertEquals(DesktopShortcut.Broadcast, match(ctrl = true, shift = true, key = Key.B))
+        assertNull(match(ctrl = true, key = Key.B)) // plain Ctrl+B belongs to the terminal
+    }
+
+    @Test
+    fun `the snippet palette is on the app modifier plus S`() {
+        assertEquals(DesktopShortcut.SnippetPalette, match(meta = true, key = Key.S))
+        assertEquals(DesktopShortcut.SnippetPalette, match(ctrl = true, shift = true, key = Key.S))
+        assertNull(match(ctrl = true, key = Key.S)) // plain Ctrl+S is the terminal's flow control
+    }
+
+    @Test
+    fun `session recording is on the app modifier plus R`() {
+        assertEquals(DesktopShortcut.ToggleRecording, match(meta = true, key = Key.R))
+        assertEquals(DesktopShortcut.ToggleRecording, match(ctrl = true, shift = true, key = Key.R))
+        // Plain Ctrl+R is reverse history search in the shell — it must not be stolen.
+        assertNull(match(ctrl = true, key = Key.R))
+    }
+
+    @Test
+    fun `the recording player is on the app modifier plus P`() {
+        assertEquals(DesktopShortcut.PlayRecording, match(meta = true, key = Key.P))
+        assertEquals(DesktopShortcut.PlayRecording, match(ctrl = true, shift = true, key = Key.P))
+        assertNull(match(ctrl = true, key = Key.P))
+    }
+
+    @Test
     fun `app modifier on macOS is Cmd alone`() {
         assertEquals(DesktopShortcut.NewConnection, match(meta = true, key = Key.N))
         assertEquals(DesktopShortcut.SplitTerminal, match(meta = true, key = Key.D))
@@ -70,5 +107,20 @@ class DesktopShortcutsTest {
         assertNull(match(key = Key.N))
         assertNull(match(key = Key.One))
         assertNull(match(shift = true, key = Key.D))
+    }
+
+    @Test
+    fun `a formatted chord is recognized as reserved by the shell`() {
+        // What the snippet editor stores, matched back against the shell's own shortcuts.
+        assertEquals(DesktopShortcut.ToggleRecording, matchDesktopShortcut("Ctrl+Shift+R"))
+        assertEquals(DesktopShortcut.SnippetPalette, matchDesktopShortcut("Meta+S"))
+        assertEquals(DesktopShortcut.SelectTab(0), matchDesktopShortcut("Alt+1"))
+    }
+
+    @Test
+    fun `a free chord is not reserved`() {
+        assertNull(matchDesktopShortcut("Ctrl+Shift+X"))
+        assertNull(matchDesktopShortcut("Ctrl+G"))
+        assertNull(matchDesktopShortcut("nonsense"))
     }
 }

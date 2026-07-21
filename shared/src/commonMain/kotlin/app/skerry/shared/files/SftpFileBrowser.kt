@@ -63,7 +63,8 @@ class SftpFileBrowser(
         try {
             block()
         } catch (e: SftpException) {
-            throw FileBrowserException(e.message ?: "SFTP error", e)
+            // The sshj/protocol text is diagnostic detail only; the UI renders [failure].
+            throw FileBrowserException(FileBrowserFailure.Sftp, e.message, e)
         }
 }
 

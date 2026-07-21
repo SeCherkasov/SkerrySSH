@@ -71,6 +71,12 @@ jna = "5.19.1"
 # 0.9.8+ is required: earlier releases can't handle the com.android.kotlin.multiplatform.library
 # target used by :shared and :composeApp (they demand a legacy `android` extension). See kover #747/#772.
 kover = "0.9.8"
+# Compose Hot Reload — dev-only live UI reload (./gradlew :composeApp:hotRunJvm). Like Kover it is
+# loaded via the root buildscript classpath and applied by id only in online builds, so the hermetic
+# offline Flatpak build (-Dskerry.offlineRepo) never resolves it. Pinned to 1.1.1: it is the last
+# line that supports Compose Multiplatform < 1.10 (we are on 1.9.3 for the stable material3 pair);
+# CHR 1.2.0-alpha02+ requires CMP 1.10.0+. Kotlin 2.1.20+ is fine (we run 2.4.10).
+composeHotReload = "1.1.1"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
