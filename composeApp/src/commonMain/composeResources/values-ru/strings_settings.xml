@@ -61,6 +61,7 @@
     <string name="settings_ai_error_invalid_request">Провайдер отклонил запрос (проверьте модель и параметры).</string>
     <string name="settings_ai_error_protocol">Неожиданный ответ от провайдера ИИ.</string>
     <string name="settings_ai_error_unknown">Не удалось выполнить запрос к ИИ. Попробуйте ещё раз.</string>
+    <string name="settings_ai_error_engine_crashed">Движок локальной модели аварийно завершился. Попробуйте ещё раз.</string>
     <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">Очищать секреты перед отправкой</string>
     <string name="settings_ai_sanitize_desc">Вырезать очевидные пароли, токены и ключи из запросов до отправки внешним провайдерам.</string>
