@@ -120,6 +120,28 @@ class AdminRepositoryTest {
     }
 
     @Test
+    fun `a revoked device does not pin the watermark`() = withTestDb { db ->
+        seedAccount(db)
+        val devices = DeviceRepository(db)
+        val records = RecordRepository(db)
+        val admin = AdminRepository(db)
+
+        // Active device is fully caught up; a revoked device is stuck at cursor 1 (e.g. an old
+        // phone that was re-paired and then revoked). The tombstone is past the active cursor,
+        // so excluding the revoked device it is safe to purge.
+        devices.register("alice@example.com", "devA", "Laptop")
+        devices.register("alice@example.com", "devOld", "Old phone")
+        records.upsert("alice@example.com", listOf(rec("r1", 1)))
+        records.upsert("alice@example.com", listOf(rec("r1", 2, deleted = true))) // tombstone at serverSeq 3
+        devices.touch("alice@example.com", "devA", syncVersion = 3)
+        devices.touch("alice@example.com", "devOld", syncVersion = 1)
+        devices.revoke("alice@example.com", "devOld")
+
+        assertEquals(1, admin.purgeTombstones("alice@example.com"))
+        assertEquals(0, admin.accountSummaries().single().tombstones)
+    }
+
+    @Test
     fun `compacted tombstone ids are those at or below the slowest device cursor`() = withTestDb { db ->
         seedAccount(db)
         val devices = DeviceRepository(db)
