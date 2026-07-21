@@ -1,6 +1,8 @@
 package app.skerry.shared.ai.local
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -24,24 +26,32 @@ class StreamLlmHostLink(
     private val reader = input.bufferedReader(Charsets.UTF_8)
     private val writer = output.writer(Charsets.UTF_8)
     private val sending = Mutex()
+
+    @Volatile
     private var closed = false
 
-    override suspend fun send(line: String) = withContext(Dispatchers.IO) {
+    // runInterruptible, not a plain withContext: these are blocking calls with no suspension point,
+    // so without it a timeout around them could not stop waiting for a host that went quiet.
+    override suspend fun send(line: String) {
         sending.withLock {
-            writer.write(line)
-            writer.write("\n")
-            writer.flush()
+            runInterruptible(Dispatchers.IO) {
+                writer.write(line)
+                writer.write("\n")
+                writer.flush()
+            }
         }
     }
 
-    override suspend fun receive(): String? = withContext(Dispatchers.IO) {
+    override suspend fun receive(): String? = runInterruptible(Dispatchers.IO) {
         runCatching { reader.readLine() }.getOrNull()
     }
 
     override suspend fun close() {
-        withContext(Dispatchers.IO) {
+        withContext(NonCancellable + Dispatchers.IO) {
             if (closed) return@withContext
             closed = true
+            // Closing the transport is also how a read that is already blocked gets released:
+            // both a socket channel (desktop) and an Android fd report the asynchronous close.
             runCatching { writer.close() }
             runCatching { reader.close() }
             runCatching { stop() }
