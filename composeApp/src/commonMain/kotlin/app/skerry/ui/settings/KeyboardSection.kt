@@ -84,8 +84,10 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_accept_autocomplete), "Tab", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_cycle_suggestions), shift("Tab"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_search_history), ctrl("R"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), ctrlShift("C"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_paste), ctrlShift("V"), live = true),
+        // Both conventions are live, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
+        // Both conventions work, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
+        KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), "${ctrlShift("C")} / ${ctrl("Insert")}", live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_paste), "${ctrlShift("V")} / ${shift("Insert")}", live = true),
     )
 
     val mono = LocalFonts.current.mono
