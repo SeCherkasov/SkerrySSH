@@ -1,5 +1,6 @@
 package app.skerry.ui.vault
 
+import app.skerry.shared.io.PrivateConfig
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sftp_dialog_save_as
 import java.awt.FileDialog
@@ -27,6 +28,13 @@ actual suspend fun exportTextFile(suggestedName: String, content: String): Boole
         val name = dialog.file ?: return@withContext null
         File(dir, name).absolutePath
     } ?: return false
-    withContext(Dispatchers.IO) { File(path).writeText(content) }
+    withContext(Dispatchers.IO) {
+        val file = File(path)
+        file.writeText(content)
+        // A session recording holds whatever the server printed — tokens, key material echoed by a
+        // careless command. Default umask leaves it 0644, readable by every local account, so it
+        // gets the same 0600 as every other private file Skerry writes.
+        PrivateConfig.harden(file.toPath())
+    }
     return true
 }

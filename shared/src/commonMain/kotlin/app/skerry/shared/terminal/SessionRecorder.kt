@@ -10,10 +10,11 @@ import kotlinx.serialization.json.JsonPrimitive
  * The whole recording is held in memory and written out once on [finish] — a growing file would mean
  * streaming appends from the PTY collector, and terminal output is untrusted, unbounded traffic
  * (`cat` a big file and it never stops). [maxEvents]/[maxBytes] bound it instead: past either limit
- * recording stops and [truncated] says so, rather than the app quietly eating memory.
+ * recording stops and [truncated] says so, rather than the app quietly eating memory. [maxBytes] is
+ * measured on the escaped form actually held in memory, not on the source text.
  *
- * Not thread-safe by itself: it is fed from the terminal's single output collector, which is the
- * only writer.
+ * Not thread-safe by itself: every call must come from the single coroutine that owns it (in the app,
+ * the terminal's command loop — start, stop and output all reach it from there).
  *
  * Recordings contain whatever the server printed — tokens, file contents, key material echoed by a
  * careless command. They are never written anywhere on their own: the user exports one explicitly.
@@ -30,6 +31,11 @@ class SessionRecorder(
     private val startedAtMillis: Long = now()
     private val events = StringBuilder()
     private var bytes = 0
+
+    // Last timestamp written. [now] can step backwards (NTP correction, suspend/resume), and an
+    // asciicast whose time goes back stalls players. [parseAsciicast] repairs that on read; the
+    // writer must not produce a file that needs the repair in the first place.
+    private var lastElapsed = 0L
 
     var eventCount: Int = 0
         private set
@@ -57,14 +63,23 @@ class SessionRecorder(
     /** Append an output [chunk]. Blank chunks and anything past the limits are dropped. */
     fun record(chunk: String) {
         if (chunk.isEmpty() || truncated) return
-        if (eventCount >= maxEvents || bytes + chunk.length > maxBytes) {
+        if (eventCount >= maxEvents) {
             truncated = true
             return
         }
-        val elapsed = (now() - startedAtMillis).coerceAtLeast(0L)
-        events.append('[').append(secondsLiteral(elapsed)).append(",\"o\",")
-            .append(JsonPrimitive(chunk).toString()).append("]\n")
-        bytes += chunk.length
+        // The cap is measured on the escaped UTF-8 form — what the buffer actually holds. Counting
+        // source characters would let it grow several times past [maxBytes]: an ESC is one character
+        // but six once escaped, and a box-drawing or CJK glyph is one character but three bytes.
+        val escaped = JsonPrimitive(chunk).toString()
+        val size = utf8Length(escaped)
+        if (bytes + size > maxBytes) {
+            truncated = true
+            return
+        }
+        val elapsed = (now() - startedAtMillis).coerceAtLeast(lastElapsed)
+        lastElapsed = elapsed
+        events.append('[').append(secondsLiteral(elapsed)).append(",\"o\",").append(escaped).append("]\n")
+        bytes += size
         eventCount++
     }
 
@@ -106,6 +121,22 @@ private fun secondsLiteral(millis: Long): String {
         fraction % 10 == 0 -> "$whole.${(fraction / 10).toString().padStart(2, '0')}"
         else -> "$whole.${fraction.toString().padStart(3, '0')}"
     }
+}
+
+/** UTF-8 byte length of [s], counted without allocating an encoded copy. */
+private fun utf8Length(s: String): Int {
+    var n = 0
+    for (ch in s) {
+        val c = ch.code
+        n += when {
+            c < 0x80 -> 1
+            c < 0x800 -> 2
+            // Half of a surrogate pair: two halves make the four bytes of an astral character.
+            c in 0xD800..0xDFFF -> 2
+            else -> 3
+        }
+    }
+    return n
 }
 
 /**

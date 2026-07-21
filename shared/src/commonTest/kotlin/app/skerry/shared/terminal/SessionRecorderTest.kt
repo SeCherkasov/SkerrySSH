@@ -94,6 +94,40 @@ class SessionRecorderTest {
     }
 
     @Test
+    fun the_byte_cap_counts_the_escaped_form_not_source_characters() {
+        val r = recorder(Clock(), maxBytes = 16)
+
+        r.record("\u001b\u001b\u001b\u001b") // four characters, 24 once escaped
+
+        assertTrue(r.truncated)
+        assertEquals(0, r.eventCount)
+    }
+
+    @Test
+    fun the_byte_cap_counts_utf8_bytes_of_multibyte_text() {
+        val r = recorder(Clock(), maxBytes = 8)
+
+        r.record("шшшш") // four characters, eight UTF-8 bytes plus quotes
+
+        assertTrue(r.truncated)
+        assertEquals(0, r.eventCount)
+    }
+
+    @Test
+    fun a_clock_that_steps_backwards_never_moves_an_event_back_in_time() {
+        val clock = Clock(1_000L)
+        val r = recorder(clock)
+
+        r.record("first")
+        clock.now = 1_500L
+        r.record("second")
+        clock.now = 1_100L // NTP step back mid-recording
+        r.record("third")
+
+        assertEquals("[0.5,\"o\",\"third\"]", r.finish().lines()[3])
+    }
+
+    @Test
     fun a_fresh_recorder_is_neither_truncated_nor_populated() {
         val r = recorder(Clock())
 
