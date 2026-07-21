@@ -9,13 +9,14 @@ import android.os.IBinder
 import android.os.Message
 import android.os.Messenger
 import android.os.ParcelFileDescriptor
+import android.util.Log
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.io.FileOutputStream
 
 /**
  * The isolated inference host on Android: declared with `android:process=":llm"`, so llama.cpp
@@ -28,7 +29,13 @@ import java.io.FileOutputStream
  */
 class LlmHostService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // The point of this process is to absorb failures: a bug in the plumbing here must end the
+    // connection (the app sees a dead host and retries), not take the process down by itself.
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, e ->
+            Log.e("SkerryLlmHost", "inference connection failed", e)
+        },
+    )
     private var serving: Job? = null
     private var handlerThread: HandlerThread? = null
 
@@ -44,9 +51,12 @@ class LlmHostService : Service() {
         val (host, client) = pair[0] to pair[1]
         serving?.cancel()
         serving = scope.launch {
-            // Both ends are sockets: reading and writing go over the same descriptor.
+            // The socket is full duplex, but each stream must own its own descriptor: two wrappers
+            // over one ParcelFileDescriptor would close it twice. The dup is closed with its stream.
             ParcelFileDescriptor.AutoCloseInputStream(host).use { input ->
-                FileOutputStream(host.fileDescriptor).use { output ->
+                ParcelFileDescriptor.AutoCloseOutputStream(host.dup()).use { output ->
+                    // A runtime per connection: the process is torn down with the last unbind, so
+                    // this is also the lifetime of the loaded model.
                     LlmHostServer.serve(input, output, LlamatikRuntime(message.arg1))
                 }
             }

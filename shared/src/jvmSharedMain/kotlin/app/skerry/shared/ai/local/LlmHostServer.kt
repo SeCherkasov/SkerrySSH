@@ -44,7 +44,11 @@ object LlmHostServer {
                         // one's `done`. The app serializes requests, but the protocol shouldn't
                         // desync if it ever stops.
                         generation?.supersede()
-                        generation = Generation().also { it.job = launch { runGeneration(command, runtime, out, it) } }
+                        generation = Generation().also {
+                            // Explicit dispatcher: the caller may drive serve() from a single-thread
+                            // event loop (the desktop host does), and answering must not sit on it.
+                            it.job = launch(Dispatchers.IO) { runGeneration(command, runtime, out, it) }
+                        }
                     }
                 }
             }

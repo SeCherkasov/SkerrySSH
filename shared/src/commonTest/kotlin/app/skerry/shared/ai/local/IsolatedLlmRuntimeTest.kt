@@ -21,7 +21,11 @@ class IsolatedLlmRuntimeTest {
     private val request = AiChatRequest("local", listOf(AiMessage(AiRole.USER, "hi")))
 
     /** Scripted host: [answers] are the event lines it replies with, per generation. */
-    private class FakeLink(private val answers: MutableList<List<LlmHostEvent>>) : LlmHostLink {
+    private class FakeLink(
+        private val answers: MutableList<List<LlmHostEvent>>,
+        /** Mimics a host wedged in a native call: it never answers and never closes the socket. */
+        private val mute: Boolean = false,
+    ) : LlmHostLink {
         val sent = mutableListOf<LlmHostCommand>()
         var closed = false
         var sendFails = false
@@ -34,13 +38,16 @@ class IsolatedLlmRuntimeTest {
             if (command !is LlmHostCommand.Generate) return
             val events = answers.removeFirstOrNull() ?: listOf(LlmHostEvent.Done)
             events.forEach { pending.send(LlmHostProtocol.encode(it)) }
-            if (events.none { it is LlmHostEvent.Done || it is LlmHostEvent.Failure }) pending.send(null) // host died
+            if (!mute && events.none { it is LlmHostEvent.Done || it is LlmHostEvent.Failure }) {
+                pending.send(null) // host died
+            }
         }
 
-        override suspend fun receive(): String? = pending.receive()
+        override suspend fun receive(): String? = pending.receiveCatching().getOrNull()
 
         override suspend fun close() {
             closed = true
+            pending.close() // a closed transport releases a read that is waiting on it
         }
     }
 
@@ -135,6 +142,33 @@ class IsolatedLlmRuntimeTest {
         assertTrue(LlmHostCommand.Cancel in link.sent, "the host must be told to stop generating")
         assertEquals(listOf(AiDelta("next")), runtime.generate(modelPath, request).toList())
         assertEquals(1, launcher.launches)
+    }
+
+    @Test
+    fun `a host that never answers the cancel is dropped instead of blocking every later request`() = runTest {
+        val wedged = FakeLink(mutableListOf(listOf(LlmHostEvent.Delta("one"))), mute = true)
+        val fresh = FakeLink(mutableListOf(listOf(LlmHostEvent.Delta("next"), LlmHostEvent.Done)))
+        val launcher = FakeLauncher(wedged, fresh)
+        val runtime = IsolatedLlmRuntime(launcher, cancelDrainMillis = 100)
+
+        assertEquals(AiDelta("one"), runtime.generate(modelPath, request).first()) // abandons the stream
+
+        assertTrue(wedged.closed, "a host that ignores cancel must be torn down")
+        // The runtime is usable afterwards, i.e. the lock was not left held by the cleanup.
+        assertEquals(listOf(AiDelta("next")), runtime.generate(modelPath, request).toList())
+        assertEquals(2, launcher.launches)
+    }
+
+    @Test
+    fun `a host that dies before the request reaches it is reported and released`() = runTest {
+        val stillborn = FakeLink(mutableListOf()).apply { sendFails = true }
+        val launcher = FakeLauncher(stillborn)
+        val runtime = IsolatedLlmRuntime(launcher)
+
+        val error = assertFailsWith<AiException> { runtime.generate(modelPath, request).toList() }
+
+        assertEquals(AiException.Kind.ENGINE_CRASHED, error.kind)
+        assertTrue(stillborn.closed, "a host that never took the request must not stay cached")
     }
 
     @Test

@@ -14,6 +14,7 @@ import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.deleteIfExists
 
 /**
@@ -47,7 +48,10 @@ class ProcessLlmHostLauncher(
                 input = Channels.newInputStream(channel),
                 output = Channels.newOutputStream(channel),
             ) {
+                // A host wedged in a native call may never act on a polite termination, and this is
+                // the path taken exactly when it looks stuck, so escalate rather than leak it.
                 process.destroy()
+                if (!process.waitFor(EXIT_GRACE_MILLIS, TimeUnit.MILLISECONDS)) process.destroyForcibly()
                 cleanUp(server, socketPath, directory)
             }
         } catch (e: Throwable) {
@@ -91,6 +95,7 @@ class ProcessLlmHostLauncher(
     private companion object {
         const val SOCKET_NAME = "host.sock"
         const val START_TIMEOUT_MILLIS = 60_000L
+        const val EXIT_GRACE_MILLIS = 2_000L
 
         /** The host holds protocol strings only; the model itself is native, mmapped memory. */
         const val DEFAULT_HEAP_MB = 256

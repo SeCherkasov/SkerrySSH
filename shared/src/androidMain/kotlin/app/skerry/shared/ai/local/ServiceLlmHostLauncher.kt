@@ -17,7 +17,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.FileOutputStream
 
 /**
  * Binds [LlmHostService] in the `:llm` process and takes the socket it hands back. The service is
@@ -38,8 +37,10 @@ class ServiceLlmHostLauncher(
                 binder.complete(service)
             }
 
+            // Only matters before the handshake: once the socket exists, a dead host is detected by
+            // the stream ending, the same way as on desktop.
             override fun onServiceDisconnected(name: ComponentName?) {
-                binder.complete(null) // the host died before it could hand over the channel
+                binder.complete(null)
             }
         }
 
@@ -53,8 +54,10 @@ class ServiceLlmHostLauncher(
                 ?: fail("the inference service did not start")
             val channel = openChannel(Messenger(service)) ?: fail("the inference service gave no channel")
             StreamLlmHostLink(
+                // One descriptor per stream (see LlmHostService): the socket is full duplex, but a
+                // ParcelFileDescriptor must not be closed twice.
                 input = ParcelFileDescriptor.AutoCloseInputStream(channel),
-                output = FileOutputStream(channel.fileDescriptor),
+                output = ParcelFileDescriptor.AutoCloseOutputStream(channel.dup()),
             ) {
                 runCatching { appContext.unbindService(connection) }
             }
