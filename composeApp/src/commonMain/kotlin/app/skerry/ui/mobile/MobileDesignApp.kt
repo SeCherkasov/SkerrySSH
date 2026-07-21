@@ -57,6 +57,7 @@ import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.terminal.TerminalSessionPrefs
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
+import app.skerry.ui.vault.tearDownForLock
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_route_team
 import org.jetbrains.compose.resources.stringResource
@@ -283,6 +284,9 @@ fun MobileDesignApp(
                     // Auto-lock threshold from settings: changing it recomposes VaultGate and restarts
                     // the idle timer; Never (idleMs == null) disables it.
                     autoLockIdleMs = state.autoLock.idleMs,
+                    // Runs on EVERY lock, including the two automatic ones that bypass the lock
+                    // action — Android had no teardown at all before (only onVaultReset did).
+                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions) },
                     onReset = onVaultReset,
                     // onPairingComplete != null (sync present) — the create screen offers "I have a code":
                     // the coordinator creates the vault under the chosen password and accepts the account key.

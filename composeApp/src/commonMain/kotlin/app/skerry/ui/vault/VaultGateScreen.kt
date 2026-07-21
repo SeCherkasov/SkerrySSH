@@ -127,6 +127,11 @@ fun VaultGate(
     // (deviceMandatesAutoLock).
     autoLockIdleMs: Long? = AUTO_LOCK_IDLE_MS,
     modifier: Modifier = Modifier,
+    // Teardown of everything holding the decrypted secret, run immediately before EVERY transition to
+    // locked — manual lock, background (`ON_STOP`) and the idle timer alike. It lives here rather than
+    // in the caller's lock action because the two automatic paths call the controller directly and
+    // would otherwise bypass it (they did: tunnels survived an idle auto-lock on both platforms).
+    onBeforeLock: () -> Unit = {},
     // External cleanup on reset (hosts/known_hosts/settings per the chosen [ResetScope]). Called after the
     // vault is erased; the platform wiring (desktop `main`) supplies the real implementation.
     onReset: (ResetScope) -> Unit = {},
@@ -229,6 +234,11 @@ fun VaultGate(
         subtitle = stringResource(Res.string.vtail_bio_unlock_subtitle),
     )
 
+    // Single door into the locked state: every path goes through the teardown first. Kept fresh via
+    // rememberUpdatedState so the DisposableEffect observer below doesn't capture a stale lambda.
+    val currentOnBeforeLock by rememberUpdatedState(onBeforeLock)
+    val lockNow = { currentOnBeforeLock(); controller.lock() }
+
     // Background auto-lock: other hands on an unlocked device must not get an open vault after minimizing.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, controller) {
@@ -240,7 +250,7 @@ fun VaultGate(
                 !controller.biometricInFlight &&
                 deviceMandatesAutoLock()
             ) {
-                controller.lock()
+                lockNow()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -252,7 +262,7 @@ fun VaultGate(
     if (controller.state == VaultGateState.Unlocked && autoLockIdleMs != null) {
         LaunchedEffect(controller.activityTick, autoLockIdleMs) {
             delay(autoLockIdleMs)
-            controller.lock()
+            lockNow()
         }
     }
 
@@ -316,7 +326,7 @@ fun VaultGate(
                     }
                 },
             ) {
-                content { controller.lock() }
+                content { lockNow() }
             }
         }
     }
