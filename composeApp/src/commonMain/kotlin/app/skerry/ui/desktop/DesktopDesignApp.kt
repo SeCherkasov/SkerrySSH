@@ -122,6 +122,7 @@ import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGate
+import app.skerry.ui.vault.tearDownForLock
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_this_session
 import app.skerry.ui.generated.resources.term_ai_dismiss
@@ -468,6 +469,8 @@ fun DesktopDesignApp(
                 // Idle auto-lock threshold from settings: changing it in the UI recomposes VaultGate
                 // and restarts the idle timer; Never (idleMs == null) turns it off.
                 autoLockIdleMs = state.autoLock.idleMs,
+                // Runs on EVERY lock, including the two automatic ones that bypass the lock action.
+                onBeforeLock = { tearDownForLock(tunnels, sessions) },
                 onReset = onVaultReset,
                 // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
                 // the coordinator creates the vault under the chosen password itself and accepts the account key.
@@ -589,30 +592,19 @@ private fun DesktopChrome(
         { host: Host -> connectOrAsk(PendingAuth.Split(host, sessions?.activeId)) }
     }
 
-    // Locking the vault must tear down all active tunnels: their connections hold the decrypted
-    // secret, and they can't keep hanging around after locking (zero-knowledge). closeAll is
-    // idempotent; the mock path (onLock==null) has nothing to wrap.
-    val tunnels = LocalTunnels.current
-    // Locking tears down active tunnels (their connections hold the decrypted secret — zero-knowledge),
-    // but TAB SESSIONS (including split) are deliberately meant to SURVIVE a lock: terminals stay put
-    // after unlocking. Any pending password-prompt dialogs are dismissed (don't leave password entry
-    // sitting under the lock screen). Stabilized like onRootKey below: the lambda flows into TitleBar
-    // and lockAction, and without remember a new instance on every recomposition would force them to
+    // Pending password-prompt dialogs are dismissed on lock (don't leave password entry sitting under
+    // the lock screen). Stabilized like onRootKey below: the lambda flows into TitleBar and
+    // lockAction, and without remember a new instance on every recomposition would force them to
     // recompute for nothing.
-    val onLockWithTunnels: (() -> Unit)? = if (onLock == null) null else remember(onLock, tunnels, sessions, state) {
+    // Only the UI part of locking lives here. Tearing down what holds the secret is
+    // [tearDownForLock], handed to VaultGate as onBeforeLock: the background and idle auto-locks
+    // never reach this lambda, so anything security-relevant put here would be skipped by them.
+    val onLockWithTunnels: (() -> Unit)? = if (onLock == null) null else remember(onLock, state) {
         {
             pendingAuth = null
             // Also dismiss any pending disconnect/close confirmation — after unlock an action needs a
             // fresh user intent (like pendingAuth), not to "resurface" on its own.
             state.dismissClose()
-            tunnels?.closeAll()
-            // Sessions survive a lock (the open socket stays alive), but auto-reconnect after a lock
-            // would re-authenticate with a stale secret against a locked vault — forbid it by clearing
-            // the saved credentials on every session and its split panes (zero-knowledge).
-            sessions?.sessions?.forEach { s ->
-                s.controller.clearReconnectCredentials()
-                s.splitSession?.controller?.clearReconnectCredentials()
-            }
             onLock()
         }
     }
@@ -630,7 +622,7 @@ private fun DesktopChrome(
         // into the snippet editor's fields (Command/ShortcutField) or New connection would go to the
         // terminal as a command.
         val snippets = LocalSnippets.current
-        // Live lock (tears down tunnels/credentials) on the live path; state.lock is mock/preview.
+        // Live lock on the live path (teardown itself runs in VaultGate); state.lock is mock/preview.
         // Via rememberUpdatedState so onRootKey doesn't depend on the lock lambda itself changing.
         val lockAction = rememberUpdatedState(onLockWithTunnels ?: state::lock)
         // Global shell hotkeys (⌘/Ctrl+Shift — New conn/Split/SFTP/AI-bar/Lock, Ctrl+Tab — adjacent

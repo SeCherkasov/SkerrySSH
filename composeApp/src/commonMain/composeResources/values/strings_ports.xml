@@ -43,4 +43,17 @@
     <string name="ports_type_local_display">Local forward (-L)</string>
     <string name="ports_type_remote_display">Remote forward (-R)</string>
     <string name="ports_type_socks_display">Dynamic SOCKS (-D)</string>
+    <string name="ports_find_services">Find services</string>
+    <string name="ports_services_title">Listening services</string>
+    <string name="ports_services_hint">Ask a host which TCP ports it listens on, then forward one in a tap.</string>
+    <string name="ports_scan">Scan</string>
+    <string name="ports_scanning">Scanning…</string>
+    <string name="ports_no_services">No listening TCP ports found</string>
+    <string name="ports_services_unsupported">This connection type has no command channel, so the host cannot be scanned.</string>
+    <string name="ports_forward">Forward</string>
+    <string name="ports_already_forwarded">Forwarded</string>
+    <string name="ports_service_port">port %1$d</string>
+    <string name="ports_pick_host_to_scan">Pick a host to scan</string>
+    <string name="ports_open_in_browser">Open in browser</string>
+    <string name="ports_close">Close</string>
 </resources>

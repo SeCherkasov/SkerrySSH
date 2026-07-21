@@ -7,31 +7,21 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
-import app.skerry.shared.ssh.PortForwardException
 import app.skerry.shared.ssh.RemoteForwardSpec
 import app.skerry.shared.ssh.SshAuth
-import app.skerry.shared.ssh.SshAuthenticationException
 import app.skerry.shared.ssh.SshConnection
-import app.skerry.shared.ssh.SshConnectionException
-import app.skerry.shared.ssh.SshHostKeyRejectedException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.tunnel.Tunnel
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.shared.tunnel.TunnelStore
 import app.skerry.ui.connection.JumpChainProblem
-import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.ptail_err_auth_failed
-import app.skerry.ui.generated.resources.ptail_err_connection_failed
-import app.skerry.ui.generated.resources.ptail_err_forward_failed
-import app.skerry.ui.generated.resources.ptail_err_host_not_trusted
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.getString
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 
@@ -146,13 +136,16 @@ class TunnelEntry internal constructor(tunnel: Tunnel) {
 class TunnelManager(
     private val store: TunnelStore,
     private val transport: SshTransport,
-    private val resolve: (Tunnel) -> TunnelResolution,
+    private val resolve: (String) -> TunnelResolution,
     private val scope: CoroutineScope,
     private val pollIntervalMillis: Long = 1000,
     private val newId: () -> String,
 ) {
     var tunnels: List<TunnelEntry> by mutableStateOf(store.all().map { TunnelEntry(it) })
         private set
+
+    /** Discovery of listening services on a host, for forwarding one of them in a tap. */
+    val services: ServiceScanController = ServiceScanController(transport, resolve, scope)
 
     init {
         // Polls telemetry for active tunnels: samples counters and computes rate from the delta.
@@ -217,7 +210,7 @@ class TunnelManager(
         // deactivate can cancel it.
         entry.connectingJob = scope.launch {
             try {
-                when (val resolution = resolve(entry.tunnel)) {
+                when (val resolution = resolve(entry.tunnel.hostId)) {
                     is TunnelResolution.Unavailable -> entry.status = TunnelStatus.Failed(reason = resolution.reason)
                     is TunnelResolution.Ready -> openForward(entry, resolution)
                 }
@@ -246,7 +239,7 @@ class TunnelManager(
             throw e
         } catch (e: Exception) {
             closeQuietly(conn)
-            entry.status = TunnelStatus.Failed(friendlyError(e))
+            entry.status = TunnelStatus.Failed(friendlyTunnelError(e))
         }
     }
 
@@ -290,9 +283,10 @@ class TunnelManager(
         }
     }
 
-    /** Deactivates all tunnels. */
+    /** Deactivates all tunnels and drops any scan result (vault lock, shutdown). */
     fun closeAll() {
         tunnels.forEach { deactivate(it.id) }
+        services.reset()
     }
 
     internal fun pollTelemetry() {
@@ -312,16 +306,5 @@ class TunnelManager(
     private fun closeQuietly(conn: SshConnection?) {
         if (conn == null) return
         scope.launch { runCatching { conn.disconnect() } }
-    }
-
-    // Raw exception text (addresses/sshj internals) is never shown in the UI, only generic
-    // messages, as in runConnectionTest. Host key rejection is called out separately: tunnels use
-    // the probe verifier, so this is the expected outcome for a not-yet-trusted host.
-    private suspend fun friendlyError(e: Exception): String = when (e) {
-        is SshHostKeyRejectedException -> getString(Res.string.ptail_err_host_not_trusted)
-        is SshAuthenticationException -> getString(Res.string.ptail_err_auth_failed)
-        is PortForwardException -> getString(Res.string.ptail_err_forward_failed)
-        is SshConnectionException -> getString(Res.string.ptail_err_connection_failed)
-        else -> getString(Res.string.ptail_err_connection_failed)
     }
 }
