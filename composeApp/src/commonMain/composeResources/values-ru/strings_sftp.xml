@@ -61,4 +61,18 @@
     <string name="sftp_overwrite_one">%1$s уже есть в каталоге-приёмнике.</string>
     <string name="sftp_overwrite_many">В каталоге-приёмнике уже есть объектов: %1$d — они будут перезаписаны.</string>
     <string name="sftp_overwrite">Перезаписать</string>
+
+    <!-- Встроенный просмотрщик/редактор (F3/F4) -->
+    <string name="sftp_edit_title">Правка</string>
+    <string name="sftp_edit_title_view">Просмотр</string>
+    <string name="sftp_edit_readonly">только чтение</string>
+    <string name="sftp_edit_modified">изменён</string>
+    <string name="sftp_edit_saving">Сохранение…</string>
+    <string name="sftp_edit_find">Найти:</string>
+    <string name="sftp_edit_not_found">не найдено</string>
+    <string name="sftp_edit_discard_q">Отменить изменения?</string>
+    <string name="sftp_edit_discard_body">В «%1$s» есть несохранённые изменения. Если закрыть сейчас, они пропадут.</string>
+    <string name="sftp_edit_discard">Отменить</string>
+    <string name="sftp_edit_conflict_q">Файл изменился в источнике?</string>
+    <string name="sftp_edit_conflict_body">«%1$s» изменился после того, как вы его открыли. Сохранение перезапишет эти изменения вашей версией.</string>
 </resources>

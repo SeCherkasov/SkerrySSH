@@ -4,7 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.skerry.shared.files.FileBrowser
+import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.serial.SerialProblem
@@ -351,7 +351,7 @@ class ConnectionController(
      * second one), and the non-volatile cache fields are published safely under the lock.
      * @throws IllegalStateException the session isn't connected (no live connection)
      */
-    suspend fun openTransferCoordinator(localBrowser: FileBrowser, hostLabel: String): TransferCoordinator =
+    suspend fun openTransferCoordinator(localBrowser: FileContentBrowser, hostLabel: String): TransferCoordinator =
         sftpMutex.withLock {
             transferCoordinator ?: run {
                 val client = (connection ?: error("No active connection for SFTP")).openSftp()
@@ -547,6 +547,7 @@ class ConnectionController(
         portForwards = null
         val sftp = sftpClient
         sftpClient = null
+        val coordinator = transferCoordinator
         transferCoordinator = null
         metrics?.stop()
         metrics = null
@@ -560,7 +561,7 @@ class ConnectionController(
         shellChannel = null
         cipher = null
         serverVersion = null
-        if (sftp != null) closeSftpQuietly(sftp)
+        if (sftp != null) closeSftpQuietly(sftp, coordinator)
         if (conn != null) closeConnectionQuietly(conn)
     }
 
@@ -569,8 +570,17 @@ class ConnectionController(
         scope.launch(NonCancellable) { runCatching { conn.disconnect() } }
     }
 
-    /** Closes the SFTP channel in the background under [NonCancellable] (the SSH connection closes separately after). */
-    private fun closeSftpQuietly(client: SftpClient) {
-        scope.launch(NonCancellable) { runCatching { client.close() } }
+    /**
+     * Closes the SFTP channel in the background under [NonCancellable] (the SSH connection closes
+     * separately after). A file being saved in the built-in editor is written on the same scope and
+     * outlives the editor UI, so the channel is closed only once that write is done
+     * ([TransferCoordinator.awaitEditorWrites]) — otherwise closing the tab right after Save would
+     * leave the remote file truncated (the write is an in-place truncate).
+     */
+    private fun closeSftpQuietly(client: SftpClient, coordinator: TransferCoordinator?) {
+        scope.launch(NonCancellable) {
+            runCatching { coordinator?.awaitEditorWrites() }
+            runCatching { client.close() }
+        }
     }
 }

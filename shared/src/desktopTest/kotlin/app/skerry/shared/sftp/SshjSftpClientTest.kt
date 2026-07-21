@@ -133,6 +133,37 @@ class SshjSftpClientTest {
     }
 
     @Test
+    fun `read refuses a file over the caller's cap`() = runTest {
+        withSftp { sftp ->
+            val e = assertFailsWith<SftpException> { sftp.read("/readme.txt", maxBytes = 4) }
+            assertTrue("too large" in (e.message ?: ""), "unexpected message: ${e.message}")
+        }
+    }
+
+    @Test
+    fun `the streaming read stops at the cap when the source outruns its reported size`() {
+        // A server can report any size (or 0, as special files do) and then keep sending; the guard
+        // has to hold on the bytes themselves, not on the metadata that preceded them.
+        val endless = object : java.io.InputStream() {
+            override fun read(): Int = 0
+            override fun read(b: ByteArray, off: Int, len: Int): Int = len
+        }
+
+        val e = assertFailsWith<SftpException> { readAtMost(endless, cap = 64 * 1024, label = "/dev/zero") }
+
+        assertTrue("read limit" in (e.message ?: ""), "unexpected message: ${e.message}")
+    }
+
+    @Test
+    fun `the streaming read returns content that exactly fills the cap`() {
+        val body = ByteArray(1024) { 'x'.code.toByte() }
+
+        val read = readAtMost(java.io.ByteArrayInputStream(body), cap = 1024, label = "/exact")
+
+        assertContentEquals(body, read)
+    }
+
+    @Test
     fun `write creates a file that reads back identically`() = runTest {
         val payload = "uploaded by skerry\n".encodeToByteArray()
         withSftp { sftp ->

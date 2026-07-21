@@ -4,11 +4,16 @@ import androidx.compose.runtime.Composable
 import app.skerry.shared.files.FileBrowserFailure
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ftail_delete_source_failed
+import app.skerry.ui.generated.resources.ftail_edit_err_binary
+import app.skerry.ui.generated.resources.ftail_edit_err_read
+import app.skerry.ui.generated.resources.ftail_edit_err_too_large
+import app.skerry.ui.generated.resources.ftail_edit_err_write
 import app.skerry.ui.generated.resources.ftail_err_illegal_name
 import app.skerry.ui.generated.resources.ftail_err_local_io
 import app.skerry.ui.generated.resources.ftail_err_open_source
 import app.skerry.ui.generated.resources.ftail_err_open_target
 import app.skerry.ui.generated.resources.ftail_err_sftp
+import app.skerry.ui.generated.resources.ftail_err_too_large
 import app.skerry.ui.generated.resources.ftail_transfer_error
 import org.jetbrains.compose.resources.stringResource
 
@@ -21,6 +26,18 @@ fun fileBrowserFailureText(failure: FileBrowserFailure): String = stringResource
         FileBrowserFailure.IllegalName -> Res.string.ftail_err_illegal_name
         FileBrowserFailure.OpenSource -> Res.string.ftail_err_open_source
         FileBrowserFailure.OpenTarget -> Res.string.ftail_err_open_target
+        FileBrowserFailure.TooLarge -> Res.string.ftail_err_too_large
+    },
+)
+
+/** Localized text for a viewer/editor failure ([FileEditState.Failed] / [FileEditController.saveFailure]). */
+@Composable
+fun fileEditFailureText(failure: FileEditFailure): String = stringResource(
+    when (failure) {
+        FileEditFailure.Read -> Res.string.ftail_edit_err_read
+        FileEditFailure.TooLarge -> Res.string.ftail_edit_err_too_large
+        FileEditFailure.Binary -> Res.string.ftail_edit_err_binary
+        FileEditFailure.Write -> Res.string.ftail_edit_err_write
     },
 )
 

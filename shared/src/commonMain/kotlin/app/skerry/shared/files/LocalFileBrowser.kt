@@ -20,7 +20,7 @@ class LocalFileBrowser(
     private val home: String,
     override val label: String,
     private val ioDispatcher: CoroutineDispatcher,
-) : FileBrowser {
+) : FileContentBrowser {
 
     /** Path normalization is pure (no I/O), so it doesn't run on [ioDispatcher]. */
     override suspend fun realpath(path: String): String =
@@ -53,6 +53,38 @@ class LocalFileBrowser(
 
     override suspend fun rename(from: String, to: String): Unit = io {
         fileSystem.atomicMove(from.toPath(), to.toPath())
+    }
+
+    override suspend fun stat(path: String): FileItem? = io {
+        val p = path.toPath()
+        fileSystem.metadataOrNull(p)?.let { md ->
+            FileItem(
+                name = p.name,
+                path = p.toString(),
+                type = md.toItemType(),
+                size = md.size ?: 0L,
+                modifiedEpochSeconds = (md.lastModifiedAtMillis ?: 0L) / 1000L,
+            )
+        }
+    }
+
+    /** The size is checked before opening the file, so an oversized one is never read into memory. */
+    override suspend fun readFile(path: String, maxBytes: Long): ByteArray = io {
+        val p = path.toPath()
+        val size = fileSystem.metadataOrNull(p)?.size
+        if (size != null && size > maxBytes) {
+            throw FileBrowserException(FileBrowserFailure.TooLarge, detail = "$size > $maxBytes")
+        }
+        val data = fileSystem.read(p) { readByteArray() }
+        // Size unreported (or the file grew between the check and the read) — enforce the cap on the bytes.
+        if (data.size > maxBytes) {
+            throw FileBrowserException(FileBrowserFailure.TooLarge, detail = "${data.size} > $maxBytes")
+        }
+        data
+    }
+
+    override suspend fun writeFile(path: String, data: ByteArray): Unit = io {
+        fileSystem.write(path.toPath()) { write(data) }
     }
 
     /**

@@ -62,6 +62,10 @@ import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.files.FileEditController
+import app.skerry.ui.files.FKeyBar
+import app.skerry.ui.files.FKeyDef
+import app.skerry.ui.files.FileEditorScreen
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.PathJumpField
@@ -228,6 +232,9 @@ private fun LiveSftpView(
     var copyTarget by remember(controller) { mutableStateOf<FilePaneController?>(null) }
     // F2 Rename target — a (pane, cursored row) pair at press time. null — dialog closed.
     var renameTarget by remember(controller) { mutableStateOf<Pair<FilePaneController, FileItem>?>(null) }
+    // F3 View / F4 Edit — the open file editor. null — no editor. The controller comes from the
+    // coordinator (session scope), so closing the modal never cancels a save in flight.
+    var editor by remember(controller) { mutableStateOf<FileEditController?>(null) }
     // A pane's path bar is being edited (type-to-jump). While true the Column's key handler steps aside
     // (preview events fire parent-first) so arrows/Enter reach the focused path field, not the listing.
     var editingPath by remember(controller) { mutableStateOf(false) }
@@ -267,12 +274,21 @@ private fun LiveSftpView(
 
     // Single point for F-keys: both a key press and a click on a bottom-pane row come here. Operations
     // act on the active pane, the target is its operands() (selection or the cursored row, mc-style).
-    // F3 View / F4 Edit are stubs (need file reading in the FileBrowser contract).
     val fKey: (Int) -> Unit = remember(c) { fKey@{ n ->
         val coord = c ?: return@fKey
         val pane = if (active == ActivePane.Local) coord.local else coord.remote
+        // F3 View / F4 Edit: the cursored row only (never the selection — one editor, one file);
+        // directories/symlinks have nothing to show.
+        val openEditor = { readOnly: Boolean ->
+            pane.cursoredItem()?.takeIf { it.type == FileItemType.File }?.let { item ->
+                editor = coord.openEditor(fromLocal = pane === coord.local, item = item, readOnly = readOnly)
+            }
+            Unit
+        }
         when (n) {
             2 -> pane.cursoredItem()?.let { renameTarget = pane to it } // Rename the cursored row
+            3 -> openEditor(true) // View: read-only
+            4 -> openEditor(false) // Edit
             5 -> { // Copy: active pane's selection/cursor to the other (upload/download), with confirmation
                 ensureOperandSelection(pane)
                 if (pane.operands().isNotEmpty()) copyTarget = pane
@@ -288,7 +304,7 @@ private fun LiveSftpView(
             }
             9 -> { coord.local.refresh(); coord.remote.refresh() } // Refresh both panes
             10 -> onQuit() // Quit: back to this tab's terminal
-            else -> {} // F3 View / F4 Edit — stub
+            else -> {}
         }
     } }
 
@@ -301,6 +317,8 @@ private fun LiveSftpView(
                 if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // Path bar has focus (type-to-jump): let its own handler take arrows/Enter/Esc.
                 if (editingPath) return@onPreviewKeyEvent false
+                // The editor is open: it owns every key, including the F-keys it redefines.
+                if (editor != null) return@onPreviewKeyEvent false
                 // Ctrl+H — show/hide hidden entries (dotfiles); toggle the persistent setting, and the
                 // LaunchedEffect below applies it to both panes (single source of truth).
                 if (event.isCtrlPressed && event.key == Key.H) {
@@ -339,39 +357,36 @@ private fun LiveSftpView(
             }
             .focusable(),
     ) {
-        // Header: "File transfer" + subtitle on the left, Upload + New folder on the right.
-        Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Sym("drive_file_move", size = 18.sp, color = D.cyanBright)
-                Txt(stringResource(Res.string.sftp_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-                Txt(stringResource(Res.string.sftp_subtitle_host, subtitle), color = D.faint, size = 11.5.sp, font = mono)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Upload: if there's a local file selection → transfer it; otherwise fall back to the
-                // native file picker → upload into the remote pane's current directory. New folder — in remote.
-                GhostButton(
-                    stringResource(Res.string.sftp_upload),
-                    onClick = {
-                        val coord = c
-                        if (coord != null) {
-                            if (coord.local.selection.isNotEmpty()) {
-                                coord.uploadSelection()
-                            } else {
-                                uiScope.launch { pickUploadSource()?.let { coord.uploadSource(it) } }
-                            }
+        // The panel's header is hidden while the editor is open: the editor brings its own, and two
+        // stacked bars over one file — the upper one offering Upload/New folder that do nothing
+        // there — are noise.
+        if (editor == null) {
+            LivePaneHeader(
+                subtitle = subtitle,
+                mono = mono,
+                onUpload = {
+                    val coord = c
+                    if (coord != null) {
+                        if (coord.local.selection.isNotEmpty()) {
+                            coord.uploadSelection()
+                        } else {
+                            uiScope.launch { pickUploadSource()?.let { coord.uploadSource(it) } }
                         }
-                    },
-                    icon = "upload",
-                )
-                GhostButton(stringResource(Res.string.sftp_new_folder), onClick = { if (c != null) creatingFolder = true }, icon = "create_new_folder")
-            }
+                    }
+                },
+                onNewFolder = { if (c != null) creatingFolder = true },
+            )
+            HLine()
         }
-        HLine()
+        val openEditor = editor
         when {
+            // F3/F4: the editor takes over the panel area and the key bar, in this same window —
+            // the panel's chrome stays, only what the function keys do changes.
+            openEditor != null -> FileEditorScreen(
+                controller = openEditor,
+                onClose = { editor = null; focus.requestFocus() },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
             openError != null -> Box(Modifier.weight(1f).fillMaxWidth()) {
                 PaneNotice("error", stringResource(Res.string.sftp_unavailable), openError, D.sunset)
             }
@@ -403,8 +418,12 @@ private fun LiveSftpView(
                 LiveTransferStrip(c.transfer, mono, onDismiss = c::clearTransfer)
             }
         }
-        HLine()
-        FKeyBar(enabled = c != null, onKey = fKey, mono = mono)
+        // The editor brings its own key bar (Save/Edit/Search/Quit) — the panel's would be a legend
+        // for keys that aren't listening.
+        if (openEditor == null) {
+            HLine()
+            FKeyBar(PANEL_FKEYS.map { it.copy(enabled = c != null) }, fKey, mono)
+        }
     }
 
     if (creatingFolder && c != null) {
@@ -508,6 +527,35 @@ private fun LiveSftpView(
 }
 
 /**
+ * The two-pane screen's header: "File transfer" + the session's subtitle on the left, Upload and
+ * New folder on the right. [onUpload] transfers the local pane's selection, or falls back to the
+ * native picker; [onNewFolder] creates a directory in the active pane.
+ */
+@Composable
+private fun LivePaneHeader(
+    subtitle: String,
+    mono: FontFamily,
+    onUpload: () -> Unit,
+    onNewFolder: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Sym("drive_file_move", size = 18.sp, color = D.cyanBright)
+            Txt(stringResource(Res.string.sftp_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.sftp_subtitle_host, subtitle), color = D.faint, size = 11.5.sp, font = mono)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GhostButton(stringResource(Res.string.sftp_upload), onClick = onUpload, icon = "upload")
+            GhostButton(stringResource(Res.string.sftp_new_folder), onClick = onNewFolder, icon = "create_new_folder")
+        }
+    }
+}
+
+/**
  * Target of the active pane's batch F-operations: if nothing is marked — select the cursored row (mc
  * copies/moves/deletes the cursored item when there's no selection). On ".."/empty — no-op.
  */
@@ -515,70 +563,18 @@ private fun ensureOperandSelection(pane: FilePaneController) {
     if (pane.selection.isEmpty()) pane.cursoredItem()?.let { pane.selectOnly(it) }
 }
 
-/**
- * mc-style bottom F-key bar layout (classic, adapted for Skerry).
- * [done] = the key actually does something; false — a stub. Non-working ones are marked "*" in the bar
- * so it's visible what's wired and what isn't.
- */
-private data class FKeyDef(val n: Int, val label: StringResource, val done: Boolean)
-
-private val FKEY_LABELS = listOf(
-    FKeyDef(2, Res.string.ftail_fkey_rename, done = true),
-    FKeyDef(3, Res.string.ftail_fkey_view, done = false),
-    FKeyDef(4, Res.string.ftail_fkey_edit, done = false),
-    FKeyDef(5, Res.string.ftail_fkey_copy, done = true),
-    FKeyDef(6, Res.string.ftail_fkey_move, done = true),
-    FKeyDef(7, Res.string.ftail_fkey_mkdir, done = true),
-    FKeyDef(8, Res.string.ftail_fkey_delete, done = true),
-    FKeyDef(9, Res.string.ftail_fkey_refresh, done = true),
-    FKeyDef(10, Res.string.ftail_fkey_quit, done = true),
+/** The file panel's own key legend (mc/Total Commander order, adapted for Skerry). */
+private val PANEL_FKEYS = listOf(
+    FKeyDef(2, Res.string.ftail_fkey_rename),
+    FKeyDef(3, Res.string.ftail_fkey_view),
+    FKeyDef(4, Res.string.ftail_fkey_edit),
+    FKeyDef(5, Res.string.ftail_fkey_copy),
+    FKeyDef(6, Res.string.ftail_fkey_move),
+    FKeyDef(7, Res.string.ftail_fkey_mkdir),
+    FKeyDef(8, Res.string.ftail_fkey_delete),
+    FKeyDef(9, Res.string.ftail_fkey_refresh),
+    FKeyDef(10, Res.string.ftail_fkey_quit),
 )
-
-/**
- * Bottom hotkey bar (mc/Total Commander): a row of cells "F3 View … F10 Quit". Both a cell click and an
- * F-key press go through the shared [onKey]. [enabled] disables the bar until the SFTP coordinator is open.
- */
-@Composable
-private fun FKeyBar(enabled: Boolean, onKey: (Int) -> Unit, mono: FontFamily) {
-    Row(
-        Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 6.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        FKEY_LABELS.forEach { def ->
-            FKeyCell(def, enabled, mono, onClick = { onKey(def.n) }, modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun FKeyCell(
-    def: FKeyDef,
-    enabled: Boolean,
-    mono: FontFamily,
-    onClick: () -> Unit,
-    modifier: Modifier,
-) {
-    Row(
-        modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(D.panel)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Txt("F${def.n}", color = if (enabled) D.cyanBright else D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, font = mono)
-        Txt(
-            stringResource(def.label),
-            color = if (enabled) D.text else D.faint,
-            size = 11.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        // "*" marks a non-working stub (F3 View / F4 Edit).
-        if (!def.done) Txt("*", color = D.sunset, size = 11.sp, weight = FontWeight.SemiBold)
-    }
-}
 
 /**
  * One live pane over [FilePaneController]: header [label] + path (no toolbar — up-navigation via the
