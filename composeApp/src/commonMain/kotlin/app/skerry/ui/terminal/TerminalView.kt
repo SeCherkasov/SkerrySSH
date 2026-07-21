@@ -65,6 +65,7 @@ import app.skerry.ui.generated.resources.term_connecting
 import app.skerry.ui.generated.resources.term_connection_failed
 import app.skerry.ui.generated.resources.term_connection_lost
 import app.skerry.ui.generated.resources.term_no_active_session
+import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.generated.resources.term_no_host_selected
 import app.skerry.ui.generated.resources.term_no_hosts_in_catalog
 import app.skerry.ui.generated.resources.term_notice_not_connected
@@ -105,9 +106,21 @@ private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modif
         SnippetPaletteButton(active, state.snippetPaletteRequests)
         // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
         RecordSessionButton(active, state.recordingToggleRequests) { state.showRecordingNotice(it) }
-        // Plays a .cast back over the shell. Not tied to a session (a recording is watched, not run),
-        // which is why it sits here rather than behind a connected-only guard.
-        PlayRecordingButton(state.castOpenRequests) { state.showCast(it) }
+        // Plays a .cast back. Not tied to a session (a recording is watched, not run), which is why
+        // it sits here rather than behind a connected-only guard. Live mode opens the recording in
+        // its own tab, so the shells stay reachable while it plays; the mock/preview path (no
+        // session manager) has no tabs and falls back to the overlay.
+        val playerTabTitle = stringResource(Res.string.term_player_title)
+        PlayRecordingButton(state.castOpenRequests) { result ->
+            if (result is CastOpenResult.Loaded && sessions != null) {
+                state.clearOverlay()
+                // The file name labels the tab: it says "recording", and two recordings of the same
+                // host stay apart (their in-file titles are both just the host name).
+                sessions.openPlayer(result.fileName.ifBlank { playerTabTitle }, result.cast)
+            } else {
+                state.showCast(result)
+            }
+        }
         // Lit while the info panel is open — the only action here with a visible on/off state.
         IconBtn("info", onClick = state::toggleInfo, tint = if (state.infoPanel) D.cyanBright else D.dim)
         // Power: closes the active session (live path) with a confirmation prompt

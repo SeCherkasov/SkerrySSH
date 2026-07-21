@@ -7,8 +7,11 @@ package app.skerry.ui.vault
  */
 const val MAX_IMPORT_BYTES = 32 * 1024 * 1024
 
+/** A file the user picked: its display name (for labels) and contents. */
+data class ImportedFile(val name: String, val text: String)
+
 /**
  * Reads a text file chosen by the user in the native picker, as UTF-8. Returns `null` on cancel, on
  * a read failure, or when the file is larger than [maxBytes] — nothing is imported silently.
  */
-expect suspend fun importTextFile(maxBytes: Int = MAX_IMPORT_BYTES): String?
+expect suspend fun importTextFile(maxBytes: Int = MAX_IMPORT_BYTES): ImportedFile?

@@ -76,6 +76,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalUriHandler
+import app.skerry.shared.ssh.PtySize
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
@@ -90,6 +91,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -157,13 +159,44 @@ private const val HANDLE_TOUCH_RADIUS_DP = 22
  * [imeTransform] (IME path only) post-processes a non-empty [imeDeltaToPty] result before sending —
  * the mobile key panel routes it through sticky-ctrl ([app.skerry.ui.mobile.applyStickyCtrl]) so
  * Ctrl+<letter> works from the soft keyboard too, not just from panel keys.
+ *
+ * [fixedGrid] pins the grid to a given size and scales the font to fill the viewport instead of
+ * fitting the grid to the viewport. It exists for the recording player: a recording was taken at a
+ * geometry of its own, and re-flowing it would leave empty columns in a wide pane and wrap its
+ * lines in a narrow one. A live session leaves this `null`.
  */
+/**
+ * Cell size of [style], measured with [measurer].
+ *
+ * cellWidth is the font's real advance, which drawText uses to lay out ASCII runs. Measured on a
+ * long string and divided by its length: size.width is an integer (rounds to ~0.5px), which at 10
+ * chars gave error up to ~0.05px/char and drifted the ASCII run off the cw-grid by ~1 cell near the
+ * row's right edge (highlight/cursor/mouse use the grid, text uses advance). At 200 chars the error
+ * is negligible and the grid matches drawText's layout.
+ *
+ * cellHeight is rounded to a whole pixel: rows tile edge-to-edge (top = r*cellHeight), and a
+ * fractional height (e.g. line-height multiplier 1.38 → 13×1.38 = 17.94px, or fractional display
+ * scale) puts adjacent background rects' borders on fractional pixels — Skia antialiases the seam,
+ * showing horizontal banding every row on solid backgrounds (e.g. mc panels). Integer height removes
+ * the seam. Width cannot be rounded the same way (its fractional advance is intentional, see above),
+ * but height can: each row's text is drawn independent of its top, so no drift accumulates.
+ */
+private fun terminalMetrics(measurer: TextMeasurer, style: TextStyle, density: Density): TerminalMetrics {
+    val sampleLen = 200
+    val sample = measurer.measure(AnnotatedString("M".repeat(sampleLen)), style)
+    return TerminalMetrics(
+        cellWidth = sample.size.width / sampleLen.toFloat(),
+        cellHeight = with(density) { style.lineHeight.toPx() }.roundToInt().toFloat(),
+    )
+}
+
 @Composable
 fun TerminalScreen(
     state: TerminalScreenState,
     modifier: Modifier = Modifier,
     imeInput: Boolean = false,
     imeTransform: ((String) -> String)? = null,
+    fixedGrid: PtySize? = null,
 ) {
     // Terminal font/size from Appearance settings ([LocalTerminalAppearance]); defaults to Hack 13px
     // where no provider is set (mobile target/preview/connection screen). Ligatures always disabled
@@ -177,11 +210,18 @@ fun TerminalScreen(
     val selectionBg = termTheme.selection
     val handleColor = termTheme.cursor
     val mono = rememberTerminalFontFamily(appearance.font)
+    val density = LocalDensity.current
+    // A full TUI screen redraws hundreds of distinct glyph runs per frame; the default layout cache
+    // (8 entries) thrashes and re-lays-out every run every frame. Sized to hold a busy screen's runs.
+    // Color is passed at draw time (see drawGlyphText), so cache hits stay theme-safe.
+    val measurer = rememberTextMeasurer(cacheSize = 1024)
+    val paddingPx = with(density) { PADDING_DP.dp.toPx() }
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
     // Keyed on appearance itself (@Immutable data class, structural equality): changes exactly when
     // font/size changes. FontFamily is not a reliable key — equality of two built instances depends
     // on compose-resources Font.equals, so reference-equality would invalidate textStyle/metrics on
     // every recomposition. mono is captured by the lambda and stays consistent with appearance.font.
-    val textStyle = remember(appearance, termTheme) {
+    val baseStyle = remember(appearance, termTheme) {
         TextStyle(
             fontFamily = mono,
             fontFeatureSettings = NO_LIGATURES,
@@ -192,6 +232,24 @@ fun TerminalScreen(
             letterSpacing = appearance.letterSpacingSp.sp,
             color = termTheme.foreground,
         )
+    }
+    // With a pinned grid ([fixedGrid]) the font is scaled so that grid fills the viewport; the scale
+    // is derived from metrics measured at the unscaled size, so the style has to be built twice.
+    val baseMetrics = remember(baseStyle, density) { terminalMetrics(measurer, baseStyle, density) }
+    val fontScale = if (fixedGrid == null) 1f else fitFontScale(
+        viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, baseMetrics,
+        fixedGrid.cols, fixedGrid.rows,
+    )
+    val textStyle = remember(baseStyle, fontScale) {
+        if (fontScale == 1f) {
+            baseStyle
+        } else {
+            baseStyle.copy(
+                fontSize = baseStyle.fontSize * fontScale,
+                lineHeight = baseStyle.lineHeight * fontScale,
+                letterSpacing = baseStyle.letterSpacing * fontScale,
+            )
+        }
     }
     val sessionState by state.state.collectAsState()
     val closed = sessionState is TerminalState.Closed
@@ -234,31 +292,7 @@ fun TerminalScreen(
     // Monospace cell size in pixels is the single source of truth for geometry: glyphs, background,
     // selection, cursor, mouse, and handles are all derived from it via col*cellWidth /
     // row*cellHeight, so everything stays consistent across fonts and system scale.
-    val density = LocalDensity.current
-    // A full TUI screen redraws hundreds of distinct glyph runs per frame; the default layout cache
-    // (8 entries) thrashes and re-lays-out every run every frame. Sized to hold a busy screen's runs.
-    // Color is passed at draw time (see drawGlyphText), so cache hits stay theme-safe.
-    val measurer = rememberTextMeasurer(cacheSize = 1024)
-    val metrics = remember(textStyle, density) {
-        // cellWidth is the font's real advance, which drawText uses to lay out ASCII runs. Measured on
-        // a long string and divided by its length: size.width is an integer (rounds to ~0.5px), which
-        // at 10 chars gave error up to ~0.05px/char and drifted the ASCII run off the cw-grid by ~1
-        // cell near the row's right edge (highlight/cursor/mouse use the grid, text uses advance). At
-        // 200 chars the error is negligible and the grid matches drawText's layout.
-        val sampleLen = 200
-        val sample = measurer.measure(AnnotatedString("M".repeat(sampleLen)), textStyle)
-        TerminalMetrics(
-            cellWidth = sample.size.width / sampleLen.toFloat(),
-            // cellHeight is rounded to a whole pixel: rows tile edge-to-edge (top = r*cellHeight), and a
-            // fractional height (e.g. line-height multiplier 1.38 → 13×1.38 = 17.94px, or fractional
-            // display scale) puts adjacent background rects' borders on fractional pixels — Skia
-            // antialiases the seam, showing horizontal banding every row on solid backgrounds (e.g. mc
-            // panels). Integer height removes the seam. Width cannot be rounded the same way (its
-            // fractional advance is intentional, see above), but height can: each row's text is drawn
-            // independent of its top, so no drift accumulates.
-            cellHeight = with(density) { textStyle.lineHeight.toPx() }.roundToInt().toFloat(),
-        )
-    }
+    val metrics = remember(textStyle, density) { terminalMetrics(measurer, textStyle, density) }
     val handleRadiusPx = with(density) { HANDLE_RADIUS_DP.dp.toPx() }
     val handleTouchRadiusPx = with(density) { HANDLE_TOUCH_RADIUS_DP.dp.toPx() }
 
@@ -314,9 +348,7 @@ fun TerminalScreen(
     // Viewport size in cells is pushed to the PTY/emulator on first layout and on window resize;
     // without this the grid stays at the default 80x24 and wide output wraps. state.resize dedupes on
     // its own. Measured on the outer Box (viewport), not the scrollable Text, whose size is the full
-    // content height.
-    val paddingPx = with(density) { PADDING_DP.dp.toPx() }
-    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+    // content height. ([paddingPx]/[viewportSize] are declared above — the font scale needs them.)
     // Glyphs/cursor stay hidden until the grid has been fitted to the viewport at least once: otherwise
     // the shell's first output would land on the default 80x24 and then "re-flow" on resize — a visible
     // jump on open. Until then only the terminal background is visible, then the final layout appears.
@@ -333,7 +365,10 @@ fun TerminalScreen(
         // pending one, so this fires once the size has settled. The very first resize (sized=false, terminal
         // opening) happens instantly, without a delay.
         if (sized) delay(150)
-        state.resize(gridSizeFor(viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, metrics))
+        // With a pinned grid the emulator keeps the recording's geometry (the font was scaled to it
+        // instead); only the content pixel size follows the viewport.
+        val content = gridSizeFor(viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, metrics)
+        state.resize(if (fixedGrid == null) content else fixedGrid.copy(widthPx = content.widthPx, heightPx = content.heightPx))
         sized = true
     }
 

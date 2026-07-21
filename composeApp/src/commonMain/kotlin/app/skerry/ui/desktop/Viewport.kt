@@ -9,6 +9,7 @@ import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.sftp.SftpView
 import app.skerry.ui.snippet.SnippetsView
 import app.skerry.ui.teams.TeamsView
+import app.skerry.ui.terminal.CastPlayerView
 import app.skerry.ui.terminal.TerminalView
 import app.skerry.ui.tunnel.TunnelsView
 import app.skerry.ui.vault.VaultView
@@ -36,6 +37,7 @@ fun Viewport(state: DesktopDesignState) {
                 SessionView.Terminal -> TerminalView(state)
                 SessionView.Sftp -> SftpView()
                 SessionView.Vnc -> VncView(state)
+                SessionView.Player -> CastPlayerView()
             }
         }
     }
