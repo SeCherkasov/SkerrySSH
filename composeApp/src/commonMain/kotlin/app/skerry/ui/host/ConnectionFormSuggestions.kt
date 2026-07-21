@@ -1,7 +1,7 @@
 package app.skerry.ui.host
 
 import app.skerry.shared.host.Host
-import app.skerry.shared.host.normalizeTag
+import app.skerry.shared.tag.normalizeTag
 
 /**
  * Unique non-empty groups from [hosts] in first-seen order, for the connection form's Group field
