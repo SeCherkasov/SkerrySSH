@@ -30,6 +30,9 @@
     <string name="lib_snippets_library">БИБЛИОТЕКА</string>
     <string name="lib_snippets_empty">Пока нет сниппетов</string>
     <string name="lib_snippets_no_matches">Нет совпадений</string>
+    <string name="lib_snippets_chip_all">Все</string>
+    <string name="lib_snippets_starter_pack">Добавить стартовый набор</string>
+    <string name="lib_snippets_uncategorized">Без категории</string>
     <string name="lib_snippets_new">Новый сниппет</string>
     <string name="lib_snippets_edit">Изменить сниппет</string>
     <string name="lib_snippets_untitled">Без названия</string>

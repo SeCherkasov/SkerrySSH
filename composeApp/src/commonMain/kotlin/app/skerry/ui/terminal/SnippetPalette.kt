@@ -50,7 +50,12 @@ import app.skerry.ui.generated.resources.term_untitled
 import app.skerry.ui.session.Session
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.snippet.UNCATEGORIZED_KEY
+import app.skerry.ui.snippet.groupSnippetsByCategory
+import app.skerry.ui.snippet.hasCategories
 import app.skerry.ui.snippet.matches
+import app.skerry.ui.snippet.snippetTagLabel
+import app.skerry.ui.snippet.uncategorizedSnippetsLabel
 import org.jetbrains.compose.resources.stringResource
 
 // Snippet palette: quickly run a saved command in the active terminal directly from the toolbar.
@@ -107,11 +112,29 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
         Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
             if (filtered.isEmpty()) {
                 Txt(if (all.isEmpty()) stringResource(Res.string.term_no_snippets_yet) else stringResource(Res.string.term_no_matches), color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+            } else if (hasCategories(filtered)) {
+                // Same category split as the library, so a command is two steps away instead of a
+                // scroll. No chips or collapsing here — the palette is keyboard-driven and ephemeral.
+                groupSnippetsByCategory(filtered).forEach { category ->
+                    key(category.name) {
+                        PaletteCategoryCaption(category.name)
+                        category.snippets.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+                    }
+                }
             } else {
                 filtered.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
             }
         }
     }
+}
+
+@Composable
+private fun PaletteCategoryCaption(name: String) {
+    Txt(
+        if (name == UNCATEGORIZED_KEY) uncategorizedSnippetsLabel() else snippetTagLabel(name),
+        color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
+        modifier = Modifier.padding(start = 9.dp, top = 7.dp, bottom = 2.dp),
+    )
 }
 
 @Composable

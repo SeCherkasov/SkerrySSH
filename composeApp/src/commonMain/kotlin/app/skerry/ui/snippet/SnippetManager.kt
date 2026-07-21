@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.snippet.Snippet
 import app.skerry.shared.snippet.SnippetStore
+import app.skerry.shared.tag.normalizeTags
 
 /**
  * Editable snippet fields without [Snippet.id]: the create/edit form works on a draft, and
@@ -18,6 +19,18 @@ data class SnippetDraft(
     val tags: List<String> = emptyList(),
     val shortcut: String? = null,
 )
+
+/**
+ * Snippets saved before tags were canonicalized (and any written by an older client through sync)
+ * may hold "#DB"/"db" side by side, which would split one category into several sections. They are
+ * canonicalized on read rather than rewritten in place: a read-modify-write over the vault would
+ * race the background sync merge, and the next [SnippetManager.save] persists the canonical form
+ * anyway.
+ */
+private fun Snippet.canonical(): Snippet {
+    val canonical = normalizeTags(tags)
+    return if (canonical == tags) this else copy(tags = canonical)
+}
 
 /** One row of the snippet list: the saved [snippet], updated via [SnippetManager.save]. */
 @Stable
@@ -39,7 +52,7 @@ class SnippetManager(
     private val store: SnippetStore,
     private val newId: () -> String,
 ) {
-    var snippets: List<SnippetEntry> by mutableStateOf(store.all().map { SnippetEntry(it) })
+    var snippets: List<SnippetEntry> by mutableStateOf(store.all().map { SnippetEntry(it.canonical()) })
         private set
 
     /**
@@ -47,7 +60,7 @@ class SnippetManager(
      * at startup the vault is locked and [store] returns empty; snippets appear after unlock.
      */
     fun reload() {
-        snippets = store.all().map { SnippetEntry(it) }
+        snippets = store.all().map { SnippetEntry(it.canonical()) }
     }
 
     fun find(id: String?): SnippetEntry? = id?.let { wanted -> snippets.firstOrNull { it.id == wanted } }
@@ -83,7 +96,7 @@ class SnippetManager(
             id = id,
             label = draft.label,
             command = draft.command,
-            tags = draft.tags,
+            tags = normalizeTags(draft.tags),
             shortcut = draft.shortcut?.takeIf { it.isNotBlank() },
         )
         store.put(snippet)

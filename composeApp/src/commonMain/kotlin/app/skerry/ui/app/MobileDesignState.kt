@@ -14,6 +14,7 @@ import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
@@ -163,6 +164,13 @@ class MobileDesignState(
         route = null
         selectedHostId = null
     }
+
+    /**
+     * View state of the snippet library (search, category chip, collapsed sections). Lives here so
+     * switching tabs doesn't reset the view; not persisted across restarts (see
+     * [app.skerry.ui.snippet.SnippetLibraryState]).
+     */
+    val snippetLibrary = SnippetLibraryState()
 
     /** Names of collapsed host-list folders (their host list is hidden). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
