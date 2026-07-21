@@ -62,7 +62,7 @@ internal fun KeyboardSection() {
 
     val global = listOf(
         KeyboardBinding(stringResource(Res.string.settings_kb_new_connection), mod("N"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_command_palette), mod("K"), live = false),
+        KeyboardBinding(stringResource(Res.string.settings_kb_command_palette), mod("K"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_split_terminal), mod("D"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_next_prev_tab), "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_select_tab_number), if (mac) "⌥1–9" else "Alt+1–9", live = true),

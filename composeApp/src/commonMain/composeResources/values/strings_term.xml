@@ -10,6 +10,11 @@
     <string name="term_no_active_session">No active session</string>
     <string name="term_run_snippet_placeholder">Run a snippet…</string>
     <string name="term_no_snippets_yet">No snippets yet</string>
+    <string name="term_palette_title">Command history</string>
+    <string name="term_palette_placeholder">Search commands…</string>
+    <string name="term_palette_empty">No commands recorded yet</string>
+    <string name="term_palette_hint">Enter inserts the command into the terminal without running it</string>
+    <string name="term_palette_this_host">this host</string>
     <string name="term_no_matches">No matches</string>
     <string name="term_untitled">Untitled</string>
     <string name="term_notice_pick_host_to_connect">Pick a host from the sidebar to connect.</string>
@@ -87,4 +92,13 @@
     <string name="term_record_truncated">Recording stopped: size limit reached</string>
     <string name="term_record_empty">Nothing was recorded</string>
     <string name="term_record_saved">Recording saved</string>
+    <string name="term_broadcast_title">Broadcast</string>
+    <string name="term_broadcast_subtitle">Run one command on several sessions</string>
+    <string name="term_broadcast_placeholder">Command to run everywhere…</string>
+    <string name="term_broadcast_send">Send</string>
+    <string name="term_broadcast_select_all">Select all</string>
+    <string name="term_broadcast_clear">Clear</string>
+    <string name="term_broadcast_none">No connected sessions</string>
+    <string name="term_broadcast_selected">%1$s of %2$s selected</string>
+    <string name="term_broadcast_sent">Sent to %1$s</string>
 </resources>

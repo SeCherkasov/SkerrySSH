@@ -70,9 +70,11 @@ import app.skerry.ui.terminal.RecordingOutcome
 import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
+import app.skerry.ui.generated.resources.term_broadcast_title
 import app.skerry.ui.generated.resources.term_monitor_title
 import app.skerry.ui.generated.resources.term_record_start
 import app.skerry.ui.generated.resources.term_record_stop
+import app.skerry.ui.generated.resources.term_palette_title
 import app.skerry.ui.generated.resources.term_no_active_session
 import app.skerry.ui.generated.resources.term_mobile_open_host_connect
 import app.skerry.ui.generated.resources.term_connecting
@@ -98,10 +100,12 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.terminal.arrowSequence
+import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -189,6 +193,11 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // Outcome of the last finished recording, shown as a notice (desktop parity). null = nothing to say.
     var recordingNotice by remember(active?.id) { mutableStateOf<RecordingOutcome?>(null) }
     val scope = rememberCoroutineScope()
+    // Broadcast sheet (desktop ⌘B parity): one command into several sessions. Not keyed on the
+    // session — it addresses all of them, and the selection lives on the shell state.
+    var broadcastOpen by remember { mutableStateOf(false) }
+    // Command history palette (desktop ⌘K parity) — same menu, connected only.
+    var historyOpen by remember(active?.id) { mutableStateOf(false) }
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
@@ -298,6 +307,21 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 onDismiss = { recordingNotice = null },
             )
         }
+        if (broadcastOpen) {
+            MobileBroadcastSheet(
+                controller = state.broadcast,
+                targets = broadcastTargets(sessions),
+                onDismiss = { broadcastOpen = false },
+            )
+        }
+        if (historyOpen && activeTerminal != null) {
+            MobileCommandPaletteSheet(
+                history = LocalTerminalHistory.current,
+                currentKey = active?.controller?.historyKey,
+                onPick = { command -> activeTerminal.applyHistoryCommand(command); historyOpen = false },
+                onDismiss = { historyOpen = false },
+            )
+        }
         if (menuOpen && onDisconnect != null) {
             MobileBottomSheet(
                 onDismiss = { menuOpen = false },
@@ -312,6 +336,22 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             onClick = { menuOpen = false; monitorOpen = true },
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             icon = "monitoring",
+                            filled = false,
+                        )
+                        MobileSheetButton(
+                            label = stringResource(Res.string.term_palette_title),
+                            onClick = { menuOpen = false; historyOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "history",
+                            filled = false,
+                        )
+                    }
+                    if (activeTerminal != null) {
+                        MobileSheetButton(
+                            label = stringResource(Res.string.term_broadcast_title),
+                            onClick = { menuOpen = false; broadcastOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "campaign",
                             filled = false,
                         )
                     }

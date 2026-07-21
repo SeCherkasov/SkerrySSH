@@ -30,6 +30,9 @@
     <string name="lib_snippets_library">库</string>
     <string name="lib_snippets_empty">暂无片段</string>
     <string name="lib_snippets_no_matches">无匹配</string>
+    <string name="lib_snippets_chip_all">全部</string>
+    <string name="lib_snippets_starter_pack">添加入门片段</string>
+    <string name="lib_snippets_uncategorized">未分类</string>
     <string name="lib_snippets_new">新建片段</string>
     <string name="lib_snippets_edit">编辑片段</string>
     <string name="lib_snippets_untitled">未命名</string>

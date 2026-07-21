@@ -10,6 +10,11 @@
     <string name="term_no_active_session">Нет активной сессии</string>
     <string name="term_run_snippet_placeholder">Запустить сниппет…</string>
     <string name="term_no_snippets_yet">Пока нет сниппетов</string>
+    <string name="term_palette_title">История команд</string>
+    <string name="term_palette_placeholder">Поиск по командам…</string>
+    <string name="term_palette_empty">Команды пока не записаны</string>
+    <string name="term_palette_hint">Enter вставит команду в терминал, но не выполнит её</string>
+    <string name="term_palette_this_host">этот хост</string>
     <string name="term_no_matches">Нет совпадений</string>
     <string name="term_untitled">Без названия</string>
     <string name="term_notice_pick_host_to_connect">Выберите хост в боковой панели, чтобы подключиться.</string>
@@ -87,4 +92,13 @@
     <string name="term_record_truncated">Запись остановлена: достигнут предел размера</string>
     <string name="term_record_empty">Записывать было нечего</string>
     <string name="term_record_saved">Запись сохранена</string>
+    <string name="term_broadcast_title">Broadcast</string>
+    <string name="term_broadcast_subtitle">Одна команда сразу в несколько сессий</string>
+    <string name="term_broadcast_placeholder">Команда для всех сессий…</string>
+    <string name="term_broadcast_send">Отправить</string>
+    <string name="term_broadcast_select_all">Выбрать все</string>
+    <string name="term_broadcast_clear">Снять</string>
+    <string name="term_broadcast_none">Нет подключённых сессий</string>
+    <string name="term_broadcast_selected">Выбрано %1$s из %2$s</string>
+    <string name="term_broadcast_sent">Отправлено: %1$s</string>
 </resources>

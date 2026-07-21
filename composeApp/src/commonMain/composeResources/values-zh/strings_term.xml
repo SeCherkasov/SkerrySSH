@@ -10,6 +10,11 @@
     <string name="term_no_active_session">无活动会话</string>
     <string name="term_run_snippet_placeholder">运行片段…</string>
     <string name="term_no_snippets_yet">暂无片段</string>
+    <string name="term_palette_title">命令历史</string>
+    <string name="term_palette_placeholder">搜索命令…</string>
+    <string name="term_palette_empty">尚未记录任何命令</string>
+    <string name="term_palette_hint">Enter 只会把命令插入终端，不会执行</string>
+    <string name="term_palette_this_host">当前主机</string>
     <string name="term_no_matches">无匹配</string>
     <string name="term_untitled">未命名</string>
     <string name="term_notice_pick_host_to_connect">从侧边栏选择一个主机进行连接。</string>
@@ -87,4 +92,13 @@
     <string name="term_record_truncated">录制已停止：已达大小上限</string>
     <string name="term_record_empty">没有录制到内容</string>
     <string name="term_record_saved">录制已保存</string>
+    <string name="term_broadcast_title">广播</string>
+    <string name="term_broadcast_subtitle">一条命令同时发送到多个会话</string>
+    <string name="term_broadcast_placeholder">要在所有会话中运行的命令…</string>
+    <string name="term_broadcast_send">发送</string>
+    <string name="term_broadcast_select_all">全选</string>
+    <string name="term_broadcast_clear">清除</string>
+    <string name="term_broadcast_none">没有已连接的会话</string>
+    <string name="term_broadcast_selected">已选 %1$s / %2$s</string>
+    <string name="term_broadcast_sent">已发送到 %1$s</string>
 </resources>

@@ -23,6 +23,12 @@ sealed interface DesktopShortcut {
     /** Lock the vault (⌘L / Ctrl+Shift+L). */
     data object Lock : DesktopShortcut
 
+    /** Open the command palette over the active session (⌘K / Ctrl+Shift+K). */
+    data object CommandPalette : DesktopShortcut
+
+    /** Open the broadcast panel: one command into several sessions (⌘B / Ctrl+Shift+B). */
+    data object Broadcast : DesktopShortcut
+
     /** Next tab (Ctrl+Tab). */
     data object NextTab : DesktopShortcut
 
@@ -65,6 +71,8 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
         Key.D -> DesktopShortcut.SplitTerminal
         Key.F -> DesktopShortcut.OpenSftp
         Key.L -> DesktopShortcut.Lock
+        Key.K -> DesktopShortcut.CommandPalette
+        Key.B -> DesktopShortcut.Broadcast
         Key.Slash -> DesktopShortcut.FocusAiBar
         else -> null
     }
