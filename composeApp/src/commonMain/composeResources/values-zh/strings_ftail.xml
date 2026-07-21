@@ -15,8 +15,28 @@
     <!-- 控制器 / 副作用错误回退 -->
     <string name="ftail_open_failed">打开 SFTP 失败</string>
     <string name="ftail_transfer_error">传输错误</string>
-    <string name="ftail_sftp_error">SFTP 错误</string>
-    <string name="ftail_file_pane_error">文件面板错误</string>
     <string name="ftail_delete_source_failed">移动后删除源文件失败</string>
     <string name="ftail_file_fallback">文件</string>
+
+    <!-- 文件浏览器/传输的类型化失败原因（原始平台文本不会展示给用户） -->
+    <string name="ftail_err_local_io">本地文件系统错误</string>
+    <string name="ftail_err_sftp">SFTP 错误</string>
+    <string name="ftail_err_illegal_name">列表中的文件名不安全</string>
+    <string name="ftail_err_open_source">无法打开所选文件</string>
+    <string name="ftail_err_open_target">无法打开保存目标</string>
+
+    <!-- 本地文件系统：面板标题与路径导航中的名称 -->
+    <string name="ftail_local_label">本设备</string>
+
+    <!-- 大小模板：单位名称与小数点分隔符均可翻译 -->
+    <string name="ftail_size_bytes">%1$d B</string>
+    <string name="ftail_size_kb">%1$d.%2$d KB</string>
+    <string name="ftail_size_mb">%1$d.%2$d MB</string>
+    <string name="ftail_size_gb">%1$d.%2$d GB</string>
+    <string name="ftail_size_tb">%1$d.%2$d TB</string>
+    <string name="ftail_size_pb">%1$d.%2$d PB</string>
+
+    <!-- 传输栏：带批次计数的文件名，以及已传输/总量 -->
+    <string name="ftail_transfer_counter">%1$s (%2$d/%3$d)</string>
+    <string name="ftail_transfer_progress">%1$s / %2$s</string>
 </resources>

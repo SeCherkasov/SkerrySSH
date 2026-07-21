@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,8 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -48,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.text.AnnotatedString
 
 /**
  * Base text on the UI font (Space Grotesk by default). Thin wrapper over [BasicText] so
@@ -82,6 +89,28 @@ fun Txt(
             lineHeight = lineHeight,
             textAlign = align,
         ),
+    )
+}
+
+/** [Txt] for pre-styled text (search-match highlighting): same defaults, spans of the string win. */
+@Composable
+fun Txt(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = D.text,
+    size: TextUnit = 13.sp,
+    weight: FontWeight = FontWeight.Normal,
+    font: FontFamily? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+) {
+    val family = font ?: LocalFonts.current.ui
+    BasicText(
+        text = text,
+        modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
+        style = TextStyle(color = color, fontSize = size, fontWeight = weight, fontFamily = family),
     )
 }
 
@@ -257,6 +286,54 @@ fun MeterBar(fraction: Float, color: Color, modifier: Modifier = Modifier, track
                 .background(color),
         )
     }
+}
+
+/**
+ * Sparkline of a metric's recent history: a polyline over [values] with a translucent fill under
+ * it, drawn right-aligned so the newest sample sits at the right edge and older ones scroll off.
+ *
+ * [values] are already normalized to 0..1 (the caller scales percentages or rates). A window
+ * shorter than [capacity] is drawn against the full width scale, so the line grows in from the left
+ * instead of stretching a two-sample history across the whole panel. Fewer than two points draw
+ * nothing — a single dot reads as noise.
+ */
+@Composable
+fun Sparkline(
+    values: List<Float>,
+    color: Color,
+    modifier: Modifier = Modifier,
+    height: Dp = 28.dp,
+    capacity: Int = 60,
+) {
+    Canvas(modifier.fillMaxWidth().height(height)) {
+        if (values.size < 2) return@Canvas
+        fun pointAt(index: Int) = Offset(
+            x = sparklineX(index, values.size, capacity, size.width),
+            y = size.height * (1f - values[index].coerceIn(0f, 1f)),
+        )
+        val line = Path().apply {
+            moveTo(pointAt(0).x, pointAt(0).y)
+            for (i in 1 until values.size) lineTo(pointAt(i).x, pointAt(i).y)
+        }
+        val fill = Path().apply {
+            addPath(line)
+            lineTo(pointAt(values.lastIndex).x, size.height)
+            lineTo(pointAt(0).x, size.height)
+            close()
+        }
+        drawPath(fill, color.copy(alpha = 0.14f))
+        drawPath(line, color, style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
+
+/**
+ * X of sample [index] of [count] in a [Sparkline] of [width] px holding up to [capacity] samples:
+ * samples sit one slot apart, right-aligned, so the newest is at the right edge and a partial
+ * window grows in from the left rather than stretching across the whole width.
+ */
+internal fun sparklineX(index: Int, count: Int, capacity: Int, width: Float): Float {
+    val step = width / (capacity.coerceAtLeast(2) - 1)
+    return width - step * (count - 1 - index)
 }
 
 /** Filled primary button (cyan background, dark text) with an optional leading icon. */

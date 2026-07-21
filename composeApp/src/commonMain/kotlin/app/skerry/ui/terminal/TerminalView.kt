@@ -1,5 +1,8 @@
 package app.skerry.ui.terminal
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -34,6 +39,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -74,15 +80,56 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.sessionDotColor
 import org.jetbrains.compose.resources.stringResource
 
-/** Shared pane header height (primary and split) so both titles align. */
-private val PANE_HEADER_HEIGHT = 40.dp
+/**
+ * Session action icons (split / SFTP / tunnels / snippets / info panel / disconnect). Pinned to the
+ * top-right corner of the terminal area rather than living in a pane header: opening the info panel
+ * or a split narrows the panes, and icons that shift under the pointer are hard to hit twice.
+ */
+@Composable
+private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modifier) {
+    val sessions = LocalSessions.current
+    val active = sessions?.active
+    Row(
+        modifier.height(PANE_HEADER_HEIGHT).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        // Split: live mode toggles the active tab's split (its own secondary session);
+        // mock/preview uses a global flag.
+        IconBtn("splitscreen_right", onClick = { if (sessions != null) sessions.toggleSplit() else state.toggleSplit() })
+        // Switches the active tab's subview (live mode, plus overlay reset) / mock fallback state.view.
+        IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
+        // Tunnels is a global section, always opens as an overlay.
+        IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
+        // Quick snippet launch into the active session without leaving for the Snippets section.
+        SnippetPaletteButton(active, state.snippetPaletteRequests)
+        // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
+        RecordSessionButton(active, state.recordingToggleRequests) { state.showRecordingNotice(it) }
+        // Plays a .cast back over the shell. Not tied to a session (a recording is watched, not run),
+        // which is why it sits here rather than behind a connected-only guard.
+        PlayRecordingButton(state.castOpenRequests) { state.showCast(it) }
+        // Lit while the info panel is open — the only action here with a visible on/off state.
+        IconBtn("info", onClick = state::toggleInfo, tint = if (state.infoPanel) D.cyanBright else D.dim)
+        // Power: closes the active session (live path) with a confirmation prompt
+        // (destructive, no auto-reconnect); no-op stub in mock mode.
+        IconBtn("power_settings_new", onClick = { if (active != null) state.requestCloseSession(active.id) }, tint = D.sunset)
+    }
+}
+
+/** Shared pane header height (primary, split, and the info panel's top strip) so rows align. */
+internal val PANE_HEADER_HEIGHT = 40.dp
 
 /** Terminal view: hosts sidebar + main (toolbar, panes, AI bar) + info panel. */
 @Composable
 fun TerminalView(state: DesktopDesignState) {
     Row(Modifier.fillMaxSize()) {
-        // Hidden entirely when collapsed; the expand/collapse toggle sits on the icon rail (SidebarToggle).
-        if (!state.sidebarHidden) HostsSidebar(state)
+        // Slides in/out when toggled from the icon rail (SidebarToggle); expandFrom = End keeps the
+        // right edge leading, so the panel visually emerges from under the rail instead of popping.
+        AnimatedVisibility(
+            visible = !state.sidebarHidden,
+            enter = expandHorizontally(expandFrom = Alignment.End),
+            exit = shrinkHorizontally(shrinkTowards = Alignment.End),
+        ) { HostsSidebar(state) }
         Column(Modifier.weight(1f).fillMaxHeight()) {
             // Shared live AI bar controller (or null): one instance for the overlay layer and
             // input row; key() recreates it when the active host/policy changes. Off/mock -> null
@@ -98,6 +145,10 @@ fun TerminalView(state: DesktopDesignState) {
                     if (liveAi != null && liveAi.enabled && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
                 }
             }
+            // Width of the pinned action row, measured so a split pane's own header can reserve
+            // room for it instead of drawing its close button underneath.
+            var actionsWidth by remember { mutableStateOf(0.dp) }
+            val density = LocalDensity.current
             Box(Modifier.weight(1f).fillMaxWidth()) {
             Row(Modifier.fillMaxSize()) {
                 // Live mode: split is tied to the active tab (its own secondary session).
@@ -123,10 +174,26 @@ fun TerminalView(state: DesktopDesignState) {
                 if (showSplit) {
                     Box(Modifier.width(1.dp).fillMaxHeight().background(D.cyan14))
                     val splitMod = Modifier.weight(1f).then(paneFocusBorder(focusedSplit))
-                    if (sessions != null) LiveSplitPane(sessions, state, splitMod) else SplitPane(splitMod)
+                    // With the info panel closed the actions sit over this pane's header, so it
+                    // gives them room; with the panel open they're over the panel instead.
+                    val reserveEnd = if (state.infoPanel) 0.dp else actionsWidth
+                    if (sessions != null) LiveSplitPane(sessions, state, splitMod, reserveEnd) else SplitPane(splitMod)
                 }
-                if (state.infoPanel) InfoPanel()
+                // Same treatment as the hosts sidebar: the panel slides out of the right edge
+                // instead of popping into the layout. shrinkTowards = Start keeps its left edge
+                // leading, so the terminal reflows smoothly as the panel widens.
+                AnimatedVisibility(
+                    visible = state.infoPanel,
+                    enter = expandHorizontally(expandFrom = Alignment.Start),
+                    exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
+                ) { InfoPanel() }
             }
+            SessionActions(
+                state,
+                Modifier.align(Alignment.TopEnd).onGloballyPositioned {
+                    actionsWidth = with(density) { it.size.width.toDp() }
+                },
+            )
             }
             // Single bar row: command + inline explanation/risk reason + buttons; thinking/blocked/
             // error states share it. Never overlaps the terminal or changes its height. Off/mock -> slot.
@@ -175,21 +242,6 @@ private fun SessionToolbar(state: DesktopDesignState) {
                     }
                     Txt("SSHv2 · aes256-gcm · ed25519", color = D.faint, size = 11.5.sp)
                 }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                // Split: live mode toggles the active tab's split (its own secondary session);
-                // mock/preview uses a global flag.
-                IconBtn("splitscreen_right", onClick = { if (sessions != null) sessions.toggleSplit() else state.toggleSplit() })
-                // Switches the active tab's subview (live mode, plus overlay reset) / mock fallback state.view.
-                IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
-                // Tunnels is a global section, always opens as an overlay.
-                IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
-                // Quick snippet launch into the active session without leaving for the Snippets section.
-                SnippetPaletteButton(active)
-                IconBtn("info", onClick = state::toggleInfo)
-                // Power: closes the active session (live path) with a confirmation prompt
-                // (destructive, no auto-reconnect); no-op stub in mock mode.
-                IconBtn("power_settings_new", onClick = { if (active != null) state.requestCloseSession(active.id) }, tint = D.sunset)
             }
         }
         HLine()
@@ -286,7 +338,12 @@ private fun TerminalNotice(icon: String, title: String, subtitle: String, color:
  * focuses the split pane (tab chip title follows focus).
  */
 @Composable
-private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignState, modifier: Modifier = Modifier) {
+private fun LiveSplitPane(
+    sessions: SessionsController,
+    state: DesktopDesignState,
+    modifier: Modifier = Modifier,
+    reserveEnd: Dp = 0.dp,
+) {
     val mono = LocalFonts.current.mono
     val parent = sessions.active ?: return
     var pickerOpen by remember { mutableStateOf(false) }
@@ -297,7 +354,8 @@ private fun LiveSplitPane(sessions: SessionsController, state: DesktopDesignStat
     ) {
         Box(Modifier.fillMaxWidth().background(D.surface2)) {
             Row(
-                Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).padding(horizontal = 16.dp),
+                Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT)
+                    .padding(start = 16.dp, end = 16.dp + reserveEnd),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {

@@ -8,7 +8,9 @@ import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.vault.AutoLockDuration
+import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -17,6 +19,9 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
+import app.skerry.shared.terminal.Asciicast
+import app.skerry.ui.terminal.CastOpenResult
+import app.skerry.ui.terminal.RecordingOutcome
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
@@ -50,6 +55,8 @@ fun DesktopView.asSessionView(): SessionView = when (this) {
 fun SessionView.asDesktopView(): DesktopView = when (this) {
     SessionView.Terminal -> DesktopView.Terminal
     SessionView.Sftp -> DesktopView.Sftp
+    // VNC has no dedicated rail item (it's a work-area view, like Terminal); don't highlight one.
+    SessionView.Vnc -> DesktopView.Terminal
 }
 
 /** Settings panel tabs. */
@@ -185,6 +192,30 @@ class DesktopDesignState(
 
     var locked: Boolean by mutableStateOf(false); private set
     var modalOpen: Boolean by mutableStateOf(false); private set
+
+    /**
+     * Outcome of the last finished session recording, shown as a notice; `null` when there is
+     * nothing to report. A silent stop would leave the user unsure whether the file was written.
+     */
+    var recordingNotice: RecordingOutcome? by mutableStateOf(null); private set
+
+    /** Recording being played back over the shell, or `null` when the player is closed. */
+    var castRecording: Asciicast? by mutableStateOf(null); private set
+
+    /** Whether the last picked file turned out not to be a recording (shown as a notice). */
+    var castInvalid: Boolean by mutableStateOf(false); private set
+    /** Whether the command palette (⌘K / Ctrl+Shift+K) is open over the active session. */
+    var commandPaletteOpen: Boolean by mutableStateOf(false); private set
+
+    /** Whether the broadcast panel (⌘B / Ctrl+Shift+B) is open. */
+    var broadcastOpen: Boolean by mutableStateOf(false); private set
+
+    /**
+     * Which sessions a broadcast addresses. Lives here, not in the panel, so a selection survives
+     * closing and reopening it — re-picking eight hosts for every command would make the feature
+     * unusable.
+     */
+    val broadcast = BroadcastController()
     var settingsOpen: Boolean by mutableStateOf(false); private set
 
     /** Whether the sync setup onboarding modal is open (Settings → Sync → "Set up sync"). */
@@ -196,7 +227,21 @@ class DesktopDesignState(
     var split: Boolean by mutableStateOf(false); private set
     /** Whether the terminal's left host sidebar is hidden (toggled from the icon rail). */
     var sidebarHidden: Boolean by mutableStateOf(false); private set
+
+    /**
+     * Whether the VNC view's slide-over host drawer is open. Separate from [sidebarHidden]: the VNC
+     * framebuffer wants the full work area, so its drawer overlays the render and defaults to closed
+     * instead of reserving layout space like the terminal sidebar.
+     */
+    var vncSidebar: Boolean by mutableStateOf(false); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
+
+    /**
+     * View state of the snippet library (search, category chip, collapsed sections). Lives here so
+     * leaving the Snippets section and coming back doesn't reset the view; not persisted across
+     * restarts (see [app.skerry.ui.snippet.SnippetLibraryState]).
+     */
+    val snippetLibrary = SnippetLibraryState()
 
     /** Names of collapsed host folders in the sidebar (their host lists are hidden). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
@@ -343,6 +388,21 @@ class DesktopDesignState(
     fun requestCloseSplit(parentId: String) { pendingClose = PendingClose.Split(parentId) }
     fun dismissClose() { pendingClose = null }
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
+    fun showRecordingNotice(outcome: RecordingOutcome) { recordingNotice = outcome.takeIf { it.worthReporting } }
+    fun dismissRecordingNotice() { recordingNotice = null }
+    fun showCast(result: CastOpenResult) {
+        when (result) {
+            is CastOpenResult.Loaded -> castRecording = result.cast
+            CastOpenResult.Invalid -> castInvalid = true
+            CastOpenResult.Cancelled -> Unit // the user backed out; nothing to report
+        }
+    }
+    fun closeCast() { castRecording = null }
+    fun dismissCastError() { castInvalid = false }
+    fun openCommandPalette() { commandPaletteOpen = true }
+    fun closeCommandPalette() { commandPaletteOpen = false }
+    fun openBroadcast() { broadcastOpen = true }
+    fun closeBroadcast() { broadcastOpen = false }
     fun openSettings() { settingsOpen = true }
     fun closeSettings() { settingsOpen = false }
     fun openSyncSetup() { syncSetupOpen = true }
@@ -352,6 +412,7 @@ class DesktopDesignState(
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
     fun toggleSidebar() { sidebarHidden = !sidebarHidden }
+    fun toggleVncSidebar() { vncSidebar = !vncSidebar }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
 
     // Signal to focus the AI bar's input (hotkey Cmd// Ctrl+Shift+/). SharedFlow rather than a counter
@@ -361,6 +422,21 @@ class DesktopDesignState(
     private val _aiBarFocusRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val aiBarFocusRequests: SharedFlow<Unit> = _aiBarFocusRequests
     fun requestAiBarFocus() { _aiBarFocusRequests.tryEmit(Unit) }
+
+    // Hotkeys for the toolbar buttons that own their own state (snippet palette popup, recording
+    // toggle, file picker). Same one-shot signal as the AI bar above rather than a flag on the
+    // state: a boolean would have to be reset by the button and could re-fire on recomposition.
+    private val _snippetPaletteRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val snippetPaletteRequests: SharedFlow<Unit> = _snippetPaletteRequests
+    fun requestSnippetPalette() { _snippetPaletteRequests.tryEmit(Unit) }
+
+    private val _recordingToggleRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val recordingToggleRequests: SharedFlow<Unit> = _recordingToggleRequests
+    fun requestRecordingToggle() { _recordingToggleRequests.tryEmit(Unit) }
+
+    private val _castOpenRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val castOpenRequests: SharedFlow<Unit> = _castOpenRequests
+    fun requestCastOpen() { _castOpenRequests.tryEmit(Unit) }
 
     /** Whether folder [name] is collapsed (its host list hidden). */
     fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups

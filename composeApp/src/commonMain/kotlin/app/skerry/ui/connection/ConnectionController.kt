@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.serial.SerialProblem
+import app.skerry.shared.serial.SerialUnavailableException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
@@ -55,16 +57,19 @@ sealed interface ConnectionUiState {
     data class Connected(val terminal: TerminalScreenState) : ConnectionUiState
 
     /**
-     * Connect failed; [message] is shown to the user. [moshReason]/[moshDetail] are set when the
-     * failure is a typed Mosh setup problem — the view then renders a localized explanation
-     * (missing server package, locale, blocked UDP) instead of the raw English [message]
-     * (see `moshFailureText`); building the text here would bake in one language
+     * Connect failed; [message] is shown to the user. [moshReason]/[moshDetail] and
+     * [serialProblem]/[serialDetail] are set when the failure is a typed Mosh setup or serial port
+     * problem — the view then renders a localized explanation (missing server package, locale,
+     * blocked UDP; port missing, permission denied) instead of the raw English [message]
+     * (see `connectionErrorText`); building the text here would bake in one language
      * (same rule as [app.skerry.shared.sync.SyncFailureReason]).
      */
     data class Error(
         val message: String,
         val moshReason: MoshSetupException.Reason? = null,
         val moshDetail: String? = null,
+        val serialProblem: SerialProblem? = null,
+        val serialDetail: String? = null,
     ) : ConnectionUiState
 
     /**
@@ -148,6 +153,14 @@ class ConnectionController(
     var serverVersion: String? by mutableStateOf(null)
         private set
 
+    /**
+     * History key of the live session (see [terminalHistoryKey]), or `null` while not connected.
+     * The command palette reads it to put this host's commands first. Snapshot state so the palette
+     * sees the key appear when a session connects under it.
+     */
+    var historyKey: String? by mutableStateOf(null)
+        private set
+
     private var connectJob: Job? = null
     // Target/auth of the last connect — used by auto-reconnect after a drop (reconnects to the same target).
     private var lastTarget: SshTarget? = null
@@ -191,10 +204,17 @@ class ConnectionController(
                 // establishSession; uiState was set to Form by disconnect() itself.
                 throw e
             } catch (e: Exception) {
+                // The serial transport wraps its typed failure into SshConnectionException, so the
+                // cause carries the reason the view localizes.
+                val serial = e as? SerialUnavailableException ?: e.cause as? SerialUnavailableException
                 uiState = ConnectionUiState.Error(
-                    message = e.message ?: "Failed to connect",
+                    // Transport text is diagnostics only: the view shows a localized base and keeps
+                    // this as a parenthetical detail (sshj/okio messages are always English).
+                    message = e.message.orEmpty(),
                     moshReason = (e as? MoshSetupException)?.reason,
                     moshDetail = (e as? MoshSetupException)?.detail,
+                    serialProblem = serial?.problem,
+                    serialDetail = serial?.detail,
                 )
             }
         }
@@ -228,6 +248,7 @@ class ConnectionController(
             val historyKey = terminalHistoryKey(
                 target.connectionType.name, target.username, target.host, target.port,
             )
+            this.historyKey = historyKey
             val loadedHistory = history?.load(historyKey).orEmpty()
             // Snapshot terminal settings at connect time: they apply to the new session.
             val prefs = terminalPrefs()
@@ -241,8 +262,10 @@ class ConnectionController(
                 clipboardWriteEnabled = prefs.clipboardWriteEnabled,
                 onHistoryChanged = history?.let { store ->
                     // Moves the write off the UI thread onto the controller's scope (Default):
-                    // commands are infrequent and the write is small.
-                    { snapshot -> scope.launch { store.save(historyKey, snapshot) } }
+                    // commands are infrequent and the write is small. The label rides along so the
+                    // command palette can name the host a command came from.
+                    val label = "${target.username}@${target.host}"
+                    { snapshot -> scope.launch { store.save(historyKey, snapshot, label) } }
                 },
             )
             // Keep-alive per the profile's cadence (0 = off, SSH-only): pings run from the moment
@@ -400,6 +423,9 @@ class ConnectionController(
         lastTarget = null
         // Cancelled before Connected — discard the not-yet-fired one-shot action (Run on host).
         pendingOnConnected = null
+        // Stop pointing at the disconnected host: a palette opened later must not attribute its
+        // commands to a session that is gone.
+        historyKey = null
         releaseSessionResources()
         uiState = ConnectionUiState.Form
     }

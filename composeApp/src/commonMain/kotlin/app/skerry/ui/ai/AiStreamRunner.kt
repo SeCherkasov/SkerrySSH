@@ -10,13 +10,27 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/** Human-readable error message for an AI provider exception (shared by chat and the terminal bar). */
-internal fun AiException.friendlyMessage(): String = when (kind) {
-    AiException.Kind.UNAUTHORIZED -> "Invalid API key — check it in AI settings."
-    AiException.Kind.RATE_LIMITED -> "Rate limited by the provider. Try again shortly."
-    AiException.Kind.NETWORK -> "Network error reaching the AI provider."
-    AiException.Kind.INVALID_REQUEST -> "The provider rejected the request (check model/params)."
-    AiException.Kind.PROTOCOL -> "Unexpected response from the AI provider."
+/**
+ * Why an AI request failed. Typed on purpose: controllers never build user-visible text, the UI
+ * resolves it via `aiFailureMessage`. [UNKNOWN] covers non-[AiException] failures — the raw library
+ * message is not shown to the user.
+ */
+enum class AiFailure {
+    UNAUTHORIZED,
+    RATE_LIMITED,
+    NETWORK,
+    INVALID_REQUEST,
+    PROTOCOL,
+    UNKNOWN,
+}
+
+/** Maps a provider exception to the typed UI failure. */
+internal fun AiException.toFailure(): AiFailure = when (kind) {
+    AiException.Kind.UNAUTHORIZED -> AiFailure.UNAUTHORIZED
+    AiException.Kind.RATE_LIMITED -> AiFailure.RATE_LIMITED
+    AiException.Kind.NETWORK -> AiFailure.NETWORK
+    AiException.Kind.INVALID_REQUEST -> AiFailure.INVALID_REQUEST
+    AiException.Kind.PROTOCOL -> AiFailure.PROTOCOL
 }
 
 /**
@@ -26,7 +40,7 @@ internal fun AiException.friendlyMessage(): String = when (kind) {
  *
  * - [onDelta] receives the accumulated text after each delta.
  * - [onComplete] fires with the full reply on successful stream completion.
- * - [onError] receives a ready-to-show message ([friendlyMessage] for [AiException]);
+ * - [onError] receives a typed [AiFailure] the UI turns into localized text;
  *   [CancellationException] is rethrown, not mapped to an error.
  * - [onFinally] always runs (success/error/cancel), after the provider is closed; generation
  *   guarding against job-reassignment races is the caller's responsibility.
@@ -40,7 +54,7 @@ internal class AiStreamRunner(
         messages: List<AiMessage>,
         onDelta: (String) -> Unit,
         onComplete: (String) -> Unit,
-        onError: (String) -> Unit,
+        onError: (AiFailure) -> Unit,
         onFinally: () -> Unit,
         // null uses the provider default; the terminal bar requests a low value (command, not creative).
         temperature: Double? = null,
@@ -57,9 +71,10 @@ internal class AiStreamRunner(
         } catch (e: CancellationException) {
             throw e
         } catch (e: AiException) {
-            onError(e.friendlyMessage())
-        } catch (e: Exception) {
-            onError("AI request failed: ${e.message}")
+            onError(e.toFailure())
+        } catch (_: Exception) {
+            // Library messages are not user-facing text: report a generic typed failure.
+            onError(AiFailure.UNKNOWN)
         } finally {
             provider?.let { runCatching { it.close() } }
             onFinally()

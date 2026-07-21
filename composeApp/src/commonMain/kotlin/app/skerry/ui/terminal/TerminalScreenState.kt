@@ -10,6 +10,8 @@ import app.skerry.shared.terminal.CommandHistory
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.DEFAULT_MAX_SCROLLBACK
 import app.skerry.shared.terminal.MouseButton
+import app.skerry.shared.terminal.SessionRecorder
+import app.skerry.shared.terminal.epochMillis
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
@@ -24,7 +26,9 @@ import app.skerry.shared.terminal.encodeMouseReport
 import app.skerry.shared.terminal.lineSelectionAt
 import app.skerry.shared.terminal.wordSelectionAt
 import kotlin.concurrent.Volatile
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
@@ -137,6 +141,49 @@ class TerminalScreenState(
     var selection: TerminalSelection? by mutableStateOf(null)
         private set
 
+    // Session recording (asciinema v2). Touched only by the command loop below, the same coroutine
+    // that owns the emulator: start/stop arrive from the UI thread while PTY output is still
+    // streaming in, and SessionRecorder is not thread-safe. The UI reads the two state flags instead
+    // of the recorder. Held in memory until the user exports it — see [SessionRecorder] on why it is
+    // bounded rather than streamed to disk.
+    private var recorder: SessionRecorder? = null
+
+    /** Whether this session is being recorded. */
+    var recording: Boolean by mutableStateOf(false)
+        private set
+
+    /** Whether the running recording hit its size limit and stopped collecting. */
+    var recordingTruncated: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * Start recording this session's output. [title] names the recording in the asciicast header
+     * (the host label). Recording while already recording keeps the existing take.
+     */
+    fun startRecording(title: String?) {
+        if (recording) return
+        val queued = commands.trySend(TerminalCommand.StartRecording(title, epochMillis(), cols, rows))
+        // The queue is closed once the session's output ends: there is nothing left to record.
+        if (queued.isFailure) return
+        recording = true
+        recordingTruncated = false
+    }
+
+    /**
+     * Stop recording and return the asciicast, or `null` if nothing was being recorded. The caller
+     * exports it; nothing is written to disk here. Suspends until the command loop hands the
+     * recording over, so every chunk queued before the stop is in the file.
+     */
+    suspend fun stopRecording(): String? {
+        if (!recording) return null
+        recording = false
+        val cast = CompletableDeferred<String?>()
+        // The queue is closed once the session's output ends; then no owner is left to answer, and
+        // the take goes with it rather than hanging the caller.
+        if (commands.trySend(TerminalCommand.StopRecording(cast)).isFailure) return null
+        return cast.await()
+    }
+
     /**
      * DECCKM (application-cursor-keys) mode from the emulator: apps like vim/less/htop enable it,
      * and arrow keys must then be sent as SS3 (`ESC O A`) instead of CSI. Read by the UI when
@@ -234,13 +281,22 @@ class TerminalScreenState(
         // it per chunk is expensive (freezes/GC, especially on Android). When the queue is empty,
         // behavior is unchanged (snapshot right away), so interactive latency does not grow.
         scope.launch {
-            for (cmd in commands) {
-                applyCommand(cmd)
-                while (true) {
-                    val next = commands.tryReceive().getOrNull() ?: break
-                    applyCommand(next)
+            try {
+                for (cmd in commands) {
+                    applyCommand(cmd)
+                    while (true) {
+                        val next = commands.tryReceive().getOrNull() ?: break
+                        applyCommand(next)
+                    }
+                    publishSnapshot()
                 }
-                publishSnapshot()
+            } finally {
+                // Cancellation can leave a stop-recording queued with nobody to answer it; hand the
+                // take over here rather than leave the exporting caller awaiting forever.
+                while (true) {
+                    val left = commands.tryReceive().getOrNull() ?: break
+                    if (left is TerminalCommand.StopRecording) left.cast.complete(recorder?.finish())
+                }
             }
         }
         // Sole consumer of outbound bytes: guarantees FIFO write order to the PTY regardless of how
@@ -253,7 +309,30 @@ class TerminalScreenState(
     /** Apply one command to the emulator (does not publish a snapshot; the caller batches that). */
     private suspend fun applyCommand(cmd: TerminalCommand) {
         when (cmd) {
-            is TerminalCommand.Feed -> emulator.feed(cmd.chunk)
+            is TerminalCommand.Feed -> {
+                recorder?.let {
+                    it.record(cmd.chunk)
+                    if (it.truncated && !recordingTruncated) recordingTruncated = true
+                }
+                emulator.feed(cmd.chunk)
+            }
+            is TerminalCommand.StartRecording -> {
+                // Elapsed time comes off a monotonic source: a wall clock can step backwards (NTP,
+                // suspend/resume) and take the event timeline with it. The epoch stamp is only the
+                // header's "when was this recorded".
+                val started = TimeSource.Monotonic.markNow()
+                recorder = SessionRecorder(
+                    columns = cmd.columns,
+                    rows = cmd.rows,
+                    startedAtEpochSeconds = cmd.startedAtMillis / 1000,
+                    title = cmd.title,
+                    now = { started.elapsedNow().inWholeMilliseconds },
+                )
+            }
+            is TerminalCommand.StopRecording -> {
+                cmd.cast.complete(recorder?.finish())
+                recorder = null
+            }
             is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
             is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
             is TerminalCommand.SetClipboardWriteEnabled -> emulator.applyClipboardWrite(cmd.enabled)
@@ -645,6 +724,17 @@ class TerminalScreenState(
 private sealed interface TerminalCommand {
     /** Raw PTY output chunk to feed to the parser. */
     class Feed(val chunk: ByteArray) : TerminalCommand
+
+    /** Begin recording. Carries the grid size and epoch stamp for the asciicast header. */
+    class StartRecording(
+        val title: String?,
+        val startedAtMillis: Long,
+        val columns: Int,
+        val rows: Int,
+    ) : TerminalCommand
+
+    /** End recording; [cast] receives the asciicast (or `null` if nothing was being recorded). */
+    class StopRecording(val cast: CompletableDeferred<String?>) : TerminalCommand
 
     /** New grid size: applied to the emulator and forwarded to the PTY. */
     class Resize(val size: PtySize) : TerminalCommand

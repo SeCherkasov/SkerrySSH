@@ -64,5 +64,33 @@ interface FileBrowser {
     suspend fun rename(from: String, to: String)
 }
 
-/** File browser operation error: missing path/access, wrong object type, or source disconnect. */
-class FileBrowserException(message: String, cause: Throwable? = null) : Exception(message, cause)
+/**
+ * Typed, user-facing reason for a [FileBrowserException]. The UI maps it to a localized string;
+ * platform text (okio/sshj/OS) is never shown as the primary message.
+ */
+enum class FileBrowserFailure {
+    /** Local filesystem error: missing path, denied access, wrong object type. */
+    LocalIo,
+
+    /** Remote SFTP error: missing path, denied access, protocol/connection failure. */
+    Sftp,
+
+    /** A listing entry carries a name that is unsafe to use as a path component. */
+    IllegalName,
+
+    /** The picked source file could not be opened for reading. */
+    OpenSource,
+
+    /** The chosen save target could not be opened for writing. */
+    OpenTarget,
+}
+
+/**
+ * File browser operation error. [failure] is the user-facing reason (localized by the UI);
+ * [detail] carries raw platform text for logs and diagnostics only — never for the primary message.
+ */
+class FileBrowserException(
+    val failure: FileBrowserFailure,
+    val detail: String? = null,
+    cause: Throwable? = null,
+) : Exception(detail ?: failure.name, cause)

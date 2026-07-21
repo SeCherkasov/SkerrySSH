@@ -53,6 +53,3 @@ expect object SerialSystem {
      */
     fun open(config: SerialConfig): SerialPortHandle
 }
-
-/** Port unavailable: platform has no serial support, or the device could not be opened. */
-class SerialUnavailableException(message: String, cause: Throwable? = null) : Exception(message, cause)

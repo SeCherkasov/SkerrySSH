@@ -24,7 +24,8 @@ actual fun platformLocalBrowser(): FileBrowser {
     return LocalFileBrowser(
         fileSystem = FileSystem.SYSTEM,
         home = home,
-        label = "On this device",
+        // Blank on purpose: the UI substitutes the localized `ftail_local_label` (parity with desktop).
+        label = "",
         ioDispatcher = Dispatchers.IO,
     )
 }

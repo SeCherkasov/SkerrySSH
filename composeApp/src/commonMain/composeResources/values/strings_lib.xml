@@ -30,6 +30,9 @@
     <string name="lib_snippets_library">LIBRARY</string>
     <string name="lib_snippets_empty">No snippets yet</string>
     <string name="lib_snippets_no_matches">No matches</string>
+    <string name="lib_snippets_chip_all">All</string>
+    <string name="lib_snippets_starter_pack">Add starter snippets</string>
+    <string name="lib_snippets_uncategorized">Uncategorized</string>
     <string name="lib_snippets_new">New snippet</string>
     <string name="lib_snippets_edit">Edit snippet</string>
     <string name="lib_snippets_untitled">Untitled</string>
@@ -41,6 +44,7 @@
     <string name="lib_snippets_add_tag">add tag…</string>
     <string name="lib_snippets_press_keys">Press keys…</string>
     <string name="lib_snippets_shortcut_conflict">Already used by \"%1$s\"</string>
+    <string name="lib_snippets_shortcut_reserved">Reserved by a Skerry shortcut (Settings → Keyboard)</string>
     <string name="lib_snippets_select_or_create">Select a snippet or create a new one.</string>
     <string name="lib_snippets_save">Save</string>
     <string name="lib_snippets_delete">Delete</string>
@@ -79,13 +83,11 @@
     <string name="lib_teams_accept">Accept</string>
     <string name="lib_teams_decline">Decline</string>
     <string name="lib_teams_role_owner">OWNER</string>
-    <string name="lib_teams_role_member">MEMBER</string>
     <string name="lib_teams_role_admin">ADMIN</string>
     <string name="lib_teams_role_editor">EDITOR</string>
     <string name="lib_teams_role_viewer">VIEWER</string>
     <string name="lib_teams_status_invited">INVITED</string>
     <string name="lib_teams_invite_role">Role</string>
-    <string name="lib_teams_change_role">Change role</string>
     <string name="lib_teams_role_picker_title">Member role</string>
     <string name="lib_teams_history">History</string>
     <string name="lib_teams_history_title">Team activity</string>
@@ -97,16 +99,17 @@
     <string name="lib_teams_event_role_change">Changed a role</string>
     <string name="lib_teams_event_share">Shared records</string>
     <string name="lib_teams_event_delete">Deleted team</string>
+    <!-- Fallback for an audit event code this client doesn't know; %1$s — the raw server code -->
+    <string name="lib_teams_event_unknown">Other event (%1$s)</string>
+    <string name="lib_teams_shared_hosts_count">Shared hosts · %1$d</string>
+    <string name="lib_teams_shared_snippets_count">Shared snippets · %1$d</string>
     <string name="lib_teams_members_count">%1$d members</string>
-    <string name="lib_teams_shared_hosts">Shared hosts</string>
-    <string name="lib_teams_shared_snippets">Shared snippets</string>
     <string name="lib_teams_share_host">Share host</string>
     <string name="lib_teams_share_snippet">Share snippet</string>
     <string name="lib_teams_share_host_title">Share host with team</string>
     <string name="lib_teams_share_snippet_title">Share snippet with team</string>
     <string name="lib_teams_share_empty">Nothing left to share</string>
     <string name="lib_teams_nothing_shared">Nothing shared yet</string>
-    <string name="lib_teams_unshare">Remove from team</string>
     <string name="lib_teams_sync_now">Sync</string>
     <string name="lib_teams_no_key">The team key has not arrived on this device yet</string>
     <string name="lib_teams_remove_member_title">Remove member</string>

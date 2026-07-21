@@ -47,8 +47,8 @@ sealed interface AiNotice {
     /** The reply was prose or nothing usable; the UI shows a fixed localized "not a command" message. */
     data object Rejected : AiNotice
 
-    /** Provider/transport error text. */
-    data class Error(val message: String) : AiNotice
+    /** Provider/transport failure; the UI resolves the localized text (see `aiFailureMessage`). */
+    data class Error(val failure: AiFailure) : AiNotice
 }
 
 class TerminalAiController(

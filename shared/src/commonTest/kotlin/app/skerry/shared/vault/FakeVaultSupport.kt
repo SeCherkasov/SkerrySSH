@@ -13,8 +13,11 @@ internal class FakeVault : Vault {
 
     private val entries = mutableMapOf<String, Entry>()
 
+    /** Flip to exercise the locked-vault path of a store; unlocked by default. */
+    var locked: Boolean = false
+
     override fun exists(): Boolean = true
-    override val isUnlocked: Boolean = true
+    override val isUnlocked: Boolean get() = !locked
     override fun create(password: CharArray) = Unit
     override fun unlock(password: CharArray): UnlockResult = UnlockResult.Success
     override fun lock() = Unit

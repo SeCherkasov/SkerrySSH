@@ -56,7 +56,9 @@ class LocalFileBrowserTest {
 
     @Test
     fun `list of a missing directory throws FileBrowserException`() = runTest {
-        assertFailsWith<FileBrowserException> { browser().list("/nope") }
+        // The okio text is diagnostic detail only; the user-facing reason is the typed failure.
+        val e = assertFailsWith<FileBrowserException> { browser().list("/nope") }
+        assertEquals(FileBrowserFailure.LocalIo, e.failure)
     }
 
     @Test

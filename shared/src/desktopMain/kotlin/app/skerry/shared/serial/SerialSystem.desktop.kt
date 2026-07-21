@@ -20,7 +20,7 @@ actual object SerialSystem {
         val port = try {
             NativePort.getCommPort(config.portName)
         } catch (e: Exception) {
-            throw SerialUnavailableException("Port ${config.portName} not found", e)
+            throw SerialUnavailableException(SerialProblem.PORT_NOT_FOUND, config.portName, e)
         }
         // Everything from parameter setup to stream acquisition is under one try: any failure
         // (invalid baud/format, driver failure, throw in getInputStream) closes the already-open
@@ -33,7 +33,7 @@ actual object SerialSystem {
             // SEMI_BLOCKING + readTimeout 0: read blocks until the first byte; -1 when the port closes.
             port.setComPortTimeouts(NativePort.TIMEOUT_READ_SEMI_BLOCKING, 0, 0)
             if (!port.openPort()) {
-                throw SerialUnavailableException("Failed to open port ${config.portName}")
+                throw SerialUnavailableException(SerialProblem.OPEN_FAILED, config.portName)
             }
             NativeSerialPortHandle(port)
         } catch (e: SerialUnavailableException) {
@@ -41,7 +41,7 @@ actual object SerialSystem {
             throw e
         } catch (e: Exception) {
             runCatching { port.closePort() }
-            throw SerialUnavailableException("Failed to configure port ${config.portName}", e)
+            throw SerialUnavailableException(SerialProblem.CONFIGURE_FAILED, config.portName, e)
         }
     }
 

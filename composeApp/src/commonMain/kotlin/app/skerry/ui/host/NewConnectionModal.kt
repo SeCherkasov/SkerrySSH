@@ -57,11 +57,14 @@ import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
+import app.skerry.shared.ssh.isVnc
+import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.ConnectionTestController
+import app.skerry.ui.connection.ConnectionTestProblem
 import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.JumpChainResolution
+import app.skerry.ui.connection.connectionTestFailureText
 import app.skerry.ui.connection.jumpHostCandidates
-import app.skerry.ui.connection.jumpProblemText
 import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.design.DropdownField
@@ -104,7 +107,9 @@ import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_mosh
 import app.skerry.ui.generated.resources.conn_protocol_ssh
 import app.skerry.ui.generated.resources.conn_protocol_telnet
+import app.skerry.ui.generated.resources.conn_protocol_vnc
 import app.skerry.ui.generated.resources.conn_telnet_plaintext_warning
+import app.skerry.ui.generated.resources.conn_vnc_plaintext_warning
 import app.skerry.ui.generated.resources.conn_save
 import app.skerry.ui.generated.resources.conn_save_changes
 import app.skerry.ui.generated.resources.conn_subtitle_edit
@@ -112,11 +117,11 @@ import app.skerry.ui.generated.resources.conn_subtitle_new
 import app.skerry.ui.generated.resources.conn_tag_add_placeholder
 import app.skerry.ui.generated.resources.conn_test
 import app.skerry.ui.generated.resources.conn_test_checking
-import app.skerry.ui.generated.resources.conn_test_incomplete
 import app.skerry.ui.generated.resources.conn_test_connected
 import app.skerry.ui.generated.resources.conn_test_rtt_ms
 import app.skerry.ui.generated.resources.conn_title_edit
 import app.skerry.ui.generated.resources.conn_title_new
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.D
@@ -193,10 +198,6 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
         findHost = { id -> allHosts.firstOrNull { it.id == id } },
         findCredential = { id -> credentials?.find(id) },
     )
-    val jumpErrorText = (testJump as? JumpChainResolution.Unavailable)?.let { jumpProblemText(it.problem) }
-    // Shown as the test result when "Test" is clicked with an incomplete form (no username/host/secret):
-    // the button stays tappable, so give feedback instead of silently doing nothing.
-    val incompleteTestMessage = stringResource(Res.string.conn_test_incomplete)
     ModalScrim(onDismiss = state::closeModal) {
         Column(
             Modifier
@@ -233,6 +234,13 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         Txt(stringResource(Res.string.conn_telnet_plaintext_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
                     }
                 }
+                // VNC/RFB has no transport encryption either — same heads-up as Telnet.
+                if (form.connectionType == ConnectionType.VNC) {
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Sym("warning", size = 14.sp, color = D.sunset)
+                        Txt(stringResource(Res.string.conn_vnc_plaintext_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
+                    }
+                }
                 Spacer14()
                 val serial = form.connectionType == ConnectionType.SERIAL
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -257,6 +265,11 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     Field(stringResource(Res.string.conn_field_username)) { ModalTextField(form.username, { form.username = it }, "root or username", icon = "person") }
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form) }
+                }
+                // VNC authenticates with a password only — no username, no private key (allowKey = false).
+                if (form.connectionType.isVnc) {
+                    Spacer14()
+                    Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form, allowKey = false) }
                 }
                 Spacer14()
                 Field(stringResource(Res.string.conn_field_group)) { GroupPicker(form, allHosts) }
@@ -311,8 +324,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     )
                 }
                 // AI policy selection is visible when AI is actually available (live controller or feature flag).
-                // Written directly into the form -> host profile (Host.aiPolicy).
-                if (LocalFeatures.current.ai || LocalAi.current != null) {
+                // Written directly into the form -> host profile (Host.aiPolicy). Not for VNC: a remote
+                // desktop has no shell/terminal for AI to act on.
+                if (!form.connectionType.isVnc && (LocalFeatures.current.ai || LocalAi.current != null)) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_ai_policy)) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -354,14 +368,14 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         }
                         if (canTest && auth != null) {
                             when (testJump) {
-                                is JumpChainResolution.Unavailable -> tester.fail(jumpErrorText.orEmpty())
+                                is JumpChainResolution.Unavailable -> tester.fail(ConnectionTestProblem.Jump(testJump.problem))
                                 is JumpChainResolution.Resolved ->
                                     tester.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim(), jump = testJump.jump), auth)
                             }
                         } else {
                             // Form isn't ready to dial (missing host/username/credentials): report it as a
                             // failure so the click isn't a silent no-op.
-                            tester?.fail(incompleteTestMessage)
+                            tester?.fail(ConnectionTestProblem.IncompleteForm)
                         }
                     },
                     fg = if (canTest) D.text else D.faint,
@@ -510,12 +524,25 @@ private fun ProtocolPicker(form: NewConnectionFormState) {
         Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        ProtocolSegment(stringResource(Res.string.conn_protocol_ssh), "lan", form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
-        ProtocolSegment(stringResource(Res.string.conn_protocol_mosh), "bolt", form.connectionType == ConnectionType.MOSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.MOSH) }
-        ProtocolSegment(stringResource(Res.string.conn_protocol_telnet), "terminal", form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
-        ProtocolSegment(stringResource(Res.string.conn_protocol_serial), "cable", form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
+        // Driven off ConnectionType.entries: a new protocol gets its segment for free, and the
+        // exhaustive `when`s behind labelRes/icon fail the build until it's given a label and an icon.
+        ConnectionType.entries.forEach { type ->
+            ProtocolSegment(stringResource(type.labelRes), type.icon, form.connectionType == type, Modifier.weight(1f)) {
+                form.chooseConnectionType(type)
+            }
+        }
     }
 }
+
+/** Localized protocol name for the picker segment; the icon counterpart is [ConnectionType.icon]. */
+private val ConnectionType.labelRes: StringResource
+    get() = when (this) {
+        ConnectionType.SSH -> Res.string.conn_protocol_ssh
+        ConnectionType.MOSH -> Res.string.conn_protocol_mosh
+        ConnectionType.TELNET -> Res.string.conn_protocol_telnet
+        ConnectionType.SERIAL -> Res.string.conn_protocol_serial
+        ConnectionType.VNC -> Res.string.conn_protocol_vnc
+    }
 
 /** One pill of the segmented protocol picker: the active one sits on a cyan backing. */
 @Composable
@@ -536,9 +563,12 @@ private fun ProtocolSegment(label: String, icon: String, selected: Boolean, modi
  * live [LocalCredentials] (behind the vault gate); in the mock path only the no-vault options remain.
  */
 @Composable
-private fun AuthPicker(form: NewConnectionFormState) {
+private fun AuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
     val credentials = LocalCredentials.current
-    val saved = credentials?.credentials ?: emptyList()
+    // VNC (allowKey = false) can only use a password secret: a key/certificate would silently map
+    // to no auth at connect (toVncAuth), so those are not offered.
+    val saved = (credentials?.credentials ?: emptyList())
+        .filter { allowKey || it.secret is CredentialSecret.Password }
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
         AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)
@@ -569,8 +599,11 @@ private fun AuthPicker(form: NewConnectionFormState) {
                     AuthOption("password", stringResource(Res.string.conn_auth_password_option), stringResource(Res.string.conn_auth_password_desc), form.authMode == AuthMode.NEW_PASSWORD) {
                         form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false
                     }
-                    AuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
-                        form.authMode = AuthMode.NEW_KEY; menuOpen = false
+                    // VNC has no key auth (allowKey = false): the RFB VNC-Auth scheme is password-only.
+                    if (allowKey) {
+                        AuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
+                            form.authMode = AuthMode.NEW_KEY; menuOpen = false
+                        }
                     }
                     if (saved.isNotEmpty()) {
                         HLine(modifier = Modifier.padding(vertical = 4.dp))
@@ -800,7 +833,7 @@ private fun TestStatusLabel(status: ConnectionTestStatus) {
         }
         is ConnectionTestStatus.Failure -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("error", size = 14.sp, color = D.storm)
-            Txt(status.message, color = D.storm, size = 11.5.sp)
+            Txt(connectionTestFailureText(status.problem), color = D.storm, size = 11.5.sp)
         }
     }
 }

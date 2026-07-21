@@ -14,7 +14,11 @@ import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.session.BroadcastController
+import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.vault.AutoLockDuration
+import app.skerry.shared.terminal.Asciicast
+import app.skerry.ui.terminal.CastOpenResult
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
@@ -26,18 +30,19 @@ import app.skerry.ui.terminal.TerminalThemes
  * No Files tab: SFTP opens as a push screen ([MobileRoute.Files]) from a host card's SFTP button —
  * a separate root tab would duplicate the terminal.
  */
-enum class MobileTab(val icon: String, val label: String) {
-    Hosts("dns", "Hosts"),
-    Snippets("code_blocks", "Snippets"),
-    Vault("vpn_key", "Vault"),
-    More("more_horiz", "More"),
+// Labels are not part of the enum: they are localized in the tab bar (nav_tab_* resources).
+enum class MobileTab(val icon: String) {
+    Hosts("dns"),
+    Snippets("code_blocks"),
+    Vault("vpn_key"),
+    More("more_horiz"),
 }
 
 /**
  * Full-screen push screens over the tab navigation (tab bar hidden): terminal and host detail open
  * from Hosts, SFTP (Files) via the host card's SFTP button, and Ports/Known/Team from the More tab.
  */
-enum class MobileRoute { Terminal, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai, Security, About }
+enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai, Security, About }
 
 /** What the system back gesture should do in the mobile shell. */
 enum class MobileBackAction {
@@ -162,6 +167,37 @@ class MobileDesignState(
         route = null
         selectedHostId = null
     }
+
+    /**
+     * Which sessions a broadcast addresses. Held here, not in the sheet, so a selection survives
+     * closing and reopening it (see [app.skerry.ui.session.BroadcastController]).
+     */
+    val broadcast = BroadcastController()
+
+    /**
+     * View state of the snippet library (search, category chip, collapsed sections). Lives here so
+     * switching tabs doesn't reset the view; not persisted across restarts (see
+     * [app.skerry.ui.snippet.SnippetLibraryState]).
+     */
+    val snippetLibrary = SnippetLibraryState()
+
+    /** Recording being played back over the app, or `null` when the player is closed. */
+    var castRecording: Asciicast? by mutableStateOf(null); private set
+
+    /** Whether the last picked file turned out not to be a recording (shown as a notice). */
+    var castInvalid: Boolean by mutableStateOf(false); private set
+
+    fun showCast(result: CastOpenResult) {
+        when (result) {
+            is CastOpenResult.Loaded -> castRecording = result.cast
+            CastOpenResult.Invalid -> castInvalid = true
+            CastOpenResult.Cancelled -> Unit // the user backed out; nothing to report
+        }
+    }
+
+    fun closeCast() { castRecording = null }
+
+    fun dismissCastError() { castInvalid = false }
 
     /** Names of collapsed host-list folders (their host list is hidden). */
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set

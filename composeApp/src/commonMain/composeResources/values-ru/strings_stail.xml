@@ -17,4 +17,10 @@
     <string name="stail_reenroll_prompt_title">Снова включить биометрическую разблокировку</string>
     <string name="stail_reenroll_prompt_cancel">Отмена</string>
     <string name="stail_reenroll_prompt_subtitle">Подтвердите биометрию, чтобы привязать быструю разблокировку к новому ключу аккаунта.</string>
+
+    <!-- Ошибки синхронизации (SyncFailureReason) — см. syncFailureText -->
+    <string name="stail_sync_fail_rekey">Не удалось перешифровать хранилище паролем аккаунта</string>
+    <string name="stail_sync_fail_key_adopt">Не удалось принять ключ аккаунта</string>
+    <!-- %1$s — локализованная причина, %2$s — техническая деталь (сообщение сервера/библиотеки) -->
+    <string name="stail_sync_fail_detail">%1$s (%2$s)</string>
 </resources>

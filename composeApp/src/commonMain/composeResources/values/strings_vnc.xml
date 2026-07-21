@@ -1,0 +1,16 @@
+<resources>
+    <string name="vnc_connecting">Connecting…</string>
+    <string name="vnc_session_closed">Session closed</string>
+    <string name="vnc_connection_lost">Connection lost</string>
+    <string name="vnc_connect_failed">Failed to connect</string>
+    <string name="vnc_error_auth">The server requires an authentication method Skerry doesn't support.</string>
+    <string name="vnc_error_protocol">The server sent an unexpected VNC stream.</string>
+    <string name="vnc_quality">Quality</string>
+    <string name="vnc_quality_auto">Auto</string>
+    <string name="vnc_quality_low">Low</string>
+    <string name="vnc_quality_medium">Medium</string>
+    <string name="vnc_quality_high">High</string>
+    <string name="vnc_view_only">View only</string>
+    <string name="vnc_resize_to_window">Resize to window</string>
+    <string name="vnc_reset_zoom">Reset zoom</string>
+</resources>

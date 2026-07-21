@@ -19,6 +19,7 @@ import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.tunnel.Tunnel
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.shared.tunnel.TunnelStore
+import app.skerry.ui.connection.JumpChainProblem
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ptail_err_auth_failed
 import app.skerry.ui.generated.resources.ptail_err_connection_failed
@@ -49,17 +50,28 @@ data class TunnelDraft(
     val destPort: Int? = null,
 )
 
+/**
+ * Why a saved tunnel can't be dialled. Typed, not a message string: [resolve] runs outside the
+ * composition, so the view localizes it (`tunnelFailureText`) — same rule as [JumpChainProblem].
+ */
+sealed interface TunnelUnavailable {
+    /** The tunnel's host profile was deleted. */
+    data object HostNotFound : TunnelUnavailable
+
+    /** The host has no secret bound in the vault. */
+    data object NoCredential : TunnelUnavailable
+
+    /** The host's ProxyJump chain didn't resolve. */
+    data class Jump(val problem: JumpChainProblem) : TunnelUnavailable
+}
+
 /** Resolution of a saved tunnel to connection parameters: either the host and secret are available, or not. */
 sealed interface TunnelResolution {
     /** Ready to connect: host address and auth resolved from the vault. */
     data class Ready(val target: SshTarget, val auth: SshAuth) : TunnelResolution
 
-    /**
-     * Cannot connect (host deleted, secret unbound, etc). [reason] is shown to the user as-is,
-     * bypassing [TunnelManager.friendlyError] — [resolve] implementations must keep it generic,
-     * with no file names, record ids, or system messages.
-     */
-    data class Unavailable(val reason: String) : TunnelResolution
+    /** Cannot connect (host deleted, secret unbound, broken jump chain). */
+    data class Unavailable(val reason: TunnelUnavailable) : TunnelResolution
 }
 
 /** Runtime state of a saved tunnel; config lives in [Tunnel], this is the on/off status. */
@@ -73,8 +85,11 @@ sealed interface TunnelStatus {
     /** Active; [boundPort] is the listener's actual port (assigned port when `0` was requested). */
     data class Active(val boundPort: Int) : TunnelStatus
 
-    /** Failed to come up; [message] is user-facing (no raw transport details). */
-    data class Failed(val message: String) : TunnelStatus
+    /**
+     * Failed to come up. [reason] is set when the failure was typed (config, not transport) and
+     * takes precedence in the UI; [message] is the friendly transport string otherwise.
+     */
+    data class Failed(val message: String = "", val reason: TunnelUnavailable? = null) : TunnelStatus
 }
 
 /**
@@ -203,7 +218,7 @@ class TunnelManager(
         entry.connectingJob = scope.launch {
             try {
                 when (val resolution = resolve(entry.tunnel)) {
-                    is TunnelResolution.Unavailable -> entry.status = TunnelStatus.Failed(resolution.reason)
+                    is TunnelResolution.Unavailable -> entry.status = TunnelStatus.Failed(reason = resolution.reason)
                     is TunnelResolution.Ready -> openForward(entry, resolution)
                 }
             } finally {

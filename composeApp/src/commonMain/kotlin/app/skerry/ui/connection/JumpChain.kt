@@ -6,9 +6,8 @@ import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.vault.Credential
 
 /**
- * Why a ProxyJump chain could not be assembled. Typed (not a message string) so each surface maps
- * it to its own localized text (`jumpProblemText` for the connect dialogs, English constants for
- * tunnels) — same pattern as `SyncFailureReason`.
+ * Why a ProxyJump chain could not be assembled. Typed (not a message string) so every surface
+ * resolves it through `jumpProblemText` — same pattern as `SyncFailureReason`.
  */
 enum class JumpChainProblem {
     /** [Host.jumpHostId] points to a deleted/unknown profile. */
@@ -104,18 +103,6 @@ fun jumpRouteLabel(host: Host, findHost: (String) -> Host?): String? {
         jumpId = hop?.jumpHostId ?: break
     }
     return labels.asReversed().joinToString(" → ")
-}
-
-/**
- * English status constant for a [JumpChainProblem] — the tunnels list shows plain-English reasons
- * ("Host not found", "No saved credential"), and these follow that convention. Localized surfaces
- * use `jumpProblemText` instead.
- */
-fun jumpProblemLabel(problem: JumpChainProblem): String = when (problem) {
-    JumpChainProblem.MISSING_HOST -> "Jump host not found"
-    JumpChainProblem.NOT_SSH -> "Jump host is not SSH"
-    JumpChainProblem.NO_CREDENTIAL -> "Jump host has no saved credential"
-    JumpChainProblem.CYCLE -> "Jump host chain forms a loop"
 }
 
 /**

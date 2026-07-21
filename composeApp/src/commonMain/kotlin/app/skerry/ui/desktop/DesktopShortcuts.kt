@@ -1,6 +1,7 @@
 package app.skerry.ui.desktop
 
 import androidx.compose.ui.input.key.Key
+import app.skerry.ui.snippet.SnippetShortcut
 
 /**
  * A global hotkey of the desktop shell (titlebar/rail/sessions), recognized from a key chord.
@@ -22,6 +23,21 @@ sealed interface DesktopShortcut {
 
     /** Lock the vault (⌘L / Ctrl+Shift+L). */
     data object Lock : DesktopShortcut
+
+    /** Open the command palette over the active session (⌘K / Ctrl+Shift+K). */
+    data object CommandPalette : DesktopShortcut
+
+    /** Open the broadcast panel: one command into several sessions (⌘B / Ctrl+Shift+B). */
+    data object Broadcast : DesktopShortcut
+
+    /** Open the snippet palette over the active session (⌘S / Ctrl+Shift+S). */
+    data object SnippetPalette : DesktopShortcut
+
+    /** Start or stop recording the active session (⌘R / Ctrl+Shift+R). */
+    data object ToggleRecording : DesktopShortcut
+
+    /** Open a .cast recording in the player (⌘P / Ctrl+Shift+P). */
+    data object PlayRecording : DesktopShortcut
 
     /** Next tab (Ctrl+Tab). */
     data object NextTab : DesktopShortcut
@@ -65,9 +81,32 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
         Key.D -> DesktopShortcut.SplitTerminal
         Key.F -> DesktopShortcut.OpenSftp
         Key.L -> DesktopShortcut.Lock
+        Key.K -> DesktopShortcut.CommandPalette
+        Key.B -> DesktopShortcut.Broadcast
+        Key.S -> DesktopShortcut.SnippetPalette
+        Key.R -> DesktopShortcut.ToggleRecording
+        Key.P -> DesktopShortcut.PlayRecording
         Key.Slash -> DesktopShortcut.FocusAiBar
         else -> null
     }
+}
+
+/**
+ * The shell hotkey a [SnippetShortcut]-formatted chord ("Ctrl+Shift+R") stands for, or `null` if the
+ * chord is free. The root key handler runs shell shortcuts before snippet ones and consumes the
+ * event, so a snippet bound to a reserved chord would never fire: the editor warns instead of
+ * letting the binding die silently.
+ */
+fun matchDesktopShortcut(combo: String): DesktopShortcut? {
+    val parts = combo.split('+')
+    val key = SnippetShortcut.keyFor(parts.last()) ?: return null
+    return matchDesktopShortcut(
+        ctrl = "Ctrl" in parts,
+        shift = "Shift" in parts,
+        alt = "Alt" in parts,
+        meta = "Meta" in parts,
+        key = key,
+    )
 }
 
 /** Tab index (0-based) for the top-row digit key 1..9, else `null`. */

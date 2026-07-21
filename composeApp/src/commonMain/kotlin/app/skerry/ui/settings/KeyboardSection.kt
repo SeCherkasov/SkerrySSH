@@ -26,7 +26,11 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_badge_soon
 import app.skerry.ui.generated.resources.settings_kb_accept_autocomplete
+import app.skerry.ui.generated.resources.settings_kb_broadcast
 import app.skerry.ui.generated.resources.settings_kb_command_palette
+import app.skerry.ui.generated.resources.settings_kb_play_recording
+import app.skerry.ui.generated.resources.settings_kb_record_session
+import app.skerry.ui.generated.resources.settings_kb_snippet_palette
 import app.skerry.ui.generated.resources.settings_kb_copy_selection
 import app.skerry.ui.generated.resources.settings_kb_cycle_suggestions
 import app.skerry.ui.generated.resources.settings_kb_focus_ai
@@ -62,7 +66,11 @@ internal fun KeyboardSection() {
 
     val global = listOf(
         KeyboardBinding(stringResource(Res.string.settings_kb_new_connection), mod("N"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_command_palette), mod("K"), live = false),
+        KeyboardBinding(stringResource(Res.string.settings_kb_command_palette), mod("K"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_snippet_palette), mod("S"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_broadcast), mod("B"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_record_session), mod("R"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_play_recording), mod("P"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_split_terminal), mod("D"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_next_prev_tab), "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_select_tab_number), if (mac) "⌥1–9" else "Alt+1–9", live = true),
@@ -76,8 +84,10 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_accept_autocomplete), "Tab", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_cycle_suggestions), shift("Tab"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_search_history), ctrl("R"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), ctrlShift("C"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_paste), ctrlShift("V"), live = true),
+        // Both conventions are live, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
+        // Both conventions work, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
+        KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), "${ctrlShift("C")} / ${ctrl("Insert")}", live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_paste), "${ctrlShift("V")} / ${shift("Insert")}", live = true),
     )
 
     val mono = LocalFonts.current.mono

@@ -127,13 +127,13 @@ class TunnelManagerTest {
     @Test
     fun `activate fails fast when resolution is unavailable and never connects`() = runTest {
         val transport = FakeTunnelTransport()
-        val manager = managerWith(transport, resolve = { TunnelResolution.Unavailable("No saved credential") })
+        val manager = managerWith(transport, resolve = { TunnelResolution.Unavailable(TunnelUnavailable.NoCredential) })
         val id = manager.save(localDraft())
 
         manager.activate(id)
 
         val status = assertIs<TunnelStatus.Failed>(manager.tunnels.single().status)
-        assertEquals("No saved credential", status.message)
+        assertEquals(TunnelUnavailable.NoCredential, status.reason)
         assertNull(transport.lastTarget) // transport untouched
     }
 
@@ -228,7 +228,7 @@ class TunnelManagerTest {
         var available = false
         val transport = FakeTunnelTransport(FakeTunnelConnection(localPort = 50030))
         val manager = managerWith(transport, resolve = {
-            if (available) TunnelResolution.Ready(target, auth) else TunnelResolution.Unavailable("No saved credential")
+            if (available) TunnelResolution.Ready(target, auth) else TunnelResolution.Unavailable(TunnelUnavailable.NoCredential)
         })
         val id = manager.save(localDraft())
 

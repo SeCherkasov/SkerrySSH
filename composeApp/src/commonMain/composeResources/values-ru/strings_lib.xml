@@ -30,6 +30,9 @@
     <string name="lib_snippets_library">БИБЛИОТЕКА</string>
     <string name="lib_snippets_empty">Пока нет сниппетов</string>
     <string name="lib_snippets_no_matches">Нет совпадений</string>
+    <string name="lib_snippets_chip_all">Все</string>
+    <string name="lib_snippets_starter_pack">Добавить стартовый набор</string>
+    <string name="lib_snippets_uncategorized">Без категории</string>
     <string name="lib_snippets_new">Новый сниппет</string>
     <string name="lib_snippets_edit">Изменить сниппет</string>
     <string name="lib_snippets_untitled">Без названия</string>
@@ -41,6 +44,7 @@
     <string name="lib_snippets_add_tag">добавить тег…</string>
     <string name="lib_snippets_press_keys">Нажмите клавиши…</string>
     <string name="lib_snippets_shortcut_conflict">Уже используется в \"%1$s\"</string>
+    <string name="lib_snippets_shortcut_reserved">Занято горячей клавишей Skerry (Настройки → Клавиатура)</string>
     <string name="lib_snippets_select_or_create">Выберите сниппет или создайте новый.</string>
     <string name="lib_snippets_save">Сохранить</string>
     <string name="lib_snippets_delete">Удалить</string>
@@ -79,13 +83,11 @@
     <string name="lib_teams_accept">Принять</string>
     <string name="lib_teams_decline">Отклонить</string>
     <string name="lib_teams_role_owner">ВЛАДЕЛЕЦ</string>
-    <string name="lib_teams_role_member">УЧАСТНИК</string>
     <string name="lib_teams_role_admin">АДМИН</string>
     <string name="lib_teams_role_editor">РЕДАКТОР</string>
     <string name="lib_teams_role_viewer">НАБЛЮДАТЕЛЬ</string>
     <string name="lib_teams_status_invited">ПРИГЛАШЁН</string>
     <string name="lib_teams_invite_role">Роль</string>
-    <string name="lib_teams_change_role">Сменить роль</string>
     <string name="lib_teams_role_picker_title">Роль участника</string>
     <string name="lib_teams_history">Журнал</string>
     <string name="lib_teams_history_title">Журнал команды</string>
@@ -97,16 +99,17 @@
     <string name="lib_teams_event_role_change">Сменил роль</string>
     <string name="lib_teams_event_share">Поделился записями</string>
     <string name="lib_teams_event_delete">Удалил команду</string>
+    <!-- Фолбэк для неизвестного клиенту кода события аудита; %1$s — исходный код с сервера -->
+    <string name="lib_teams_event_unknown">Другое событие (%1$s)</string>
+    <string name="lib_teams_shared_hosts_count">Общие хосты · %1$d</string>
+    <string name="lib_teams_shared_snippets_count">Общие сниппеты · %1$d</string>
     <string name="lib_teams_members_count">Участников: %1$d</string>
-    <string name="lib_teams_shared_hosts">Общие хосты</string>
-    <string name="lib_teams_shared_snippets">Общие сниппеты</string>
     <string name="lib_teams_share_host">Поделиться хостом</string>
     <string name="lib_teams_share_snippet">Поделиться сниппетом</string>
     <string name="lib_teams_share_host_title">Поделиться хостом с командой</string>
     <string name="lib_teams_share_snippet_title">Поделиться сниппетом с командой</string>
     <string name="lib_teams_share_empty">Делиться больше нечем</string>
     <string name="lib_teams_nothing_shared">Пока ничем не поделились</string>
-    <string name="lib_teams_unshare">Убрать из команды</string>
     <string name="lib_teams_sync_now">Синхронизировать</string>
     <string name="lib_teams_no_key">Ключ команды ещё не доехал до этого устройства</string>
     <string name="lib_teams_remove_member_title">Удалить участника</string>

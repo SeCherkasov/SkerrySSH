@@ -117,6 +117,84 @@ class NewConnectionFormStateTest {
         assertEquals("cred-1", f.resolveCredentialId { null })
     }
 
+    @Test
+    fun vnc_defaults_to_port_5900_and_needs_no_username() {
+        val f = NewConnectionFormState().apply { name = "desk"; address = "10.0.0.9" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals("5900", f.port) // RFB display :0
+        // VNC has no username; the default ASK auth is enough to save.
+        assertTrue(f.canSave)
+        assertEquals(app.skerry.shared.ssh.ConnectionType.VNC, f.toDraft().connectionType)
+        assertEquals(5900, f.toDraft().port)
+    }
+
+    @Test
+    fun vnc_out_of_range_port_blocks_save() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "a" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        f.port = "70000"; assertFalse(f.canSave)
+        f.port = "5901"; assertTrue(f.canSave)
+    }
+
+    @Test
+    fun vnc_stores_a_password_credential_without_username() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "10.0.0.9" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        f.authMode = AuthMode.NEW_PASSWORD
+        assertFalse(f.canSave) // password blank
+        f.password = "sekret"
+        assertTrue(f.canSave)
+        val cap = Captures()
+        assertEquals("cred-id", f.resolveCredentialId(cap.saveCredential))
+        assertEquals(CredentialKind.PASSWORD, cap.credentialDraft?.kind)
+        assertEquals("sekret", cap.credentialDraft?.password)
+    }
+
+    @Test
+    fun vnc_ask_auth_resolves_to_null() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "a" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals(AuthMode.ASK, f.authMode)
+        assertNull(f.resolveCredentialId { error("ask must not save a credential") })
+    }
+
+    @Test
+    fun switching_to_vnc_drops_key_auth_state() {
+        // Started as SSH with a key: switching to VNC must not carry the key over — VNC auth is
+        // password-only and a key credential would silently degrade to no auth at connect.
+        val f = NewConnectionFormState().apply { name = "d"; address = "a"; username = "u" }
+        f.authMode = AuthMode.NEW_KEY
+        f.privateKeyPem = "-----BEGIN OPENSSH PRIVATE KEY-----"
+        f.passphrase = "pp"
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals(AuthMode.ASK, f.authMode)
+        assertEquals("", f.privateKeyPem)
+        assertEquals("", f.passphrase)
+        assertNull(f.resolveCredentialId { error("no key credential may be created for VNC") })
+    }
+
+    @Test
+    fun switching_to_vnc_drops_existing_credential_selection() {
+        // The form can't tell a key secret from a password one by id, so the selection resets.
+        val f = NewConnectionFormState().apply { name = "d"; address = "a"; username = "u" }
+        f.authMode = AuthMode.EXISTING
+        f.existingCredentialId = "key-cred"
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals(AuthMode.ASK, f.authMode)
+        assertNull(f.existingCredentialId)
+    }
+
+    @Test
+    fun switching_to_vnc_keeps_new_password_auth() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "a"; username = "u" }
+        f.authMode = AuthMode.NEW_PASSWORD
+        f.password = "sekret"
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
+        assertEquals(AuthMode.NEW_PASSWORD, f.authMode)
+        assertEquals("sekret", f.password)
+        assertTrue(f.canSave)
+    }
+
     // Authentication
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
@@ -245,7 +323,7 @@ class NewConnectionFormStateTest {
     fun addTag_caps_total_count() {
         val f = NewConnectionFormState()
         f.addTag((1..50).joinToString(",") { "tag$it" })
-        assertEquals(app.skerry.shared.host.MAX_TAGS_PER_HOST, f.tags.size)
+        assertEquals(app.skerry.shared.tag.MAX_TAGS_PER_RECORD, f.tags.size)
     }
 
     @Test
