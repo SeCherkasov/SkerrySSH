@@ -3,10 +3,15 @@ package app.skerry.server.routes
 import app.skerry.server.Services
 import app.skerry.server.config.ServerConfig
 import app.skerry.server.db.Db
+import app.skerry.sync.wire.ChallengeRequest
+import app.skerry.sync.wire.ChallengeResponse
+import app.skerry.sync.wire.ChangePasswordRequest
 import app.skerry.sync.wire.PushRequest
 import app.skerry.sync.wire.RecordDto
 import app.skerry.sync.wire.RegisterRequest
 import app.skerry.sync.wire.TokenResponse
+import app.skerry.sync.wire.VerifyRequest
+import app.skerry.sync.wire.VerifyResponse
 import app.skerry.server.model.b64
 import com.nimbusds.srp6.SRP6ClientSession
 import com.nimbusds.srp6.SRP6CryptoParams
@@ -76,6 +81,73 @@ suspend fun HttpClient.registerAccount(
     platform: String? = null,
 ): TokenResponse =
     registerAccountResponse(accountId, password, wrappedDataKey, deviceId, deviceName, platform).body()
+
+/** Full SRP login (challenge -> proof) as the client does; returns the raw response. */
+suspend fun HttpClient.srpLoginResponse(
+    accountId: String,
+    password: String,
+    deviceId: String,
+    deviceName: String,
+    platform: String? = null,
+): HttpResponse {
+    val sc = srpClient(accountId, password)
+    val challenge: ChallengeResponse = post("/auth/srp/challenge") {
+        contentType(ContentType.Application.Json)
+        setBody(ChallengeRequest(accountId))
+    }.body()
+    val creds = sc.step2(SRP_PARAMS, BigInteger(challenge.salt, 16), BigInteger(challenge.b, 16))
+    return post("/auth/srp/verify") {
+        contentType(ContentType.Application.Json)
+        setBody(VerifyRequest(challenge.challengeId, creds.A.toString(16), creds.M1.toString(16), deviceId, deviceName, platform))
+    }
+}
+
+/** SRP login returning the token pair (asserts nothing; use [srpLoginResponse] for status checks). */
+suspend fun HttpClient.srpLogin(
+    accountId: String,
+    password: String,
+    deviceId: String,
+    deviceName: String,
+    platform: String? = null,
+): VerifyResponse = srpLoginResponse(accountId, password, deviceId, deviceName, platform).body()
+
+/**
+ * Rotates the account password as the client does (issue #32): SRP-proves the current password,
+ * then submits the new salt/verifier and the re-wrapped dataKey. Returns the raw response.
+ */
+suspend fun HttpClient.changePassword(
+    accountId: String,
+    currentPassword: String,
+    newPassword: String,
+    newWrappedDataKey: ByteArray,
+    deviceId: String = "devA",
+    deviceName: String = "Laptop A",
+    platform: String? = null,
+): HttpResponse {
+    val sc = srpClient(accountId, currentPassword)
+    val challenge: ChallengeResponse = post("/auth/srp/challenge") {
+        contentType(ContentType.Application.Json)
+        setBody(ChallengeRequest(accountId))
+    }.body()
+    val creds = sc.step2(SRP_PARAMS, BigInteger(challenge.salt, 16), BigInteger(challenge.b, 16))
+    val reg = srpRegister(accountId, newPassword) // new salt+verifier, as the client derives from the new password
+    return post("/auth/change-password") {
+        contentType(ContentType.Application.Json)
+        setBody(
+            ChangePasswordRequest(
+                challengeId = challenge.challengeId,
+                a = creds.A.toString(16),
+                m1 = creds.M1.toString(16),
+                deviceId = deviceId,
+                deviceName = deviceName,
+                platform = platform,
+                newSrpSalt = reg.salt,
+                newSrpVerifier = reg.verifier,
+                newWrappedDataKey = newWrappedDataKey.b64(),
+            ),
+        )
+    }
+}
 
 /** PUT /vault/records with a single record, under a bearer token. */
 suspend fun HttpClient.pushRecord(token: String, record: RecordDto): HttpResponse =

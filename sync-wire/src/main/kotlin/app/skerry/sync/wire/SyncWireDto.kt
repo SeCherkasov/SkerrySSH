@@ -48,6 +48,32 @@ data class RefreshRequest(val refreshToken: String)
 @Serializable
 data class TokenResponse(val accessToken: String, val refreshToken: String)
 
+/**
+ * Rotate the account password (issue #32). [challengeId]/[a]/[m1] are a fresh SRP proof of the
+ * CURRENT password (obtained via the same `/auth/srp/challenge`) — the server verifies them before
+ * touching anything, so a stolen access token alone can't rotate. [newSrpSalt]/[newSrpVerifier] are
+ * derived from the NEW password, [newWrappedDataKey] is the account dataKey re-wrapped under the new
+ * master key (base64) — the dataKey itself is unchanged. The server swaps the verifier and the wrap
+ * in one transaction and revokes every device except [deviceId], forcing them to re-authenticate
+ * with the new password.
+ */
+@Serializable
+data class ChangePasswordRequest(
+    val challengeId: String,
+    val a: String,
+    val m1: String,
+    val deviceId: String,
+    val deviceName: String,
+    val platform: String? = null,
+    val newSrpSalt: String,
+    val newSrpVerifier: String,
+    val newWrappedDataKey: String,
+)
+
+/** [m2] is the server's SRP counter-proof (client verifies it, as in login); tokens are fresh for the acting device. */
+@Serializable
+data class ChangePasswordResponse(val m2: String, val accessToken: String, val refreshToken: String)
+
 // --- vault ---
 
 @Serializable

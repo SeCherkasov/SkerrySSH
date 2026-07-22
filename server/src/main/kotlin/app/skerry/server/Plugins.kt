@@ -55,6 +55,7 @@ object RateLimits {
     val SRP_VERIFY = RateLimitName("srp-verify")
     val PAIRING_CLAIM = RateLimitName("pairing-claim")
     val REFRESH = RateLimitName("auth-refresh")
+    val CHANGE_PASSWORD = RateLimitName("auth-change-password")
     val ADMIN = RateLimitName("admin")
 }
 
@@ -126,6 +127,9 @@ fun Application.configureServer(services: Services) {
         // Refresh needs no password; rate-limited as defense-in-depth even though the signature
         // check is cheap, since it's a public POST with no prior authentication.
         perIp(RateLimits.REFRESH, limit = 30)
+        // Password rotation proves the current password via SRP; rate-limited like the SRP endpoints
+        // as defense-in-depth (it's a public POST that swaps the verifier).
+        perIp(RateLimits.CHANGE_PASSWORD, limit = 10)
         // The admin console uses a constant-time static token compare, which doesn't stop brute
         // forcing the token itself, hence a rate limit on /admin/*.
         perIp(RateLimits.ADMIN, limit = 30)

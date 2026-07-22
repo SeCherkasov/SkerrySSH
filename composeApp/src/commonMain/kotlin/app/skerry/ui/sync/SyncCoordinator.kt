@@ -99,6 +99,31 @@ sealed interface SyncStatus {
     data class Failed(val reason: SyncFailureReason, val detail: String? = null) : SyncStatus
 }
 
+/**
+ * Outcome of [SyncCoordinator.changeAccountPassword] (issue #32). A discrete action result, not a
+ * [SyncStatus] transition: the caller (a dialog) shows the message inline; the localized text lives
+ * in the UI layer.
+ */
+sealed interface AccountPasswordChange {
+    data object Success : AccountPasswordChange
+
+    /** The typed current password doesn't unlock this vault (caught locally, no round-trip). */
+    data object WrongCurrentPassword : AccountPasswordChange
+
+    /** Sync isn't configured on this device — there's no account password to rotate. */
+    data object NotConfigured : AccountPasswordChange
+
+    /**
+     * The server rotated the password, but re-wrapping the local vault under it failed. The account
+     * is now on the new password; this device must reconnect with it (the #28 path heals the local
+     * wrap). Distinct from [Failed] so the UI can tell the user exactly this.
+     */
+    data object LocalRewrapFailed : AccountPasswordChange
+
+    /** The rotation failed before anything changed ([reason] is localized in the UI; [detail] optional). */
+    data class Failed(val reason: SyncFailureReason, val detail: String? = null) : AccountPasswordChange
+}
+
 /** [SyncStatus.Failed] causes — one value per user-facing situation (en+ru strings in the UI). */
 enum class SyncFailureReason {
     VaultLocked,
@@ -606,6 +631,127 @@ class SyncCoordinator(
         pendingReplace = null
         pending.password.fill(' ')
         _status.value = configStore.load()?.let { SyncStatus.Configured(it.serverUrl, it.accountId) } ?: SyncStatus.Disabled
+    }
+
+    /**
+     * Change the account (sync) password — the single source of truth shared by all devices (issue
+     * #32). Atomically on the server: the SRP verifier and the wrapped account dataKey are swapped to
+     * the new password's, and every other device is revoked (they re-authenticate with the new
+     * password). Locally the vault is re-wrapped under the new password so this device keeps
+     * unlocking; the dataKey is unchanged (only its wrap), so biometrics — which wraps the dataKey —
+     * stays valid and needs no reset.
+     *
+     * Server-first ordering is the atomic commit point: if this device dies after the server rotates
+     * but before the local re-wrap ([AccountPasswordChange.LocalRewrapFailed]), the account is on the
+     * new password and this device heals on its next reconnect via the confirmed-replace path (#28).
+     *
+     * Requires sync configured ([isConfigured]) and an unlocked vault. Owns copies of [current]/[next]
+     * and wipes them (and all derived key material) before returning.
+     */
+    suspend fun changeAccountPassword(current: CharArray, next: CharArray): AccountPasswordChange {
+        val cfg = savedConfig
+        if (cfg == null) {
+            current.fill(' '); next.fill(' ')
+            return AccountPasswordChange.NotConfigured
+        }
+        // Under opMutex like connect: activating the fresh session must not race with a disconnect or
+        // a concurrent connect.
+        return try {
+            opMutex.withLock { doChangeAccountPassword(cfg, current, next) }
+        } finally {
+            // If cancelled while waiting for opMutex (dialog dismissed mid-submit), doChangeAccountPassword
+            // never ran and never wiped these — wipe here too. Idempotent on the normal path (it already
+            // filled them with spaces).
+            current.fill(' '); next.fill(' ')
+        }
+    }
+
+    // Under [opMutex] (see changeAccountPassword).
+    private suspend fun doChangeAccountPassword(cfg: SyncConfig, current: CharArray, next: CharArray): AccountPasswordChange {
+        // Local current-password check first: catch a typo without a round-trip (and the vault must be
+        // unlocked to export the dataKey for the new wrap anyway).
+        if (!vault.verifyPassword(current.copyOf())) {
+            current.fill(' '); next.fill(' ')
+            return AccountPasswordChange.WrongCurrentPassword
+        }
+        val dataKey = vault.exportDataKey()
+        if (dataKey == null) {
+            current.fill(' '); next.fill(' ')
+            return AccountPasswordChange.Failed(SyncFailureReason.VaultLocked)
+        }
+        var curMasterKey: MasterKey? = null
+        var newMasterKey: MasterKey? = null
+        var curAuthKey: ByteArray? = null
+        var newAuthKey: ByteArray? = null
+        // A client we opened but haven't handed to [activateSession] yet — close it on any early exit
+        // so its Ktor pool/sockets don't leak.
+        var openedClient: SyncClient? = null
+        try {
+            val syncSalt = crypto.deriveSyncSalt(cfg.accountId)
+            val cmk = crypto.deriveMasterKey(current, syncSalt).also { curMasterKey = it }
+            val cak = crypto.deriveAuthKey(cmk).also { curAuthKey = it }
+            val nmk = crypto.deriveMasterKey(next, syncSalt).also { newMasterKey = it }
+            val nak = crypto.deriveAuthKey(nmk).also { newAuthKey = it }
+            val newWrapped = crypto.wrapDataKey(nmk, dataKey)
+            val device = DeviceInfo(cfg.deviceId, deviceName, platformName)
+            val syncClient = clientFactory(cfg.serverUrl).also { openedClient = it }
+
+            // keep-connected: drop the auto-restore token for the rotation window. If this device dies
+            // after the server commits but before the local re-wrap, [restoreSession] must NOT silently
+            // bring it back Online under the OLD password on the next launch (the account moved to the
+            // new one — issue #32 divergence, and the leaked old password would keep unlocking it). The
+            // new token is re-sealed on success; the old one is restored only on errors that provably
+            // precede the server commit.
+            val hadAutoRestore = cfg.keepConnected && cfg.sealedRefreshToken != null
+            if (hadAutoRestore) configStore.save(cfg.copy(sealedRefreshToken = null))
+
+            val newSession = try {
+                syncClient.changePassword(cfg.accountId, cak, nak, newWrapped, device)
+            } catch (e: SyncException) {
+                // UNAUTHORIZED/NOT_FOUND come from the SRP verify gate, before any DB write — nothing
+                // rotated, so it's safe to restore the auto-restore token (a wrong-password typo mustn't
+                // cost the user their "keep connected"). NETWORK/PROTOCOL are ambiguous (the server may
+                // have committed): leave it cleared and let the user reconnect with the new password.
+                if (hadAutoRestore && (e.kind == SyncException.Kind.UNAUTHORIZED || e.kind == SyncException.Kind.NOT_FOUND)) {
+                    configStore.save(cfg)
+                }
+                return when (e.kind) {
+                    // A wrong current password (the server's SRP proof failed) or missing account.
+                    SyncException.Kind.UNAUTHORIZED, SyncException.Kind.NOT_FOUND ->
+                        AccountPasswordChange.Failed(SyncFailureReason.Unauthorized)
+                    SyncException.Kind.NETWORK -> AccountPasswordChange.Failed(SyncFailureReason.Network, e.message)
+                    SyncException.Kind.PROTOCOL -> AccountPasswordChange.Failed(SyncFailureReason.Protocol, e.message)
+                    else -> AccountPasswordChange.Failed(SyncFailureReason.ConnectFailed, e.message)
+                }
+            }
+
+            // Server rotated. Re-wrap the LOCAL vault under the new password so this device keeps
+            // unlocking with it. The dataKey is unchanged, so this doesn't touch biometrics.
+            if (!vault.changePassword(current.copyOf(), next.copyOf())) {
+                // The account is on the new password but the local re-wrap failed (disk error). Don't
+                // report success: this device must reconnect with the new password, and the #28
+                // confirmed-replace path re-wraps the local vault then.
+                return AccountPasswordChange.LocalRewrapFailed
+            }
+
+            // keep-connected: re-seal the fresh refresh token under the (unchanged) dataKey.
+            val sealed = if (cfg.keepConnected) {
+                vault.exportDataKey()?.let { dk -> try { tokens.seal(dk, newSession.refreshToken) } finally { dk.zeroize() } }
+            } else null
+            openedClient = null // ownership passes to activateSession (it closes any superseded client)
+            activateSession(syncClient, newSession, cfg.copy(sealedRefreshToken = sealed), resetCursor = false)
+            return AccountPasswordChange.Success
+        } catch (e: CancellationException) {
+            throw e // don't swallow cancellation — it would break structured concurrency
+        } catch (e: Exception) {
+            return AccountPasswordChange.Failed(SyncFailureReason.ConnectFailed, e.message)
+        } finally {
+            current.fill(' '); next.fill(' ')
+            curMasterKey?.zeroize(); newMasterKey?.zeroize()
+            curAuthKey?.fill(0); newAuthKey?.fill(0)
+            dataKey.zeroize()
+            runCatching { openedClient?.close() } // opened but not activated (error/rewrap-failed path)
+        }
     }
 
     /**
