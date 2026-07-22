@@ -73,6 +73,22 @@ interface SyncClient {
     /** Logs in via SRP (password never transmitted): challenge -> proof -> tokens. */
     suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession
 
+    /**
+     * Rotates the account password (issue #32). Proves the CURRENT password with an SRP handshake
+     * ([currentAuthKey]), then atomically swaps the server-side SRP verifier and wrapped dataKey to
+     * the new password's ([newAuthKey] → verifier, [newWrappedDataKey] → wrap) and revokes every
+     * device except [device], forcing them to re-authenticate with the new password. The dataKey
+     * itself is unchanged — only its wrap. Returns a fresh session for [device]. Wrong current
+     * password → [SyncException.Kind.UNAUTHORIZED].
+     */
+    suspend fun changePassword(
+        accountId: String,
+        currentAuthKey: ByteArray,
+        newAuthKey: ByteArray,
+        newWrappedDataKey: ByteArray,
+        device: DeviceInfo,
+    ): SyncSession
+
     /** Wrapped dataKey to decrypt on this device (pairing variant A). */
     suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray
 

@@ -2,6 +2,8 @@ package app.skerry.shared.sync
 
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
+import app.skerry.sync.wire.ChangePasswordRequest
+import app.skerry.sync.wire.ChangePasswordResponse
 import app.skerry.sync.wire.DevicesResponse
 import app.skerry.sync.wire.KeysResponse
 import app.skerry.sync.wire.PairingClaimRequest
@@ -140,6 +142,54 @@ class KtorSyncClient(
             throw SyncException(SyncException.Kind.PROTOCOL, "server SRP proof (M2) invalid", e)
         }
         return SyncSession(accountId, verify.accessToken, verify.refreshToken)
+    }
+
+    override suspend fun changePassword(
+        accountId: String,
+        currentAuthKey: ByteArray,
+        newAuthKey: ByteArray,
+        newWrappedDataKey: ByteArray,
+        device: DeviceInfo,
+    ): SyncSession {
+        // Prove the current password: same challenge as a login, but instead of /auth/srp/verify the
+        // proof (M1) goes to /auth/change-password together with the new material.
+        val srp = SRP6ClientSession()
+        srp.step1(accountId, currentAuthKey.toHex())
+        val challenge: ChallengeResponse = post("/auth/srp/challenge") {
+            contentType(ContentType.Application.Json)
+            setBody(ChallengeRequest(accountId))
+        }.bodyChecked()
+        val creds = srp.step2(params, BigInteger(challenge.salt, 16), BigInteger(challenge.b, 16))
+
+        // New SRP salt/verifier derived from the new password's authKey — the server never sees it.
+        val newSalt = BigInteger(256, random)
+        val newVerifier = SRP6VerifierGenerator(params).generateVerifier(newSalt, accountId, newAuthKey.toHex())
+
+        val resp: ChangePasswordResponse = post("/auth/change-password") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ChangePasswordRequest(
+                    challengeId = challenge.challengeId,
+                    a = creds.A.toString(16),
+                    m1 = creds.M1.toString(16),
+                    deviceId = device.id,
+                    deviceName = device.name,
+                    platform = device.platform,
+                    newSrpSalt = newSalt.toString(16),
+                    newSrpVerifier = newVerifier.toString(16),
+                    newWrappedDataKey = newWrappedDataKey.b64(),
+                ),
+            )
+        }.bodyChecked()
+
+        // Verify the server's counter-proof M2 (as in login): guards against a spoofed server that
+        // couldn't actually check the current password before it returned success.
+        try {
+            srp.step3(BigInteger(resp.m2, 16))
+        } catch (e: SRP6Exception) {
+            throw SyncException(SyncException.Kind.PROTOCOL, "server SRP proof (M2) invalid", e)
+        }
+        return SyncSession(accountId, resp.accessToken, resp.refreshToken)
     }
 
     override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray {

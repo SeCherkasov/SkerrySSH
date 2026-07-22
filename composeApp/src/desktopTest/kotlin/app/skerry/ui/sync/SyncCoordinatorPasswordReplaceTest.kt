@@ -25,6 +25,7 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -63,8 +64,9 @@ class SyncCoordinatorPasswordReplaceTest {
         /** Serve a wrap that can't be unwrapped, modelling a corrupted/mismatched server record. */
         private val corruptWrap: Boolean = false,
     ) : SyncClient {
-        private val expectedAuthKey: ByteArray?
-        private val wrappedAccountKey: ByteArray?
+        // var: a password rotation ([changePassword]) swaps both to the new password's material.
+        private var expectedAuthKey: ByteArray?
+        private var wrappedAccountKey: ByteArray?
 
         init {
             if (existingAccountPassword == null) {
@@ -101,6 +103,26 @@ class SyncCoordinatorPasswordReplaceTest {
             return wrap
         }
 
+        /**
+         * Models the server rotation (issue #32): the SRP proof is only accepted for the CURRENT
+         * authKey, then the verifier (authKey) and the wrapped dataKey are swapped to the new ones.
+         * Other-device revocation isn't observable through this stub, so it's not modelled.
+         */
+        override suspend fun changePassword(
+            accountId: String,
+            currentAuthKey: ByteArray,
+            newAuthKey: ByteArray,
+            newWrappedDataKey: ByteArray,
+            device: DeviceInfo,
+        ): SyncSession {
+            if (expectedAuthKey == null || !currentAuthKey.contentEquals(expectedAuthKey)) {
+                throw SyncException(SyncException.Kind.UNAUTHORIZED, "wrong current password")
+            }
+            expectedAuthKey = newAuthKey.copyOf()
+            wrappedAccountKey = newWrappedDataKey.copyOf()
+            return SyncSession(accountId, accessToken = "access2", refreshToken = "refresh2")
+        }
+
         override fun changes(session: SyncSession): Flow<SyncSignal> = emptyFlow()
         override suspend fun ping(): Boolean = true
         override suspend fun close() {}
@@ -122,12 +144,31 @@ class SyncCoordinatorPasswordReplaceTest {
             .also { it.create(vaultPassword.toCharArray()) }
     }
 
-    private fun coordinator(vault: Vault, client: SyncClient): SyncCoordinator = SyncCoordinator(
+    private fun coordinator(
+        vault: Vault,
+        client: SyncClient,
+        configStore: SyncConfigStore = InMemorySyncConfigStore(),
+    ): SyncCoordinator = SyncCoordinator(
         clientFactory = { client },
         crypto = crypto,
         vault = vault,
+        configStore = configStore,
+        deviceIdProvider = { "dev-local" },
         engineFactory = { _ -> SyncRunner { _ -> SyncOutcome(pulled = 0, pushed = 0, cursor = 0L) } },
     )
+
+    /** Sync already configured for [account] on [serverUrl] (so [SyncCoordinator.changeAccountPassword] runs). */
+    private fun configuredStore(): SyncConfigStore = InMemorySyncConfigStore().apply {
+        save(SyncConfig(serverUrl, account, deviceId = "dev-local"))
+    }
+
+    /** A vault whose local re-wrap fails — models the client dying between the server rotate and the local re-wrap. */
+    private class RewrapFailingVault(private val delegate: Vault) : Vault by delegate {
+        override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean {
+            oldPassword.fill(' '); newPassword.fill(' ')
+            return false
+        }
+    }
 
     @Test
     fun `joining an existing account under a different password pauses without changing the vault password`() = runBlocking {
@@ -286,6 +327,144 @@ class SyncCoordinatorPasswordReplaceTest {
             }
             assertFalse(client.registered, "must not register a divergent account under a non-vault password")
             assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "vault password is untouched")
+        } finally {
+            sut.close()
+        }
+    }
+
+    // --- issue #32: change account password ---
+
+    private val rotated = "rotated-E"
+
+    @Test
+    fun `changing the account password rotates it and re-keys the local vault`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault() // on a synced device the vault password IS the account password
+        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val sut = coordinator(vault, client, configuredStore())
+        try {
+            val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
+            assertTrue(result is AccountPasswordChange.Success, "rotation succeeds, was $result")
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            assertTrue(vault.verifyPassword(rotated.toCharArray()), "the vault now unlocks with the new password")
+            assertFalse(vault.verifyPassword(vaultPassword.toCharArray()), "the old password no longer unlocks")
+        } finally {
+            sut.close()
+        }
+    }
+
+    @Test
+    fun `changing the account password with a wrong current password changes nothing`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val sut = coordinator(vault, client, configuredStore())
+        try {
+            val result = sut.changeAccountPassword("not-the-password".toCharArray(), rotated.toCharArray())
+            assertTrue(result is AccountPasswordChange.WrongCurrentPassword, "wrong current password is refused, was $result")
+            assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the vault password is untouched")
+            assertFalse(vault.verifyPassword(rotated.toCharArray()), "the new password does not unlock")
+        } finally {
+            sut.close()
+        }
+    }
+
+    @Test
+    fun `changing the account password without sync configured is a no-op`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = vaultPassword)
+        val sut = coordinator(vault, client) // no configStore → not configured
+        try {
+            val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
+            assertTrue(result is AccountPasswordChange.NotConfigured, "nothing to rotate, was $result")
+            assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the vault password is untouched")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The failure the issue calls out: the client dies between the server rotate (step 3) and the local
+     * re-wrap (step 4). The account must end up on the new password (the server committed atomically),
+     * and the device must heal on its next reconnect via the confirmed-replace path (#28) — never a
+     * half-applied state that locks the user out.
+     */
+    @Test
+    fun `an interrupted rotation leaves the account on the new password and heals on reconnect`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val store = configuredStore()
+
+        // The server rotates, but the local re-wrap fails (client "dies" between step 3 and 4).
+        val sut = coordinator(RewrapFailingVault(vault), client, store)
+        try {
+            val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
+            assertTrue(result is AccountPasswordChange.LocalRewrapFailed, "the interruption is reported, not a silent success, was $result")
+            assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the local vault is still on the old password")
+        } finally {
+            sut.close()
+        }
+
+        // Reconnecting with the NEW password heals the local wrap (the account already expects it).
+        val heal = coordinator(vault, client, store)
+        try {
+            heal.connect(serverUrl, account, rotated.toCharArray())
+            withTimeout(30_000) { heal.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            heal.confirmPasswordReplace()
+            withTimeout(30_000) { heal.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            assertTrue(heal.status.value is SyncStatus.Online, "reconnect with the new password heals the device, was ${heal.status.value}")
+            assertTrue(vault.verifyPassword(rotated.toCharArray()), "the local vault now unlocks with the new password")
+        } finally {
+            heal.close()
+        }
+    }
+
+    /**
+     * On a keep-connected device an interrupted rotation must drop the saved refresh token, or
+     * [SyncCoordinator.restoreSession] would silently bring the device back Online under the OLD
+     * password on the next launch — the account moved to the new one, and the leaked old password
+     * would keep unlocking this device (issue #32 divergence).
+     */
+    @Test
+    fun `an interrupted rotation on a keep-connected device clears the auto-restore token`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val store = InMemorySyncConfigStore().apply {
+            save(SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed-old"))
+        }
+        val sut = coordinator(RewrapFailingVault(vault), client, store)
+        try {
+            val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
+            assertTrue(result is AccountPasswordChange.LocalRewrapFailed, "was $result")
+            assertEquals(null, store.load()?.sealedRefreshToken, "the auto-restore token must be cleared after an interrupted rotation")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The current password passes the local check but the SERVER rejects the SRP proof (e.g. another
+     * device already rotated the account): the coordinator surfaces it as a failure, unchanged locally.
+     */
+    @Test
+    fun `a server-rejected current password surfaces as a failure without changing the vault`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        // Account exists under a DIFFERENT password than this vault's: local verifyPassword passes,
+        // but the server's SRP proof of the current password fails.
+        val client = FakeAccountClient(existingAccountPassword = accountPassword)
+        val sut = coordinator(vault, client, configuredStore())
+        try {
+            val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
+            assertTrue(
+                result is AccountPasswordChange.Failed && result.reason == SyncFailureReason.Unauthorized,
+                "server rejection maps to Failed(Unauthorized), was $result",
+            )
+            assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the vault password is untouched")
+            assertFalse(vault.verifyPassword(rotated.toCharArray()), "the new password does not unlock")
         } finally {
             sut.close()
         }

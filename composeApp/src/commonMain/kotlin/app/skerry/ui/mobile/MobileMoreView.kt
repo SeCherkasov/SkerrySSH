@@ -99,6 +99,8 @@ import app.skerry.ui.generated.resources.settings_security_2fa
 import app.skerry.ui.generated.resources.settings_security_2fa_desc
 import app.skerry.ui.generated.resources.settings_security_auto_lock
 import app.skerry.ui.generated.resources.settings_security_auto_lock_desc
+import app.skerry.ui.generated.resources.settings_security_account_password
+import app.skerry.ui.generated.resources.settings_security_account_password_desc
 import app.skerry.ui.generated.resources.settings_security_master_password
 import app.skerry.ui.generated.resources.settings_security_no_events
 import app.skerry.ui.generated.resources.settings_security_subtitle
@@ -116,6 +118,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.Badge
+import app.skerry.ui.settings.ChangeAccountPasswordDialog
 import app.skerry.ui.settings.ChangeMasterPasswordDialog
 import app.skerry.ui.design.D
 import app.skerry.ui.generated.resources.term_player_open
@@ -290,8 +293,15 @@ fun MobileSecurityScreen(state: MobileDesignState) {
     val controller = remember(vault, biometrics, log) {
         vault?.let { VaultGateController(it, biometrics, securityLog = log) }
     }
+    val sync = LocalSync.current
+    // Sync configured → the password is the account password (issue #32): the account-aware rotation
+    // replaces the local-only master-password change (which would diverge this device, issue #28).
+    // Derived from the status flow (reactive, no per-recomposition disk read).
+    val syncStatus = sync?.status?.collectAsState()?.value
+    val syncConfigured = syncStatus != null && syncStatus !is app.skerry.ui.sync.SyncStatus.Disabled
     var reload by remember { mutableStateOf(0) }
     var changePwOpen by remember { mutableStateOf(false) }
+    var changeAccountPwOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize().background(D.bg)) {
@@ -307,8 +317,17 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 }
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
-                        Txt(stringResource(Res.string.settings_security_master_password), color = D.text, size = 14.5.sp)
-                        Txt(masterPasswordSubtitle(lastChange), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                        Txt(
+                            stringResource(if (syncConfigured) Res.string.settings_security_account_password else Res.string.settings_security_master_password),
+                            color = D.text,
+                            size = 14.5.sp,
+                        )
+                        Txt(
+                            if (syncConfigured) stringResource(Res.string.settings_security_account_password_desc) else masterPasswordSubtitle(lastChange),
+                            color = D.dim,
+                            size = 11.5.sp,
+                            modifier = Modifier.padding(top = 3.dp),
+                        )
                     }
                     // Changing the password requires a live vault; without one it's dimmed/inert.
                     Txt(
@@ -316,7 +335,11 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                         color = if (controller != null) D.cyanBright else D.faint,
                         size = 13.sp,
                         weight = FontWeight.Medium,
-                        modifier = if (controller != null) Modifier.clickable { changePwOpen = true } else Modifier,
+                        modifier = if (controller != null) {
+                            Modifier.clickable { if (syncConfigured) changeAccountPwOpen = true else changePwOpen = true }
+                        } else {
+                            Modifier
+                        },
                     )
                 }
                 MobileSecurityDivider()
@@ -421,6 +444,15 @@ fun MobileSecurityScreen(state: MobileDesignState) {
             ChangeMasterPasswordDialog(
                 controller = controller,
                 onClose = { changePwOpen = false },
+                onChanged = { reload++ },
+            )
+        }
+        // Change-account-password dialog (issue #32) — same modal treatment, shown when sync is configured.
+        if (changeAccountPwOpen && sync != null) {
+            PlatformBackHandler(enabled = true) { changeAccountPwOpen = false }
+            ChangeAccountPasswordDialog(
+                sync = sync,
+                onClose = { changeAccountPwOpen = false },
                 onChanged = { reload++ },
             )
         }
