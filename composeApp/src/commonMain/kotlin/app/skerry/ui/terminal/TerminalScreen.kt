@@ -107,7 +107,6 @@ import app.skerry.shared.terminal.UnderlineStyle
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalState
-import app.skerry.ui.design.D
 import app.skerry.ui.design.ModalPresence
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
@@ -123,7 +122,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.terminal_copied
 import app.skerry.ui.generated.resources.terminal_reverse_search_no_matches
 import app.skerry.ui.generated.resources.terminal_reverse_search_prompt
-import app.skerry.ui.theme.SkerryColors
+import app.skerry.ui.theme.Skerry
 
 /** Max gap (ms) between clicks to count as double/triple click. */
 private const val DOUBLE_CLICK_MS = 350
@@ -1082,7 +1081,7 @@ fun TerminalScreen(
                           text = cmd,
                           maxLines = 1,
                           style = textStyle.copy(
-                              color = if (selected) SkerryColors.cyan else Color(0xFFB8C6D0),
+                              color = if (selected) Skerry.colors.cyan else Color(0xFFB8C6D0),
                               fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                           ),
                       )
@@ -1172,9 +1171,9 @@ private fun CopiedBanner(nonce: Int, modifier: Modifier = Modifier) {
         TerminalOverlayBanner(
             icon = "content_copy",
             text = stringResource(Res.string.terminal_copied),
-            accent = D.cyan,
-            background = D.surfaceDeep.copy(alpha = 0.8f),
-            contentColor = D.cyanBright,
+            accent = Skerry.colors.cyan,
+            background = Skerry.colors.surfaceDeep.copy(alpha = 0.8f),
+            contentColor = Skerry.colors.cyanBright,
         )
     }
 }

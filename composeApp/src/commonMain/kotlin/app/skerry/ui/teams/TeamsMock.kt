@@ -32,7 +32,6 @@ import app.skerry.ui.generated.resources.lib_teams_members
 import app.skerry.ui.generated.resources.lib_teams_recent_activity
 import app.skerry.ui.generated.resources.lib_teams_sidebar
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
@@ -42,15 +41,16 @@ import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
+import app.skerry.ui.theme.Skerry
 
 private data class Member(val initials: String, val avatar: Color, val name: String, val email: String, val role: String, val roleBg: Color, val roleFg: Color)
 private data class SharedHost(val name: String, val members: String, val online: Boolean)
 private data class Activity(val icon: String, val iconColor: Color, val prefix: String, val target: String, val time: String)
 
 private val MEMBERS = listOf(
-    Member("MK", D.cyan, "Maya Kovac", "maya@skerry.dev", "OWNER", D.amber.copy(alpha = 0.14f), D.amber),
-    Member("TR", D.moss, "Theo Reyes", "theo@skerry.dev", "ADMIN", D.cyan.copy(alpha = 0.12f), D.cyanBright),
-    Member("JL", D.dim, "June Lin", "june@skerry.dev", "MEMBER", Color(0x0DFFFFFF), D.dim),
+    Member("MK", Color(0xFF2BBDEE), "Maya Kovac", "maya@skerry.dev", "OWNER", Color(0xFFF2A65A).copy(alpha = 0.14f), Color(0xFFF2A65A)),
+    Member("TR", Color(0xFF5DCE9E), "Theo Reyes", "theo@skerry.dev", "ADMIN", Color(0xFF2BBDEE).copy(alpha = 0.12f), Color(0xFF5FD1F4)),
+    Member("JL", Color(0xFF8FA3B0), "June Lin", "june@skerry.dev", "MEMBER", Color(0x0DFFFFFF), Color(0xFF8FA3B0)),
 )
 
 private val SHARED_HOSTS = listOf(
@@ -61,32 +61,32 @@ private val SHARED_HOSTS = listOf(
 )
 
 private val ACTIVITY = listOf(
-    Activity("login", D.moss, "Theo connected to ", "prod-web-02", "3 min ago"),
-    Activity("add", D.cyan, "Maya shared host ", "k3s-control", "1 h ago"),
-    Activity("key", D.amber, "June rotated key ", "deploy_ci", "Yesterday"),
+    Activity("login", Color(0xFF5DCE9E), "Theo connected to ", "prod-web-02", "3 min ago"),
+    Activity("add", Color(0xFF2BBDEE), "Maya shared host ", "k3s-control", "1 h ago"),
+    Activity("key", Color(0xFFF2A65A), "June rotated key ", "deploy_ci", "Yesterday"),
 )
 
-/** Static Teams layout — mock/preview path (LocalTeams == null), renders prototype data. */
+/** Static Teams layout — mock/preview path (LocalTeams == null), renders placeholder data. */
 @Composable
 internal fun TeamsMockView() {
     val mono = LocalFonts.current.mono
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
+        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
             SidebarSectionTitle(stringResource(Res.string.lib_teams_sidebar), modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
             TeamRow("rocket_launch", "Platform crew", active = true)
             TeamRow("database", "Data team")
             Spacer(Modifier.weight(1f))
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.moss.copy(alpha = 0.06f)).padding(horizontal = 10.dp, vertical = 9.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.moss.copy(alpha = 0.06f)).padding(horizontal = 10.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                Sym("sync", size = 15.sp, color = D.moss)
-                Txt("Synced 2 min ago", color = D.moss, size = 11.5.sp)
+                Sym("sync", size = 15.sp, color = Skerry.colors.moss)
+                Txt("Synced 2 min ago", color = Skerry.colors.moss, size = 11.5.sp)
             }
         }
-        VLine(D.line)
-        Column(Modifier.weight(1f).fillMaxHeight().background(D.bg).verticalScroll(rememberScrollState())) {
+        VLine(Skerry.colors.line)
+        Column(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
             SectionHeader(
                 title = "Platform crew",
                 subtitle = "5 members · 9 shared hosts · 2 shared vaults",
@@ -107,8 +107,8 @@ internal fun TeamsMockView() {
                     Column(Modifier.weight(1f)) {
                         SectionLabel("Shared vaults · 2")
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SharedVaultRow(D.cyanBright, "Production secrets", "12 items · read-only for members")
-                            SharedVaultRow(D.amber, "CI / deploy keys", "4 items · admins only")
+                            SharedVaultRow(Skerry.colors.cyanBright, "Production secrets", "12 items · read-only for members")
+                            SharedVaultRow(Skerry.colors.amber, "CI / deploy keys", "4 items · admins only")
                         }
                     }
                 }
@@ -123,24 +123,24 @@ internal fun TeamsMockView() {
 @Composable
 private fun TeamRow(icon: String, name: String, active: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (active) D.cyan10 else Color.Transparent).padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (active) Skerry.colors.cyan10 else Color.Transparent).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym(icon, size = 16.sp, color = if (active) D.cyanBright else D.dim)
-        Txt(name, color = if (active) D.cyanBright else D.dim, size = 12.5.sp)
+        Sym(icon, size = 16.sp, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim)
+        Txt(name, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim, size = 12.5.sp)
     }
 }
 
 @Composable
 private fun SectionLabel(text: String) {
-    Txt(text.uppercase(), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 12.dp))
+    Txt(text.uppercase(), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 12.dp))
 }
 
 @Composable
 private fun MemberRow(m: Member) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -148,8 +148,8 @@ private fun MemberRow(m: Member) {
             Txt(m.initials, color = Color(0xFF0A1A26), size = 13.sp, weight = FontWeight.SemiBold)
         }
         Column(Modifier.weight(1f)) {
-            Txt(m.name, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(m.email, color = D.faint, size = 11.5.sp)
+            Txt(m.name, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(m.email, color = Skerry.colors.faint, size = 11.5.sp)
         }
         Box(Modifier.clip(RoundedCornerShape(20.dp)).background(m.roleBg).padding(horizontal = 9.dp, vertical = 2.dp)) {
             Txt(m.role, color = m.roleFg, size = 10.sp, weight = FontWeight.SemiBold)
@@ -164,23 +164,23 @@ private fun SharedHostRow(h: SharedHost, mono: FontFamily) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-        Dot(if (h.online) D.moss else D.faint)
-        Txt(h.name, color = D.textBright, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
-        Txt(h.members, color = D.faint, size = 10.sp)
+        Dot(if (h.online) Skerry.colors.moss else Skerry.colors.faint)
+        Txt(h.name, color = Skerry.colors.textBright, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+        Txt(h.members, color = Skerry.colors.faint, size = 10.sp)
     }
 }
 
 @Composable
 private fun SharedVaultRow(iconColor: Color, title: String, subtitle: String) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 13.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 13.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Sym("folder_shared", size = 18.sp, color = iconColor)
         Column(Modifier.weight(1f)) {
-            Txt(title, color = D.text, size = 12.5.sp, weight = FontWeight.Medium)
-            Txt(subtitle, color = D.faint, size = 10.5.sp)
+            Txt(title, color = Skerry.colors.text, size = 12.5.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = Skerry.colors.faint, size = 10.5.sp)
         }
     }
 }
@@ -194,9 +194,9 @@ private fun ActivityRow(a: Activity, mono: FontFamily) {
     ) {
         Sym(a.icon, size = 16.sp, color = a.iconColor)
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Txt(a.prefix, color = D.textBright, size = 12.sp)
-            Txt(a.target, color = D.cyanBright, size = 12.sp, font = mono)
+            Txt(a.prefix, color = Skerry.colors.textBright, size = 12.sp)
+            Txt(a.target, color = Skerry.colors.cyanBright, size = 12.sp, font = mono)
         }
-        Txt(a.time, color = D.faint, size = 11.sp)
+        Txt(a.time, color = Skerry.colors.faint, size = 11.sp)
     }
 }

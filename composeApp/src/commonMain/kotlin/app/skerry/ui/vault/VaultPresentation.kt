@@ -5,7 +5,6 @@ import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
-import app.skerry.ui.design.D
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_category_certificates
 import app.skerry.ui.generated.resources.vtail_category_passwords
@@ -13,6 +12,7 @@ import app.skerry.ui.generated.resources.vtail_category_ssh_keys
 import app.skerry.ui.generated.resources.vtail_used_by_one
 import app.skerry.ui.generated.resources.vtail_used_by_other
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.SkerryColors
 
 /**
  * Vault manager categories ([icon] is a Material Symbols sidebar icon; [title] is the localized
@@ -56,11 +56,18 @@ object VaultPresentation {
         is CredentialSecret.Certificate -> VaultCategoryKind.CERTIFICATES
     }
 
-    /** Style for a secret type: icon/accent color/tint (see [SecretTypeStyle]). */
-    fun secretStyle(secret: CredentialSecret): SecretTypeStyle = when (secret) {
-        is CredentialSecret.Certificate -> SecretTypeStyle("workspace_premium", D.moss, tinted = true)
-        is CredentialSecret.PrivateKey -> SecretTypeStyle("key", D.cyanBright, tinted = true)
-        is CredentialSecret.Password -> SecretTypeStyle("password", D.dim, tinted = false)
+    /** Icon for a secret type. Theme-independent, so callers outside composition can use it. */
+    fun secretIcon(secret: CredentialSecret): String = when (secret) {
+        is CredentialSecret.Certificate -> "workspace_premium"
+        is CredentialSecret.PrivateKey -> "key"
+        is CredentialSecret.Password -> "password"
+    }
+
+    /** Style for a secret type: icon/accent color/tint (see [SecretTypeStyle]) in the active [colors]. */
+    fun secretStyle(secret: CredentialSecret, colors: SkerryColors): SecretTypeStyle = when (secret) {
+        is CredentialSecret.Certificate -> SecretTypeStyle(secretIcon(secret), colors.moss, tinted = true)
+        is CredentialSecret.PrivateKey -> SecretTypeStyle(secretIcon(secret), colors.cyanBright, tinted = true)
+        is CredentialSecret.Password -> SecretTypeStyle(secretIcon(secret), colors.dim, tinted = false)
     }
 
     /** Credentials belonging to the given category. */

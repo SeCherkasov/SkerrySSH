@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.design.ChipButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
@@ -66,6 +65,7 @@ import app.skerry.ui.sync.accountCardModelLocalized
 import app.skerry.ui.sync.syncFailureText
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Sync section: the whole sync story in one tab — account/profile card with the connection
 // lifecycle, account identifiers for Teams invites, "what syncs" toggles and linked devices.
@@ -96,8 +96,8 @@ private fun LiveSyncSection(sync: app.skerry.ui.sync.SyncCoordinator, state: Des
     val status = sync.status.collectAsState().value
     when (status) {
         // Transient states keep the status-card look; everything else is the account card.
-        SyncStatus.Busy -> SyncStatusCard("sync", D.cyanBright, stringResource(Res.string.settings_sync_syncing), stringResource(Res.string.settings_sync_syncing_desc)) {}
-        is SyncStatus.Failed -> SyncStatusCard("cloud_off", D.sunset, stringResource(Res.string.settings_sync_error), syncFailureText(status)) {
+        SyncStatus.Busy -> SyncStatusCard("sync", Skerry.colors.cyanBright, stringResource(Res.string.settings_sync_syncing), stringResource(Res.string.settings_sync_syncing_desc)) {}
+        is SyncStatus.Failed -> SyncStatusCard("cloud_off", Skerry.colors.sunset, stringResource(Res.string.settings_sync_error), syncFailureText(status)) {
             GhostButton(stringResource(Res.string.settings_reconnect), onClick = state::openSyncSetup, icon = "cloud_sync")
         }
         else -> {
@@ -107,7 +107,7 @@ private fun LiveSyncSection(sync: app.skerry.ui.sync.SyncCoordinator, state: Des
             // (not extra lines in the profile card) keeps each card to one line and one action.
             if (status is SyncStatus.Online) {
                 SyncStatusCard(
-                    "cloud_done", D.moss,
+                    "cloud_done", Skerry.colors.moss,
                     stringResource(Res.string.settings_sync_connected),
                     stringResource(Res.string.settings_sync_pushed_pulled, status.lastPushed, status.lastPulled),
                     modifier = Modifier.padding(top = 12.dp),
@@ -128,8 +128,8 @@ private fun LiveSyncSection(sync: app.skerry.ui.sync.SyncCoordinator, state: Des
 
 /**
  * Live "what syncs" toggles (account level): write [SyncSettings] to the vault through the
- * coordinator; a change goes out via the same live push. "SSH keys" and "Terminal history" from the
- * mockup are omitted deliberately: keys authenticate hosts and always sync with "Hosts & groups" (a
+ * coordinator; a change goes out via the same live push. "SSH keys" and "Terminal history" are
+ * omitted deliberately: keys authenticate hosts and always sync with "Hosts & groups" (a
  * separate switch would break the host-credential link), and terminal history isn't a feature yet.
  */
 @Composable
@@ -150,7 +150,7 @@ private fun WhatSyncsToggles(sync: app.skerry.ui.sync.SyncCoordinator) {
 
 @Composable
 private fun WhatSyncsHeader() {
-    Txt(stringResource(Res.string.settings_what_syncs), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+    Txt(stringResource(Res.string.settings_what_syncs), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
 }
 
 /**
@@ -160,19 +160,19 @@ private fun WhatSyncsHeader() {
 @Composable
 private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCoordinator?, state: DesktopDesignState) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(D.cyan), contentAlignment = Alignment.Center) {
-            Txt(model.initials, color = D.ink, size = 14.sp, weight = FontWeight.SemiBold)
+        Box(Modifier.size(40.dp).clip(CircleShape).background(Skerry.colors.cyan), contentAlignment = Alignment.Center) {
+            Txt(model.initials, color = Skerry.colors.ink, size = 14.sp, weight = FontWeight.SemiBold)
         }
         Column(Modifier.weight(1f)) {
-            Txt(model.title, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
-            Txt(model.subtitle, color = D.faint, size = 11.5.sp)
+            Txt(model.title, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+            Txt(model.subtitle, color = Skerry.colors.faint, size = 11.5.sp)
         }
         when {
-            model.connected && sync != null -> GhostButton(stringResource(Res.string.settings_disconnect), onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
+            model.connected && sync != null -> GhostButton(stringResource(Res.string.settings_disconnect), onClick = { sync.disconnect() }, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.4f))
             model.linked -> PrimaryButton(stringResource(Res.string.settings_reconnect), onClick = state::openSyncSetup, icon = "cloud_sync")
             else -> PrimaryButton(stringResource(Res.string.settings_set_up_sync), onClick = state::openSyncSetup, icon = "cloud_sync")
         }
@@ -183,14 +183,14 @@ private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCo
 @Composable
 private fun SyncStatusCard(icon: String, iconColor: Color, title: String, subtitle: String, modifier: Modifier = Modifier, action: @Composable () -> Unit) {
     Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Sym(icon, size = 20.sp, color = iconColor)
         Column(Modifier.weight(1f)) {
-            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(subtitle, color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+            Txt(title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
         }
         action()
     }
@@ -215,13 +215,13 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -
         }
     }
 
-    Txt(stringResource(Res.string.settings_linked_devices), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
+    Txt(stringResource(Res.string.settings_linked_devices), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
     when {
-        loading -> Txt(stringResource(Res.string.settings_loading_devices), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        loading -> Txt(stringResource(Res.string.settings_loading_devices), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
         // An active session always returns at least the current device; an empty list means
         // listDevices swallowed an error, so report that rather than "only you".
-        devices.isEmpty() -> Txt(stringResource(Res.string.settings_devices_load_failed), color = D.amber, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
-        devices.size == 1 && devices.first().current -> Txt(stringResource(Res.string.settings_only_this_device), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.isEmpty() -> Txt(stringResource(Res.string.settings_devices_load_failed), color = Skerry.colors.amber, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.size == 1 && devices.first().current -> Txt(stringResource(Res.string.settings_only_this_device), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
         else -> devices.forEach { d ->
             DeviceRow(
                 icon = "devices",
@@ -250,22 +250,22 @@ private fun DeviceRow(icon: String, name: String, sub: String, onRevoke: (() -> 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Sym(icon, size = 18.sp, color = D.dim)
+        Sym(icon, size = 18.sp, color = Skerry.colors.dim)
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Txt(name, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-                if (thisDevice) Txt(stringResource(Res.string.settings_this_device), color = D.moss, size = 10.sp)
+                Txt(name, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+                if (thisDevice) Txt(stringResource(Res.string.settings_this_device), color = Skerry.colors.moss, size = 10.sp)
             }
-            Txt(sub, color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
+            Txt(sub, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
         }
         if (onRevoke != null) {
             if (confirming) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ChipButton(stringResource(Res.string.settings_confirm), color = D.sunset, onClick = { confirming = false; onRevoke() })
-                    ChipButton(stringResource(Res.string.settings_cancel), color = D.dim, onClick = { confirming = false })
+                    ChipButton(stringResource(Res.string.settings_confirm), color = Skerry.colors.sunset, onClick = { confirming = false; onRevoke() })
+                    ChipButton(stringResource(Res.string.settings_cancel), color = Skerry.colors.dim, onClick = { confirming = false })
                 }
             } else {
-                ChipButton(stringResource(Res.string.settings_revoke), color = D.dim, onClick = { confirming = true })
+                ChipButton(stringResource(Res.string.settings_revoke), color = Skerry.colors.dim, onClick = { confirming = true })
             }
         }
     }

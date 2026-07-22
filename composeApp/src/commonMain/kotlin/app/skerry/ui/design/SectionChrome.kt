@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import app.skerry.ui.theme.Skerry
 
 // Shared "section chrome": the sidebar/header/empty-state building blocks every section screen
 // (hosts, snippets, vault, teams, tunnels, known hosts) draws from, so they read as one system
@@ -57,7 +58,7 @@ fun SidebarSectionTitle(text: String, modifier: Modifier = Modifier) {
     Txt(
         text,
         modifier = modifier,
-        color = D.faint,
+        color = Skerry.colors.faint,
         size = 10.sp,
         weight = FontWeight.SemiBold,
         letterSpacing = 0.6.sp,
@@ -74,7 +75,7 @@ fun EmptyState(
     title: String,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    tint: Color = D.faint,
+    tint: Color = Skerry.colors.faint,
 ) {
     Column(
         modifier.fillMaxSize().padding(horizontal = 32.dp),
@@ -83,7 +84,7 @@ fun EmptyState(
     ) {
         Sym(icon, size = 30.sp, color = tint)
         Spacer(Modifier.height(14.dp))
-        Txt(title, color = D.text, size = 15.sp, weight = FontWeight.SemiBold, align = TextAlign.Center)
+        Txt(title, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold, align = TextAlign.Center)
         if (subtitle != null) {
             Spacer(Modifier.height(6.dp))
             // Wide enough that a normal subtitle stays on one line; only a long message (e.g. a
@@ -91,7 +92,7 @@ fun EmptyState(
             Txt(
                 subtitle,
                 modifier = Modifier.widthIn(max = 680.dp),
-                color = D.faint,
+                color = Skerry.colors.faint,
                 size = 13.sp,
                 lineHeight = 19.sp,
                 align = TextAlign.Center,
@@ -121,8 +122,8 @@ fun SidebarSearchField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 12.5.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         modifier = modifier,
         decorationBox = { inner ->
             Row(
@@ -130,15 +131,15 @@ fun SidebarSearchField(
                     .fillMaxWidth()
                     .height(28.dp)
                     .clip(RoundedCornerShape(7.dp))
-                    .background(D.card)
-                    .border(1.dp, D.line, RoundedCornerShape(7.dp))
+                    .background(Skerry.colors.card)
+                    .border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp))
                     .padding(horizontal = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Sym("search", size = 16.sp, color = D.faint)
+                Sym("search", size = 16.sp, color = Skerry.colors.faint)
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 12.5.sp)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 12.5.sp)
                     inner()
                 }
                 if (value.isNotEmpty()) {
@@ -146,7 +147,7 @@ fun SidebarSearchField(
                         Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).clickable { onValueChange("") },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Sym("close", size = 14.sp, color = D.faint)
+                        Sym("close", size = 14.sp, color = Skerry.colors.faint)
                     }
                 }
             }
@@ -203,16 +204,16 @@ fun SectionHeader(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Column(modifier.fillMaxWidth().background(D.surface2)) {
+    Column(modifier.fillMaxWidth().background(Skerry.colors.surface2)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(Modifier.padding(end = 12.dp)) {
-                Txt(title, color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+                Txt(title, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold)
                 if (subtitle != null) {
-                    Txt(subtitle, modifier = Modifier.padding(top = 2.dp), color = D.dim, size = 12.sp)
+                    Txt(subtitle, modifier = Modifier.padding(top = 2.dp), color = Skerry.colors.dim, size = 12.sp)
                 }
             }
             Row(

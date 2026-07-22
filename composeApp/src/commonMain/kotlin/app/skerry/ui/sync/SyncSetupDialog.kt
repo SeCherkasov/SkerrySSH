@@ -57,12 +57,12 @@ import app.skerry.ui.generated.resources.sync_keep_connected
 import app.skerry.ui.generated.resources.sync_keep_connected_sub_long
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.CancelButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Self-hosted sync onboarding modal: server URL + accountId + master password, one "Connect" action
@@ -127,15 +127,15 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .clickable(interactionSource = noop, indication = null, onClick = {})
                 .padding(26.dp),
         ) {
-            Txt(stringResource(Res.string.sync_setup_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(stringResource(Res.string.sync_setup_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             Txt(
                 stringResource(Res.string.sync_setup_dialog_desc),
-                color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+                color = Skerry.colors.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
 
             FieldLabel(stringResource(Res.string.sync_field_server_url), top = 16.dp)
@@ -152,16 +152,16 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
             // http:// is allowed (local test/LAN without a TLS proxy) but defenseless against MITM — warn explicitly.
             if (form.isInsecureUrl) {
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Sym("warning", size = 14.sp, color = D.sunset)
-                    Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp)
+                    Sym("warning", size = 14.sp, color = Skerry.colors.sunset)
+                    Txt(stringResource(Res.string.sync_insecure_url_warning), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp)
                 }
             }
 
             val failed = status as? SyncStatus.Failed
             if (failed != null) {
                 Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Sym("error", size = 14.sp, color = D.sunset)
-                    Txt(syncFailureText(failed), color = D.sunset, size = 11.5.sp)
+                    Sym("error", size = 14.sp, color = Skerry.colors.sunset)
+                    Txt(syncFailureText(failed), color = Skerry.colors.sunset, size = 11.5.sp)
                 }
             }
 
@@ -171,10 +171,10 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Sym("shield_lock", size = 14.sp, color = D.moss)
+                    Sym("shield_lock", size = 14.sp, color = Skerry.colors.moss)
                     Txt(
                         if (status == SyncStatus.Busy) stringResource(Res.string.sync_connecting) else stringResource(Res.string.sync_zero_knowledge),
-                        color = D.faint, size = 11.sp,
+                        color = Skerry.colors.faint, size = 11.sp,
                     )
                 }
                 CancelButton(stringResource(Res.string.sync_cancel), onClick = onDismiss)
@@ -194,22 +194,22 @@ private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
     ) {
         Box(
             Modifier.size(18.dp).clip(RoundedCornerShape(5.dp))
-                .background(if (checked) D.cyan else Color.Transparent)
-                .border(1.dp, if (checked) D.cyan else D.cyan14, RoundedCornerShape(5.dp)),
+                .background(if (checked) Skerry.colors.cyan else Color.Transparent)
+                .border(1.dp, if (checked) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(5.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (checked) Sym("check", size = 13.sp, color = Color(0xFF0A1A26))
         }
         Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.sync_keep_connected), color = D.text, size = 12.5.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.sync_keep_connected_sub_long), color = D.faint, size = 11.sp)
+            Txt(stringResource(Res.string.sync_keep_connected), color = Skerry.colors.text, size = 12.5.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.sync_keep_connected_sub_long), color = Skerry.colors.faint, size = 11.sp)
         }
     }
 }
 
 @Composable
 internal fun FieldLabel(text: String, top: androidx.compose.ui.unit.Dp = 12.dp) {
-    Txt(text, color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = top, bottom = 5.dp))
+    Txt(text, color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = top, bottom = 5.dp))
 }
 
 @Composable
@@ -224,27 +224,28 @@ internal fun SyncField(
     onChange: (String) -> Unit,
 ) {
     val ui = LocalFonts.current.ui
-    val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
+    val textColor = Skerry.colors.text
+    val style = remember(ui, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = ui) }
     // Capsule/padding/icon live in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
         value = value,
         onValueChange = onChange,
         singleLine = true,
         textStyle = style,
-        cursorBrush = SolidColor(D.cyan),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }, onSend = { onSubmit() }),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Sym(icon, size = 16.sp, color = D.faint)
+                Sym(icon, size = 16.sp, color = Skerry.colors.faint)
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp)
                     inner()
                 }
             }

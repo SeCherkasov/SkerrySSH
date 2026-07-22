@@ -38,7 +38,6 @@ import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.LocalSnippets
 import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
-import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
@@ -59,6 +58,7 @@ import app.skerry.ui.snippet.matches
 import app.skerry.ui.snippet.snippetTagLabel
 import app.skerry.ui.snippet.uncategorizedSnippetsLabel
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Snippet palette: quickly run a saved command in the active terminal directly from the toolbar.
 
@@ -74,7 +74,7 @@ internal fun SnippetPaletteButton(active: Session?, requests: SharedFlow<Unit>? 
     if (manager == null) return
     Box {
         // Nowhere to run without a connected session — the button is dimmed and doesn't open.
-        IconBtn("bolt", onClick = { if (terminal != null) open = !open }, tint = if (terminal != null) D.dim else D.faint, tooltip = stringResource(Res.string.shell_tip_snippets))
+        IconBtn("bolt", onClick = { if (terminal != null) open = !open }, tint = if (terminal != null) Skerry.colors.dim else Skerry.colors.faint, tooltip = stringResource(Res.string.shell_tip_snippets))
         if (open && terminal != null) {
             Popup(
                 alignment = Alignment.TopEnd,
@@ -100,23 +100,24 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { searchFocus.requestFocus() }
     Column(
-        Modifier.width(320.dp).clip(RoundedCornerShape(9.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(9.dp)).padding(6.dp),
+        Modifier.width(320.dp).clip(RoundedCornerShape(9.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(9.dp)).padding(6.dp),
     ) {
-        val style = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
+        val textColor = Skerry.colors.text
+        val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = mono) }
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Sym("search", size = 15.sp, color = D.faint)
+            Sym("search", size = 15.sp, color = Skerry.colors.faint)
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Txt(stringResource(Res.string.term_run_snippet_placeholder), color = D.faint, size = 12.5.sp, font = mono)
-                BasicTextField(query, { query = it }, singleLine = true, textStyle = style, cursorBrush = SolidColor(D.cyan), modifier = Modifier.fillMaxWidth().focusRequester(searchFocus))
+                if (query.isEmpty()) Txt(stringResource(Res.string.term_run_snippet_placeholder), color = Skerry.colors.faint, size = 12.5.sp, font = mono)
+                BasicTextField(query, { query = it }, singleLine = true, textStyle = style, cursorBrush = SolidColor(Skerry.colors.cyan), modifier = Modifier.fillMaxWidth().focusRequester(searchFocus))
             }
         }
         Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
             if (filtered.isEmpty()) {
-                Txt(if (all.isEmpty()) stringResource(Res.string.term_no_snippets_yet) else stringResource(Res.string.term_no_matches), color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+                Txt(if (all.isEmpty()) stringResource(Res.string.term_no_snippets_yet) else stringResource(Res.string.term_no_matches), color = Skerry.colors.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
             } else if (hasCategories(filtered)) {
                 // Same category split as the library, so a command is two steps away instead of a
                 // scroll. No chips or collapsing here — the palette is keyboard-driven and ephemeral.
@@ -137,7 +138,7 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
 private fun PaletteCategoryCaption(name: String) {
     Txt(
         if (name == UNCATEGORIZED_KEY) uncategorizedSnippetsLabel() else snippetTagLabel(name),
-        color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
+        color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
         modifier = Modifier.padding(start = 9.dp, top = 7.dp, bottom = 2.dp),
     )
 }
@@ -149,14 +150,14 @@ private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Uni
         Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = 7.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Sym("code_blocks", size = 14.sp, color = D.dim)
-            Txt(s.label.ifBlank { stringResource(Res.string.term_untitled) }, color = D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+            Sym("code_blocks", size = 14.sp, color = Skerry.colors.dim)
+            Txt(s.label.ifBlank { stringResource(Res.string.term_untitled) }, color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
             if (!s.shortcut.isNullOrBlank()) {
-                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(D.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Txt(s.shortcut!!, color = D.faint, size = 10.sp, font = mono)
+                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Skerry.colors.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                    Txt(s.shortcut!!, color = Skerry.colors.faint, size = 10.sp, font = mono)
                 }
             }
         }
-        Txt(s.command, color = D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
+        Txt(s.command, color = Skerry.colors.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
     }
 }

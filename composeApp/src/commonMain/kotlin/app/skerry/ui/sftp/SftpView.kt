@@ -133,7 +133,6 @@ import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import app.skerry.ui.design.CancelButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
@@ -146,25 +145,26 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
+import app.skerry.ui.theme.Skerry
 
 private data class FileEntry(val icon: String, val iconColor: Color, val name: String, val meta: String, val selected: Boolean = false)
 
 private val LOCAL_FILES = listOf(
-    FileEntry("arrow_upward", D.faint, "..", ""),
-    FileEntry("folder", D.cyanBright, "skerry-app", "Jun 21 09:14"),
-    FileEntry("folder", D.cyanBright, "deploy-scripts", "Jun 18 22:40"),
-    FileEntry("description", D.dim, "docker-compose.yml", "2.4 KB"),
-    FileEntry("key", D.dim, "id_ed25519.pub", "96 B"),
-    FileEntry("description", D.dim, "backup.tar.gz", "418 MB"),
+    FileEntry("arrow_upward", Color(0xFF5A7080), "..", ""),
+    FileEntry("folder", Color(0xFF5FD1F4), "skerry-app", "Jun 21 09:14"),
+    FileEntry("folder", Color(0xFF5FD1F4), "deploy-scripts", "Jun 18 22:40"),
+    FileEntry("description", Color(0xFF8FA3B0), "docker-compose.yml", "2.4 KB"),
+    FileEntry("key", Color(0xFF8FA3B0), "id_ed25519.pub", "96 B"),
+    FileEntry("description", Color(0xFF8FA3B0), "backup.tar.gz", "418 MB"),
 )
 
 private val REMOTE_FILES = listOf(
-    FileEntry("arrow_upward", D.faint, "..", ""),
-    FileEntry("folder", D.cyanBright, "html", "drwxr-xr-x"),
-    FileEntry("folder", D.cyanBright, "releases", "drwxr-xr-x"),
-    FileEntry("description", D.dim, "nginx.conf", "3.1 KB", selected = true),
-    FileEntry("description", D.dim, "robots.txt", "112 B"),
-    FileEntry("terminal", D.dim, "deploy.sh", "1.8 KB"),
+    FileEntry("arrow_upward", Color(0xFF5A7080), "..", ""),
+    FileEntry("folder", Color(0xFF5FD1F4), "html", "drwxr-xr-x"),
+    FileEntry("folder", Color(0xFF5FD1F4), "releases", "drwxr-xr-x"),
+    FileEntry("description", Color(0xFF8FA3B0), "nginx.conf", "3.1 KB", selected = true),
+    FileEntry("description", Color(0xFF8FA3B0), "robots.txt", "112 B"),
+    FileEntry("terminal", Color(0xFF8FA3B0), "deploy.sh", "1.8 KB"),
 )
 
 /**
@@ -196,13 +196,13 @@ fun SftpView() {
 @Composable
 private fun SftpTopBar(subtitle: String, mono: FontFamily) {
     Row(
-        Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
+        Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Sym("drive_file_move", size = 18.sp, color = D.cyanBright)
-        Txt(stringResource(Res.string.sftp_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-        Txt(subtitle, color = D.faint, size = 11.5.sp, font = mono)
+        Sym("drive_file_move", size = 18.sp, color = Skerry.colors.cyanBright)
+        Txt(stringResource(Res.string.sftp_title), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
+        Txt(subtitle, color = Skerry.colors.faint, size = 11.5.sp, font = mono)
     }
 }
 
@@ -312,7 +312,7 @@ private fun LiveSftpView(
     Column(
         Modifier
             .fillMaxSize()
-            .background(D.bg)
+            .background(Skerry.colors.bg)
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
                 if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -389,15 +389,15 @@ private fun LiveSftpView(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             )
             openError != null -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaneNotice("error", stringResource(Res.string.sftp_unavailable), openError, D.sunset)
+                PaneNotice("error", stringResource(Res.string.sftp_unavailable), openError, Skerry.colors.sunset)
             }
             c == null -> Box(Modifier.weight(1f).fillMaxWidth()) {
-                PaneNotice("sync", stringResource(Res.string.sftp_opening), null, D.faint)
+                PaneNotice("sync", stringResource(Res.string.sftp_opening), null, Skerry.colors.faint)
             }
             else -> {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     LivePane(
-                        c.local, "computer", D.dim, stringResource(Res.string.sftp_pane_local), mono,
+                        c.local, "computer", Skerry.colors.dim, stringResource(Res.string.sftp_pane_local), mono,
                         listState = localList,
                         active = active == ActivePane.Local,
                         onActivate = { active = ActivePane.Local; focus.requestFocus() },
@@ -405,9 +405,9 @@ private fun LiveSftpView(
                         restoreFocus = { focus.requestFocus() },
                         modifier = Modifier.weight(1f),
                     )
-                    VLine(D.line)
+                    VLine(Skerry.colors.line)
                     LivePane(
-                        c.remote, "dns", D.moss, stringResource(Res.string.sftp_pane_remote), mono,
+                        c.remote, "dns", Skerry.colors.moss, stringResource(Res.string.sftp_pane_remote), mono,
                         listState = remoteList,
                         active = active == ActivePane.Remote,
                         onActivate = { active = ActivePane.Remote; focus.requestFocus() },
@@ -540,14 +540,14 @@ private fun LivePaneHeader(
     onNewFolder: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
+        Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Sym("drive_file_move", size = 18.sp, color = D.cyanBright)
-            Txt(stringResource(Res.string.sftp_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            Txt(stringResource(Res.string.sftp_subtitle_host, subtitle), color = D.faint, size = 11.5.sp, font = mono)
+            Sym("drive_file_move", size = 18.sp, color = Skerry.colors.cyanBright)
+            Txt(stringResource(Res.string.sftp_title), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.sftp_subtitle_host, subtitle), color = Skerry.colors.faint, size = 11.5.sp, font = mono)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GhostButton(stringResource(Res.string.sftp_upload), onClick = onUpload, icon = "upload")
@@ -621,14 +621,14 @@ private fun LivePane(
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onActivate),
     ) {
         Row(
-            Modifier.fillMaxWidth().background(D.panel).padding(horizontal = 14.dp, vertical = 9.dp),
+            Modifier.fillMaxWidth().background(Skerry.colors.panel).padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Sym(icon, size = 16.sp, color = if (active) iconColor else D.faint)
+            Sym(icon, size = 16.sp, color = if (active) iconColor else Skerry.colors.faint)
             Txt(
                 labelUppercase(label),
-                color = if (active) D.cyanBright else D.faint,
+                color = if (active) Skerry.colors.cyanBright else Skerry.colors.faint,
                 size = 11.sp,
                 weight = FontWeight.SemiBold,
                 letterSpacing = 0.5.sp,
@@ -645,9 +645,9 @@ private fun LivePane(
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val st = pane.state) {
-                FilePaneState.Loading -> PaneNotice("sync", stringResource(Res.string.sftp_loading), null, D.faint)
+                FilePaneState.Loading -> PaneNotice("sync", stringResource(Res.string.sftp_loading), null, Skerry.colors.faint)
                 is FilePaneState.Error ->
-                    PaneNotice("error", stringResource(Res.string.sftp_error), fileBrowserFailureText(st.failure), D.sunset)
+                    PaneNotice("error", stringResource(Res.string.sftp_error), fileBrowserFailureText(st.failure), Skerry.colors.sunset)
                 is FilePaneState.Loaded -> LivePaneList(
                     pane = pane,
                     entries = st.entries,
@@ -681,7 +681,7 @@ private fun PathField(
     if (!editing) {
         Txt(
             pane.path,
-            color = D.textBright,
+            color = Skerry.colors.textBright,
             size = 11.5.sp,
             font = mono,
             maxLines = 1,
@@ -713,8 +713,8 @@ private fun PathField(
         Box(
             Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .background(D.bg)
-                .border(1.dp, D.lineStrong, RoundedCornerShape(6.dp))
+                .background(Skerry.colors.bg)
+                .border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(6.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
         ) { inner() }
     }
@@ -733,7 +733,7 @@ private fun LivePaneList(
         if (pane.path != "/") {
             item(key = "..") {
                 LiveFileRow(
-                    "arrow_upward", D.faint, "..", "", selected = false, cursored = pane.cursorOnParent, active = active, mono,
+                    "arrow_upward", Skerry.colors.faint, "..", "", selected = false, cursored = pane.cursorOnParent, active = active, mono,
                     // A single click only puts the cursor on ".."; going up is a double click (like entering a directory).
                     onPress = { onActivate(); pane.setCursorOnParent() },
                     onDoubleClick = { onActivate(); pane.goUp() },
@@ -755,7 +755,7 @@ private fun LivePaneList(
             }
             LiveFileRow(
                 icon = fileItemIcon(entry.type),
-                iconColor = if (entry.type == FileItemType.Directory) D.cyanBright else D.dim,
+                iconColor = if (entry.type == FileItemType.Directory) Skerry.colors.cyanBright else Skerry.colors.dim,
                 name = entry.name,
                 meta = if (entry.type == FileItemType.File) humanSize(entry.size) else "",
                 selected = entry.path in pane.selection,
@@ -840,8 +840,8 @@ private fun LiveFileRow(
     // Cursor (navigation position) and selection (marked files) are distinct in mc: the active pane's
     // cursor is a bright bar, the inactive one's a border; selection is a highlight + bold name.
     val rowBg = when {
-        cursored && active -> D.cyan.copy(alpha = 0.22f)
-        selected -> D.cyan06
+        cursored && active -> Skerry.colors.cyan.copy(alpha = 0.22f)
+        selected -> Skerry.colors.cyan06
         else -> Color.Transparent
     }
     Row(
@@ -849,7 +849,7 @@ private fun LiveFileRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(5.dp))
             .background(rowBg)
-            .then(if (cursored && !active) Modifier.border(1.dp, D.lineStrong, RoundedCornerShape(5.dp)) else Modifier)
+            .then(if (cursored && !active) Modifier.border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(5.dp)) else Modifier)
             // LMB: our own tap parsing in one loop — more reliable than detectTapGestures (which lost
             // double clicks to slop/timeouts). Each LMB press instantly places the cursor (currentPress);
             // two presses closer than DOUBLE_CLICK_MS are a double click (enter directory). Time comes
@@ -901,9 +901,9 @@ private fun LiveFileRow(
         Txt(
             name,
             color = when {
-                name == ".." -> D.dim
-                selected -> D.cyanBright
-                else -> D.textBright
+                name == ".." -> Skerry.colors.dim
+                selected -> Skerry.colors.cyanBright
+                else -> Skerry.colors.textBright
             },
             size = 12.sp,
             font = mono,
@@ -912,7 +912,7 @@ private fun LiveFileRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        if (meta.isNotEmpty()) Txt(meta, color = D.faint, size = 11.sp)
+        if (meta.isNotEmpty()) Txt(meta, color = Skerry.colors.faint, size = 11.sp)
     }
 }
 
@@ -925,44 +925,44 @@ private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismi
         is TransferState.Active -> {
             HLine()
             Row(
-                Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 val up = transfer.direction == TransferDirection.Upload
-                Sym(if (up) "upload" else "download", size = 16.sp, color = D.cyan)
+                Sym(if (up) "upload" else "download", size = 16.sp, color = Skerry.colors.cyan)
                 val title = if (transfer.fileCount > 1) {
                     stringResource(Res.string.ftail_transfer_counter, transfer.name, transfer.fileIndex, transfer.fileCount)
                 } else {
                     transfer.name
                 }
-                Txt(title, color = D.textBright, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Txt(title, color = Skerry.colors.textBright, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val fraction = if (transfer.total > 0) transfer.transferred.toFloat() / transfer.total else 0f
-                MeterBar(fraction, D.cyan, Modifier.weight(1f))
+                MeterBar(fraction, Skerry.colors.cyan, Modifier.weight(1f))
                 val tail = if (transfer.total > 0) {
                     stringResource(Res.string.ftail_transfer_progress, humanSize(transfer.transferred), humanSize(transfer.total))
                 } else {
                     humanSize(transfer.transferred)
                 }
-                Txt(tail, color = D.dim, size = 11.sp, font = mono)
+                Txt(tail, color = Skerry.colors.dim, size = 11.sp, font = mono)
             }
         }
 
         is TransferState.Failed -> {
             HLine()
             Row(
-                Modifier.fillMaxWidth().background(D.surface2).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Sym("error", size = 16.sp, color = D.sunset)
+                Sym("error", size = 16.sp, color = Skerry.colors.sunset)
                 Txt(
                     stringResource(
                         Res.string.sftp_transfer_error,
                         transfer.name.ifBlank { stringResource(Res.string.ftail_file_fallback) },
                         transferFailureText(transfer.failure),
                     ),
-                    color = D.sunset,
+                    color = Skerry.colors.sunset,
                     size = 11.5.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -1008,14 +1008,14 @@ internal fun NameDialog(
     val fieldFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { fieldFocus.requestFocus() }
     SftpDialogFrame(onDismiss = onDismiss) {
-            Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
+            Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold)
             // Border in decorationBox so a click anywhere in the field places the caret.
             BasicTextField(
                 value = name,
                 onValueChange = { name = it },
                 singleLine = true,
-                textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono),
-                cursorBrush = SolidColor(D.cyan),
+                textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = mono),
+                cursorBrush = SolidColor(Skerry.colors.cyan),
                 // Enter confirms (if the name is valid), Esc closes — handler before the focusable field.
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1033,13 +1033,13 @@ internal fun NameDialog(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(7.dp))
-                            .background(D.panel)
-                            .border(1.dp, D.lineStrong, RoundedCornerShape(7.dp))
+                            .background(Skerry.colors.panel)
+                            .border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(7.dp))
                             .padding(horizontal = 10.dp, vertical = 9.dp),
                     ) { inner() }
                 },
             )
-            if (conflict) Txt(stringResource(Res.string.sftp_already_exists, trimmed), color = D.sunset, size = 11.5.sp)
+            if (conflict) Txt(stringResource(Res.string.sftp_already_exists, trimmed), color = Skerry.colors.sunset, size = 11.5.sp)
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -1049,7 +1049,7 @@ internal fun NameDialog(
                 PrimaryButton(
                     confirmLabel,
                     onClick = submit,
-                    bg = if (ok) D.cyan else D.whiteFaint,
+                    bg = if (ok) Skerry.colors.cyan else Skerry.colors.whiteFaint,
                 )
             }
     }
@@ -1097,8 +1097,8 @@ private fun ConfirmCopyDialog(
         confirmLabel = stringResource(Res.string.sftp_copy),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
-        confirmBg = D.cyan,
-        confirmFg = D.ink,
+        confirmBg = Skerry.colors.cyan,
+        confirmFg = Skerry.colors.ink,
     )
 }
 
@@ -1122,8 +1122,8 @@ private fun ConfirmMoveDialog(
         confirmLabel = stringResource(Res.string.sftp_move),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
-        confirmBg = D.cyan,
-        confirmFg = D.ink,
+        confirmBg = Skerry.colors.cyan,
+        confirmFg = Skerry.colors.ink,
     )
 }
 
@@ -1139,8 +1139,8 @@ internal fun ConfirmDangerDialog(
     confirmLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    confirmBg: Color = D.sunset,
-    confirmFg: Color = D.ink,
+    confirmBg: Color = Skerry.colors.sunset,
+    confirmFg: Color = Skerry.colors.ink,
 ) {
     var focusConfirm by remember { mutableStateOf(true) }
     val dialogFocus = remember { FocusRequester() }
@@ -1160,8 +1160,8 @@ internal fun ConfirmDangerDialog(
             }
             .focusable(),
     ) {
-            Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
-            Txt(body, color = D.faint, size = 12.sp)
+            Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold)
+            Txt(body, color = Skerry.colors.faint, size = 12.sp)
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -1193,8 +1193,8 @@ private fun SftpDialogFrame(
             Modifier
                 .width(340.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surface)
-                .border(1.dp, D.line, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surface)
+                .border(1.dp, Skerry.colors.line, RoundedCornerShape(12.dp))
                 .padding(18.dp)
                 .then(modifier),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -1209,7 +1209,7 @@ private fun DialogButtonFocus(focused: Boolean, content: @Composable () -> Unit)
     Box(
         Modifier
             .clip(RoundedCornerShape(9.dp))
-            .then(if (focused) Modifier.border(1.5.dp, D.cyanBright, RoundedCornerShape(9.dp)) else Modifier)
+            .then(if (focused) Modifier.border(1.5.dp, Skerry.colors.cyanBright, RoundedCornerShape(9.dp)) else Modifier)
             .padding(1.5.dp),
     ) { content() }
 }
@@ -1219,11 +1219,11 @@ private fun DialogButtonFocus(focused: Boolean, content: @Composable () -> Unit)
 internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val isDir = entry.type == FileItemType.Directory
     SftpDialogFrame(onDismiss = onDismiss) {
-            Txt(if (isDir) stringResource(Res.string.sftp_delete_folder_q) else stringResource(Res.string.sftp_delete_file_q), color = D.text, size = 14.sp, weight = FontWeight.SemiBold)
+            Txt(if (isDir) stringResource(Res.string.sftp_delete_folder_q) else stringResource(Res.string.sftp_delete_file_q), color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold)
             Txt(
                 if (isDir) stringResource(Res.string.sftp_delete_folder_body, entry.name)
                 else stringResource(Res.string.sftp_delete_file_body, entry.name),
-                color = D.faint,
+                color = Skerry.colors.faint,
                 size = 12.sp,
             )
             Row(
@@ -1232,7 +1232,7 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CancelButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
-                PrimaryButton(stringResource(Res.string.sftp_delete), onClick = onConfirm, bg = D.sunset, fg = D.ink)
+                PrimaryButton(stringResource(Res.string.sftp_delete), onClick = onConfirm, bg = Skerry.colors.sunset, fg = Skerry.colors.ink)
             }
     }
 }
@@ -1248,8 +1248,8 @@ private fun PaneNotice(icon: String, title: String, subtitle: String?, color: Co
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Sym(icon, size = 26.sp, color = color)
-            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-            if (subtitle != null) Txt(subtitle, color = D.faint, size = 11.5.sp)
+            Txt(title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
+            if (subtitle != null) Txt(subtitle, color = Skerry.colors.faint, size = 11.5.sp)
         }
     }
 }
@@ -1264,11 +1264,11 @@ private fun fileItemIcon(type: FileItemType): String = when (type) {
 /** A live session exists but isn't connected: header + notice. */
 @Composable
 private fun NoSessionSftpView(mono: FontFamily) {
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         SftpTopBar(stringResource(Res.string.sftp_no_session), mono)
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            PaneNotice("cloud_off", stringResource(Res.string.sftp_no_session), stringResource(Res.string.sftp_no_session_hint), D.faint)
+            PaneNotice("cloud_off", stringResource(Res.string.sftp_no_session), stringResource(Res.string.sftp_no_session_hint), Skerry.colors.faint)
         }
     }
 }
@@ -1276,16 +1276,16 @@ private fun NoSessionSftpView(mono: FontFamily) {
 /** Static mock (offscreen render/preview without a session backend). */
 @Composable
 private fun MockSftpView(mono: FontFamily) {
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
+            Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Sym("drive_file_move", size = 18.sp, color = D.cyanBright)
-                Txt(stringResource(Res.string.sftp_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-                Txt("root@prod-web-01 · SFTP", color = D.faint, size = 11.5.sp, font = mono)
+                Sym("drive_file_move", size = 18.sp, color = Skerry.colors.cyanBright)
+                Txt(stringResource(Res.string.sftp_title), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
+                Txt("root@prod-web-01 · SFTP", color = Skerry.colors.faint, size = 11.5.sp, font = mono)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GhostButton(stringResource(Res.string.sftp_upload), onClick = {}, icon = "upload")
@@ -1294,20 +1294,20 @@ private fun MockSftpView(mono: FontFamily) {
         }
         HLine()
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            MockPane("computer", D.dim, stringResource(Res.string.sftp_pane_local), "~/projects", LOCAL_FILES, mono, Modifier.weight(1f))
-            VLine(D.line)
-            MockPane("dns", D.moss, stringResource(Res.string.sftp_pane_remote), "/var/www", REMOTE_FILES, mono, Modifier.weight(1f))
+            MockPane("computer", Skerry.colors.dim, stringResource(Res.string.sftp_pane_local), "~/projects", LOCAL_FILES, mono, Modifier.weight(1f))
+            VLine(Skerry.colors.line)
+            MockPane("dns", Skerry.colors.moss, stringResource(Res.string.sftp_pane_remote), "/var/www", REMOTE_FILES, mono, Modifier.weight(1f))
         }
         HLine()
         Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Sym("upload", size = 16.sp, color = D.cyan)
-            Txt("backup.tar.gz", color = D.textBright, size = 11.5.sp, font = mono)
-            MeterBar(0.64f, D.cyan, Modifier.weight(1f))
-            Txt("64% · 12.4 MB/s · 02:18 left", color = D.dim, size = 11.sp, font = mono)
+            Sym("upload", size = 16.sp, color = Skerry.colors.cyan)
+            Txt("backup.tar.gz", color = Skerry.colors.textBright, size = 11.5.sp, font = mono)
+            MeterBar(0.64f, Skerry.colors.cyan, Modifier.weight(1f))
+            Txt("64% · 12.4 MB/s · 02:18 left", color = Skerry.colors.dim, size = 11.sp, font = mono)
         }
     }
 }
@@ -1324,13 +1324,13 @@ private fun MockPane(
 ) {
     Column(modifier.fillMaxHeight()) {
         Row(
-            Modifier.fillMaxWidth().background(D.panel).padding(horizontal = 14.dp, vertical = 9.dp),
+            Modifier.fillMaxWidth().background(Skerry.colors.panel).padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Sym(icon, size = 16.sp, color = iconColor)
-            Txt(label.uppercase(), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
-            Txt(path, color = D.textBright, size = 11.5.sp, font = mono)
+            Txt(label.uppercase(), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+            Txt(path, color = Skerry.colors.textBright, size = 11.5.sp, font = mono)
         }
         HLine()
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(6.dp)) {
@@ -1345,13 +1345,13 @@ private fun MockRow(entry: FileEntry, mono: FontFamily) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(5.dp))
-            .background(if (entry.selected) D.cyan06 else Color.Transparent)
+            .background(if (entry.selected) Skerry.colors.cyan06 else Color.Transparent)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Sym(entry.icon, size = 17.sp, color = entry.iconColor)
-        Txt(entry.name, color = if (entry.name == "..") D.dim else D.textBright, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
-        if (entry.meta.isNotEmpty()) Txt(entry.meta, color = D.faint, size = 11.sp)
+        Txt(entry.name, color = if (entry.name == "..") Skerry.colors.dim else Skerry.colors.textBright, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+        if (entry.meta.isNotEmpty()) Txt(entry.meta, color = Skerry.colors.faint, size = 11.sp)
     }
 }

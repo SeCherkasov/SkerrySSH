@@ -19,9 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiRole
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Clickable header for the collapsible quick-chat (AI settings, desktop and mobile): title,
@@ -34,10 +34,10 @@ internal fun AiQuickChatHeader(title: String, desc: String, open: Boolean, onTog
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(desc, color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+            Txt(title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(desc, color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
         }
-        Sym(if (open) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+        Sym(if (open) "expand_less" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
     }
 }
 
@@ -48,11 +48,11 @@ internal fun AiChatBubble(role: AiRole, text: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Box(
             Modifier.clip(RoundedCornerShape(8.dp))
-                .background(if (mine) D.cyan10 else Color(0x0DFFFFFF))
-                .border(1.dp, if (mine) D.cyan14 else D.line, RoundedCornerShape(8.dp))
+                .background(if (mine) Skerry.colors.cyan10 else Color(0x0DFFFFFF))
+                .border(1.dp, if (mine) Skerry.colors.cyan14 else Skerry.colors.line, RoundedCornerShape(8.dp))
                 .padding(horizontal = 11.dp, vertical = 8.dp),
         ) {
-            Txt(text, color = if (mine) D.text else D.dim, size = 12.5.sp, lineHeight = 18.sp)
+            Txt(text, color = if (mine) Skerry.colors.text else Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp)
         }
     }
 }

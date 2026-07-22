@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -45,6 +44,7 @@ import app.skerry.ui.generated.resources.term_broadcast_title
 import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.session.BroadcastTarget
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Broadcast on mobile: the desktop panel ([app.skerry.ui.session.BroadcastPanel]) as a bottom sheet
@@ -64,11 +64,11 @@ internal fun MobileBroadcastSheet(
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.8f) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Txt(stringResource(Res.string.term_broadcast_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            Txt(stringResource(Res.string.term_broadcast_subtitle), color = D.faint, size = 12.sp)
+            Txt(stringResource(Res.string.term_broadcast_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.term_broadcast_subtitle), color = Skerry.colors.faint, size = 12.sp)
 
             if (targets.isEmpty()) {
-                Txt(stringResource(Res.string.term_broadcast_none), color = D.faint, size = 13.sp)
+                Txt(stringResource(Res.string.term_broadcast_none), color = Skerry.colors.faint, size = 13.sp)
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     MobileSheetButton(
@@ -86,7 +86,7 @@ internal fun MobileBroadcastSheet(
                 }
                 Txt(
                     stringResource(Res.string.term_broadcast_selected, selected.toString(), targets.size.toString()),
-                    color = D.faint, size = 11.5.sp,
+                    color = Skerry.colors.faint, size = 11.5.sp,
                 )
                 targets.forEach { target ->
                     key(target.id) {
@@ -96,21 +96,21 @@ internal fun MobileBroadcastSheet(
                             Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (on) D.cyan.copy(alpha = 0.10f) else Color.Transparent)
+                                .background(if (on) Skerry.colors.cyan.copy(alpha = 0.10f) else Color.Transparent)
                                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
                                 .padding(horizontal = 10.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
-                                Sym(if (on) "check_box" else "check_box_outline_blank", size = 18.sp, color = if (on) D.cyanBright else D.faint)
+                                Sym(if (on) "check_box" else "check_box_outline_blank", size = 18.sp, color = if (on) Skerry.colors.cyanBright else Skerry.colors.faint)
                             }
-                            Txt(target.label, color = if (on) D.text else D.dim, size = 13.sp, font = mono)
+                            Txt(target.label, color = if (on) Skerry.colors.text else Skerry.colors.dim, size = 13.sp, font = mono)
                         }
                     }
                 }
                 MobileFormInput(command, { command = it }, stringResource(Res.string.term_broadcast_placeholder))
-                lastSentTo?.let { Txt(stringResource(Res.string.term_broadcast_sent, it.toString()), color = D.cyanBright, size = 11.5.sp) }
+                lastSentTo?.let { Txt(stringResource(Res.string.term_broadcast_sent, it.toString()), color = Skerry.colors.cyanBright, size = 11.5.sp) }
                 MobileSheetButton(
                     label = stringResource(Res.string.term_broadcast_send),
                     onClick = {

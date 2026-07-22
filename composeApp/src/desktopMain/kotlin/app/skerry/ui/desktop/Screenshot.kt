@@ -17,7 +17,6 @@ import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.host.Host
-import app.skerry.ui.design.D
 import app.skerry.ui.files.FileEditController
 import app.skerry.ui.files.FileEditorScreen
 import app.skerry.shared.host.HostStore

@@ -26,9 +26,9 @@ import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
+import app.skerry.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import app.skerry.ui.design.D
 
 /** Left rail / top-level views of the layout. */
 enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
@@ -100,7 +100,7 @@ data class SessionTab(val name: String, val dot: Color)
 
 /** A demo-terminal line: a command (with prompt) or output. */
 @Stable
-data class TermLine(val text: String, val isCmd: Boolean, val color: Color = D.textMid)
+data class TermLine(val text: String, val isCmd: Boolean, val color: Color = Color(0xFFB7C5CC))
 
 /**
  * UI state for the desktop app without a backend: demo terminal (`exec`) and toggles are stubs;
@@ -172,6 +172,9 @@ class DesktopDesignState(
     // mock/preview/tests.
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // App theme (Settings → Appearance). Default (night-sea dark, no-op) preserves the prior look.
+    initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
+    private val onThemeModeChange: (ThemeMode) -> Unit = {},
     // Idle auto-lock threshold (Settings → Security). Read from persistence, written back via the
     // callback; threaded into [app.skerry.ui.vault.VaultGate] as the timer's idleMs.
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
@@ -289,6 +292,9 @@ class DesktopDesignState(
     /** Terminal theme (Appearance → cards). Threaded via [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
+    /** App theme (Settings → Appearance). Threaded into [app.skerry.ui.theme.SkerryTheme] at the root. */
+    var themeMode: ThemeMode by mutableStateOf(initialThemeMode); private set
+
     /** Idle auto-lock threshold (Settings → Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
     var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
 
@@ -331,10 +337,10 @@ class DesktopDesignState(
 
     var tabs: List<SessionTab> by mutableStateOf(
         listOf(
-            SessionTab("prod-web-01", D.moss),
-            SessionTab("db-master", D.moss),
-            SessionTab("homelab-pi", D.amber),
-            SessionTab("staging-web", D.faint),
+            SessionTab("prod-web-01", Color(0xFF5DCE9E)),
+            SessionTab("db-master", Color(0xFF5DCE9E)),
+            SessionTab("homelab-pi", Color(0xFFF2A65A)),
+            SessionTab("staging-web", Color(0xFF5A7080)),
         ),
     )
         private set
@@ -372,7 +378,7 @@ class DesktopDesignState(
 
     /**
      * Close tab [i]: the active index is clamped into the new range (the neighbor on the right shifts
-     * into the freed index, else the nearest one on the left, else 0), matching the prototype.
+     * into the freed index, else the nearest one on the left, else 0).
      */
     fun closeTab(i: Int) {
         if (i !in tabs.indices) return
@@ -549,6 +555,13 @@ class DesktopDesignState(
         onTerminalThemeChange(theme)
     }
 
+    /** Choose the app theme and report outward (for persistence). Repeating the same value is a no-op. */
+    fun chooseThemeMode(mode: ThemeMode) {
+        if (mode == themeMode) return
+        themeMode = mode
+        onThemeModeChange(mode)
+    }
+
     /** Choose the auto-lock threshold and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseAutoLock(duration: AutoLockDuration) {
         if (duration == autoLock) return
@@ -652,8 +665,8 @@ class DesktopDesignState(
 
     private fun exec(c: String): TermLine? {
         if (c.isEmpty()) return null
-        DEMO_OUTPUT[c]?.let { return TermLine(text = it, isCmd = false, color = D.textMid) }
-        return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, color = D.sunset)
+        DEMO_OUTPUT[c]?.let { return TermLine(text = it, isCmd = false, color = Color(0xFFB7C5CC)) }
+        return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, color = Color(0xFFE07A5F))
     }
 
     // internal (not private): MAX_RECENT_HOSTS is read by settings/persistence/tests in this module

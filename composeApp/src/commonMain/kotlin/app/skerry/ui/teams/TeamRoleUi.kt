@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamRole
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.CancelButton
@@ -45,6 +45,7 @@ import app.skerry.ui.generated.resources.lib_teams_role_owner
 import app.skerry.ui.generated.resources.lib_teams_role_picker_title
 import app.skerry.ui.generated.resources.lib_teams_role_viewer
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /** Localized role label for badges and pickers. */
 @Composable
@@ -66,11 +67,13 @@ internal fun canModifyMember(actor: TeamRole, target: TeamRole): Boolean = when 
 }
 
 /** Role badge colors (text, background), [D] tokens only. */
+@Composable
+@ReadOnlyComposable
 internal fun roleBadgeColors(role: TeamRole): Pair<Color, Color> = when (role) {
-    TeamRole.OWNER -> D.amber to D.amber.copy(alpha = 0.14f)
-    TeamRole.ADMIN -> D.cyanBright to D.cyan.copy(alpha = 0.12f)
-    TeamRole.EDITOR -> D.moss to D.moss.copy(alpha = 0.14f)
-    TeamRole.VIEWER -> D.dim to Color(0x0DFFFFFF)
+    TeamRole.OWNER -> Skerry.colors.amber to Skerry.colors.amber.copy(alpha = 0.14f)
+    TeamRole.ADMIN -> Skerry.colors.cyanBright to Skerry.colors.cyan.copy(alpha = 0.12f)
+    TeamRole.EDITOR -> Skerry.colors.moss to Skerry.colors.moss.copy(alpha = 0.14f)
+    TeamRole.VIEWER -> Skerry.colors.dim to Color(0x0DFFFFFF)
 }
 
 /** Localized audit event summary; an unknown code goes into a localized fallback as a detail. */
@@ -103,12 +106,12 @@ internal fun RoleChips(options: List<TeamRole>, selected: TeamRole, onSelect: (T
             Box(
                 Modifier
                     .clip(RoundedCornerShape(7.dp))
-                    .background(if (active) D.cyan.copy(alpha = 0.12f) else Color.Transparent)
-                    .border(1.dp, if (active) D.cyan else D.line, RoundedCornerShape(7.dp))
+                    .background(if (active) Skerry.colors.cyan.copy(alpha = 0.12f) else Color.Transparent)
+                    .border(1.dp, if (active) Skerry.colors.cyan else Skerry.colors.line, RoundedCornerShape(7.dp))
                     .clickable { onSelect(role) }
                     .padding(horizontal = 12.dp, vertical = 7.dp),
             ) {
-                Txt(teamRoleLabel(role), color = if (active) D.cyanBright else D.dim, size = 11.5.sp, weight = FontWeight.SemiBold)
+                Txt(teamRoleLabel(role), color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim, size = 11.5.sp, weight = FontWeight.SemiBold)
             }
         }
     }
@@ -125,8 +128,8 @@ internal fun RolePickerDialog(
 ) {
     val mono = LocalFonts.current.mono
     TeamsDialogCard(onDismiss) {
-        Txt(stringResource(Res.string.lib_teams_role_picker_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-        Txt(accountId, color = D.dim, size = 12.sp, font = mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+        Txt(stringResource(Res.string.lib_teams_role_picker_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+        Txt(accountId, color = Skerry.colors.dim, size = 12.sp, font = mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             assignable.forEach { role ->
                 val active = role == current
@@ -135,7 +138,7 @@ internal fun RolePickerDialog(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(7.dp))
-                        .border(1.dp, if (active) D.cyan else D.cyan08, RoundedCornerShape(7.dp))
+                        .border(1.dp, if (active) Skerry.colors.cyan else Skerry.colors.cyan08, RoundedCornerShape(7.dp))
                         .clickable { onPick(role) }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -144,7 +147,7 @@ internal fun RolePickerDialog(
                     RoleBadge(teamRoleLabel(role), fg, bg)
                     if (active) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                            Txt("✓", color = D.cyanBright, size = 13.sp)
+                            Txt("✓", color = Skerry.colors.cyanBright, size = 13.sp)
                         }
                     }
                 }
@@ -161,9 +164,9 @@ internal fun RolePickerDialog(
 internal fun AuditLogDialog(entries: List<TeamActivityEntry>, onDismiss: () -> Unit) {
     val mono = LocalFonts.current.mono
     TeamsDialogCard(onDismiss) {
-        Txt(stringResource(Res.string.lib_teams_history_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, modifier = Modifier.padding(bottom = 14.dp))
+        Txt(stringResource(Res.string.lib_teams_history_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, modifier = Modifier.padding(bottom = 14.dp))
         if (entries.isEmpty()) {
-            Txt(stringResource(Res.string.lib_teams_history_empty), color = D.dim, size = 12.5.sp)
+            Txt(stringResource(Res.string.lib_teams_history_empty), color = Skerry.colors.dim, size = 12.5.sp)
         } else {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
@@ -174,16 +177,16 @@ internal fun AuditLogDialog(entries: List<TeamActivityEntry>, onDismiss: () -> U
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, D.cyan08, RoundedCornerShape(8.dp))
+                            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(8.dp))
                             .padding(horizontal = 12.dp, vertical = 9.dp),
                     ) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Txt(teamEventLabel(e.event), color = D.textBright, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                            Txt(formatEpochUtc(e.createdAt), color = D.faint, size = 10.5.sp, font = mono)
+                            Txt(teamEventLabel(e.event), color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            Txt(formatEpochUtc(e.createdAt), color = Skerry.colors.faint, size = 10.5.sp, font = mono)
                         }
-                        Txt(e.actorAccountId, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
+                        Txt(e.actorAccountId, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
                         if (e.detail.isNotBlank()) {
-                            Txt(e.detail, color = D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 2.dp))
+                            Txt(e.detail, color = Skerry.colors.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 2.dp))
                         }
                     }
                 }

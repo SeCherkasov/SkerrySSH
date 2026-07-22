@@ -71,7 +71,6 @@ import app.skerry.ui.teams.AutoPullTeamsOnOnline
 import app.skerry.ui.generated.resources.lib_teams_sidebar
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.Chip
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
@@ -116,6 +115,7 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Terminal view host sidebar: search, tag filters, catalog folders (live drag-and-drop or mock
 // preview), a RECENT section, and the "New connection" button.
@@ -194,14 +194,14 @@ internal fun HostsSidebar(state: DesktopDesignState) {
     val chips = liveHosts?.let { remember(it.hosts) { hostTagChips(it.hosts) } } ?: emptyList()
     // If the active tag disappears (host edited/deleted), the filter falls back to "All".
     val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
-    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2)) {
+    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
             // Search and the collapse control share the header. The chevron pulls the search field
             // in from the right edge (it no longer runs to the panel border) and collapses the
             // sidebar; the reopen handle then lives at the terminal's left edge (SidebarReopenHandle).
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 HostSearchField(state, Modifier.weight(1f))
-                IconBtn("chevron_left", onClick = state::toggleSidebar, box = 30, icon = 18.sp, tint = D.faint)
+                IconBtn("chevron_left", onClick = state::toggleSidebar, box = 30, icon = 18.sp, tint = Skerry.colors.faint)
             }
             // The filter-tag row overflows the narrow sidebar, so it scrolls horizontally. Desktop's
             // vertical mouse wheel doesn't translate to horizontal on its own, so Scroll events are
@@ -252,9 +252,9 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 SidebarSectionTitle(stringResource(Res.string.term_hosts_section))
                 // Create a new (initially empty) group in the live catalog; decorative on the mock path.
                 if (liveHosts != null) {
-                    IconBtn("create_new_folder", onClick = state::openCreateGroup, box = 20, icon = 14.sp, tint = D.faint)
+                    IconBtn("create_new_folder", onClick = state::openCreateGroup, box = 20, icon = 14.sp, tint = Skerry.colors.faint)
                 } else {
-                    Sym("create_new_folder", size = 14.sp, color = D.faint)
+                    Sym("create_new_folder", size = 14.sp, color = Skerry.colors.faint)
                 }
             }
             // Live catalog from HostManagerController when provided (behind the vault gate), otherwise
@@ -277,7 +277,7 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 if (folders.isEmpty() && (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP)) {
                     Txt(
                         stringResource(Res.string.term_no_hosts_match),
-                        color = D.faint, size = 12.sp,
+                        color = Skerry.colors.faint, size = 12.sp,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp),
                     )
                 }
@@ -323,8 +323,8 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Sym("history", size = 14.sp, color = D.faint)
-                    Txt("user@vps.example.com", color = D.dim, size = 11.5.sp, font = mono)
+                    Sym("history", size = 14.sp, color = Skerry.colors.faint)
+                    Txt("user@vps.example.com", color = Skerry.colors.dim, size = 11.5.sp, font = mono)
                 }
             }
         }
@@ -362,14 +362,14 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
             Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
             contentAlignment = Alignment.Center,
         ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = D.faint)
+            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
         }
-        Sym("folder_open", size = 15.sp, color = D.cyanBright)
-        Txt(name, color = D.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        Sym("folder_open", size = 15.sp, color = Skerry.colors.cyanBright)
+        Txt(name, color = Skerry.colors.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
         // Rename/delete the group (live catalog only, not for the synthetic "Ungrouped").
-        if (onEdit != null) IconBtn("edit", onClick = onEdit, box = 20, icon = 13.sp, tint = D.faint)
+        if (onEdit != null) IconBtn("edit", onClick = onEdit, box = 20, icon = 13.sp, tint = Skerry.colors.faint)
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
-            Txt(count.toString(), color = D.faint, size = 10.sp)
+            Txt(count.toString(), color = Skerry.colors.faint, size = 10.sp)
         }
     }
 }
@@ -447,12 +447,12 @@ private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onTog
             Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
             contentAlignment = Alignment.Center,
         ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = D.faint)
+            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
         }
-        Sym("group", size = 15.sp, color = D.cyanBright)
-        Txt(name, color = D.dim, size = 12.5.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Sym("group", size = 15.sp, color = Skerry.colors.cyanBright)
+        Txt(name, color = Skerry.colors.dim, size = 12.5.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
-            Txt(count.toString(), color = D.faint, size = 10.sp)
+            Txt(count.toString(), color = Skerry.colors.faint, size = 10.sp)
         }
     }
 }
@@ -472,10 +472,10 @@ private fun TeamHostRow(host: Host, mono: FontFamily) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym(host.connectionType.icon, size = 14.sp, color = D.faint)
+        Sym(host.connectionType.icon, size = 14.sp, color = Skerry.colors.faint)
         Column(Modifier.weight(1f)) {
-            Txt(host.label, color = D.dim, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Txt("${host.username}@${host.address}", color = D.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt(host.label, color = Skerry.colors.dim, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt("${host.username}@${host.address}", color = Skerry.colors.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -501,16 +501,16 @@ private fun RecentHostRow(host: Host, mono: FontFamily) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym(host.connectionType.icon, size = 14.sp, color = D.faint)
+        Sym(host.connectionType.icon, size = 14.sp, color = Skerry.colors.faint)
         Column(Modifier.weight(1f)) {
             Txt(
                 host.label,
-                color = D.dim, size = 12.sp,
+                color = Skerry.colors.dim, size = 12.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Txt(
                 "${host.username}@${host.address}",
-                color = D.faint, size = 10.5.sp, font = mono,
+                color = Skerry.colors.faint, size = 10.5.sp, font = mono,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
@@ -578,7 +578,7 @@ private fun LiveHostFolder(
             .clip(RoundedCornerShape(6.dp))
             // After clip, so bounds match the folder's visible (rounded) area, not its corners.
             .folderRangeAnchor(dragState, folder.name)
-            .border(1.dp, if (isDropTarget) D.cyan else Color.Transparent, RoundedCornerShape(6.dp)),
+            .border(1.dp, if (isDropTarget) Skerry.colors.cyan else Color.Transparent, RoundedCornerShape(6.dp)),
     ) {
         Box(
             Modifier.folderHeaderAnchor(dragState, folder.name)
@@ -625,7 +625,7 @@ private fun LiveHostFolder(
 private fun HostTypeSubheader(label: String) {
     Txt(
         label,
-        color = D.faint,
+        color = Skerry.colors.faint,
         size = 9.5.sp,
         weight = FontWeight.SemiBold,
         letterSpacing = 0.5.sp,
@@ -692,7 +692,7 @@ private fun DropLine() {
             .padding(end = 8.dp, top = 2.dp, bottom = 2.dp)
             .height(2.dp)
             .clip(RoundedCornerShape(1.dp))
-            .background(D.cyan),
+            .background(Skerry.colors.cyan),
     )
 }
 
@@ -711,7 +711,7 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
 
 /**
  * Shared host row for the sidebar (mock and live catalog): status dot + protocol icon + name +
- * optional badge. [icon] is the profile's [app.skerry.ui.host.icon] and stays [D.faint] — the two
+ * optional badge. [icon] is the profile's [app.skerry.ui.host.icon] and stays [Skerry.colors.faint] — the two
  * markers read as separate axes, colour for session status and shape for protocol. Clicking the row
  * connects ([onClick]). When
  * [onEdit]/[onDelete] are provided (live catalog) or a snippet can be run on the host ([host] !=
@@ -744,7 +744,7 @@ private fun HostEntryRow(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(5.dp))
-            .background(if (selected) D.cyan10 else Color.Transparent)
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
             .hostConnectClick(
                 onClick = {
                     // Connecting also marks the row selected (single-click mode too — it reads as
@@ -759,33 +759,33 @@ private fun HostEntryRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Dot(dot)
-        Sym(icon, size = 13.sp, color = D.faint)
+        Sym(icon, size = 13.sp, color = Skerry.colors.faint)
         Txt(
             label,
-            color = if (selected) D.cyanBright else D.dim, size = 11.5.sp, font = mono,
+            color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim, size = 11.5.sp, font = mono,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         if (badge != null) {
             val strict = badge == "STRICT"
-            Badge(badge, bg = if (strict) D.strictBg else D.devBg, fg = if (strict) D.strictFg else D.moss)
+            Badge(badge, bg = if (strict) Skerry.colors.strictBg else Skerry.colors.devBg, fg = if (strict) Skerry.colors.strictFg else Skerry.colors.moss)
         }
         if (hasMenu) {
             Box {
-                IconBtn("more_vert", onClick = { menuOpen = !menuOpen }, box = 22, icon = 16.sp, tint = D.faint)
+                IconBtn("more_vert", onClick = { menuOpen = !menuOpen }, box = 22, icon = 16.sp, tint = Skerry.colors.faint)
                 if (menuOpen) {
                     Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
                         Column(
-                            Modifier.clip(RoundedCornerShape(7.dp)).background(D.surface2).border(1.dp, D.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
+                            Modifier.clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
                         ) {
                             if (canRunSnippet) {
-                                HostMenuItem(stringResource(Res.string.term_menu_run_snippet), D.text) { menuOpen = false; snippetPickerOpen = true }
+                                HostMenuItem(stringResource(Res.string.term_menu_run_snippet), Skerry.colors.text) { menuOpen = false; snippetPickerOpen = true }
                             }
                             onEdit?.let { edit ->
-                                HostMenuItem(stringResource(Res.string.term_menu_edit), D.text) { menuOpen = false; edit() }
+                                HostMenuItem(stringResource(Res.string.term_menu_edit), Skerry.colors.text) { menuOpen = false; edit() }
                             }
                             onDelete?.let { delete ->
-                                HostMenuItem(stringResource(Res.string.term_menu_delete), D.sunset) { menuOpen = false; delete() }
+                                HostMenuItem(stringResource(Res.string.term_menu_delete), Skerry.colors.sunset) { menuOpen = false; delete() }
                             }
                         }
                     }

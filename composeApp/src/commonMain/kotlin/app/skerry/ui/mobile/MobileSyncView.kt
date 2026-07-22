@@ -79,7 +79,6 @@ import app.skerry.ui.generated.resources.stail_reenroll_prompt_title
 import app.skerry.ui.generated.resources.stail_reenroll_prompt_cancel
 import app.skerry.ui.generated.resources.stail_reenroll_prompt_subtitle
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.LocalVault
@@ -90,6 +89,7 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * More -> Sync push screen: self-hosted sync. Mobile idiom (like Appearance): the setup form is
@@ -100,16 +100,16 @@ import app.skerry.ui.design.Txt
  */
 @Composable
 fun MobileSyncScreen(state: MobileDesignState) {
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         MobilePushHeader(stringResource(Res.string.sync_title), onBack = state::pop)
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Txt(
                 stringResource(Res.string.sync_mobile_intro),
-                color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+                color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
             val sync = LocalSync.current
             if (sync == null) {
-                SyncStatusNotice("cloud_off", D.faint, stringResource(Res.string.sync_unavailable_title), stringResource(Res.string.sync_unavailable_subtitle))
+                SyncStatusNotice("cloud_off", Skerry.colors.faint, stringResource(Res.string.sync_unavailable_title), stringResource(Res.string.sync_unavailable_subtitle))
             } else {
                 SyncBody(sync)
             }
@@ -147,16 +147,16 @@ private fun BiometricReenrollCard(sync: SyncCoordinator) {
     )
 
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.surfaceDeep)
-            .border(1.dp, D.cyan.copy(alpha = 0.45f), RoundedCornerShape(11.dp)).padding(15.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.surfaceDeep)
+            .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.45f), RoundedCornerShape(11.dp)).padding(15.dp),
     ) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Sym("fingerprint", size = 22.sp, color = D.cyanBright)
+            Sym("fingerprint", size = 22.sp, color = Skerry.colors.cyanBright)
             Column(Modifier.weight(1f)) {
-                Txt(stringResource(Res.string.sync_reenroll_title), color = D.text, size = 14.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.sync_reenroll_title), color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium)
                 Txt(
                     stringResource(Res.string.sync_reenroll_desc),
-                    color = D.faint, size = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp),
+                    color = Skerry.colors.faint, size = 12.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp),
                 )
             }
         }
@@ -175,7 +175,7 @@ private fun BiometricReenrollCard(sync: SyncCoordinator) {
                     }
                 },
             )
-            GhostButton(stringResource(Res.string.sync_not_now), onClick = { sync.acknowledgeBiometricReset() }, fg = D.dim)
+            GhostButton(stringResource(Res.string.sync_not_now), onClick = { sync.acknowledgeBiometricReset() }, fg = Skerry.colors.dim)
         }
     }
     Spacer(Modifier.height(16.dp))
@@ -192,13 +192,13 @@ private fun SyncBody(sync: SyncCoordinator) {
     val busy = status == SyncStatus.Busy
     var stable by remember { mutableStateOf<SyncStatus?>(if (busy) null else status) }
     if (!busy) stable = status
-    if (busy) SyncStatusNotice("sync", D.cyanBright, stringResource(Res.string.sync_syncing), stringResource(Res.string.sync_connecting_sub))
+    if (busy) SyncStatusNotice("sync", Skerry.colors.cyanBright, stringResource(Res.string.sync_syncing), stringResource(Res.string.sync_connecting_sub))
     when (val s = stable) {
         // Opened mid-operation (e.g. session restore right after unlock): nothing stable to show
         // yet besides the notice above. Busy itself never lands in [stable].
         null, SyncStatus.Busy -> {}
         is SyncStatus.Online -> if (!busy) {
-            SyncStatusNotice("cloud_done", D.moss, stringResource(Res.string.sync_connected_title, s.accountId), stringResource(Res.string.sync_session_stats, s.lastPushed, s.lastPulled))
+            SyncStatusNotice("cloud_done", Skerry.colors.moss, stringResource(Res.string.sync_connected_title, s.accountId), stringResource(Res.string.sync_session_stats, s.lastPushed, s.lastPulled))
             // Identifiers for Teams invites (accountId + share-key fingerprint) - mobile merges
             // Account+Sync into one screen, so this block lives here (desktop has a separate Account tab).
             AccountIdentityBlock(s.accountId, Modifier.padding(top = 12.dp))
@@ -207,7 +207,7 @@ private fun SyncBody(sync: SyncCoordinator) {
             // Disconnect sit next to each other (separated by tabs on desktop).
             Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 GhostButton(stringResource(Res.string.sync_sync_now), onClick = { sync.syncNow() })
-                GhostButton(stringResource(Res.string.sync_disconnect), onClick = { sync.disconnect() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.4f))
+                GhostButton(stringResource(Res.string.sync_disconnect), onClick = { sync.disconnect() }, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.4f))
             }
             MobileLinkDeviceSection(sync)
             MobileWhatSyncs(sync)
@@ -228,7 +228,7 @@ private fun SyncBody(sync: SyncCoordinator) {
         // typed fields even though the form never visually left the screen.
         is SyncStatus.Configured, is SyncStatus.Failed, SyncStatus.Disabled -> {
             if (s is SyncStatus.Configured) {
-                SyncStatusNotice("cloud_off", D.amber, stringResource(Res.string.sync_linked_title, s.accountId), stringResource(Res.string.sync_reconnect_password))
+                SyncStatusNotice("cloud_off", Skerry.colors.amber, stringResource(Res.string.sync_linked_title, s.accountId), stringResource(Res.string.sync_reconnect_password))
                 Spacer(Modifier.height(16.dp))
             }
             SyncSetupBody(
@@ -243,14 +243,14 @@ private fun SyncBody(sync: SyncCoordinator) {
 /**
  * What syncs, matching desktop (Settings -> Sync, WHAT SYNCS section). Live account-level toggles:
  * write [SyncSettings] to the vault via the coordinator, change ships out through the same live-push.
- * "SSH keys" and "Terminal history" from the mockup are deliberately omitted (as on desktop): keys
+ * "SSH keys" and "Terminal history" are deliberately omitted (as on desktop): keys
  * always sync together with "Hosts & groups", and terminal history isn't a feature yet.
  */
 @Composable
 private fun MobileWhatSyncs(sync: SyncCoordinator) {
     val settings = sync.syncSettings.collectAsState().value
     LaunchedEffect(Unit) { sync.refreshSyncSettings() }
-    Txt(stringResource(Res.string.sync_what_syncs), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 4.dp))
+    Txt(stringResource(Res.string.sync_what_syncs), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 4.dp))
     // onToggle reads the current value from the flow, not a composition snapshot (stale-closure write-write).
     MobileSyncToggleRow(stringResource(Res.string.sync_what_hosts), null, on = settings.syncHosts) {
         val current = sync.syncSettings.value
@@ -275,13 +275,13 @@ private fun MobileLinkDeviceSection(sync: SyncCoordinator) {
     }
     Spacer(Modifier.height(16.dp))
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(D.surfaceDeep)
-            .border(1.dp, D.cyan14, RoundedCornerShape(13.dp)).padding(16.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(Skerry.colors.surfaceDeep)
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(13.dp)).padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Txt(stringResource(Res.string.sync_link_device), color = D.text, size = 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Txt(stringResource(Res.string.sync_link_device), color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable { show = false }.padding(horizontal = 10.dp, vertical = 5.dp)) {
-                Txt(stringResource(Res.string.sync_hide), color = D.dim, size = 12.sp)
+                Txt(stringResource(Res.string.sync_hide), color = Skerry.colors.dim, size = 12.sp)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -297,8 +297,8 @@ private fun MobileSyncToggleRow(label: String, sub: String?, on: Boolean, onTogg
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Txt(label, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
-            if (sub != null) Txt(sub, color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+            Txt(label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+            if (sub != null) Txt(sub, color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
         }
         Toggle(on = on, onToggle = onToggle)
     }
@@ -324,11 +324,11 @@ private fun MobileLinkedDevices(sync: SyncCoordinator) {
         loading = false
     }
 
-    Txt(stringResource(Res.string.sync_linked_devices), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 6.dp))
+    Txt(stringResource(Res.string.sync_linked_devices), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 6.dp))
     when {
-        loading -> Txt(stringResource(Res.string.sync_loading_devices), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
-        devices.isEmpty() -> Txt(stringResource(Res.string.sync_load_devices_failed), color = D.amber, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
-        devices.size == 1 && devices.first().current -> Txt(stringResource(Res.string.sync_only_this_device), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        loading -> Txt(stringResource(Res.string.sync_loading_devices), color = Skerry.colors.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.isEmpty() -> Txt(stringResource(Res.string.sync_load_devices_failed), color = Skerry.colors.amber, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        devices.size == 1 && devices.first().current -> Txt(stringResource(Res.string.sync_only_this_device), color = Skerry.colors.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
         else -> devices.forEach { d ->
             MobileDeviceRow(
                 device = d,
@@ -349,22 +349,22 @@ private fun MobileDeviceRow(device: RemoteDevice, onRevoke: (() -> Unit)?) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Sym("devices", size = 20.sp, color = D.dim)
+        Sym("devices", size = 20.sp, color = Skerry.colors.dim)
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Txt(device.name, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
-                if (device.current) Txt(stringResource(Res.string.sync_this_device_badge), color = D.moss, size = 10.sp)
+                Txt(device.name, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+                if (device.current) Txt(stringResource(Res.string.sync_this_device_badge), color = Skerry.colors.moss, size = 10.sp)
             }
-            Txt(if (device.current) stringResource(Res.string.sync_device_linked_current) else stringResource(Res.string.sync_device_linked), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+            Txt(if (device.current) stringResource(Res.string.sync_device_linked_current) else stringResource(Res.string.sync_device_linked), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
         }
         if (onRevoke != null) {
             if (confirming) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MobileRevokeChip(stringResource(Res.string.sync_confirm), D.sunset) { confirming = false; onRevoke() }
-                    MobileRevokeChip(stringResource(Res.string.sync_cancel), D.dim) { confirming = false }
+                    MobileRevokeChip(stringResource(Res.string.sync_confirm), Skerry.colors.sunset) { confirming = false; onRevoke() }
+                    MobileRevokeChip(stringResource(Res.string.sync_cancel), Skerry.colors.dim) { confirming = false }
                 }
             } else {
-                MobileRevokeChip(stringResource(Res.string.sync_revoke), D.dim) { confirming = true }
+                MobileRevokeChip(stringResource(Res.string.sync_revoke), Skerry.colors.dim) { confirming = true }
             }
         }
     }
@@ -373,7 +373,7 @@ private fun MobileDeviceRow(device: RemoteDevice, onRevoke: (() -> Unit)?) {
 @Composable
 private fun MobileRevokeChip(label: String, fg: Color, onClick: () -> Unit) {
     Box(
-        Modifier.clip(RoundedCornerShape(7.dp)).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp),
+        Modifier.clip(RoundedCornerShape(7.dp)).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
         Txt(label, color = fg, size = 12.sp)
     }

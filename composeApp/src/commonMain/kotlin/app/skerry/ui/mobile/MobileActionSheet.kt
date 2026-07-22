@@ -28,9 +28,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /** One bottom-sheet menu action: label plus an optional icon; [danger] colors it coral (destructive). */
 data class MobileSheetAction(
@@ -78,9 +78,9 @@ fun MobileActionSheet(
         properties = PopupProperties(focusable = true),
     ) {
         MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
-            Txt(title, color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+            Txt(title, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold)
             if (subtitle != null) {
-                Txt(subtitle, color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+                Txt(subtitle, color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
             }
             Spacer(Modifier.height(14.dp))
             Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -103,7 +103,7 @@ fun MobileActionSheet(
  * Bottom-sheet action button at mobile scale (parity with [MobileNewConnectionSheet]): 12-dp
  * corner radius, 13-dp vertical padding, 15-sp text — a large touch target rather than the
  * desktop [PrimaryButton] (8-dp/12-sp), which looked small on a phone. [filled] gives a solid
- * cyan button; otherwise outlined. [danger] colors the outline/text [D.sunset] (deletion). Shared
+ * cyan button; otherwise outlined. [danger] colors the outline/text [Skerry.colors.sunset] (deletion). Shared
  * by the Vault sheets and [MobileActionSheet].
  */
 @Composable
@@ -116,12 +116,12 @@ internal fun MobileSheetButton(
     danger: Boolean = false,
 ) {
     val fg = when {
-        filled -> D.ink
-        danger -> D.sunset
-        else -> D.text
+        filled -> Skerry.colors.ink
+        danger -> Skerry.colors.sunset
+        else -> Skerry.colors.text
     }
     val base = Modifier.clip(RoundedCornerShape(12.dp))
-        .then(if (filled) Modifier.background(D.cyan) else Modifier.border(1.dp, if (danger) D.sunset.copy(alpha = 0.3f) else D.cyan14, RoundedCornerShape(12.dp)))
+        .then(if (filled) Modifier.background(Skerry.colors.cyan) else Modifier.border(1.dp, if (danger) Skerry.colors.sunset.copy(alpha = 0.3f) else Skerry.colors.cyan14, RoundedCornerShape(12.dp)))
     Row(
         modifier.then(base)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)

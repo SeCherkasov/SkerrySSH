@@ -1,7 +1,11 @@
 <resources>
     <!-- Appearance / 外观设置 -->
     <string name="appearance_title">外观</string>
-    <string name="appearance_subtitle">界面语言和侧边栏。</string>
+    <string name="appearance_subtitle">主题、界面语言和侧边栏。</string>
+    <string name="appearance_theme">应用主题</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
     <string name="appearance_badge_active">活跃</string>
     <string name="appearance_section_terminal">终端</string>
     <string name="appearance_section_interface">界面</string>

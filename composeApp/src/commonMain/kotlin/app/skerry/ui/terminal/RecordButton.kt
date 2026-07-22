@@ -7,7 +7,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import app.skerry.shared.terminal.castFileName
 import app.skerry.shared.terminal.recordingStamp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_record
@@ -18,6 +17,7 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
+import app.skerry.ui.theme.Skerry
 
 /**
  * Session record toggle: starts an asciinema recording of the live terminal, and on the second
@@ -71,7 +71,7 @@ fun RecordSessionButton(
     LaunchedEffect(requests) { requests?.collect { currentToggle() } }
     IconBtn(
         name = if (recording) "stop_circle" else "radio_button_checked",
-        tint = if (recording) D.sunset else D.dim,
+        tint = if (recording) Skerry.colors.sunset else Skerry.colors.dim,
         onClick = toggle,
         tooltip = stringResource(if (recording) Res.string.shell_tip_record_stop else Res.string.shell_tip_record),
     )

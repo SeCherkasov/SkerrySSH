@@ -44,6 +44,10 @@ import app.skerry.ui.generated.resources.appearance_default_value
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
 import app.skerry.ui.generated.resources.appearance_language
+import app.skerry.ui.generated.resources.appearance_theme
+import app.skerry.ui.generated.resources.theme_dark
+import app.skerry.ui.generated.resources.theme_light
+import app.skerry.ui.generated.resources.theme_system
 import app.skerry.ui.generated.resources.appearance_letter_spacing
 import app.skerry.ui.generated.resources.appearance_line_height
 import app.skerry.ui.generated.resources.appearance_section_interface
@@ -120,7 +124,6 @@ import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.Badge
 import app.skerry.ui.settings.ChangeAccountPasswordDialog
 import app.skerry.ui.settings.ChangeMasterPasswordDialog
-import app.skerry.ui.design.D
 import app.skerry.ui.generated.resources.term_player_open
 import app.skerry.ui.terminal.openCastFile
 import androidx.compose.runtime.rememberCoroutineScope
@@ -147,6 +150,8 @@ import app.skerry.ui.settings.formatDecimal
 import app.skerry.ui.settings.formatScrollback
 import app.skerry.ui.settings.masterPasswordSubtitle
 import app.skerry.ui.settings.securityEventLine
+import app.skerry.ui.theme.Skerry
+import app.skerry.ui.theme.ThemeMode
 
 /**
  * Root More tab: title + profile card + list of section links. Navigation hub to the
@@ -161,7 +166,7 @@ import app.skerry.ui.settings.securityEventLine
 @Composable
 fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
     val preview = onLock == null
-    Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
         Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 14.dp)) {
             MobileScreenTitle(stringResource(Res.string.more_title))
         }
@@ -173,9 +178,9 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             val known = if (preview) mobileMoreKnownSubtitle(1) else knownSubtitle()
             val knownWarn = if (preview) true else knownChanged() > 0
 
-            MoreRow("lan", D.cyanBright, stringResource(Res.string.more_port_forwarding), ports, D.moss, onClick = { state.push(MobileRoute.Ports) })
-            MoreRow("fingerprint", D.cyanBright, stringResource(Res.string.more_known_hosts), known, if (knownWarn) D.sunset else D.moss, onClick = { state.push(MobileRoute.Known) })
-            MoreRow("groups", D.cyanBright, stringResource(Res.string.more_team), if (preview) "Platform crew" else null, D.dim, onClick = { state.push(MobileRoute.Team) })
+            MoreRow("lan", Skerry.colors.cyanBright, stringResource(Res.string.more_port_forwarding), ports, Skerry.colors.moss, onClick = { state.push(MobileRoute.Ports) })
+            MoreRow("fingerprint", Skerry.colors.cyanBright, stringResource(Res.string.more_known_hosts), known, if (knownWarn) Skerry.colors.sunset else Skerry.colors.moss, onClick = { state.push(MobileRoute.Known) })
+            MoreRow("groups", Skerry.colors.cyanBright, stringResource(Res.string.more_team), if (preview) "Platform crew" else null, Skerry.colors.dim, onClick = { state.push(MobileRoute.Team) })
             // AI: live path (controller present) pushes the AI settings screen; otherwise an inert
             // placeholder (preview). Subtitle is the currently selected provider (Local / BYOK / Off).
             val liveAi = LocalAi.current
@@ -184,30 +189,30 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
                 AiProviderKind.CLOUD -> stringResource(Res.string.more_ai_subtitle_byok)
                 AiProviderKind.OFF -> stringResource(Res.string.more_ai_subtitle_off)
             }
-            MoreRow("auto_awesome", D.amber, stringResource(Res.string.more_ai_privacy), aiSubtitle, D.dim, onClick = if (liveAi != null) { -> state.push(MobileRoute.Ai) } else null)
+            MoreRow("auto_awesome", Skerry.colors.amber, stringResource(Res.string.more_ai_privacy), aiSubtitle, Skerry.colors.dim, onClick = if (liveAi != null) { -> state.push(MobileRoute.Ai) } else null)
             // Appearance subtitle is the actual selected terminal theme, not static layout text.
-            MoreRow("palette", D.cyanBright, stringResource(Res.string.appearance_title), state.terminalTheme.displayName, D.dim, onClick = { state.push(MobileRoute.Appearance) })
-            MoreRow("sync", D.cyanBright, stringResource(Res.string.more_sync), if (preview) stringResource(Res.string.more_sync_synced) else syncSubtitle(), D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
+            MoreRow("palette", Skerry.colors.cyanBright, stringResource(Res.string.appearance_title), state.terminalTheme.displayName, Skerry.colors.dim, onClick = { state.push(MobileRoute.Appearance) })
+            MoreRow("sync", Skerry.colors.cyanBright, stringResource(Res.string.more_sync), if (preview) stringResource(Res.string.more_sync_synced) else syncSubtitle(), Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Sync) })
             // "Security" section: master password, biometrics, auto-lock, event log. Live path is
             // behind the gate (vault present); in preview the row is inert (nothing to configure without a vault).
-            MoreRow("shield_lock", D.cyanBright, stringResource(Res.string.settings_security_title), null, D.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
+            MoreRow("shield_lock", Skerry.colors.cyanBright, stringResource(Res.string.settings_security_title), null, Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
             // About: subtitle is the current version, or an amber "Update x.y.z" when a newer
             // release is known (the passive mobile counterpart of the desktop status-bar notice).
             val updateVersion = LocalUpdates.current?.available?.versionLabel
             MoreRow(
-                "info", D.cyanBright, stringResource(Res.string.more_about),
+                "info", Skerry.colors.cyanBright, stringResource(Res.string.more_about),
                 updateVersion?.let { stringResource(Res.string.settings_update_status, it) } ?: AppVersion.VERSION,
-                if (updateVersion != null) D.amber else D.dim,
+                if (updateVersion != null) Skerry.colors.amber else Skerry.colors.dim,
                 onClick = { state.push(MobileRoute.About) },
             )
             // Recording player: opens a .cast picker. Lives here because watching a recording needs no
             // session — the terminal menu would hide it behind a live connection.
             val playerScope = rememberCoroutineScope()
             MoreRow(
-                "play_circle", D.cyanBright, stringResource(Res.string.term_player_open), null, D.dim,
+                "play_circle", Skerry.colors.cyanBright, stringResource(Res.string.term_player_open), null, Skerry.colors.dim,
                 onClick = { playerScope.launch { state.showCast(openCastFile()) } },
             )
-            MoreRow("lock", D.sunset, stringResource(Res.string.more_lock), null, D.dim, labelColor = D.sunset, divider = false, onClick = onLock)
+            MoreRow("lock", Skerry.colors.sunset, stringResource(Res.string.more_lock), null, Skerry.colors.dim, labelColor = Skerry.colors.sunset, divider = false, onClick = onLock)
         }
         Spacer(Modifier.height(96.dp))
     }
@@ -251,7 +256,7 @@ private fun MoreRow(
     label: String,
     subtitle: String?,
     subtitleColor: Color,
-    labelColor: Color = D.text,
+    labelColor: Color = Skerry.colors.text,
     divider: Boolean = true,
     onClick: (() -> Unit)?,
 ) {
@@ -269,9 +274,9 @@ private fun MoreRow(
         Sym(icon, size = 21.sp, color = iconColor)
         Txt(label, color = labelColor, size = 14.5.sp, modifier = Modifier.weight(1f))
         if (!subtitle.isNullOrEmpty()) Txt(subtitle, color = subtitleColor, size = 11.sp)
-        if (onClick != null && labelColor != D.sunset) Sym("chevron_right", size = 20.sp, color = D.faint)
+        if (onClick != null && labelColor != Skerry.colors.sunset) Sym("chevron_right", size = 20.sp, color = Skerry.colors.faint)
     }
-    if (divider) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+    if (divider) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
 }
 
 // Security (More -> Security push screen).
@@ -304,11 +309,11 @@ fun MobileSecurityScreen(state: MobileDesignState) {
     var changeAccountPwOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    Box(Modifier.fillMaxSize().background(D.bg)) {
+    Box(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobilePushHeader(stringResource(Res.string.settings_security_title), onBack = state::pop)
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
-                Txt(stringResource(Res.string.settings_security_subtitle), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
+                Txt(stringResource(Res.string.settings_security_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp))
 
                 // Master password: subtitle is the real "last changed" from the log (or neutral text).
                 // Reading the log is file I/O + JSON parsing, moved off the composition thread.
@@ -319,12 +324,12 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     Column(Modifier.weight(1f)) {
                         Txt(
                             stringResource(if (syncConfigured) Res.string.settings_security_account_password else Res.string.settings_security_master_password),
-                            color = D.text,
+                            color = Skerry.colors.text,
                             size = 14.5.sp,
                         )
                         Txt(
                             if (syncConfigured) stringResource(Res.string.settings_security_account_password_desc) else masterPasswordSubtitle(lastChange),
-                            color = D.dim,
+                            color = Skerry.colors.dim,
                             size = 11.5.sp,
                             modifier = Modifier.padding(top = 3.dp),
                         )
@@ -332,7 +337,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     // Changing the password requires a live vault; without one it's dimmed/inert.
                     Txt(
                         stringResource(Res.string.settings_change),
-                        color = if (controller != null) D.cyanBright else D.faint,
+                        color = if (controller != null) Skerry.colors.cyanBright else Skerry.colors.faint,
                         size = 13.sp,
                         weight = FontWeight.Medium,
                         modifier = if (controller != null) {
@@ -350,12 +355,12 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 if (controller != null && controller.biometricUnsupported) {
                     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Txt(stringResource(Res.string.settings_security_touch_id), color = D.faint, size = 14.5.sp)
-                            Txt(stringResource(Res.string.settings_security_touch_id_unsupported), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                            Txt(stringResource(Res.string.settings_security_touch_id), color = Skerry.colors.faint, size = 14.5.sp)
+                            Txt(stringResource(Res.string.settings_security_touch_id_unsupported), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                         }
                         Txt(
                             stringResource(Res.string.settings_security_touch_id_recheck),
-                            color = D.cyanBright,
+                            color = Skerry.colors.cyanBright,
                             size = 13.sp,
                             weight = FontWeight.Medium,
                             modifier = Modifier.clickable { controller.recheckBiometricSupport(); reload++ },
@@ -376,11 +381,11 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     )
                     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Txt(stringResource(Res.string.settings_security_touch_id), color = D.text, size = 14.5.sp)
+                            Txt(stringResource(Res.string.settings_security_touch_id), color = Skerry.colors.text, size = 14.5.sp)
                             // Same subtitle slot admits a weaker key binding when the device took one.
                             val desc = if (controller.biometricReducedBinding) Res.string.settings_security_touch_id_weak_binding
                             else Res.string.settings_security_touch_id_desc
-                            Txt(stringResource(desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                            Txt(stringResource(desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                         }
                         Toggle(
                             on = controller.biometricEnabled,
@@ -400,8 +405,8 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 // Auto-lock: real idle threshold, wired into the VaultGate idle timer via state.autoLock.
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
-                        Txt(stringResource(Res.string.settings_security_auto_lock), color = D.text, size = 14.5.sp)
-                        Txt(stringResource(Res.string.settings_security_auto_lock_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                        Txt(stringResource(Res.string.settings_security_auto_lock), color = Skerry.colors.text, size = 14.5.sp)
+                        Txt(stringResource(Res.string.settings_security_auto_lock_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                     }
                     Box(Modifier.width(160.dp)) { MobileAutoLockPicker(state.autoLock, onPick = state::chooseAutoLock) }
                 }
@@ -412,26 +417,26 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             // weight(fill=false): the long label wraps on its own without shrinking the badge.
-                            Txt(stringResource(Res.string.settings_security_2fa), color = D.dim, size = 14.5.sp, modifier = Modifier.weight(1f, fill = false))
-                            Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
+                            Txt(stringResource(Res.string.settings_security_2fa), color = Skerry.colors.dim, size = 14.5.sp, modifier = Modifier.weight(1f, fill = false))
+                            Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = Skerry.colors.amber, radius = 3, size = 9.sp)
                         }
-                        Txt(stringResource(Res.string.settings_security_2fa_desc), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                        Txt(stringResource(Res.string.settings_security_2fa_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                     }
-                    Txt(stringResource(Res.string.settings_manage), color = D.faint, size = 13.sp)
+                    Txt(stringResource(Res.string.settings_manage), color = Skerry.colors.faint, size = 13.sp)
                 }
 
                 // Recent security events from the real log (or "no events yet").
-                Txt(stringResource(Res.string.settings_recent_security_events), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
+                Txt(stringResource(Res.string.settings_recent_security_events), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 8.dp))
                 val events by produceState(emptyList<SecurityEvent>(), controller, reload) {
                     value = withContext(Dispatchers.Default) { controller?.recentSecurityEvents(8) ?: emptyList() }
                 }
                 if (events.isEmpty()) {
-                    Txt(stringResource(Res.string.settings_security_no_events), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 3.dp))
+                    Txt(stringResource(Res.string.settings_security_no_events), color = Skerry.colors.faint, size = 12.sp, modifier = Modifier.padding(vertical = 3.dp))
                 } else {
                     events.forEach { event ->
                         Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Txt("●", color = D.moss, size = 9.sp)
-                            Txt(securityEventLine(event), color = D.dim, size = 12.sp)
+                            Txt("●", color = Skerry.colors.moss, size = 9.sp)
+                            Txt(securityEventLine(event), color = Skerry.colors.dim, size = 12.sp)
                         }
                     }
                 }
@@ -462,7 +467,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
 /** Divider line between Security section rows (layout tone). */
 @Composable
 private fun MobileSecurityDivider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
 }
 
 /** Auto-lock threshold dropdown (mobile) — reuses the Appearance trigger/menu. */
@@ -491,10 +496,10 @@ private fun MobileAutoLockPicker(current: AutoLockDuration, onPick: (AutoLockDur
  */
 @Composable
 fun MobileAppearanceScreen(state: MobileDesignState) {
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         MobilePushHeader(stringResource(Res.string.appearance_title), onBack = state::pop)
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
-            Txt(stringResource(Res.string.appearance_section_terminal), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp))
+            Txt(stringResource(Res.string.appearance_section_terminal), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 6.dp, bottom = 6.dp))
             // Theme cards in a 2xN grid from the [TerminalThemes] catalog; selection applies to the terminal live.
             TerminalThemes.all.chunked(2).forEach { rowThemes ->
                 Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -512,7 +517,7 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             FontSettingRow(stringResource(Res.string.appearance_font)) {
                 MobileFontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
             MobileStepperRow(
                 label = stringResource(Res.string.appearance_font_size),
                 isDefault = state.terminalFontSize == DEFAULT_TERMINAL_FONT_SIZE,
@@ -561,29 +566,32 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             }
             // Scrollback depth and default cursor style for new sessions (behaviour, desktop parity).
             // Both apply to new sessions at connect and are pushed live into already-open ones.
-            Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
             FontSettingRow(stringResource(Res.string.settings_terminal_scrollback)) {
                 MobileScrollbackPicker(state.terminalScrollback, onPick = state::chooseTerminalScrollback)
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
             FontSettingRow(stringResource(Res.string.settings_terminal_cursor_style)) {
                 MobileCursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle)
             }
             // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host
             // from silently overwriting the system clipboard. Applies to new and already-open sessions.
-            Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Column(Modifier.weight(1f)) {
-                    Txt(stringResource(Res.string.settings_terminal_clipboard_write), color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
-                    Txt(stringResource(Res.string.settings_terminal_clipboard_write_desc), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+                    Txt(stringResource(Res.string.settings_terminal_clipboard_write), color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.settings_terminal_clipboard_write_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
                 }
                 Toggle(on = state.allowServerClipboardWrite, onToggle = state::toggleAllowServerClipboardWrite)
             }
-            Txt(stringResource(Res.string.appearance_section_interface), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+            Txt(stringResource(Res.string.appearance_section_interface), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+            FontSettingRow(stringResource(Res.string.appearance_theme)) {
+                MobileThemePicker(state.themeMode, onPick = state::chooseThemeMode)
+            }
             FontSettingRow(stringResource(Res.string.appearance_language)) {
                 MobileLanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
             }
@@ -606,7 +614,7 @@ private fun MobileThemeCard(
     Column(
         modifier
             .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, if (active) D.cyan else D.cyan.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+            .border(1.dp, if (active) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
     ) {
         Column(Modifier.fillMaxWidth().background(theme.background).padding(8.dp)) {
@@ -615,12 +623,12 @@ private fun MobileThemeCard(
             Row { Txt("-rw-r--r-- ", color = theme.ansi[8], size = 9.sp, font = mono); Txt(".env", color = theme.ansi[3], size = 9.sp, font = mono) }
         }
         Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Txt(theme.displayName, color = D.text, size = 11.sp, weight = FontWeight.Medium, maxLines = 1)
-            if (active) Badge(stringResource(Res.string.appearance_badge_active), bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 8.sp)
+            Txt(theme.displayName, color = Skerry.colors.text, size = 11.sp, weight = FontWeight.Medium, maxLines = 1)
+            if (active) Badge(stringResource(Res.string.appearance_badge_active), bg = Skerry.colors.cyan14, fg = Skerry.colors.cyanBright, radius = 3, size = 8.sp)
         }
     }
 }
@@ -643,6 +651,32 @@ private fun MobileLanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Un
     )
 }
 
+@Composable
+private fun MobileThemePicker(current: ThemeMode, onPick: (ThemeMode) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger(current.themeLabel(), onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                ThemeMode.entries.forEach { option ->
+                    MobileDropdownOption(option.themeLabel(), selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ThemeMode.themeLabel(): String = stringResource(
+    when (this) {
+        ThemeMode.SYSTEM -> Res.string.theme_system
+        ThemeMode.LIGHT -> Res.string.theme_light
+        ThemeMode.DARK -> Res.string.theme_dark
+    }
+)
+
 /** Setting row: label on the left + a fixed-width control (dropdown) on the right. */
 @Composable
 private fun FontSettingRow(label: String, control: @Composable () -> Unit) {
@@ -651,7 +685,7 @@ private fun FontSettingRow(label: String, control: @Composable () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Txt(label, color = D.text, size = 14.5.sp, modifier = Modifier.weight(1f))
+        Txt(label, color = Skerry.colors.text, size = 14.5.sp, modifier = Modifier.weight(1f))
         Box(Modifier.width(180.dp)) { control() }
     }
 }
@@ -725,7 +759,7 @@ private fun MobileStepperRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Txt(label, color = D.text, size = 14.5.sp)
+            Txt(label, color = Skerry.colors.text, size = 14.5.sp)
             MobileDefaultValueHint(isDefault, defaultText, onReset)
         }
         stepper()
@@ -737,15 +771,15 @@ private fun MobileStepperRow(
 private fun MobileDefaultValueHint(isDefault: Boolean, defaultText: String, onReset: () -> Unit) {
     val text = stringResource(Res.string.appearance_default_value, defaultText)
     if (isDefault) {
-        Txt(text, color = D.faint, size = 12.sp, modifier = Modifier.padding(top = 3.dp))
+        Txt(text, color = Skerry.colors.faint, size = 12.sp, modifier = Modifier.padding(top = 3.dp))
     } else {
         Row(
             Modifier.padding(top = 3.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onReset),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Sym("restart_alt", size = 14.sp, color = D.cyan)
-            Txt(text, color = D.cyan, size = 12.sp)
+            Sym("restart_alt", size = 14.sp, color = Skerry.colors.cyan)
+            Txt(text, color = Skerry.colors.cyan, size = 12.sp)
         }
     }
 }
@@ -754,12 +788,12 @@ private fun MobileDefaultValueHint(isDefault: Boolean, defaultText: String, onRe
 @Composable
 private fun MobileSelectTrigger(value: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Txt(value, color = D.text, size = 13.sp)
-        Sym("expand_more", size = 18.sp, color = D.faint)
+        Txt(value, color = Skerry.colors.text, size = 13.sp)
+        Sym("expand_more", size = 18.sp, color = Skerry.colors.faint)
     }
 }
 
@@ -767,7 +801,7 @@ private fun MobileSelectTrigger(value: String, onClick: () -> Unit) {
 @Composable
 private fun MobileDropdownMenu(width: Dp, content: @Composable () -> Unit) {
     Column(
-        Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)),
+        Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)),
     ) { content() }
 }
 
@@ -776,7 +810,7 @@ private fun MobileDropdownMenu(width: Dp, content: @Composable () -> Unit) {
 private fun MobileDropdownOption(label: String, selected: Boolean, onClick: () -> Unit) {
     Txt(
         label,
-        color = if (selected) D.cyanBright else D.text,
+        color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text,
         size = 13.sp,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 11.dp),
     )
@@ -808,13 +842,13 @@ private fun LiveLocalVaultCard(sync: app.skerry.ui.sync.SyncCoordinator) {
 
 @Composable
 private fun AccountProfileCard(model: app.skerry.ui.sync.AccountCardModel) {
-    ProfileCard(initials = model.initials, avatarBg = D.cyan, title = model.title, subtitle = model.subtitle, badge = null)
+    ProfileCard(initials = model.initials, avatarBg = Skerry.colors.cyan, title = model.title, subtitle = model.subtitle, badge = null)
 }
 
 /** Static profile card (preview/offscreen). */
 @Composable
 private fun MockProfileCard() {
-    ProfileCard(initials = "MK", avatarBg = D.cyan, title = "Maya Kovac", subtitle = "maya@skerry.dev", badge = "PRO")
+    ProfileCard(initials = "MK", avatarBg = Skerry.colors.cyan, title = "Maya Kovac", subtitle = "maya@skerry.dev", badge = "PRO")
 }
 
 @Composable
@@ -825,21 +859,21 @@ private fun ProfileCard(initials: String, avatarBg: Color, title: String, subtit
             .padding(bottom = 18.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(D.card)
-            .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
+            .background(Skerry.colors.card)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(14.dp))
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
         Box(Modifier.size(46.dp).clip(CircleShape).background(avatarBg), contentAlignment = Alignment.Center) {
-            Txt(initials, color = D.ink, size = 16.sp, weight = FontWeight.Bold)
+            Txt(initials, color = Skerry.colors.ink, size = 16.sp, weight = FontWeight.Bold)
         }
         Column(Modifier.weight(1f)) {
-            Txt(title, color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-            Txt(subtitle, color = D.dim, size = 12.sp)
+            Txt(title, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold)
+            Txt(subtitle, color = Skerry.colors.dim, size = 12.sp)
         }
         if (badge != null) {
-            Badge(badge, bg = D.amber.copy(alpha = 0.14f), fg = D.amber, radius = 20, size = 9.5.sp)
+            Badge(badge, bg = Skerry.colors.amber.copy(alpha = 0.14f), fg = Skerry.colors.amber, radius = 20, size = 9.5.sp)
         }
     }
 }

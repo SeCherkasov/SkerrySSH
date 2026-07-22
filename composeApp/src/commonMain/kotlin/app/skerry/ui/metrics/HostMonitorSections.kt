@@ -20,7 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.MeterBar
 import app.skerry.ui.design.Sparkline
@@ -42,6 +41,7 @@ import app.skerry.ui.generated.resources.term_monitor_unavailable
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.max
 import kotlin.math.roundToInt
+import app.skerry.ui.theme.Skerry
 
 // Host monitor blocks shared by the desktop info panel and the mobile monitor sheet: resource
 // meters with sparklines, network rates, mounted filesystems, and the top processes.
@@ -92,7 +92,7 @@ fun HostMonitorSections(
             label = stringResource(Res.string.term_metric_cpu),
             value = cpu?.let { "$it%" } ?: PENDING,
             fraction = metrics?.cpuFraction ?: 0f,
-            bar = D.cyan,
+            bar = Skerry.colors.cyan,
             alert = (cpu ?: 0) > ALERT_PERCENT,
             history = history.map { it.cpuPercent / 100f },
             mono = mono,
@@ -101,7 +101,7 @@ fun HostMonitorSections(
             label = stringResource(Res.string.term_metric_memory),
             value = metrics?.let { gbPair(it.memUsedBytes, it.memTotalBytes) } ?: PENDING,
             fraction = metrics?.memFraction ?: 0f,
-            bar = D.moss,
+            bar = Skerry.colors.moss,
             alert = false,
             history = history.map { it.memPercent / 100f },
             mono = mono,
@@ -112,7 +112,7 @@ fun HostMonitorSections(
                 label = stringResource(Res.string.term_metric_swap),
                 value = gbPair(metrics.swapUsedBytes, metrics.swapTotalBytes),
                 fraction = metrics.swapFraction,
-                bar = D.amber,
+                bar = Skerry.colors.amber,
                 // Swap in use at all is worth noticing, but only heavy use is an alert.
                 alert = metrics.swapFraction > 0.5f,
                 history = emptyList(),
@@ -133,7 +133,7 @@ fun HostMonitorSections(
                     label = disk.mount,
                     value = "${gbPair(disk.usedBytes, disk.totalBytes)} · ${disk.percent}%",
                     fraction = disk.fraction,
-                    bar = if (disk.percent > ALERT_PERCENT) D.sunset else D.cyan,
+                    bar = if (disk.percent > ALERT_PERCENT) Skerry.colors.sunset else Skerry.colors.cyan,
                     alert = disk.percent > ALERT_PERCENT,
                     history = emptyList(),
                     mono = mono,
@@ -154,7 +154,7 @@ fun HostMonitorSections(
 fun MonitorSectionTitle(text: String) {
     Txt(
         text,
-        color = D.faint,
+        color = Skerry.colors.faint,
         size = 10.sp,
         weight = FontWeight.SemiBold,
         letterSpacing = 0.5.sp,
@@ -175,11 +175,11 @@ private fun MonitorMeter(
 ) {
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Txt(label, color = D.dim, size = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Txt(label, color = Skerry.colors.dim, size = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
             Spacer(Modifier.width(8.dp))
-            Txt(value, color = if (alert) D.sunset else D.textBright, size = 11.sp, font = mono, maxLines = 1)
+            Txt(value, color = if (alert) Skerry.colors.sunset else Skerry.colors.textBright, size = 11.sp, font = mono, maxLines = 1)
         }
-        MeterBar(fraction, if (alert) D.sunset else bar)
+        MeterBar(fraction, if (alert) Skerry.colors.sunset else bar)
         AnimatedVisibility(visible = history.size >= 2, enter = SparklineReveal) {
             Sparkline(history, bar, Modifier.padding(top = 4.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
         }
@@ -194,15 +194,15 @@ private fun MonitorMeter(
 private fun MonitorNetwork(rxRate: Long, txRate: Long, history: List<MetricsSample>, mono: FontFamily) {
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            MonitorRateLabel("arrow_downward", humanRate(rxRate), D.cyan, mono)
-            MonitorRateLabel("arrow_upward", humanRate(txRate), D.moss, mono)
+            MonitorRateLabel("arrow_downward", humanRate(rxRate), Skerry.colors.cyan, mono)
+            MonitorRateLabel("arrow_upward", humanRate(txRate), Skerry.colors.moss, mono)
         }
         val peak = history.maxOfOrNull { max(it.rxBytesPerSec, it.txBytesPerSec) } ?: 0L
         val scale = max(peak, NET_SCALE_FLOOR).toFloat()
         AnimatedVisibility(visible = history.size >= 2, enter = SparklineReveal) {
             Column {
-                Sparkline(history.map { it.rxBytesPerSec / scale }, D.cyan, Modifier.padding(top = 6.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
-                Sparkline(history.map { it.txBytesPerSec / scale }, D.moss, Modifier.padding(top = 2.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
+                Sparkline(history.map { it.rxBytesPerSec / scale }, Skerry.colors.cyan, Modifier.padding(top = 6.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
+                Sparkline(history.map { it.txBytesPerSec / scale }, Skerry.colors.moss, Modifier.padding(top = 2.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
             }
         }
     }
@@ -212,16 +212,16 @@ private fun MonitorNetwork(rxRate: Long, txRate: Long, history: List<MetricsSamp
 private fun MonitorRateLabel(icon: String, text: String, color: Color, mono: FontFamily) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Sym(icon, size = 12.sp, color = color)
-        Txt(text, color = D.textBright, size = 11.sp, font = mono)
+        Txt(text, color = Skerry.colors.textBright, size = 11.sp, font = mono)
     }
 }
 
 @Composable
 private fun MonitorProcessHeader(mono: FontFamily) {
     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-        Txt(stringResource(Res.string.term_monitor_col_cpu), color = D.faint, size = 10.sp, font = mono, modifier = Modifier.width(42.dp))
-        Txt(stringResource(Res.string.term_monitor_col_mem), color = D.faint, size = 10.sp, font = mono, modifier = Modifier.width(42.dp))
-        Txt(stringResource(Res.string.term_monitor_col_command), color = D.faint, size = 10.sp, font = mono)
+        Txt(stringResource(Res.string.term_monitor_col_cpu), color = Skerry.colors.faint, size = 10.sp, font = mono, modifier = Modifier.width(42.dp))
+        Txt(stringResource(Res.string.term_monitor_col_mem), color = Skerry.colors.faint, size = 10.sp, font = mono, modifier = Modifier.width(42.dp))
+        Txt(stringResource(Res.string.term_monitor_col_command), color = Skerry.colors.faint, size = 10.sp, font = mono)
     }
 }
 
@@ -230,11 +230,11 @@ private fun MonitorProcessRow(process: ProcessSample, mono: FontFamily) {
     Row(Modifier.fillMaxWidth().padding(bottom = 3.dp)) {
         Txt(
             percentText(process.cpuPercent),
-            color = if (process.cpuPercent > ALERT_PERCENT) D.sunset else D.textBright,
+            color = if (process.cpuPercent > ALERT_PERCENT) Skerry.colors.sunset else Skerry.colors.textBright,
             size = 10.5.sp, font = mono, modifier = Modifier.width(42.dp),
         )
-        Txt(percentText(process.memPercent), color = D.textBright, size = 10.5.sp, font = mono, modifier = Modifier.width(42.dp))
-        Txt(process.command, color = D.dim, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Txt(percentText(process.memPercent), color = Skerry.colors.textBright, size = 10.5.sp, font = mono, modifier = Modifier.width(42.dp))
+        Txt(process.command, color = Skerry.colors.dim, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -246,8 +246,8 @@ private fun MonitorUnavailable() {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Sym("info", size = 13.sp, color = D.faint)
-        Txt(stringResource(Res.string.term_monitor_unavailable), color = D.faint, size = 11.sp)
+        Sym("info", size = 13.sp, color = Skerry.colors.faint)
+        Txt(stringResource(Res.string.term_monitor_unavailable), color = Skerry.colors.faint, size = 11.sp)
     }
 }
 

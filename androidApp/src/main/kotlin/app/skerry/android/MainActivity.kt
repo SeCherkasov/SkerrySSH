@@ -54,6 +54,10 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
+import app.skerry.ui.theme.SkerryTheme
+import app.skerry.ui.theme.ThemeMode
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnelHost
 import app.skerry.ui.vault.AutoLockDuration
@@ -162,16 +166,24 @@ class MainActivity : FragmentActivity() {
                     onTerminalScrollbackChange = { writeTerminalScrollback(dir, it) },
                     initialTerminalCursorStyle = readTerminalCursorStyle(dir),
                     onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
+                    initialTerminalTheme = readTerminalTheme(dir),
+                    onTerminalThemeChange = { writeTerminalTheme(dir, it) },
+                    initialThemeMode = readThemeMode(dir),
+                    onThemeModeChange = { writeThemeMode(dir, it) },
                 )
             }
             AppLocaleProvider(currentUiLanguage.value) {
-                MobileDesignApp(
-                    deps,
-                    state = designState,
-                    onVaultReset = onVaultReset,
-                    // Secret migration + reload + sync session restore.
-                    onVaultUnlocked = onVaultUnlocked,
-                )
+                // App theme at the root: reads designState.themeMode, so a change from the theme picker
+                // recomposes the whole tree with the new palette (mirrors the desktop wiring in main.kt).
+                SkerryTheme(mode = designState.themeMode) {
+                    MobileDesignApp(
+                        deps,
+                        state = designState,
+                        onVaultReset = onVaultReset,
+                        // Secret migration + reload + sync session restore.
+                        onVaultUnlocked = onVaultUnlocked,
+                    )
+                }
             }
         }
     }
@@ -300,6 +312,36 @@ class MainActivity : FragmentActivity() {
         val id = language.id
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "ui_language").writeText(id) }
+        }
+    }
+
+    /**
+     * Terminal color theme (More → Appearance → cards): stable [TerminalTheme.id] in `terminal_theme`.
+     * Missing/unreadable/unknown → [TerminalThemes.DEFAULT]. Write is best-effort, off the UI thread.
+     */
+    private fun readTerminalTheme(dir: File): TerminalTheme = runCatching {
+        TerminalThemes.fromId(File(dir, "terminal_theme").readText().trim())
+    }.getOrDefault(TerminalThemes.DEFAULT)
+
+    private fun writeTerminalTheme(dir: File, theme: TerminalTheme) {
+        val id = theme.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_theme").writeText(id) }
+        }
+    }
+
+    /**
+     * App theme (More → Appearance → theme): stable [ThemeMode.id] in `app_theme`.
+     * Missing/unreadable/unknown → [ThemeMode.DEFAULT] (night-sea dark). Best-effort, off the UI thread.
+     */
+    private fun readThemeMode(dir: File): ThemeMode = runCatching {
+        ThemeMode.fromId(File(dir, "app_theme").readText().trim())
+    }.getOrDefault(ThemeMode.DEFAULT)
+
+    private fun writeThemeMode(dir: File, mode: ThemeMode) {
+        val id = mode.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "app_theme").writeText(id) }
         }
     }
 
@@ -469,6 +511,8 @@ class MainActivity : FragmentActivity() {
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
                 writeTerminalScrollback(dir, DEFAULT_TERMINAL_SCROLLBACK)
                 writeTerminalCursorStyle(dir, TerminalCursorStyle.DEFAULT)
+                writeTerminalTheme(dir, TerminalThemes.DEFAULT)
+                writeThemeMode(dir, ThemeMode.DEFAULT)
                 writeClipboardWrite(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)

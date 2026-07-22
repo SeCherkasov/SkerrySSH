@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.skerry.ui.theme.Skerry
 
 /**
  * Skerry logo — a "signal S": a thick S-curve (light-to-deep teal gradient) with three
@@ -20,6 +21,9 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun BrandMark(modifier: Modifier = Modifier, size: Dp = 28.dp) {
+    val teal = Skerry.colors.teal
+    val tealLight = Skerry.colors.tealLight
+    val tealDeep = Skerry.colors.tealDeep
     Canvas(modifier.size(size)) {
         val u = this.size.minDimension / 120f
         fun p(x: Float, y: Float) = Offset(x * u, y * u)
@@ -31,7 +35,7 @@ fun BrandMark(modifier: Modifier = Modifier, size: Dp = 28.dp) {
             val r = w.r * u
             val c = p(58f, 60f)
             drawArc(
-                color = D.teal.copy(alpha = w.alpha),
+                color = teal.copy(alpha = w.alpha),
                 startAngle = -50f,
                 sweepAngle = 100f,
                 useCenter = false,
@@ -53,7 +57,7 @@ fun BrandMark(modifier: Modifier = Modifier, size: Dp = 28.dp) {
         drawPath(
             path = s,
             brush = Brush.linearGradient(
-                colors = listOf(D.tealLight, D.tealDeep),
+                colors = listOf(tealLight, tealDeep),
                 start = p(31f, 32f),
                 end = p(60f, 84f),
             ),

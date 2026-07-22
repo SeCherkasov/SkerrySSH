@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.Asciicast
 import app.skerry.ui.app.LocalSessions
-import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Txt
@@ -39,6 +38,7 @@ import app.skerry.ui.generated.resources.term_player_speed
 import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.generated.resources.term_player_truncated
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Plays a recording over the current screen (mobile, and the desktop mock without live sessions):
@@ -61,8 +61,8 @@ fun CastPlayerOverlay(cast: Asciicast, onDismiss: () -> Unit) {
                 .fillMaxSize()
                 .padding(24.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(D.surface)
-                .border(1.dp, D.lineStrong, RoundedCornerShape(10.dp)),
+                .background(Skerry.colors.surface)
+                .border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(10.dp)),
         ) {
             CastPlayerContent(playback, onClose = onDismiss)
         }
@@ -79,7 +79,7 @@ fun CastPlayerView() {
     val playback = LocalSessions.current?.active?.playback ?: return
     // Start on first display only ([CastPlayback.start]) — returning to the tab must not rewind.
     LaunchedEffect(playback) { playback.start() }
-    Column(Modifier.fillMaxSize().background(D.surface)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.surface)) {
         CastPlayerContent(playback, onClose = null)
     }
 }
@@ -98,16 +98,16 @@ private fun ColumnScope.CastPlayerContent(playback: CastPlayback, onClose: (() -
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Txt(cast.title ?: stringResource(Res.string.term_player_title), color = D.textBright, size = 13.sp, weight = FontWeight.SemiBold)
-            if (cast.truncated) Txt(stringResource(Res.string.term_player_truncated), color = D.amber, size = 11.sp)
+            Txt(cast.title ?: stringResource(Res.string.term_player_title), color = Skerry.colors.textBright, size = 13.sp, weight = FontWeight.SemiBold)
+            if (cast.truncated) Txt(stringResource(Res.string.term_player_truncated), color = Skerry.colors.amber, size = 11.sp)
         }
         if (onClose != null) IconBtn("close", onClick = onClose)
     }
-    Box(Modifier.weight(1f).fillMaxWidth().background(D.terminalBg)) {
+    Box(Modifier.weight(1f).fillMaxWidth().background(Skerry.colors.terminalBg)) {
         if (cast.events.isEmpty()) {
             Txt(
                 stringResource(Res.string.term_player_empty),
-                color = D.faint,
+                color = Skerry.colors.faint,
                 size = 12.sp,
                 modifier = Modifier.align(Alignment.Center),
             )
@@ -136,21 +136,21 @@ private fun TransportBar(player: CastPlayer) {
         IconBtn(
             if (player.playing) "pause" else "play_arrow",
             onClick = player::toggle,
-            tint = D.cyanBright,
+            tint = Skerry.colors.cyanBright,
         )
         IconBtn("replay", onClick = player::restart)
-        Txt(formatCastTime(player.position), color = D.dim, size = 11.5.sp)
+        Txt(formatCastTime(player.position), color = Skerry.colors.dim, size = 11.5.sp)
         SeekBar(player, Modifier.weight(1f))
-        Txt(formatCastTime(player.duration), color = D.dim, size = 11.5.sp)
+        Txt(formatCastTime(player.duration), color = Skerry.colors.dim, size = 11.5.sp)
         CAST_SPEEDS.forEach { speed ->
             val label = stringResource(Res.string.term_player_speed, speedLabel(speed))
             Txt(
                 label,
-                color = if (player.speed == speed) D.cyanBright else D.dim,
+                color = if (player.speed == speed) Skerry.colors.cyanBright else Skerry.colors.dim,
                 size = 11.5.sp,
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
-                    .background(if (player.speed == speed) D.surface2 else Color.Transparent)
+                    .background(if (player.speed == speed) Skerry.colors.surface2 else Color.Transparent)
                     .pointerInput(speed) { detectTapGestures { player.changeSpeed(speed) } }
                     .padding(horizontal = 6.dp, vertical = 3.dp),
             )
@@ -172,13 +172,13 @@ private fun SeekBar(player: CastPlayer, modifier: Modifier = Modifier) {
             },
         contentAlignment = Alignment.CenterStart,
     ) {
-        Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(D.line))
+        Box(Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Skerry.colors.line))
         Box(
             Modifier
                 .fillMaxWidth(player.progress)
                 .height(3.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(D.cyanBright),
+                .background(Skerry.colors.cyanBright),
         )
     }
 }

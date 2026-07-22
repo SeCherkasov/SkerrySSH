@@ -27,7 +27,6 @@ import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.jumpRouteLabel
 import app.skerry.ui.connection.shortCipher
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
@@ -57,6 +56,7 @@ import app.skerry.ui.metrics.PREVIEW_TX_RATE
 import app.skerry.ui.metrics.formatUptime
 import app.skerry.ui.session.sessionDotColor
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Terminal view info panel: connection parameters, live metrics, and the active session's SYSTEM block.
 
@@ -78,7 +78,7 @@ internal fun InfoPanel() {
         if (connected) active.controller.openMetrics() else null
     }
     val liveMetrics = monitor?.metrics
-    Column(Modifier.width(268.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState())) {
+    Column(Modifier.width(268.dp).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState())) {
         // No heading of its own: the session action icons are pinned over this strip, and a
         // second title under them just repeated what the connection rows below already say.
         Spacer(Modifier.height(PANE_HEADER_HEIGHT))
@@ -90,7 +90,7 @@ internal fun InfoPanel() {
             InfoRow(stringResource(Res.string.term_info_address), if (live) (host?.let { "${it.address}:${it.port}" } ?: "—") else "192.168.1.45:22", mono)
             InfoRow(stringResource(Res.string.term_info_user), if (live) (host?.username ?: "—") else "root", mono)
             // ProxyJump route (entry hop first) — only when the profile actually routes through
-            // one, so a direct connection's panel stays as in the prototype.
+            // one, so a direct connection's panel omits the row.
             val jumpRoute = if (live) host?.let { h -> jumpRouteLabel(h) { id -> hosts?.find(id) } } else null
             if (jumpRoute != null) InfoRow(stringResource(Res.string.term_info_jump), jumpRoute, mono)
             // Auth = the actual kind of the bound keychain secret (password/key/certificate), or
@@ -122,11 +122,11 @@ internal fun InfoPanel() {
             )
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-            Txt(stringResource(Res.string.term_info_system), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
+            Txt(stringResource(Res.string.term_info_system), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(vertical = 8.dp))
             // The live block is built from host facts (OS / kernel / CPU+load); "…" until the first poll.
             // Mock mode (preview/offscreen) uses static text.
             val systemText = if (live) liveSystemSummary(liveMetrics) else MOCK_SYSTEM
-            Txt(systemText, color = D.dim, size = 10.5.sp, font = mono, lineHeight = 18.sp)
+            Txt(systemText, color = Skerry.colors.dim, size = 10.5.sp, font = mono, lineHeight = 18.sp)
         }
     }
 }
@@ -134,8 +134,8 @@ internal fun InfoPanel() {
 @Composable
 private fun InfoRow(label: String, value: String, mono: FontFamily) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Txt(label, color = D.faint, size = 11.5.sp)
-        Txt(value, color = D.textBright, size = 11.5.sp, font = mono)
+        Txt(label, color = Skerry.colors.faint, size = 11.5.sp)
+        Txt(value, color = Skerry.colors.textBright, size = 11.5.sp, font = mono)
     }
 }
 

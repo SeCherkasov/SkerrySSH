@@ -15,8 +15,13 @@ import app.skerry.ui.generated.resources.appearance_recent_count
 import app.skerry.ui.generated.resources.appearance_recent_show
 import app.skerry.ui.generated.resources.appearance_recent_show_desc
 import app.skerry.ui.generated.resources.appearance_subtitle
+import app.skerry.ui.generated.resources.appearance_theme
+import app.skerry.ui.generated.resources.theme_dark
+import app.skerry.ui.generated.resources.theme_light
+import app.skerry.ui.generated.resources.theme_system
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.i18n.label
+import app.skerry.ui.theme.ThemeMode
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 
@@ -26,6 +31,9 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun AppearanceSection(state: DesktopDesignState) {
     SectionSubtitle(stringResource(Res.string.appearance_subtitle))
+    SettingRow(label = stringResource(Res.string.appearance_theme)) {
+        Box(Modifier.width(180.dp)) { ThemePicker(state.themeMode, onPick = state::chooseThemeMode) }
+    }
     SettingRow(label = stringResource(Res.string.appearance_language)) {
         Box(Modifier.width(180.dp)) { LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage) }
     }
@@ -63,3 +71,19 @@ internal fun AppearanceSection(state: DesktopDesignState) {
 private fun LanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
     DropdownField(current, UiLanguage.entries, label = { it.label() }, onPick = onPick)
 }
+
+/** App theme dropdown (System / Light / Dark). */
+@Composable
+private fun ThemePicker(current: ThemeMode, onPick: (ThemeMode) -> Unit) {
+    DropdownField(current, ThemeMode.entries, label = { it.label() }, onPick = onPick)
+}
+
+/** Localized name for a theme mode. */
+@Composable
+private fun ThemeMode.label(): String = stringResource(
+    when (this) {
+        ThemeMode.SYSTEM -> Res.string.theme_system
+        ThemeMode.LIGHT -> Res.string.theme_light
+        ThemeMode.DARK -> Res.string.theme_dark
+    }
+)

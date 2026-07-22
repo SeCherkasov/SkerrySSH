@@ -36,8 +36,8 @@ import app.skerry.ui.generated.resources.conn_group_rename_hint
 import app.skerry.ui.generated.resources.conn_group_rename_title
 import app.skerry.ui.generated.resources.conn_save
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 // Create/Rename group dialogs for the New connection sheet, built on [MobileCenteredDialog].
 
@@ -51,7 +51,7 @@ internal fun MobileCenteredDialog(onDismiss: () -> Unit, content: @Composable Co
     Box(
         Modifier
             .fillMaxSize()
-            .background(D.scrim)
+            .background(Skerry.colors.scrim)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
@@ -60,8 +60,8 @@ internal fun MobileCenteredDialog(onDismiss: () -> Unit, content: @Composable Co
                 .padding(horizontal = 32.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(18.dp))
-                .background(SheetPanel)
-                .border(1.dp, D.cyan14, RoundedCornerShape(18.dp))
+                .background(Skerry.colors.surface2)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(18.dp))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .padding(20.dp),
             content = content,
@@ -80,7 +80,7 @@ internal fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -
     val canCreate = name.isNotBlank()
     val submit = { if (canCreate) onCreate(name) }
     MobileCenteredDialog(onDismiss = onDismiss) {
-        Txt(stringResource(Res.string.conn_group_new_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+        Txt(stringResource(Res.string.conn_group_new_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
         Spacer(Modifier.height(14.dp))
         MobileFormInput(name, { name = it }, "Production")
         Spacer(Modifier.height(18.dp))
@@ -89,23 +89,23 @@ internal fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -
                 Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
                     .padding(vertical = 13.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(stringResource(Res.string.conn_cancel), color = D.dim, size = 15.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.conn_cancel), color = Skerry.colors.dim, size = 15.sp, weight = FontWeight.Medium)
             }
             Box(
                 Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (canCreate) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    .background(if (canCreate) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
                     .padding(vertical = 13.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(stringResource(Res.string.conn_create), color = D.ink, size = 15.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.conn_create), color = Skerry.colors.ink, size = 15.sp, weight = FontWeight.Bold)
             }
         }
     }
@@ -131,9 +131,9 @@ internal fun MobileGroupRenameDialog(
     // System back/gesture dismisses the dialog (like tapping the scrim), intercepted before frame navigation.
     PlatformBackHandler(onBack = onDismiss)
     MobileCenteredDialog(onDismiss = onDismiss) {
-        Txt(stringResource(Res.string.conn_group_rename_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+        Txt(stringResource(Res.string.conn_group_rename_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
-        Txt(stringResource(Res.string.conn_group_rename_hint), color = D.dim, size = 12.5.sp)
+        Txt(stringResource(Res.string.conn_group_rename_hint), color = Skerry.colors.dim, size = 12.5.sp)
         Spacer(Modifier.height(14.dp))
         MobileFormInput(name, { name = it }, "Production")
         Spacer(Modifier.height(18.dp))
@@ -144,17 +144,17 @@ internal fun MobileGroupRenameDialog(
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDelete)
                     .padding(horizontal = 14.dp, vertical = 13.dp),
             ) {
-                Txt(stringResource(Res.string.conn_group_delete), color = D.sunset, size = 15.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.conn_group_delete), color = Skerry.colors.sunset, size = 15.sp, weight = FontWeight.Medium)
             }
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (canSave) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    .background(if (canSave) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
                     .padding(horizontal = 18.dp, vertical = 13.dp),
             ) {
-                Txt(stringResource(Res.string.conn_save), color = D.ink, size = 15.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.conn_save), color = Skerry.colors.ink, size = 15.sp, weight = FontWeight.Bold)
             }
         }
     }

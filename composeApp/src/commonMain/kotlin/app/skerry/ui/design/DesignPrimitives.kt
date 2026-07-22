@@ -58,6 +58,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.text.AnnotatedString
+import app.skerry.ui.theme.Skerry
 
 /**
  * Base text on the UI font (Space Grotesk by default). Thin wrapper over [BasicText] so
@@ -67,7 +68,7 @@ import androidx.compose.ui.text.AnnotatedString
 fun Txt(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = D.text,
+    color: Color = Skerry.colors.text,
     size: TextUnit = 13.sp,
     weight: FontWeight = FontWeight.Normal,
     font: FontFamily? = null,
@@ -100,7 +101,7 @@ fun Txt(
 fun Txt(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
-    color: Color = D.text,
+    color: Color = Skerry.colors.text,
     size: TextUnit = 13.sp,
     weight: FontWeight = FontWeight.Normal,
     font: FontFamily? = null,
@@ -144,7 +145,7 @@ fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier, o
     Box(
         modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (active) D.cyan.copy(alpha = 0.12f) else Color(0x0AFFFFFF))
+            .background(if (active) Skerry.colors.cyan.copy(alpha = 0.12f) else Color(0x0AFFFFFF))
             .then(
                 if (onClick != null) {
                     Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -156,7 +157,7 @@ fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier, o
     ) {
         Txt(
             text,
-            color = if (active) D.cyanBright else D.dim,
+            color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim,
             size = 10.5.sp,
             weight = if (active) FontWeight.Medium else FontWeight.Normal,
         )
@@ -200,7 +201,7 @@ fun AnchoredDropdown(
     }
 }
 
-/** 36×20 toggle switch (prototype's `tog`/`knob`): cyan when [on], white knob circle. */
+/** 36×20 toggle switch: cyan when [on], white knob circle. */
 @Composable
 fun Toggle(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
@@ -209,7 +210,7 @@ fun Toggle(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
             .width(36.dp)
             .height(20.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (on) D.cyan else D.whiteFaint)
+            .background(if (on) Skerry.colors.cyan else Skerry.colors.whiteFaint)
             .clickable(interactionSource = interaction, indication = null, onClick = onToggle),
     ) {
         Box(
@@ -217,20 +218,20 @@ fun Toggle(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
                 .padding(start = if (on) 18.dp else 2.dp, top = 2.dp)
                 .size(16.dp)
                 .clip(CircleShape)
-                .background(D.white),
+                .background(Skerry.colors.white),
         )
     }
 }
 
 /** Horizontal divider line (1dp, cyan 6%). */
 @Composable
-fun HLine(color: Color = D.line, modifier: Modifier = Modifier) {
+fun HLine(color: Color = Skerry.colors.line, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(1.dp).background(color))
 }
 
 /** Vertical divider line (1dp). */
 @Composable
-fun VLine(color: Color = D.lineStrong, modifier: Modifier = Modifier) {
+fun VLine(color: Color = Skerry.colors.lineStrong, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxHeight().width(1.dp).background(color))
 }
 
@@ -252,7 +253,7 @@ fun IconBtn(
     modifier: Modifier = Modifier,
     box: Int = 28,
     icon: TextUnit = 18.sp,
-    tint: Color = D.dim,
+    tint: Color = Skerry.colors.dim,
     hoverBg: Color = Color(0x1FFFFFFF),
     hoverTint: Color? = null,
     tooltip: String? = null,
@@ -295,11 +296,11 @@ private fun IconTooltip(text: String) {
         Box(
             Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .background(D.railBg)
-                .border(1.dp, D.cyan.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+                .background(Skerry.colors.railBg)
+                .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
                 .padding(horizontal = 10.dp, vertical = 5.dp),
         ) {
-            Txt(text, color = D.textBright, size = 11.sp, weight = FontWeight.Medium)
+            Txt(text, color = Skerry.colors.textBright, size = 11.sp, weight = FontWeight.Medium)
         }
     }
 }
@@ -378,8 +379,8 @@ fun PrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: String? = null,
-    bg: Color = D.cyan,
-    fg: Color = D.ink,
+    bg: Color = Skerry.colors.cyan,
+    fg: Color = Skerry.colors.ink,
     enabled: Boolean = true,
 ) {
     // Disabled state is owned by the primitive: callers pass `enabled` and never a pre-dimmed `bg`,
@@ -406,8 +407,8 @@ fun GhostButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: String? = null,
-    fg: Color = D.text,
-    border: Color = D.lineStrong,
+    fg: Color = Skerry.colors.text,
+    border: Color = Skerry.colors.lineStrong,
 ) {
     Row(
         modifier
@@ -438,7 +439,7 @@ fun CancelButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifi
             .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Txt(label, color = D.dim, size = 12.sp, weight = FontWeight.Medium)
+        Txt(label, color = Skerry.colors.dim, size = 12.sp, weight = FontWeight.Medium)
     }
 }
 
@@ -463,13 +464,14 @@ fun NumberStepper(
     // While focused, show and edit the raw string [editing]; unfocused shows format(value).
     var editing by remember { mutableStateOf<String?>(null) }
     val shown = editing ?: format(value)
-    val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = fonts.ui, textAlign = TextAlign.Center) }
+    val textColor = Skerry.colors.text
+    val textStyle = remember(fonts.ui, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = fonts.ui, textAlign = TextAlign.Center) }
     fun commit() {
         editing?.let { e -> parse(e)?.let(onValueChange) }
         editing = null
     }
     Row(
-        modifier.clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)),
+        modifier.clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StepButton("remove") { onValueChange(value - step); editing = null }
@@ -478,12 +480,12 @@ fun NumberStepper(
             onValueChange = { editing = it },
             singleLine = true,
             textStyle = textStyle,
-            cursorBrush = SolidColor(D.cyan),
+            cursorBrush = SolidColor(Skerry.colors.cyan),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { commit() }),
             modifier = Modifier.width(fieldWidth).onFocusChanged { if (!it.isFocused) commit() },
         )
-        if (suffix.isNotEmpty()) Txt(suffix, color = D.faint, size = 12.sp)
+        if (suffix.isNotEmpty()) Txt(suffix, color = Skerry.colors.faint, size = 12.sp)
         StepButton("add") { onValueChange(value + step); editing = null }
     }
 }
@@ -492,6 +494,6 @@ fun NumberStepper(
 @Composable
 private fun StepButton(icon: String, onClick: () -> Unit) {
     Box(Modifier.size(32.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Sym(icon, size = 16.sp, color = D.faint)
+        Sym(icon, size = 16.sp, color = Skerry.colors.faint)
     }
 }

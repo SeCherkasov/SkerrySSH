@@ -45,7 +45,6 @@ import app.skerry.shared.vnc.VncQuality
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.AnchoredDropdown
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -68,6 +67,7 @@ import androidx.compose.ui.input.key.Key
 import app.skerry.ui.vnc.vncFailureText
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Mobile VNC (remote-desktop) screen: the framebuffer edge to edge, with the system bars hidden
@@ -105,15 +105,15 @@ fun MobileVncScreen(state: MobileDesignState) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (val ui = vnc?.uiState) {
             is VncUiState.Connected -> VncTouchSurface(ui.screen)
-            is VncUiState.Error -> CenterText(vncFailureText(ui.failure), D.sunset)
+            is VncUiState.Error -> CenterText(vncFailureText(ui.failure), Skerry.colors.sunset)
             is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 VncTouchSurface(ui.screen, interactive = false)
                 CenterText(
                     stringResource(if (ui.cleanExit) Res.string.vnc_session_closed else Res.string.vnc_connection_lost),
-                    D.sunset,
+                    Skerry.colors.sunset,
                 )
             }
-            else -> CenterText(stringResource(Res.string.vnc_connecting), D.dim)
+            else -> CenterText(stringResource(Res.string.vnc_connecting), Skerry.colors.dim)
         }
 
         // Swipe down near the top reveals the bar. A transparent catcher rather than a gesture on the
@@ -172,7 +172,7 @@ private fun MobileVncBar(
     Row(
         // Its own inset padding: the screen below draws under the (hidden) system bars, so without
         // this the buttons would sit under a display cutout or a transiently-shown status bar.
-        Modifier.fillMaxWidth().background(D.surfaceDeep.copy(alpha = 0.94f))
+        Modifier.fillMaxWidth().background(Skerry.colors.surfaceDeep.copy(alpha = 0.94f))
             .hiddenSystemBarsPadding()
             // Deliberately tight: this bar sits on top of the remote desktop, and every dp of it is a
             // dp the desktop does not get. The status-bar reserve above already adds height.
@@ -183,7 +183,7 @@ private fun MobileVncBar(
         MobileVncIcon("arrow_back") { state.pop() }
         Txt(
             screen?.serverName ?: title,
-            color = D.text, size = 13.sp, modifier = Modifier.weight(1f).padding(start = 4.dp),
+            color = Skerry.colors.text, size = 13.sp, modifier = Modifier.weight(1f).padding(start = 4.dp),
         )
         if (screen != null) MobileVncGraphics(screen, menuOpen, onMenuOpenChange)
         MobileVncIcon(if (keyboardOn) "keyboard_hide" else "keyboard", onClick = onToggleKeyboard)
@@ -254,9 +254,9 @@ private fun MobileVncGraphics(screen: VncScreenState, open: Boolean, onOpenChang
         menu = { width ->
             Column(
                 Modifier.width(width.coerceAtLeast(200.dp)).clip(RoundedCornerShape(11.dp))
-                    .background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(vertical = 4.dp),
+                    .background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(vertical = 4.dp),
             ) {
-                Txt(stringResource(Res.string.vnc_quality), color = D.faint, size = 11.sp, modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 2.dp))
+                Txt(stringResource(Res.string.vnc_quality), color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 2.dp))
                 VncQuality.entries.forEach { q ->
                     MobileVncMenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
                 }
@@ -275,14 +275,14 @@ private fun MobileVncGraphics(screen: VncScreenState, open: Boolean, onOpenChang
 @Composable
 private fun MobileVncMenuRow(label: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(if (selected) D.cyan10 else Color.Transparent).clickable(onClick = onClick)
+        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (icon != null) Sym(icon, size = 17.sp, color = if (selected) D.cyanBright else D.dim)
-        Txt(label, color = if (selected) D.cyanBright else D.text, size = 14.sp, modifier = Modifier.weight(1f))
-        if (selected && icon == null) Sym("check", size = 16.sp, color = D.cyanBright)
+        if (icon != null) Sym(icon, size = 17.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
+        Txt(label, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 14.sp, modifier = Modifier.weight(1f))
+        if (selected && icon == null) Sym("check", size = 16.sp, color = Skerry.colors.cyanBright)
     }
 }
 
@@ -293,7 +293,7 @@ private fun MobileVncIcon(icon: String, onClick: () -> Unit) {
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(icon, size = 18.sp, color = D.dim)
+        Sym(icon, size = 18.sp, color = Skerry.colors.dim)
     }
 }
 

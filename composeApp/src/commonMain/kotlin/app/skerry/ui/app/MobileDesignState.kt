@@ -22,6 +22,7 @@ import app.skerry.ui.terminal.CastOpenResult
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.theme.ThemeMode
 import app.skerry.ui.terminal.TerminalThemes
 
 /**
@@ -95,6 +96,9 @@ class MobileDesignState(
     // [app.skerry.ui.terminal.LocalTerminalTheme]; not yet persisted on mobile (in-memory only).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // App theme (More -> Appearance). Default (night-sea dark, no-op) preserves the prior look.
+    initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
+    private val onThemeModeChange: (ThemeMode) -> Unit = {},
     // Whether the server may write the system clipboard via OSC 52 (More -> Appearance -> Terminal).
     // Off by default (like xterm/kitty): an untrusted host must not silently overwrite the clipboard
     // until the user opts in. Snapshotted into new sessions via [app.skerry.ui.terminal.TerminalSessionPrefs]
@@ -269,6 +273,9 @@ class MobileDesignState(
     /** Terminal theme (More -> Appearance -> cards). Threaded via [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
+    /** App theme (More -> Appearance). Threaded into [app.skerry.ui.theme.SkerryTheme] at the root. */
+    var themeMode: ThemeMode by mutableStateOf(initialThemeMode); private set
+
     /**
      * Whether a server may write the system clipboard via OSC 52 (More -> Appearance -> Terminal).
      * Off by default; snapshotted into new sessions and pushed live into open ones.
@@ -306,6 +313,13 @@ class MobileDesignState(
         if (theme == terminalTheme) return
         terminalTheme = theme
         onTerminalThemeChange(theme)
+    }
+
+    /** Choose the app theme and report outward. Repeating the same value is a no-op. */
+    fun chooseThemeMode(mode: ThemeMode) {
+        if (mode == themeMode) return
+        themeMode = mode
+        onThemeModeChange(mode)
     }
 
     /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */

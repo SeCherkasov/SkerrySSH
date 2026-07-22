@@ -53,7 +53,6 @@ import app.skerry.shared.vnc.VncQuality
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.design.AnchoredDropdown
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -73,6 +72,7 @@ import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * The VNC tab's work area. Renders the active session's [VncSessionController] state: connecting /
@@ -93,14 +93,14 @@ fun VncView(state: DesktopDesignState) {
             is VncUiState.Error -> CenterNotice(
                 "error",
                 vncFailureText(ui.failure),
-                color = D.sunset,
+                color = Skerry.colors.sunset,
             )
             is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 VncSurface(ui.screen, interactive = false)
                 CenterNotice(
                     "link_off",
                     stringResource(if (ui.cleanExit) Res.string.vnc_session_closed else Res.string.vnc_connection_lost),
-                    color = D.sunset,
+                    color = Skerry.colors.sunset,
                 )
             }
         }
@@ -317,14 +317,14 @@ private fun VncGraphicsBar(screen: VncScreenState) {
                 Box(
                     Modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.45f))
                         .clickable { open = !open }.padding(7.dp),
-                ) { Sym("tune", size = 18.sp, color = D.text) }
+                ) { Sym("tune", size = 18.sp, color = Skerry.colors.text) }
             },
             menu = { width ->
                 Column(
                     Modifier.width(width.coerceAtLeast(180.dp)).clip(RoundedCornerShape(9.dp))
-                        .background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(9.dp)).padding(vertical = 4.dp),
+                        .background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(9.dp)).padding(vertical = 4.dp),
                 ) {
-                    Txt(stringResource(Res.string.vnc_quality), color = D.faint, size = 10.5.sp, modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
+                    Txt(stringResource(Res.string.vnc_quality), color = Skerry.colors.faint, size = 10.5.sp, modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
                     VncQuality.entries.forEach { q ->
                         VncMenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
                     }
@@ -357,19 +357,19 @@ internal fun VncQuality.label(): String = stringResource(
 @Composable
 private fun VncMenuRow(label: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(if (selected) D.cyan10 else Color.Transparent).clickable(onClick = onClick)
+        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (icon != null) Sym(icon, size = 15.sp, color = if (selected) D.cyanBright else D.dim)
-        Txt(label, color = if (selected) D.cyanBright else D.text, size = 12.5.sp, modifier = Modifier.weight(1f))
-        if (selected && icon == null) Sym("check", size = 14.sp, color = D.cyanBright)
+        if (icon != null) Sym(icon, size = 15.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
+        Txt(label, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp, modifier = Modifier.weight(1f))
+        if (selected && icon == null) Sym("check", size = 14.sp, color = Skerry.colors.cyanBright)
     }
 }
 
 @Composable
-private fun CenterNotice(icon: String, message: String, color: Color = D.dim) {
+private fun CenterNotice(icon: String, message: String, color: Color = Skerry.colors.dim) {
     Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Sym(icon, size = 28.sp, color = color)

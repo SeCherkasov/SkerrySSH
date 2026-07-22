@@ -76,13 +76,13 @@ import app.skerry.ui.generated.resources.shell_password_strength_good
 import app.skerry.ui.generated.resources.shell_password_strength_strong
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.BrandMark
-import app.skerry.ui.design.D
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.sync.PairingJoinScreen
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Lock overlay (mock path): radial background, large logo, master password field and buttons. Unlock
@@ -140,7 +140,7 @@ fun DesktopUnlockScreen(
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Txt(
                 stringResource(Res.string.shell_forgot_password),
-                color = D.faint,
+                color = Skerry.colors.faint,
                 size = 12.sp,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
@@ -198,13 +198,13 @@ fun DesktopResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
             stringResource(Res.string.shell_reset_permanently),
             onClick = { if (canConfirm) onConfirm(scope) },
             modifier = Modifier.fillMaxWidth(),
-            bg = if (canConfirm) D.storm else Color(0x14FFFFFF),
-            fg = if (canConfirm) Color(0xFF0A1A26) else D.faint,
+            bg = if (canConfirm) Skerry.colors.storm else Skerry.colors.whiteFaint,
+            fg = if (canConfirm) Skerry.colors.ink else Skerry.colors.faint,
             enabled = canConfirm,
         )
         Txt(
             stringResource(Res.string.shell_cancel),
-            color = D.dim,
+            color = Skerry.colors.dim,
             size = 12.sp,
             modifier = Modifier
                 .fillMaxWidth()
@@ -222,7 +222,7 @@ private fun ResetScopeRow(selected: Boolean, title: String, subtitle: String, on
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
-            .border(1.dp, if (selected) D.cyan else D.line, RoundedCornerShape(7.dp))
+            .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.line, RoundedCornerShape(7.dp))
             .clickable(onClick = onSelect)
             .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -230,14 +230,14 @@ private fun ResetScopeRow(selected: Boolean, title: String, subtitle: String, on
     ) {
         Box(
             Modifier.size(16.dp).clip(RoundedCornerShape(8.dp))
-                .border(1.dp, if (selected) D.cyan else D.faint, RoundedCornerShape(8.dp)),
+                .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.faint, RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            if (selected) Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(D.cyan))
+            if (selected) Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(Skerry.colors.cyan))
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(subtitle, color = D.dim, size = 11.5.sp, lineHeight = 15.sp)
+            Txt(title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 15.sp)
         }
     }
 }
@@ -282,21 +282,21 @@ fun DesktopCreateScreen(
     ) {
         LockPasswordField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Next, autoFocus = true)
         strength?.let { PasswordStrengthMeter(it) }
-        issue?.let { Txt(masterPasswordHint(it), color = D.amber, size = 11.sp) }
+        issue?.let { Txt(masterPasswordHint(it), color = Skerry.colors.amber, size = 11.sp) }
         LockPasswordField(confirm, { confirm = it }, stringResource(Res.string.shell_repeat_password), ImeAction.Done, onSubmit = submit)
         NoRecoveryAcknowledge(acknowledged) { acknowledged = !acknowledged }
         PrimaryButton(
             stringResource(Res.string.shell_create_vault),
             onClick = submit,
             modifier = Modifier.fillMaxWidth(),
-            bg = if (canCreate) D.cyan else Color(0x14FFFFFF),
-            fg = if (canCreate) Color(0xFF0A1A26) else D.faint,
+            bg = if (canCreate) Skerry.colors.cyan else Skerry.colors.whiteFaint,
+            fg = if (canCreate) Skerry.colors.ink else Skerry.colors.faint,
             enabled = canCreate,
         )
         if (sync != null && onPairingComplete != null) {
             Txt(
                 stringResource(Res.string.shell_pairing_link),
-                color = D.cyanBright, size = 12.5.sp,
+                color = Skerry.colors.cyanBright, size = 12.5.sp,
                 modifier = Modifier.fillMaxWidth().clickable { joining = true },
             )
         }
@@ -307,17 +307,17 @@ fun DesktopCreateScreen(
 @Composable
 private fun PasswordStrengthMeter(strength: PasswordStrength) {
     val (filled, color, label) = when (strength) {
-        PasswordStrength.Weak -> Triple(1, D.storm, stringResource(Res.string.shell_password_strength_weak))
-        PasswordStrength.Fair -> Triple(2, D.amber, stringResource(Res.string.shell_password_strength_fair))
-        PasswordStrength.Good -> Triple(3, D.cyan, stringResource(Res.string.shell_password_strength_good))
-        PasswordStrength.Strong -> Triple(4, D.moss, stringResource(Res.string.shell_password_strength_strong))
+        PasswordStrength.Weak -> Triple(1, Skerry.colors.storm, stringResource(Res.string.shell_password_strength_weak))
+        PasswordStrength.Fair -> Triple(2, Skerry.colors.amber, stringResource(Res.string.shell_password_strength_fair))
+        PasswordStrength.Good -> Triple(3, Skerry.colors.cyan, stringResource(Res.string.shell_password_strength_good))
+        PasswordStrength.Strong -> Triple(4, Skerry.colors.moss, stringResource(Res.string.shell_password_strength_strong))
     }
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             repeat(4) { i ->
                 Box(
                     Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp))
-                        .background(if (i < filled) color else D.cyan14),
+                        .background(if (i < filled) color else Skerry.colors.cyan14),
                 )
             }
         }
@@ -337,15 +337,15 @@ private fun NoRecoveryAcknowledge(checked: Boolean, onToggle: () -> Unit) {
     ) {
         Box(
             Modifier.size(18.dp).clip(RoundedCornerShape(4.dp))
-                .background(if (checked) D.cyan.copy(alpha = 0.15f) else Color.Transparent)
-                .border(1.dp, if (checked) D.cyan else D.faint, RoundedCornerShape(4.dp)),
+                .background(if (checked) Skerry.colors.cyan.copy(alpha = 0.15f) else Color.Transparent)
+                .border(1.dp, if (checked) Skerry.colors.cyan else Skerry.colors.faint, RoundedCornerShape(4.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            if (checked) Sym("check", size = 13.sp, color = D.cyan)
+            if (checked) Sym("check", size = 13.sp, color = Skerry.colors.cyan)
         }
         Txt(
             stringResource(Res.string.shell_no_recovery_ack),
-            color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.weight(1f),
+            color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.weight(1f),
         )
     }
 }
@@ -363,7 +363,7 @@ private fun LockScaffold(
     Column(
         Modifier
             .fillMaxSize()
-            .background(Brush.radialGradient(colors = listOf(Color(0xFF122332), D.bg)))
+            .background(Brush.radialGradient(colors = listOf(Skerry.colors.surfaceDeep, Skerry.colors.bg)))
             .padding(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -382,20 +382,20 @@ private fun LockScaffold(
             BrandMark(size = 88.dp)
         }
         Box(Modifier.height(22.dp))
-        Txt(title, color = D.text, size = 22.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.3).sp)
+        Txt(title, color = Skerry.colors.text, size = 22.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.3).sp)
         Box(Modifier.height(6.dp))
-        Txt(subtitle, color = D.dim, size = 13.sp)
+        Txt(subtitle, color = Skerry.colors.dim, size = 13.sp)
         Box(Modifier.height(32.dp))
         Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             fields()
             if (error != null) {
-                Txt(vaultGateErrorMessage(error), color = D.storm, size = 12.sp)
+                Txt(vaultGateErrorMessage(error), color = Skerry.colors.storm, size = 12.sp)
             }
         }
         Box(Modifier.height(28.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("shield_lock", size = 14.sp, color = D.faint)
-            Txt(stringResource(Res.string.shell_footer_never_leaves), color = D.faint, size = 11.sp)
+            Sym("shield_lock", size = 14.sp, color = Skerry.colors.faint)
+            Txt(stringResource(Res.string.shell_footer_never_leaves), color = Skerry.colors.faint, size = 11.sp)
         }
     }
 }
@@ -422,8 +422,8 @@ private fun LockPasswordField(
         onValueChange = onValueChange,
         singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
-        textStyle = TextStyle(color = D.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
         modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
@@ -431,15 +431,15 @@ private fun LockPasswordField(
             Row(
                 Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(D.surface2)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Sym("lock", size = 18.sp, color = D.faint)
+                Sym("lock", size = 18.sp, color = Skerry.colors.faint)
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 14.sp)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 14.sp)
                     innerTextField()
                 }
             }
@@ -460,8 +460,8 @@ private fun LockTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(color = D.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
         modifier = Modifier.fillMaxWidth(),
@@ -469,13 +469,13 @@ private fun LockTextField(
             Row(
                 Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(D.surface2)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 14.sp)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 14.sp)
                     innerTextField()
                 }
             }
@@ -489,11 +489,11 @@ private fun BiometricButton(onClick: () -> Unit) {
     Row(
         Modifier
             .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Sym("fingerprint", size = 16.sp, color = D.dim)
+        Sym("fingerprint", size = 16.sp, color = Skerry.colors.dim)
     }
 }

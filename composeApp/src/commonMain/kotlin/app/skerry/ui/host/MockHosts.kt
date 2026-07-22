@@ -2,7 +2,6 @@ package app.skerry.ui.host
 
 import androidx.compose.ui.graphics.Color
 import app.skerry.shared.ssh.ConnectionType
-import app.skerry.ui.design.D
 
 /**
  * Static demo hosts for the sidebar preview (until the live catalog is wired up).
@@ -10,7 +9,7 @@ import app.skerry.ui.design.D
  */
 
 enum class HostStatus(val color: Color, val glow: Boolean) {
-    On(D.moss, true), Off(D.faint, false), Warn(D.sunset, false),
+    On(Color(0xFF5DCE9E), true), Off(Color(0xFF5A7080), false), Warn(Color(0xFFE07A5F), false),
 }
 
 data class MockHost(

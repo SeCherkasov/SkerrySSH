@@ -37,7 +37,6 @@ import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.SettingsTab
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Sym
@@ -56,6 +55,7 @@ import app.skerry.ui.generated.resources.shtail_nav_sync
 import app.skerry.ui.generated.resources.shtail_nav_terminal
 import app.skerry.ui.vault.VaultGateController
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Height of the content pane's sticky header strip: tall enough to clear the top-right close button,
 // so the divider line lands just below it and section content scrolls beneath the band.
@@ -84,8 +84,8 @@ fun SettingsPanel(state: DesktopDesignState) {
                 .width(760.dp)
                 .height(560.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks(),
         ) {
         Row(Modifier.fillMaxSize()) {
@@ -96,12 +96,12 @@ fun SettingsPanel(state: DesktopDesignState) {
             val aiVisible = features.ai || LocalAi.current != null
             val effectiveTab = if (state.settingsTab == SettingsTab.AI && !aiVisible) SettingsTab.Sync else state.settingsTab
             Column(Modifier.width(200.dp).fillMaxHeight().background(Color(0x33000000)).padding(horizontal = 8.dp, vertical = 16.dp)) {
-                Txt(stringResource(Res.string.settings_nav_header), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+                Txt(stringResource(Res.string.settings_nav_header), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
                 SETTINGS_NAV.filter { aiVisible || it.tab != SettingsTab.AI }.forEach { item ->
                     NavRow(item, active = effectiveTab == item.tab, onClick = { state.showSettingsTab(item.tab) })
                 }
             }
-            VLine(D.line)
+            VLine(Skerry.colors.line)
             // Content pane with a static header strip: the section title sits above a divider line
             // (aligned under the close button) and stays put; section content scrolls beneath the
             // line and disappears behind the opaque band. The About tab has its own centered layout
@@ -140,10 +140,10 @@ fun SettingsPanel(state: DesktopDesignState) {
                 if (hasHeader) {
                     Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
                         Box(
-                            Modifier.fillMaxWidth().height(SETTINGS_HEADER_HEIGHT - 1.dp).background(D.surfaceDeep).padding(horizontal = 26.dp),
+                            Modifier.fillMaxWidth().height(SETTINGS_HEADER_HEIGHT - 1.dp).background(Skerry.colors.surfaceDeep).padding(horizontal = 26.dp),
                             contentAlignment = Alignment.CenterStart,
                         ) {
-                            Txt(effectiveTab.navLabel(), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+                            Txt(effectiveTab.navLabel(), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold)
                         }
                         HLine()
                     }
@@ -161,7 +161,7 @@ fun SettingsPanel(state: DesktopDesignState) {
             Box(
                 Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = state::closeSettings).padding(8.dp),
             ) {
-                Sym(name = "close", size = 18.sp, color = D.dim)
+                Sym(name = "close", size = 18.sp, color = Skerry.colors.dim)
             }
         }
         // Change master password dialog: overlay over the whole settings card (outside the scroll).
@@ -203,12 +203,12 @@ private fun rememberSecurityController(): VaultGateController? {
 @Composable
 private fun NavRow(item: SettingsNavItem, active: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(bottom = 1.dp).clip(RoundedCornerShape(6.dp)).background(if (active) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth().padding(bottom = 1.dp).clip(RoundedCornerShape(6.dp)).background(if (active) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym(item.icon, size = 16.sp, color = if (active) D.cyanBright else D.dim)
-        Txt(item.tab.navLabel(), color = if (active) D.cyanBright else D.dim, size = 12.5.sp)
+        Sym(item.icon, size = 16.sp, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim)
+        Txt(item.tab.navLabel(), color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim, size = 12.5.sp)
     }
 }
 

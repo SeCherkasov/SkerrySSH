@@ -27,6 +27,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import app.skerry.ui.theme.Skerry
 
 /**
  * Modal overlay scrim: full-screen dimming with the card centered (or at [contentAlignment]). The
@@ -38,7 +39,7 @@ import androidx.compose.ui.input.key.type
 @Composable
 fun ModalScrim(
     onDismiss: () -> Unit,
-    scrimColor: Color = D.modalScrim,
+    scrimColor: Color = Skerry.colors.modalScrim,
     contentAlignment: Alignment = Alignment.Center,
     content: @Composable BoxScope.() -> Unit,
 ) {

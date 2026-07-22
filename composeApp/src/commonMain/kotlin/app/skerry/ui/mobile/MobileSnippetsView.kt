@@ -66,7 +66,6 @@ import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.ChipButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
@@ -74,6 +73,7 @@ import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 private data class MockMobileSnippet(val icon: String, val title: String, val cmd: String)
 
@@ -121,7 +121,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
     val snippets = manager.snippets
 
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
                 MobileScreenTitle(stringResource(Res.string.lib_snippets_screen_title))
             }
@@ -130,10 +130,10 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                     Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 30.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Txt(stringResource(Res.string.lib_snippets_empty_mobile), color = D.faint, size = 13.sp)
+                    Txt(stringResource(Res.string.lib_snippets_empty_mobile), color = Skerry.colors.faint, size = 13.sp)
                     ChipButton(
                         label = stringResource(Res.string.lib_snippets_starter_pack),
-                        color = D.cyan,
+                        color = Skerry.colors.cyan,
                         onClick = { manager.installStarterPack() },
                     )
                 }
@@ -198,20 +198,20 @@ internal fun MobileSnippetCard(snippet: Snippet, mono: FontFamily, onClick: () -
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(13.dp))
-            .background(D.card)
-            .border(1.dp, D.cyan08, RoundedCornerShape(13.dp))
+            .background(Skerry.colors.card)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(13.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            Sym("code_blocks", size = 18.sp, color = D.cyanBright)
-            Txt(snippet.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = D.text, size = 14.5.sp, weight = FontWeight.SemiBold)
+            Sym("code_blocks", size = 18.sp, color = Skerry.colors.cyanBright)
+            Txt(snippet.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = Skerry.colors.text, size = 14.5.sp, weight = FontWeight.SemiBold)
         }
         if (snippet.command.isNotBlank()) {
             Box(
-                Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).background(D.terminalBg).padding(horizontal = 11.dp, vertical = 9.dp),
+                Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).padding(horizontal = 11.dp, vertical = 9.dp),
             ) {
-                Txt(snippet.command, color = D.dim, size = 11.5.sp, font = mono)
+                Txt(snippet.command, color = Skerry.colors.dim, size = 11.5.sp, font = mono)
             }
         }
         if (snippet.tags.isNotEmpty()) {
@@ -225,9 +225,9 @@ internal fun MobileSnippetCard(snippet: Snippet, mono: FontFamily, onClick: () -
 @Composable
 private fun SnippetTagChip(tag: String) {
     Box(
-        Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(horizontal = 9.dp, vertical = 2.dp),
+        Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)).padding(horizontal = 9.dp, vertical = 2.dp),
     ) {
-        Txt("#$tag", color = D.cyanBright, size = 11.sp)
+        Txt("#$tag", color = Skerry.colors.cyanBright, size = 11.sp)
     }
 }
 
@@ -245,10 +245,10 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
     // not via Popup: a focusable Popup shifted window insets and slightly moved the terminal header.
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.7f) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Txt(stringResource(Res.string.lib_snippets_run_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.lib_snippets_run_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
             MobileFormInput(query, { query = it }, stringResource(Res.string.lib_snippets_search))
             if (filtered.isEmpty()) {
-                Txt(if (all.isEmpty()) stringResource(Res.string.lib_snippets_run_empty) else stringResource(Res.string.lib_snippets_no_matches), color = D.faint, size = 13.sp)
+                Txt(if (all.isEmpty()) stringResource(Res.string.lib_snippets_run_empty) else stringResource(Res.string.lib_snippets_no_matches), color = Skerry.colors.faint, size = 13.sp)
             } else {
                 filtered.forEach { entry ->
                     key(entry.id) {
@@ -285,12 +285,12 @@ private fun MobileSnippetEditSheet(
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.9f) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Txt(if (entry == null) stringResource(Res.string.lib_snippets_new) else stringResource(Res.string.lib_snippets_edit), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(if (entry == null) stringResource(Res.string.lib_snippets_new) else stringResource(Res.string.lib_snippets_edit), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
             MobileFormField(stringResource(Res.string.lib_snippets_field_name)) {
                 MobileFormInput(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name))
             }
             MobileFormField(stringResource(Res.string.lib_snippets_field_command)) {
-                MobileFormInput(form.command, { form.command = it }, "df -h | sort -k5 -r", mono = true, background = D.terminalBg, singleLine = false, minHeightDp = 88)
+                MobileFormInput(form.command, { form.command = it }, "df -h | sort -k5 -r", mono = true, background = Skerry.colors.terminalBg, singleLine = false, minHeightDp = 88)
             }
             MobileFormField(stringResource(Res.string.lib_snippets_field_tags)) {
                 // Own tags are excluded via selected; suggestions come from all snippets (including the
@@ -306,7 +306,7 @@ private fun MobileSnippetEditSheet(
                     suggestions = suggestions,
                     placeholder = stringResource(Res.string.lib_snippets_add_tag),
                     onPick = form::pickTag,
-                    menuBackground = D.surface2,
+                    menuBackground = Skerry.colors.surface2,
                 )
             }
             if (canRun) {
@@ -338,8 +338,8 @@ private fun MobileRenameTagSheet(oldTag: String, onDismiss: () -> Unit, onSave: 
     val save = { if (name.trim().isNotEmpty()) onSave(name) }
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.7f) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Txt(stringResource(Res.string.lib_snippets_rename_tag_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
-            Txt(stringResource(Res.string.lib_snippets_rename_tag_subtitle), color = D.dim, size = 13.sp, lineHeight = 18.sp)
+            Txt(stringResource(Res.string.lib_snippets_rename_tag_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.lib_snippets_rename_tag_subtitle), color = Skerry.colors.dim, size = 13.sp, lineHeight = 18.sp)
             MobileFormInput(
                 name,
                 { name = it },
@@ -359,7 +359,7 @@ private fun MobileRenameTagSheet(oldTag: String, onDismiss: () -> Unit, onSave: 
 private fun MobileSnippetsMock() {
     val mono = LocalFonts.current.mono
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().background(D.bg).verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
                 MobileScreenTitle(stringResource(Res.string.lib_snippets_screen_title))
             }
@@ -369,16 +369,16 @@ private fun MobileSnippetsMock() {
             ) {
                 MOCK_MOBILE_SNIPPETS.forEach { s ->
                     Column(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(D.card).border(1.dp, D.cyan08, RoundedCornerShape(13.dp)).padding(14.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(Skerry.colors.card).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(13.dp)).padding(14.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                            Sym(s.icon, size = 18.sp, color = D.cyanBright)
-                            Txt(s.title, color = D.text, size = 14.5.sp, weight = FontWeight.SemiBold)
+                            Sym(s.icon, size = 18.sp, color = Skerry.colors.cyanBright)
+                            Txt(s.title, color = Skerry.colors.text, size = 14.5.sp, weight = FontWeight.SemiBold)
                         }
                         Box(
-                            Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).background(D.terminalBg).padding(horizontal = 11.dp, vertical = 9.dp),
+                            Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).padding(horizontal = 11.dp, vertical = 9.dp),
                         ) {
-                            Txt(s.cmd, color = D.dim, size = 11.5.sp, font = mono)
+                            Txt(s.cmd, color = Skerry.colors.dim, size = 11.5.sp, font = mono)
                         }
                     }
                 }

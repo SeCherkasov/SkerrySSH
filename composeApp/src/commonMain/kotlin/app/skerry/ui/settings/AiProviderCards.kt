@@ -31,7 +31,6 @@ import app.skerry.ui.ai.LocalModelStatus
 import app.skerry.ui.ai.localModelFailureMessage
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.ChipButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -54,6 +53,7 @@ import app.skerry.ui.generated.resources.settings_ai_provider_off
 import app.skerry.ui.generated.resources.settings_ai_provider_off_desc
 import app.skerry.ui.sftp.humanSize
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Default AI provider picker: on-device with a local model catalog (download/progress/delete),
@@ -64,8 +64,8 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 internal fun AiProviderCards(ai: AiAssistantController, byokContent: (@Composable () -> Unit)? = null) {
-    Txt(stringResource(Res.string.settings_ai_default_provider), color = D.text, size = 13.sp, weight = FontWeight.Medium)
-    Txt(stringResource(Res.string.settings_ai_default_provider_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+    Txt(stringResource(Res.string.settings_ai_default_provider), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+    Txt(stringResource(Res.string.settings_ai_default_provider_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
 
     val models = ai.models
     val provider = ai.settings.provider
@@ -116,21 +116,21 @@ private fun LocalModelRow(ai: AiAssistantController, models: LocalModelControlle
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
-            .background(if (selected) D.cyan10 else Color(0x08FFFFFF))
-            .border(1.dp, if (selected) D.cyan14 else D.line, RoundedCornerShape(7.dp))
+            .background(if (selected) Skerry.colors.cyan10 else Color(0x08FFFFFF))
+            .border(1.dp, if (selected) Skerry.colors.cyan14 else Skerry.colors.line, RoundedCornerShape(7.dp))
             .clickable { ai.selectLocalModel(model.id) }
             .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
-                Modifier.size(13.dp).clip(CircleShape).border(1.5.dp, if (selected) D.cyan else D.faint, CircleShape),
+                Modifier.size(13.dp).clip(CircleShape).border(1.5.dp, if (selected) Skerry.colors.cyan else Skerry.colors.faint, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                if (selected) Box(Modifier.size(6.dp).clip(CircleShape).background(D.cyan))
+                if (selected) Box(Modifier.size(6.dp).clip(CircleShape).background(Skerry.colors.cyan))
             }
             Column(Modifier.weight(1f)) {
-                Txt(model.displayName, color = D.text, size = 12.5.sp, weight = FontWeight.Medium)
-                Txt(stringResource(Res.string.settings_ai_model_meta, humanSize(model.sizeBytes), model.license), color = D.dim, size = 10.5.sp, modifier = Modifier.padding(top = 1.dp))
+                Txt(model.displayName, color = Skerry.colors.text, size = 12.5.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.settings_ai_model_meta, humanSize(model.sizeBytes), model.license), color = Skerry.colors.dim, size = 10.5.sp, modifier = Modifier.padding(top = 1.dp))
             }
             ModelActions(models, model, status)
         }
@@ -138,17 +138,17 @@ private fun LocalModelRow(ai: AiAssistantController, models: LocalModelControlle
             val fraction = (status.downloadedBytes.toFloat() / status.totalBytes.coerceAtLeast(1)).coerceIn(0f, 1f)
             // Progress bar is its own full-width row, counter below it: in a single weighted Row
             // the changing text width ("9.9 MB…" → "10.0 MB…") would jitter the bar width.
-            Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(D.line)) {
-                Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(D.cyan))
+            Box(Modifier.padding(top = 8.dp).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(Skerry.colors.line)) {
+                Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(Skerry.colors.cyan))
             }
             Txt(
                 stringResource(Res.string.ftail_transfer_progress, humanSize(status.downloadedBytes), humanSize(status.totalBytes)),
-                color = D.dim, size = 10.sp,
+                color = Skerry.colors.dim, size = 10.sp,
                 modifier = Modifier.align(Alignment.End).padding(top = 4.dp),
             )
         }
         if (status is LocalModelStatus.Failed) {
-            Txt(localModelFailureMessage(status.failure), color = D.storm, size = 10.5.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 6.dp))
+            Txt(localModelFailureMessage(status.failure), color = Skerry.colors.storm, size = 10.5.sp, lineHeight = 14.sp, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
@@ -158,18 +158,18 @@ private fun LocalModelRow(ai: AiAssistantController, models: LocalModelControlle
 private fun ModelActions(models: LocalModelController, model: LocalModel, status: LocalModelStatus) {
     when (status) {
         LocalModelStatus.NotInstalled ->
-            ChipButton(stringResource(Res.string.settings_ai_local_download), color = D.cyan, onClick = { models.download(model) })
+            ChipButton(stringResource(Res.string.settings_ai_local_download), color = Skerry.colors.cyan, onClick = { models.download(model) })
         is LocalModelStatus.Downloading ->
-            ChipButton(stringResource(Res.string.settings_ai_local_cancel), color = D.dim, onClick = { models.cancel(model) })
+            ChipButton(stringResource(Res.string.settings_ai_local_cancel), color = Skerry.colors.dim, onClick = { models.cancel(model) })
         LocalModelStatus.Verifying ->
-            Txt(stringResource(Res.string.settings_ai_local_verifying), color = D.dim, size = 11.sp)
+            Txt(stringResource(Res.string.settings_ai_local_verifying), color = Skerry.colors.dim, size = 11.sp)
         LocalModelStatus.Installed ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Txt(stringResource(Res.string.settings_ai_local_ready), color = D.moss, size = 11.sp)
-                ChipButton(stringResource(Res.string.settings_ai_local_delete), color = D.dim, onClick = { models.delete(model) })
+                Txt(stringResource(Res.string.settings_ai_local_ready), color = Skerry.colors.moss, size = 11.sp)
+                ChipButton(stringResource(Res.string.settings_ai_local_delete), color = Skerry.colors.dim, onClick = { models.delete(model) })
             }
         is LocalModelStatus.Failed ->
-            ChipButton(stringResource(Res.string.settings_ai_local_retry), color = D.cyan, onClick = { models.download(model) })
+            ChipButton(stringResource(Res.string.settings_ai_local_retry), color = Skerry.colors.cyan, onClick = { models.download(model) })
     }
 }
 
@@ -192,27 +192,27 @@ internal fun ProviderCard(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) D.cyan10 else Color.Transparent)
-            .border(1.dp, if (selected) D.cyan else D.cyan08, RoundedCornerShape(8.dp))
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
+            .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.cyan08, RoundedCornerShape(8.dp))
             .let { m -> if (onClick != null) m.clickable(onClick = onClick) else m }
             .padding(12.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(32.dp).clip(RoundedCornerShape(7.dp)).background(if (selected) D.cyan.copy(alpha = 0.2f) else Color(0x0DFFFFFF)), contentAlignment = Alignment.Center) {
-                Sym(icon, size = 18.sp, color = if (selected) D.cyan else D.dim)
+            Box(Modifier.size(32.dp).clip(RoundedCornerShape(7.dp)).background(if (selected) Skerry.colors.cyan.copy(alpha = 0.2f) else Color(0x0DFFFFFF)), contentAlignment = Alignment.Center) {
+                Sym(icon, size = 18.sp, color = if (selected) Skerry.colors.cyan else Skerry.colors.dim)
             }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-                    if (badge != null) Badge(badge, bg = D.moss.copy(alpha = 0.16f), fg = D.moss, radius = 3, size = 9.5.sp)
+                    Txt(title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+                    if (badge != null) Badge(badge, bg = Skerry.colors.moss.copy(alpha = 0.16f), fg = Skerry.colors.moss, radius = 3, size = 9.5.sp)
                 }
-                Txt(desc, color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
+                Txt(desc, color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
             }
             Box(
-                Modifier.padding(top = 2.dp).size(18.dp).clip(CircleShape).background(if (selected) D.cyan else Color.Transparent).border(1.5.dp, if (selected) D.cyan else D.faint, CircleShape),
+                Modifier.padding(top = 2.dp).size(18.dp).clip(CircleShape).background(if (selected) Skerry.colors.cyan else Color.Transparent).border(1.5.dp, if (selected) Skerry.colors.cyan else Skerry.colors.faint, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                if (selected) Sym("check", size = 12.sp, color = D.ink)
+                if (selected) Sym("check", size = 12.sp, color = Skerry.colors.ink)
             }
         }
         content?.invoke()

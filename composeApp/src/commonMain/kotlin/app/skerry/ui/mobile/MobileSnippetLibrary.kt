@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -40,6 +39,7 @@ import app.skerry.ui.snippet.snippetChipLabel
 import app.skerry.ui.snippet.snippetTagLabel
 import app.skerry.ui.snippet.uncategorizedSnippetsLabel
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Snippet library body on mobile: search field, category chips and the cards grouped into
@@ -65,7 +65,7 @@ internal fun MobileSnippetLibrary(
     }
     if (categories.isEmpty()) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 24.dp)) {
-            Txt(stringResource(Res.string.lib_snippets_no_matches), color = D.faint, size = 13.sp)
+            Txt(stringResource(Res.string.lib_snippets_no_matches), color = Skerry.colors.faint, size = 13.sp)
         }
         return
     }
@@ -113,13 +113,13 @@ private fun MobileSnippetChips(chips: List<String>, active: String, onSelect: (S
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (on) D.cyan.copy(alpha = 0.14f) else Color(0x0DFFFFFF))
+                        .background(if (on) Skerry.colors.cyan.copy(alpha = 0.14f) else Color(0x0DFFFFFF))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
                         .padding(horizontal = 13.dp, vertical = 5.dp),
                 ) {
                     Txt(
                         snippetChipLabel(chip),
-                        color = if (on) D.cyanBright else D.dim,
+                        color = if (on) Skerry.colors.cyanBright else Skerry.colors.dim,
                         size = 12.5.sp,
                         weight = if (on) FontWeight.Medium else FontWeight.Normal,
                     )
@@ -150,12 +150,12 @@ private fun MobileSnippetSectionHeader(
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onToggle),
             contentAlignment = Alignment.Center,
         ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = D.faint)
+            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
         }
-        Txt(name.uppercase(), color = D.faint, size = 12.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.weight(1f))
+        Txt(name.uppercase(), color = Skerry.colors.faint, size = 12.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.weight(1f))
         if (onRename != null) {
-            IconBtn("edit", onClick = onRename, box = 30, icon = 16.sp, tint = D.faint, tooltip = stringResource(Res.string.lib_snippets_edit))
+            IconBtn("edit", onClick = onRename, box = 30, icon = 16.sp, tint = Skerry.colors.faint, tooltip = stringResource(Res.string.lib_snippets_edit))
         }
-        Txt(count.toString(), color = D.faint, size = 11.5.sp)
+        Txt(count.toString(), color = Skerry.colors.faint, size = 11.5.sp)
     }
 }

@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.design.Badge
-import app.skerry.ui.design.D
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
@@ -67,6 +66,7 @@ import app.skerry.ui.terminal.TerminalThemes
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Terminal section: themes, font/metrics, scrollback, cursor style, live OSC title on tabs.
 
@@ -154,15 +154,15 @@ internal fun TerminalSection(state: DesktopDesignState) {
     // Scrollback depth for new sessions (preset picker to the right of the label).
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.settings_terminal_scrollback), color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.settings_terminal_scrollback_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+            Txt(stringResource(Res.string.settings_terminal_scrollback), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.settings_terminal_scrollback_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
         Box(Modifier.width(160.dp)) { ScrollbackPicker(state.terminalScrollback, onPick = state::chooseTerminalScrollback) }
     }
     HLine()
     // Cursor style: default shape x blink for new sessions.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_cursor_style), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
+        Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_cursor_style), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium) }
         Box(Modifier.width(200.dp)) { CursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle) }
     }
     HLine()
@@ -177,7 +177,7 @@ internal fun TerminalSection(state: DesktopDesignState) {
     // Host-row click behavior: single click connects directly, double click requires a second
     // click (protects against accidental connects when just browsing the catalog). Desktop-only.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_host_connect), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
+        Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_host_connect), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium) }
         // Fixed width like the neighbouring pickers: the trigger fills maxWidth, so without a bound
         // it would eat the whole row and collapse the label to a one-glyph column. Wide enough for
         // the longest localized option ("Двойной клик (клик выделяет)") on a single line.
@@ -229,7 +229,7 @@ private fun ThemeCard(
     Column(
         modifier
             .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, if (active) D.cyan else D.cyan08, RoundedCornerShape(8.dp))
+            .border(1.dp, if (active) Skerry.colors.cyan else Skerry.colors.cyan08, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick),
     ) {
         Column(Modifier.fillMaxWidth().background(theme.background).padding(10.dp)) {
@@ -238,12 +238,12 @@ private fun ThemeCard(
             Row { Txt("-rw-r--r-- ", color = theme.ansi[8], size = 10.sp, font = mono); Txt(".env", color = theme.ansi[3], size = 10.sp, font = mono) }
         }
         Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 10.dp, vertical = 7.dp),
+            Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Txt(theme.displayName, color = D.text, size = 11.5.sp, weight = FontWeight.Medium)
-            if (active) Badge(stringResource(Res.string.appearance_badge_active), bg = D.cyan14, fg = D.cyanBright, radius = 3, size = 9.sp)
+            Txt(theme.displayName, color = Skerry.colors.text, size = 11.5.sp, weight = FontWeight.Medium)
+            if (active) Badge(stringResource(Res.string.appearance_badge_active), bg = Skerry.colors.cyan14, fg = Skerry.colors.cyanBright, radius = 3, size = 9.sp)
         }
     }
 }

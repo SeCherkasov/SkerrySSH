@@ -17,12 +17,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import app.skerry.ui.design.D
+import app.skerry.ui.theme.ThemeMode
+import app.skerry.ui.theme.nightSeaColors
 
 class DesktopDesignStateTest {
 
     @Test
-    fun defaults_match_prototype() {
+    fun defaults_match_reference() {
         val s = DesktopDesignState()
         assertEquals(DesktopView.Terminal, s.view)
         assertFalse(s.locked)
@@ -171,7 +172,7 @@ class DesktopDesignStateTest {
         s.onCmd("nope --x")
         s.runCmd()
         assertEquals("nope: command not found", s.termLines[1].text)
-        assertEquals(D.sunset, s.termLines[1].color)
+        assertEquals(nightSeaColors().sunset, s.termLines[1].color)
     }
 
     @Test
@@ -485,6 +486,17 @@ class DesktopDesignStateTest {
         s.chooseTerminalTheme(TerminalThemes.GruvboxDark) // repeat of the same theme — no-op
         assertEquals(TerminalThemes.GruvboxDark, s.terminalTheme)
         assertEquals(listOf(TerminalThemes.GruvboxDark), seen)
+    }
+
+    @Test
+    fun setThemeMode_updates_and_reports_once_skipping_repeat() {
+        val seen = mutableListOf<ThemeMode>()
+        val s = DesktopDesignState(onThemeModeChange = { seen += it })
+        assertEquals(ThemeMode.DEFAULT, s.themeMode) // default is night-sea dark, preserving the prior look
+        s.chooseThemeMode(ThemeMode.LIGHT)
+        s.chooseThemeMode(ThemeMode.LIGHT) // repeat of the same mode — no-op
+        assertEquals(ThemeMode.LIGHT, s.themeMode)
+        assertEquals(listOf(ThemeMode.LIGHT), seen)
     }
 
     @Test

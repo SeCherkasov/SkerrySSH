@@ -43,12 +43,12 @@ import app.skerry.ui.generated.resources.shell_save
 import app.skerry.ui.generated.resources.shell_create
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.CancelButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
+import app.skerry.ui.theme.Skerry
 
 /**
  * Dialog for creating/renaming a host group: a name field plus buttons. [onDelete] != null means
@@ -75,19 +75,19 @@ fun GroupDialog(
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks()
                 .padding(26.dp),
         ) {
             Txt(
                 if (editing) stringResource(Res.string.shell_group_rename_title) else stringResource(Res.string.shell_group_new_title),
-                color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
+                color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
             )
             Txt(
                 if (editing) stringResource(Res.string.shell_group_rename_subtitle)
                 else stringResource(Res.string.shell_group_new_subtitle),
-                color = D.dim, size = 12.5.sp, lineHeight = 18.sp,
+                color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
             // Border/placeholder live in decorationBox + fillMaxWidth so a click anywhere in the
@@ -96,8 +96,8 @@ fun GroupDialog(
                 value = name,
                 onValueChange = { name = it },
                 singleLine = true,
-                textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
-                cursorBrush = SolidColor(D.cyan),
+                textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
+                cursorBrush = SolidColor(Skerry.colors.cyan),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { save() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
@@ -106,13 +106,13 @@ fun GroupDialog(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(7.dp))
-                            .background(D.card)
-                            .border(1.dp, D.line, RoundedCornerShape(7.dp))
+                            .background(Skerry.colors.card)
+                            .border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp))
                             .padding(horizontal = 11.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.fillMaxWidth()) {
-                            if (name.isEmpty()) Txt(stringResource(Res.string.shell_group_name_placeholder), color = D.faint, size = 13.sp)
+                            if (name.isEmpty()) Txt(stringResource(Res.string.shell_group_name_placeholder), color = Skerry.colors.faint, size = 13.sp)
                             inner()
                         }
                     }
@@ -125,7 +125,7 @@ fun GroupDialog(
             ) {
                 if (onDelete != null) {
                     Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDelete).padding(horizontal = 14.dp, vertical = 9.dp)) {
-                        Txt(stringResource(Res.string.shell_group_delete), color = D.sunset, size = 12.5.sp)
+                        Txt(stringResource(Res.string.shell_group_delete), color = Skerry.colors.sunset, size = 12.5.sp)
                     }
                 }
                 Box(Modifier.weight(1f))

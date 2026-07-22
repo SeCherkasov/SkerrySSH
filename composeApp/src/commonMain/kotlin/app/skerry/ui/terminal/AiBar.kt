@@ -44,7 +44,6 @@ import app.skerry.ui.ai.shortLabel
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.ChipButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
@@ -62,6 +61,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Terminal AI bar: live input under per-host policy, or a decorative mock preview.
 
@@ -123,19 +123,19 @@ internal fun AiBarInput(
     val danger = risk == CommandRisk.Danger
     // Any destructive command (delete/overwrite) is colored red, even at Warn level.
     val severe = danger || controller.pendingRisk?.destructive == true
-    val accent = if (severe) D.sunset else D.moss
+    val accent = if (severe) Skerry.colors.sunset else Skerry.colors.moss
     var armed by remember(pending) { mutableStateOf(false) }
     Column {
         HLine()
         Row(
             Modifier.fillMaxWidth()
                 .heightIn(min = BOTTOM_BAR_HEIGHT)
-                .background(if (pending != null) accent.copy(alpha = 0.08f) else D.surface2)
+                .background(if (pending != null) accent.copy(alpha = 0.08f) else Skerry.colors.surface2)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            val leadColor = if (pending != null) accent else D.amber
+            val leadColor = if (pending != null) accent else Skerry.colors.amber
             // A destructive command shows a block icon instead of the terminal icon.
             val leadIcon = if (pending != null) (if (severe) "block" else "terminal") else "auto_awesome"
             Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(leadColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
@@ -145,7 +145,7 @@ internal fun AiBarInput(
                 when {
                     pending != null -> {
                         // Single line: command plus inline explanation or risk reason, no separate panel.
-                        val infoColor = if (severe) D.sunset else if (risk == CommandRisk.Warn) D.amber else D.dim
+                        val infoColor = if (severe) Skerry.colors.sunset else if (risk == CommandRisk.Warn) Skerry.colors.amber else Skerry.colors.dim
                         val info = when (risk) {
                             CommandRisk.None -> controller.pendingInfo
                             else -> controller.pendingRisk?.reason
@@ -155,25 +155,25 @@ internal fun AiBarInput(
                             // Destructive commands are highlighted red. The command wraps (up to 6 lines)
                             // instead of being ellipsized, so the user sees the full command before
                             // confirming and running it.
-                            Txt(pending, color = if (severe) D.sunset else D.text, size = 13.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
+                            Txt(pending, color = if (severe) Skerry.colors.sunset else Skerry.colors.text, size = 13.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
                             if (info != null) Txt(info, color = infoColor, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }
-                    controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = D.dim, size = 13.sp)
+                    controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = Skerry.colors.dim, size = 13.sp)
                     controller.notice != null -> when (val notice = controller.notice!!) {
-                        is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = D.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Ask -> Txt(notice.question, color = D.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        AiNotice.Rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = D.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = D.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = Skerry.colors.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Ask -> Txt(notice.question, color = Skerry.colors.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        AiNotice.Rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = Skerry.colors.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = Skerry.colors.sunset, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     else -> {
-                        if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_placeholder), color = D.dim, size = 13.sp)
+                        if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_placeholder), color = Skerry.colors.dim, size = 13.sp)
                         BasicTextField(
                             value = prompt,
                             onValueChange = { prompt = it },
                             singleLine = true,
-                            textStyle = TextStyle(color = D.text, fontSize = 13.sp),
-                            cursorBrush = SolidColor(D.cyan),
+                            textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp),
+                            cursorBrush = SolidColor(Skerry.colors.cyan),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { submit() }),
                             modifier = Modifier.fillMaxWidth().focusRequester(promptFocus),
@@ -192,18 +192,18 @@ internal fun AiBarInput(
                             else controller.confirm()?.let { terminal?.sendUserInput(it + "\r") }
                         },
                     )
-                    AiActionChip(stringResource(Res.string.term_ai_dismiss), D.faint, onClick = { controller.dismiss() })
+                    AiActionChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint, onClick = { controller.dismiss() })
                 }
                 controller.notice != null ->
-                    AiActionChip(stringResource(Res.string.term_ai_dismiss), D.faint, onClick = { controller.dismiss() })
+                    AiActionChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint, onClick = { controller.dismiss() })
                 else -> {
                     AiBarTag("verified_user", labelUppercase(controller.policy.shortLabel()), mono)
                     Box(
-                        Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.cyan)
+                        Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Skerry.colors.cyan)
                             .clickable(enabled = !controller.busy) { submit() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Sym("arrow_upward", size = 16.sp, color = D.ink)
+                        Sym("arrow_upward", size = 16.sp, color = Skerry.colors.ink)
                     }
                 }
             }
@@ -224,20 +224,20 @@ private fun AiBarMock() {
     Column {
         HLine()
         Row(
-            Modifier.fillMaxWidth().heightIn(min = BOTTOM_BAR_HEIGHT).background(D.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().heightIn(min = BOTTOM_BAR_HEIGHT).background(Skerry.colors.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.amber.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Sym("auto_awesome", size = 16.sp, color = D.amber)
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Skerry.colors.amber.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                Sym("auto_awesome", size = 16.sp, color = Skerry.colors.amber)
             }
-            Txt("Ask Skerry: 'find files larger than 100MB'   ·   Ctrl / to focus", color = D.dim, size = 13.sp, modifier = Modifier.weight(1f))
+            Txt("Ask Skerry: 'find files larger than 100MB'   ·   Ctrl / to focus", color = Skerry.colors.dim, size = 13.sp, modifier = Modifier.weight(1f))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AiBarTag("lock", "Local · Qwen 2.5", mono)
                 AiBarTag("verified_user", "STRICT", mono)
             }
-            Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(D.cyan), contentAlignment = Alignment.Center) {
-                Sym("arrow_upward", size = 16.sp, color = D.ink)
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Skerry.colors.cyan), contentAlignment = Alignment.Center) {
+                Sym("arrow_upward", size = 16.sp, color = Skerry.colors.ink)
             }
         }
     }
@@ -249,12 +249,12 @@ private fun AiBarTag(icon: String, text: String, mono: FontFamily) {
         Modifier
             .clip(RoundedCornerShape(4.dp))
             .background(Color(0x0AFFFFFF))
-            .border(1.dp, D.line, RoundedCornerShape(4.dp))
+            .border(1.dp, Skerry.colors.line, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Sym(icon, size = 12.sp, color = D.faint)
-        Txt(text, color = D.faint, size = 10.5.sp, font = mono)
+        Sym(icon, size = 12.sp, color = Skerry.colors.faint)
+        Txt(text, color = Skerry.colors.faint, size = 10.5.sp, font = mono)
     }
 }

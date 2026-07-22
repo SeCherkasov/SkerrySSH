@@ -44,11 +44,11 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_connect
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.CancelButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Password-entry dialog for connecting to a host with no bound identity (parity with the mobile
@@ -71,37 +71,38 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .clickable(interactionSource = noop, indication = null, onClick = {})
                 .padding(26.dp),
         ) {
-            Txt(stringResource(Res.string.shell_connect_to, host.label), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-            Txt(host.connectionSubtitle(), color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
+            Txt(stringResource(Res.string.shell_connect_to, host.label), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(host.connectionSubtitle(), color = Skerry.colors.dim, size = 12.5.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
 
-            Txt(stringResource(Res.string.shell_password_caps), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
+            Txt(stringResource(Res.string.shell_password_caps), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
             val ui = LocalFonts.current.ui
-            val style = remember(ui) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = ui) }
+            val textColor = Skerry.colors.text
+            val style = remember(ui, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = ui) }
             // Capsule/padding/icon live in decorationBox so a click anywhere in the field places the caret.
             BasicTextField(
                 value = password,
                 onValueChange = { password = it },
                 singleLine = true,
                 textStyle = style,
-                cursorBrush = SolidColor(D.cyan),
+                cursorBrush = SolidColor(Skerry.colors.cyan),
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
                 keyboardActions = KeyboardActions(onDone = { submit() }),
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { inner ->
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Sym("key", size = 16.sp, color = D.faint)
+                        Sym("key", size = 16.sp, color = Skerry.colors.faint)
                         Box(Modifier.weight(1f)) {
-                            if (password.isEmpty()) Txt(stringResource(Res.string.shell_password_host_placeholder), color = D.faint, size = 13.sp)
+                            if (password.isEmpty()) Txt(stringResource(Res.string.shell_password_host_placeholder), color = Skerry.colors.faint, size = 13.sp)
                             inner()
                         }
                     }
@@ -114,8 +115,8 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Sym("shield_lock", size = 14.sp, color = D.moss)
-                    Txt(stringResource(Res.string.shell_not_stored_once), color = D.faint, size = 11.sp)
+                    Sym("shield_lock", size = 14.sp, color = Skerry.colors.moss)
+                    Txt(stringResource(Res.string.shell_not_stored_once), color = Skerry.colors.faint, size = 11.sp)
                 }
                 CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
                 PrimaryButton(stringResource(Res.string.shell_connect), onClick = submit, enabled = password.isNotEmpty())

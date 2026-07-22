@@ -401,6 +401,9 @@ fun main(args: Array<String>) {
         // DesktopDesignState) updates this state and persists it; DesktopDesignState keeps a copy
         // for the dropdown display.
         val currentUiLanguage = remember { mutableStateOf(prefs.id("ui_language", UiLanguage.DEFAULT, UiLanguage::fromId)) }
+        // App theme: held above SkerryTheme so a change from Settings recomposes the whole tree with
+        // the new palette. onThemeModeChange (from DesktopDesignState) updates this state and persists.
+        val currentThemeMode = remember { mutableStateOf(prefs.id("app_theme", app.skerry.ui.theme.ThemeMode.DEFAULT, app.skerry.ui.theme.ThemeMode::fromId)) }
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
         val windowState = rememberWindowState(
             size = optimalWindowSize(DpSize(screen.width.dp, screen.height.dp)),
@@ -422,7 +425,7 @@ fun main(args: Array<String>) {
             // password gate, clicking a host opens a live SSH terminal in a tab (transport+identities
             // from `deps`), and the known-hosts manager runs over its own stores (knownHosts from `deps`).
             AppLocaleProvider(currentUiLanguage.value) {
-              app.skerry.ui.theme.SkerryTheme {
+              app.skerry.ui.theme.SkerryTheme(mode = currentThemeMode.value) {
                 app.skerry.ui.desktop.DesktopDesignApp(
                     initialInfoPanel = prefs.bool("info_panel", true),
                     onInfoPanelChange = { prefs.set("info_panel", it) },
@@ -447,6 +450,8 @@ fun main(args: Array<String>) {
                     onTerminalLetterSpacingChange = { prefs.set("terminal_letter_spacing", it.toString()) },
                     initialTerminalTheme = prefs.id("terminal_theme", TerminalThemes.DEFAULT, TerminalThemes::fromId),
                     onTerminalThemeChange = { prefs.set("terminal_theme", it.id) },
+                    initialThemeMode = currentThemeMode.value,
+                    onThemeModeChange = { prefs.set("app_theme", it.id); currentThemeMode.value = it },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; prefs.set("ui_language", it.id) },
                     initialTerminalScrollback = readTerminalScrollback(prefs),

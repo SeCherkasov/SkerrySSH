@@ -84,7 +84,6 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import app.skerry.ui.sftp.ConfirmDangerDialog
 import app.skerry.ui.sftp.ConfirmDeleteDialog
-import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalSessions
@@ -92,8 +91,9 @@ import app.skerry.ui.design.MeterBar
 import app.skerry.ui.sftp.NameDialog
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
-/** Transfer card background (`#0B1A26` = [D.surface2]); progress track is white at 7%. */
+/** Transfer card background (`#0B1A26` = [Skerry.colors.surface2]); progress track is white at 7%. */
 private val TransferTrack = Color(0x12FFFFFF)
 
 /**
@@ -174,7 +174,7 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
         )
         return
     }
-    Box(Modifier.fillMaxSize().background(D.bg)) {
+    Box(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobileFilesTitle(onBack)
             when {
@@ -182,9 +182,9 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                 // SFTP channel open → first directory listing. Text and position stay fixed (same
                 // idea as the terminal — it doesn't matter whether it's a terminal or sftp), so the
                 // screen doesn't flash or jump vertically. Breadcrumb + list show only once loaded.
-                openError != null -> MobileFilesNoticeBox("error", stringResource(Res.string.sftp_unavailable), openError, D.sunset)
+                openError != null -> MobileFilesNoticeBox("error", stringResource(Res.string.sftp_unavailable), openError, Skerry.colors.sunset)
                 c == null || c.remote.state is FilePaneState.Loading ->
-                    MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_connecting), subtitle, D.cyanBright)
+                    MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_connecting), subtitle, Skerry.colors.cyanBright)
                 else -> {
                     val pane = c.remote
                     // File row's visible action (ios_share): download OUT of the sandbox via the
@@ -312,9 +312,9 @@ private fun MobileLivePane(
 
     Box(modifier.fillMaxWidth()) {
         when (val st = pane.state) {
-            FilePaneState.Loading -> MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_loading), null, D.faint)
+            FilePaneState.Loading -> MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_loading), null, Skerry.colors.faint)
             is FilePaneState.Error ->
-                MobileFilesNoticeBox("error", stringResource(Res.string.sftp_error), fileBrowserFailureText(st.failure), D.sunset)
+                MobileFilesNoticeBox("error", stringResource(Res.string.sftp_error), fileBrowserFailureText(st.failure), Skerry.colors.sunset)
             is FilePaneState.Loaded -> Column(
                 Modifier.fillMaxSize().verticalScroll(scroll).padding(top = 12.dp, start = 12.dp, end = 12.dp),
             ) {
@@ -383,18 +383,18 @@ private fun MobileFileRow(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(11.dp))
-            .background(if (selected) D.cyan06 else Color.Transparent)
+            .background(if (selected) Skerry.colors.cyan06 else Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
             .padding(horizontal = 12.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
-        Sym(mobileFileIcon(entry), size = 23.sp, color = if (isDir) D.cyanBright else D.dim)
+        Sym(mobileFileIcon(entry), size = 23.sp, color = if (isDir) Skerry.colors.cyanBright else Skerry.colors.dim)
         Column(Modifier.weight(1f)) {
-            Txt(entry.name, color = D.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            mobileFileRowMeta(entry)?.let { Txt(sizeText(it), color = D.faint, size = 11.sp) }
+            Txt(entry.name, color = Skerry.colors.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            mobileFileRowMeta(entry)?.let { Txt(sizeText(it), color = Skerry.colors.faint, size = 11.sp) }
         }
-        Sym(mobileFileTrailingIcon(entry.type), size = 20.sp, color = D.faint)
+        Sym(mobileFileTrailingIcon(entry.type), size = 20.sp, color = Skerry.colors.faint)
     }
     if (menuOpen) {
         MobileActionSheet(
@@ -427,8 +427,8 @@ private fun MobileFileUpRow(mono: FontFamily, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
-        Sym("arrow_upward", size = 23.sp, color = D.faint)
-        Txt("..", color = D.dim, size = 14.5.sp, font = mono)
+        Sym("arrow_upward", size = 23.sp, color = Skerry.colors.faint)
+        Txt("..", color = Skerry.colors.dim, size = 14.5.sp, font = mono)
     }
 }
 
@@ -450,21 +450,21 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
                     .padding(horizontal = 22.dp, vertical = 14.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(D.surface2)
-                    .border(1.dp, D.cyan08, RoundedCornerShape(12.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
-                    Sym(if (up) "upload" else "download", size = 17.sp, color = D.cyan)
-                    Txt(transfer.name, color = D.textBright, size = 12.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Txt("$percent%", color = D.dim, size = 11.sp)
+                    Sym(if (up) "upload" else "download", size = 17.sp, color = Skerry.colors.cyan)
+                    Txt(transfer.name, color = Skerry.colors.textBright, size = 12.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Txt("$percent%", color = Skerry.colors.dim, size = 11.sp)
                 }
                 Spacer(Modifier.height(8.dp))
                 Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(TransferTrack)) {
-                    MeterBar(fraction, D.cyan, Modifier.fillMaxWidth())
+                    MeterBar(fraction, Skerry.colors.cyan, Modifier.fillMaxWidth())
                 }
             }
         }
@@ -475,20 +475,20 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
                     .padding(horizontal = 22.dp, vertical = 14.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(D.surface2)
-                    .border(1.dp, D.sunset.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.sunset.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                     .padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                Sym("error", size = 17.sp, color = D.sunset)
+                Sym("error", size = 17.sp, color = Skerry.colors.sunset)
                 Txt(
                     stringResource(
                         Res.string.sftp_transfer_error,
                         transfer.name.ifBlank { stringResource(Res.string.ftail_file_fallback) },
                         transferFailureText(transfer.failure),
                     ),
-                    color = D.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    color = Skerry.colors.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 IconBtn("close", onClick = onDismiss, box = 26, icon = 16.sp)
             }
         }
@@ -513,7 +513,7 @@ private fun MobileFilesTitle(onBack: (() -> Unit)? = null) {
             Sym(
                 "chevron_left",
                 size = 27.sp,
-                color = D.cyanBright,
+                color = Skerry.colors.cyanBright,
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onBack),
             )
         }
@@ -540,7 +540,7 @@ private fun MobileFilesBreadcrumbRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Sym("dns", size = 16.sp, color = D.moss)
+        Sym("dns", size = 16.sp, color = Skerry.colors.moss)
         if (editing && onGoToPath != null) {
             PathJumpField(
                 path = path,
@@ -554,15 +554,15 @@ private fun MobileFilesBreadcrumbRow(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(D.bg)
-                        .border(1.dp, D.cyan14, RoundedCornerShape(8.dp))
+                        .background(Skerry.colors.bg)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp))
                         .padding(horizontal = 10.dp, vertical = 7.dp),
                 ) { inner() }
             }
         } else {
             Txt(
                 mobileFilesBreadcrumb(label, path),
-                color = D.dim,
+                color = Skerry.colors.dim,
                 size = 12.sp,
                 font = mono,
                 maxLines = 1,
@@ -592,15 +592,15 @@ private fun MobileFabAction(icon: String, label: String, onClick: () -> Unit) {
     Row(
         Modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(D.surface2)
-            .border(1.dp, D.cyan14, RoundedCornerShape(14.dp))
+            .background(Skerry.colors.surface2)
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(14.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Sym(icon, size = 20.sp, color = D.cyanBright)
-        Txt(label, color = D.text, size = 13.5.sp, weight = FontWeight.Medium)
+        Sym(icon, size = 20.sp, color = Skerry.colors.cyanBright)
+        Txt(label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
     }
 }
 
@@ -616,26 +616,26 @@ private fun MobileFilesNoticeBox(icon: String, title: String, subtitle: String?,
 private fun MobileFilesNoticeContent(icon: String, title: String, subtitle: String?, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Sym(icon, size = 30.sp, color = color)
-        Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium)
-        if (subtitle != null) Txt(subtitle, color = D.faint, size = 12.sp)
+        Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium)
+        if (subtitle != null) Txt(subtitle, color = Skerry.colors.faint, size = 12.sp)
     }
 }
 
 /** Session manager exists but the active session isn't connected: title + notice. */
 @Composable
 private fun NoSessionMobileFilesView(mono: FontFamily, onBack: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         MobileFilesTitle(onBack)
-        MobileFilesNoticeBox("cloud_off", stringResource(Res.string.sftp_no_session), stringResource(Res.string.sftp_no_session_hint), D.faint)
+        MobileFilesNoticeBox("cloud_off", stringResource(Res.string.sftp_no_session), stringResource(Res.string.sftp_no_session_hint), Skerry.colors.faint)
     }
 }
 
 /** Active session is still connecting (tapped SFTP/Connect): title + "Connecting…" with the host subtitle. */
 @Composable
 private fun ConnectingMobileFilesView(subtitle: String, onBack: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         MobileFilesTitle(onBack)
-        MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_connecting), subtitle, D.cyanBright)
+        MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_connecting), subtitle, Skerry.colors.cyanBright)
     }
 }
 
@@ -645,17 +645,17 @@ private data class MockFileEntry(val icon: String, val iconColor: Color, val nam
 
 /** Static Remote pane data (preview/offscreen). */
 private val MOCK_REMOTE_FILES = listOf(
-    MockFileEntry("folder", D.cyanBright, "html", "drwxr-xr-x · 4 items", "chevron_right"),
-    MockFileEntry("folder", D.cyanBright, "releases", "drwxr-xr-x · 12 items", "chevron_right"),
-    MockFileEntry("description", D.dim, "nginx.conf", "3.1 KB · Jun 20", "ios_share", selected = true),
-    MockFileEntry("terminal", D.dim, "deploy.sh", "1.8 KB · Jun 18", "ios_share"),
-    MockFileEntry("description", D.dim, "robots.txt", "112 B · May 30", "ios_share"),
+    MockFileEntry("folder", Color(0xFF5FD1F4), "html", "drwxr-xr-x · 4 items", "chevron_right"),
+    MockFileEntry("folder", Color(0xFF5FD1F4), "releases", "drwxr-xr-x · 12 items", "chevron_right"),
+    MockFileEntry("description", Color(0xFF8FA3B0), "nginx.conf", "3.1 KB · Jun 20", "ios_share", selected = true),
+    MockFileEntry("terminal", Color(0xFF8FA3B0), "deploy.sh", "1.8 KB · Jun 18", "ios_share"),
+    MockFileEntry("description", Color(0xFF8FA3B0), "robots.txt", "112 B · May 30", "ios_share"),
 )
 
 /** Static mock of the Files section (preview/offscreen, no backend). */
 @Composable
 private fun MockMobileFilesView(mono: FontFamily) {
-    Box(Modifier.fillMaxSize().background(D.bg)) {
+    Box(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobileFilesTitle()
             MobileFilesBreadcrumbRow(label = "prod-web-01", path = "/var/www", mono = mono)
@@ -675,17 +675,17 @@ private fun MockFileRow(entry: MockFileEntry, mono: FontFamily) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(11.dp))
-            .background(if (entry.selected) D.cyan06 else Color.Transparent)
+            .background(if (entry.selected) Skerry.colors.cyan06 else Color.Transparent)
             .padding(horizontal = 12.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
         Sym(entry.icon, size = 23.sp, color = entry.iconColor)
         Column(Modifier.weight(1f)) {
-            Txt(entry.name, color = D.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Txt(entry.meta, color = D.faint, size = 11.sp)
+            Txt(entry.name, color = Skerry.colors.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt(entry.meta, color = Skerry.colors.faint, size = 11.sp)
         }
-        Sym(entry.trailing, size = 20.sp, color = D.faint)
+        Sym(entry.trailing, size = 20.sp, color = Skerry.colors.faint)
     }
 }
 
@@ -697,18 +697,18 @@ private fun MockTransferCard(mono: FontFamily) {
             .padding(horizontal = 22.dp, vertical = 14.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(D.surface2)
-            .border(1.dp, D.cyan08, RoundedCornerShape(12.dp))
+            .background(Skerry.colors.surface2)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            Sym("upload", size = 17.sp, color = D.cyan)
-            Txt("backup.tar.gz", color = D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
-            Txt("64%", color = D.dim, size = 11.sp)
+            Sym("upload", size = 17.sp, color = Skerry.colors.cyan)
+            Txt("backup.tar.gz", color = Skerry.colors.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt("64%", color = Skerry.colors.dim, size = 11.sp)
         }
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(TransferTrack)) {
-            MeterBar(0.64f, D.cyan, Modifier.fillMaxWidth())
+            MeterBar(0.64f, Skerry.colors.cyan, Modifier.fillMaxWidth())
         }
     }
 }

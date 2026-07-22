@@ -21,5 +21,5 @@ internal fun CredentialSecret.pickerTypeLabel(): String = when (this) {
     is CredentialSecret.Certificate -> stringResource(Res.string.vtail_picker_type_certificate)
 }
 
-/** Secret type icon, from the shared [VaultPresentation.secretStyle] so pickers stay in sync with Vault. */
-internal fun CredentialSecret.pickerIcon(): String = VaultPresentation.secretStyle(this).icon
+/** Secret type icon, from the shared [VaultPresentation.secretIcon] so pickers stay in sync with Vault. */
+internal fun CredentialSecret.pickerIcon(): String = VaultPresentation.secretIcon(this)

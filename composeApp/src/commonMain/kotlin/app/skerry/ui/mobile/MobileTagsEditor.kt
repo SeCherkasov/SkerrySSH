@@ -41,10 +41,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.AnchoredDropdown
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Mobile tag editor with type-ahead: `#tag` pills with a close button + inline entry for a new tag
@@ -69,7 +69,8 @@ internal fun MobileTagsEditor(
     menuBackground: Color,
 ) {
     val fonts = LocalFonts.current
-    val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 14.sp, fontFamily = fonts.ui) }
+    val textColor = Skerry.colors.text
+    val textStyle = remember(fonts.ui, textColor) { TextStyle(color = textColor, fontSize = 14.sp, fontFamily = fonts.ui) }
     var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     AnchoredDropdown(
@@ -79,7 +80,7 @@ internal fun MobileTagsEditor(
         trigger = {
             FlowRow(
                 // Tapping anywhere in the capsule (padding, gaps between pills) focuses the input.
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { focus.requestFocus() }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -88,16 +89,16 @@ internal fun MobileTagsEditor(
                 tags.forEach { tag ->
                     key(tag) {
                         Row(
-                            Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(start = 10.dp, end = 5.dp, top = 3.dp, bottom = 3.dp),
+                            Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)).padding(start = 10.dp, end = 5.dp, top = 3.dp, bottom = 3.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Txt("#$tag", color = D.cyanBright, size = 12.5.sp)
+                            Txt("#$tag", color = Skerry.colors.cyanBright, size = 12.5.sp)
                             Box(
                                 Modifier.clip(CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onRemove(tag) }.padding(2.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Sym("close", size = 14.sp, color = D.cyanBright)
+                                Sym("close", size = 14.sp, color = Skerry.colors.cyanBright)
                             }
                         }
                     }
@@ -107,13 +108,13 @@ internal fun MobileTagsEditor(
                     onValueChange = onDraftChange,
                     singleLine = true,
                     textStyle = textStyle,
-                    cursorBrush = SolidColor(D.cyan),
+                    cursorBrush = SolidColor(Skerry.colors.cyan),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommit() }),
                     modifier = Modifier.widthIn(min = 90.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
-                            if (draft.isEmpty()) Txt(placeholder, color = D.faint, size = 14.sp)
+                            if (draft.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 14.sp)
                             inner()
                         }
                     },
@@ -126,7 +127,7 @@ internal fun MobileTagsEditor(
                     .width(width)
                     .clip(RoundedCornerShape(11.dp))
                     .background(menuBackground)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                     .heightIn(max = 240.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
@@ -140,7 +141,7 @@ internal fun MobileTagsEditor(
                                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(tag) }
                                 .padding(horizontal = 14.dp, vertical = 11.dp),
                         ) {
-                            Txt("#$tag", color = D.cyanBright, size = 14.sp)
+                            Txt("#$tag", color = Skerry.colors.cyanBright, size = 14.sp)
                         }
                     }
                 }

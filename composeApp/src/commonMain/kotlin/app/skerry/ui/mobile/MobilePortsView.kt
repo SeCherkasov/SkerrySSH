@@ -98,7 +98,6 @@ import app.skerry.ui.generated.resources.ports_via
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.Badge
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalTunnels
@@ -107,6 +106,7 @@ import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Push screen for Port forwarding: back header + saved tunnel cards + New tunnel button.
@@ -126,7 +126,7 @@ fun MobilePortsScreen(state: MobileDesignState) {
     // Discovery survives leaving and re-entering the screen (desktop does the same): the sheet
     // reopens on whatever the scan still holds, and only closing it resets the scan.
     var discovering by remember { mutableStateOf(manager?.services?.state != ServiceScanState.Idle) }
-    Box(Modifier.fillMaxSize().background(D.bg)) {
+    Box(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobilePushHeader(stringResource(Res.string.ports_port_forwarding), onBack = state::pop, plainBack = true)
             if (manager == null) {
@@ -237,21 +237,21 @@ private fun LiveTunnelCard(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(D.card)
-            .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
+            .background(Skerry.colors.card)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(14.dp))
             .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Badge(t.direction.badgeLabel(), bg = bg, fg = fg, radius = 4, size = 9.5.sp)
-            Txt(stringResource(Res.string.ports_via, via), color = D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt(stringResource(Res.string.ports_via, via), color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
             // Only a live local forward has something to open; -R listens on the server, -D is SOCKS.
             tunnelBrowserUrl(entry)?.let { url ->
                 val uriHandler = LocalUriHandler.current
                 Sym(
                     "open_in_new",
                     size = 18.sp,
-                    color = D.cyanBright,
+                    color = Skerry.colors.cyanBright,
                     // A failing system handler must not throw into the composition.
                     modifier = Modifier.clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -263,13 +263,13 @@ private fun LiveTunnelCard(
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            Txt("${t.bindHost}:$port", color = if (dim) D.dim else D.text, size = 12.5.sp, font = mono)
-            Sym(mobileTunnelArrow(t.direction), size = 16.sp, color = D.faint)
-            Txt(mobileTunnelDest(t), color = if (dim) D.faint else D.textBright, size = 12.5.sp, font = mono)
+            Txt("${t.bindHost}:$port", color = if (dim) Skerry.colors.dim else Skerry.colors.text, size = 12.5.sp, font = mono)
+            Sym(mobileTunnelArrow(t.direction), size = 16.sp, color = Skerry.colors.faint)
+            Txt(mobileTunnelDest(t), color = if (dim) Skerry.colors.faint else Skerry.colors.textBright, size = 12.5.sp, font = mono)
         }
         (entry.status as? TunnelStatus.Failed)?.let {
             Spacer(Modifier.height(6.dp))
-            Txt(tunnelFailureText(it), color = D.sunset, size = 11.sp, font = mono)
+            Txt(tunnelFailureText(it), color = Skerry.colors.sunset, size = 11.sp, font = mono)
         }
     }
     if (menuOpen) {
@@ -290,7 +290,7 @@ private fun LiveTunnelCard(
 private fun TunnelStatusControl(entry: TunnelEntry, onToggle: () -> Unit) {
     when (entry.status) {
         is TunnelStatus.Active -> Toggle(on = true, onToggle = onToggle)
-        TunnelStatus.Connecting -> Sym("hourglass_top", size = 18.sp, color = D.amber)
+        TunnelStatus.Connecting -> Sym("hourglass_top", size = 18.sp, color = Skerry.colors.amber)
         else -> Toggle(on = false, onToggle = onToggle)
     }
 }
@@ -300,9 +300,9 @@ private fun TunnelStatusControl(entry: TunnelEntry, onToggle: () -> Unit) {
 private fun MobileEmptyTunnels() {
     Box(Modifier.fillMaxWidth().padding(top = 50.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("lan", size = 28.sp, color = D.faint)
-            Txt(stringResource(Res.string.ports_no_tunnels_yet), color = D.text, size = 14.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.ports_add_tunnel_below), color = D.faint, size = 12.sp)
+            Sym("lan", size = 28.sp, color = Skerry.colors.faint)
+            Txt(stringResource(Res.string.ports_no_tunnels_yet), color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.ports_add_tunnel_below), color = Skerry.colors.faint, size = 12.sp)
         }
     }
 }
@@ -342,12 +342,12 @@ private fun MobileTunnelEditorSheet(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Badge(form.direction.badgeLabel(), bg = badgeBg, fg = badgeFg, radius = 4, size = 9.5.sp)
-                    Txt(if (existing == null) stringResource(Res.string.ports_new_tunnel) else stringResource(Res.string.ports_edit_tunnel), color = D.text, size = 20.sp, weight = FontWeight.Bold)
+                    Txt(if (existing == null) stringResource(Res.string.ports_new_tunnel) else stringResource(Res.string.ports_edit_tunnel), color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
                 }
                 Sym(
                     "close",
                     size = 24.sp,
-                    color = D.dim,
+                    color = Skerry.colors.dim,
                     modifier = Modifier.clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -376,7 +376,7 @@ private fun MobileTunnelEditorSheet(
                 Spacer(Modifier.height(10.dp))
                 Txt(
                     stringResource(Res.string.ports_socks_hint),
-                    color = D.faint,
+                    color = Skerry.colors.faint,
                     size = 12.sp,
                     lineHeight = 17.sp,
                 )
@@ -385,28 +385,28 @@ private fun MobileTunnelEditorSheet(
                 Spacer(Modifier.height(16.dp))
                 MobileFormField(stringResource(Res.string.ports_field_live_throughput)) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MobileThroughputRow("arrow_upward", D.cyanBright, rateFraction(existing.upRate), humanRate(existing.upRate), mono)
-                        MobileThroughputRow("arrow_downward", D.moss, rateFraction(existing.downRate), humanRate(existing.downRate), mono)
+                        MobileThroughputRow("arrow_upward", Skerry.colors.cyanBright, rateFraction(existing.upRate), humanRate(existing.upRate), mono)
+                        MobileThroughputRow("arrow_downward", Skerry.colors.moss, rateFraction(existing.downRate), humanRate(existing.downRate), mono)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 // Editing an active tunnel saves, but the forward is already up; new params apply
                 // on next activation since save does not restart the connection.
-                Txt(stringResource(Res.string.ports_changes_apply_after_restart), color = D.faint, size = 12.sp, lineHeight = 16.sp)
+                Txt(stringResource(Res.string.ports_changes_apply_after_restart), color = Skerry.colors.faint, size = 12.sp, lineHeight = 16.sp)
             }
             Spacer(Modifier.height(22.dp))
             Box(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (draft != null) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    .background(if (draft != null) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {
                         draft?.let { manager.save(it); onDismiss() }
                     })
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(stringResource(Res.string.ports_save_tunnel), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.ports_save_tunnel), color = Skerry.colors.ink, size = 16.sp, weight = FontWeight.Bold)
             }
             if (existing != null) {
                 Spacer(Modifier.height(12.dp))
@@ -414,14 +414,14 @@ private fun MobileTunnelEditorSheet(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .border(1.dp, D.sunset.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+                        .border(1.dp, Skerry.colors.sunset.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {
                             manager.delete(existing.id); onDismiss()
                         })
                         .padding(15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Txt(stringResource(Res.string.ports_remove_tunnel), color = D.sunset, size = 16.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.ports_remove_tunnel), color = Skerry.colors.sunset, size = 16.sp, weight = FontWeight.Medium)
                 }
             }
         }
@@ -452,18 +452,18 @@ private fun MobileServicesSheet(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Sym("radar", size = 22.sp, color = D.cyanBright)
-                Txt(stringResource(Res.string.ports_services_title), color = D.text, size = 20.sp, weight = FontWeight.Bold)
+                Sym("radar", size = 22.sp, color = Skerry.colors.cyanBright)
+                Txt(stringResource(Res.string.ports_services_title), color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
             }
             Sym(
                 "close",
                 size = 24.sp,
-                color = D.dim,
+                color = Skerry.colors.dim,
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
             )
         }
         Spacer(Modifier.height(10.dp))
-        Txt(stringResource(Res.string.ports_services_hint), color = D.faint, size = 12.sp, lineHeight = 17.sp)
+        Txt(stringResource(Res.string.ports_services_hint), color = Skerry.colors.faint, size = 12.sp, lineHeight = 17.sp)
         Spacer(Modifier.height(16.dp))
         MobileFormField(stringResource(Res.string.ports_field_via_host)) {
             MobileHostPicker(hostName, hostList.map { it.id to it.label }) { hostId = it }
@@ -473,25 +473,25 @@ private fun MobileServicesSheet(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (hostId != null) D.cyan else D.cyan.copy(alpha = 0.4f))
+                .background(if (hostId != null) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                     hostId?.let { scan.scan(it) }
                 }
                 .padding(15.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Txt(stringResource(Res.string.ports_scan), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.ports_scan), color = Skerry.colors.ink, size = 16.sp, weight = FontWeight.Bold)
         }
         Spacer(Modifier.height(16.dp))
         when (val state = scan.state) {
-            ServiceScanState.Idle -> MobileScanNote(stringResource(Res.string.ports_pick_host_to_scan), D.faint)
-            ServiceScanState.Scanning -> MobileScanNote(stringResource(Res.string.ports_scanning), D.amber)
-            ServiceScanState.Unsupported -> MobileScanNote(stringResource(Res.string.ports_services_unsupported), D.dim)
-            is ServiceScanState.Failed -> MobileScanNote(serviceScanFailureText(state), D.sunset)
+            ServiceScanState.Idle -> MobileScanNote(stringResource(Res.string.ports_pick_host_to_scan), Skerry.colors.faint)
+            ServiceScanState.Scanning -> MobileScanNote(stringResource(Res.string.ports_scanning), Skerry.colors.amber)
+            ServiceScanState.Unsupported -> MobileScanNote(stringResource(Res.string.ports_services_unsupported), Skerry.colors.dim)
+            is ServiceScanState.Failed -> MobileScanNote(serviceScanFailureText(state), Skerry.colors.sunset)
             is ServiceScanState.Ready -> {
                 val scanned = scan.scannedHostId
                 if (state.services.isEmpty() || scanned == null) {
-                    MobileScanNote(stringResource(Res.string.ports_no_services), D.faint)
+                    MobileScanNote(stringResource(Res.string.ports_no_services), Skerry.colors.faint)
                 } else {
                     val taken = forwardedPorts(manager.tunnels.map { it.tunnel }, scanned)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -525,20 +525,20 @@ private fun MobileServiceRow(service: ListeningService, mono: FontFamily, forwar
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(D.card)
-            .border(1.dp, D.cyan08, RoundedCornerShape(12.dp))
+            .background(Skerry.colors.card)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Txt("${service.port}", color = D.textBright, size = 14.sp, font = mono, modifier = Modifier.width(58.dp))
-        Txt(serviceLabel(service), color = D.dim, size = 13.sp, modifier = Modifier.weight(1f))
+        Txt("${service.port}", color = Skerry.colors.textBright, size = 14.sp, font = mono, modifier = Modifier.width(58.dp))
+        Txt(serviceLabel(service), color = Skerry.colors.dim, size = 13.sp, modifier = Modifier.weight(1f))
         if (forwarded) {
-            Txt(stringResource(Res.string.ports_already_forwarded), color = D.moss, size = 12.sp)
+            Txt(stringResource(Res.string.ports_already_forwarded), color = Skerry.colors.moss, size = 12.sp)
         } else {
             Txt(
                 stringResource(Res.string.ports_forward),
-                color = D.cyanBright,
+                color = Skerry.colors.cyanBright,
                 size = 13.sp,
                 weight = FontWeight.SemiBold,
                 modifier = Modifier
@@ -558,23 +558,23 @@ private fun MobileHostPicker(current: String, options: List<Pair<String, String>
         onDismiss = { open = false },
         trigger = {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(current, color = D.text, size = 15.sp)
-                Sym(if (open) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+                Txt(current, color = Skerry.colors.text, size = 15.sp)
+                Sym(if (open) "expand_less" else "expand_more", size = 20.sp, color = Skerry.colors.faint)
             }
         },
         menu = { width ->
             Column(
-                Modifier.width(width).clip(RoundedCornerShape(11.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).heightIn(max = 260.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                Modifier.width(width).clip(RoundedCornerShape(11.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).heightIn(max = 260.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
             ) {
                 if (options.isEmpty()) {
-                    Txt(stringResource(Res.string.ports_no_saved_hosts), color = D.faint, size = 13.sp, modifier = Modifier.padding(14.dp))
+                    Txt(stringResource(Res.string.ports_no_saved_hosts), color = Skerry.colors.faint, size = 13.sp, modifier = Modifier.padding(14.dp))
                 } else {
                     options.forEach { (id, name) ->
-                        Txt(name, color = D.text, size = 15.sp, modifier = Modifier.fillMaxWidth().clickable { onPick(id); open = false }.padding(horizontal = 14.dp, vertical = 11.dp))
+                        Txt(name, color = Skerry.colors.text, size = 15.sp, modifier = Modifier.fillMaxWidth().clickable { onPick(id); open = false }.padding(horizontal = 14.dp, vertical = 11.dp))
                     }
                 }
             }
@@ -585,21 +585,22 @@ private fun MobileHostPicker(current: String, options: List<Pair<String, String>
 /** Field label + content, matching the New connection sheet's field idiom. */
 @Composable
 private fun PortInput(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily, keyboardType: KeyboardType = KeyboardType.Text) {
-    val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 15.sp, fontFamily = mono) }
+    val textColor = Skerry.colors.text
+    val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 15.sp, fontFamily = mono) }
     // Border lives in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
         textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
             Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
             ) {
-                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp, font = mono)
+                if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 15.sp, font = mono)
                 inner()
             }
         },
@@ -615,22 +616,22 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
         onDismiss = { open = false },
         trigger = {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(direction.displayLabel(), color = D.text, size = 15.sp)
-                Sym(if (open) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+                Txt(direction.displayLabel(), color = Skerry.colors.text, size = 15.sp)
+                Sym(if (open) "expand_less" else "expand_more", size = 20.sp, color = Skerry.colors.faint)
             }
         },
         menu = { width ->
             Column(
-                Modifier.width(width).clip(RoundedCornerShape(11.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(vertical = 4.dp),
+                Modifier.width(width).clip(RoundedCornerShape(11.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(vertical = 4.dp),
             ) {
                 listOf(TunnelDirection.Local, TunnelDirection.Remote, TunnelDirection.Dynamic).forEach { option ->
                     Txt(
                         option.displayLabel(),
-                        color = if (option == direction) D.cyanBright else D.text,
+                        color = if (option == direction) Skerry.colors.cyanBright else Skerry.colors.text,
                         size = 15.sp,
                         modifier = Modifier.fillMaxWidth().clickable { onPick(option); open = false }.padding(horizontal = 14.dp, vertical = 11.dp),
                     )
@@ -649,14 +650,14 @@ private fun MobileDashedButton(label: String, icon: String, onClick: () -> Unit)
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(13.dp))
-            .border(1.dp, D.cyan20, RoundedCornerShape(13.dp))
+            .border(1.dp, Skerry.colors.cyan20, RoundedCornerShape(13.dp))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
     ) {
-        Sym(icon, size = 19.sp, color = D.cyanBright)
-        Txt(label, color = D.cyanBright, size = 14.sp, weight = FontWeight.Medium)
+        Sym(icon, size = 19.sp, color = Skerry.colors.cyanBright)
+        Txt(label, color = Skerry.colors.cyanBright, size = 14.sp, weight = FontWeight.Medium)
     }
 }
 
@@ -671,7 +672,7 @@ private fun MobileThroughputRow(icon: String, color: Color, fraction: Float, val
         Sym(icon, size = 16.sp, color = color)
         MeterBar(fraction, color, Modifier.weight(1f))
         Box(Modifier.width(72.dp), contentAlignment = Alignment.CenterEnd) {
-            Txt(value, color = D.dim, size = 12.sp, font = mono)
+            Txt(value, color = Skerry.colors.dim, size = 12.sp, font = mono)
         }
     }
 }
@@ -682,9 +683,9 @@ private data class MockTunnel(val type: String, val bg: Color, val fg: Color, va
 
 /** Static tunnels for preview/offscreen. */
 private val MOCK_TUNNELS = listOf(
-    MockTunnel("LOCAL", D.cyan.copy(alpha = 0.12f), D.cyanBright, "via prod-web-01", "127.0.0.1:8080", "arrow_forward", "10.0.0.5:80", false, true),
-    MockTunnel("REMOTE", D.amber.copy(alpha = 0.14f), D.amber, "via homelab-pi", "0.0.0.0:9000", "arrow_forward", "localhost:3000", false, true),
-    MockTunnel("SOCKS", D.moss.copy(alpha = 0.14f), D.moss, "via db-master", "127.0.0.1:1080", "all_inclusive", "dynamic proxy", true, false),
+    MockTunnel("LOCAL", Color(0xFF2BBDEE).copy(alpha = 0.12f), Color(0xFF2BBDEE), "via prod-web-01", "127.0.0.1:8080", "arrow_forward", "10.0.0.5:80", false, true),
+    MockTunnel("REMOTE", Color(0xFFF2A65A).copy(alpha = 0.14f), Color(0xFFF2A65A), "via homelab-pi", "0.0.0.0:9000", "arrow_forward", "localhost:3000", false, true),
+    MockTunnel("SOCKS", Color(0xFF5DCE9E).copy(alpha = 0.14f), Color(0xFF5DCE9E), "via db-master", "127.0.0.1:1080", "all_inclusive", "dynamic proxy", true, false),
 )
 
 @Composable
@@ -705,20 +706,20 @@ private fun MockTunnelCard(t: MockTunnel, mono: FontFamily) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(D.card)
-            .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
+            .background(Skerry.colors.card)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Badge(t.type, bg = t.bg, fg = t.fg, radius = 4, size = 9.5.sp)
-            Txt(t.via, color = D.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt(t.via, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
             Toggle(on = t.on, onToggle = {})
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            Txt(t.source, color = D.text, size = 12.5.sp, font = mono)
-            Sym(t.arrow, size = 16.sp, color = D.faint)
-            Txt(t.dest, color = if (t.destDim) D.dim else D.textBright, size = 12.5.sp, font = mono)
+            Txt(t.source, color = Skerry.colors.text, size = 12.5.sp, font = mono)
+            Sym(t.arrow, size = 16.sp, color = Skerry.colors.faint)
+            Txt(t.dest, color = if (t.destDim) Skerry.colors.dim else Skerry.colors.textBright, size = 12.5.sp, font = mono)
         }
     }
 }

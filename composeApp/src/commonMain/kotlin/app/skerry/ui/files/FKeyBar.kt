@@ -18,10 +18,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Txt
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * One cell of the mc-style bottom key bar: function key [n] and what it does. [enabled] greys the
@@ -44,7 +44,7 @@ internal data class FKeyDef(
 @Composable
 internal fun FKeyBar(keys: List<FKeyDef>, onKey: (Int) -> Unit, mono: FontFamily) {
     Row(
-        Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 6.dp, vertical = 5.dp),
+        Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 6.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         keys.forEach { def ->
@@ -58,7 +58,7 @@ private fun FKeyCell(def: FKeyDef, mono: FontFamily, onClick: () -> Unit, modifi
     Row(
         modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(D.panel)
+            .background(Skerry.colors.panel)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -69,15 +69,15 @@ private fun FKeyCell(def: FKeyDef, mono: FontFamily, onClick: () -> Unit, modifi
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Txt("F${def.n}", color = if (def.enabled) D.cyanBright else D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, font = mono)
+        Txt("F${def.n}", color = if (def.enabled) Skerry.colors.cyanBright else Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, font = mono)
         Txt(
             stringResource(def.label),
-            color = if (def.enabled) D.text else D.faint,
+            color = if (def.enabled) Skerry.colors.text else Skerry.colors.faint,
             size = 11.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         // "*" marks a non-working stub.
-        if (!def.done) Txt("*", color = D.sunset, size = 11.sp, weight = FontWeight.SemiBold)
+        if (!def.done) Txt("*", color = Skerry.colors.sunset, size = 11.sp, weight = FontWeight.SemiBold)
     }
 }

@@ -18,14 +18,14 @@ import app.skerry.ui.nav.PlatformBackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import app.skerry.ui.theme.Skerry
 
 /** Canonical mobile bottom-sheet tokens ("New connection"): panel and scrim. */
-internal val SheetPanel = Color(0xFF0E1B26)
 private val SheetScrim = Color(0x8C04080C)
 
 /**
  * Shared mobile bottom-sheet chrome: full-screen scrim ([SheetScrim], tap outside to dismiss),
- * bottom panel with 26dp corner rounding ([SheetPanel]), grab handle, and drag-to-dismiss
+ * bottom panel with 26dp corner rounding, grab handle, and drag-to-dismiss
  * ([rememberSheetDrag]/[SheetHandle]). The container owns ONLY the chrome — height, scrolling, and
  * padding are set by each sheet via [panelModifier], so forms/details/menus reuse one skeleton
  * without losing their own layout details. The sheet doesn't lift itself above the keyboard: the
@@ -66,7 +66,7 @@ fun MobileBottomSheet(
                 .then(cap)
                 .then(drag.sheet)
                 .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .background(SheetPanel)
+                .background(Skerry.colors.surface2)
                 // Absorb clicks on the panel so tapping the sheet doesn't dismiss it (dismiss is scrim/swipe only).
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 .then(panelModifier),

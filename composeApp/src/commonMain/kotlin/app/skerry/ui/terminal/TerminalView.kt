@@ -56,7 +56,6 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
@@ -88,6 +87,7 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.sessionDotColor
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Session action icons (split / SFTP / tunnels / snippets / info panel / disconnect). Pinned to the
@@ -133,10 +133,10 @@ private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modif
         // panel is session-scoped, so with no active session there is nothing to show: the button
         // dims and no-ops rather than toggling a panel that can't appear. Mock preview keeps it live.
         val infoAvailable = active != null || sessions == null
-        IconBtn("info", onClick = { if (infoAvailable) state.toggleInfo() }, tint = if (state.infoPanel && infoAvailable) D.cyanBright else D.dim, tooltip = stringResource(Res.string.shell_tip_info))
+        IconBtn("info", onClick = { if (infoAvailable) state.toggleInfo() }, tint = if (state.infoPanel && infoAvailable) Skerry.colors.cyanBright else Skerry.colors.dim, tooltip = stringResource(Res.string.shell_tip_info))
         // Power: closes the active session (live path) with a confirmation prompt
         // (destructive, no auto-reconnect); no-op stub in mock mode.
-        IconBtn("power_settings_new", onClick = { if (active != null) state.requestCloseSession(active.id) }, tint = D.sunset, tooltip = stringResource(Res.string.shell_tip_disconnect))
+        IconBtn("power_settings_new", onClick = { if (active != null) state.requestCloseSession(active.id) }, tint = Skerry.colors.sunset, tooltip = stringResource(Res.string.shell_tip_disconnect))
     }
 }
 
@@ -190,8 +190,9 @@ fun TerminalView(state: DesktopDesignState) {
                 // In split mode, an accent border (primary cyan) outlines the focused pane.
                 // focusedSplit=false means the primary pane.
                 val focusedSplit = sessions?.active?.focusedSplit == true
+                val focusBorderColor = Skerry.colors.cyan
                 fun paneFocusBorder(focused: Boolean): Modifier =
-                    if (showSplit && focused) Modifier.border(1.dp, D.cyan.copy(alpha = 0.35f)) else Modifier
+                    if (showSplit && focused) Modifier.border(1.dp, focusBorderColor.copy(alpha = 0.35f)) else Modifier
                 // While split is open, clicking the primary pane returns focus to it (tab chip title).
                 val primaryMod = Modifier.weight(1f).fillMaxHeight()
                     .then(if (sessions != null && activeId != null && showSplit) Modifier.focusPaneOnPress(sessions, activeId, split = false) else Modifier)
@@ -203,7 +204,7 @@ fun TerminalView(state: DesktopDesignState) {
                     TerminalPane(state, Modifier.weight(1f).fillMaxWidth())
                 }
                 if (showSplit) {
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(D.cyan14))
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(Skerry.colors.cyan14))
                     val splitMod = Modifier.weight(1f).then(paneFocusBorder(focusedSplit))
                     // With the info panel closed the actions sit over this pane's header, so it
                     // gives them room; with the panel open they're over the panel instead.
@@ -247,10 +248,10 @@ fun TerminalView(state: DesktopDesignState) {
 @Composable
 private fun SidebarReopenHandle(onClick: () -> Unit) {
     Box(
-        Modifier.width(16.dp).fillMaxHeight().background(D.surface2).clickable(onClick = onClick),
+        Modifier.width(16.dp).fillMaxHeight().background(Skerry.colors.surface2).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Sym("chevron_right", size = 16.sp, color = D.faint)
+        Sym("chevron_right", size = 16.sp, color = Skerry.colors.faint)
     }
 }
 
@@ -265,7 +266,7 @@ private fun SessionToolbar(state: DesktopDesignState) {
         Row(
             // Fixed header height shared with the split pane (PANE_HEADER_HEIGHT) so both
             // headers align regardless of content.
-            Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).background(D.surface2).padding(horizontal = 16.dp),
+            Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).background(Skerry.colors.surface2).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -273,19 +274,19 @@ private fun SessionToolbar(state: DesktopDesignState) {
                 if (active != null) {
                     // Live title: host label + user@addr:port + connection status dot.
                     // Spacing/padding matches the split header (LiveSplitPane) for visual parity.
-                    Txt(active.title, color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
-                    Txt(active.subtitle, color = D.dim, size = 11.5.sp, font = mono)
+                    Txt(active.title, color = Skerry.colors.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
+                    Txt(active.subtitle, color = Skerry.colors.dim, size = 11.5.sp, font = mono)
                     Dot(sessionDotColor(active.controller.uiState))
                 } else if (sessions == null) {
                     // Mock/preview (offscreen render without LocalSessions): static header.
-                    Txt("root@prod-web-01", color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
+                    Txt("root@prod-web-01", color = Skerry.colors.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Txt("192.168.1.45:22", color = D.dim, size = 11.5.sp)
-                        Txt(" · ", color = D.faint, size = 11.5.sp)
-                        Txt("●", color = D.moss, size = 11.5.sp)
-                        Txt(" 04:12:45", color = D.faint, size = 11.5.sp)
+                        Txt("192.168.1.45:22", color = Skerry.colors.dim, size = 11.5.sp)
+                        Txt(" · ", color = Skerry.colors.faint, size = 11.5.sp)
+                        Txt("●", color = Skerry.colors.moss, size = 11.5.sp)
+                        Txt(" 04:12:45", color = Skerry.colors.faint, size = 11.5.sp)
                     }
-                    Txt("SSHv2 · aes256-gcm · ed25519", color = D.faint, size = 11.5.sp)
+                    Txt("SSHv2 · aes256-gcm · ed25519", color = Skerry.colors.faint, size = 11.5.sp)
                 }
             }
         }
@@ -314,14 +315,14 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
     // A live or frozen screen sits on the terminal's own background; every notice (no session /
     // connecting / error) sits on the app background, so the empty terminal matches other sections.
     val onScreen = st is ConnectionUiState.Connected || st is ConnectionUiState.Disconnected
-    Box(modifier.fillMaxHeight().fillMaxWidth().background(if (onScreen) D.terminalBg else D.bg)) {
+    Box(modifier.fillMaxHeight().fillMaxWidth().background(if (onScreen) Skerry.colors.terminalBg else Skerry.colors.bg)) {
         when (st) {
             null -> TerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_notice_pick_host_to_connect))
             // Form state on the active tab means an empty ("+") tab: connection not yet started.
             ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new))
             ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), active.subtitle)
             is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
-            is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = D.sunset)
+            is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = Skerry.colors.sunset)
             // Disconnected: screen is frozen at the moment of loss ([ConnectionUiState.Disconnected.terminal]),
             // shown under the disconnect banner so output isn't lost and status (reconnecting/gave up) stays visible.
             is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
@@ -340,9 +341,9 @@ private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = 
 @Composable
 private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: Modifier = Modifier) {
     val color = when {
-        state.cleanExit -> D.dim
-        state.reconnecting -> D.amber
-        else -> D.sunset
+        state.cleanExit -> Skerry.colors.dim
+        state.reconnecting -> Skerry.colors.amber
+        else -> Skerry.colors.sunset
     }
     val icon = when {
         state.cleanExit -> "power_settings_new"
@@ -363,7 +364,7 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
  * the glyph (red for errors).
  */
 @Composable
-private fun TerminalNotice(icon: String, title: String, subtitle: String, color: Color = D.dim) {
+private fun TerminalNotice(icon: String, title: String, subtitle: String, color: Color = Skerry.colors.dim) {
     EmptyState(icon = icon, title = title, subtitle = subtitle, tint = color)
 }
 
@@ -388,10 +389,10 @@ private fun LiveSplitPane(
     var pickerOpen by remember { mutableStateOf(false) }
     val split = parent.splitSession
     Column(
-        modifier.fillMaxHeight().background(D.terminalBg)
+        modifier.fillMaxHeight().background(Skerry.colors.terminalBg)
             .focusPaneOnPress(sessions, parent.id, split = true),
     ) {
-        Box(Modifier.fillMaxWidth().background(D.surface2)) {
+        Box(Modifier.fillMaxWidth().background(Skerry.colors.surface2)) {
             Row(
                 Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT)
                     .padding(start = 16.dp, end = 16.dp + reserveEnd),
@@ -407,14 +408,14 @@ private fun LiveSplitPane(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     if (split != null) {
-                        Txt(split.title, color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
-                        Txt(split.subtitle, color = D.dim, size = 11.5.sp, font = mono)
+                        Txt(split.title, color = Skerry.colors.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
+                        Txt(split.subtitle, color = Skerry.colors.dim, size = 11.5.sp, font = mono)
                         Dot(sessionDotColor(split.controller.uiState))
                         Spacer(Modifier.weight(1f))
                     } else {
-                        Txt(stringResource(Res.string.term_select_host_placeholder), color = D.faint, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+                        Txt(stringResource(Res.string.term_select_host_placeholder), color = Skerry.colors.faint, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
                     }
-                    Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+                    Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
                 }
                 // Header close button closes this tab's split (drops the secondary connection);
                 // confirms only when there's something to drop (host already selected), closes
@@ -438,7 +439,7 @@ private fun LiveSplitPane(
                 ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_session_closed), split.subtitle)
                 ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), split.subtitle)
                 is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
-                is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = D.sunset)
+                is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = Skerry.colors.sunset)
                 is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                     TerminalScreen(st.terminal, Modifier.fillMaxSize())
                     DisconnectedBanner(st, Modifier.align(Alignment.TopCenter))
@@ -463,13 +464,13 @@ private fun SplitHostPicker(onPicked: () -> Unit) {
             .width(240.dp)
             .heightIn(max = 280.dp)
             .clip(RoundedCornerShape(7.dp))
-            .background(D.surface2)
-            .border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+            .background(Skerry.colors.surface2)
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
             .verticalScroll(rememberScrollState())
             .padding(4.dp),
     ) {
         if (hosts.isEmpty()) {
-            Txt(stringResource(Res.string.term_no_hosts_in_catalog), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
+            Txt(stringResource(Res.string.term_no_hosts_in_catalog), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
         }
         hosts.forEach { host ->
             Row(
@@ -481,8 +482,8 @@ private fun SplitHostPicker(onPicked: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Sym("dns", size = 14.sp, color = D.cyanBright)
-                Txt(host.label, color = D.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+                Sym("dns", size = 14.sp, color = Skerry.colors.cyanBright)
+                Txt(host.label, color = Skerry.colors.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
             }
         }
     }

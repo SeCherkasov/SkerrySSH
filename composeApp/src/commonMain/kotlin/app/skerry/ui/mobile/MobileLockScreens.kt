@@ -43,7 +43,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.BrandMark
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -84,6 +83,7 @@ import app.skerry.ui.vault.ResetScope
 import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Lock screens (mobile visual).
 
@@ -116,15 +116,15 @@ fun MobileUnlockScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Sym("fingerprint", size = 24.sp, color = D.cyanBright)
-                Txt(stringResource(Res.string.shell_use_biometrics), color = D.dim, size = 14.sp)
+                Sym("fingerprint", size = 24.sp, color = Skerry.colors.cyanBright)
+                Txt(stringResource(Res.string.shell_use_biometrics), color = Skerry.colors.dim, size = 14.sp)
             }
         }
         // Forgot-password dead end is resolved only by reset (zero-knowledge); leads to [MobileResetScreen].
         Spacer(Modifier.height(18.dp))
         Txt(
             stringResource(Res.string.shell_forgot_password),
-            color = D.faint,
+            color = Skerry.colors.faint,
             size = 13.sp,
             modifier = Modifier.clickable(onClick = onForgotPassword),
         )
@@ -170,7 +170,7 @@ fun MobileCreateScreen(
         MobileLockField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Next)
         issue?.let {
             Spacer(Modifier.height(8.dp))
-            Txt(masterPasswordHint(it), color = D.amber, size = 12.sp)
+            Txt(masterPasswordHint(it), color = Skerry.colors.amber, size = 12.sp)
         }
         Spacer(Modifier.height(12.dp))
         MobileLockField(confirm, { confirm = it }, stringResource(Res.string.shell_repeat_password), ImeAction.Done, onSubmit = submit)
@@ -178,15 +178,15 @@ fun MobileCreateScreen(
         MobileWideButton(
             stringResource(Res.string.shell_create_vault),
             onClick = submit,
-            bg = if (canCreate) D.cyan else Color(0x14FFFFFF),
-            fg = if (canCreate) D.ink else D.faint,
+            bg = if (canCreate) Skerry.colors.cyan else Color(0x14FFFFFF),
+            fg = if (canCreate) Skerry.colors.ink else Skerry.colors.faint,
             enabled = canCreate,
         )
         if (sync != null && onPairingComplete != null) {
             Spacer(Modifier.height(18.dp))
             Txt(
                 stringResource(Res.string.shell_pairing_link),
-                color = D.cyanBright, size = 13.sp,
+                color = Skerry.colors.cyanBright, size = 13.sp,
                 modifier = Modifier.clickable { joining = true },
             )
         }
@@ -212,7 +212,7 @@ fun MobileBiometricOfferScreen(inFlight: Boolean, onEnable: () -> Unit, onSkip: 
             Modifier.fillMaxWidth().clickable(enabled = !inFlight, onClick = onSkip).padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Txt(stringResource(Res.string.shell_not_now), color = D.dim, size = 14.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.shell_not_now), color = Skerry.colors.dim, size = 14.sp, weight = FontWeight.Medium)
         }
     }
 }
@@ -270,8 +270,8 @@ fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
         MobileWideButton(
             stringResource(Res.string.shell_reset_permanently),
             onClick = { if (canConfirm) onConfirm(scope) },
-            bg = if (canConfirm) D.storm else Color(0x14FFFFFF),
-            fg = if (canConfirm) D.ink else D.faint,
+            bg = if (canConfirm) Skerry.colors.storm else Color(0x14FFFFFF),
+            fg = if (canConfirm) Skerry.colors.ink else Skerry.colors.faint,
             enabled = canConfirm,
         )
         Spacer(Modifier.height(16.dp))
@@ -279,7 +279,7 @@ fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
         // otherwise a mis-tap leaves the user on the danger screen with no obvious way back.
         Txt(
             stringResource(Res.string.shell_cancel),
-            color = D.dim,
+            color = Skerry.colors.dim,
             size = 13.sp,
             modifier = Modifier
                 .fillMaxWidth()
@@ -297,7 +297,7 @@ private fun MobileResetScopeRow(selected: Boolean, title: String, subtitle: Stri
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(11.dp))
-            .border(1.dp, if (selected) D.cyan else D.line, RoundedCornerShape(11.dp))
+            .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.line, RoundedCornerShape(11.dp))
             .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
             .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -305,14 +305,14 @@ private fun MobileResetScopeRow(selected: Boolean, title: String, subtitle: Stri
     ) {
         Box(
             Modifier.size(18.dp).clip(RoundedCornerShape(9.dp))
-                .border(1.dp, if (selected) D.cyan else D.faint, RoundedCornerShape(9.dp)),
+                .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.faint, RoundedCornerShape(9.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            if (selected) Box(Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(D.cyan))
+            if (selected) Box(Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(Skerry.colors.cyan))
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium)
-            Txt(subtitle, color = D.dim, size = 12.sp, lineHeight = 16.sp)
+            Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = Skerry.colors.dim, size = 12.sp, lineHeight = 16.sp)
         }
     }
 }
@@ -328,7 +328,7 @@ private fun MobileLockScaffold(
     Column(
         Modifier
             .fillMaxSize()
-            .background(Brush.radialGradient(colors = listOf(Color(0xFF132838), Color(0xFF06121C))))
+            .background(Brush.radialGradient(colors = listOf(Skerry.colors.surfaceDeep, Skerry.colors.bg)))
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = 30.dp, vertical = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -343,21 +343,21 @@ private fun MobileLockScaffold(
             BrandMark(size = 64.dp)
         }
         Spacer(Modifier.height(16.dp))
-        Txt(title, color = D.text, size = 20.sp, weight = FontWeight.Bold)
+        Txt(title, color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Txt(subtitle, color = D.dim, size = 13.sp)
+        Txt(subtitle, color = Skerry.colors.dim, size = 13.sp)
         Spacer(Modifier.height(26.dp))
         Column(Modifier.width(300.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             fields()
             if (error != null) {
                 Spacer(Modifier.height(12.dp))
-                Txt(vaultGateErrorMessage(error), color = D.storm, size = 12.sp)
+                Txt(vaultGateErrorMessage(error), color = Skerry.colors.storm, size = 12.sp)
             }
         }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("shield_lock", size = 14.sp, color = D.faint)
-            Txt(stringResource(Res.string.shell_footer_never_leaves_short), color = D.faint, size = 11.sp)
+            Sym("shield_lock", size = 14.sp, color = Skerry.colors.faint)
+            Txt(stringResource(Res.string.shell_footer_never_leaves_short), color = Skerry.colors.faint, size = 11.sp)
         }
     }
 }
@@ -377,8 +377,8 @@ private fun MobileLockField(
         onValueChange = onValueChange,
         singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
-        textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
         modifier = Modifier.fillMaxWidth(),
@@ -387,15 +387,15 @@ private fun MobileLockField(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(13.dp))
-                    .background(D.surface2)
-                    .border(1.dp, D.cyan.copy(alpha = 0.16f), RoundedCornerShape(13.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.16f), RoundedCornerShape(13.dp))
                     .padding(horizontal = 14.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Sym("lock", size = 19.sp, color = D.faint)
+                Sym("lock", size = 19.sp, color = Skerry.colors.faint)
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 15.sp)
                     inner()
                 }
             }
@@ -416,8 +416,8 @@ private fun MobileLockPlainField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         // Confirm word is uppercase (RESET): disable autocorrect (otherwise the IME rewrites it to
         // "Reset" and the comparison never matches) and force uppercase capitalization.
         keyboardOptions = KeyboardOptions(
@@ -432,13 +432,13 @@ private fun MobileLockPlainField(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(13.dp))
-                    .background(D.surface2)
-                    .border(1.dp, D.cyan.copy(alpha = 0.16f), RoundedCornerShape(13.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.16f), RoundedCornerShape(13.dp))
                     .padding(horizontal = 14.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 15.sp)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 15.sp)
                     inner()
                 }
             }
@@ -455,8 +455,8 @@ private fun MobileLockPlainField(
 private fun MobileWideButton(
     label: String,
     onClick: () -> Unit,
-    bg: Color = D.cyan,
-    fg: Color = D.ink,
+    bg: Color = Skerry.colors.cyan,
+    fg: Color = Skerry.colors.ink,
     enabled: Boolean = true,
 ) {
     Box(

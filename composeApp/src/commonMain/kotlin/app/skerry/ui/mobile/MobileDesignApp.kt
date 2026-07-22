@@ -61,7 +61,6 @@ import app.skerry.ui.vault.tearDownForLock
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_route_team
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.D
 import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.app.FeatureFlags
 import app.skerry.ui.app.LocalAi
@@ -92,6 +91,7 @@ import app.skerry.ui.app.mobileBackAction
 import app.skerry.ui.design.rememberMaterialSymbols
 import app.skerry.ui.design.rememberMono
 import app.skerry.ui.design.rememberSpaceGrotesk
+import app.skerry.ui.theme.Skerry
 
 /**
  * Root of the mobile layout. Supplies fonts via [LocalFonts] and live backends via
@@ -274,7 +274,7 @@ fun MobileDesignApp(
         // Teams — More → "Team" push screen (sharing hosts/snippets between accounts).
         LocalTeams provides deps.teams,
     ) {
-        Box(Modifier.fillMaxSize().background(D.bg)) {
+        Box(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
             val vault = deps.vault
             if (vault != null) {
                 VaultGate(

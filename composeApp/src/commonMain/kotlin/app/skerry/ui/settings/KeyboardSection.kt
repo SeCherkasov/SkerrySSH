@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.Badge
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
@@ -62,6 +61,7 @@ import app.skerry.ui.generated.resources.settings_kb_split_terminal
 import app.skerry.ui.generated.resources.settings_kb_terminal_group
 import app.skerry.ui.generated.resources.settings_keyboard_subtitle
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Keyboard section: hotkey reference (global and terminal).
 
@@ -145,20 +145,20 @@ internal fun KeyboardSection() {
 
 @Composable
 private fun KeyboardGroupLabel(text: String, top: Dp) {
-    Txt(text, color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = top, bottom = 8.dp))
+    Txt(text, color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = top, bottom = 8.dp))
 }
 
 @Composable
 private fun KeyboardRow(b: KeyboardBinding, mono: FontFamily) {
     Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Txt(b.label, color = if (b.live) D.textBright else D.dim, size = 12.5.sp)
+            Txt(b.label, color = if (b.live) Skerry.colors.textBright else Skerry.colors.dim, size = 12.5.sp)
             // Command palette isn't implemented yet; mark the binding SOON instead of showing a
             // dead shortcut next to working ones.
-            if (!b.live) Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
+            if (!b.live) Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = Skerry.colors.amber, radius = 3, size = 9.sp)
         }
-        Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x0AFFFFFF)).border(1.dp, D.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
-            Txt(b.binding, color = D.dim, size = 11.sp, font = mono)
+        Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+            Txt(b.binding, color = Skerry.colors.dim, size = 11.sp, font = mono)
         }
     }
     HLine()
