@@ -70,6 +70,7 @@ import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnelHost
 import app.skerry.ui.vault.AutoLockDuration
+import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.vault.ResetScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -454,6 +455,8 @@ fun main(args: Array<String>) {
                     onTerminalCursorStyleChange = { prefs.set("terminal_cursor_style", it.id) },
                     initialShowTerminalTitleOnTabs = prefs.bool("terminal_show_title", false),
                     onShowTerminalTitleOnTabsChange = { prefs.set("terminal_show_title", it) },
+                    initialHostClickConnectMode = prefs.id("host_click_connect", HostClickConnectMode.DEFAULT, HostClickConnectMode::fromId),
+                    onHostClickConnectModeChange = { prefs.set("host_click_connect", it.id) },
                     initialAllowServerClipboardWrite = prefs.bool("terminal_clipboard_write", false),
                     onAllowServerClipboardWriteChange = { prefs.set("terminal_clipboard_write", it) },
                     initialAutoLock = prefs.id("auto_lock", AutoLockDuration.DEFAULT, AutoLockDuration::fromId),

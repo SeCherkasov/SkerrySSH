@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.D
 import app.skerry.ui.design.DropdownField
@@ -51,6 +52,9 @@ import app.skerry.ui.generated.resources.settings_terminal_show_title
 import app.skerry.ui.generated.resources.settings_terminal_show_title_desc
 import app.skerry.ui.generated.resources.settings_terminal_subtitle
 import app.skerry.ui.generated.resources.settings_terminal_title
+import app.skerry.ui.generated.resources.settings_terminal_host_connect
+import app.skerry.ui.generated.resources.settings_terminal_host_connect_single
+import app.skerry.ui.generated.resources.settings_terminal_host_connect_double
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -171,6 +175,13 @@ internal fun TerminalSection(state: DesktopDesignState) {
         onToggle = state::toggleShowTerminalTitleOnTabs,
     )
     HLine()
+    // Host-row click behavior: single click connects directly, double click requires a second
+    // click (protects against accidental connects when just browsing the catalog). Desktop-only.
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_host_connect), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
+        Box(Modifier.width(160.dp)) { HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode) }
+    }
+    HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from
     // silently overwriting the system clipboard. Applies to new and already-open sessions.
     SettingToggleRow(
@@ -258,6 +269,21 @@ private fun ScrollbackPicker(current: Int, onPick: (Int) -> Unit) {
 @Composable
 private fun CursorStylePicker(current: TerminalCursorStyle, onPick: (TerminalCursorStyle) -> Unit) {
     DropdownField(current, TerminalCursorStyle.entries, label = { it.cursorStyleLabel() }, onPick = onPick)
+}
+
+/** Localized host-connect-mode label for the dropdown and its trigger. */
+@Composable
+internal fun HostClickConnectMode.hostConnectModeLabel(): String = stringResource(
+    when (this) {
+        HostClickConnectMode.SingleClick -> Res.string.settings_terminal_host_connect_single
+        HostClickConnectMode.DoubleClick -> Res.string.settings_terminal_host_connect_double
+    },
+)
+
+/** Dropdown for host-row connect click behavior (single/double click). */
+@Composable
+private fun HostConnectModePicker(current: HostClickConnectMode, onPick: (HostClickConnectMode) -> Unit) {
+    DropdownField(current, HostClickConnectMode.entries, label = { it.hostConnectModeLabel() }, onPick = onPick)
 }
 
 /** "10000" -> "10 000" (space between thousands) for readable line counts. */

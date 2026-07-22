@@ -87,6 +87,9 @@
     <string name="settings_terminal_show_title">Показывать заголовок терминала на вкладках</string>
     <string name="settings_terminal_show_title_desc">Разрешить подключённому шеллу переименовывать вкладку (например, по запущенной программе). Выкл — вкладки всегда показывают сохранённое имя хоста.</string>
     <string name="settings_terminal_clipboard_write">Разрешить серверу писать в буфер обмена (OSC 52)</string>
+    <string name="settings_terminal_host_connect">Подключение к хосту</string>
+    <string name="settings_terminal_host_connect_single">Один клик</string>
+    <string name="settings_terminal_host_connect_double">Двойной клик</string>
     <string name="settings_terminal_clipboard_write_desc">Разрешить подключённому шеллу заменять системный буфер обмена (используется copy в tmux/vim). По умолчанию выкл — иначе вредоносный хост может подсунуть свой текст в то, что вы вставите.</string>
 
     <!-- Раздел Sync (включая карточку аккаунта и устройства — бывшая вкладка Account влита сюда) -->

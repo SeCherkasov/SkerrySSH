@@ -87,6 +87,9 @@
     <string name="settings_terminal_show_title">在标签页上显示终端标题</string>
     <string name="settings_terminal_show_title_desc">允许连接的终端程序重命名标签页（如运行中的程序名）。关闭——标签页始终显示保存的主机名。</string>
     <string name="settings_terminal_clipboard_write">允许服务器写入剪贴板 (OSC 52)</string>
+    <string name="settings_terminal_host_connect">连接主机方式</string>
+    <string name="settings_terminal_host_connect_single">单击</string>
+    <string name="settings_terminal_host_connect_double">双击</string>
     <string name="settings_terminal_clipboard_write_desc">允许连接的终端程序覆盖系统剪贴板（tmux/vim 的复制功能使用）。默认关闭——恶意主机可能将攻击者控制的文本插入你粘贴的内容中。</string>
 
     <!-- 同步部分 -->
