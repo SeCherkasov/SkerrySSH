@@ -74,6 +74,7 @@ import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.theme.SkerryTheme
+import app.skerry.ui.theme.ThemeMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -198,8 +199,10 @@ fun main() {
         else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, windowChrome = windowChrome) } }
     }
 
+    // Theme for visual review: -Dskerry.screenshot.theme=<system|light|dark> (default dark).
+    val themeMode = ThemeMode.fromId(System.getProperty("skerry.screenshot.theme", "dark"))
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
-        SkerryTheme { content() }
+        SkerryTheme(mode = themeMode) { content() }
     }
     // Pumps frames with a real pause so compose-resources can load fonts (async IO) and the fake
     // session can flush its output to the terminal.
@@ -260,8 +263,9 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     }
     if (overlay == "sheet") state.openNewConn() // New connection sheet over the current tab
     // Scene width/height are in pixels: 780x1688 at density 2 = logical 390x844dp (phone).
+    val themeMode = ThemeMode.fromId(System.getProperty("skerry.screenshot.theme", "dark"))
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
-        SkerryTheme {
+        SkerryTheme(mode = themeMode) {
             MobileDesignApp(deps = deps, state = state, sessions = sessions, aiOverride = ai, updatesOverride = updates)
             // overlay=monitor: the host-monitor sheet on a fixed snapshot. The sheet is opened from
             // the terminal's menu at runtime, which an offscreen render can't tap, and the live

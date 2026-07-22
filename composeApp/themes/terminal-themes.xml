@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Terminal color themes (Appearance → theme picker). Single source of truth for the TerminalThemes
+  catalog; :composeApp:generateThemeSources turns this into terminal/GeneratedTerminalThemes.kt.
+
+  Document order is the catalog (`all`) order and the Appearance card order. `default="true"` marks
+  TerminalThemes.DEFAULT. `symbol` is the generated Kotlin property name (kept explicit so the named
+  accessors — TerminalThemes.NightSea, … — stay stable). <ansi> holds exactly 16 whitespace-separated
+  hex colors (0..7 normal, 8..15 bright). <selection> is optional: omit it to inherit the data class
+  default (cursor accent at 0.3 alpha); light themes set an explicit shade so pale text stays legible.
+-->
+<themes>
+
+    <!-- Skerry default — "night sea". -->
+    <terminal id="night-sea" name="Night Sea" symbol="NightSea" default="true">
+        <background>#050E16</background>
+        <foreground>#E6ECEF</foreground>
+        <cursor>#2BBDEE</cursor>
+        <ansi>
+            #2A3540 #E94B4B #5DCE9E #F2A65A #4A9EDB #C792EA #2BBDEE #C9D6DE
+            #5A7080 #FF6B6B #7FE9B8 #FFC078 #6FC3F5 #E0A8FF #5FD1F4 #FFFFFF
+        </ansi>
+    </terminal>
+
+    <!-- Tokyo Night — dark blue palette. -->
+    <terminal id="tokyo-night" name="Tokyo Night" symbol="TokyoNight">
+        <background>#1A1B26</background>
+        <foreground>#C0CAF5</foreground>
+        <cursor>#7AA2F7</cursor>
+        <ansi>
+            #15161E #F7768E #9ECE6A #E0AF68 #7AA2F7 #BB9AF7 #7DCFFF #A9B1D6
+            #414868 #F7768E #9ECE6A #E0AF68 #7AA2F7 #BB9AF7 #7DCFFF #C0CAF5
+        </ansi>
+    </terminal>
+
+    <!-- Tokyo Day — light variant of Tokyo Night (folke tokyonight "day"). Explicit light-blue
+         selection rather than a translucent accent, which would wash out the pale text. -->
+    <terminal id="tokyo-day" name="Tokyo Day" symbol="TokyoDay">
+        <background>#E1E2E7</background>
+        <foreground>#3760BF</foreground>
+        <cursor>#3760BF</cursor>
+        <ansi>
+            #B4B5B9 #F52A65 #587539 #8C6C3E #2E7DE9 #9854F1 #007197 #6172B0
+            #A1A6C5 #F52A65 #587539 #8C6C3E #2E7DE9 #9854F1 #007197 #3760BF
+        </ansi>
+        <selection>#B7C1E3</selection>
+    </terminal>
+
+    <!-- Catppuccin Mocha — soft dark-purple pastel (Base #1E1E2E / Text #CDD6F4). -->
+    <terminal id="catppuccin-mocha" name="Catppuccin Mocha" symbol="CatppuccinMocha">
+        <background>#1E1E2E</background>
+        <foreground>#CDD6F4</foreground>
+        <cursor>#F5E0DC</cursor>
+        <ansi>
+            #45475A #F38BA8 #A6E3A1 #F9E2AF #89B4FA #F5C2E7 #94E2D5 #BAC2DE
+            #585B70 #F38BA8 #A6E3A1 #F9E2AF #89B4FA #F5C2E7 #94E2D5 #A6ADC8
+        </ansi>
+    </terminal>
+
+    <!-- Gruvbox Dark — warm retro palette. -->
+    <terminal id="gruvbox-dark" name="Gruvbox Dark" symbol="GruvboxDark">
+        <background>#282828</background>
+        <foreground>#EBDBB2</foreground>
+        <cursor>#FE8019</cursor>
+        <ansi>
+            #282828 #CC241D #98971A #D79921 #458588 #B16286 #689D6A #A89984
+            #928374 #FB4934 #B8BB26 #FABD2F #83A598 #D3869B #8EC07C #EBDBB2
+        </ansi>
+    </terminal>
+
+    <!-- Dracula — dark palette with bright neon accents (#282A36 / #F8F8F2). -->
+    <terminal id="dracula" name="Dracula" symbol="Dracula">
+        <background>#282A36</background>
+        <foreground>#F8F8F2</foreground>
+        <cursor>#F8F8F2</cursor>
+        <ansi>
+            #21222C #FF5555 #50FA7B #F1FA8C #BD93F9 #FF79C6 #8BE9FD #F8F8F2
+            #6272A4 #FF6E6E #69FF94 #FFFFA5 #D6ACFF #FF92DF #A4FFFF #FFFFFF
+        </ansi>
+    </terminal>
+
+    <!-- Solarized Light. Uses dark base01 (#586E75) for body text instead of the canonical pale
+         base00, which loses contrast on the cream background; selection is base2. -->
+    <terminal id="solarized-light" name="Solarized Light" symbol="SolarizedLight">
+        <background>#FDF6E3</background>
+        <foreground>#586E75</foreground>
+        <cursor>#268BD2</cursor>
+        <ansi>
+            #073642 #DC322F #859900 #B58900 #268BD2 #D33682 #2AA198 #EEE8D5
+            #002B36 #CB4B16 #586E75 #657B83 #839496 #6C71C4 #93A1A1 #FDF6E3
+        </ansi>
+        <selection>#EEE8D5</selection>
+    </terminal>
+
+</themes>

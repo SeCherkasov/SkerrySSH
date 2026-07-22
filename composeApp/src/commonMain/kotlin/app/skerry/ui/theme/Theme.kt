@@ -1,6 +1,7 @@
 package app.skerry.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -9,55 +10,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
-/**
- * The "night sea" palette — the app's original dark theme. This is the default and the
- * reference for token values.
- */
-fun nightSeaColors(): SkerryColors {
-    val cyan = Color(0xFF2BBDEE)
-    return SkerryColors(
-        // Base backgrounds and surfaces
-        bg = Color(0xFF07141E),
-        railBg = Color(0xFF0A1620),
-        titleTop = Color(0xFF0C1A24),
-        titleBottom = Color(0xFF0A1620),
-        surface = Color(0xFF0A141B),
-        surface2 = Color(0xFF0B1A26),
-        surfaceDeep = Color(0xFF0E2230),
-        panel = Color(0xFF08121C),
-        terminalBg = Color(0xFF050E16),
-        // Text
-        text = Color(0xFFE6ECEF),
-        textBright = Color(0xFFC9D6DE),
-        textMid = Color(0xFFB7C5CC),
-        dim = Color(0xFF8FA3B0),
-        faint = Color(0xFF5A7080),
-        // Accents
-        cyan = cyan,
-        cyanBright = Color(0xFF5FD1F4),
-        moss = Color(0xFF5DCE9E),
-        sunset = Color(0xFFE07A5F),
-        amber = Color(0xFFF2A65A),
-        amberBright = Color(0xFFFFC078),
-        // Teal logo accent
-        teal = Color(0xFF34D3C0),
-        tealLight = Color(0xFF7FF0E2),
-        tealDeep = Color(0xFF22B3A4),
-        // Fixed tones
-        white = Color(0xFFFFFFFF),
-        storm = Color(0xFFE94B4B),
-        // Borders — cyan tint on the dark surfaces
-        line = cyan.copy(alpha = 0.06f),
-        lineStrong = cyan.copy(alpha = 0.14f),
-        // Shared surfaces / accents
-        strictFg = Color(0xFFE07060),
-        whiteFaint = Color(0x1AFFFFFF), // rgba(255,255,255,0.1) — disabled toggle background
-        ink = Color(0xFF0A1A26),        // text/icon color on cyan-accented buttons
-        card = Color(0x08FFFFFF),       // row card background (rgba(255,255,255,0.03))
-        scrim = Color(0xB304080C),      // dimming under mobile sheets/dialogs
-        modalScrim = Color(0xB3060E16), // dimming under desktop modals
-    )
-}
+// The night-sea (dark) and daybreak (light) palettes — nightSeaColors() / daybreakColors() — are
+// generated from composeApp/themes/chrome-themes.xml by :composeApp:generateThemeSources. Edit the XML,
+// not Kotlin, to change a token.
 
 /** Maps app-chrome tokens onto the Material3 [ColorScheme] used by the few Material components. */
 fun SkerryColors.toMaterialColorScheme(dark: Boolean): ColorScheme {
@@ -87,58 +42,6 @@ fun SkerryColors.toMaterialColorScheme(dark: Boolean): ColorScheme {
     )
 }
 
-/**
- * The "daybreak" light palette — a cool, high-key counterpart to night sea. Backgrounds are a cool
- * off-white with white cards stratified above them; accents are darkened for AA contrast on light
- * surfaces; borders are neutral ink tints rather than the cyan tint used on dark.
- */
-fun daybreakColors(): SkerryColors {
-    val ink = 0xFF0D1E29 // the darkest text/border base, reused for translucent lines
-    val cyan = Color(0xFF0E90BF)
-    return SkerryColors(
-        // Base backgrounds and surfaces
-        bg = Color(0xFFF3F6F8),
-        railBg = Color(0xFFEBF0F3),
-        titleTop = Color(0xFFFFFFFF),
-        titleBottom = Color(0xFFEDF2F5),
-        surface = Color(0xFFFFFFFF),
-        surface2 = Color(0xFFEEF3F6),
-        surfaceDeep = Color(0xFFE1E9EE),
-        panel = Color(0xFFF3F6F8),
-        terminalBg = Color(0xFFEDF1F4),
-        // Text — inverted lightness ladder: darkest is the primary text
-        text = Color(ink),
-        textBright = Color(0xFF243B49),
-        textMid = Color(0xFF3B5361),
-        dim = Color(0xFF5E7583),
-        faint = Color(0xFF93A6B2),
-        // Accents — darkened for contrast on light surfaces
-        cyan = cyan,
-        cyanBright = Color(0xFF14A6DB),
-        moss = Color(0xFF2C9E71),
-        sunset = Color(0xFFCE5B3E),
-        amber = Color(0xFFB9761B),
-        amberBright = Color(0xFFD98E2C),
-        // Teal logo accent — kept vivid for brand recognition
-        teal = Color(0xFF12A897),
-        tealLight = Color(0xFF4FD1C2),
-        tealDeep = Color(0xFF0B7F73),
-        // Fixed tones
-        white = Color(0xFFFFFFFF),
-        storm = Color(0xFFCE3B3B),
-        // Borders — neutral ink tint, not cyan
-        line = Color(ink).copy(alpha = 0.07f),
-        lineStrong = Color(ink).copy(alpha = 0.18f),
-        // Shared surfaces / accents
-        strictFg = Color(0xFFB4543E),
-        whiteFaint = Color(ink).copy(alpha = 0.08f), // disabled toggle background (dark tint on light)
-        ink = Color(0xFF08303F),                     // text/icon color on cyan-accented buttons
-        card = Color(0x0D0D1E29),                    // row card — a faint ink darkening on light (mirrors the white lift on dark)
-        scrim = Color(0x66101922),                   // dimming under mobile sheets/dialogs
-        modalScrim = Color(0x73101922),              // dimming under desktop modals
-    )
-}
-
 /** User-facing theme choice, persisted by id. [SYSTEM] follows the OS; the default is [DARK]. */
 enum class ThemeMode(val id: String) {
     SYSTEM("system"),
@@ -157,7 +60,7 @@ fun ThemeMode.resolveColors(): Pair<SkerryColors, Boolean> {
     val dark = when (this) {
         ThemeMode.DARK -> true
         ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.SYSTEM -> systemInDarkTheme()
     }
     return (if (dark) nightSeaColors() else daybreakColors()) to dark
 }
@@ -172,11 +75,57 @@ fun SkerryTheme(
     mode: ThemeMode = ThemeMode.DEFAULT,
     content: @Composable () -> Unit,
 ) {
-    val (colors, dark) = mode.resolveColors()
+    val (target, dark) = mode.resolveColors()
+    // Cross-fade every token so a theme switch (including a live OS light↔dark flip under
+    // ThemeMode.SYSTEM) glides instead of snapping. First composition snaps to the target.
+    val colors = animateSkerryColors(target)
     CompositionLocalProvider(LocalSkerryColors provides colors) {
         MaterialTheme(
             colorScheme = colors.toMaterialColorScheme(dark),
             content = content,
         )
     }
+}
+
+private val ThemeTransitionSpec = tween<Color>(durationMillis = 250)
+
+/** Returns [target] with every base token animated, so a palette change transitions smoothly. */
+@Composable
+private fun animateSkerryColors(target: SkerryColors): SkerryColors {
+    @Composable fun anim(value: Color): Color = animateColorAsState(value, ThemeTransitionSpec).value
+    return SkerryColors(
+        bg = anim(target.bg),
+        railBg = anim(target.railBg),
+        titleTop = anim(target.titleTop),
+        titleBottom = anim(target.titleBottom),
+        surface = anim(target.surface),
+        surface2 = anim(target.surface2),
+        surfaceDeep = anim(target.surfaceDeep),
+        panel = anim(target.panel),
+        terminalBg = anim(target.terminalBg),
+        text = anim(target.text),
+        textBright = anim(target.textBright),
+        textMid = anim(target.textMid),
+        dim = anim(target.dim),
+        faint = anim(target.faint),
+        cyan = anim(target.cyan),
+        cyanBright = anim(target.cyanBright),
+        moss = anim(target.moss),
+        sunset = anim(target.sunset),
+        amber = anim(target.amber),
+        amberBright = anim(target.amberBright),
+        teal = anim(target.teal),
+        tealLight = anim(target.tealLight),
+        tealDeep = anim(target.tealDeep),
+        white = anim(target.white),
+        storm = anim(target.storm),
+        line = anim(target.line),
+        lineStrong = anim(target.lineStrong),
+        strictFg = anim(target.strictFg),
+        whiteFaint = anim(target.whiteFaint),
+        ink = anim(target.ink),
+        card = anim(target.card),
+        scrim = anim(target.scrim),
+        modalScrim = anim(target.modalScrim),
+    )
 }

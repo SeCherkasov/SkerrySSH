@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  App-chrome design tokens. Single source of truth for SkerryColors; :composeApp:generateThemeSources
+  turns this into theme/GeneratedChromeThemes.kt at build time. Token names mirror the SkerryColors
+  constructor 1:1 (all 33 required). The derived getters (cyan06…, strictBg, devBg, amberSoft) live
+  in the data class and are NOT listed here.
+
+  A color is either a literal — <color name="x">#RRGGBB</color> or 8-digit #AARRGGBB — or an
+  alpha-over-base — <color name="x" over="cyan" alpha="0.06"/> — where `over` is another token name
+  in the same theme or a raw #RRGGBB. Alpha derivations are kept as `.copy(alpha=)` (not baked into
+  ARGB) so they stay bit-identical to the previous hand-written palette.
+-->
+<themes>
+
+    <!-- "Night sea" — the app's original dark theme; the default and the reference for token values. -->
+    <chrome id="night-sea" fn="nightSeaColors" dark="true">
+        <!-- Base backgrounds and surfaces -->
+        <color name="bg">#07141E</color>
+        <color name="railBg">#0A1620</color>
+        <color name="titleTop">#0C1A24</color>
+        <color name="titleBottom">#0A1620</color>
+        <color name="surface">#0A141B</color>
+        <color name="surface2">#0B1A26</color>
+        <color name="surfaceDeep">#0E2230</color>
+        <color name="panel">#08121C</color>
+        <color name="terminalBg">#050E16</color>
+        <!-- Text -->
+        <color name="text">#E6ECEF</color>
+        <color name="textBright">#C9D6DE</color>
+        <color name="textMid">#B7C5CC</color>
+        <color name="dim">#8FA3B0</color>
+        <color name="faint">#5A7080</color>
+        <!-- Accents -->
+        <color name="cyan">#2BBDEE</color>
+        <color name="cyanBright">#5FD1F4</color>
+        <color name="moss">#5DCE9E</color>
+        <color name="sunset">#E07A5F</color>
+        <color name="amber">#F2A65A</color>
+        <color name="amberBright">#FFC078</color>
+        <!-- Teal logo accent -->
+        <color name="teal">#34D3C0</color>
+        <color name="tealLight">#7FF0E2</color>
+        <color name="tealDeep">#22B3A4</color>
+        <!-- Fixed tones -->
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#E94B4B</color>
+        <!-- Borders — cyan tint on the dark surfaces -->
+        <color name="line" over="cyan" alpha="0.06"/>
+        <color name="lineStrong" over="cyan" alpha="0.14"/>
+        <!-- Shared surfaces / accents -->
+        <color name="strictFg">#E07060</color>
+        <color name="whiteFaint">#1AFFFFFF</color>  <!-- disabled toggle background, rgba(255,255,255,0.1) -->
+        <color name="ink">#0A1A26</color>           <!-- text/icon color on cyan-accented buttons -->
+        <color name="card">#08FFFFFF</color>        <!-- row card background, rgba(255,255,255,0.03) -->
+        <color name="scrim">#B304080C</color>       <!-- dimming under mobile sheets/dialogs -->
+        <color name="modalScrim">#B3060E16</color>  <!-- dimming under desktop modals -->
+    </chrome>
+
+    <!-- "Daybreak" — a cool, high-key light counterpart. Accents darkened for AA contrast on light
+         surfaces; borders are a neutral ink tint rather than the cyan tint used on dark. -->
+    <chrome id="daybreak" fn="daybreakColors" dark="false">
+        <!-- Base backgrounds and surfaces -->
+        <color name="bg">#F3F6F8</color>
+        <color name="railBg">#EBF0F3</color>
+        <color name="titleTop">#FFFFFF</color>
+        <color name="titleBottom">#EDF2F5</color>
+        <color name="surface">#FFFFFF</color>
+        <color name="surface2">#EEF3F6</color>
+        <color name="surfaceDeep">#E1E9EE</color>
+        <color name="panel">#F3F6F8</color>
+        <color name="terminalBg">#EDF1F4</color>
+        <!-- Text — inverted lightness ladder: darkest is the primary text -->
+        <color name="text">#0D1E29</color>
+        <color name="textBright">#243B49</color>
+        <color name="textMid">#3B5361</color>
+        <color name="dim">#5E7583</color>
+        <color name="faint">#6B7E8D</color> <!-- ~3.8:1 on the light panels; #93A6B2 washed out labels/section headers -->
+        <!-- Accents — darkened for contrast on light surfaces -->
+        <color name="cyan">#0E90BF</color>
+        <color name="cyanBright">#14A6DB</color>
+        <color name="moss">#2C9E71</color>
+        <color name="sunset">#CE5B3E</color>
+        <color name="amber">#B9761B</color>
+        <color name="amberBright">#D98E2C</color>
+        <!-- Teal logo accent — kept vivid for brand recognition -->
+        <color name="teal">#12A897</color>
+        <color name="tealLight">#4FD1C2</color>
+        <color name="tealDeep">#0B7F73</color>
+        <!-- Fixed tones -->
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#CE3B3B</color>
+        <!-- Borders — neutral ink tint over the darkest base, not cyan -->
+        <color name="line" over="#0D1E29" alpha="0.07"/>
+        <color name="lineStrong" over="#0D1E29" alpha="0.18"/>
+        <!-- Shared surfaces / accents -->
+        <color name="strictFg">#B4543E</color>
+        <color name="whiteFaint" over="#0D1E29" alpha="0.08"/> <!-- disabled toggle: dark tint on light -->
+        <color name="ink">#08303F</color>                      <!-- text/icon color on cyan-accented buttons -->
+        <color name="card">#0D0D1E29</color>                   <!-- row card — faint ink darkening on light -->
+        <color name="scrim">#66101922</color>                  <!-- dimming under mobile sheets/dialogs -->
+        <color name="modalScrim">#73101922</color>             <!-- dimming under desktop modals -->
+    </chrome>
+
+</themes>
