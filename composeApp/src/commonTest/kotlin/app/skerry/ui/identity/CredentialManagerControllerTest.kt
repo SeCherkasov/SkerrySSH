@@ -81,6 +81,28 @@ class CredentialManagerControllerTest {
     }
 
     @Test
+    fun `rename changes the label in the reactive list and keeps id and secret`() {
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
+        controller.save(CredentialDraft(label = "old", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem", passphrase = "pp"))
+
+        controller.rename("gen", "new")
+
+        val c = controller.credentials.single()
+        assertEquals("gen", c.id)
+        assertEquals("new", c.label)
+        assertEquals(CredentialSecret.PrivateKey("pem", passphrase = "pp"), c.secret)
+    }
+
+    @Test
+    fun `rename of a missing id is a no-op`() {
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
+
+        controller.rename("missing", "x")
+
+        assertEquals(emptyList(), controller.credentials)
+    }
+
+    @Test
     fun `delete removes the credential`() {
         val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
         controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PASSWORD, password = "p"))

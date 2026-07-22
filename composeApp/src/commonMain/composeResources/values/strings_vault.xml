@@ -36,6 +36,7 @@
     <string name="vault_copy_password">Copy password</string>
     <string name="vault_export">Export</string>
     <string name="vault_delete">Delete</string>
+    <string name="vault_rename">Rename</string>
     <string name="vault_cancel">Cancel</string>
     <string name="vault_used_by_one">Used by · 1 host</string>
     <string name="vault_used_by">Used by · %1$d hosts</string>
@@ -82,6 +83,9 @@
     <string name="vault_placeholder_master_password">master password</string>
     <string name="vault_password_mismatch_retry">That password didn't match — try again.</string>
     <string name="vault_copy">Copy</string>
+
+    <!-- Rename secret dialog. -->
+    <string name="vault_rename_title">Rename \"%1$s\"</string>
 
     <!-- Delete secret dialog. -->
     <string name="vault_delete_title">Delete \"%1$s\"?</string>

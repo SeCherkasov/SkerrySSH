@@ -16,6 +16,22 @@ internal class FakeVault : Vault {
     /** Flip to exercise the locked-vault path of a store; unlocked by default. */
     var locked: Boolean = false
 
+    /** Nesting depth of [transaction] (0 = no transaction held) — lets tests assert atomic sequences. */
+    private var transactionDepth = 0
+
+    /** Whether the most recent [put] happened while a [transaction] was held. */
+    var lastPutInTransaction: Boolean = false
+        private set
+
+    override fun <T> transaction(block: () -> T): T {
+        transactionDepth++
+        try {
+            return block()
+        } finally {
+            transactionDepth--
+        }
+    }
+
     override fun exists(): Boolean = true
     override val isUnlocked: Boolean get() = !locked
     override fun create(password: CharArray) = Unit
@@ -32,6 +48,7 @@ internal class FakeVault : Vault {
         entries[id]?.takeIf { !it.record.deleted }?.payload
 
     override fun put(id: String, type: RecordType, payload: ByteArray) {
+        lastPutInTransaction = transactionDepth > 0
         val version = (entries[id]?.record?.version ?: 0L) + 1
         entries[id] = Entry(
             VaultRecord(id, type, version, "2026-06-12T00:00:00Z", "test-device", deleted = false, blob = SEALED),
