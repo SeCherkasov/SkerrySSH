@@ -74,5 +74,5 @@
     <string name="sftp_edit_discard_body">«%1$s» has unsaved changes. Closing now loses them.</string>
     <string name="sftp_edit_discard">Discard</string>
     <string name="sftp_edit_conflict_q">File changed on the source?</string>
-    <string name="sftp_edit_conflict_body">«%1$s» changed after you opened it. Saving overwrites those changes with your version.</string>
+    <string name="sftp_edit_conflict_body">«%1$s» changed since you opened it. Saving overwrites it with your version.</string>
 </resources>

@@ -56,6 +56,7 @@ import app.skerry.ui.generated.resources.sync_connect
 import app.skerry.ui.generated.resources.sync_keep_connected
 import app.skerry.ui.generated.resources.sync_keep_connected_sub_long
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
@@ -176,10 +177,8 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                         color = D.faint, size = 11.sp,
                     )
                 }
-                Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt(stringResource(Res.string.sync_cancel), color = D.dim, size = 12.5.sp)
-                }
-                PrimaryButton(stringResource(Res.string.sync_connect), onClick = { submit() }, enabled = canSubmit, bg = if (canSubmit) D.cyan else D.cyan.copy(alpha = 0.4f))
+                CancelButton(stringResource(Res.string.sync_cancel), onClick = onDismiss)
+                PrimaryButton(stringResource(Res.string.sync_connect), onClick = { submit() }, enabled = canSubmit)
             }
         }
     }

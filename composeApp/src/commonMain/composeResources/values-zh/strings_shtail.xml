@@ -26,7 +26,7 @@
     <!-- 移动端已知主机 (MobileKnown.kt) -->
     <string name="shtail_known_changed">已变更</string>
     <string name="shtail_known_key_changed_title">密钥已变更：%1$s</string>
-    <string name="shtail_known_mismatch_body">%1$s 的指纹与记录不符。重新连接前请验证。</string>
+    <string name="shtail_known_mismatch_body">%1$s 的指纹与记录不符。重新连接前请验证：不符可能意味着连接被劫持。</string>
 
     <!-- 会话标签：空白标签的默认标题 (SessionsController.openBlank caller) -->
     <string name="shtail_new_tab">新标签页</string>

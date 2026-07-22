@@ -1,9 +1,9 @@
 <resources>
     <string name="conn_title_new">New connection</string>
     <string name="conn_title_edit">Edit connection</string>
-    <string name="conn_subtitle_new">Configure a new skerry in your archipelago. Credentials are encrypted with your master password.</string>
-    <string name="conn_subtitle_edit">Update this skerry's profile. Credentials are encrypted with your master password.</string>
-    <string name="conn_subtitle_mobile">Credentials are encrypted with your master password and stay on this device.</string>
+    <string name="conn_subtitle_new">Add a host. Credentials are encrypted with your master password.</string>
+    <string name="conn_subtitle_edit">Edit this host. Credentials are encrypted with your master password.</string>
+    <string name="conn_subtitle_mobile">Encrypted with your master password. Stays on this device.</string>
 
     <string name="conn_field_name">Name</string>
     <string name="conn_field_protocol">Protocol</string>
@@ -21,10 +21,10 @@
     <string name="conn_field_ai_policy_short">AI policy</string>
 
     <string name="conn_policy_strict_title">Strict — production safety</string>
-    <string name="conn_policy_strict_desc">Cloud AI is off for this host; nothing is sent to a provider. Only the local on-device model is used.</string>
+    <string name="conn_policy_strict_desc">Cloud AI off. Nothing leaves the device; only the local model is used.</string>
     <string name="conn_policy_strict_short">Strict</string>
     <string name="conn_policy_balanced_title">Balanced — cloud allowed</string>
-    <string name="conn_policy_balanced_desc">Cloud AI enabled. Secrets are stripped from every prompt before it is sent.</string>
+    <string name="conn_policy_balanced_desc">Cloud AI on. Secrets are stripped from every prompt before sending.</string>
     <string name="conn_policy_balanced_short">Balanced</string>
     <string name="conn_policy_permissive_title">Permissive — dev / homelab</string>
     <string name="conn_policy_permissive_desc">Cloud AI enabled. Prompts are sent as-is, without stripping secrets.</string>
@@ -38,15 +38,15 @@
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">Serial</string>
     <string name="conn_protocol_vnc">VNC</string>
-    <string name="conn_telnet_plaintext_warning">Telnet is unencrypted — credentials and session data travel in the clear. Prefer SSH unless on a trusted network.</string>
-    <string name="conn_vnc_plaintext_warning">VNC (RFB) is unencrypted — the screen and input travel in the clear. Use it over a trusted network or tunnel it through SSH.</string>
+    <string name="conn_telnet_plaintext_warning">Telnet is unencrypted — credentials and session data travel in the clear. Use SSH unless the network is trusted.</string>
+    <string name="conn_vnc_plaintext_warning">VNC (RFB) is unencrypted — screen and input travel in the clear. Use a trusted network or tunnel through SSH.</string>
 
     <string name="conn_jump_none">None — direct</string>
     <string name="conn_jump_error_title">Jump host unavailable</string>
-    <string name="conn_jump_error_missing">The jump host referenced by this profile no longer exists. Pick another one in the profile settings.</string>
-    <string name="conn_jump_error_not_ssh">The referenced jump host is not an SSH profile, so it cannot carry a tunnel.</string>
-    <string name="conn_jump_error_no_credential">The jump host has no saved secret. Attach a password or key to it in its profile first.</string>
-    <string name="conn_jump_error_cycle">Jump host references form a loop. Fix the chain in the profile settings.</string>
+    <string name="conn_jump_error_missing">The jump host this profile references no longer exists. Pick another in profile settings.</string>
+    <string name="conn_jump_error_not_ssh">The jump host isn't an SSH profile, so it can't carry a tunnel.</string>
+    <string name="conn_jump_error_no_credential">The jump host has no saved secret. Add a password or key to its profile first.</string>
+    <string name="conn_jump_error_cycle">Jump host references form a loop. Fix the chain in profile settings.</string>
     <string name="conn_jump_error_ok">OK</string>
     <string name="conn_keepalive_off">Off</string>
     <string name="conn_keepalive_every">Every %1$ds</string>
@@ -99,4 +99,9 @@
     <string name="conn_serial_err_permission">Access to port %1$s was denied.</string>
     <string name="conn_serial_err_open">Port %1$s could not be opened — it may be in use by another program.</string>
     <string name="conn_serial_err_configure">Port %1$s rejected the selected speed or frame format.</string>
+    <string name="conn_type_ssh">SSH</string>
+    <string name="conn_type_mosh">Mosh</string>
+    <string name="conn_type_telnet">Telnet</string>
+    <string name="conn_type_serial">Serial</string>
+    <string name="conn_type_vnc">VNC</string>
 </resources>

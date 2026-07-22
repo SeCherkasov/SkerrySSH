@@ -152,10 +152,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.Badge
+import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.D
+import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
-import app.skerry.ui.design.HLine
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.labelUppercase
@@ -165,6 +166,9 @@ import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.SIDEBAR_WIDTH
+import app.skerry.ui.design.SectionHeader
+import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
@@ -224,12 +228,9 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     onAddPassword = { showAddPassword = true },
                     onImportCert = { showImportCert = true },
                 )
-                HLine()
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     if (credItems.isEmpty()) {
-                        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                            VaultEmptyCategory(category)
-                        }
+                        VaultEmptyCategory(category, Modifier.weight(1f).fillMaxHeight())
                     } else {
                         Column(
                             Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp),
@@ -357,8 +358,8 @@ private fun VaultSidebar(
     credentials: List<Credential>,
     onSelect: (VaultCategoryKind) -> Unit,
 ) {
-    Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
-        Txt(stringResource(Res.string.vault_sidebar_header), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
+        SidebarSectionTitle(stringResource(Res.string.vault_sidebar_header), Modifier.padding(start = 10.dp, bottom = 10.dp))
         VaultPresentation.sidebarCategories.forEach { kind ->
             VaultCategoryRow(
                 icon = kind.icon,
@@ -408,18 +409,16 @@ private fun VaultHeader(
     onAddPassword: () -> Unit,
     onImportCert: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Txt(category.title(), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-        when (category) {
-            VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add")
-            VaultCategoryKind.PASSWORDS -> PrimaryButton(stringResource(Res.string.vault_add_password), onClick = onAddPassword, icon = "add")
-            VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add")
-        }
-    }
+    SectionHeader(
+        title = category.title(),
+        actions = {
+            when (category) {
+                VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add")
+                VaultCategoryKind.PASSWORDS -> PrimaryButton(stringResource(Res.string.vault_add_password), onClick = onAddPassword, icon = "add")
+                VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add")
+            }
+        },
+    )
 }
 
 // Keychain secret card (key/password/certificate) + account card + empty states.
@@ -499,17 +498,13 @@ internal fun SecretIcon(icon: String, tinted: Boolean, color: Color, size: Int =
 }
 
 @Composable
-private fun VaultEmptyCategory(category: VaultCategoryKind) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Sym(category.icon, size = 26.sp, color = D.faint)
-        val (title, hint) = when (category) {
-            VaultCategoryKind.SSH_KEYS -> stringResource(Res.string.vault_empty_ssh_title) to stringResource(Res.string.vault_empty_ssh_hint)
-            VaultCategoryKind.PASSWORDS -> stringResource(Res.string.vault_empty_passwords_title) to stringResource(Res.string.vault_empty_passwords_hint)
-            VaultCategoryKind.CERTIFICATES -> stringResource(Res.string.vault_empty_certificates_title) to stringResource(Res.string.vault_empty_certificates_hint)
-        }
-        Txt(title, color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-        if (hint.isNotEmpty()) Txt(hint, color = D.faint, size = 11.5.sp)
+private fun VaultEmptyCategory(category: VaultCategoryKind, modifier: Modifier = Modifier) {
+    val (title, hint) = when (category) {
+        VaultCategoryKind.SSH_KEYS -> stringResource(Res.string.vault_empty_ssh_title) to stringResource(Res.string.vault_empty_ssh_hint)
+        VaultCategoryKind.PASSWORDS -> stringResource(Res.string.vault_empty_passwords_title) to stringResource(Res.string.vault_empty_passwords_hint)
+        VaultCategoryKind.CERTIFICATES -> stringResource(Res.string.vault_empty_certificates_title) to stringResource(Res.string.vault_empty_certificates_hint)
     }
+    EmptyState(icon = category.icon, title = title, modifier = modifier, subtitle = hint.ifEmpty { null })
 }
 
 /**
@@ -760,9 +755,7 @@ internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: (
         }
         Txt(detail, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 4.dp))
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                Txt(stringResource(Res.string.vault_cancel), color = D.dim, size = 12.5.sp)
-            }
+            CancelButton(stringResource(Res.string.vault_cancel), onClick = onDismiss)
             PrimaryButton(stringResource(Res.string.vault_delete), onClick = onConfirm, bg = D.sunset, fg = Color(0xFF1A0B07))
         }
     }
@@ -881,10 +874,8 @@ private fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDismi
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-            Txt(stringResource(Res.string.vault_cancel), color = D.dim, size = 12.5.sp)
-        }
-        PrimaryButton(confirmLabel, onClick = { if (confirmEnabled) onConfirm() }, bg = if (confirmEnabled) D.cyan else D.cyan.copy(alpha = 0.4f))
+        CancelButton(stringResource(Res.string.vault_cancel), onClick = onDismiss)
+        PrimaryButton(confirmLabel, onClick = onConfirm, enabled = confirmEnabled)
     }
 }
 
@@ -895,8 +886,8 @@ private fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDismi
 private fun MockVaultView() {
     val mono = LocalFonts.current.mono
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
-            Txt(stringResource(Res.string.vault_sidebar_header), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
+            SidebarSectionTitle(stringResource(Res.string.vault_sidebar_header), Modifier.padding(start = 10.dp, bottom = 10.dp))
             VaultCategory("key", "SSH keys", "4", active = true)
             VaultCategory("password", "Passwords", "12")
             VaultCategory("vpn_lock", "Certificates", "2")
@@ -913,15 +904,10 @@ private fun MockVaultView() {
         }
         VLine(D.line)
         Column(Modifier.weight(1f).fillMaxHeight().background(D.bg)) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Txt("SSH keys", color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-                PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = {}, icon = "add")
-            }
-            HLine()
+            SectionHeader(
+                title = "SSH keys",
+                actions = { PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = {}, icon = "add") },
+            )
             Row(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     KeyCard(

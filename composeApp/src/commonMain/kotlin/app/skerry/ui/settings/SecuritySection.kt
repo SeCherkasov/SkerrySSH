@@ -84,7 +84,6 @@ import app.skerry.ui.generated.resources.settings_security_pw_changed_days
 import app.skerry.ui.generated.resources.settings_security_pw_changed_today
 import app.skerry.ui.generated.resources.settings_security_pw_changed_yesterday
 import app.skerry.ui.generated.resources.settings_security_subtitle
-import app.skerry.ui.generated.resources.settings_security_title
 import app.skerry.ui.generated.resources.settings_security_touch_id
 import app.skerry.ui.generated.resources.settings_security_touch_id_desc
 import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
@@ -137,7 +136,7 @@ internal fun SecuritySection(
     onChangeAccountPassword: () -> Unit,
     onBiometricToggled: () -> Unit,
 ) {
-    SectionTitle(stringResource(Res.string.settings_security_title), stringResource(Res.string.settings_security_subtitle))
+    SectionSubtitle(stringResource(Res.string.settings_security_subtitle))
 
     // Master password subtitle is the real "last changed" from the log (or a neutral fallback).
     // Reading the log is file I/O + JSON parsing, so it runs off the composition thread.

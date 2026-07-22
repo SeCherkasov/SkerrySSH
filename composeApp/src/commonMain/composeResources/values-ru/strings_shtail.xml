@@ -26,7 +26,7 @@
     <!-- Mobile known hosts (MobileKnown.kt) -->
     <string name="shtail_known_changed">изменён</string>
     <string name="shtail_known_key_changed_title">Ключ изменён: %1$s</string>
-    <string name="shtail_known_mismatch_body">Отпечаток %1$s отличается от записанного. Проверьте перед повторным подключением.</string>
+    <string name="shtail_known_mismatch_body">Отпечаток %1$s не совпадает с записанным. Проверьте перед подключением: расхождение может означать перехват.</string>
 
     <!-- Session tabs: default title for a blank tab (SessionsController.openBlank caller) -->
     <string name="shtail_new_tab">Новая вкладка</string>

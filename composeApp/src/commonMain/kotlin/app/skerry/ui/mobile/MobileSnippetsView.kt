@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.Snippet
@@ -52,11 +53,15 @@ import app.skerry.ui.generated.resources.lib_snippets_field_tags
 import app.skerry.ui.generated.resources.lib_snippets_new
 import app.skerry.ui.generated.resources.lib_snippets_no_matches
 import app.skerry.ui.generated.resources.lib_snippets_ph_name
+import app.skerry.ui.generated.resources.lib_snippets_rename_tag_placeholder
+import app.skerry.ui.generated.resources.lib_snippets_rename_tag_subtitle
+import app.skerry.ui.generated.resources.lib_snippets_rename_tag_title
 import app.skerry.ui.generated.resources.lib_snippets_run_empty
 import app.skerry.ui.generated.resources.lib_snippets_run_in_terminal
 import app.skerry.ui.generated.resources.lib_snippets_run_title
 import app.skerry.ui.generated.resources.lib_snippets_save_snippet
 import app.skerry.ui.generated.resources.lib_snippets_screen_title
+import app.skerry.ui.generated.resources.shell_save
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
@@ -104,7 +109,10 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
 
     var editing by remember { mutableStateOf<SnippetEntry?>(null) }
     var adding by remember { mutableStateOf(false) }
-    val sheetOpen = adding || editing != null
+    var renamingTag by remember { mutableStateOf<String?>(null) }
+    val editSheetOpen = adding || editing != null
+    // Any sheet (edit or rename) hides the tab bar and the add FAB.
+    val sheetOpen = editSheetOpen || renamingTag != null
 
     // Open edit sheet hides the tab bar (otherwise it floats above the input fields over the keyboard).
     LaunchedEffect(sheetOpen) { state.modalOverlay(sheetOpen) }
@@ -135,12 +143,13 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                     library = state.snippetLibrary,
                     mono = mono,
                     onEdit = { entry -> editing = entry; adding = false },
+                    onRenameCategory = { tag -> renamingTag = tag },
                 )
             }
             Spacer(Modifier.height(96.dp))
         }
 
-        // Add FAB (bottom-right, above the tab bar). Hidden while the edit sheet is open.
+        // Add FAB (bottom-right, above the tab bar). Hidden while any sheet (edit/rename) is open.
         if (!sheetOpen) {
             MobileFabButton(
                 onClick = { adding = true; editing = null },
@@ -148,7 +157,18 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
             )
         }
 
-        if (sheetOpen) {
+        renamingTag?.let { tag ->
+            MobileRenameTagSheet(
+                oldTag = tag,
+                onDismiss = { renamingTag = null },
+                onSave = { newTag ->
+                    manager.renameTag(tag, newTag)?.let { state.snippetLibrary.onTagRenamed(tag, it) }
+                    renamingTag = null
+                },
+            )
+        }
+
+        if (editSheetOpen) {
             val target = editing
             MobileSnippetEditSheet(
                 entry = target,
@@ -305,6 +325,33 @@ private fun MobileSnippetEditSheet(
     }
 }
 
+
+/**
+ * Rename a snippet tag (which doubles as a library category) across every snippet that carries it.
+ * Mobile counterpart of the desktop [app.skerry.ui.snippet.SnippetLibrarySidebar] rename dialog:
+ * bottom sheet, prefilled name, Save is a no-op while blank. The merge/normalize semantics live in
+ * [SnippetManager.renameTag].
+ */
+@Composable
+private fun MobileRenameTagSheet(oldTag: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf(oldTag) }
+    val save = { if (name.trim().isNotEmpty()) onSave(name) }
+    MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.7f) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Txt(stringResource(Res.string.lib_snippets_rename_tag_title), color = D.text, size = 18.sp, weight = FontWeight.Bold)
+            Txt(stringResource(Res.string.lib_snippets_rename_tag_subtitle), color = D.dim, size = 13.sp, lineHeight = 18.sp)
+            MobileFormInput(
+                name,
+                { name = it },
+                stringResource(Res.string.lib_snippets_rename_tag_placeholder),
+                imeAction = ImeAction.Done,
+                onSubmit = save,
+            )
+            MobileSheetButton(stringResource(Res.string.shell_save), onClick = save, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(4.dp))
+        }
+    }
+}
 
 // --- Static mock (preview/offscreen without a manager) ---
 

@@ -16,7 +16,7 @@
     <string name="more_sync_error">同步错误</string>
     <string name="more_biometric_prompt_title">启用生物识别解锁</string>
     <string name="more_biometric_prompt_cancel">取消</string>
-    <string name="more_biometric_prompt_subtitle">验证你的生物识别信息，无需输入主密码即可解锁 Skerry。</string>
+    <string name="more_biometric_prompt_subtitle">用生物识别解锁 Skerry，无需输入主密码。</string>
     <string name="more_biometric_verify_title">检查生物识别解锁</string>
     <string name="more_biometric_verify_subtitle">再触摸一次以确认解锁可用。</string>
     <string name="more_about">关于</string>

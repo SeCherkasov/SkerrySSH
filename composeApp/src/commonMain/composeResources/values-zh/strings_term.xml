@@ -63,7 +63,7 @@
     <string name="term_ai_dismiss">忽略</string>
     <string name="term_ai_not_a_command">这不是需要运行的命令。请描述一个服务器任务。</string>
     <string name="term_ai_blocked_not_configured">请先在 AI 设置中添加 API 密钥。</string>
-    <string name="term_ai_blocked_strict">严格策略：请在 AI 设置中下载设备端模型以在此主机上使用 AI。</string>
+    <string name="term_ai_blocked_strict">严格策略：请在 AI 设置中下载设备端模型以在此使用 AI。</string>
     <string name="term_ai_blocked_device_not_ready">请先在 AI 设置中下载设备端模型。</string>
     <string name="term_ai_blocked_disabled">AI 已在 AI 设置中关闭。</string>
     <string name="term_mobile_title_fallback">终端</string>
@@ -81,11 +81,11 @@
     <string name="term_disconnect">断开连接</string>
 
     <!-- Mosh 设置失败：服务器端且可修复，因此每条消息说明在服务器端该怎么做。 -->
-    <string name="mosh_err_not_installed">此主机上未安装 mosh-server。Skerry 仅附带 Mosh 客户端 — 请在服务器上安装 mosh 软件包（Debian/Ubuntu: sudo apt install mosh，Fedora: sudo dnf install mosh，Alpine: apk add mosh）然后重新连接。</string>
-    <string name="mosh_err_locale">mosh-server 拒绝启动：主机没有 UTF-8 区域设置。请在服务器上生成一个（例如 locale-gen en_US.UTF-8，或安装 locales 软件包）然后重新连接。</string>
-    <string name="mosh_err_udp">mosh-server 已启动，但 UDP 端口 %1$s 没有回复。防火墙可能在服务器端或途中阻止了 Mosh UDP 范围 60000–61000。注意：Mosh 需要到主机的直接 UDP 路径 — 不通过跳板主机中继。</string>
+    <string name="mosh_err_not_installed">此主机未安装 mosh-server。请在服务器上安装 mosh 软件包（Debian/Ubuntu: sudo apt install mosh，Fedora: sudo dnf install mosh，Alpine: apk add mosh）后重新连接。</string>
+    <string name="mosh_err_locale">mosh-server 无法启动：主机没有 UTF-8 区域设置。请生成一个（locale-gen en_US.UTF-8，或安装 locales 软件包）后重新连接。</string>
+    <string name="mosh_err_udp">mosh-server 已启动，但 UDP 端口 %1$s 无回复。防火墙可能阻止了 Mosh 的 UDP 范围 60000–61000。Mosh 需要直接的 UDP 路径，无法通过跳板主机中继。</string>
     <string name="mosh_err_bootstrap">mosh-server 在主机上启动失败：%1$s</string>
-    <string name="mosh_err_bootstrap_no_output">mosh-server 在主机上启动失败（无输出）。请检查服务器上是否已安装并可以运行 Mosh。</string>
+    <string name="mosh_err_bootstrap_no_output">mosh-server 启动失败（无输出）。请检查服务器上是否已安装并可运行 Mosh。</string>
     <string name="term_record_start">录制会话</string>
     <string name="term_record_stop">停止并保存录制</string>
     <string name="term_record_active">录制中</string>

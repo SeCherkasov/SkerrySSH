@@ -15,16 +15,16 @@
 
     <!-- 存储选择 -->
     <string name="sync_storage_choice_title">Skerry 应将你的保险库存放在哪里？</string>
-    <string name="sync_storage_choice_desc">你的主机和密钥始终加密。选择仅保留在此设备上，或通过你运行的服务器跨设备同步。</string>
+    <string name="sync_storage_choice_desc">主机和密钥始终加密。可仅保留在此设备，或通过自建服务器跨设备同步。</string>
     <string name="sync_storage_local_title">本地加密存储</string>
-    <string name="sync_storage_local_sub">所有内容仅在此设备上。无账户、无服务器 — 最简单的设置。</string>
+    <string name="sync_storage_local_sub">所有内容仅保留在此设备。无账户、无服务器。</string>
     <string name="sync_storage_server_title">自托管同步服务器</string>
     <string name="sync_storage_server_sub">通过你运行的服务器实现跨设备端到端加密同步。</string>
     <string name="sync_switch_later">你可以稍后在设置中切换。</string>
 
     <!-- 密钥变更后重新注册生物识别 -->
     <string name="sync_reenroll_title">重新启用指纹</string>
-    <string name="sync_reenroll_desc">连接到你的账户更改了保险库密钥，因此生物识别解锁已关闭。重新设置以继续使用指纹打开 Skerry。</string>
+    <string name="sync_reenroll_desc">连接账户更改了保险库密钥，生物识别解锁已关闭。重新设置即可用指纹解锁。</string>
     <string name="sync_reenroll_action">重新启用</string>
     <string name="sync_not_now">暂不</string>
 
@@ -53,7 +53,7 @@
 
     <!-- 通过代码关联 (join) -->
     <string name="sync_join_title">使用代码关联</string>
-    <string name="sync_join_desc">在已登录的设备上，打开设置 → 同步 → 关联设备，然后扫描其二维码或将代码粘贴在此处。每台设备拥有独立的主密码，互不影响，也不影响云同步。此密码无法恢复 — 如果丢失，需要重新关联。</string>
+    <string name="sync_join_desc">在已登录的设备上，打开设置 → 同步 → 关联设备，然后扫描二维码或粘贴代码。下方密码用于加密此设备的保险库，无法恢复 — 丢失后需重新关联。</string>
     <string name="sync_field_pairing_code">配对码</string>
     <string name="sync_placeholder_pairing_code">粘贴代码 (sk1.…)</string>
     <string name="sync_scan_qr">扫描二维码</string>
@@ -87,7 +87,7 @@
     <string name="sync_revoke">撤销</string>
 
     <!-- 桌面端对话框 -->
-    <string name="sync_setup_dialog_desc">端到端加密。Skerry 永远不会看到你的明文数据 — 只有你的设备持有主密码。</string>
+    <string name="sync_setup_dialog_desc">端到端加密。Skerry 永远不会看到你的明文数据 — 主密码只留在你的设备上。</string>
     <string name="sync_pairing_dialog_desc">在新设备上选择\"我有配对码\"，然后扫描此二维码或粘贴下方代码。仅可使用一次。</string>
     <string name="sync_done">完成</string>
     <string name="sync_pairing_gen_failed">无法创建配对码。</string>
@@ -117,7 +117,7 @@
 
     <!-- issue #28: 连接到使用其他密码的现有账户会将本设备改用该密码 -->
     <string name="sync_password_replace_title">使用账户密码？</string>
-    <string name="sync_password_replace_body">账户「%1$s」使用其他密码保护。若要同步，此设备将改用您的账户密码解锁。</string>
+    <string name="sync_password_replace_body">账户「%1$s」使用其他密码。若要同步，此设备将改用账户密码解锁。</string>
     <string name="sync_password_replace_confirm">使用账户密码</string>
     <string name="sync_password_replace_cancel">取消</string>
 

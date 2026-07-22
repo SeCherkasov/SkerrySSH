@@ -26,7 +26,9 @@ import app.skerry.shared.team.TeamRole
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.CancelButton
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.lib_teams_event_accept
 import app.skerry.ui.generated.resources.lib_teams_event_create
 import app.skerry.ui.generated.resources.lib_teams_event_delete
@@ -149,7 +151,7 @@ internal fun RolePickerDialog(
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-            CancelButton(onDismiss)
+            CancelButton(stringResource(Res.string.shell_cancel), onDismiss)
         }
     }
 }
@@ -188,7 +190,7 @@ internal fun AuditLogDialog(entries: List<TeamActivityEntry>, onDismiss: () -> U
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-            CancelButton(onDismiss)
+            CancelButton(stringResource(Res.string.shell_cancel), onDismiss)
         }
     }
 }

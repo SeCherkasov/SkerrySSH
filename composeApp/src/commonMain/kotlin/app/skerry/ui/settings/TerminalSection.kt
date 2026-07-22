@@ -51,7 +51,6 @@ import app.skerry.ui.generated.resources.settings_terminal_section_font
 import app.skerry.ui.generated.resources.settings_terminal_show_title
 import app.skerry.ui.generated.resources.settings_terminal_show_title_desc
 import app.skerry.ui.generated.resources.settings_terminal_subtitle
-import app.skerry.ui.generated.resources.settings_terminal_title
 import app.skerry.ui.generated.resources.settings_terminal_host_connect
 import app.skerry.ui.generated.resources.settings_terminal_host_connect_single
 import app.skerry.ui.generated.resources.settings_terminal_host_connect_double
@@ -74,7 +73,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun TerminalSection(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
-    SectionTitle(stringResource(Res.string.settings_terminal_title), stringResource(Res.string.settings_terminal_subtitle))
+    SectionSubtitle(stringResource(Res.string.settings_terminal_subtitle))
     // Theme cards in a 2×N grid from the [TerminalThemes] catalog; selection applies to the terminal live.
     TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
         if (rowIndex > 0) Box(Modifier.height(10.dp))
@@ -179,9 +178,10 @@ internal fun TerminalSection(state: DesktopDesignState) {
     // click (protects against accidental connects when just browsing the catalog). Desktop-only.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_host_connect), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
-        // No fixed-width Box: DropdownField sizes itself to the longest option, matching the
-        // neighbouring CursorStylePicker.
-        HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode)
+        // Fixed width like the neighbouring pickers: the trigger fills maxWidth, so without a bound
+        // it would eat the whole row and collapse the label to a one-glyph column. Wide enough for
+        // the longest localized option ("Двойной клик (клик выделяет)") on a single line.
+        Box(Modifier.width(232.dp)) { HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode) }
     }
     HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from

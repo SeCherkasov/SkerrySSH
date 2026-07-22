@@ -1,10 +1,13 @@
 package app.skerry.ui.terminal
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +25,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +77,9 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.SIDEBAR_WIDTH
+import app.skerry.ui.design.SidebarSearchField
+import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -97,11 +104,15 @@ import app.skerry.ui.host.draggableHostRow
 import app.skerry.ui.host.filterHosts
 import app.skerry.ui.host.folderHeaderAnchor
 import app.skerry.ui.host.folderRangeAnchor
+import app.skerry.ui.host.connectionTypeLabel
+import app.skerry.ui.host.groupHostsByConnectionType
 import app.skerry.ui.host.groupHostsByFolder
+import app.skerry.ui.host.ungroupedLabel
 import app.skerry.ui.host.hostBoundsAnchor
 import app.skerry.ui.host.hostChipLabel
 import app.skerry.ui.host.hostTagChips
 import app.skerry.ui.host.icon
+import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -127,13 +138,28 @@ private fun Modifier.hostConnectClick(
 ): Modifier =
     when (LocalHostClickConnectMode.current) {
         HostClickConnectMode.SingleClick -> clickable(onClick = onClick)
-        HostClickConnectMode.DoubleClick ->
+        HostClickConnectMode.DoubleClick -> {
+            // Selection fires on the press *Release*, not on combinedClickable's onClick: when
+            // onDoubleClick is set, onClick is held back by the double-tap timeout (~300 ms) to
+            // disambiguate a single tap from a double one, so routing selection through onClick makes
+            // the highlight lag noticeably. Release fires on pointer-up of a genuine click, well
+            // before that timeout — so the highlight still feels immediate, but a press that turns
+            // into a drag-reorder or a drag-scroll emits Cancel (not Release) and no longer
+            // spuriously selects the row under the pointer.
+            val interaction = remember { MutableInteractionSource() }
+            val select = rememberUpdatedState(onSingleClick)
+            LaunchedEffect(interaction) {
+                interaction.interactions.collect { if (it is PressInteraction.Release) select.value?.invoke() }
+            }
+            // Chain onto `this` (not a fresh Modifier): the receiver already carries the row's
+            // fillMaxWidth/padding/clip, and starting over would drop them — the row would lose its
+            // left indent and stop filling the width, so it shifts when the mode changes.
             // onPreviewKeyEvent must sit *outer* to combinedClickable: key events travel
-            // root→focused on the preview pass, and combinedClickable consumes Enter/Space itself
-            // (routing them to onClick = select), so a descendant onKeyEvent never fires. The
-            // preview handler intercepts first, making Enter/Space connect while the mouse still
-            // requires a double click (same pattern as TerminalScreen/CommandPalette).
-            Modifier
+            // root→focused on the preview pass, and combinedClickable consumes Enter/Space itself,
+            // so a descendant onKeyEvent never fires. The preview handler intercepts first, making
+            // Enter/Space connect while the mouse still requires a double click (same pattern as
+            // TerminalScreen/CommandPalette).
+            this
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown &&
                         (event.key == Key.Enter || event.key == Key.Spacebar)
@@ -145,9 +171,12 @@ private fun Modifier.hostConnectClick(
                     }
                 }
                 .combinedClickable(
-                    onClick = { onSingleClick?.invoke() },
+                    interactionSource = interaction,
+                    indication = LocalIndication.current,
+                    onClick = {},
                     onDoubleClick = onClick,
                 )
+        }
     }
 
 @Composable
@@ -165,11 +194,15 @@ internal fun HostsSidebar(state: DesktopDesignState) {
     val chips = liveHosts?.let { remember(it.hosts) { hostTagChips(it.hosts) } } ?: emptyList()
     // If the active tag disappears (host edited/deleted), the filter falls back to "All".
     val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
-    Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
+    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
-            // The collapse-sidebar toggle lives on the icon rail (SidebarToggle), so search gets the
-            // full header width.
-            HostSearchField(state)
+            // Search and the collapse control share the header. The chevron pulls the search field
+            // in from the right edge (it no longer runs to the panel border) and collapses the
+            // sidebar; the reopen handle then lives at the terminal's left edge (SidebarReopenHandle).
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                HostSearchField(state, Modifier.weight(1f))
+                IconBtn("chevron_left", onClick = state::toggleSidebar, box = 30, icon = 18.sp, tint = D.faint)
+            }
             // The filter-tag row overflows the narrow sidebar, so it scrolls horizontally. Desktop's
             // vertical mouse wheel doesn't translate to horizontal on its own, so Scroll events are
             // caught and [chipScroll] is driven manually (delta.y, or delta.x on a horizontal axis);
@@ -216,7 +249,7 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(stringResource(Res.string.term_hosts_section), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+                SidebarSectionTitle(stringResource(Res.string.term_hosts_section))
                 // Create a new (initially empty) group in the live catalog; decorative on the mock path.
                 if (liveHosts != null) {
                     IconBtn("create_new_folder", onClick = state::openCreateGroup, box = 20, icon = 14.sp, tint = D.faint)
@@ -309,44 +342,8 @@ internal fun HostsSidebar(state: DesktopDesignState) {
  * cross once text is entered.
  */
 @Composable
-private fun HostSearchField(state: DesktopDesignState) {
-    val query = state.hostSearchQuery
-    BasicTextField(
-        value = query,
-        onValueChange = state::onHostSearch,
-        singleLine = true,
-        textStyle = TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(D.cyan),
-        modifier = Modifier.fillMaxWidth(),
-        decorationBox = { inner ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(34.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(D.card)
-                    .border(1.dp, D.line, RoundedCornerShape(7.dp))
-                    .padding(horizontal = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("search", size = 16.sp, color = D.faint)
-                Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Txt(stringResource(Res.string.term_search_hosts_placeholder), color = D.faint, size = 12.5.sp)
-                    inner()
-                }
-                if (query.isNotEmpty()) {
-                    val onClear = remember(state) { { state.onHostSearch("") } }
-                    Box(
-                        Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onClear),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Sym("close", size = 14.sp, color = D.faint)
-                    }
-                }
-            }
-        },
-    )
+private fun HostSearchField(state: DesktopDesignState, modifier: Modifier = Modifier) {
+    SidebarSearchField(state.hostSearchQuery, state::onHostSearch, stringResource(Res.string.term_search_hosts_placeholder), modifier)
 }
 
 /**
@@ -380,18 +377,16 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
 /** RECENT section header in the sidebar (shared by the live and mock paths). */
 @Composable
 private fun RecentSectionHeader() {
-    Txt(
+    SidebarSectionTitle(
         stringResource(Res.string.term_recent_section),
-        color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
         modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 16.dp, bottom = 4.dp),
     )
 }
 
 @Composable
 private fun TeamHostsSectionHeader() {
-    Txt(
+    SidebarSectionTitle(
         stringResource(Res.string.lib_teams_sidebar),
-        color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
         modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 14.dp, bottom = 4.dp),
     )
 }
@@ -435,7 +430,7 @@ private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignStat
 }
 
 /** Collapse-key prefix for teams in the shared [DesktopDesignState.collapsedGroups], see [TeamHostsSection]. */
-private const val TEAM_COLLAPSE_PREFIX = " team "
+private const val TEAM_COLLAPSE_PREFIX = "\u0000team\u0000"
 
 /**
  * Team header in the sidebar, modeled on [FolderHeader] (collapse chevron + icon + name + count) to
@@ -591,55 +586,100 @@ private fun LiveHostFolder(
                     controller.moveFolder(group, index)
                 },
         ) {
-            FolderHeader(folder.name, folder.hosts.size, collapsed, onToggleCollapsed, onEditGroup)
+            // The synthetic bucket shows the localized "no group" label; real folders show their name.
+            val headerName = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folder.name
+            FolderHeader(headerName, folder.hosts.size, collapsed, onToggleCollapsed, onEditGroup)
         }
         // A collapsed folder shows only the header; the host list (and its drag targets) is hidden.
         if (!collapsed) Column(Modifier.padding(start = 22.dp)) {
-            // key(host.id): row positional identity is pinned to the host, so an open menu/row state
-            // doesn't jump to a neighbor when the catalog reorders after an edit.
-            folder.hosts.forEach { host ->
-                key(host.id) {
-                    if (host.id == lineBeforeId) DropLine()
-                    // Stabilizes lambdas on (host, ...): otherwise every folder recomposition would
-                    // recreate them and force the row to redraw (nullable functions are unstable).
-                    val onClick = remember(host, connect) { { connect(host) } }
-                    val onSelect = remember(host) { { onSelectHost(host.id) } }
-                    val onEdit = remember(host, state) { { state.openEditModal(host) } }
-                    val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
-                    // Forgets the row's geometry once the host leaves the list (deleted/filtered out).
-                    DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
-                    Box(
-                        Modifier
-                            .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
-                            .hostBoundsAnchor(dragState, host.id)
-                            .draggableHostRow(dragState, host.id, foldersProvider) { drop ->
-                                controller.moveHost(host.id, drop.group, drop.index)
-                            },
-                    ) {
-                        HostEntryRow(
-                            label = host.label,
-                            // Selection highlight: marks the row clicked in double-click mode (and
-                            // the most recently connected one in single-click mode). Distinct from
-                            // the live-connection status dot on the right.
-                            selected = host.id == selectedHostId,
-                            dot = sessionDotColor(sessions?.statusFor(host.id)),
-                            badge = null,
-                            onClick = onClick,
-                            onSelect = onSelect,
-                            mono = mono,
-                            icon = host.connectionType.icon,
-                            // Host object, for the "Run snippet..." menu item (runs a snippet on this host).
-                            host = host,
-                            // Edit/delete the profile via the context menu (right-click/long-press).
-                            onEdit = onEdit,
-                            onDelete = onDelete,
-                        )
+            if (folder.name == UNGROUPED_LABEL) {
+                // No-group bucket: sub-group by connection type with a small header per transport.
+                // Reorder insertion lines are dropped here (ordering a typeless bucket is moot); a
+                // host can still be dragged out to a real folder, which owns its own drop target.
+                groupHostsByConnectionType(folder.hosts).forEach { (type, typeHosts) ->
+                    HostTypeSubheader(connectionTypeLabel(type))
+                    typeHosts.forEach { host ->
+                        key(host.id) {
+                            HostRow(host, state, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
+                        }
                     }
                 }
+            } else {
+                // key(host.id): row positional identity is pinned to the host, so an open menu/row
+                // state doesn't jump to a neighbor when the catalog reorders after an edit.
+                folder.hosts.forEach { host ->
+                    key(host.id) {
+                        if (host.id == lineBeforeId) DropLine()
+                        HostRow(host, state, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
+                    }
+                }
+                // Drop at the folder's end: the line goes after the last row.
+                if (dropIndex != null && dropIndex == others.size) DropLine()
             }
-            // Drop at the folder's end: the line goes after the last row.
-            if (dropIndex != null && dropIndex == others.size) DropLine()
         }
+    }
+}
+
+/** Small caption for a connection-type sub-group inside the no-group bucket. */
+@Composable
+private fun HostTypeSubheader(label: String) {
+    Txt(
+        label,
+        color = D.faint,
+        size = 9.5.sp,
+        weight = FontWeight.SemiBold,
+        letterSpacing = 0.5.sp,
+        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 3.dp),
+    )
+}
+
+/** One host row: connection click, selection highlight, live-status dot, drag handle, and context menu. */
+@Composable
+private fun HostRow(
+    host: Host,
+    state: DesktopDesignState,
+    controller: HostManagerController,
+    sessions: SessionsController?,
+    connect: (Host) -> Unit,
+    mono: FontFamily,
+    selectedHostId: String?,
+    onSelectHost: (String) -> Unit,
+    dragState: HostDragState,
+    foldersProvider: () -> List<HostFolder>,
+) {
+    // Stabilizes lambdas on (host, ...): otherwise every folder recomposition would recreate them
+    // and force the row to redraw (nullable functions are unstable).
+    val onClick = remember(host, connect) { { connect(host) } }
+    val onSelect = remember(host) { { onSelectHost(host.id) } }
+    val onEdit = remember(host, state) { { state.openEditModal(host) } }
+    val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
+    // Forgets the row's geometry once the host leaves the list (deleted/filtered out).
+    DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
+    Box(
+        Modifier
+            .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
+            .hostBoundsAnchor(dragState, host.id)
+            .draggableHostRow(dragState, host.id, foldersProvider) { drop ->
+                controller.moveHost(host.id, drop.group, drop.index)
+            },
+    ) {
+        HostEntryRow(
+            label = host.label,
+            // Selection highlight: marks the row clicked in double-click mode (and the most recently
+            // connected one in single-click mode). Distinct from the live-connection status dot.
+            selected = host.id == selectedHostId,
+            dot = sessionDotColor(sessions?.statusFor(host.id)),
+            badge = null,
+            onClick = onClick,
+            onSelect = onSelect,
+            mono = mono,
+            icon = host.connectionType.icon,
+            // Host object, for the "Run snippet..." menu item (runs a snippet on this host).
+            host = host,
+            // Edit/delete the profile via the context menu (right-click/long-press).
+            onEdit = onEdit,
+            onDelete = onDelete,
+        )
     }
 }
 

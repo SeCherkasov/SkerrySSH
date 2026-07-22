@@ -1,5 +1,10 @@
 package app.skerry.ui.tunnel
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalUriHandler
@@ -35,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.rateFraction
@@ -91,8 +98,10 @@ import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.design.D
+import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalHosts
@@ -137,28 +146,18 @@ fun TunnelsView() {
     var discovering by remember { mutableStateOf(manager?.services?.state != ServiceScanState.Idle) }
 
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 22.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column {
-                Txt(stringResource(Res.string.ports_port_forwarding), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-                Txt(
-                    stringResource(Res.string.ports_saved_tunnels_subtitle),
-                    color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                GhostButton(stringResource(Res.string.ports_find_services), onClick = { discovering = true }, icon = "radar")
+        SectionHeader(
+            title = stringResource(Res.string.ports_port_forwarding),
+            subtitle = stringResource(Res.string.ports_saved_tunnels_subtitle),
+            actions = {
+                GhostButton(stringResource(Res.string.ports_find_services), onClick = { discovering = true; adding = false; selectedId = null }, icon = "radar")
                 PrimaryButton(
                     stringResource(Res.string.ports_new_tunnel),
                     onClick = { adding = true; selectedId = null; discovering = false },
                     icon = "add",
                 )
-            }
-        }
-        HLine()
+            },
+        )
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (manager == null) {
                 MockTunnelsBody()
@@ -172,6 +171,7 @@ fun TunnelsView() {
                     selectedId = selectedId,
                     onSelect = { selectedId = it; adding = false; discovering = false },
                     onCloseDiscovery = { discovering = false; manager.services.reset() },
+                    onCloseEditor = { adding = false; selectedId = null; discovering = false },
                     // After deletion, returns to "New tunnel" mode instead of jumping to an
                     // arbitrary remaining tunnel: selectedId still holds the removed id, and
                     // without resetting it, selected would resolve via firstOrNull().
@@ -194,13 +194,17 @@ private fun GlobalTunnelsBody(
     selectedId: String?,
     onSelect: (String) -> Unit,
     onCloseDiscovery: () -> Unit,
+    onCloseEditor: () -> Unit,
     onNew: () -> Unit,
 ) {
     val tunnels = manager.tunnels
     val activeCount = tunnels.count { it.status is TunnelStatus.Active }
-    val selected = tunnels.firstOrNull { it.id == selectedId } ?: tunnels.firstOrNull()
-    // Right panel: new-tunnel editor (New tunnel or while the list is empty), otherwise editing the selected one.
-    val showNew = adding || selected == null
+    // No auto-selection: the right panel stays closed until the user opens it (New tunnel / a row /
+    // Find services). `selected` is null unless a real tunnel is being edited.
+    val selected = tunnels.firstOrNull { it.id == selectedId }
+    // Editor slides in for a new tunnel (adding) or when editing a selected one; never together with
+    // the services panel (they share the right column).
+    val editorVisible = !discovering && (adding || selected != null)
 
     fun hostLabel(hostId: String): String = hosts?.find(hostId)?.label ?: hostId
 
@@ -211,7 +215,12 @@ private fun GlobalTunnelsBody(
     Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
             if (tunnels.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { EmptyTunnels() }
+                EmptyState(
+                    icon = "lan",
+                    title = stringResource(Res.string.ports_no_tunnels_yet),
+                    subtitle = stringResource(Res.string.ports_add_tunnel_right),
+                    modifier = Modifier.weight(1f),
+                )
             } else {
                 Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
@@ -232,7 +241,7 @@ private fun GlobalTunnelsBody(
                                 entry = entry,
                                 via = hostLabel(entry.tunnel.hostId),
                                 mono = mono,
-                                selected = !showNew && entry.id == selected.id,
+                                selected = entry.id == selectedId,
                                 onSelect = onRowSelect,
                                 onToggle = onRowToggle,
                             )
@@ -248,18 +257,45 @@ private fun GlobalTunnelsBody(
                     }
                 }
             }
-            VLine(D.line)
-            if (discovering) {
-                ServicesPanel(manager = manager, hosts = hosts, mono = mono, onClose = onCloseDiscovery)
-            } else {
-                TunnelEditor(
-                    manager = manager,
-                    hosts = hosts,
-                    mono = mono,
-                    existing = if (showNew) null else selected,
-                    onSaved = { onSelect(it) },
-                    onRequestRemove = { selected?.let { pendingRemove = it } },
-                )
+            // Right column: editor and services share ONE slide-in slot (not two sibling
+            // AnimatedVisibility blocks — those each reserved width in the Row, so switching
+            // editor↔services briefly expanded both at once and jolted the list width). A single
+            // slot expands from the right edge (the list reflows to fill the freed width);
+            // clipToBounds keeps the 308dp content from painting outside the animating slot.
+            //
+            // `shown*` latch what the panel is displaying and only update while it's open, so the
+            // outgoing content survives the slide-out unchanged — otherwise the exit would recompose
+            // against the just-cleared state and flash (a blank "New tunnel" form on editor close, or
+            // the editor on services close).
+            val panelVisible = editorVisible || discovering
+            var shownServices by remember { mutableStateOf(discovering) }
+            var shownEntry by remember { mutableStateOf<TunnelEntry?>(null) }
+            var shownAdding by remember { mutableStateOf(false) }
+            if (panelVisible) {
+                shownServices = discovering
+                if (!discovering) { shownEntry = selected; shownAdding = adding }
+            }
+            AnimatedVisibility(
+                visible = panelVisible,
+                enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.End) + fadeOut(),
+            ) {
+                Row(Modifier.clipToBounds()) {
+                    VLine(D.line)
+                    if (shownServices) {
+                        ServicesPanel(manager = manager, hosts = hosts, mono = mono, onClose = onCloseDiscovery)
+                    } else {
+                        TunnelEditor(
+                            manager = manager,
+                            hosts = hosts,
+                            mono = mono,
+                            existing = if (shownAdding) null else shownEntry,
+                            onSaved = { onSelect(it) },
+                            onRequestRemove = { shownEntry?.let { pendingRemove = it } },
+                            onClose = onCloseEditor,
+                        )
+                    }
+                }
             }
         }
         pendingRemove?.let { entry ->
@@ -275,15 +311,6 @@ private fun GlobalTunnelsBody(
                 onDismiss = { pendingRemove = null },
             )
         }
-    }
-}
-
-@Composable
-private fun EmptyTunnels() {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Sym("lan", size = 26.sp, color = D.faint)
-        Txt(stringResource(Res.string.ports_no_tunnels_yet), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-        Txt(stringResource(Res.string.ports_add_tunnel_right), color = D.faint, size = 11.5.sp)
     }
 }
 
@@ -371,7 +398,10 @@ private fun ServicesPanel(
     onClose: () -> Unit,
 ) {
     val scan = manager.services
-    val hostList = hosts?.hosts ?: emptyList()
+    // Only SSH-authenticated hosts can be scanned: the scan is an SSH exec round-trip, so Telnet/
+    // Serial/VNC profiles (no command channel) are excluded from the picker rather than offered and
+    // then rejected as Unsupported. MOSH qualifies — it dials the same SSH hop.
+    val hostList = hosts?.hosts?.filter { it.connectionType.usesSshAuth } ?: emptyList()
     var hostId by remember { mutableStateOf(scan.scannedHostId ?: hostList.firstOrNull()?.id) }
     val hostLabel = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label }
         ?: stringResource(Res.string.ports_select_host)
@@ -395,8 +425,7 @@ private fun ServicesPanel(
             onClick = { hostId?.let { scan.scan(it) } },
             modifier = Modifier.fillMaxWidth(),
             icon = "radar",
-            bg = if (hostId != null) D.cyan else Color(0x14FFFFFF),
-            fg = if (hostId != null) Color(0xFF0A1A26) else D.faint,
+            enabled = hostId != null,
         )
         Box(Modifier.padding(bottom = 14.dp))
         when (val state = scan.state) {
@@ -473,6 +502,7 @@ private fun TunnelEditor(
     existing: TunnelEntry?,
     onSaved: (String) -> Unit,
     onRequestRemove: () -> Unit,
+    onClose: () -> Unit,
 ) {
     val editingId = existing?.id
     // Keyed by editingId: the form is an isolated edit buffer, populated once per selected
@@ -488,9 +518,12 @@ private fun TunnelEditor(
     Column(
         Modifier.width(308.dp).fillMaxHeight().background(D.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
-        Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Badge(form.direction.badgeLabel(), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
-            Txt(if (existing == null) stringResource(Res.string.ports_new_tunnel) else stringResource(Res.string.ports_tunnel_detail), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Badge(form.direction.badgeLabel(), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp)
+                Txt(if (existing == null) stringResource(Res.string.ports_new_tunnel) else stringResource(Res.string.ports_tunnel_detail), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
+            }
+            Sym("close", size = 16.sp, color = D.faint, modifier = Modifier.clickable(onClick = onClose))
         }
         FieldLabel(stringResource(Res.string.ports_field_name))
         EditField(form.label, { form.label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono)
@@ -544,8 +577,7 @@ private fun TunnelEditor(
                 label = stringResource(Res.string.ports_save),
                 onClick = { draft?.let { onSaved(manager.save(it)) } },
                 modifier = Modifier.weight(1f),
-                bg = if (draft != null) D.cyan else Color(0x14FFFFFF),
-                fg = if (draft != null) Color(0xFF0A1A26) else D.faint,
+                enabled = draft != null,
             )
             if (existing != null) {
                 GhostButton(stringResource(Res.string.ports_remove), onClick = onRequestRemove, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))

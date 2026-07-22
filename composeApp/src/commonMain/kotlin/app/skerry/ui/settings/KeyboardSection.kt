@@ -61,14 +61,13 @@ import app.skerry.ui.generated.resources.settings_kb_snippet_palette
 import app.skerry.ui.generated.resources.settings_kb_split_terminal
 import app.skerry.ui.generated.resources.settings_kb_terminal_group
 import app.skerry.ui.generated.resources.settings_keyboard_subtitle
-import app.skerry.ui.generated.resources.settings_keyboard_title
 import org.jetbrains.compose.resources.stringResource
 
 // Keyboard section: hotkey reference (global and terminal).
 
 @Composable
 internal fun KeyboardSection() {
-    SectionTitle(stringResource(Res.string.settings_keyboard_title), stringResource(Res.string.settings_keyboard_subtitle))
+    SectionSubtitle(stringResource(Res.string.settings_keyboard_subtitle))
     // Platform-specific labels: ⌘/⌥ on macOS, Ctrl+Shift/Alt on Linux/Windows — matching what
     // matchDesktopShortcut recognizes. The Ctrl path requires Shift, so plain Ctrl+letter (Ctrl+L
     // clear, Ctrl+D EOF, Ctrl+C signal) stays reserved for the terminal.

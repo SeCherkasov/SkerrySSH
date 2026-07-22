@@ -62,10 +62,12 @@ import app.skerry.ui.generated.resources.lib_known_subtitle
 import app.skerry.ui.generated.resources.lib_known_title
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.D
+import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalKnownHosts
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
@@ -96,10 +98,10 @@ fun KnownHostsView() {
 
 @Composable
 private fun KnownHostsHeader() {
-    Column(Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 22.dp, vertical = 14.dp)) {
-        Txt(stringResource(Res.string.lib_known_title), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-        Txt(stringResource(Res.string.lib_known_subtitle), color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
-    }
+    SectionHeader(
+        title = stringResource(Res.string.lib_known_title),
+        subtitle = stringResource(Res.string.lib_known_subtitle),
+    )
 }
 
 @Composable
@@ -133,10 +135,9 @@ private fun LiveKnownHostsView(controller: KnownHostsController) {
 
     Column(Modifier.fillMaxSize().background(D.bg)) {
         KnownHostsHeader()
-        HLine()
         Row(Modifier.weight(1f).fillMaxWidth()) {
             if (entries.isEmpty() && mismatches.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { EmptyKnownHosts() }
+                EmptyKnownHosts(Modifier.weight(1f))
             } else {
                 Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
                     mismatches.forEach { mismatch ->
@@ -255,12 +256,13 @@ private fun KnownRowLive(entry: KnownHostEntry, mono: FontFamily, onForget: () -
 }
 
 @Composable
-private fun EmptyKnownHosts() {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Sym("fingerprint", size = 26.sp, color = D.faint)
-        Txt(stringResource(Res.string.lib_known_empty_title), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-        Txt(stringResource(Res.string.lib_known_empty_desc), color = D.faint, size = 11.5.sp)
-    }
+private fun EmptyKnownHosts(modifier: Modifier = Modifier) {
+    EmptyState(
+        icon = "fingerprint",
+        title = stringResource(Res.string.lib_known_empty_title),
+        subtitle = stringResource(Res.string.lib_known_empty_desc),
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -311,7 +313,6 @@ private fun MockKnownHostsView() {
     val mono = LocalFonts.current.mono
     Column(Modifier.fillMaxSize().background(D.bg)) {
         KnownHostsHeader()
-        HLine()
         Row(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
                 Row(

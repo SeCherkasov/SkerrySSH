@@ -9,6 +9,10 @@ import app.skerry.shared.terminal.castFileName
 import app.skerry.shared.terminal.recordingStamp
 import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_record
+import app.skerry.ui.generated.resources.shell_tip_record_stop
+import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.session.Session
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.vault.exportTextFile
@@ -69,6 +73,7 @@ fun RecordSessionButton(
         name = if (recording) "stop_circle" else "radio_button_checked",
         tint = if (recording) D.sunset else D.dim,
         onClick = toggle,
+        tooltip = stringResource(if (recording) Res.string.shell_tip_record_stop else Res.string.shell_tip_record),
     )
 }
 

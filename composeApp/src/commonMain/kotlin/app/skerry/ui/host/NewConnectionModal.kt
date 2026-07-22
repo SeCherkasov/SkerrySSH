@@ -124,6 +124,7 @@ import app.skerry.ui.generated.resources.conn_title_new
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
+import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.D
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.GhostButton
@@ -353,9 +354,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         TestStatusLabel(status)
                     }
                 }
-                Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = state::closeModal).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt(stringResource(Res.string.conn_cancel), color = D.dim, size = 12.5.sp)
-                }
+                CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeModal)
                 GhostButton(
                     stringResource(Res.string.conn_test),
                     onClick = {
@@ -411,7 +410,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                             state.closeModal()
                         }
                     },
-                    bg = if (hosts == null || form.canSave) D.cyan else D.cyan.copy(alpha = 0.4f),
+                    enabled = hosts == null || form.canSave,
                 )
             }
         }
@@ -766,10 +765,8 @@ private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit)
                 ModalTextField(name, { name = it }, "Production")
                 Spacer14()
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-                    Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                        Txt(stringResource(Res.string.conn_cancel), color = D.dim, size = 12.5.sp)
-                    }
-                    PrimaryButton(stringResource(Res.string.conn_create), onClick = { if (canCreate) onCreate(name) }, bg = if (canCreate) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    CancelButton(stringResource(Res.string.conn_cancel), onClick = onDismiss)
+                    PrimaryButton(stringResource(Res.string.conn_create), onClick = { onCreate(name) }, enabled = canCreate)
                 }
             }
         }

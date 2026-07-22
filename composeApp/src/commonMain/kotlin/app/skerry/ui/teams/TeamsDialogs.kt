@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
@@ -117,13 +118,6 @@ private fun TeamsTextField(
     )
 }
 
-@Composable
-internal fun CancelButton(onDismiss: () -> Unit) {
-    Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-        Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
-    }
-}
-
 /** Create team: a single name field; the team key is generated locally (the caption notes this). */
 @Composable
 fun CreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
@@ -142,7 +136,7 @@ fun CreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CancelButton(onDismiss)
+            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
             PrimaryButton(stringResource(Res.string.shell_create), onClick = ::save, enabled = name.trim().isNotEmpty())
         }
     }
@@ -207,7 +201,7 @@ fun InviteMemberDialog(
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CancelButton(onDismiss)
+            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
             PrimaryButton(
                 if (ready) stringResource(Res.string.lib_teams_invite_send) else stringResource(Res.string.lib_teams_invite_next),
                 onClick = ::submit,
@@ -257,7 +251,7 @@ fun SharePickerDialog(
             Modifier.fillMaxWidth().padding(top = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
         ) {
-            CancelButton(onDismiss)
+            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
         }
     }
 }

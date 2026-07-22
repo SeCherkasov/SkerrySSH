@@ -29,6 +29,7 @@ import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_ai_ask
@@ -64,7 +65,6 @@ import app.skerry.ui.generated.resources.settings_ai_quick_chat_desc
 import app.skerry.ui.generated.resources.settings_ai_sanitize
 import app.skerry.ui.generated.resources.settings_ai_sanitize_desc
 import app.skerry.ui.generated.resources.settings_ai_sending
-import app.skerry.ui.generated.resources.settings_ai_title
 import app.skerry.ui.generated.resources.settings_clear
 import app.skerry.ui.generated.resources.settings_save
 import app.skerry.ui.generated.resources.sync_insecure_url_warning
@@ -95,7 +95,7 @@ private fun SectionDivider() {
  */
 @Composable
 private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
-    SectionTitle(stringResource(Res.string.settings_ai_title), stringResource(Res.string.settings_ai_live_subtitle))
+    SectionSubtitle(stringResource(Res.string.settings_ai_live_subtitle))
 
     AiProviderCards(ai, byokContent = { DesktopByokFields(ai) })
 
@@ -168,7 +168,7 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
 
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        ChipButton(stringResource(Res.string.settings_save), color = D.cyan, onClick = { ai.save(key, model, baseUrl) })
+        PrimaryButton(stringResource(Res.string.settings_save), onClick = { ai.save(key, model, baseUrl) })
         if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = D.moss, size = 11.5.sp)
         else Txt(stringResource(Res.string.settings_ai_not_configured), color = D.faint, size = 11.5.sp)
     }
@@ -176,7 +176,7 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
 
 @Composable
 private fun AiSectionMock(state: DesktopDesignState) {
-    SectionTitle(stringResource(Res.string.settings_ai_title), stringResource(Res.string.settings_ai_mock_subtitle))
+    SectionSubtitle(stringResource(Res.string.settings_ai_mock_subtitle))
     Txt(stringResource(Res.string.settings_ai_default_provider), color = D.text, size = 13.sp, weight = FontWeight.Medium)
     Txt(stringResource(Res.string.settings_ai_default_provider_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
     ProviderCard("lock", stringResource(Res.string.settings_ai_provider_device), stringResource(Res.string.settings_ai_provider_device_desc), selected = true, badge = stringResource(Res.string.settings_ai_badge_private))

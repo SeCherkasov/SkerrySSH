@@ -83,12 +83,15 @@ import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.D
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.SIDEBAR_WIDTH
+import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
@@ -140,11 +143,12 @@ private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibrarySta
             onSelect = { id -> selectedId = id; adding = false },
             onNew = { adding = true; selectedId = null },
             onInstallStarterPack = { manager.installStarterPack() },
+            onRenameTag = { oldTag, newTag -> manager.renameTag(oldTag, newTag)?.let { library.onTagRenamed(oldTag, it) } },
         )
         VLine(D.line)
         Box(Modifier.weight(1f).fillMaxHeight().background(D.bg)) {
             if (!adding && selected == null) {
-                EmptyEditorHint()
+                EmptyState(icon = "code_blocks", title = stringResource(Res.string.lib_snippets_select_or_create))
             } else {
                 // Keyed by the edited snippet's identity so the editor's fields reset instead of
                 // carrying over the previous values.
@@ -190,17 +194,19 @@ private fun SnippetEditor(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Sym("code_blocks", size = 20.sp, color = D.cyanBright)
                 Txt(form.label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = D.text, size = 17.sp, weight = FontWeight.SemiBold)
-            }
-            if (form.tags.isNotEmpty()) {
-                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    form.tags.forEach { Chip("#$it") }
+                // Tags sit inline right after the name, not on a line of their own.
+                if (form.tags.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        form.tags.forEach { Chip("#$it") }
+                    }
                 }
             }
         }
         HLine()
         Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
             FieldLabelSnip(stringResource(Res.string.lib_snippets_field_name))
-            SnipEditField(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name), mono)
+            // The name is human-readable text — UI font, like every other name field (command below stays mono).
+            SnipEditField(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name), LocalFonts.current.ui)
             Column(Modifier.padding(top = 20.dp)) {
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_command))
                 SnipCommandField(form.command, { form.command = it }, "df -h | sort -k5 -r", mono)
@@ -246,20 +252,12 @@ private fun SnippetEditor(
                     stringResource(Res.string.lib_snippets_save),
                     onClick = { if (form.canSave) onSaved(persist()) },
                     enabled = form.canSave,
-                    bg = if (form.canSave) D.cyan else D.cyan.copy(alpha = 0.3f),
                 )
                 if (entry != null) {
-                    GhostButton(stringResource(Res.string.lib_snippets_delete), onClick = { manager.delete(entry.id); onDeleted() }, fg = D.storm, border = D.storm.copy(alpha = 0.4f))
+                    GhostButton(stringResource(Res.string.lib_snippets_delete), onClick = { manager.delete(entry.id); onDeleted() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f))
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun EmptyEditorHint() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Txt(stringResource(Res.string.lib_snippets_select_or_create), color = D.faint, size = 13.sp)
     }
 }
 
@@ -405,7 +403,7 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String
 @Composable
 private fun MockSnippetsView(mono: FontFamily) {
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
+        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2)) {
             Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Color(0x08FFFFFF)).border(1.dp, D.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
@@ -418,7 +416,7 @@ private fun MockSnippetsView(mono: FontFamily) {
             }
             HLine()
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 8.dp)) {
-                Txt("LIBRARY", color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp))
+                SidebarSectionTitle(stringResource(Res.string.lib_snippets_library), modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp))
                 Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     MOCK_SNIPPETS.forEach { MockSnippetRow(it, mono) }
                 }
