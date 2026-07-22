@@ -36,6 +36,7 @@
     <string name="vault_copy_password">复制密码</string>
     <string name="vault_export">导出</string>
     <string name="vault_delete">删除</string>
+    <string name="vault_rename">重命名</string>
     <string name="vault_cancel">取消</string>
     <string name="vault_used_by_one">被 1 台主机使用</string>
     <string name="vault_used_by">被 %1$d 台主机使用</string>
@@ -82,6 +83,9 @@
     <string name="vault_placeholder_master_password">主密码</string>
     <string name="vault_password_mismatch_retry">密码不匹配——请重试。</string>
     <string name="vault_copy">复制</string>
+
+    <!-- 重命名密钥对话框 -->
+    <string name="vault_rename_title">重命名「%1$s」</string>
 
     <!-- 删除密钥对话框 -->
     <string name="vault_delete_title">删除「%1$s」？</string>

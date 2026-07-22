@@ -60,6 +60,7 @@ import app.skerry.ui.generated.resources.vault_label_public_key
 import app.skerry.ui.generated.resources.vault_meta_any_principal
 import app.skerry.ui.generated.resources.vault_meta_certificate
 import app.skerry.ui.generated.resources.vault_meta_password
+import app.skerry.ui.generated.resources.vault_rename
 import app.skerry.ui.generated.resources.vault_subtitle_certificate
 import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
 import app.skerry.ui.generated.resources.vault_subtitle_password
@@ -100,6 +101,7 @@ import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.vault.PasswordConfirmDialog
+import app.skerry.ui.vault.RenameSecretDialog
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.vault.SecretIcon
 import app.skerry.ui.design.Sym
@@ -146,6 +148,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     var showGenerate by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
     var showImportCert by remember { mutableStateOf(false) }
+    var pendingRename by remember { mutableStateOf<Credential?>(null) }
     var pendingDelete by remember { mutableStateOf<Credential?>(null) }
 
     val credItems = VaultPresentation.credentialsIn(category, allCreds)
@@ -155,7 +158,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     // over the centered dialog and covers the bottom input fields above the keyboard. LaunchedEffect
     // writes the flag only on value change (not every list recomposition); DisposableEffect clears it
     // on leaving the tab so the tab bar isn't left hidden.
-    val modalOpen = showGenerate || showAddPassword || showImportCert || pendingDelete != null ||
+    val modalOpen = showGenerate || showAddPassword || showImportCert || pendingRename != null || pendingDelete != null ||
         selectedCred != null || copyAuth.passwordPromptVisible
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
@@ -244,6 +247,20 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 },
             )
         }
+        pendingRename?.let { target ->
+            // Rename edits only the label; the id (hosts reference it) and the secret stay put, and the
+            // change propagates to sync on its own (see CredentialManagerController.rename).
+            RenameSecretDialog(
+                currentLabel = target.label,
+                onDismiss = { pendingRename = null },
+                onConfirm = { newLabel ->
+                    // Abort on a lock race: idle auto-lock can fire while the dialog is open, and vault
+                    // CRUD throws once locked. Mirrors the delete guard.
+                    if (vault?.isUnlocked == true) credentials.rename(target.id, newLabel)
+                    pendingRename = null
+                },
+            )
+        }
         pendingDelete?.let { victim ->
             val bound = VaultPresentation.hostsUsing(victim.id, hosts)
             DeleteSecretDialog(
@@ -271,8 +288,12 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 onCopy = { copyTextToClipboard(it) },
                 onCopyPassword = { pwd -> copyAuth.authorize { copyPasswordToClipboard(pwd) } },
                 onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
-                // Close the detail sheet before showing the confirm dialog: otherwise the sheet (drawn
-                // on top) would cover the centered DeleteSecretDialog, leaving only its edge visible.
+                // Close the detail sheet before showing a centered dialog (rename/delete): otherwise the
+                // sheet, drawn on top, would cover it and leave only its edge visible.
+                onRename = {
+                    selectedId = null
+                    pendingRename = credential
+                },
                 onDelete = {
                     selectedId = null
                     pendingDelete = credential
@@ -443,6 +464,7 @@ private fun MobileSecretDetailSheet(
     onCopy: (String) -> Unit,
     onCopyPassword: (String) -> Unit,
     onExport: (name: String, content: String) -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -485,29 +507,31 @@ private fun MobileSecretDetailSheet(
                 }
                 UsedByHosts(hosts, mono)
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Copy is type-specific (what's copyable differs); rename is universal and edits only
+                    // the label; export/delete are type-specific again.
                     when (secret) {
-                        is CredentialSecret.Certificate -> {
+                        is CredentialSecret.Certificate ->
                             MobileSheetButton(stringResource(Res.string.vault_copy_certificate), onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                MobileSheetButton(stringResource(Res.string.vault_export), onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, filled = false, modifier = Modifier.weight(1f))
-                                MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
-                            }
-                        }
-                        is CredentialSecret.PrivateKey -> {
+                        is CredentialSecret.PrivateKey ->
                             MobileSheetButton(stringResource(Res.string.vault_copy_public_key), onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                MobileSheetButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, filled = false, modifier = Modifier.weight(1f))
-                                MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
-                            }
-                        }
-                        is CredentialSecret.Password -> {
-                            // The password is sensitive: copying requires re-authentication
-                            // (biometrics/master password, see onCopyPassword) and goes through the
-                            // platform path (Android: sensitive clip + auto-clear), not the normal
-                            // clipboard like cert/public key.
+                        // The password is sensitive: copying requires re-authentication (biometrics/master
+                        // password, see onCopyPassword) and goes through the platform path (Android:
+                        // sensitive clip + auto-clear), not the normal clipboard like cert/public key.
+                        is CredentialSecret.Password ->
                             MobileSheetButton(stringResource(Res.string.vault_copy_password), onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                            MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
+                    }
+                    MobileSheetButton(stringResource(Res.string.vault_rename), onClick = onRename, filled = false, modifier = Modifier.fillMaxWidth())
+                    when (secret) {
+                        is CredentialSecret.Certificate -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            MobileSheetButton(stringResource(Res.string.vault_export), onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, filled = false, modifier = Modifier.weight(1f))
+                            MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
                         }
+                        is CredentialSecret.PrivateKey -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            MobileSheetButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, filled = false, modifier = Modifier.weight(1f))
+                            MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
+                        }
+                        is CredentialSecret.Password ->
+                            MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
                     }
                 }
                 Spacer(Modifier.height(8.dp))
