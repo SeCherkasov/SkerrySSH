@@ -91,7 +91,7 @@
     <string name="shell_close_split_title">Close split panel?</string>
     <string name="shell_close_split_message">Disconnects the second session in this tab and closes the panel. The main session stays connected.</string>
     <string name="shell_close_panel">Close panel</string>
-    <string name="shell_unlocked">Unlocked</string>
+    <string name="shell_lock">Lock</string>
     <string name="shell_settings">Settings</string>
     <string name="shell_status_connected">Connected</string>
     <string name="shell_status_disconnected">Disconnected</string>

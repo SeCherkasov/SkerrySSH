@@ -91,7 +91,7 @@
     <string name="shell_close_split_title">Закрыть split-панель?</string>
     <string name="shell_close_split_message">Отключает вторую сессию в этой вкладке и закрывает панель. Основная сессия останется подключённой.</string>
     <string name="shell_close_panel">Закрыть панель</string>
-    <string name="shell_unlocked">Разблокировано</string>
+    <string name="shell_lock">Заблокировать</string>
     <string name="shell_settings">Настройки</string>
     <string name="shell_status_connected">Подключено</string>
     <string name="shell_status_disconnected">Отключено</string>

@@ -91,7 +91,7 @@
     <string name="shell_close_split_title">关闭分屏面板？</string>
     <string name="shell_close_split_message">断开此标签页中的第二个会话并关闭面板。主会话保持连接。</string>
     <string name="shell_close_panel">关闭面板</string>
-    <string name="shell_unlocked">已解锁</string>
+    <string name="shell_lock">锁定</string>
     <string name="shell_settings">设置</string>
     <string name="shell_status_connected">已连接</string>
     <string name="shell_status_disconnected">已断开</string>
