@@ -135,17 +135,19 @@ fun DesktopUnlockScreen(
             PrimaryButton(stringResource(Res.string.shell_unlock), onClick = submit, modifier = Modifier.weight(1f))
             if (canUseBiometric) BiometricButton(onClick = onBiometric)
         }
-        // A forgotten password can only be resolved by a reset (zero-knowledge): an unobtrusive link
-        // under the button leads to the confirmation screen.
-        Txt(
-            stringResource(Res.string.shell_forgot_password),
-            color = D.faint,
-            size = 12.sp,
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .clickable(onClick = onForgotPassword)
-                .padding(vertical = 4.dp),
-        )
+        // A forgotten password can only be resolved by a reset (zero-knowledge): an unobtrusive,
+        // centered link under the button leads to the confirmation screen.
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Txt(
+                stringResource(Res.string.shell_forgot_password),
+                color = D.faint,
+                size = 12.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onForgotPassword)
+                    .padding(vertical = 4.dp),
+            )
+        }
     }
 }
 
