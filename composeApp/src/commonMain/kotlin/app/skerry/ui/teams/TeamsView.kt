@@ -47,10 +47,13 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.design.D
+import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
-import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.SIDEBAR_WIDTH
+import app.skerry.ui.design.SectionHeader
+import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
@@ -140,17 +143,21 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     }
 
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
-            Txt(stringResource(Res.string.lib_teams_sidebar), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
+            SidebarSectionTitle(stringResource(Res.string.lib_teams_sidebar), modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
             teams.forEach { team ->
                 LiveTeamRow(team, active = team.id == selected?.id) { selectedId = team.id }
             }
             Spacer(Modifier.weight(1f))
             error?.let { Txt(teamsFailureText(it), color = D.sunset, size = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
-            GhostButton(stringResource(Res.string.lib_teams_create), onClick = { showCreate = true }, icon = "group_add", modifier = Modifier.fillMaxWidth())
+            PrimaryButton(stringResource(Res.string.lib_teams_create), onClick = { showCreate = true }, icon = "group_add", modifier = Modifier.fillMaxWidth())
         }
         VLine(D.line)
-        Column(Modifier.weight(1f).fillMaxHeight().background(D.bg).verticalScroll(rememberScrollState())) {
+        Column(
+            Modifier.weight(1f).fillMaxHeight().background(D.bg)
+                // Scroll only the team detail; the empty state needs the full height to center in it.
+                .then(if (selected != null) Modifier.verticalScroll(rememberScrollState()) else Modifier),
+        ) {
             when {
                 selected == null && error == TeamsFailure.NotConnected -> TeamsEmptyState(stringResource(Res.string.lib_teams_need_sync))
                 selected == null -> TeamsEmptyState(stringResource(Res.string.lib_teams_empty_subtitle))
@@ -310,27 +317,20 @@ private fun TeamDetail(
     val sharedHosts = remember(team.id, tick, teamVault) { teamVault?.let { VaultHostStore(it).all() } ?: emptyList() }
     val sharedSnippets = remember(team.id, tick, teamVault) { teamVault?.let { VaultSnippetStore(it).all() } ?: emptyList() }
 
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column {
-            Txt(team.name, color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
-            Txt(stringResource(Res.string.lib_teams_members_count, team.memberCount), color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    SectionHeader(
+        title = team.name,
+        subtitle = stringResource(Res.string.lib_teams_members_count, team.memberCount),
+        actions = {
             if (!invited) GhostButton(stringResource(Res.string.lib_teams_sync_now), onClick = onSync, icon = "sync")
             if (canAudit) GhostButton(stringResource(Res.string.lib_teams_history), onClick = onShowHistory, icon = "history")
             if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
             if (owner) {
-                GhostButton(stringResource(Res.string.lib_teams_delete), onClick = { onConfirm(TeamsConfirm.Delete(team.id)) }, icon = "delete", fg = D.sunset)
+                GhostButton(stringResource(Res.string.lib_teams_delete), onClick = { onConfirm(TeamsConfirm.Delete(team.id)) }, icon = "delete", fg = D.sunset, border = D.sunset.copy(alpha = 0.3f))
             } else if (!invited) {
-                GhostButton(stringResource(Res.string.lib_teams_leave), onClick = { onConfirm(TeamsConfirm.Leave(team.id)) }, icon = "logout", fg = D.sunset)
+                GhostButton(stringResource(Res.string.lib_teams_leave), onClick = { onConfirm(TeamsConfirm.Leave(team.id)) }, icon = "logout", fg = D.sunset, border = D.sunset.copy(alpha = 0.3f))
             }
-        }
-    }
-    HLine()
+        },
+    )
     Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
         if (invited) {
             // Verify the inviter's identity (signature + fingerprint) before offering Accept. Null =
@@ -409,11 +409,7 @@ private fun TeamDetail(
 
 @Composable
 private fun TeamsEmptyState(subtitle: String) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Sym("groups", size = 34.sp, color = D.faint)
-        Txt(stringResource(Res.string.lib_teams_empty_title), color = D.text, size = 15.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
-        Txt(subtitle, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp))
-    }
+    EmptyState(icon = "groups", title = stringResource(Res.string.lib_teams_empty_title), subtitle = subtitle)
 }
 
 @Composable

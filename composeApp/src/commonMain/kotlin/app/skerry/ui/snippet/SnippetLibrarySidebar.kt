@@ -6,43 +6,65 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.ChipButton
+import app.skerry.ui.design.FilterChipRow
+import app.skerry.ui.design.SidebarSearchField
 import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.IconBtn
+import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.SIDEBAR_WIDTH
+import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_snippets_edit
 import app.skerry.ui.generated.resources.lib_snippets_empty
 import app.skerry.ui.generated.resources.lib_snippets_library
 import app.skerry.ui.generated.resources.lib_snippets_new
 import app.skerry.ui.generated.resources.lib_snippets_no_matches
+import app.skerry.ui.generated.resources.lib_snippets_rename_tag_placeholder
+import app.skerry.ui.generated.resources.lib_snippets_rename_tag_subtitle
+import app.skerry.ui.generated.resources.lib_snippets_rename_tag_title
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_starter_pack
 import app.skerry.ui.generated.resources.lib_snippets_untitled
+import app.skerry.ui.generated.resources.shell_cancel
+import app.skerry.ui.generated.resources.shell_save
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.key
 
@@ -60,19 +82,25 @@ internal fun SnippetLibrarySidebar(
     onSelect: (String) -> Unit,
     onNew: () -> Unit,
     onInstallStarterPack: () -> Unit,
+    onRenameTag: (oldTag: String, newTag: String) -> Unit = { _, _ -> },
 ) {
     val chips = library.chips(all)
     val grouped = hasCategories(all)
     val categories = library.categories(all)
+    // Tag being renamed via the category pencil (null = dialog closed).
+    var renamingTag by remember { mutableStateOf<String?>(null) }
 
-    Column(Modifier.width(262.dp).fillMaxHeight().background(D.surface2)) {
+    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2)) {
         Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
-            SnipSearchField(library.query, { library.query = it }, mono)
+            SnipSearchField(library.query, { library.query = it })
         }
         if (grouped) SnippetChipRow(chips, library)
         HLine()
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 8.dp)) {
-            SectionCaption(stringResource(Res.string.lib_snippets_library))
+            SidebarSectionTitle(
+                stringResource(Res.string.lib_snippets_library),
+                modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp),
+            )
             if (categories.isEmpty()) {
                 Txt(
                     if (all.isEmpty()) stringResource(Res.string.lib_snippets_empty) else stringResource(Res.string.lib_snippets_no_matches),
@@ -91,7 +119,7 @@ internal fun SnippetLibrarySidebar(
                 }
             } else if (grouped) {
                 categories.forEach { category ->
-                    SnippetCategorySection(category, library, selectedId, mono, onSelect)
+                    SnippetCategorySection(category, library, selectedId, mono, onSelect, onEditCategory = { renamingTag = it })
                 }
             } else {
                 SnippetRows(categories.flatMap { it.snippets }, selectedId, mono, onSelect)
@@ -102,32 +130,99 @@ internal fun SnippetLibrarySidebar(
             PrimaryButton(stringResource(Res.string.lib_snippets_new), onClick = onNew, icon = "add", modifier = Modifier.fillMaxWidth())
         }
     }
+
+    renamingTag?.let { tag ->
+        RenameTagDialog(
+            initialName = tag,
+            onDismiss = { renamingTag = null },
+            onSave = { newTag -> onRenameTag(tag, newTag); renamingTag = null },
+        )
+    }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Rename a snippet tag (which doubles as a library category). Mirrors the host group rename dialog
+ * ([app.skerry.ui.host.GroupDialog]) — scrim + card, prefilled name field, save disabled while blank.
+ */
 @Composable
-private fun SnippetChipRow(chips: List<String>, library: SnippetLibraryState) {
-    FlowRow(
-        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        chips.forEach { chip ->
-            // Keyed like the mobile row: categories are sorted, so editing tags reorders the chips
-            // and unkeyed slots would carry the previous chip's interaction state.
-            key(chip) {
-                val active = chip == library.activeChip
-                ChipButton(
-                    label = snippetChipLabel(chip),
-                    color = if (active) D.cyan else D.dim,
-                    filled = active,
-                    size = 11.sp,
-                    verticalPadding = 4.dp,
-                    onClick = { library.activeChip = chip },
-                )
+private fun RenameTagDialog(initialName: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf(initialName) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val canSave = name.trim().isNotEmpty()
+    val save = { if (canSave) onSave(name) }
+    ModalScrim(onDismiss = onDismiss) {
+        Column(
+            Modifier
+                .widthIn(max = 420.dp)
+                .fillMaxWidth()
+                .padding(20.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(D.surfaceDeep)
+                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .consumeClicks()
+                .padding(26.dp),
+        ) {
+            Txt(
+                stringResource(Res.string.lib_snippets_rename_tag_title),
+                color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
+            )
+            Txt(
+                stringResource(Res.string.lib_snippets_rename_tag_subtitle),
+                color = D.dim, size = 12.5.sp, lineHeight = 18.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+            )
+            BasicTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
+                cursorBrush = SolidColor(D.cyan),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { save() }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                decorationBox = { inner ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(7.dp))
+                            .background(D.card)
+                            .border(1.dp, D.line, RoundedCornerShape(7.dp))
+                            .padding(horizontal = 11.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.fillMaxWidth()) {
+                            if (name.isEmpty()) Txt(stringResource(Res.string.lib_snippets_rename_tag_placeholder), color = D.faint, size = 13.sp)
+                            inner()
+                        }
+                    }
+                },
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(top = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f))
+                Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
+                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
+                }
+                PrimaryButton(stringResource(Res.string.shell_save), onClick = save, enabled = canSave)
             }
         }
     }
+}
+
+@Composable
+private fun SnippetChipRow(chips: List<String>, library: SnippetLibraryState) {
+    // Same scrollable single-row filter strip as the hosts sidebar, so the two read as one system.
+    FilterChipRow(
+        chips = chips,
+        activeChip = library.activeChip,
+        onSelect = { library.activeChip = it },
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+        label = { snippetChipLabel(it) },
+    )
 }
 
 @Composable
@@ -137,8 +232,11 @@ private fun SnippetCategorySection(
     selectedId: String?,
     mono: FontFamily,
     onSelect: (String) -> Unit,
+    onEditCategory: (String) -> Unit,
 ) {
     val collapsed = library.isCollapsed(category.name)
+    // The synthetic "uncategorized" bucket is not a real tag, so it carries no rename pencil.
+    val editable = category.name != UNCATEGORIZED_KEY
     Row(
         Modifier
             .fillMaxWidth()
@@ -150,10 +248,20 @@ private fun SnippetCategorySection(
     ) {
         Sym(if (collapsed) "chevron_right" else "expand_more", size = 15.sp, color = D.faint)
         Txt(
-            if (category.name == UNCATEGORIZED_KEY) uncategorizedSnippetsLabel() else snippetTagLabel(category.name),
+            if (editable) snippetTagLabel(category.name) else uncategorizedSnippetsLabel(),
             color = D.dim, size = 11.sp, weight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
         )
+        if (editable) {
+            IconBtn(
+                "edit",
+                onClick = { onEditCategory(category.name) },
+                box = 20,
+                icon = 13.sp,
+                tint = D.faint,
+                tooltip = stringResource(Res.string.lib_snippets_edit),
+            )
+        }
         Txt(category.snippets.size.toString(), color = D.faint, size = 10.5.sp, font = mono)
     }
     if (!collapsed) SnippetRows(category.snippets, selectedId, mono, onSelect)
@@ -191,37 +299,8 @@ private fun SnippetRow(entry: SnippetEntry, selected: Boolean, mono: FontFamily,
     }
 }
 
+/** Library search field — the shared sidebar field, identical to the hosts sidebar. */
 @Composable
-private fun SectionCaption(text: String) {
-    Txt(
-        text, color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
-        modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp),
-    )
-}
-
-/** Library search field. */
-@Composable
-private fun SnipSearchField(value: String, onValueChange: (String) -> Unit, mono: FontFamily) {
-    val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
-        modifier = Modifier.fillMaxWidth(),
-        decorationBox = { inner ->
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Color(0x08FFFFFF)).border(1.dp, D.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("search", size = 16.sp, color = D.faint)
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(stringResource(Res.string.lib_snippets_search), color = D.faint, size = 12.5.sp, font = mono)
-                    inner()
-                }
-            }
-        },
-    )
+private fun SnipSearchField(value: String, onValueChange: (String) -> Unit) {
+    SidebarSearchField(value, onValueChange, stringResource(Res.string.lib_snippets_search), Modifier.fillMaxWidth())
 }

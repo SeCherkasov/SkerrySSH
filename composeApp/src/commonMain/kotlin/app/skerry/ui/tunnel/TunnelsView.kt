@@ -91,8 +91,10 @@ import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.design.D
+import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalHosts
@@ -137,28 +139,18 @@ fun TunnelsView() {
     var discovering by remember { mutableStateOf(manager?.services?.state != ServiceScanState.Idle) }
 
     Column(Modifier.fillMaxSize().background(D.bg)) {
-        Row(
-            Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 22.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column {
-                Txt(stringResource(Res.string.ports_port_forwarding), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
-                Txt(
-                    stringResource(Res.string.ports_saved_tunnels_subtitle),
-                    color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        SectionHeader(
+            title = stringResource(Res.string.ports_port_forwarding),
+            subtitle = stringResource(Res.string.ports_saved_tunnels_subtitle),
+            actions = {
                 GhostButton(stringResource(Res.string.ports_find_services), onClick = { discovering = true }, icon = "radar")
                 PrimaryButton(
                     stringResource(Res.string.ports_new_tunnel),
                     onClick = { adding = true; selectedId = null; discovering = false },
                     icon = "add",
                 )
-            }
-        }
-        HLine()
+            },
+        )
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (manager == null) {
                 MockTunnelsBody()
@@ -211,7 +203,12 @@ private fun GlobalTunnelsBody(
     Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
             if (tunnels.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) { EmptyTunnels() }
+                EmptyState(
+                    icon = "lan",
+                    title = stringResource(Res.string.ports_no_tunnels_yet),
+                    subtitle = stringResource(Res.string.ports_add_tunnel_right),
+                    modifier = Modifier.weight(1f),
+                )
             } else {
                 Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, D.cyan08, RoundedCornerShape(10.dp))) {
@@ -275,15 +272,6 @@ private fun GlobalTunnelsBody(
                 onDismiss = { pendingRemove = null },
             )
         }
-    }
-}
-
-@Composable
-private fun EmptyTunnels() {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Sym("lan", size = 26.sp, color = D.faint)
-        Txt(stringResource(Res.string.ports_no_tunnels_yet), color = D.text, size = 13.sp, weight = FontWeight.SemiBold)
-        Txt(stringResource(Res.string.ports_add_tunnel_right), color = D.faint, size = 11.5.sp)
     }
 }
 
@@ -395,8 +383,7 @@ private fun ServicesPanel(
             onClick = { hostId?.let { scan.scan(it) } },
             modifier = Modifier.fillMaxWidth(),
             icon = "radar",
-            bg = if (hostId != null) D.cyan else Color(0x14FFFFFF),
-            fg = if (hostId != null) Color(0xFF0A1A26) else D.faint,
+            enabled = hostId != null,
         )
         Box(Modifier.padding(bottom = 14.dp))
         when (val state = scan.state) {
@@ -544,8 +531,7 @@ private fun TunnelEditor(
                 label = stringResource(Res.string.ports_save),
                 onClick = { draft?.let { onSaved(manager.save(it)) } },
                 modifier = Modifier.weight(1f),
-                bg = if (draft != null) D.cyan else Color(0x14FFFFFF),
-                fg = if (draft != null) Color(0xFF0A1A26) else D.faint,
+                enabled = draft != null,
             )
             if (existing != null) {
                 GhostButton(stringResource(Res.string.ports_remove), onClick = onRequestRemove, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))

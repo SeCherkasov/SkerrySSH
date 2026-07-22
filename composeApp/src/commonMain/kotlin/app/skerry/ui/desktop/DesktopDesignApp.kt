@@ -1,5 +1,10 @@
 package app.skerry.ui.desktop
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -1170,19 +1175,17 @@ private fun IconRail(state: DesktopDesignState) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        // Collapse/expand toggle for the terminal's hosts sidebar: lives on the rail (not in the
-        // sidebar header) and only while the terminal view is on screen. Deliberately shorter than
-        // the 38dp view buttons — an auxiliary control, not a view. VNC maps to the same rail item
-        // but drives its own slide-over drawer (closed by default, overlays the framebuffer). A
-        // player tab has no sidebar at all — there is no host behind a recording.
-        if (state.appOverlay == null && currentSessionView == DesktopView.Terminal &&
-            sessions?.active?.view != SessionView.Player
+        // The terminal's hosts-sidebar collapse now lives in the sidebar header itself (a chevron
+        // next to search), so the rail no longer carries it. Only VNC keeps a rail toggle: its
+        // framebuffer view has no header to host one, and the host drawer overlays the framebuffer.
+        // It fades and collapses to zero height so entering and leaving VNC doesn't jolt the icons.
+        val showVncDrawerToggle = state.appOverlay == null && sessions?.active?.view == SessionView.Vnc
+        AnimatedVisibility(
+            visible = showVncDrawerToggle,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
         ) {
-            if (sessions?.active?.view == SessionView.Vnc) {
-                SidebarToggle(hidden = !state.vncSidebar, onToggle = state::toggleVncSidebar)
-            } else {
-                SidebarToggle(hidden = state.sidebarHidden, onToggle = state::toggleSidebar)
-            }
+            SidebarToggle(hidden = !state.vncSidebar, onToggle = state::toggleVncSidebar)
         }
         RAIL.forEach { item ->
             val active = if (state.appOverlay != null) item.view == state.appOverlay
@@ -1334,22 +1337,33 @@ private fun StatusBar() {
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
-            // Jump route right next to the connection status, cyan so it reads at a glance.
-            if (jumpRoute != null) StatusItem("alt_route", jumpRoute, color = D.cyan, mono = mono)
-            // Live RTT ping of the active session (before the first sample — "—"); mock mode — template label.
-            StatusItem("network_ping", if (live) (rttMs?.let { "$it ms" } ?: "—") else "42 ms", mono = mono)
-            // Live channel throughput (before connect — "—"); mock mode (offscreen) — template labels.
-            StatusItem("arrow_upward", if (live) (upRate?.let { humanRate(it) } ?: "—") else "1.2 KB/s", mono = mono)
-            StatusItem("arrow_downward", if (live) (downRate?.let { humanRate(it) } ?: "—") else "8.4 KB/s", mono = mono)
+            if (live && !connected) {
+                // Idle home / dropped session: with no session there is nothing to ping or meter, so a
+                // bare dim dot stands in for "not connected" instead of the word plus a row of "—".
+                Sym("circle", size = 11.sp, color = statusColor)
+            } else {
+                StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
+                // Jump route right next to the connection status, cyan so it reads at a glance.
+                if (jumpRoute != null) StatusItem("alt_route", jumpRoute, color = D.cyan, mono = mono)
+                // Live RTT ping of the active session (before the first sample — "—"); mock mode — template label.
+                StatusItem("network_ping", if (live) (rttMs?.let { "$it ms" } ?: "—") else "42 ms", mono = mono)
+                // Live channel throughput (before connect — "—"); mock mode (offscreen) — template labels.
+                StatusItem("arrow_upward", if (live) (upRate?.let { humanRate(it) } ?: "—") else "1.2 KB/s", mono = mono)
+                StatusItem("arrow_downward", if (live) (downRate?.let { humanRate(it) } ?: "—") else "8.4 KB/s", mono = mono)
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             // Update notice (undismissed newer release): click opens the GitHub release page.
+            // App-level — shown regardless of any session.
             app.skerry.ui.update.UpdateStatusItem()
-            // Server version — live ident of the active session (before connect / if the transport is silent — "—").
-            StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
-            Txt(stringResource(Res.string.shell_status_encoding), color = D.faint, size = 10.5.sp, font = mono)
-            Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
+            // Server ident, encoding, and grid size describe the active terminal — with no session they
+            // are just template values, so off-connection they drop out (mock mode keeps the prototype's).
+            if (!live || connected) {
+                // Server version — live ident of the active session (before connect / if the transport is silent — "—").
+                StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
+                Txt(stringResource(Res.string.shell_status_encoding), color = D.faint, size = 10.5.sp, font = mono)
+                Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
+            }
             // The sync indicator follows session status (see syncIndicator): green only with an active
             // session + reachable server; linked-but-not-connected → amber, etc. Hidden when sync isn't
             // configured / not yet pinged. Rendered as a bare glyph (no label) to match the mobile header,

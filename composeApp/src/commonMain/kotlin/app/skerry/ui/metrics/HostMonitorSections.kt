@@ -1,5 +1,9 @@
 package app.skerry.ui.metrics
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +54,13 @@ private const val ALERT_PERCENT = 85
  * own noise to full height and look like saturated traffic.
  */
 private const val NET_SCALE_FLOOR = 64L * 1024
+
+/**
+ * How a sparkline appears once its second sample lands. Without it the chart snaps into place and
+ * shoves everything below it down in one frame — a jarring redraw a few seconds after connecting.
+ * Fading and growing in turns that into a soft reveal.
+ */
+private val SparklineReveal = fadeIn(tween(350)) + expandVertically(tween(350))
 
 /**
  * The whole live part of the monitor: CPU / memory / swap meters with their history, network
@@ -169,7 +180,9 @@ private fun MonitorMeter(
             Txt(value, color = if (alert) D.sunset else D.textBright, size = 11.sp, font = mono, maxLines = 1)
         }
         MeterBar(fraction, if (alert) D.sunset else bar)
-        if (history.size >= 2) Sparkline(history, bar, Modifier.padding(top = 4.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
+        AnimatedVisibility(visible = history.size >= 2, enter = SparklineReveal) {
+            Sparkline(history, bar, Modifier.padding(top = 4.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
+        }
     }
 }
 
@@ -186,9 +199,11 @@ private fun MonitorNetwork(rxRate: Long, txRate: Long, history: List<MetricsSamp
         }
         val peak = history.maxOfOrNull { max(it.rxBytesPerSec, it.txBytesPerSec) } ?: 0L
         val scale = max(peak, NET_SCALE_FLOOR).toFloat()
-        if (history.size >= 2) {
-            Sparkline(history.map { it.rxBytesPerSec / scale }, D.cyan, Modifier.padding(top = 6.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
-            Sparkline(history.map { it.txBytesPerSec / scale }, D.moss, Modifier.padding(top = 2.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
+        AnimatedVisibility(visible = history.size >= 2, enter = SparklineReveal) {
+            Column {
+                Sparkline(history.map { it.rxBytesPerSec / scale }, D.cyan, Modifier.padding(top = 6.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
+                Sparkline(history.map { it.txBytesPerSec / scale }, D.moss, Modifier.padding(top = 2.dp), height = 26.dp, capacity = METRICS_HISTORY_SIZE)
+            }
         }
     }
 }

@@ -34,9 +34,11 @@ import app.skerry.ui.generated.resources.lib_teams_sidebar
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
-import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.SIDEBAR_WIDTH
+import app.skerry.ui.design.SectionHeader
+import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
@@ -69,8 +71,8 @@ private val ACTIVITY = listOf(
 internal fun TeamsMockView() {
     val mono = LocalFonts.current.mono
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(222.dp).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
-            Txt(stringResource(Res.string.lib_teams_sidebar), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
+            SidebarSectionTitle(stringResource(Res.string.lib_teams_sidebar), modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
             TeamRow("rocket_launch", "Platform crew", active = true)
             TeamRow("database", "Data team")
             Spacer(Modifier.weight(1f))
@@ -85,18 +87,13 @@ internal fun TeamsMockView() {
         }
         VLine(D.line)
         Column(Modifier.weight(1f).fillMaxHeight().background(D.bg).verticalScroll(rememberScrollState())) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Txt("Platform crew", color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
-                    Txt("5 members · 9 shared hosts · 2 shared vaults", color = D.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
-                }
-                PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = {}, icon = "person_add")
-            }
-            HLine()
+            SectionHeader(
+                title = "Platform crew",
+                subtitle = "5 members · 9 shared hosts · 2 shared vaults",
+                actions = {
+                    PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = {}, icon = "person_add")
+                },
+            )
             Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
                 SectionLabel(stringResource(Res.string.lib_teams_members))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

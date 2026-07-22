@@ -2,7 +2,10 @@ package app.skerry.ui.terminal
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import app.skerry.ui.design.EmptyState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,6 +64,11 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_disconnect
+import app.skerry.ui.generated.resources.shell_tip_files
+import app.skerry.ui.generated.resources.shell_tip_info
+import app.skerry.ui.generated.resources.shell_tip_ports
+import app.skerry.ui.generated.resources.shell_tip_split
 import app.skerry.ui.generated.resources.term_connecting
 import app.skerry.ui.generated.resources.term_connection_failed
 import app.skerry.ui.generated.resources.term_connection_lost
@@ -97,11 +105,11 @@ private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modif
     ) {
         // Split: live mode toggles the active tab's split (its own secondary session);
         // mock/preview uses a global flag.
-        IconBtn("splitscreen_right", onClick = { if (sessions != null) sessions.toggleSplit() else state.toggleSplit() })
+        IconBtn("splitscreen_right", onClick = { if (sessions != null) sessions.toggleSplit() else state.toggleSplit() }, tooltip = stringResource(Res.string.shell_tip_split))
         // Switches the active tab's subview (live mode, plus overlay reset) / mock fallback state.view.
-        IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) })
+        IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) }, tooltip = stringResource(Res.string.shell_tip_files))
         // Tunnels is a global section, always opens as an overlay.
-        IconBtn("lan", onClick = { state.showView(DesktopView.Ports) })
+        IconBtn("lan", onClick = { state.showView(DesktopView.Ports) }, tooltip = stringResource(Res.string.shell_tip_ports))
         // Quick snippet launch into the active session without leaving for the Snippets section.
         SnippetPaletteButton(active, state.snippetPaletteRequests)
         // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
@@ -121,11 +129,14 @@ private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modif
                 state.showCast(result)
             }
         }
-        // Lit while the info panel is open — the only action here with a visible on/off state.
-        IconBtn("info", onClick = state::toggleInfo, tint = if (state.infoPanel) D.cyanBright else D.dim)
+        // Lit while the info panel is open — the only action here with a visible on/off state. The
+        // panel is session-scoped, so with no active session there is nothing to show: the button
+        // dims and no-ops rather than toggling a panel that can't appear. Mock preview keeps it live.
+        val infoAvailable = active != null || sessions == null
+        IconBtn("info", onClick = { if (infoAvailable) state.toggleInfo() }, tint = if (state.infoPanel && infoAvailable) D.cyanBright else D.dim, tooltip = stringResource(Res.string.shell_tip_info))
         // Power: closes the active session (live path) with a confirmation prompt
         // (destructive, no auto-reconnect); no-op stub in mock mode.
-        IconBtn("power_settings_new", onClick = { if (active != null) state.requestCloseSession(active.id) }, tint = D.sunset)
+        IconBtn("power_settings_new", onClick = { if (active != null) state.requestCloseSession(active.id) }, tint = D.sunset, tooltip = stringResource(Res.string.shell_tip_disconnect))
     }
 }
 
@@ -143,6 +154,13 @@ fun TerminalView(state: DesktopDesignState) {
             enter = expandHorizontally(expandFrom = Alignment.End),
             exit = shrinkHorizontally(shrinkTowards = Alignment.End),
         ) { HostsSidebar(state) }
+        // Reopen handle: a slim strip at the terminal's left edge, shown only while the sidebar is
+        // collapsed (its collapse chevron lives in the panel header, which is gone when hidden).
+        AnimatedVisibility(
+            visible = state.sidebarHidden,
+            enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+            exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
+        ) { SidebarReopenHandle(onClick = state::toggleSidebar) }
         Column(Modifier.weight(1f).fillMaxHeight()) {
             // Shared live AI bar controller (or null): one instance for the overlay layer and
             // input row; key() recreates it when the active host/policy changes. Off/mock -> null
@@ -195,8 +213,11 @@ fun TerminalView(state: DesktopDesignState) {
                 // Same treatment as the hosts sidebar: the panel slides out of the right edge
                 // instead of popping into the layout. shrinkTowards = Start keeps its left edge
                 // leading, so the terminal reflows smoothly as the panel widens.
+                // The panel is entirely about the active session (host / cipher / metrics), so with
+                // no active session it would be a column of "—" placeholders next to the empty-state
+                // screen — hide it there, like the header and AI bar. Mock preview keeps it.
                 AnimatedVisibility(
-                    visible = state.infoPanel,
+                    visible = state.infoPanel && (sessions == null || activeId != null),
                     enter = expandHorizontally(expandFrom = Alignment.Start),
                     exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
                 ) { InfoPanel() }
@@ -216,6 +237,20 @@ fun TerminalView(state: DesktopDesignState) {
                 if (aiController != null) AiBarInput(aiController, aiTerminal, state.aiBarFocusRequests) else TerminalAiBarSlot()
             }
         }
+    }
+}
+
+/**
+ * Slim reopen strip shown at the terminal's left edge while the hosts sidebar is collapsed. Painted
+ * in the sidebar's own surface so it reads as the panel peeking out; clicking it restores the panel.
+ */
+@Composable
+private fun SidebarReopenHandle(onClick: () -> Unit) {
+    Box(
+        Modifier.width(16.dp).fillMaxHeight().background(D.surface2).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Sym("chevron_right", size = 16.sp, color = D.faint)
     }
 }
 
@@ -241,10 +276,7 @@ private fun SessionToolbar(state: DesktopDesignState) {
                     Txt(active.title, color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
                     Txt(active.subtitle, color = D.dim, size = 11.5.sp, font = mono)
                     Dot(sessionDotColor(active.controller.uiState))
-                } else if (sessions != null) {
-                    // Live mode with no active session: explicit empty state, no fake host.
-                    Txt(stringResource(Res.string.term_no_active_session), color = D.faint, size = 12.sp, font = mono)
-                } else {
+                } else if (sessions == null) {
                     // Mock/preview (offscreen render without LocalSessions): static header.
                     Txt("root@prod-web-01", color = D.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -278,8 +310,12 @@ private fun TerminalPane(state: DesktopDesignState, modifier: Modifier = Modifie
 @Composable
 private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = Modifier) {
     val active = sessions.active
-    Box(modifier.fillMaxHeight().fillMaxWidth().background(D.terminalBg)) {
-        when (val st = active?.controller?.uiState) {
+    val st = active?.controller?.uiState
+    // A live or frozen screen sits on the terminal's own background; every notice (no session /
+    // connecting / error) sits on the app background, so the empty terminal matches other sections.
+    val onScreen = st is ConnectionUiState.Connected || st is ConnectionUiState.Disconnected
+    Box(modifier.fillMaxHeight().fillMaxWidth().background(if (onScreen) D.terminalBg else D.bg)) {
+        when (st) {
             null -> TerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_notice_pick_host_to_connect))
             // Form state on the active tab means an empty ("+") tab: connection not yet started.
             ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new))
@@ -321,24 +357,14 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
     TerminalOverlayBanner(icon = icon, text = text, accent = color, background = Color(0xCC1A0E0E), modifier = modifier)
 }
 
-/** Centered message over the terminal background (no session / connecting / error). */
+/**
+ * Centered message over the terminal background (no session / connecting / error). Delegates to the
+ * shared [EmptyState] so the terminal's empty screen matches every other section's; [color] tints
+ * the glyph (red for errors).
+ */
 @Composable
 private fun TerminalNotice(icon: String, title: String, subtitle: String, color: Color = D.dim) {
-    val mono = LocalFonts.current.mono
-    Column(
-        Modifier.fillMaxSize().padding(40.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Sym(icon, size = 30.sp, color = color)
-        Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-        // Long texts (Mosh setup errors) must wrap into a readable centered block, not one
-        // terminal-wide line.
-        Txt(
-            subtitle, color = D.faint, size = 12.sp, font = mono, lineHeight = 18.sp,
-            align = TextAlign.Center, modifier = Modifier.widthIn(max = 480.dp),
-        )
-    }
+    EmptyState(icon = icon, title = title, subtitle = subtitle, tint = color)
 }
 
 // Split pane.
