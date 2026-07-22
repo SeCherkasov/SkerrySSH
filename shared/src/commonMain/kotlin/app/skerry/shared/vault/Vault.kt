@@ -211,6 +211,21 @@ interface Vault {
     fun compact(ids: List<String>) {}
 
     /**
+     * Physically drops every record whose [RecordType] is in [types], keeping the key, metadata, and
+     * unlock state — a soft reset used when a revoked device is reactivated and must become a fresh
+     * mirror of the server ([app.skerry.shared.sync.SyncCoordinator] follows this with a full re-pull).
+     *
+     * Unlike [remove] it does NOT tombstone the dropped records (a tombstone would re-inflate the very
+     * tombstones a server-side purge just removed) and does NOT emit [localChanges] (there's nothing to
+     * push — the caller repopulates from the server). Unlike [reset] the vault stays unlocked with the
+     * same dataKey and file. The caller scopes [types] to the sync-eligible types so device-local data
+     * (e.g. terminal history, or a type currently excluded from sync) survives. Unknown/unparsed records
+     * are left untouched — they never push, so they carry no resurrection risk, and the re-pull restores
+     * the server's copy. No-op by default (fakes); the file vault overrides it. Requires an unlocked vault.
+     */
+    fun clearRecords(types: Set<RecordType>) {}
+
+    /**
      * Changes the master password: rewraps the same `dataKey` under the new password (records aren't
      * re-encrypted). `false` if [oldPassword] is wrong. Requires an unlocked vault.
      */

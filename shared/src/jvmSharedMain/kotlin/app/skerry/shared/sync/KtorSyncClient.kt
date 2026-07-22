@@ -139,7 +139,7 @@ class KtorSyncClient(
         } catch (e: SRP6Exception) {
             throw SyncException(SyncException.Kind.PROTOCOL, "server SRP proof (M2) invalid", e)
         }
-        return SyncSession(accountId, verify.accessToken, verify.refreshToken)
+        return SyncSession(accountId, verify.accessToken, verify.refreshToken, reactivated = verify.reactivated)
     }
 
     override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray {

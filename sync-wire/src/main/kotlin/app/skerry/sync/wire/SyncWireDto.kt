@@ -39,8 +39,19 @@ data class VerifyRequest(
     val platform: String? = null,
 )
 
+/**
+ * SRP login response. [reactivated] is `true` only when this device was revoked and this correct-password
+ * login cleared the revocation (server-computed, see the device re-enroll audit event). The client uses it
+ * to rebuild its vault from the server snapshot before its first push, so a record purged while the device
+ * was revoked isn't resurrected by a stale local copy. Default `false` keeps old servers/clients wire-compatible.
+ */
 @Serializable
-data class VerifyResponse(val m2: String, val accessToken: String, val refreshToken: String)
+data class VerifyResponse(
+    val m2: String,
+    val accessToken: String,
+    val refreshToken: String,
+    val reactivated: Boolean = false,
+)
 
 @Serializable
 data class RefreshRequest(val refreshToken: String)

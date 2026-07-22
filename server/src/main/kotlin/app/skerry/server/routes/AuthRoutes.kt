@@ -122,6 +122,8 @@ fun Route.authRoutes(services: Services) {
                 m2 = verified.m2,
                 accessToken = services.tokens.issueAccess(verified.accountId, req.deviceId),
                 refreshToken = services.tokens.issueRefresh(verified.accountId, req.deviceId),
+                // Tell the client a revoked device just came back so it re-mirrors the server before pushing.
+                reactivated = reactivated,
             ),
         )
         }

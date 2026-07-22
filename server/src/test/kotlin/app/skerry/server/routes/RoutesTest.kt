@@ -41,6 +41,7 @@ import kotlinx.coroutines.withTimeout
 import java.math.BigInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class RoutesTest {
@@ -166,6 +167,7 @@ class RoutesTest {
         assertEquals(HttpStatusCode.OK, verify.status)
         val vr: VerifyResponse = verify.body()
         sc.step3(BigInteger(vr.m2, 16)) // not throwing means the server is authentic
+        assertFalse(vr.reactivated, "a normal login of a live device is not a reactivation")
 
         // wrong password
         val bad = srpClient(accountId, "nope")
@@ -233,6 +235,8 @@ class RoutesTest {
         assertEquals(HttpStatusCode.OK, client.get("/vault/keys") { bearerAuth(fresh.accessToken) }.status)
         val after: DevicesResponse = client.get("/devices") { bearerAuth(fresh.accessToken) }.body()
         assertEquals(false, after.devices.single { it.id == "devA" }.revoked)
+        // The response flags the reactivation so the client rebuilds its vault from the server before pushing.
+        assertTrue(fresh.reactivated, "re-login of a revoked device must be reported as a reactivation")
     }
 
     @Test

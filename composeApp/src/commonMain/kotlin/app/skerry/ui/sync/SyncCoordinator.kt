@@ -16,6 +16,7 @@ import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSettingsStore
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.MasterKey
+import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
@@ -401,6 +402,10 @@ class SyncCoordinator(
             // vault salt; a rare user-initiated connect, so the extra derivation is acceptable.
             val matchesVault = vault.verifyPassword(masterPassword.copyOf())
             var adoptedKey = false
+            // Set when the server reports this device was revoked and this login reactivated it: the vault
+            // may still hold records the server purged while we were locked out, so we must re-mirror the
+            // server before the first push (see [activateSession]'s clearLocalRecords).
+            var reactivated = false
             val newSession: SyncSession = if (matchesVault) {
                 // Establish the account under the vault's own password: register a new one (publishes our
                 // dataKey), or on CONFLICT log into our existing account and adopt its key. Adopting here
@@ -410,6 +415,7 @@ class SyncCoordinator(
                 } catch (e: SyncException) {
                     if (e.kind != SyncException.Kind.CONFLICT) throw e
                     val s = syncClient.login(accountId, ak, device)
+                    reactivated = s.reactivated
                     // Same password on both sides: nothing to re-wrap, only a possible key change.
                     adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf()) == KeyAdoption.Adopted
                     s
@@ -442,6 +448,7 @@ class SyncCoordinator(
                 // Confirmed ([confirmPasswordReplace]): log into the existing account and adopt its key,
                 // re-keying this vault to the account password (the intended, consented password change).
                 val s = syncClient.login(accountId, ak, device)
+                reactivated = s.reactivated
                 when (adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())) {
                     KeyAdoption.Adopted -> adoptedKey = true
                     // The account key already IS ours (registered here, then the vault password was changed
@@ -478,11 +485,14 @@ class SyncCoordinator(
             // The cursor is now persistent ([FileSyncStateStore]), so a process restart also continues
             // incrementally; the reset path is doubly guarded — cursor reset in [disconnect]
             // (onVaultReset) and adoptedKey.
+            // A reactivated (formerly revoked) device forces a full re-pull like an adopted key, and first
+            // discards its pre-revocation records so a stale live copy can't re-push a server-purged record.
             activateSession(
                 syncClient,
                 newSession,
                 SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed),
-                resetCursor = adoptedKey,
+                resetCursor = adoptedKey || reactivated,
+                clearLocalRecords = reactivated,
             )
         } catch (e: CancellationException) {
             throw e // don't swallow cancellation — it would break structured concurrency
@@ -504,9 +514,10 @@ class SyncCoordinator(
 
     /**
      * Shared tail of activating a session (from [doConnect]/[doClaimPairing]/[restoreSession]):
-     * publish client/session, optionally reset the cursor ([resetCursor] — full re-pull cases: adopted
-     * account key, freshly paired device), save the link, point the health ping at its server, and
-     * start the initial sync + live subscriptions (watch/push).
+     * publish client/session, optionally drop pre-revocation records ([clearLocalRecords] — a reactivated
+     * device rebuilds from the server), reset the cursor ([resetCursor] — full re-pull cases: adopted
+     * account key, freshly paired device, reactivation), save the link, point the health ping at its
+     * server, and start the initial sync + live subscriptions (watch/push).
      *
      * Call only under [opMutex]: assigning client/session and cancel/join/replacing subscriptions race
      * with [disconnect] — the mutex serializes activation and teardown as a whole. For [restoreSession]
@@ -517,10 +528,19 @@ class SyncCoordinator(
         newSession: SyncSession,
         config: SyncConfig,
         resetCursor: Boolean,
+        clearLocalRecords: Boolean = false,
     ) {
         val superseded = client?.takeIf { it !== syncClient }
         client = syncClient
         session = newSession
+        // Reactivation reconcile: drop the sync-eligible local records BEFORE resetting the cursor and
+        // running the first sync, so the following full re-pull rebuilds them from the server snapshot and
+        // the subsequent push can't resurrect a record the server purged while this device was revoked.
+        // Scoped to currently-synced types (what the push would send), so device-local data survives.
+        if (clearLocalRecords) {
+            val filter = settingsStore.load()
+            vault.clearRecords(RecordType.entries.filter { filter.shouldSync(it) }.toSet())
+        }
         if (resetCursor) syncState.setCursor(config.accountId, 0)
         configStore.save(config)
         health.setTarget(config.serverUrl)

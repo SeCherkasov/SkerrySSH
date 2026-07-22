@@ -9,8 +9,18 @@ import kotlinx.coroutines.flow.Flow
  */
 data class DeviceInfo(val id: String, val name: String, val platform: String? = null)
 
-/** Active session with the sync server: accountId and a token pair (see design doc §4). */
-data class SyncSession(val accountId: String, val accessToken: String, val refreshToken: String)
+/**
+ * Active session with the sync server: accountId and a token pair (see design doc §4). [reactivated] is a
+ * transient signal from the [login] that produced this session — `true` only when this device was revoked
+ * and this login cleared the revocation; the coordinator uses it to rebuild the vault from the server before
+ * its first push. Not part of session identity: [refresh] and [register] carry the default `false`.
+ */
+data class SyncSession(
+    val accountId: String,
+    val accessToken: String,
+    val refreshToken: String,
+    val reactivated: Boolean = false,
+)
 
 /**
  * Encrypted record as sent over the wire: metadata is plaintext, [blob] is XChaCha20-Poly1305

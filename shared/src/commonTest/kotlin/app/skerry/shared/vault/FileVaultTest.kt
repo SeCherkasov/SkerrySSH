@@ -876,6 +876,46 @@ class FileVaultTest {
     }
 
     @Test
+    fun `clearRecords drops the given types, keeps others, and leaves the vault unlocked under the same key`() = vaultTest {
+        val v = vault()
+        v.create("m".toCharArray())
+        v.put("h1", RecordType.HOST, "host".encodeToByteArray())
+        v.put("s1", RecordType.SNIPPET, "snip".encodeToByteArray())
+        v.put("t1", RecordType.TERMINAL_HISTORY, "hist".encodeToByteArray()) // device-local: must survive
+
+        v.clearRecords(setOf(RecordType.HOST, RecordType.SNIPPET))
+
+        // The named types are physically gone, NOT tombstoned — a leftover tombstone would be pushed and
+        // could resurrect a record the server just purged.
+        assertEquals(listOf("t1"), v.records().map { it.id })
+        assertFalse(v.records().any { it.deleted })
+        // Same key, still unlocked: the surviving record decrypts and a re-put bumps its version normally.
+        assertTrue(v.isUnlocked)
+        assertContentEquals("hist".encodeToByteArray(), v.openPayload("t1"))
+        // Persisted: a fresh handle unlocks with the same password and sees the same surviving record.
+        val reopened = vault()
+        assertEquals(UnlockResult.Success, reopened.unlock("m".toCharArray()))
+        assertEquals(listOf("t1"), reopened.records().map { it.id })
+    }
+
+    @Test
+    fun `clearRecords emits no local change`() = runTest {
+        initializeVaultCrypto()
+        val v = vault()
+        v.create("m".toCharArray())
+        v.put("h1", RecordType.HOST, "host".encodeToByteArray())
+        val seen = mutableListOf<Unit>()
+        val job = backgroundScope.launch { v.localChanges.collect { seen += Unit } }
+        runCurrent()
+
+        v.clearRecords(setOf(RecordType.HOST)) // reconcile re-pulls from the server — nothing to push
+        runCurrent()
+
+        assertTrue(seen.isEmpty())
+        job.cancel()
+    }
+
+    @Test
     fun `failed atomic write cleans up the tmp file`() = vaultTest {
         // Write target is an existing directory: atomicMove into it fails, and atomicWriteUtf8 must
         // clean up the tmp file (not leave an orphaned copy of secrets on disk).
