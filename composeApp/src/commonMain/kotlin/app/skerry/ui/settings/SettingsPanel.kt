@@ -95,7 +95,7 @@ fun SettingsPanel(state: DesktopDesignState) {
             val features = LocalFeatures.current
             val aiVisible = features.ai || LocalAi.current != null
             val effectiveTab = if (state.settingsTab == SettingsTab.AI && !aiVisible) SettingsTab.Sync else state.settingsTab
-            Column(Modifier.width(200.dp).fillMaxHeight().background(Color(0x33000000)).padding(horizontal = 8.dp, vertical = 16.dp)) {
+            Column(Modifier.width(200.dp).fillMaxHeight().background(Skerry.colors.card).padding(horizontal = 8.dp, vertical = 16.dp)) {
                 Txt(stringResource(Res.string.settings_nav_header), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
                 SETTINGS_NAV.filter { aiVisible || it.tab != SettingsTab.AI }.forEach { item ->
                     NavRow(item, active = effectiveTab == item.tab, onClick = { state.showSettingsTab(item.tab) })

@@ -106,6 +106,125 @@ val generateAppVersion = tasks.register("generateAppVersion") {
 }
 kotlin.sourceSets.named("commonMain") { kotlin.srcDir(generateAppVersion) }
 
+// Theme colors are authored in composeApp/themes/*.xml (single source of truth) and generated into
+// Kotlin at build time — same offline-safe pattern as generateAppVersion (no plugin, JDK XML only).
+// Alpha-over-base tokens are kept as `.copy(alpha=)` on the inlined base literal so generated values
+// stay bit-identical to the previous hand-written palette. A missing required token surfaces as a
+// Kotlin "no value passed for parameter" compile error — the compile-time safety XML would otherwise lose.
+val generateThemeSources = tasks.register("generateThemeSources") {
+    val themesDir = layout.projectDirectory.dir("themes")
+    val outDir = layout.buildDirectory.dir("generated/theme/commonMain/kotlin")
+    inputs.dir(themesDir)
+    outputs.dir(outDir)
+    doLast {
+        val out = outDir.get()
+
+        fun hexToColor(raw: String): String {
+            val h = raw.trim().removePrefix("#").uppercase()
+            val argb = if (h.length == 6) "FF$h" else h
+            require(argb.length == 8 && argb.all { it in "0123456789ABCDEF" }) { "Bad color hex: '$raw'" }
+            return "Color(0x$argb)"
+        }
+        fun alphaLiteral(a: String): String = a.trim().let { if (it.contains('.')) "${it}f" else "$it.0f" }
+
+        fun parse(fileName: String): org.w3c.dom.Document =
+            javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                .apply { isIgnoringComments = true }
+                .newDocumentBuilder()
+                .parse(themesDir.file(fileName).asFile)
+
+        fun org.w3c.dom.Element.elements(tag: String): List<org.w3c.dom.Element> {
+            val nl = getElementsByTagName(tag)
+            return (0 until nl.length).map { nl.item(it) as org.w3c.dom.Element }
+        }
+
+        // --- Chrome themes → SkerryColors builder functions ---
+        val chromeDoc = parse("chrome-themes.xml")
+        val chromeSb = StringBuilder()
+        chromeSb.append(
+            """
+            |// Generated from composeApp/themes/chrome-themes.xml by :composeApp:generateThemeSources — do not edit.
+            |package app.skerry.ui.theme
+            |
+            |import androidx.compose.ui.graphics.Color
+            |
+            """.trimMargin() + "\n",
+        )
+        for (chrome in chromeDoc.documentElement.elements("chrome")) {
+            val fn = chrome.getAttribute("fn")
+            val colors = chrome.elements("color")
+            // Literal tokens first so alpha-over-<token> can inline the base literal.
+            val literals = colors.filter { !it.hasAttribute("over") }
+                .associate { it.getAttribute("name") to hexToColor(it.textContent) }
+            chromeSb.append("/** Generated ${chrome.getAttribute("id")} palette. */\n")
+            chromeSb.append("fun $fn(): SkerryColors = SkerryColors(\n")
+            for (color in colors) {
+                val name = color.getAttribute("name")
+                val expr = if (color.hasAttribute("over")) {
+                    val over = color.getAttribute("over")
+                    val base = if (over.startsWith("#")) hexToColor(over)
+                    else literals[over] ?: error("Token '$name' references unknown base '$over'")
+                    "$base.copy(alpha = ${alphaLiteral(color.getAttribute("alpha"))})"
+                } else {
+                    hexToColor(color.textContent)
+                }
+                chromeSb.append("    $name = $expr,\n")
+            }
+            chromeSb.append(")\n\n")
+        }
+        val chromeFile = out.file("app/skerry/ui/theme/GeneratedChromeThemes.kt").asFile
+        chromeFile.parentFile.mkdirs()
+        chromeFile.writeText(chromeSb.toString().trimEnd() + "\n")
+
+        // --- Terminal themes → TerminalThemes catalog object ---
+        val termDoc = parse("terminal-themes.xml")
+        val terminals = termDoc.documentElement.elements("terminal")
+        val termSb = StringBuilder()
+        termSb.append(
+            """
+            |// Generated from composeApp/themes/terminal-themes.xml by :composeApp:generateThemeSources — do not edit.
+            |package app.skerry.ui.terminal
+            |
+            |import androidx.compose.ui.graphics.Color
+            |
+            |/** Built-in terminal theme catalog. Order matches the Appearance card order. */
+            |object TerminalThemes {
+            """.trimMargin() + "\n",
+        )
+        for (term in terminals) {
+            val symbol = term.getAttribute("symbol")
+            val ansi = term.elements("ansi").single().textContent.trim().split(Regex("\\s+"))
+            require(ansi.size == 16) { "Terminal '${term.getAttribute("id")}' must list 16 ANSI colors, got ${ansi.size}" }
+            termSb.append("    val $symbol: TerminalTheme = TerminalTheme(\n")
+            termSb.append("        id = \"${term.getAttribute("id")}\",\n")
+            termSb.append("        displayName = \"${term.getAttribute("name")}\",\n")
+            termSb.append("        background = ${hexToColor(term.elements("background").single().textContent)},\n")
+            termSb.append("        foreground = ${hexToColor(term.elements("foreground").single().textContent)},\n")
+            termSb.append("        cursor = ${hexToColor(term.elements("cursor").single().textContent)},\n")
+            termSb.append("        ansi = listOf(\n")
+            ansi.chunked(4).forEach { row ->
+                termSb.append("            " + row.joinToString(", ") { hexToColor(it) } + ",\n")
+            }
+            termSb.append("        ),\n")
+            term.elements("selection").firstOrNull()?.let {
+                termSb.append("        selection = ${hexToColor(it.textContent)},\n")
+            }
+            termSb.append("    )\n\n")
+        }
+        val order = terminals.joinToString(", ") { it.getAttribute("symbol") }
+        val default = terminals.single { it.getAttribute("default") == "true" }.getAttribute("symbol")
+        termSb.append("    val all: List<TerminalTheme> = listOf($order)\n\n")
+        termSb.append("    val DEFAULT: TerminalTheme = $default\n\n")
+        termSb.append("    /** Theme by stable [TerminalTheme.id]; unknown/`null`/empty id falls back to [DEFAULT]. */\n")
+        termSb.append("    fun fromId(id: String?): TerminalTheme = all.firstOrNull { it.id == id } ?: DEFAULT\n")
+        termSb.append("}\n")
+        val termFile = out.file("app/skerry/ui/terminal/GeneratedTerminalThemes.kt").asFile
+        termFile.parentFile.mkdirs()
+        termFile.writeText(termSb.toString())
+    }
+}
+kotlin.sourceSets.named("commonMain") { kotlin.srcDir(generateThemeSources) }
+
 compose.desktop {
     application {
         mainClass = "app.skerry.ui.MainKt"
@@ -207,6 +326,7 @@ tasks.register<JavaExec>("screenshotDesign") {
     systemProperty("skerry.screenshot.device", providers.systemProperty("skerry.screenshot.device").getOrElse("desktop"))
     providers.systemProperty("skerry.screenshot.settingsTab").orNull?.let { systemProperty("skerry.screenshot.settingsTab", it) }
     providers.systemProperty("skerry.screenshot.termTheme").orNull?.let { systemProperty("skerry.screenshot.termTheme", it) }
+    providers.systemProperty("skerry.screenshot.theme").orNull?.let { systemProperty("skerry.screenshot.theme", it) }
     providers.systemProperty("skerry.screenshot.portsScan").orNull?.let { systemProperty("skerry.screenshot.portsScan", it) }
     providers.systemProperty("skerry.screenshot.aiProvider").orNull?.let { systemProperty("skerry.screenshot.aiProvider", it) }
     providers.systemProperty("skerry.screenshot.updateAvailable").orNull?.let { systemProperty("skerry.screenshot.updateAvailable", it) }

@@ -108,4 +108,69 @@ class SkerryColorsTest {
         // Borders are a neutral ink tint on light, not the cyan tint used on dark.
         assertTrue(light.line != light.cyan.copy(alpha = 0.06f))
     }
+
+    /**
+     * Pins every daybreak token to its reference value so the light palette can't silently drift
+     * during the move to XML-sourced colors. Exercises the tricky cases the generator must reproduce
+     * exactly: alpha-over-reference borders (`line`/`lineStrong`/`whiteFaint`), 8-digit ARGB
+     * literals (`card`/`scrim`/`modalScrim`), and the darkened light-theme accents.
+     */
+    @Test
+    fun `daybreak tokens match the reference values`() {
+        val c = daybreakColors()
+        val ink = 0xFF0D1E29
+        // Surfaces
+        assertEquals(Color(0xFFF3F6F8), c.bg)
+        assertEquals(Color(0xFFEBF0F3), c.railBg)
+        assertEquals(Color(0xFFFFFFFF), c.titleTop)
+        assertEquals(Color(0xFFEDF2F5), c.titleBottom)
+        assertEquals(Color(0xFFFFFFFF), c.surface)
+        assertEquals(Color(0xFFEEF3F6), c.surface2)
+        assertEquals(Color(0xFFE1E9EE), c.surfaceDeep)
+        assertEquals(Color(0xFFF3F6F8), c.panel)
+        assertEquals(Color(0xFFEDF1F4), c.terminalBg)
+        // Text ladder (darkest is primary)
+        assertEquals(Color(ink), c.text)
+        assertEquals(Color(0xFF243B49), c.textBright)
+        assertEquals(Color(0xFF3B5361), c.textMid)
+        assertEquals(Color(0xFF5E7583), c.dim)
+        assertEquals(Color(0xFF6B7E8D), c.faint)
+        // Accents — darkened for contrast on light
+        assertEquals(Color(0xFF0E90BF), c.cyan)
+        assertEquals(Color(0xFF14A6DB), c.cyanBright)
+        assertEquals(Color(0xFF2C9E71), c.moss)
+        assertEquals(Color(0xFFCE5B3E), c.sunset)
+        assertEquals(Color(0xFFB9761B), c.amber)
+        assertEquals(Color(0xFFD98E2C), c.amberBright)
+        assertEquals(Color(0xFF12A897), c.teal)
+        assertEquals(Color(0xFF4FD1C2), c.tealLight)
+        assertEquals(Color(0xFF0B7F73), c.tealDeep)
+        // Fixed tones
+        assertEquals(Color(0xFFFFFFFF), c.white)
+        assertEquals(Color(0xFFCE3B3B), c.storm)
+        // Borders — neutral ink tint, alpha over the ink base (not baked ARGB)
+        assertEquals(Color(ink).copy(alpha = 0.07f), c.line)
+        assertEquals(Color(ink).copy(alpha = 0.18f), c.lineStrong)
+        // Shared surfaces / accents
+        assertEquals(Color(0xFFB4543E), c.strictFg)
+        assertEquals(Color(ink).copy(alpha = 0.08f), c.whiteFaint)
+        assertEquals(Color(0xFF08303F), c.ink)
+        assertEquals(Color(0x0D0D1E29), c.card)
+        assertEquals(Color(0x66101922), c.scrim)
+        assertEquals(Color(0x73101922), c.modalScrim)
+        // Derived getters track the light accents
+        assertEquals(c.cyan.copy(alpha = 0.10f), c.cyan10)
+        assertEquals(c.sunset.copy(alpha = 0.16f), c.strictBg)
+    }
+
+    @Test
+    fun `light color scheme maps tokens to material roles`() {
+        val c = daybreakColors()
+        val scheme = c.toMaterialColorScheme(dark = false)
+        assertEquals(c.cyan, scheme.primary)
+        assertEquals(c.bg, scheme.background)
+        assertEquals(c.text, scheme.onBackground)
+        assertEquals(c.storm, scheme.error)
+        assertEquals(c.lineStrong, scheme.outline)
+    }
 }

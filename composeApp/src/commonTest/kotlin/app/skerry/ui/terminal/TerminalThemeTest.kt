@@ -72,6 +72,102 @@ class TerminalThemeTest {
         assertTrue(t.selection.alpha < 1f)
     }
 
+    /**
+     * Golden pin of every built-in terminal theme's background, foreground, cursor, selection and
+     * full ANSI palette. Guards the move to XML-sourced themes: the generator must reproduce each
+     * theme byte-for-byte, including the ANSI ordering and the two light themes that override
+     * selection (Solarized Light, Tokyo Day) versus the translucent-cursor default.
+     */
+    @Test
+    fun every_theme_matches_its_golden_palette() {
+        data class Golden(
+            val bg: Long,
+            val fg: Long,
+            val cursor: Long,
+            val ansi: List<Long>,
+            val selection: Long? = null, // null → default translucent cursor accent
+        )
+
+        val golden = mapOf(
+            "night-sea" to Golden(
+                0xFF050E16, 0xFFE6ECEF, 0xFF2BBDEE,
+                listOf(
+                    0xFF2A3540, 0xFFE94B4B, 0xFF5DCE9E, 0xFFF2A65A,
+                    0xFF4A9EDB, 0xFFC792EA, 0xFF2BBDEE, 0xFFC9D6DE,
+                    0xFF5A7080, 0xFFFF6B6B, 0xFF7FE9B8, 0xFFFFC078,
+                    0xFF6FC3F5, 0xFFE0A8FF, 0xFF5FD1F4, 0xFFFFFFFF,
+                ),
+            ),
+            "tokyo-night" to Golden(
+                0xFF1A1B26, 0xFFC0CAF5, 0xFF7AA2F7,
+                listOf(
+                    0xFF15161E, 0xFFF7768E, 0xFF9ECE6A, 0xFFE0AF68,
+                    0xFF7AA2F7, 0xFFBB9AF7, 0xFF7DCFFF, 0xFFA9B1D6,
+                    0xFF414868, 0xFFF7768E, 0xFF9ECE6A, 0xFFE0AF68,
+                    0xFF7AA2F7, 0xFFBB9AF7, 0xFF7DCFFF, 0xFFC0CAF5,
+                ),
+            ),
+            "tokyo-day" to Golden(
+                0xFFE1E2E7, 0xFF3760BF, 0xFF3760BF,
+                listOf(
+                    0xFFB4B5B9, 0xFFF52A65, 0xFF587539, 0xFF8C6C3E,
+                    0xFF2E7DE9, 0xFF9854F1, 0xFF007197, 0xFF6172B0,
+                    0xFFA1A6C5, 0xFFF52A65, 0xFF587539, 0xFF8C6C3E,
+                    0xFF2E7DE9, 0xFF9854F1, 0xFF007197, 0xFF3760BF,
+                ),
+                selection = 0xFFB7C1E3,
+            ),
+            "catppuccin-mocha" to Golden(
+                0xFF1E1E2E, 0xFFCDD6F4, 0xFFF5E0DC,
+                listOf(
+                    0xFF45475A, 0xFFF38BA8, 0xFFA6E3A1, 0xFFF9E2AF,
+                    0xFF89B4FA, 0xFFF5C2E7, 0xFF94E2D5, 0xFFBAC2DE,
+                    0xFF585B70, 0xFFF38BA8, 0xFFA6E3A1, 0xFFF9E2AF,
+                    0xFF89B4FA, 0xFFF5C2E7, 0xFF94E2D5, 0xFFA6ADC8,
+                ),
+            ),
+            "gruvbox-dark" to Golden(
+                0xFF282828, 0xFFEBDBB2, 0xFFFE8019,
+                listOf(
+                    0xFF282828, 0xFFCC241D, 0xFF98971A, 0xFFD79921,
+                    0xFF458588, 0xFFB16286, 0xFF689D6A, 0xFFA89984,
+                    0xFF928374, 0xFFFB4934, 0xFFB8BB26, 0xFFFABD2F,
+                    0xFF83A598, 0xFFD3869B, 0xFF8EC07C, 0xFFEBDBB2,
+                ),
+            ),
+            "dracula" to Golden(
+                0xFF282A36, 0xFFF8F8F2, 0xFFF8F8F2,
+                listOf(
+                    0xFF21222C, 0xFFFF5555, 0xFF50FA7B, 0xFFF1FA8C,
+                    0xFFBD93F9, 0xFFFF79C6, 0xFF8BE9FD, 0xFFF8F8F2,
+                    0xFF6272A4, 0xFFFF6E6E, 0xFF69FF94, 0xFFFFFFA5,
+                    0xFFD6ACFF, 0xFFFF92DF, 0xFFA4FFFF, 0xFFFFFFFF,
+                ),
+            ),
+            "solarized-light" to Golden(
+                0xFFFDF6E3, 0xFF586E75, 0xFF268BD2,
+                listOf(
+                    0xFF073642, 0xFFDC322F, 0xFF859900, 0xFFB58900,
+                    0xFF268BD2, 0xFFD33682, 0xFF2AA198, 0xFFEEE8D5,
+                    0xFF002B36, 0xFFCB4B16, 0xFF586E75, 0xFF657B83,
+                    0xFF839496, 0xFF6C71C4, 0xFF93A1A1, 0xFFFDF6E3,
+                ),
+                selection = 0xFFEEE8D5,
+            ),
+        )
+
+        assertEquals(golden.keys, TerminalThemes.all.map { it.id }.toSet())
+        for (theme in TerminalThemes.all) {
+            val g = golden.getValue(theme.id)
+            assertEquals(Color(g.bg), theme.background, "${theme.id} background")
+            assertEquals(Color(g.fg), theme.foreground, "${theme.id} foreground")
+            assertEquals(Color(g.cursor), theme.cursor, "${theme.id} cursor")
+            assertEquals(g.ansi.map { Color(it) }, theme.ansi, "${theme.id} ansi")
+            val expectedSelection = g.selection?.let { Color(it) } ?: theme.cursor.copy(alpha = 0.3f)
+            assertEquals(expectedSelection, theme.selection, "${theme.id} selection")
+        }
+    }
+
     @Test
     fun requiring_sixteen_ansi_colors_is_enforced() {
         val ex = runCatching {

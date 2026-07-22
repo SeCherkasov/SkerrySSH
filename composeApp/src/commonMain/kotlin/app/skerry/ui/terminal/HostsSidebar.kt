@@ -368,7 +368,7 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
         Txt(name, color = Skerry.colors.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
         // Rename/delete the group (live catalog only, not for the synthetic "Ungrouped").
         if (onEdit != null) IconBtn("edit", onClick = onEdit, box = 20, icon = 13.sp, tint = Skerry.colors.faint)
-        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Skerry.colors.card).padding(horizontal = 6.dp, vertical = 1.dp)) {
             Txt(count.toString(), color = Skerry.colors.faint, size = 10.sp)
         }
     }
@@ -451,7 +451,7 @@ private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onTog
         }
         Sym("group", size = 15.sp, color = Skerry.colors.cyanBright)
         Txt(name, color = Skerry.colors.dim, size = 12.5.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Skerry.colors.card).padding(horizontal = 6.dp, vertical = 1.dp)) {
             Txt(count.toString(), color = Skerry.colors.faint, size = 10.sp)
         }
     }
