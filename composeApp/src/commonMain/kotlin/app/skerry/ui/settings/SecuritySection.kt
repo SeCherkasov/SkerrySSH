@@ -95,7 +95,18 @@ import app.skerry.ui.generated.resources.settings_time_today
 import app.skerry.ui.generated.resources.settings_time_yesterday
 import app.skerry.ui.generated.resources.vtail_error_password_mismatch
 import app.skerry.ui.generated.resources.vtail_error_password_too_short
+import app.skerry.ui.generated.resources.settings_change_account_pw_err_rewrap
+import app.skerry.ui.generated.resources.settings_change_account_pw_note
+import app.skerry.ui.generated.resources.settings_change_account_pw_submit
+import app.skerry.ui.generated.resources.settings_change_account_pw_title
+import app.skerry.ui.generated.resources.settings_security_account_password
+import app.skerry.ui.generated.resources.settings_security_account_password_desc
+import app.skerry.ui.sync.AccountPasswordChange
+import app.skerry.ui.sync.SyncCoordinator
+import app.skerry.ui.sync.SyncFailureReason
 import app.skerry.ui.sync.SyncField
+import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.sync.syncFailureText
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.vault.MIN_MASTER_PASSWORD_LENGTH
 import app.skerry.ui.vault.VaultGateController
@@ -118,7 +129,12 @@ internal fun SecuritySection(
     state: DesktopDesignState,
     controller: VaultGateController?,
     reload: Int,
+    // When sync is configured the password IS the account password (one password model, issue #28):
+    // the local-only "Change master password" would diverge this device from the account, so we swap
+    // it for the account-aware "Change account password" (issue #32) instead of showing both.
+    syncConfigured: Boolean,
     onChangeMasterPassword: () -> Unit,
+    onChangeAccountPassword: () -> Unit,
     onBiometricToggled: () -> Unit,
 ) {
     SectionTitle(stringResource(Res.string.settings_security_title), stringResource(Res.string.settings_security_subtitle))
@@ -130,12 +146,25 @@ internal fun SecuritySection(
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.settings_security_master_password), color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(masterPasswordSubtitle(lastChange), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+            Txt(
+                stringResource(if (syncConfigured) Res.string.settings_security_account_password else Res.string.settings_security_master_password),
+                color = D.text,
+                size = 13.sp,
+                weight = FontWeight.Medium,
+            )
+            Txt(
+                if (syncConfigured) stringResource(Res.string.settings_security_account_password_desc) else masterPasswordSubtitle(lastChange),
+                color = D.dim,
+                size = 11.5.sp,
+                modifier = Modifier.padding(top = 3.dp),
+            )
         }
         // Change is only available with a live vault; in mock/preview the button is inert.
-        if (controller != null) GhostButton(stringResource(Res.string.settings_change), onClick = onChangeMasterPassword)
-        else GhostButton(stringResource(Res.string.settings_change), onClick = {}, fg = D.faint, border = D.line)
+        if (controller != null) {
+            GhostButton(stringResource(Res.string.settings_change), onClick = if (syncConfigured) onChangeAccountPassword else onChangeMasterPassword)
+        } else {
+            GhostButton(stringResource(Res.string.settings_change), onClick = {}, fg = D.faint, border = D.line)
+        }
     }
     HLine()
 
@@ -376,6 +405,104 @@ internal fun ChangeMasterPasswordDialog(
                 }
                 PrimaryButton(
                     stringResource(Res.string.settings_change_pw_submit),
+                    onClick = submit,
+                    enabled = canSubmit,
+                    bg = if (canSubmit) D.cyan else D.cyan10,
+                    fg = if (canSubmit) D.ink else D.faint,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Change ACCOUNT password dialog (issue #32), shown instead of [ChangeMasterPasswordDialog] when sync
+ * is configured. Same three fields, but the submit rotates the account password over the network
+ * ([SyncCoordinator.changeAccountPassword]): the server swaps the SRP verifier + wrapped dataKey and
+ * revokes the other devices, and the local vault is re-wrapped under the new password. The note warns
+ * that this affects every synced device. [LocalRewrapFailed] gets its own message — the account did
+ * rotate, only this device must reconnect.
+ */
+@Composable
+internal fun ChangeAccountPasswordDialog(
+    sync: SyncCoordinator,
+    onClose: () -> Unit,
+    onChanged: () -> Unit,
+) {
+    var current by remember { mutableStateOf("") }
+    var fresh by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    // Last coordinator result (kept as the typed value so the localized error text is resolved in
+    // composition via the @Composable syncFailureText); cleared on the next edit.
+    var result by remember { mutableStateOf<AccountPasswordChange?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val tooShort = fresh.isNotEmpty() && fresh.length < MIN_MASTER_PASSWORD_LENGTH
+    val mismatch = confirm.isNotEmpty() && fresh != confirm
+    val canSubmit = current.isNotEmpty() && fresh.length >= MIN_MASTER_PASSWORD_LENGTH && fresh == confirm && !busy
+
+    val submit = {
+        if (canSubmit) {
+            result = null
+            busy = true
+            val old = current.toCharArray()
+            val next = fresh.toCharArray()
+            scope.launch {
+                val r = withContext(Dispatchers.Default) { sync.changeAccountPassword(old, next) }
+                busy = false
+                if (r is AccountPasswordChange.Success) { onChanged(); onClose() } else result = r
+            }
+            Unit
+        }
+    }
+
+    val error: String? = when (val r = result) {
+        is AccountPasswordChange.WrongCurrentPassword -> stringResource(Res.string.settings_change_pw_err_wrong)
+        is AccountPasswordChange.LocalRewrapFailed -> stringResource(Res.string.settings_change_account_pw_err_rewrap)
+        is AccountPasswordChange.Failed -> syncFailureText(SyncStatus.Failed(r.reason, r.detail))
+        is AccountPasswordChange.NotConfigured -> syncFailureText(SyncStatus.Failed(SyncFailureReason.ConnectFailed))
+        // Success never renders (the coroutine closed the dialog); null is the untouched state — both
+        // fall through to input validation. Exhaustive over the sealed type so a new variant won't
+        // silently land in a validation message.
+        is AccountPasswordChange.Success, null -> when {
+            tooShort -> stringResource(Res.string.vtail_error_password_too_short, MIN_MASTER_PASSWORD_LENGTH)
+            mismatch -> stringResource(Res.string.vtail_error_password_mismatch)
+            else -> null
+        }
+    }
+
+    ModalScrim(onDismiss = onClose) {
+        Column(
+            Modifier
+                .width(360.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(D.surfaceDeep)
+                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .consumeClicks()
+                .padding(26.dp),
+        ) {
+            Txt(stringResource(Res.string.settings_change_account_pw_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+            Box(Modifier.height(8.dp))
+            Txt(stringResource(Res.string.settings_change_account_pw_note), color = D.dim, size = 11.5.sp)
+            Box(Modifier.height(14.dp))
+            FieldLabel(stringResource(Res.string.settings_change_pw_current), top = 0.dp)
+            SyncField(placeholder = "••••••••", value = current, icon = "lock", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { current = it; result = null }
+            FieldLabel(stringResource(Res.string.settings_change_pw_new))
+            SyncField(placeholder = "••••••••", value = fresh, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { fresh = it; result = null }
+            FieldLabel(stringResource(Res.string.settings_change_pw_confirm))
+            SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it; result = null }
+            if (error != null) Txt(error, color = D.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
+            Row(
+                Modifier.fillMaxWidth().padding(top = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onClose).padding(horizontal = 16.dp, vertical = 9.dp)) {
+                    Txt(stringResource(Res.string.settings_cancel), color = D.dim, size = 12.5.sp)
+                }
+                PrimaryButton(
+                    stringResource(Res.string.settings_change_account_pw_submit),
                     onClick = submit,
                     enabled = canSubmit,
                     bg = if (canSubmit) D.cyan else D.cyan10,

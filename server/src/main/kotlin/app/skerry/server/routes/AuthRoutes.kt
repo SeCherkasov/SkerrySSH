@@ -4,6 +4,8 @@ import app.skerry.server.RateLimits
 import app.skerry.server.Services
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
+import app.skerry.sync.wire.ChangePasswordRequest
+import app.skerry.sync.wire.ChangePasswordResponse
 import app.skerry.server.model.ErrorResponse
 import app.skerry.sync.wire.RefreshRequest
 import app.skerry.sync.wire.RegisterRequest
@@ -126,6 +128,54 @@ fun Route.authRoutes(services: Services) {
                 reactivated = reactivated,
             ),
         )
+        }
+    }
+
+    rateLimit(RateLimits.CHANGE_PASSWORD) {
+        post("/auth/change-password") {
+            val req = call.receive<ChangePasswordRequest>()
+            if (tooLong(req.deviceId, req.challengeId)) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
+                return@post
+            }
+            // Prove the CURRENT password before touching anything: the SRP proof (M1) is checked
+            // against the account's current verifier, so a stolen access token alone can't rotate.
+            // The proof also establishes the accountId (from the one-shot challenge).
+            val verified = services.srp.verify(req.challengeId, req.a, req.m1)
+            if (verified == null) {
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
+                return@post
+            }
+            // base64-decode before writing to the DB: invalid payload -> 400, not 500.
+            val newWrapped = req.newWrappedDataKey.unb64()
+            // Ensure the acting device exists and is not revoked (rotatePassword keeps it while
+            // revoking the others), so its fresh tokens below authenticate.
+            services.devices.register(verified.accountId, req.deviceId, req.deviceName, req.platform)
+            val syncSeq = services.accounts.rotatePassword(
+                accountId = verified.accountId,
+                newSrpSalt = req.newSrpSalt,
+                newSrpVerifier = req.newSrpVerifier,
+                newWrappedDataKey = newWrapped,
+                keepDeviceId = req.deviceId,
+            )
+            if (syncSeq == null) {
+                // Should not happen (the SRP proof implies the account exists), but stay defensive.
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
+                return@post
+            }
+            services.activity.record(verified.accountId, "auth.password_changed", "account password rotated", deviceId = req.deviceId)
+            // Nudge currently-connected devices: the revoked ones' sockets close on the next
+            // emission (per-signal isRevoked check), dropping them to "reconnect" promptly instead
+            // of only on their next server call. The acting device's cursor already equals syncSeq,
+            // so it ignores the signal.
+            services.notifier.publish(verified.accountId, syncSeq)
+            call.respond(
+                ChangePasswordResponse(
+                    m2 = verified.m2,
+                    accessToken = services.tokens.issueAccess(verified.accountId, req.deviceId),
+                    refreshToken = services.tokens.issueRefresh(verified.accountId, req.deviceId),
+                ),
+            )
         }
     }
 

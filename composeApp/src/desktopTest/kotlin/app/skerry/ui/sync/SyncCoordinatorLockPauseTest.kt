@@ -76,6 +76,7 @@ class SyncCoordinatorLockPauseTest {
         override suspend fun ping(): Boolean = true
         override suspend fun close() {}
         override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession = nope()
+        override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = nope()
         override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray = nope()
         override suspend fun pull(session: SyncSession, since: Long): RecordPage = nope()
         override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage = nope()

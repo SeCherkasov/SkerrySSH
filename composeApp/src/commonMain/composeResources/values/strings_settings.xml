@@ -160,6 +160,14 @@
     <string name="settings_change_pw_submit">Change password</string>
     <string name="settings_change_pw_err_wrong">Current password is incorrect.</string>
 
+    <!-- Change account password dialog (issue #32) -->
+    <string name="settings_security_account_password">Account password</string>
+    <string name="settings_security_account_password_desc">Shared by all your synced devices.</string>
+    <string name="settings_change_account_pw_title">Change account password</string>
+    <string name="settings_change_account_pw_note">This changes the password on every synced device. Your other devices will need to sign in again with the new password.</string>
+    <string name="settings_change_account_pw_submit">Change password</string>
+    <string name="settings_change_account_pw_err_rewrap">The account password was changed, but this device must reconnect with the new password.</string>
+
     <!-- Keyboard section -->
     <string name="settings_keyboard_title">Keyboard</string>
     <string name="settings_keyboard_subtitle">Shortcuts adapt to your platform. Terminal bindings apply while a session is focused.</string>

@@ -240,6 +240,57 @@ class RoutesTest {
     }
 
     @Test
+    fun `change password swaps verifier and wrap and revokes other devices`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val oldWrap = byteArrayOf(1, 1, 1)
+        val newWrap = byteArrayOf(2, 2, 2)
+        val newPassword = "new-auth-key-hex-xyz789"
+
+        // devA registers; devB logs in via SRP so there is a second device to revoke.
+        client.registerAccount(accountId, password, wrappedDataKey = oldWrap, deviceId = "devA")
+        val devB = client.srpLogin(accountId, password, deviceId = "devB", deviceName = "Phone B")
+        assertEquals(HttpStatusCode.OK, client.get("/vault/keys") { bearerAuth(devB.accessToken) }.status)
+
+        // devA rotates the password.
+        val rotated = client.changePassword(accountId, password, newPassword, newWrap, deviceId = "devA")
+        assertEquals(HttpStatusCode.OK, rotated.status)
+        val body: app.skerry.sync.wire.ChangePasswordResponse = rotated.body()
+        // The acting device's fresh tokens work, and the wrapped dataKey is now the new one.
+        val keys: KeysResponse = client.get("/vault/keys") { bearerAuth(body.accessToken) }.body()
+        assertEquals(newWrap.b64(), keys.wrappedDataKey)
+
+        // The old password no longer logs in; the new one does.
+        assertEquals(HttpStatusCode.Unauthorized, client.srpLoginResponse(accountId, password, "devC", "C").status)
+        assertEquals(HttpStatusCode.OK, client.srpLoginResponse(accountId, newPassword, "devC", "C").status)
+
+        // devB was revoked by the rotation: its old token is dead until it re-authenticates.
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/vault/keys") { bearerAuth(devB.accessToken) }.status)
+    }
+
+    @Test
+    fun `change password with wrong current password is rejected and changes nothing`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val oldWrap = byteArrayOf(1, 1, 1)
+        val newWrap = byteArrayOf(2, 2, 2)
+        client.registerAccount(accountId, password, wrappedDataKey = oldWrap, deviceId = "devA")
+
+        // A rotate proven with the WRONG current password must be refused.
+        val rotated = client.changePassword(accountId, "wrong-password", "new-password", newWrap, deviceId = "devA")
+        assertEquals(HttpStatusCode.Unauthorized, rotated.status)
+
+        // Nothing changed: the original password still logs in and the wrap is untouched.
+        val ok = client.srpLogin(accountId, password, deviceId = "devA", deviceName = "Laptop A")
+        val keys: KeysResponse = client.get("/vault/keys") { bearerAuth(ok.accessToken) }.body()
+        assertEquals(oldWrap.b64(), keys.wrappedDataKey)
+    }
+
+    @Test
     fun `pairing transfers encrypted data key to a new device`() = testApplication {
         val services = testServices()
         application { configureServer(services) }

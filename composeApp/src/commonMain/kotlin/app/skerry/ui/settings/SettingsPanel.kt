@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.app.LocalSecurityLog
+import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.SettingsTab
@@ -41,6 +43,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.design.consumeClicks
+import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_nav_header
 import app.skerry.ui.generated.resources.shtail_nav_about
@@ -61,8 +64,15 @@ fun SettingsPanel(state: DesktopDesignState) {
     // log/label after actions. changePwOpen is lifted to overlay level: the dialog is drawn over
     // the whole settings card.
     val securityController = rememberSecurityController()
+    val sync = LocalSync.current
+    // Sync configured → the password is the account password (issue #32): show/host the account
+    // rotation dialog instead of the local-only master-password one. Derived from the status flow
+    // (reactive, no per-recomposition disk read): a saved link means status is never Disabled.
+    val syncStatus = sync?.status?.collectAsState()?.value
+    val syncConfigured = syncStatus != null && syncStatus !is SyncStatus.Disabled
     var securityReload by remember { mutableStateOf(0) }
     var changePwOpen by remember { mutableStateOf(false) }
+    var changeAccountPwOpen by remember { mutableStateOf(false) }
     ModalScrim(onDismiss = state::closeSettings, scrimColor = Color(0xA6060E16)) {
         Box(
             Modifier
@@ -97,7 +107,9 @@ fun SettingsPanel(state: DesktopDesignState) {
                         state = state,
                         controller = securityController,
                         reload = securityReload,
+                        syncConfigured = syncConfigured,
                         onChangeMasterPassword = { changePwOpen = true },
+                        onChangeAccountPassword = { changeAccountPwOpen = true },
                         onBiometricToggled = { securityReload++ },
                     )
                     SettingsTab.Keyboard -> KeyboardSection()
@@ -121,6 +133,14 @@ fun SettingsPanel(state: DesktopDesignState) {
             ChangeMasterPasswordDialog(
                 controller = securityController,
                 onClose = { changePwOpen = false },
+                onChanged = { securityReload++ },
+            )
+        }
+        // Change account (sync) password dialog — shown when sync is configured (issue #32).
+        if (changeAccountPwOpen && sync != null) {
+            ChangeAccountPasswordDialog(
+                sync = sync,
+                onClose = { changeAccountPwOpen = false },
                 onChanged = { securityReload++ },
             )
         }
