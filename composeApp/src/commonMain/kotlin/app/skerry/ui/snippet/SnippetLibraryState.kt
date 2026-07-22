@@ -30,6 +30,17 @@ class SnippetLibraryState {
     }
 
     /**
+     * Carry view state across a tag rename ([SnippetManager.renameTag]): a collapsed section stays
+     * collapsed under its new name, and an active category chip follows the rename instead of falling
+     * back to "all". [newKey] is the canonical target; a merge onto an existing tag just re-points the
+     * old key at it.
+     */
+    fun onTagRenamed(oldKey: String, newKey: String) {
+        if (oldKey in collapsed) collapsed = collapsed - oldKey + newKey
+        if (activeChip == oldKey) activeChip = newKey
+    }
+
+    /**
      * Snippets to show: [query] AND the active chip. A chip whose category no longer exists (its last
      * snippet was deleted or re-tagged) falls back to "all" instead of emptying the list.
      */

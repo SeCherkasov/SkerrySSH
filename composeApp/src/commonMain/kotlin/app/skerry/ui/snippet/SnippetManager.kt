@@ -111,10 +111,13 @@ class SnippetManager(
      * categories. [newTag] is canonicalized like typed tag input ([parseSnippetTags]); a blank or
      * unchanged target is a no-op. Order is preserved and a collision with an existing tag merges
      * (via [normalizeTags]). Each touched snippet is persisted through the same path as an edit.
+     *
+     * Returns the canonical target the tag was renamed to, or `null` on a no-op (blank/unchanged
+     * target) — so the caller can migrate view state (e.g. a collapsed section) onto the new key.
      */
-    fun renameTag(oldTag: String, newTag: String) {
-        val target = parseSnippetTags(newTag).firstOrNull() ?: return
-        if (target == oldTag) return
+    fun renameTag(oldTag: String, newTag: String): String? {
+        val target = parseSnippetTags(newTag).firstOrNull() ?: return null
+        if (target == oldTag) return null
         for (entry in snippets) {
             val tags = entry.snippet.tags
             if (oldTag !in tags) continue
@@ -123,6 +126,7 @@ class SnippetManager(
             store.put(updated)
             entry.snippet = updated
         }
+        return target
     }
 
     /** Delete a snippet: remove it from the store and the list. */
