@@ -1,10 +1,13 @@
 package app.skerry.ui.terminal
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +25,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -134,13 +138,26 @@ private fun Modifier.hostConnectClick(
 ): Modifier =
     when (LocalHostClickConnectMode.current) {
         HostClickConnectMode.SingleClick -> clickable(onClick = onClick)
-        HostClickConnectMode.DoubleClick ->
+        HostClickConnectMode.DoubleClick -> {
+            // Selection fires on *press*, not on combinedClickable's onClick: when onDoubleClick is
+            // set, onClick is held back by the double-tap timeout (~300 ms) to disambiguate a single
+            // tap from a double one, so routing selection through onClick makes the highlight lag
+            // noticeably. Emitting it on the PressInteraction gives the file-manager feel — press
+            // highlights immediately, the double click opens.
+            val interaction = remember { MutableInteractionSource() }
+            val select = rememberUpdatedState(onSingleClick)
+            LaunchedEffect(interaction) {
+                interaction.interactions.collect { if (it is PressInteraction.Press) select.value?.invoke() }
+            }
+            // Chain onto `this` (not a fresh Modifier): the receiver already carries the row's
+            // fillMaxWidth/padding/clip, and starting over would drop them — the row would lose its
+            // left indent and stop filling the width, so it shifts when the mode changes.
             // onPreviewKeyEvent must sit *outer* to combinedClickable: key events travel
-            // root→focused on the preview pass, and combinedClickable consumes Enter/Space itself
-            // (routing them to onClick = select), so a descendant onKeyEvent never fires. The
-            // preview handler intercepts first, making Enter/Space connect while the mouse still
-            // requires a double click (same pattern as TerminalScreen/CommandPalette).
-            Modifier
+            // root→focused on the preview pass, and combinedClickable consumes Enter/Space itself,
+            // so a descendant onKeyEvent never fires. The preview handler intercepts first, making
+            // Enter/Space connect while the mouse still requires a double click (same pattern as
+            // TerminalScreen/CommandPalette).
+            this
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown &&
                         (event.key == Key.Enter || event.key == Key.Spacebar)
@@ -152,9 +169,12 @@ private fun Modifier.hostConnectClick(
                     }
                 }
                 .combinedClickable(
-                    onClick = { onSingleClick?.invoke() },
+                    interactionSource = interaction,
+                    indication = LocalIndication.current,
+                    onClick = {},
                     onDoubleClick = onClick,
                 )
+        }
     }
 
 @Composable

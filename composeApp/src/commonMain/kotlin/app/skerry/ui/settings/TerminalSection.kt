@@ -179,9 +179,10 @@ internal fun TerminalSection(state: DesktopDesignState) {
     // click (protects against accidental connects when just browsing the catalog). Desktop-only.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_host_connect), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
-        // No fixed-width Box: DropdownField sizes itself to the longest option, matching the
-        // neighbouring CursorStylePicker.
-        HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode)
+        // Fixed width like the neighbouring pickers: the trigger fills maxWidth, so without a bound
+        // it would eat the whole row and collapse the label to a one-glyph column. Wide enough for
+        // the longest localized option ("Двойной клик (клик выделяет)") on a single line.
+        Box(Modifier.width(232.dp)) { HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode) }
     }
     HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from
