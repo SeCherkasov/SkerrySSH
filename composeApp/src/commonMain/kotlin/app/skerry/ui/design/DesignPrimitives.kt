@@ -48,11 +48,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.text.AnnotatedString
 
@@ -252,6 +255,7 @@ fun IconBtn(
     tint: Color = D.dim,
     hoverBg: Color = Color(0x1FFFFFFF),
     hoverTint: Color? = null,
+    tooltip: String? = null,
 ) {
     // Custom light hover background (dark theme): clickable's default indication gives a dark
     // ripple that's barely visible on a dark background, so we highlight with a light overlay instead.
@@ -266,6 +270,37 @@ fun IconBtn(
         contentAlignment = Alignment.Center,
     ) {
         Sym(name, size = icon, color = if (hovered && hoverTint != null) hoverTint else tint)
+        if (tooltip != null && hovered) IconTooltip(tooltip)
+    }
+}
+
+/** Hover tooltip shown centered just below its icon button (toolbar icons carry no visible label). */
+@Composable
+private fun IconTooltip(text: String) {
+    val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
+    val position = remember(gap) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(
+                anchorBounds: IntRect,
+                windowSize: IntSize,
+                layoutDirection: LayoutDirection,
+                popupContentSize: IntSize,
+            ): IntOffset = IntOffset(
+                x = anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2,
+                y = anchorBounds.bottom + gap,
+            )
+        }
+    }
+    Popup(popupPositionProvider = position, properties = PopupProperties(focusable = false)) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(D.railBg)
+                .border(1.dp, D.cyan.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        ) {
+            Txt(text, color = D.textBright, size = 11.sp, weight = FontWeight.Medium)
+        }
     }
 }
 
@@ -347,17 +382,20 @@ fun PrimaryButton(
     fg: Color = D.ink,
     enabled: Boolean = true,
 ) {
+    // Disabled state is owned by the primitive: callers pass `enabled` and never a pre-dimmed `bg`,
+    // so every disabled Save/primary looks the same instead of each form dimming (or not) its own way.
     Row(
         modifier
             .clip(RoundedCornerShape(7.dp))
-            .background(bg)
+            .background(if (enabled) bg else bg.copy(alpha = 0.35f))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) Sym(icon, size = 16.sp, color = fg)
-        Txt(label, color = fg, size = 12.sp, weight = FontWeight.SemiBold)
+        val content = if (enabled) fg else fg.copy(alpha = 0.6f)
+        if (icon != null) Sym(icon, size = 16.sp, color = content)
+        Txt(label, color = content, size = 12.sp, weight = FontWeight.SemiBold)
     }
 }
 
@@ -376,12 +414,31 @@ fun GhostButton(
             .clip(RoundedCornerShape(7.dp))
             .border(1.dp, border, RoundedCornerShape(7.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            // Match PrimaryButton's padding and icon size so a Ghost + Primary pair is the same height.
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) Sym(icon, size = 15.sp, color = fg)
+        if (icon != null) Sym(icon, size = 16.sp, color = fg)
         Txt(label, color = fg, size = 12.sp, weight = FontWeight.Medium)
+    }
+}
+
+/**
+ * Subtle dismiss button for a dialog (Cancel / Not now): no border, dim label, same vertical size as
+ * [PrimaryButton] so a `[Cancel] [Save]` pair sits level. One primitive instead of a hand-rolled box
+ * copied into every dialog.
+ */
+@Composable
+fun CancelButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(7.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Txt(label, color = D.dim, size = 12.sp, weight = FontWeight.Medium)
     }
 }
 
