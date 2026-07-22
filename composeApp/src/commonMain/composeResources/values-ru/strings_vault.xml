@@ -3,7 +3,7 @@
     <string name="vault_title">Хранилище</string>
     <string name="vault_sidebar_header">ХРАНИЛИЩЕ</string>
     <string name="vault_e2e_encrypted">Сквозное шифрование</string>
-    <string name="vault_e2e_description">Приватные ключи запечатаны мастер-паролем и никогда не синхронизируются в открытом виде.</string>
+    <string name="vault_e2e_description">Приватные ключи зашифрованы мастер-паролем и никогда не синхронизируются в открытом виде.</string>
     <string name="vault_banner_encrypted">Сквозное шифрование · запечатано мастер-паролем</string>
     <string name="vault_generate_key">Создать ключ</string>
     <string name="vault_add_password">Добавить пароль</string>
@@ -16,12 +16,12 @@
 
     <!-- Пустые состояния категорий. -->
     <string name="vault_empty_ssh_title">Пока нет SSH-ключей</string>
-    <string name="vault_empty_ssh_hint">Создайте ключ — он запечатывается в хранилище и готов к привязке к хостам.</string>
+    <string name="vault_empty_ssh_hint">Создайте ключ для привязки к хостам.</string>
     <string name="vault_empty_passwords_title">Пока нет паролей</string>
     <string name="vault_empty_passwords_hint">Добавьте пароль — он хранится в зашифрованном виде и переиспользуется на разных хостах.</string>
     <string name="vault_empty_certificates_title">Пока нет сертификатов</string>
-    <string name="vault_empty_certificates_hint">Импортируйте сертификат, подписанный CA, вместе с приватным ключом — он запечатывается в хранилище и готов к привязке к хостам.</string>
-    <string name="vault_empty_certificates_hint_short">Импортируйте сертификат, подписанный CA, вместе с приватным ключом — он запечатывается в хранилище.</string>
+    <string name="vault_empty_certificates_hint">Импортируйте сертификат, подписанный CA, с приватным ключом.</string>
+    <string name="vault_empty_certificates_hint_short">Импортируйте сертификат, подписанный CA, с приватным ключом.</string>
 
     <!-- Детали секрета: подзаголовки и подписи. -->
     <string name="vault_subtitle_certificate">Сертификат</string>
@@ -86,27 +86,27 @@
     <!-- Диалог удаления секрета. -->
     <string name="vault_delete_title">Удалить «%1$s»?</string>
     <string name="vault_delete_detail_none">Секрет будет удалён из хранилища. Это действие необратимо.</string>
-    <string name="vault_delete_detail_bound">%1$d хостов потеряют эти учётные данные и запросят пароль при следующем подключении. Это действие необратимо.</string>
+    <string name="vault_delete_detail_bound">%1$d хостов потеряют эти учётные данные и запросят пароль при следующем подключении. Отменить нельзя.</string>
 
     <!-- Гейт мастер-пароля: создание / разблокировка / предложение биометрии / повреждение / сброс. -->
     <string name="vault_create_title">Создать мастер-пароль</string>
-    <string name="vault_create_subtitle">Им шифруется локальное хранилище. Пароль не покидает устройство и не восстанавливается — забыли его, и данные не расшифровать.</string>
+    <string name="vault_create_subtitle">Шифрует локальное хранилище. Пароль не покидает устройство и не восстанавливается — забудете его, и данные не расшифровать.</string>
     <string name="vault_master_password_label">Мастер-пароль</string>
     <string name="vault_confirm_password_label">Повторите пароль</string>
     <string name="vault_create_button">Создать хранилище</string>
     <string name="vault_biometric_offer_title">Быстрая разблокировка</string>
-    <string name="vault_biometric_offer_subtitle">Включите вход по биометрии, чтобы открывать хранилище без ввода мастер-пароля. Это можно изменить позже в настройках.</string>
+    <string name="vault_biometric_offer_subtitle">Открывайте хранилище без ввода мастер-пароля. Изменить можно позже в настройках.</string>
     <string name="vault_biometric_enable">Включить биометрию</string>
     <string name="vault_not_now">Не сейчас</string>
     <string name="vault_unlock_title">Разблокировать хранилище</string>
     <string name="vault_unlock_subtitle">Введите мастер-пароль, чтобы открыть хосты, ключи и сессии.</string>
     <string name="vault_unlock_button">Разблокировать</string>
     <string name="vault_unlock_biometric">Разблокировать биометрией</string>
-    <string name="vault_forgot_password">Забыли мастер-пароль?</string>
+    <string name="vault_forgot_password">Сбросить мастер-пароль</string>
     <string name="vault_corrupted_title">Хранилище повреждено</string>
-    <string name="vault_corrupted_subtitle">Файл хранилища не читается, и расшифровать его нельзя. Чтобы пользоваться приложением, придётся сбросить хранилище и начать заново.</string>
+    <string name="vault_corrupted_subtitle">Файл хранилища не читается и не расшифровывается. Чтобы продолжить работу, сбросьте хранилище.</string>
     <string name="vault_reset_vault">Сбросить хранилище</string>
-    <string name="vault_reset_subtitle">Это необратимо. Сохранённые пароли, ключи и учётные данные будут стёрты без возможности восстановления — мастер-пароль их не защищает, а пересоздаёт.</string>
+    <string name="vault_reset_subtitle">Необратимо. Сохранённые пароли, ключи и учётные данные будут стёрты без возможности восстановления — мастер-пароль их не вернёт.</string>
     <string name="vault_reset_scope_secrets_title">Только секреты</string>
     <string name="vault_reset_scope_secrets_subtitle">Профили хостов и known_hosts останутся.</string>
     <string name="vault_reset_scope_everything_title">Стереть всё</string>

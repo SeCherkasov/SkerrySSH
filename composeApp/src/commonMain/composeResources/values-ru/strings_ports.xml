@@ -35,7 +35,7 @@
     <string name="ports_col_via_host">ЧЕРЕЗ ХОСТ</string>
     <string name="ports_col_active">АКТИВЕН</string>
     <string name="ports_remove_confirm_title">Удалить «%1$s»?</string>
-    <string name="ports_remove_active_message">Туннель активен — он будет отключён и удалён. Отменить нельзя.</string>
+    <string name="ports_remove_active_message">Туннель активен. Он будет отключён и удалён — отменить нельзя.</string>
     <string name="ports_remove_inactive_message">Сохранённый туннель будет удалён. Отменить нельзя.</string>
     <string name="ports_type_local">LOCAL</string>
     <string name="ports_type_remote">REMOTE</string>
@@ -49,7 +49,7 @@
     <string name="ports_scan">Сканировать</string>
     <string name="ports_scanning">Сканирование…</string>
     <string name="ports_no_services">Слушающих TCP-портов не найдено</string>
-    <string name="ports_services_unsupported">У этого типа подключения нет командного канала — хост нельзя просканировать.</string>
+    <string name="ports_services_unsupported">У этого типа подключения нет командного канала — хост не просканировать.</string>
     <string name="ports_forward">Пробросить</string>
     <string name="ports_already_forwarded">Проброшен</string>
     <string name="ports_service_port">порт %1$d</string>

@@ -74,5 +74,5 @@
     <string name="sftp_edit_discard_body">「%1$s」有未保存的更改，现在关闭将会丢失。</string>
     <string name="sftp_edit_discard">放弃</string>
     <string name="sftp_edit_conflict_q">文件在源端已被修改？</string>
-    <string name="sftp_edit_conflict_body">「%1$s」在你打开之后发生了变化。保存将用你的版本覆盖这些更改。</string>
+    <string name="sftp_edit_conflict_body">「%1$s」在你打开后已更改。保存将用你的版本覆盖它。</string>
 </resources>

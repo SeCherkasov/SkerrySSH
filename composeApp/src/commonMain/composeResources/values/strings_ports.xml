@@ -35,7 +35,7 @@
     <string name="ports_col_via_host">VIA HOST</string>
     <string name="ports_col_active">ACTIVE</string>
     <string name="ports_remove_confirm_title">Remove \"%1$s\"?</string>
-    <string name="ports_remove_active_message">This tunnel is active — it will be disconnected and deleted. This can't be undone.</string>
+    <string name="ports_remove_active_message">Active tunnel. It will be disconnected and deleted — can't be undone.</string>
     <string name="ports_remove_inactive_message">This saved tunnel is deleted. This can't be undone.</string>
     <string name="ports_type_local">LOCAL</string>
     <string name="ports_type_remote">REMOTE</string>
@@ -49,7 +49,7 @@
     <string name="ports_scan">Scan</string>
     <string name="ports_scanning">Scanning…</string>
     <string name="ports_no_services">No listening TCP ports found</string>
-    <string name="ports_services_unsupported">This connection type has no command channel, so the host cannot be scanned.</string>
+    <string name="ports_services_unsupported">This connection type has no command channel — the host can't be scanned.</string>
     <string name="ports_forward">Forward</string>
     <string name="ports_already_forwarded">Forwarded</string>
     <string name="ports_service_port">port %1$d</string>

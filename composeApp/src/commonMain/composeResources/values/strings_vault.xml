@@ -3,7 +3,7 @@
     <string name="vault_title">Vault</string>
     <string name="vault_sidebar_header">VAULT</string>
     <string name="vault_e2e_encrypted">End-to-end encrypted</string>
-    <string name="vault_e2e_description">Private keys are sealed with your master password and never sync in plaintext.</string>
+    <string name="vault_e2e_description">Private keys are encrypted with your master password and never sync in plaintext.</string>
     <string name="vault_banner_encrypted">End-to-end encrypted · sealed with your master password</string>
     <string name="vault_generate_key">Generate key</string>
     <string name="vault_add_password">Add password</string>
@@ -16,12 +16,12 @@
 
     <!-- Empty category states. -->
     <string name="vault_empty_ssh_title">No SSH keys yet</string>
-    <string name="vault_empty_ssh_hint">Generate a key — it's sealed in your vault and ready to attach to hosts.</string>
+    <string name="vault_empty_ssh_hint">Generate a key to attach to hosts.</string>
     <string name="vault_empty_passwords_title">No passwords yet</string>
     <string name="vault_empty_passwords_hint">Add a password — it's stored encrypted and reusable across hosts.</string>
     <string name="vault_empty_certificates_title">No certificates yet</string>
-    <string name="vault_empty_certificates_hint">Import a CA-signed certificate with its private key — sealed in your vault and ready to attach to hosts.</string>
-    <string name="vault_empty_certificates_hint_short">Import a CA-signed certificate with its private key — sealed in your vault.</string>
+    <string name="vault_empty_certificates_hint">Import a CA-signed certificate and its private key.</string>
+    <string name="vault_empty_certificates_hint_short">Import a CA-signed certificate and its private key.</string>
 
     <!-- Secret detail: subtitles and labels. -->
     <string name="vault_subtitle_certificate">Certificate</string>
@@ -86,27 +86,27 @@
     <!-- Delete secret dialog. -->
     <string name="vault_delete_title">Delete \"%1$s\"?</string>
     <string name="vault_delete_detail_none">This is removed from your vault. This can't be undone.</string>
-    <string name="vault_delete_detail_bound">%1$d hosts will lose this credential and ask for a password on next connect. This can't be undone.</string>
+    <string name="vault_delete_detail_bound">%1$d hosts will lose this credential and ask for a password on next connect. Can't be undone.</string>
 
     <!-- Master-password gate: create / unlock / biometric offer / corrupted / reset. -->
     <string name="vault_create_title">Create a master password</string>
-    <string name="vault_create_subtitle">It encrypts your local vault. The password never leaves this device and can't be recovered — forget it and the data can't be decrypted.</string>
+    <string name="vault_create_subtitle">Encrypts your local vault. The password stays on this device and can't be recovered — forget it and the data can't be decrypted.</string>
     <string name="vault_master_password_label">Master password</string>
     <string name="vault_confirm_password_label">Confirm password</string>
     <string name="vault_create_button">Create vault</string>
     <string name="vault_biometric_offer_title">Quick unlock</string>
-    <string name="vault_biometric_offer_subtitle">Turn on biometric unlock to open the vault without typing your master password. You can change this later in settings.</string>
+    <string name="vault_biometric_offer_subtitle">Unlock the vault without typing your master password. Change this later in settings.</string>
     <string name="vault_biometric_enable">Enable biometrics</string>
     <string name="vault_not_now">Not now</string>
     <string name="vault_unlock_title">Unlock vault</string>
     <string name="vault_unlock_subtitle">Enter your master password to open your hosts, keys and sessions.</string>
     <string name="vault_unlock_button">Unlock</string>
     <string name="vault_unlock_biometric">Unlock with biometrics</string>
-    <string name="vault_forgot_password">Forgot your master password?</string>
+    <string name="vault_forgot_password">Reset master password</string>
     <string name="vault_corrupted_title">Vault is corrupted</string>
-    <string name="vault_corrupted_subtitle">The vault file can't be read or decrypted. To keep using the app you'll have to reset the vault and start over.</string>
+    <string name="vault_corrupted_subtitle">The vault file can't be read or decrypted. Reset the vault to keep using the app.</string>
     <string name="vault_reset_vault">Reset vault</string>
-    <string name="vault_reset_subtitle">This is irreversible. Saved passwords, keys and credentials will be erased beyond recovery — your master password doesn't protect them, it starts fresh.</string>
+    <string name="vault_reset_subtitle">Irreversible. Saved passwords, keys and credentials are erased beyond recovery — the master password can't bring them back.</string>
     <string name="vault_reset_scope_secrets_title">Secrets only</string>
     <string name="vault_reset_scope_secrets_subtitle">Host profiles and known_hosts are kept.</string>
     <string name="vault_reset_scope_everything_title">Erase everything</string>

@@ -15,7 +15,7 @@
 
     <!-- AI section -->
     <string name="settings_ai_title">AI</string>
-    <string name="settings_ai_live_subtitle">Choose where AI runs: on this device, through your own OpenAI-compatible key (BYOK) — or turn it off entirely. Keys are stored encrypted in the vault and only ever sent to the provider you configure.</string>
+    <string name="settings_ai_live_subtitle">Run AI on this device, through your own OpenAI-compatible key (BYOK), or off. Keys are stored encrypted and sent only to the provider you configure.</string>
     <string name="settings_ai_field_api_key">OPENAI API KEY</string>
     <string name="settings_ai_field_model">MODEL</string>
     <string name="settings_ai_field_endpoint">ENDPOINT</string>
@@ -30,7 +30,7 @@
     <string name="settings_ai_prompt_placeholder_needs_key">Save an API key first</string>
     <string name="settings_ai_sending">Sending…</string>
     <string name="settings_ai_ask">Ask</string>
-    <string name="settings_ai_mock_subtitle">Configure where AI runs. The default is on this device — your commands never leave Skerry. Each connection can override these settings.</string>
+    <string name="settings_ai_mock_subtitle">Choose where AI runs. Default is on this device; commands never leave Skerry. Each connection can override this.</string>
     <string name="settings_ai_default_provider">Default AI provider</string>
     <string name="settings_ai_default_provider_desc">Used for connections without a specific override.</string>
     <string name="settings_ai_provider_device">On this device</string>
@@ -40,7 +40,7 @@
     <string name="settings_ai_provider_byok_desc">Use your OpenAI, Anthropic, or OpenRouter key. You pay the provider directly.</string>
     <string name="settings_ai_provider_off">Off — no AI</string>
     <string name="settings_ai_provider_off_desc">Disable the assistant everywhere. Nothing is ever sent anywhere.</string>
-    <string name="settings_ai_off_note">AI is off: the terminal assistant and quick chat are hidden. Pick a provider above to bring it back.</string>
+    <string name="settings_ai_off_note">AI is off: the terminal assistant and quick chat are hidden. Pick a provider above to re-enable.</string>
     <!-- Живая карточка «На этом устройстве»: каталог локальных моделей и их статусы -->
     <string name="settings_ai_local_desc">Runs the assistant fully offline. No data ever leaves your machine.</string>
     <string name="settings_ai_local_ready">Ready</string>
@@ -64,11 +64,11 @@
     <string name="settings_ai_error_engine_crashed">The local model engine stopped unexpectedly. Try again.</string>
     <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">Sanitize secrets before sending</string>
-    <string name="settings_ai_sanitize_desc">Strip obvious passwords, tokens and keys from prompts before they reach external providers.</string>
+    <string name="settings_ai_sanitize_desc">Strip obvious passwords, tokens, and keys before prompts reach external providers.</string>
     <string name="settings_ai_preview">Preview prompt before sending</string>
-    <string name="settings_ai_preview_desc">Show the exact text sent externally, with redactions highlighted. Edit or cancel before transmission.</string>
+    <string name="settings_ai_preview_desc">Show the exact text sent externally, with redactions highlighted. Edit or cancel before it's sent.</string>
     <string name="settings_ai_confirm">Confirm before running AI suggestions</string>
-    <string name="settings_ai_confirm_desc">Every AI-suggested command requires a deliberate click. Mitigates prompt injection from compromised servers.</string>
+    <string name="settings_ai_confirm_desc">Require a click before running any AI-suggested command. Mitigates prompt injection from compromised servers.</string>
 
     <!-- Terminal section -->
     <string name="settings_terminal_title">Terminal</string>
@@ -85,12 +85,12 @@
     <string name="settings_terminal_cursor_bar_blink">Bar (blink)</string>
     <string name="settings_terminal_cursor_bar_steady">Bar</string>
     <string name="settings_terminal_show_title">Show terminal title on tabs</string>
-    <string name="settings_terminal_show_title_desc">Let the connected shell rename a tab (e.g. the running program). Off — tabs always show the saved host name.</string>
+    <string name="settings_terminal_show_title_desc">Let the connected shell rename a tab (e.g. the running program). Off: tabs keep the saved host name.</string>
     <string name="settings_terminal_clipboard_write">Allow server clipboard writes (OSC 52)</string>
     <string name="settings_terminal_host_connect">Connect to host on</string>
     <string name="settings_terminal_host_connect_single">Single click</string>
     <string name="settings_terminal_host_connect_double">Double click (click selects)</string>
-    <string name="settings_terminal_clipboard_write_desc">Let the connected shell replace your system clipboard (used by tmux/vim yank). Off by default — a malicious host could otherwise slip attacker-controlled text into what you paste.</string>
+    <string name="settings_terminal_clipboard_write_desc">Let the connected shell replace your system clipboard (tmux/vim yank). Off by default: a malicious host could otherwise inject attacker-controlled text into what you paste.</string>
 
     <!-- Sync section (also covers the account card and linked devices — merged from the former Account tab) -->
     <string name="settings_disconnect">Disconnect</string>
@@ -164,9 +164,9 @@
     <string name="settings_security_account_password">Account password</string>
     <string name="settings_security_account_password_desc">Shared by all your synced devices.</string>
     <string name="settings_change_account_pw_title">Change account password</string>
-    <string name="settings_change_account_pw_note">This changes the password on every synced device. Your other devices will need to sign in again with the new password.</string>
+    <string name="settings_change_account_pw_note">Changes the password on every synced device. Others must sign in again with the new password.</string>
     <string name="settings_change_account_pw_submit">Change password</string>
-    <string name="settings_change_account_pw_err_rewrap">The account password was changed, but this device must reconnect with the new password.</string>
+    <string name="settings_change_account_pw_err_rewrap">Account password changed, but this device must reconnect with the new password.</string>
 
     <!-- Keyboard section -->
     <string name="settings_keyboard_title">Keyboard</string>
@@ -199,13 +199,13 @@
 
     <!-- About section -->
     <string name="settings_about_version">Version %1$s</string>
-    <string name="settings_about_tagline">A private-first SSH client. Local AI, end-to-end encrypted sync, and a terminal that respects your secrets.</string>
+    <string name="settings_about_tagline">A privacy-first SSH client with local AI and end-to-end encrypted sync.</string>
     <string name="settings_about_whats_new">What's new</string>
     <string name="settings_about_documentation">Documentation</string>
     <string name="settings_about_licenses">Open-source licenses</string>
     <string name="settings_about_footer">Built on the open seas · © 2026 Skerry</string>
     <string name="settings_about_check_updates">Check for updates</string>
-    <string name="settings_about_check_updates_desc">Once a day Skerry asks the GitHub Releases API for the latest version. Nothing else is sent.</string>
+    <string name="settings_about_check_updates_desc">Checks the GitHub Releases API once a day for the latest version. Nothing else is sent.</string>
     <string name="settings_about_update_available">Version %1$s is available</string>
     <string name="settings_about_update_open">Open release page</string>
     <string name="settings_update_status">Update %1$s</string>
