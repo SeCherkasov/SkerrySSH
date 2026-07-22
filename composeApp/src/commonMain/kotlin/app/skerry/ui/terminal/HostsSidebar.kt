@@ -139,15 +139,17 @@ private fun Modifier.hostConnectClick(
     when (LocalHostClickConnectMode.current) {
         HostClickConnectMode.SingleClick -> clickable(onClick = onClick)
         HostClickConnectMode.DoubleClick -> {
-            // Selection fires on *press*, not on combinedClickable's onClick: when onDoubleClick is
-            // set, onClick is held back by the double-tap timeout (~300 ms) to disambiguate a single
-            // tap from a double one, so routing selection through onClick makes the highlight lag
-            // noticeably. Emitting it on the PressInteraction gives the file-manager feel — press
-            // highlights immediately, the double click opens.
+            // Selection fires on the press *Release*, not on combinedClickable's onClick: when
+            // onDoubleClick is set, onClick is held back by the double-tap timeout (~300 ms) to
+            // disambiguate a single tap from a double one, so routing selection through onClick makes
+            // the highlight lag noticeably. Release fires on pointer-up of a genuine click, well
+            // before that timeout — so the highlight still feels immediate, but a press that turns
+            // into a drag-reorder or a drag-scroll emits Cancel (not Release) and no longer
+            // spuriously selects the row under the pointer.
             val interaction = remember { MutableInteractionSource() }
             val select = rememberUpdatedState(onSingleClick)
             LaunchedEffect(interaction) {
-                interaction.interactions.collect { if (it is PressInteraction.Press) select.value?.invoke() }
+                interaction.interactions.collect { if (it is PressInteraction.Release) select.value?.invoke() }
             }
             // Chain onto `this` (not a fresh Modifier): the receiver already carries the row's
             // fillMaxWidth/padding/clip, and starting over would drop them — the row would lose its
@@ -428,7 +430,7 @@ private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignStat
 }
 
 /** Collapse-key prefix for teams in the shared [DesktopDesignState.collapsedGroups], see [TeamHostsSection]. */
-private const val TEAM_COLLAPSE_PREFIX = " team "
+private const val TEAM_COLLAPSE_PREFIX = "\u0000team\u0000"
 
 /**
  * Team header in the sidebar, modeled on [FolderHeader] (collapse chevron + icon + name + count) to
