@@ -174,6 +174,64 @@ class SnippetManagerTest {
     }
 
     @Test
+    fun `renameTag rewrites the tag on every snippet that carries it`() {
+        val store = FakeSnippetStore()
+        val manager = managerWith(store)
+        val a = manager.save(draft(label = "a", tags = listOf("db")))
+        val b = manager.save(draft(label = "b", tags = listOf("db", "prod")))
+        val c = manager.save(draft(label = "c", tags = listOf("prod")))
+
+        manager.renameTag("db", "database")
+
+        assertEquals(listOf("database"), manager.find(a)!!.snippet.tags)
+        assertEquals(listOf("database", "prod"), manager.find(b)!!.snippet.tags)
+        assertEquals(listOf("prod"), manager.find(c)!!.snippet.tags) // untouched
+        // Persisted to the store too.
+        assertEquals(listOf("database"), store.all().first { it.id == a }.tags)
+    }
+
+    @Test
+    fun `renameTag merges into an existing tag without duplicating`() {
+        val manager = managerWith()
+        val id = manager.save(draft(tags = listOf("db", "prod")))
+
+        manager.renameTag("db", "prod")
+
+        assertEquals(listOf("prod"), manager.find(id)!!.snippet.tags)
+    }
+
+    @Test
+    fun `renameTag normalizes the new tag`() {
+        val manager = managerWith()
+        val id = manager.save(draft(tags = listOf("db")))
+
+        manager.renameTag("db", "#Database")
+
+        assertEquals(listOf("database"), manager.find(id)!!.snippet.tags)
+    }
+
+    @Test
+    fun `renameTag ignores a blank new tag`() {
+        val manager = managerWith()
+        val id = manager.save(draft(tags = listOf("db")))
+
+        manager.renameTag("db", "   ")
+
+        assertEquals(listOf("db"), manager.find(id)!!.snippet.tags)
+    }
+
+    @Test
+    fun `renameTag leaves untagged snippets alone`() {
+        val store = FakeSnippetStore()
+        val manager = managerWith(store)
+        val untagged = manager.save(draft(label = "plain"))
+
+        manager.renameTag("db", "database")
+
+        assertTrue(manager.find(untagged)!!.snippet.tags.isEmpty())
+    }
+
+    @Test
     fun `loads previously saved snippets on construction`() {
         val store = FakeSnippetStore()
         store.put(Snippet("x", "saved", "ls -la", listOf("fs")))

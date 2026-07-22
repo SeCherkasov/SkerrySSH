@@ -105,6 +105,26 @@ class SnippetManager(
         return id
     }
 
+    /**
+     * Rename tag [oldTag] to [newTag] across every snippet that carries it, mirroring host group
+     * rename ([app.skerry.ui.host.HostManagerController.renameGroup]) — tags double as the library's
+     * categories. [newTag] is canonicalized like typed tag input ([parseSnippetTags]); a blank or
+     * unchanged target is a no-op. Order is preserved and a collision with an existing tag merges
+     * (via [normalizeTags]). Each touched snippet is persisted through the same path as an edit.
+     */
+    fun renameTag(oldTag: String, newTag: String) {
+        val target = parseSnippetTags(newTag).firstOrNull() ?: return
+        if (target == oldTag) return
+        for (entry in snippets) {
+            val tags = entry.snippet.tags
+            if (oldTag !in tags) continue
+            val renamed = normalizeTags(tags.map { if (it == oldTag) target else it })
+            val updated = entry.snippet.copy(tags = renamed)
+            store.put(updated)
+            entry.snippet = updated
+        }
+    }
+
     /** Delete a snippet: remove it from the store and the list. */
     fun delete(id: String) {
         store.remove(id)
