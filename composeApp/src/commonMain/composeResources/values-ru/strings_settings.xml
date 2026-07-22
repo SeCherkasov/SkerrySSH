@@ -160,6 +160,14 @@
     <string name="settings_change_pw_submit">Сменить пароль</string>
     <string name="settings_change_pw_err_wrong">Текущий пароль неверен.</string>
 
+    <!-- Диалог смены пароля аккаунта (issue #32) -->
+    <string name="settings_security_account_password">Пароль аккаунта</string>
+    <string name="settings_security_account_password_desc">Общий для всех синхронизированных устройств.</string>
+    <string name="settings_change_account_pw_title">Смена пароля аккаунта</string>
+    <string name="settings_change_account_pw_note">Пароль изменится на всех синхронизированных устройствах. На остальных потребуется войти заново с новым паролём.</string>
+    <string name="settings_change_account_pw_submit">Сменить пароль</string>
+    <string name="settings_change_account_pw_err_rewrap">Пароль аккаунта изменён, но это устройство нужно переподключить с новым паролём.</string>
+
     <!-- Раздел Keyboard -->
     <string name="settings_keyboard_title">Клавиатура</string>
     <string name="settings_keyboard_subtitle">Горячие клавиши подстраиваются под вашу платформу. Терминальные привязки работают, когда сессия в фокусе.</string>

@@ -160,6 +160,14 @@
     <string name="settings_change_pw_submit">更改密码</string>
     <string name="settings_change_pw_err_wrong">当前密码不正确。</string>
 
+    <!-- 更改账户密码对话框 (issue #32) -->
+    <string name="settings_security_account_password">账户密码</string>
+    <string name="settings_security_account_password_desc">由所有已同步设备共享。</string>
+    <string name="settings_change_account_pw_title">更改账户密码</string>
+    <string name="settings_change_account_pw_note">这将更改所有已同步设备上的密码。其他设备需使用新密码重新登录。</string>
+    <string name="settings_change_account_pw_submit">更改密码</string>
+    <string name="settings_change_account_pw_err_rewrap">账户密码已更改，但此设备需使用新密码重新连接。</string>
+
     <!-- 键盘部分 -->
     <string name="settings_keyboard_title">键盘</string>
     <string name="settings_keyboard_subtitle">快捷键适配你的平台。终端快捷键在会话聚焦时生效。</string>
