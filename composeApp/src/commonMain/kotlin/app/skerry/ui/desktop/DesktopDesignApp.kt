@@ -140,7 +140,7 @@ import app.skerry.ui.generated.resources.shell_disconnect
 import app.skerry.ui.generated.resources.shell_close_split_title
 import app.skerry.ui.generated.resources.shell_close_split_message
 import app.skerry.ui.generated.resources.shell_close_panel
-import app.skerry.ui.generated.resources.shell_unlocked
+import app.skerry.ui.generated.resources.shell_lock
 import app.skerry.ui.generated.resources.shell_settings
 import app.skerry.ui.generated.resources.shell_status_connected
 import app.skerry.ui.generated.resources.shell_status_disconnected
@@ -1069,7 +1069,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Sym("lock_open", size = 14.sp, color = D.cyan)
-                Txt(stringResource(Res.string.shell_unlocked), color = D.cyan, size = 11.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.shell_lock), color = D.cyan, size = 11.sp, weight = FontWeight.Medium)
             }
             if (windowChrome != null) WindowButtons(windowChrome, Modifier.padding(start = 8.dp))
         }
