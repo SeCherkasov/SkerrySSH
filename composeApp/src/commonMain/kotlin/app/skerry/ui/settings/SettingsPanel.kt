@@ -38,6 +38,7 @@ import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.SettingsTab
 import app.skerry.ui.design.D
+import app.skerry.ui.design.HLine
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -55,6 +56,10 @@ import app.skerry.ui.generated.resources.shtail_nav_sync
 import app.skerry.ui.generated.resources.shtail_nav_terminal
 import app.skerry.ui.vault.VaultGateController
 import org.jetbrains.compose.resources.stringResource
+
+// Height of the content pane's sticky header strip: tall enough to clear the top-right close button,
+// so the divider line lands just below it and section content scrolls beneath the band.
+private val SETTINGS_HEADER_HEIGHT = 44.dp
 
 /** Settings panel (760x560 modal): 200dp nav + content with 7 sections (AI/Sync/.../About). */
 @Composable
@@ -97,36 +102,67 @@ fun SettingsPanel(state: DesktopDesignState) {
                 }
             }
             VLine(D.line)
-            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 26.dp, vertical = 22.dp)) {
-                when (effectiveTab) {
-                    SettingsTab.AI -> AiSection(state)
-                    SettingsTab.Appearance -> AppearanceSection(state)
-                    SettingsTab.Terminal -> TerminalSection(state)
-                    SettingsTab.Sync -> SyncSection(state)
-                    SettingsTab.Security -> SecuritySection(
-                        state = state,
-                        controller = securityController,
-                        reload = securityReload,
-                        syncConfigured = syncConfigured,
-                        onChangeMasterPassword = { changePwOpen = true },
-                        onChangeAccountPassword = { changeAccountPwOpen = true },
-                        onBiometricToggled = { securityReload++ },
-                    )
-                    SettingsTab.Keyboard -> KeyboardSection()
-                    SettingsTab.About -> AboutSection()
+            // Content pane with a static header strip: the section title sits above a divider line
+            // (aligned under the close button) and stays put; section content scrolls beneath the
+            // line and disappears behind the opaque band. The About tab has its own centered layout
+            // (logo/version), so it opts out of the header and keeps the plain top padding.
+            val hasHeader = effectiveTab != SettingsTab.About
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 26.dp)
+                        .padding(top = if (hasHeader) SETTINGS_HEADER_HEIGHT else 22.dp, bottom = 22.dp),
+                ) {
+                    when (effectiveTab) {
+                        SettingsTab.AI -> AiSection(state)
+                        SettingsTab.Appearance -> AppearanceSection(state)
+                        SettingsTab.Terminal -> TerminalSection(state)
+                        SettingsTab.Sync -> SyncSection(state)
+                        SettingsTab.Security -> SecuritySection(
+                            state = state,
+                            controller = securityController,
+                            reload = securityReload,
+                            syncConfigured = syncConfigured,
+                            onChangeMasterPassword = { changePwOpen = true },
+                            onChangeAccountPassword = { changeAccountPwOpen = true },
+                            onBiometricToggled = { securityReload++ },
+                        )
+                        SettingsTab.Keyboard -> KeyboardSection()
+                        SettingsTab.About -> AboutSection()
+                    }
+                }
+                // Static header: the section title over an opaque band (card background) the scrolled
+                // content hides behind, capped by the divider line under the close button. Declared
+                // after the scroll content so it draws on top; the close button (card-level TopEnd
+                // overlay) stays above both. The title reuses the nav label (same string per tab).
+                if (hasHeader) {
+                    Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
+                        Box(
+                            Modifier.fillMaxWidth().height(SETTINGS_HEADER_HEIGHT - 1.dp).background(D.surfaceDeep).padding(horizontal = 26.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Txt(effectiveTab.navLabel(), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+                        }
+                        HLine()
+                    }
                 }
             }
         }
-        // Close button: overlay in the top-right corner of the card (the only pointer way to close).
+        // Close button: overlay in the top-right corner, vertically centered within the header strip
+        // height so it lines up with the section title and sits above the divider. Height is tied to
+        // SETTINGS_HEADER_HEIGHT (not a magic offset) so it can't desync from the header. Only pointer
+        // way to close.
         Box(
-            Modifier
-                .align(Alignment.TopEnd)
-                .padding(6.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = state::closeSettings)
-                .padding(8.dp),
+            Modifier.align(Alignment.TopEnd).height(SETTINGS_HEADER_HEIGHT).padding(end = 6.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Sym(name = "close", size = 18.sp, color = D.dim)
+            Box(
+                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = state::closeSettings).padding(8.dp),
+            ) {
+                Sym(name = "close", size = 18.sp, color = D.dim)
+            }
         }
         // Change master password dialog: overlay over the whole settings card (outside the scroll).
         if (changePwOpen && securityController != null) {

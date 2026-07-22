@@ -24,11 +24,13 @@ import org.jetbrains.compose.resources.stringResource
 
 // Shared settings-section widgets (used by several *Section.kt files in this package).
 
-/** Settings section header: title plus a dimmed subtitle, spaced above the content. */
+/**
+ * Section subtitle: dimmed line under the sticky header. The section's bold title now lives in the
+ * panel's static header strip (see SettingsPanel), so it is not repeated here.
+ */
 @Composable
-internal fun SectionTitle(title: String, subtitle: String) {
-    Txt(title, color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
-    Txt(subtitle, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 18.dp))
+internal fun SectionSubtitle(subtitle: String) {
+    Txt(subtitle, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 14.dp, bottom = 16.dp))
 }
 
 /** Settings group heading: small caps in a muted color, top padding to separate sections. */

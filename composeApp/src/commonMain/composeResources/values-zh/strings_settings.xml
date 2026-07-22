@@ -14,7 +14,6 @@
     <string name="settings_manage">管理</string>
 
     <!-- AI 部分 -->
-    <string name="settings_ai_title">AI</string>
     <string name="settings_ai_live_subtitle">在本设备运行 AI、使用你自己的 OpenAI 兼容密钥 (BYOK)，或关闭。密钥加密存储，仅发送到你配置的提供商。</string>
     <string name="settings_ai_field_api_key">OPENAI API 密钥</string>
     <string name="settings_ai_field_model">模型</string>
@@ -71,7 +70,6 @@
     <string name="settings_ai_confirm_desc">运行任何 AI 建议的命令前需点击确认。降低来自被入侵服务器的提示注入风险。</string>
 
     <!-- 终端部分 -->
-    <string name="settings_terminal_title">终端</string>
     <string name="settings_terminal_subtitle">选择主题和字体；调整滚动缓冲和终端行为。</string>
     <string name="settings_terminal_section_font">字体</string>
     <string name="settings_terminal_section_behavior">行为</string>
@@ -104,7 +102,6 @@
     <string name="settings_device_sub_other">已关联设备</string>
     <string name="settings_this_device">● 此设备</string>
     <string name="settings_link_device">关联设备</string>
-    <string name="settings_sync_title">同步</string>
     <string name="settings_sync_subtitle">端到端加密跨设备同步。Skerry 永远不会看到你的明文数据。</string>
     <string name="settings_sync_now">立即同步</string>
     <string name="settings_what_syncs">同步内容</string>
@@ -169,7 +166,6 @@
     <string name="settings_change_account_pw_err_rewrap">账户密码已更改，但此设备需用新密码重新连接。</string>
 
     <!-- 键盘部分 -->
-    <string name="settings_keyboard_title">键盘</string>
     <string name="settings_keyboard_subtitle">快捷键适配你的平台。终端快捷键在会话聚焦时生效。</string>
     <string name="settings_kb_new_connection">新建连接</string>
     <string name="settings_kb_command_palette">命令面板 / 搜索</string>

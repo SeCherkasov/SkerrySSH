@@ -15,7 +15,6 @@ import app.skerry.ui.generated.resources.appearance_recent_count
 import app.skerry.ui.generated.resources.appearance_recent_show
 import app.skerry.ui.generated.resources.appearance_recent_show_desc
 import app.skerry.ui.generated.resources.appearance_subtitle
-import app.skerry.ui.generated.resources.appearance_title
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.i18n.label
 import kotlin.math.roundToInt
@@ -26,7 +25,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AppearanceSection(state: DesktopDesignState) {
-    SectionTitle(stringResource(Res.string.appearance_title), stringResource(Res.string.appearance_subtitle))
+    SectionSubtitle(stringResource(Res.string.appearance_subtitle))
     SettingRow(label = stringResource(Res.string.appearance_language)) {
         Box(Modifier.width(180.dp)) { LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage) }
     }

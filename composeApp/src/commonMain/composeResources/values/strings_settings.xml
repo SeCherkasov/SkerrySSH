@@ -14,7 +14,6 @@
     <string name="settings_manage">Manage</string>
 
     <!-- AI section -->
-    <string name="settings_ai_title">AI</string>
     <string name="settings_ai_live_subtitle">Run AI on this device, through your own OpenAI-compatible key (BYOK), or off. Keys are stored encrypted and sent only to the provider you configure.</string>
     <string name="settings_ai_field_api_key">OPENAI API KEY</string>
     <string name="settings_ai_field_model">MODEL</string>
@@ -71,7 +70,6 @@
     <string name="settings_ai_confirm_desc">Require a click before running any AI-suggested command. Mitigates prompt injection from compromised servers.</string>
 
     <!-- Terminal section -->
-    <string name="settings_terminal_title">Terminal</string>
     <string name="settings_terminal_subtitle">Pick a theme and font; tune scrollback and shell behaviour.</string>
     <string name="settings_terminal_section_font">FONT</string>
     <string name="settings_terminal_section_behavior">BEHAVIOUR</string>
@@ -104,7 +102,6 @@
     <string name="settings_device_sub_other">linked device</string>
     <string name="settings_this_device">● this device</string>
     <string name="settings_link_device">Link a device</string>
-    <string name="settings_sync_title">Sync</string>
     <string name="settings_sync_subtitle">End-to-end encrypted sync across your devices. Skerry never sees your data in plaintext.</string>
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_what_syncs">WHAT SYNCS</string>
@@ -169,7 +166,6 @@
     <string name="settings_change_account_pw_err_rewrap">Account password changed, but this device must reconnect with the new password.</string>
 
     <!-- Keyboard section -->
-    <string name="settings_keyboard_title">Keyboard</string>
     <string name="settings_keyboard_subtitle">Shortcuts adapt to your platform. Terminal bindings apply while a session is focused.</string>
     <string name="settings_kb_new_connection">New connection</string>
     <string name="settings_kb_command_palette">Command palette / search</string>

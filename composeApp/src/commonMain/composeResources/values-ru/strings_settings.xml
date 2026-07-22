@@ -14,7 +14,6 @@
     <string name="settings_manage">Управление</string>
 
     <!-- Раздел AI -->
-    <string name="settings_ai_title">AI</string>
     <string name="settings_ai_live_subtitle">AI на этом устройстве, через свой OpenAI-совместимый ключ (BYOK) или выключен. Ключи хранятся зашифрованными и отправляются только выбранному провайдеру.</string>
     <string name="settings_ai_field_api_key">КЛЮЧ API OPENAI</string>
     <string name="settings_ai_field_model">МОДЕЛЬ</string>
@@ -71,7 +70,6 @@
     <string name="settings_ai_confirm_desc">Требовать клик перед выполнением любой предложенной AI команды. Снижает риск инъекции промпта со скомпрометированных серверов.</string>
 
     <!-- Раздел Terminal -->
-    <string name="settings_terminal_title">Терминал</string>
     <string name="settings_terminal_subtitle">Тема и шрифт; прокрутка и поведение шелла.</string>
     <string name="settings_terminal_section_font">ШРИФТ</string>
     <string name="settings_terminal_section_behavior">ПОВЕДЕНИЕ</string>
@@ -88,7 +86,7 @@
     <string name="settings_terminal_show_title_desc">Разрешить подключённому шеллу переименовывать вкладку (например, по запущенной программе). Выкл: вкладки показывают сохранённое имя хоста.</string>
     <string name="settings_terminal_clipboard_write">Разрешить серверу писать в буфер обмена (OSC 52)</string>
     <string name="settings_terminal_host_connect">Подключение к хосту</string>
-    <string name="settings_terminal_host_connect_single">Один клик</string>
+    <string name="settings_terminal_host_connect_single">Одинарный клик</string>
     <string name="settings_terminal_host_connect_double">Двойной клик (клик выделяет)</string>
     <string name="settings_terminal_clipboard_write_desc">Разрешить подключённому шеллу заменять системный буфер обмена (copy в tmux/vim). По умолчанию выкл: иначе вредоносный хост может подсунуть свой текст в то, что вы вставите.</string>
 
@@ -104,7 +102,6 @@
     <string name="settings_device_sub_other">привязанное устройство</string>
     <string name="settings_this_device">● это устройство</string>
     <string name="settings_link_device">Привязать устройство</string>
-    <string name="settings_sync_title">Синхронизация</string>
     <string name="settings_sync_subtitle">Сквозное шифрование синхронизации между устройствами. Skerry никогда не видит ваши данные в открытом виде.</string>
     <string name="settings_sync_now">Синхронизировать</string>
     <string name="settings_what_syncs">ЧТО СИНХРОНИЗИРУЕТСЯ</string>
@@ -169,7 +166,6 @@
     <string name="settings_change_account_pw_err_rewrap">Пароль аккаунта изменён, но это устройство нужно переподключить с новым паролём.</string>
 
     <!-- Раздел Keyboard -->
-    <string name="settings_keyboard_title">Клавиатура</string>
     <string name="settings_keyboard_subtitle">Горячие клавиши подстраиваются под вашу платформу. Терминальные привязки работают, когда сессия в фокусе.</string>
     <string name="settings_kb_new_connection">Новое подключение</string>
     <string name="settings_kb_command_palette">Палитра команд / поиск</string>

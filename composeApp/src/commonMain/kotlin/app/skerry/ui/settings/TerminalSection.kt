@@ -51,7 +51,6 @@ import app.skerry.ui.generated.resources.settings_terminal_section_font
 import app.skerry.ui.generated.resources.settings_terminal_show_title
 import app.skerry.ui.generated.resources.settings_terminal_show_title_desc
 import app.skerry.ui.generated.resources.settings_terminal_subtitle
-import app.skerry.ui.generated.resources.settings_terminal_title
 import app.skerry.ui.generated.resources.settings_terminal_host_connect
 import app.skerry.ui.generated.resources.settings_terminal_host_connect_single
 import app.skerry.ui.generated.resources.settings_terminal_host_connect_double
@@ -74,7 +73,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun TerminalSection(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
-    SectionTitle(stringResource(Res.string.settings_terminal_title), stringResource(Res.string.settings_terminal_subtitle))
+    SectionSubtitle(stringResource(Res.string.settings_terminal_subtitle))
     // Theme cards in a 2×N grid from the [TerminalThemes] catalog; selection applies to the terminal live.
     TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
         if (rowIndex > 0) Box(Modifier.height(10.dp))

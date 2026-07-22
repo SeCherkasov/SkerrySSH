@@ -57,7 +57,6 @@ import app.skerry.ui.generated.resources.settings_sync_pushed_pulled
 import app.skerry.ui.generated.resources.settings_sync_subtitle
 import app.skerry.ui.generated.resources.settings_sync_syncing
 import app.skerry.ui.generated.resources.settings_sync_syncing_desc
-import app.skerry.ui.generated.resources.settings_sync_title
 import app.skerry.ui.generated.resources.settings_this_device
 import app.skerry.ui.generated.resources.settings_what_syncs
 import app.skerry.ui.sync.AccountCardModel
@@ -74,7 +73,7 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun SyncSection(state: DesktopDesignState) {
-    SectionTitle(stringResource(Res.string.settings_sync_title), stringResource(Res.string.settings_sync_subtitle))
+    SectionSubtitle(stringResource(Res.string.settings_sync_subtitle))
     // Mock path and live path are separate composables (not a conditional remember/collectAsState in
     // one body): remember/collectAsState must be called unconditionally within their composable
     // (Compose slot table rule). LocalSync.current is stable (staticCompositionLocalOf), but the
