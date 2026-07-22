@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -127,19 +127,27 @@ private fun Modifier.hostConnectClick(
 ): Modifier =
     when (LocalHostClickConnectMode.current) {
         HostClickConnectMode.SingleClick -> clickable(onClick = onClick)
-        HostClickConnectMode.DoubleClick -> combinedClickable(
-            onClick = { onSingleClick?.invoke() },
-            onDoubleClick = onClick,
-        ).onKeyEvent { event ->
-            if (event.type == KeyEventType.KeyDown &&
-                (event.key == Key.Enter || event.key == Key.Spacebar)
-            ) {
-                onClick()
-                true
-            } else {
-                false
-            }
-        }
+        HostClickConnectMode.DoubleClick ->
+            // onPreviewKeyEvent must sit *outer* to combinedClickable: key events travel
+            // root→focused on the preview pass, and combinedClickable consumes Enter/Space itself
+            // (routing them to onClick = select), so a descendant onKeyEvent never fires. The
+            // preview handler intercepts first, making Enter/Space connect while the mouse still
+            // requires a double click (same pattern as TerminalScreen/CommandPalette).
+            Modifier
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown &&
+                        (event.key == Key.Enter || event.key == Key.Spacebar)
+                    ) {
+                        onClick()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .combinedClickable(
+                    onClick = { onSingleClick?.invoke() },
+                    onDoubleClick = onClick,
+                )
     }
 
 @Composable
