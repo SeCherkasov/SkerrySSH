@@ -102,6 +102,28 @@ val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticC
  */
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
+/** How a host row click connects: single click or double click. Desktop-only setting. */
+enum class HostClickConnectMode(val id: String) {
+    SingleClick("single"),
+    DoubleClick("double"),
+    ;
+
+    companion object {
+        // Single click keeps the historic behavior; double click is opt-in via Settings.
+        val DEFAULT = SingleClick
+
+        fun fromId(id: String): HostClickConnectMode = entries.firstOrNull { it.id == id } ?: DEFAULT
+    }
+}
+
+/**
+ * Whether a host row connects on single or double click (Settings → Terminal → Behavior).
+ * Desktop-only; mobile always connects on tap. Supplied by [DesktopDesignApp]; default is
+ * [HostClickConnectMode.DEFAULT].
+ */
+val LocalHostClickConnectMode: ProvidableCompositionLocal<HostClickConnectMode> =
+    staticCompositionLocalOf { HostClickConnectMode.DEFAULT }
+
 /**
  * "Open host in the active tab's split pane" action: same secret resolution as [LocalConnectHost], but
  * opens a new independent secondary session alongside, rather than a new tab. Supplied by

@@ -3,6 +3,7 @@ package app.skerry.ui.terminal
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +49,8 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.app.HostClickConnectMode
+import app.skerry.ui.app.LocalHostClickConnectMode
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
@@ -100,6 +103,17 @@ import org.jetbrains.compose.resources.stringResource
 
 // Terminal view host sidebar: search, tag filters, catalog folders (live drag-and-drop or mock
 // preview), a RECENT section, and the "New connection" button.
+
+/**
+ * Host-row connect click behavior from Settings → Terminal → Behavior: single click connects
+ * directly, double click requires a second click. Desktop-only (mobile always connects on tap).
+ */
+@Composable
+private fun Modifier.hostConnectClick(onClick: () -> Unit): Modifier =
+    when (LocalHostClickConnectMode.current) {
+        HostClickConnectMode.SingleClick -> clickable(onClick = onClick)
+        HostClickConnectMode.DoubleClick -> combinedClickable(onClick = { }, onDoubleClick = onClick)
+    }
 
 @Composable
 internal fun HostsSidebar(state: DesktopDesignState) {
@@ -419,7 +433,7 @@ private fun TeamHostRow(host: Host, mono: FontFamily) {
             .fillMaxWidth()
             .padding(start = 16.dp)
             .clip(RoundedCornerShape(5.dp))
-            .clickable(onClick = onClick)
+            .hostConnectClick(onClick)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -448,7 +462,7 @@ private fun RecentHostRow(host: Host, mono: FontFamily) {
             .fillMaxWidth()
             .padding(start = 16.dp)
             .clip(RoundedCornerShape(5.dp))
-            .clickable(onClick = onClick)
+            .hostConnectClick(onClick)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -647,7 +661,7 @@ private fun HostEntryRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(5.dp))
             .background(if (selected) D.cyan10 else Color.Transparent)
-            .clickable(onClick = onClick)
+            .hostConnectClick(onClick)
             .padding(start = 8.dp, end = 2.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

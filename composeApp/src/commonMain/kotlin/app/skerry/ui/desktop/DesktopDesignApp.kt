@@ -166,6 +166,8 @@ import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.app.LocalHostClickConnectMode
+import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.app.LocalKnownHosts
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSecurityLog
@@ -255,6 +257,9 @@ fun DesktopDesignApp(
     onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
     initialShowTerminalTitleOnTabs: Boolean = false,
     onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
+    // Host-row click behavior (Settings → Terminal → Behavior) — persisted externally (desktop main).
+    initialHostClickConnectMode: HostClickConnectMode = HostClickConnectMode.DEFAULT,
+    onHostClickConnectModeChange: (HostClickConnectMode) -> Unit = {},
     // OSC 52 server clipboard-write gate (Settings → Terminal) — persisted externally (desktop main).
     initialAllowServerClipboardWrite: Boolean = false,
     onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
@@ -279,6 +284,7 @@ fun DesktopDesignApp(
             initialTerminalScrollback, onTerminalScrollbackChange,
             initialTerminalCursorStyle, onTerminalCursorStyleChange,
             initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
+            initialHostClickConnectMode, onHostClickConnectModeChange,
             initialAllowServerClipboardWrite, onAllowServerClipboardWriteChange,
             initialTerminalTheme, onTerminalThemeChange,
             initialAutoLock, onAutoLockChange,
@@ -614,6 +620,7 @@ private fun DesktopChrome(
         LocalConnectSplit provides connectSplitHost,
         LocalRunSnippetOnHost provides runSnippetOnHost,
         LocalCredentials provides credentials,
+        LocalHostClickConnectMode provides state.hostClickConnectMode,
     ) {
         // Global snippet hotkey: preview events flow from the root down to focus, so the root Box
         // intercepts the chord before the terminal does. If a saved shortcut matches and there's a
