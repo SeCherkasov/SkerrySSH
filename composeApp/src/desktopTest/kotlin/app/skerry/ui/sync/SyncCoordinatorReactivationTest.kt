@@ -76,6 +76,7 @@ class SyncCoordinatorReactivationTest {
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = emptyList()
         override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = false
         override suspend fun refresh(session: SyncSession): SyncSession = throw NotImplementedError()
+        override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = throw NotImplementedError()
         override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = throw NotImplementedError()
         override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult = throw NotImplementedError()
     }
