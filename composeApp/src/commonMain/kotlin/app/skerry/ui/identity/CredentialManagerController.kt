@@ -65,6 +65,16 @@ class CredentialManagerController(
         return id
     }
 
+    /**
+     * Renames a secret in place — keeps its id and secret material, changing only the label — and
+     * reloads the list. A no-op if [id] is missing/deleted. The rename propagates to sync on its own
+     * (it's a re-put of the same record; see [CredentialStore.rename]).
+     */
+    fun rename(id: String, label: String) {
+        store.rename(id, label)
+        credentials = store.all()
+    }
+
     fun delete(id: String) {
         store.remove(id)
         credentials = store.all()

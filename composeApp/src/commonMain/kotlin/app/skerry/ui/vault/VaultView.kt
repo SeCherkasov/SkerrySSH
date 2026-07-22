@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
@@ -124,6 +125,8 @@ import app.skerry.ui.generated.resources.vault_placeholder_name_key
 import app.skerry.ui.generated.resources.vault_placeholder_name_password
 import app.skerry.ui.generated.resources.vault_placeholder_optional
 import app.skerry.ui.generated.resources.vault_placeholder_password
+import app.skerry.ui.generated.resources.vault_rename
+import app.skerry.ui.generated.resources.vault_rename_title
 import app.skerry.ui.generated.resources.vault_sidebar_header
 import app.skerry.ui.generated.resources.vault_subtitle_certificate
 import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
@@ -210,6 +213,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     var showGenerate by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
     var showImportCert by remember { mutableStateOf(false) }
+    var pendingRenameCred by remember { mutableStateOf<Credential?>(null) }
     var pendingDeleteCred by remember { mutableStateOf<Credential?>(null) }
 
     val credItems = VaultPresentation.credentialsIn(category, allCreds)
@@ -260,6 +264,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                             onCopy = { copyTextToClipboard(it) },
                             onCopyPassword = { pwd -> copyAuth.authorize { copyPasswordToClipboard(pwd) } },
                             onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
+                            onRename = { pendingRenameCred = credential },
                             onDelete = { pendingDeleteCred = credential },
                         )
                     }
@@ -311,6 +316,20 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     )
                     category = VaultCategoryKind.CERTIFICATES
                     showImportCert = false
+                },
+            )
+        }
+        pendingRenameCred?.let { target ->
+            // Rename edits only the label; the id (which hosts reference) and the secret stay put, and
+            // the change propagates to sync on its own (see CredentialManagerController.rename).
+            RenameSecretDialog(
+                currentLabel = target.label,
+                onDismiss = { pendingRenameCred = null },
+                onConfirm = { newLabel ->
+                    // Abort on a lock race: idle auto-lock can fire while the dialog is open, and vault
+                    // CRUD throws once locked. Mirrors the delete guard just below.
+                    if (vault?.isUnlocked == true) credentials.rename(target.id, newLabel)
+                    pendingRenameCred = null
                 },
             )
         }
@@ -547,6 +566,7 @@ private fun LiveSecretDetail(
     onCopy: (String) -> Unit,
     onCopyPassword: (String) -> Unit,
     onExport: (name: String, content: String) -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val secret = credential.secret
@@ -580,28 +600,31 @@ private fun LiveSecretDetail(
         }
         UsedByHosts(hosts, mono)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Copy is type-specific (what's copyable differs); rename is universal and edits only the
+            // label (see onRename); delete/export are type-specific again.
             when (secret) {
-                is CredentialSecret.Certificate -> {
+                is CredentialSecret.Certificate ->
                     PrimaryButton(stringResource(Res.string.vault_copy_certificate), onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GhostButton(stringResource(Res.string.vault_export), onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, modifier = Modifier.weight(1f))
-                        GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
-                    }
-                }
-                is CredentialSecret.PrivateKey -> {
+                is CredentialSecret.PrivateKey ->
                     PrimaryButton(stringResource(Res.string.vault_copy_public_key), onClick = { keyInfo?.let { onCopy(it.publicKeyOpenSsh) } }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GhostButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
-                        GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
-                    }
-                }
-                is CredentialSecret.Password -> {
-                    // Password is sensitive: copying requires re-authentication (biometrics/master password,
-                    // see onCopyPassword) and goes through a platform-specific path (Android: sensitive clip +
-                    // auto-clear) rather than the plain clipboard used for cert/public key.
+                // Password is sensitive: copying requires re-authentication (biometrics/master password,
+                // see onCopyPassword) and goes through a platform-specific path (Android: sensitive clip +
+                // auto-clear) rather than the plain clipboard used for cert/public key.
+                is CredentialSecret.Password ->
                     PrimaryButton(stringResource(Res.string.vault_copy_password), onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
-                    GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
+            }
+            GhostButton(stringResource(Res.string.vault_rename), onClick = onRename, modifier = Modifier.fillMaxWidth())
+            when (secret) {
+                is CredentialSecret.Certificate -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GhostButton(stringResource(Res.string.vault_export), onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, modifier = Modifier.weight(1f))
+                    GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
                 }
+                is CredentialSecret.PrivateKey -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GhostButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
+                    GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                }
+                is CredentialSecret.Password ->
+                    GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -745,6 +768,23 @@ internal fun PasswordConfirmDialog(error: Boolean, busy: Boolean, onDismiss: () 
     }
 }
 
+/**
+ * Renames a keychain secret: a single prefilled NAME field. The secret material and id are untouched
+ * (only the label changes). Confirm is enabled only for a non-blank label that actually differs — a
+ * rename to the same name is a pointless sync push. Shared by desktop and mobile. [onConfirm] gets the
+ * trimmed label.
+ */
+@Composable
+internal fun RenameSecretDialog(currentLabel: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var name by remember { mutableStateOf(currentLabel) }
+    val trimmed = name.trim()
+    val valid = trimmed.isNotEmpty() && trimmed != currentLabel
+    VaultDialogScaffold(stringResource(Res.string.vault_rename_title, currentLabel), null, onDismiss) {
+        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = currentLabel)
+        DialogButtons(confirmLabel = stringResource(Res.string.vault_rename), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onConfirm(trimmed) })
+    }
+}
+
 @Composable
 internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     VaultDialogScaffold(stringResource(Res.string.vault_delete_title, label), null, onDismiss) {
@@ -769,7 +809,7 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
     Box(
         // The dialog centers in the visible area; it ends up above the keyboard on its own — on mobile the
         // root `safeDrawing` shrinks the area above the IME, and `Center` centers within what's left (no-op on desktop).
-        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(onClick = onDismiss),
+        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -781,7 +821,8 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
                 .background(D.surfaceDeep)
                 .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
                 // Absorbs the click on the card so it doesn't close the dialog (same as DesktopPasswordDialog).
-                .clickable(onClick = {})
+                // indication = null: the card is a static surface, not a button — no hover/press highlight.
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
                 // Scrolls the content: a tall dialog (certificate import — 4 fields) doesn't fit under the
                 // on-screen keyboard; scrolling keeps the fields and buttons reachable. No-op on desktop.
                 .verticalScroll(rememberScrollState())

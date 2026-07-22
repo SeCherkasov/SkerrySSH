@@ -36,6 +36,7 @@
     <string name="vault_copy_password">Скопировать пароль</string>
     <string name="vault_export">Экспорт</string>
     <string name="vault_delete">Удалить</string>
+    <string name="vault_rename">Переименовать</string>
     <string name="vault_cancel">Отмена</string>
     <string name="vault_used_by_one">Используется · 1 хостом</string>
     <string name="vault_used_by">Используется · %1$d хостами</string>
@@ -82,6 +83,9 @@
     <string name="vault_placeholder_master_password">мастер-пароль</string>
     <string name="vault_password_mismatch_retry">Пароль не подошёл — попробуйте ещё раз.</string>
     <string name="vault_copy">Скопировать</string>
+
+    <!-- Диалог переименования секрета. -->
+    <string name="vault_rename_title">Переименовать «%1$s»</string>
 
     <!-- Диалог удаления секрета. -->
     <string name="vault_delete_title">Удалить «%1$s»?</string>
