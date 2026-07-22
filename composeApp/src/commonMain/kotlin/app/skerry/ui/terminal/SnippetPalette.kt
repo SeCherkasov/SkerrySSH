@@ -44,6 +44,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.term_no_matches
 import app.skerry.ui.generated.resources.term_no_snippets_yet
 import app.skerry.ui.generated.resources.term_run_snippet_placeholder
@@ -73,7 +74,7 @@ internal fun SnippetPaletteButton(active: Session?, requests: SharedFlow<Unit>? 
     if (manager == null) return
     Box {
         // Nowhere to run without a connected session — the button is dimmed and doesn't open.
-        IconBtn("bolt", onClick = { if (terminal != null) open = !open }, tint = if (terminal != null) D.dim else D.faint)
+        IconBtn("bolt", onClick = { if (terminal != null) open = !open }, tint = if (terminal != null) D.dim else D.faint, tooltip = stringResource(Res.string.shell_tip_snippets))
         if (open && terminal != null) {
             Popup(
                 alignment = Alignment.TopEnd,

@@ -10,6 +10,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_play
+import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 
@@ -43,5 +46,6 @@ fun PlayRecordingButton(requests: SharedFlow<Unit>? = null, onOpened: (CastOpenR
         "play_circle",
         tint = if (opening) D.faint else D.dim,
         onClick = { open() },
+        tooltip = stringResource(Res.string.shell_tip_play),
     )
 }
