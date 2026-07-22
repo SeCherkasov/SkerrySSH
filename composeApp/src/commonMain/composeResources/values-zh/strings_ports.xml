@@ -35,7 +35,7 @@
     <string name="ports_col_via_host">经由主机</string>
     <string name="ports_col_active">活动</string>
     <string name="ports_remove_confirm_title">移除 \"%1$s\"?</string>
-    <string name="ports_remove_active_message">此隧道处于活动状态 — 将断开连接并删除。无法撤销。</string>
+    <string name="ports_remove_active_message">隧道处于活动状态，将断开并删除，无法撤销。</string>
     <string name="ports_remove_inactive_message">此已保存隧道将被删除。无法撤销。</string>
     <string name="ports_type_local">本地转发</string>
     <string name="ports_type_remote">远程转发</string>
@@ -49,7 +49,7 @@
     <string name="ports_scan">扫描</string>
     <string name="ports_scanning">正在扫描…</string>
     <string name="ports_no_services">未发现监听中的 TCP 端口</string>
-    <string name="ports_services_unsupported">此连接类型没有命令通道，无法扫描该主机。</string>
+    <string name="ports_services_unsupported">此连接类型没有命令通道，无法扫描主机。</string>
     <string name="ports_forward">转发</string>
     <string name="ports_already_forwarded">已转发</string>
     <string name="ports_service_port">端口 %1$d</string>

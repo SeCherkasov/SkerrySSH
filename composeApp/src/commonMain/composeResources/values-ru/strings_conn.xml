@@ -1,9 +1,9 @@
 <resources>
     <string name="conn_title_new">Новое подключение</string>
     <string name="conn_title_edit">Изменить подключение</string>
-    <string name="conn_subtitle_new">Настройте новый skerry в вашем архипелаге. Учётные данные шифруются мастер-паролем.</string>
-    <string name="conn_subtitle_edit">Обновите профиль этого skerry. Учётные данные шифруются мастер-паролем.</string>
-    <string name="conn_subtitle_mobile">Учётные данные шифруются мастер-паролем и остаются на этом устройстве.</string>
+    <string name="conn_subtitle_new">Добавьте хост. Учётные данные шифруются мастер-паролем.</string>
+    <string name="conn_subtitle_edit">Измените хост. Учётные данные шифруются мастер-паролем.</string>
+    <string name="conn_subtitle_mobile">Шифруется мастер-паролем. Остаётся на этом устройстве.</string>
 
     <string name="conn_field_name">Имя</string>
     <string name="conn_field_protocol">Протокол</string>
@@ -21,10 +21,10 @@
     <string name="conn_field_ai_policy_short">Политика AI</string>
 
     <string name="conn_policy_strict_title">Строгая — безопасность продакшена</string>
-    <string name="conn_policy_strict_desc">Облачный AI для этого хоста выключен; провайдеру ничего не отправляется. Используется только локальная модель на устройстве.</string>
+    <string name="conn_policy_strict_desc">Облачный AI выключен. Ничего не покидает устройство; используется только локальная модель.</string>
     <string name="conn_policy_strict_short">Строгая</string>
     <string name="conn_policy_balanced_title">Сбалансированная — облако разрешено</string>
-    <string name="conn_policy_balanced_desc">Облачный AI включён. Секреты удаляются из каждого запроса перед отправкой.</string>
+    <string name="conn_policy_balanced_desc">Облачный AI включён. Секреты вырезаются из каждого запроса перед отправкой.</string>
     <string name="conn_policy_balanced_short">Баланс</string>
     <string name="conn_policy_permissive_title">Свободная — dev / homelab</string>
     <string name="conn_policy_permissive_desc">Облачный AI включён. Запросы отправляются как есть, без удаления секретов.</string>
@@ -38,14 +38,14 @@
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">Serial</string>
     <string name="conn_protocol_vnc">VNC</string>
-    <string name="conn_telnet_plaintext_warning">Telnet не шифруется — учётные данные и содержимое сессии идут открытым текстом. Предпочитайте SSH вне доверенной сети.</string>
-    <string name="conn_vnc_plaintext_warning">VNC (RFB) не шифруется — экран и ввод идут открытым текстом. Используйте в доверенной сети или через SSH-туннель.</string>
+    <string name="conn_telnet_plaintext_warning">Telnet не шифруется — учётные данные и содержимое сессии идут открытым текстом. Используйте SSH вне доверенной сети.</string>
+    <string name="conn_vnc_plaintext_warning">VNC (RFB) не шифруется — экран и ввод идут открытым текстом. Используйте доверенную сеть или SSH-туннель.</string>
 
     <string name="conn_jump_none">Нет — напрямую</string>
     <string name="conn_jump_error_title">Прыжковый хост недоступен</string>
-    <string name="conn_jump_error_missing">Прыжковый хост, на который ссылается профиль, больше не существует. Выберите другой в настройках профиля.</string>
-    <string name="conn_jump_error_not_ssh">Указанный прыжковый хост — не SSH-профиль, туннель через него невозможен.</string>
-    <string name="conn_jump_error_no_credential">У прыжкового хоста нет сохранённого секрета. Сначала привяжите к нему пароль или ключ в его профиле.</string>
+    <string name="conn_jump_error_missing">Прыжковый хост из профиля больше не существует. Выберите другой в настройках профиля.</string>
+    <string name="conn_jump_error_not_ssh">Прыжковый хост — не SSH-профиль, туннель через него невозможен.</string>
+    <string name="conn_jump_error_no_credential">У прыжкового хоста нет сохранённого секрета. Добавьте пароль или ключ в его профиль.</string>
     <string name="conn_jump_error_cycle">Ссылки прыжковых хостов образуют цикл. Исправьте цепочку в настройках профиля.</string>
     <string name="conn_jump_error_ok">ОК</string>
     <string name="conn_keepalive_off">Выкл.</string>
@@ -99,4 +99,9 @@
     <string name="conn_serial_err_permission">Доступ к порту %1$s запрещён.</string>
     <string name="conn_serial_err_open">Не удалось открыть порт %1$s — возможно, он занят другой программой.</string>
     <string name="conn_serial_err_configure">Порт %1$s не принял выбранную скорость или формат кадра.</string>
+    <string name="conn_type_ssh">SSH</string>
+    <string name="conn_type_mosh">Mosh</string>
+    <string name="conn_type_telnet">Telnet</string>
+    <string name="conn_type_serial">Serial</string>
+    <string name="conn_type_vnc">VNC</string>
 </resources>

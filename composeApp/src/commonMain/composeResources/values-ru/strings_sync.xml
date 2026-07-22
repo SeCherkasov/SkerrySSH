@@ -15,16 +15,16 @@
 
     <!-- Развилка хранения -->
     <string name="sync_storage_choice_title">Где Skerry хранить ваше хранилище?</string>
-    <string name="sync_storage_choice_desc">Ваши хосты и ключи всегда зашифрованы. Выберите, оставить их только на этом устройстве или синхронизировать между устройствами через ваш сервер.</string>
+    <string name="sync_storage_choice_desc">Хосты и ключи всегда зашифрованы. Оставьте их только на этом устройстве или синхронизируйте между устройствами через свой сервер.</string>
     <string name="sync_storage_local_title">Локальное зашифрованное хранилище</string>
-    <string name="sync_storage_local_sub">Всё остаётся на этом устройстве. Без аккаунта и сервера — самый простой вариант.</string>
+    <string name="sync_storage_local_sub">Всё остаётся на этом устройстве. Без аккаунта и сервера.</string>
     <string name="sync_storage_server_title">Собственный сервер синхронизации</string>
     <string name="sync_storage_server_sub">Сквозное шифрование синхронизации между устройствами через ваш собственный сервер.</string>
     <string name="sync_switch_later">Позже это можно изменить в настройках.</string>
 
     <!-- Перерегистрация биометрии после смены ключа -->
     <string name="sync_reenroll_title">Снова включить отпечаток</string>
-    <string name="sync_reenroll_desc">Подключение к аккаунту сменило ключ хранилища, поэтому биометрическая разблокировка была отключена. Настройте её снова, чтобы и дальше открывать Skerry по отпечатку.</string>
+    <string name="sync_reenroll_desc">Подключение к аккаунту сменило ключ хранилища, поэтому биометрическая разблокировка отключена. Настройте её снова, чтобы разблокировать по отпечатку.</string>
     <string name="sync_reenroll_action">Включить снова</string>
     <string name="sync_not_now">Не сейчас</string>
 
@@ -53,7 +53,7 @@
 
     <!-- Связывание по коду (join) -->
     <string name="sync_join_title">Связать по коду</string>
-    <string name="sync_join_desc">На устройстве, где вы уже вошли, откройте Настройки → Синхронизация → Связать устройство, затем отсканируйте его QR-код или вставьте код сюда. Пароль, который вы зададите ниже, шифрует хранилище этого устройства и не восстанавливается — если потеряете его, придётся связывать заново.</string>
+    <string name="sync_join_desc">На устройстве, где вы уже вошли, откройте Настройки → Синхронизация → Связать устройство, затем отсканируйте QR-код или вставьте код сюда. Пароль ниже шифрует хранилище этого устройства и не восстанавливается — потеряете его, придётся связывать заново.</string>
     <string name="sync_field_pairing_code">КОД СВЯЗЫВАНИЯ</string>
     <string name="sync_placeholder_pairing_code">Вставьте код (sk1.…)</string>
     <string name="sync_scan_qr">Сканировать QR-код</string>
@@ -87,7 +87,7 @@
     <string name="sync_revoke">Отозвать</string>
 
     <!-- Desktop-диалоги -->
-    <string name="sync_setup_dialog_desc">Сквозное шифрование. Skerry никогда не видит ваши данные в открытом виде — мастер-пароль хранится только на вашем устройстве.</string>
+    <string name="sync_setup_dialog_desc">Сквозное шифрование. Skerry никогда не видит ваши данные в открытом виде — мастер-пароль остаётся на вашем устройстве.</string>
     <string name="sync_pairing_dialog_desc">На новом устройстве выберите «У меня есть код связывания», затем отсканируйте этот QR-код или вставьте код ниже. Код срабатывает один раз.</string>
     <string name="sync_done">Готово</string>
     <string name="sync_pairing_gen_failed">Не удалось создать код связывания.</string>
@@ -117,7 +117,7 @@
 
     <!-- issue #28: подключение к существующему аккаунту с другим паролём меняет пароль этого устройства -->
     <string name="sync_password_replace_title">Использовать пароль аккаунта?</string>
-    <string name="sync_password_replace_body">Аккаунт «%1$s» защищён другим паролём. Чтобы синхронизировать, это устройство будет разблокироваться паролём аккаунта.</string>
+    <string name="sync_password_replace_body">Аккаунт «%1$s» использует другой пароль. Для синхронизации это устройство переключится на разблокировку паролём аккаунта.</string>
     <string name="sync_password_replace_confirm">Использовать пароль аккаунта</string>
     <string name="sync_password_replace_cancel">Отмена</string>
 

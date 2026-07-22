@@ -15,7 +15,7 @@
 
     <!-- AI 部分 -->
     <string name="settings_ai_title">AI</string>
-    <string name="settings_ai_live_subtitle">选择 AI 运行位置：本设备、通过你自己的 OpenAI 兼容密钥 (BYOK)——或完全关闭。密钥加密存储在保险库中，仅发送到你配置的提供商。</string>
+    <string name="settings_ai_live_subtitle">在本设备运行 AI、使用你自己的 OpenAI 兼容密钥 (BYOK)，或关闭。密钥加密存储，仅发送到你配置的提供商。</string>
     <string name="settings_ai_field_api_key">OPENAI API 密钥</string>
     <string name="settings_ai_field_model">模型</string>
     <string name="settings_ai_field_endpoint">端点</string>
@@ -30,7 +30,7 @@
     <string name="settings_ai_prompt_placeholder_needs_key">请先保存 API 密钥</string>
     <string name="settings_ai_sending">发送中…</string>
     <string name="settings_ai_ask">提问</string>
-    <string name="settings_ai_mock_subtitle">配置 AI 运行位置。默认在本设备——你的命令永不离开 Skerry。每个连接可单独覆盖这些设置。</string>
+    <string name="settings_ai_mock_subtitle">选择 AI 运行位置。默认在本设备，命令永不离开 Skerry。每个连接可单独覆盖。</string>
     <string name="settings_ai_default_provider">默认 AI 提供商</string>
     <string name="settings_ai_default_provider_desc">用于无特定覆盖的连接。</string>
     <string name="settings_ai_provider_device">本设备</string>
@@ -40,7 +40,7 @@
     <string name="settings_ai_provider_byok_desc">使用你的 OpenAI、Anthropic 或 OpenRouter 密钥。你直接向提供商付费。</string>
     <string name="settings_ai_provider_off">关闭——无 AI</string>
     <string name="settings_ai_provider_off_desc">在所有地方禁用助手。不会发送任何数据。</string>
-    <string name="settings_ai_off_note">AI 已关闭：终端助手和快速聊天已隐藏。请在上述选择一个提供商以恢复。</string>
+    <string name="settings_ai_off_note">AI 已关闭：终端助手和快速聊天已隐藏。在上方选择一个提供商以重新启用。</string>
     <!-- 本地模型卡片 -->
     <string name="settings_ai_local_desc">完全离线运行助手。数据永不离开你的设备。</string>
     <string name="settings_ai_local_ready">就绪</string>
@@ -64,11 +64,11 @@
     <string name="settings_ai_error_engine_crashed">本地模型引擎意外停止。请重试。</string>
     <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">发送前清除敏感信息</string>
-    <string name="settings_ai_sanitize_desc">在发送到外部提供商前，从提示中移除明显的密码、令牌和密钥。</string>
+    <string name="settings_ai_sanitize_desc">在提示发送到外部提供商前，移除明显的密码、令牌和密钥。</string>
     <string name="settings_ai_preview">发送前预览提示</string>
-    <string name="settings_ai_preview_desc">显示发送给外部提供商的精确文本，高亮被清除的内容。可在传输前编辑或取消。</string>
+    <string name="settings_ai_preview_desc">显示发送到外部的精确文本，高亮已隐去的内容。发送前可编辑或取消。</string>
     <string name="settings_ai_confirm">运行 AI 建议前确认</string>
-    <string name="settings_ai_confirm_desc">每条 AI 建议的命令都需要手动点击确认。防止来自恶意服务器的提示注入。</string>
+    <string name="settings_ai_confirm_desc">运行任何 AI 建议的命令前需点击确认。降低来自被入侵服务器的提示注入风险。</string>
 
     <!-- 终端部分 -->
     <string name="settings_terminal_title">终端</string>
@@ -85,12 +85,12 @@
     <string name="settings_terminal_cursor_bar_blink">竖线（闪烁）</string>
     <string name="settings_terminal_cursor_bar_steady">竖线</string>
     <string name="settings_terminal_show_title">在标签页上显示终端标题</string>
-    <string name="settings_terminal_show_title_desc">允许连接的终端程序重命名标签页（如运行中的程序名）。关闭——标签页始终显示保存的主机名。</string>
+    <string name="settings_terminal_show_title_desc">允许连接的终端重命名标签页（如运行中的程序）。关闭：标签页显示保存的主机名。</string>
     <string name="settings_terminal_clipboard_write">允许服务器写入剪贴板 (OSC 52)</string>
     <string name="settings_terminal_host_connect">连接主机方式</string>
     <string name="settings_terminal_host_connect_single">单击</string>
     <string name="settings_terminal_host_connect_double">双击（单击选中）</string>
-    <string name="settings_terminal_clipboard_write_desc">允许连接的终端程序覆盖系统剪贴板（tmux/vim 的复制功能使用）。默认关闭——恶意主机可能将攻击者控制的文本插入你粘贴的内容中。</string>
+    <string name="settings_terminal_clipboard_write_desc">允许连接的终端替换系统剪贴板（tmux/vim 复制）。默认关闭：否则恶意主机可能将攻击者控制的文本注入你粘贴的内容。</string>
 
     <!-- 同步部分 -->
     <string name="settings_disconnect">断开连接</string>
@@ -164,9 +164,9 @@
     <string name="settings_security_account_password">账户密码</string>
     <string name="settings_security_account_password_desc">由所有已同步设备共享。</string>
     <string name="settings_change_account_pw_title">更改账户密码</string>
-    <string name="settings_change_account_pw_note">这将更改所有已同步设备上的密码。其他设备需使用新密码重新登录。</string>
+    <string name="settings_change_account_pw_note">更改所有已同步设备的密码。其他设备需用新密码重新登录。</string>
     <string name="settings_change_account_pw_submit">更改密码</string>
-    <string name="settings_change_account_pw_err_rewrap">账户密码已更改，但此设备需使用新密码重新连接。</string>
+    <string name="settings_change_account_pw_err_rewrap">账户密码已更改，但此设备需用新密码重新连接。</string>
 
     <!-- 键盘部分 -->
     <string name="settings_keyboard_title">键盘</string>
@@ -199,13 +199,13 @@
 
     <!-- 关于部分 -->
     <string name="settings_about_version">版本 %1$s</string>
-    <string name="settings_about_tagline">一款隐私优先的 SSH 客户端。本地 AI、端到端加密同步，以及尊重你隐私的终端。</string>
+    <string name="settings_about_tagline">隐私优先的 SSH 客户端，支持本地 AI 和端到端加密同步。</string>
     <string name="settings_about_whats_new">更新日志</string>
     <string name="settings_about_documentation">文档</string>
     <string name="settings_about_licenses">开源许可</string>
     <string name="settings_about_footer">开源之海 · © 2026 Skerry</string>
     <string name="settings_about_check_updates">检查更新</string>
-    <string name="settings_about_check_updates_desc">Skerry 每天检查一次 GitHub Releases API 获取最新版本。不发送其他数据。</string>
+    <string name="settings_about_check_updates_desc">每天查询一次 GitHub Releases API 获取最新版本。不发送其他数据。</string>
     <string name="settings_about_update_available">版本 %1$s 可用</string>
     <string name="settings_about_update_open">打开发布页面</string>
     <string name="settings_update_status">更新 %1$s</string>

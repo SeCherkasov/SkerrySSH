@@ -63,7 +63,7 @@
     <string name="term_ai_dismiss">Dismiss</string>
     <string name="term_ai_not_a_command">That is not a command to run. Describe a task for the server.</string>
     <string name="term_ai_blocked_not_configured">Add an API key in AI settings first.</string>
-    <string name="term_ai_blocked_strict">Strict policy: download the on-device model in AI settings to use AI on this host.</string>
+    <string name="term_ai_blocked_strict">Strict policy: download the on-device model in AI settings to use AI here.</string>
     <string name="term_ai_blocked_device_not_ready">Download the on-device model in AI settings first.</string>
     <string name="term_ai_blocked_disabled">AI is turned off in AI settings.</string>
     <string name="term_mobile_title_fallback">Terminal</string>
@@ -81,11 +81,11 @@
     <string name="term_disconnect">Disconnect</string>
 
     <!-- Mosh setup failures: server-side and fixable, so each message says what to do there. -->
-    <string name="mosh_err_not_installed">mosh-server is not installed on this host. Skerry ships only the Mosh client — install the mosh package on the server (Debian/Ubuntu: sudo apt install mosh, Fedora: sudo dnf install mosh, Alpine: apk add mosh) and reconnect.</string>
-    <string name="mosh_err_locale">mosh-server refused to start: the host has no UTF-8 locale. Generate one on the server (for example locale-gen en_US.UTF-8, or install the locales package) and reconnect.</string>
-    <string name="mosh_err_udp">mosh-server started, but no reply came back on UDP port %1$s. A firewall is likely blocking the Mosh UDP range 60000–61000 on the server or on the way. Note: Mosh needs a direct UDP path to the host — it does not relay through jump hosts.</string>
+    <string name="mosh_err_not_installed">mosh-server is not installed on this host. Install the mosh package on the server (Debian/Ubuntu: sudo apt install mosh, Fedora: sudo dnf install mosh, Alpine: apk add mosh) and reconnect.</string>
+    <string name="mosh_err_locale">mosh-server will not start: the host has no UTF-8 locale. Generate one (locale-gen en_US.UTF-8, or install the locales package) and reconnect.</string>
+    <string name="mosh_err_udp">mosh-server started, but no reply on UDP port %1$s. A firewall is likely blocking the Mosh UDP range 60000–61000. Mosh needs a direct UDP path — it cannot relay through jump hosts.</string>
     <string name="mosh_err_bootstrap">mosh-server failed to start on the host: %1$s</string>
-    <string name="mosh_err_bootstrap_no_output">mosh-server failed to start on the host (no output). Check that Mosh is installed and runnable on the server.</string>
+    <string name="mosh_err_bootstrap_no_output">mosh-server failed to start (no output). Check that Mosh is installed and runnable on the server.</string>
     <string name="term_record_start">Record session</string>
     <string name="term_record_stop">Stop and save recording</string>
     <string name="term_record_active">Recording</string>

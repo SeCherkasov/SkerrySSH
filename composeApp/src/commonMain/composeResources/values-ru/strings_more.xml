@@ -16,7 +16,7 @@
     <string name="more_sync_error">Ошибка синхронизации</string>
     <string name="more_biometric_prompt_title">Включить разблокировку биометрией</string>
     <string name="more_biometric_prompt_cancel">Отмена</string>
-    <string name="more_biometric_prompt_subtitle">Подтвердите биометрию, чтобы разблокировать Skerry без ввода мастер-пароля.</string>
+    <string name="more_biometric_prompt_subtitle">Разблокируйте Skerry по биометрии — мастер-пароль не нужен.</string>
     <string name="more_biometric_verify_title">Проверка разблокировки</string>
     <string name="more_biometric_verify_subtitle">Ещё одно касание — проверяем разблокировку.</string>
     <string name="more_about">О приложении</string>

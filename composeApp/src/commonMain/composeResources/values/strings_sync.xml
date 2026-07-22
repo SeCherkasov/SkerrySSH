@@ -15,16 +15,16 @@
 
     <!-- Развилка хранения -->
     <string name="sync_storage_choice_title">Where should Skerry keep your vault?</string>
-    <string name="sync_storage_choice_desc">Your hosts and keys are always encrypted. Choose whether they stay only on this device or sync across your devices through a server you run.</string>
+    <string name="sync_storage_choice_desc">Your hosts and keys are always encrypted. Keep them only on this device, or sync across devices through a server you run.</string>
     <string name="sync_storage_local_title">Local encrypted storage</string>
-    <string name="sync_storage_local_sub">Everything stays on this device. No account, no server — the simplest setup.</string>
+    <string name="sync_storage_local_sub">Everything stays on this device. No account, no server.</string>
     <string name="sync_storage_server_title">Self-hosted sync server</string>
     <string name="sync_storage_server_sub">End-to-end encrypted sync across your devices through a server you run.</string>
     <string name="sync_switch_later">You can switch later in Settings.</string>
 
     <!-- Перерегистрация биометрии после смены ключа -->
     <string name="sync_reenroll_title">Re-enable fingerprint</string>
-    <string name="sync_reenroll_desc">Connecting to your account changed the vault key, so biometric unlock was turned off. Set it up again to keep opening Skerry with your fingerprint.</string>
+    <string name="sync_reenroll_desc">Connecting to your account changed the vault key, so biometric unlock was turned off. Set it up again to unlock with your fingerprint.</string>
     <string name="sync_reenroll_action">Re-enable</string>
     <string name="sync_not_now">Not now</string>
 
@@ -53,7 +53,7 @@
 
     <!-- Связывание по коду (join) -->
     <string name="sync_join_title">Link with a code</string>
-    <string name="sync_join_desc">On a device that's already signed in, open Settings → Sync → Link a device, then scan its QR or paste the code here. The password you choose below encrypts this device's vault and can't be recovered — if you lose it, you'll re-link from scratch.</string>
+    <string name="sync_join_desc">On a device that's already signed in, open Settings → Sync → Link a device, then scan its QR or paste the code here. The password below encrypts this device's vault and can't be recovered — lose it and you'll re-link from scratch.</string>
     <string name="sync_field_pairing_code">PAIRING CODE</string>
     <string name="sync_placeholder_pairing_code">Paste code (sk1.…)</string>
     <string name="sync_scan_qr">Scan QR code</string>
@@ -87,7 +87,7 @@
     <string name="sync_revoke">Revoke</string>
 
     <!-- Desktop-диалоги -->
-    <string name="sync_setup_dialog_desc">End-to-end encrypted. Skerry never sees your data in plaintext — only your device holds the master password.</string>
+    <string name="sync_setup_dialog_desc">End-to-end encrypted. Skerry never sees your data in plaintext — the master password stays on your device.</string>
     <string name="sync_pairing_dialog_desc">On the new device pick “I have a pairing code”, then scan this QR or paste the code below. It works once.</string>
     <string name="sync_done">Done</string>
     <string name="sync_pairing_gen_failed">Couldn't create a pairing code.</string>
@@ -117,7 +117,7 @@
 
     <!-- issue #28: joining an existing account whose password differs re-keys this device to it -->
     <string name="sync_password_replace_title">Use your account password?</string>
-    <string name="sync_password_replace_body">The account “%1$s” is protected by a different password. To sync, this device will start unlocking with your account password.</string>
+    <string name="sync_password_replace_body">The account “%1$s” uses a different password. To sync, this device will switch to unlocking with your account password.</string>
     <string name="sync_password_replace_confirm">Use account password</string>
     <string name="sync_password_replace_cancel">Cancel</string>
 

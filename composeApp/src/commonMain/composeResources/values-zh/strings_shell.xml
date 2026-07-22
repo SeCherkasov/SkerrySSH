@@ -5,17 +5,17 @@
     <string name="shell_unlock_subtitle_mobile">输入你的主密码</string>
     <string name="shell_master_password">主密码</string>
     <string name="shell_unlock">解锁</string>
-    <string name="shell_forgot_password">忘记主密码？</string>
+    <string name="shell_forgot_password">重置主密码</string>
     <string name="shell_use_biometrics">使用生物识别</string>
-    <string name="shell_footer_never_leaves">主密码永远不会离开此设备</string>
+    <string name="shell_footer_never_leaves">主密码不会离开此设备</string>
     <string name="shell_footer_never_leaves_short">不会离开此设备</string>
 
     <string name="shell_create_title">设置主密码</string>
-    <string name="shell_create_subtitle">它加密此保险库且永远不会离开设备 — 无法恢复。</string>
+    <string name="shell_create_subtitle">加密此保险库，且永不离开设备。无法恢复。</string>
     <string name="shell_repeat_password">重复密码</string>
     <string name="shell_create_vault">创建保险库</string>
     <string name="shell_pairing_link">从其他设备关联？使用配对码</string>
-    <string name="shell_no_recovery_ack">我理解我的主密码无法恢复或重置。如果丢失，此保险库将无法访问。</string>
+    <string name="shell_no_recovery_ack">我理解主密码无法恢复或重置。一旦丢失，此保险库将无法找回。</string>
 
     <string name="shell_password_strength">密码强度：%1$s</string>
     <string name="shell_password_strength_weak">弱</string>
@@ -30,10 +30,10 @@
     <string name="shell_not_now">暂不</string>
 
     <string name="shell_corrupted_title">存储已损坏</string>
-    <string name="shell_corrupted_subtitle">保险库文件无法读取或解密。要再次使用 Skerry，需要重置。</string>
+    <string name="shell_corrupted_subtitle">保险库文件无法读取或解密。需重置后才能再次使用 Skerry。</string>
 
     <string name="shell_reset_skerry">重置 Skerry</string>
-    <string name="shell_reset_subtitle">此操作永久不可逆。已保存的密码、密钥和身份将被抹除 — 无法恢复。</string>
+    <string name="shell_reset_subtitle">永久不可逆。已保存的密码、密钥和身份将被抹除，无法恢复。</string>
     <string name="shell_reset_scope_secrets_title">仅密钥</string>
     <string name="shell_reset_scope_secrets_subtitle">保留主机配置和已知主机。</string>
     <string name="shell_reset_scope_all_title">抹除全部</string>
@@ -52,7 +52,7 @@
     <string name="shell_group_rename_title">重命名分组</string>
     <string name="shell_group_new_title">新建分组</string>
     <string name="shell_group_rename_subtitle">此分组中的主机将随新名称移动。</string>
-    <string name="shell_group_new_subtitle">创建一个空分组，然后将主机拖入或在添加连接时选择。</string>
+    <string name="shell_group_new_subtitle">创建空分组，然后拖入主机，或在添加连接时选择。</string>
     <string name="shell_group_name_placeholder">分组名称</string>
     <string name="shell_group_delete">删除分组</string>
 
@@ -64,7 +64,7 @@
 
     <!-- 删除主机对话框 (DeleteHostDialog.kt) -->
     <string name="shell_delete_host_title">删除 \"%1$s\"？</string>
-    <string name="shell_delete_host_body">此连接配置将从此设备移除。已存储的凭据仍保留在保险库中。此操作不可撤销。</string>
+    <string name="shell_delete_host_body">已从主机列表中移除。已存储的凭据仍保留在保险库中。此操作不可撤销。</string>
 
     <!-- 移动端主机详情 (MobileHostDetailView.kt) -->
     <string name="shell_host">主机</string>
@@ -86,14 +86,23 @@
     <!-- 桌面端边框：确认对话框、标题栏、状态栏 (DesktopDesignApp.kt) -->
     <string name="shell_this_session">本次会话</string>
     <string name="shell_disconnect_title">断开 \"%1$s\"？</string>
-    <string name="shell_disconnect_message">SSH 会话及其终端将立即关闭。自动重连不会恢复 — 你需要重新连接。</string>
+    <string name="shell_disconnect_message">关闭 SSH 会话及其终端。自动重连不会恢复，需重新连接。</string>
     <string name="shell_disconnect">断开连接</string>
     <string name="shell_close_split_title">关闭分屏面板？</string>
-    <string name="shell_close_split_message">此标签页中的第二个会话将断开且面板关闭。主会话保持连接。</string>
+    <string name="shell_close_split_message">断开此标签页中的第二个会话并关闭面板。主会话保持连接。</string>
     <string name="shell_close_panel">关闭面板</string>
     <string name="shell_unlocked">已解锁</string>
     <string name="shell_settings">设置</string>
     <string name="shell_status_connected">已连接</string>
     <string name="shell_status_disconnected">已断开</string>
     <string name="shell_status_encoding">UTF-8 · LF</string>
+    <string name="shell_tip_split">并行会话</string>
+    <string name="shell_tip_files">文件 (SFTP)</string>
+    <string name="shell_tip_ports">端口转发</string>
+    <string name="shell_tip_snippets">代码片段</string>
+    <string name="shell_tip_record">录制会话</string>
+    <string name="shell_tip_record_stop">停止录制</string>
+    <string name="shell_tip_play">播放录制</string>
+    <string name="shell_tip_info">会话详情</string>
+    <string name="shell_tip_disconnect">断开连接</string>
 </resources>

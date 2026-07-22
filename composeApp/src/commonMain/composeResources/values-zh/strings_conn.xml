@@ -1,9 +1,9 @@
 <resources>
     <string name="conn_title_new">新建连接</string>
     <string name="conn_title_edit">编辑连接</string>
-    <string name="conn_subtitle_new">配置一个新的连接。凭据使用你的主密码加密。</string>
-    <string name="conn_subtitle_edit">更新此连接的配置。凭据使用主密码加密。</string>
-    <string name="conn_subtitle_mobile">凭据使用主密码加密，仅存储在此设备上。</string>
+    <string name="conn_subtitle_new">添加主机。凭据使用主密码加密。</string>
+    <string name="conn_subtitle_edit">编辑此主机。凭据使用主密码加密。</string>
+    <string name="conn_subtitle_mobile">使用主密码加密，仅保存在此设备。</string>
 
     <string name="conn_field_name">名称</string>
     <string name="conn_field_protocol">协议</string>
@@ -21,10 +21,10 @@
     <string name="conn_field_ai_policy_short">AI 策略</string>
 
     <string name="conn_policy_strict_title">严格 — 生产环境安全</string>
-    <string name="conn_policy_strict_desc">此主机禁用云端 AI；不会向任何提供商发送数据。仅使用本地设备端模型。</string>
+    <string name="conn_policy_strict_desc">云端 AI 已关闭。数据不离开设备，仅使用本地模型。</string>
     <string name="conn_policy_strict_short">严格</string>
     <string name="conn_policy_balanced_title">均衡 — 允许云端</string>
-    <string name="conn_policy_balanced_desc">启用云端 AI。每个提示在发送前会剥离密钥信息。</string>
+    <string name="conn_policy_balanced_desc">云端 AI 已开启。每个提示在发送前会剥离密钥。</string>
     <string name="conn_policy_balanced_short">均衡</string>
     <string name="conn_policy_permissive_title">宽松 — 开发/家庭实验室</string>
     <string name="conn_policy_permissive_desc">启用云端 AI。提示原样发送，不剥离密钥。</string>
@@ -38,13 +38,13 @@
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">串口</string>
     <string name="conn_protocol_vnc">VNC</string>
-    <string name="conn_telnet_plaintext_warning">Telnet 未加密 — 凭据和会话数据以明文传输。除非在可信网络中，否则请使用 SSH。</string>
-    <string name="conn_vnc_plaintext_warning">VNC (RFB) 未加密 — 屏幕画面和输入以明文传输。请在可信网络中使用或通过 SSH 隧道连接。</string>
+    <string name="conn_telnet_plaintext_warning">Telnet 未加密 — 凭据和会话数据以明文传输。非可信网络请使用 SSH。</string>
+    <string name="conn_vnc_plaintext_warning">VNC (RFB) 未加密 — 屏幕和输入以明文传输。请使用可信网络或 SSH 隧道。</string>
 
     <string name="conn_jump_none">无 — 直连</string>
     <string name="conn_jump_error_title">跳板主机不可用</string>
-    <string name="conn_jump_error_missing">此配置引用的跳板主机已不存在。请在配置设置中选择另一个。</string>
-    <string name="conn_jump_error_not_ssh">引用的跳板主机不是 SSH 配置，无法建立隧道。</string>
+    <string name="conn_jump_error_missing">此配置引用的跳板主机已不存在。请在配置设置中另选一个。</string>
+    <string name="conn_jump_error_not_ssh">跳板主机不是 SSH 配置，无法建立隧道。</string>
     <string name="conn_jump_error_no_credential">跳板主机没有保存的密钥。请先在其配置中添加密码或密钥。</string>
     <string name="conn_jump_error_cycle">跳板主机引用形成循环。请在配置设置中修复链路。</string>
     <string name="conn_jump_error_ok">确定</string>
@@ -99,4 +99,9 @@
     <string name="conn_serial_err_permission">访问端口 %1$s 被拒绝。</string>
     <string name="conn_serial_err_open">无法打开端口 %1$s — 它可能正被其他程序占用。</string>
     <string name="conn_serial_err_configure">端口 %1$s 拒绝了所选的速率或帧格式。</string>
+    <string name="conn_type_ssh">SSH</string>
+    <string name="conn_type_mosh">Mosh</string>
+    <string name="conn_type_telnet">Telnet</string>
+    <string name="conn_type_serial">串口</string>
+    <string name="conn_type_vnc">VNC</string>
 </resources>

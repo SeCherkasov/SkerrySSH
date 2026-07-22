@@ -5,17 +5,17 @@
     <string name="shell_unlock_subtitle_mobile">Введите мастер-пароль</string>
     <string name="shell_master_password">Мастер-пароль</string>
     <string name="shell_unlock">Разблокировать</string>
-    <string name="shell_forgot_password">Забыли мастер-пароль?</string>
+    <string name="shell_forgot_password">Сбросить мастер-пароль</string>
     <string name="shell_use_biometrics">Использовать биометрию</string>
-    <string name="shell_footer_never_leaves">Мастер-пароль никогда не покидает это устройство</string>
+    <string name="shell_footer_never_leaves">Мастер-пароль не покидает устройство</string>
     <string name="shell_footer_never_leaves_short">Никогда не покидает это устройство</string>
 
     <string name="shell_create_title">Задайте мастер-пароль</string>
-    <string name="shell_create_subtitle">Он шифрует этот vault и никогда не покидает устройство — восстановления нет.</string>
+    <string name="shell_create_subtitle">Шифрует этот vault и никогда не покидает устройство. Восстановления нет.</string>
     <string name="shell_repeat_password">Повторите пароль</string>
     <string name="shell_create_vault">Создать vault</string>
     <string name="shell_pairing_link">Подключаетесь с другого устройства? Используйте код связывания</string>
-    <string name="shell_no_recovery_ack">Я понимаю, что мастер-пароль нельзя восстановить или сбросить. Если я его потеряю, этот vault пропадёт.</string>
+    <string name="shell_no_recovery_ack">Понимаю: мастер-пароль нельзя восстановить или сбросить. Потеряю его — vault пропадёт.</string>
 
     <string name="shell_password_strength">Надёжность пароля: %1$s</string>
     <string name="shell_password_strength_weak">Слабый</string>
@@ -30,10 +30,10 @@
     <string name="shell_not_now">Не сейчас</string>
 
     <string name="shell_corrupted_title">Хранилище повреждено</string>
-    <string name="shell_corrupted_subtitle">Файл vault не читается или не расшифровывается. Чтобы снова пользоваться Skerry, придётся его сбросить.</string>
+    <string name="shell_corrupted_subtitle">Файл vault не читается или не расшифровывается. Чтобы снова пользоваться Skerry, сбросьте его.</string>
 
     <string name="shell_reset_skerry">Сбросить Skerry</string>
-    <string name="shell_reset_subtitle">Это необратимо. Сохранённые пароли, ключи и учётные записи будут стёрты — восстановления нет.</string>
+    <string name="shell_reset_subtitle">Необратимо. Сохранённые пароли, ключи и учётные записи будут стёрты. Восстановления нет.</string>
     <string name="shell_reset_scope_secrets_title">Только секреты</string>
     <string name="shell_reset_scope_secrets_subtitle">Сохранить профили хостов и known_hosts.</string>
     <string name="shell_reset_scope_all_title">Стереть всё</string>
@@ -52,7 +52,7 @@
     <string name="shell_group_rename_title">Переименовать группу</string>
     <string name="shell_group_new_title">Новая группа</string>
     <string name="shell_group_rename_subtitle">Хосты этой группы перейдут с новым именем.</string>
-    <string name="shell_group_new_subtitle">Создайте пустую группу, затем перетащите в неё хосты или выберите её при добавлении подключения.</string>
+    <string name="shell_group_new_subtitle">Создаёт пустую группу. Перетащите в неё хосты или выберите её при добавлении подключения.</string>
     <string name="shell_group_name_placeholder">Имя группы</string>
     <string name="shell_group_delete">Удалить группу</string>
 
@@ -64,7 +64,7 @@
 
     <!-- Delete host dialog (DeleteHostDialog.kt) -->
     <string name="shell_delete_host_title">Удалить «%1$s»?</string>
-    <string name="shell_delete_host_body">Профиль подключения удаляется из вашего архипелага. Сохранённые учётные данные останутся в vault. Отменить нельзя.</string>
+    <string name="shell_delete_host_body">Удалён из каталога хостов. Сохранённые учётные данные останутся в vault. Отменить нельзя.</string>
 
     <!-- Mobile host detail (MobileHostDetailView.kt) -->
     <string name="shell_host">Хост</string>
@@ -86,14 +86,23 @@
     <!-- Desktop chrome: confirm dialogs, title bar, status bar (DesktopDesignApp.kt) -->
     <string name="shell_this_session">эта сессия</string>
     <string name="shell_disconnect_title">Отключить «%1$s»?</string>
-    <string name="shell_disconnect_message">SSH-сессия и её терминал закроются сейчас. Автопереподключение их не вернёт — придётся подключиться заново.</string>
+    <string name="shell_disconnect_message">Закрывает SSH-сессию и её терминал. Автопереподключение их не вернёт; подключитесь заново.</string>
     <string name="shell_disconnect">Отключить</string>
     <string name="shell_close_split_title">Закрыть split-панель?</string>
-    <string name="shell_close_split_message">Вторая сессия в этой вкладке отключится, панель закроется. Основная сессия останется подключённой.</string>
+    <string name="shell_close_split_message">Отключает вторую сессию в этой вкладке и закрывает панель. Основная сессия останется подключённой.</string>
     <string name="shell_close_panel">Закрыть панель</string>
     <string name="shell_unlocked">Разблокировано</string>
     <string name="shell_settings">Настройки</string>
     <string name="shell_status_connected">Подключено</string>
     <string name="shell_status_disconnected">Отключено</string>
     <string name="shell_status_encoding">UTF-8 · LF</string>
+    <string name="shell_tip_split">Параллельная сессия</string>
+    <string name="shell_tip_files">Файлы (SFTP)</string>
+    <string name="shell_tip_ports">Проброс портов</string>
+    <string name="shell_tip_snippets">Сниппеты</string>
+    <string name="shell_tip_record">Записать сессию</string>
+    <string name="shell_tip_record_stop">Остановить запись</string>
+    <string name="shell_tip_play">Воспроизвести запись</string>
+    <string name="shell_tip_info">Сведения о сессии</string>
+    <string name="shell_tip_disconnect">Отключить</string>
 </resources>

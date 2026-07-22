@@ -26,7 +26,7 @@
     <!-- Mobile known hosts (MobileKnown.kt) -->
     <string name="shtail_known_changed">changed</string>
     <string name="shtail_known_key_changed_title">Key changed: %1$s</string>
-    <string name="shtail_known_mismatch_body">The %1$s fingerprint differs from the one recorded. Verify before reconnecting.</string>
+    <string name="shtail_known_mismatch_body">The %1$s fingerprint doesn't match the one on record. Verify before reconnecting; a mismatch can mean interception.</string>
 
     <!-- Session tabs: default title for a blank tab (SessionsController.openBlank caller) -->
     <string name="shtail_new_tab">New tab</string>

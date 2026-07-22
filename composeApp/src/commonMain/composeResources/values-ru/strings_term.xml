@@ -63,7 +63,7 @@
     <string name="term_ai_dismiss">Скрыть</string>
     <string name="term_ai_not_a_command">Это не команда для выполнения. Опишите задачу для сервера.</string>
     <string name="term_ai_blocked_not_configured">Сначала добавьте ключ API в настройках AI.</string>
-    <string name="term_ai_blocked_strict">Строгий режим: чтобы использовать AI на этом хосте, скачайте локальную модель в настройках AI.</string>
+    <string name="term_ai_blocked_strict">Строгий режим: чтобы использовать AI здесь, скачайте локальную модель в настройках AI.</string>
     <string name="term_ai_blocked_device_not_ready">Сначала скачайте локальную модель в настройках AI.</string>
     <string name="term_ai_blocked_disabled">AI выключен в настройках AI.</string>
     <string name="term_mobile_title_fallback">Терминал</string>
@@ -81,11 +81,11 @@
     <string name="term_disconnect">Отключиться</string>
 
     <!-- Сбои настройки Mosh: серверные и исправимые, каждое сообщение говорит, что сделать на сервере. -->
-    <string name="mosh_err_not_installed">На этом хосте не установлен mosh-server. Skerry содержит только клиент Mosh — установите пакет mosh на сервере (Debian/Ubuntu: sudo apt install mosh, Fedora: sudo dnf install mosh, Alpine: apk add mosh) и подключитесь снова.</string>
-    <string name="mosh_err_locale">mosh-server не смог запуститься: на хосте нет локали UTF-8. Создайте её на сервере (например, locale-gen en_US.UTF-8 или установите пакет locales) и подключитесь снова.</string>
-    <string name="mosh_err_udp">mosh-server запущен, но ответ по UDP-порту %1$s не пришёл. Скорее всего, файрвол блокирует UDP-диапазон Mosh 60000–61000 на сервере или по пути. Учтите: Mosh требует прямой UDP-доступ к хосту — через jump-хосты он не проходит.</string>
+    <string name="mosh_err_not_installed">На этом хосте не установлен mosh-server. Установите пакет mosh на сервере (Debian/Ubuntu: sudo apt install mosh, Fedora: sudo dnf install mosh, Alpine: apk add mosh) и подключитесь снова.</string>
+    <string name="mosh_err_locale">mosh-server не запускается: на хосте нет локали UTF-8. Создайте её (locale-gen en_US.UTF-8 или установите пакет locales) и подключитесь снова.</string>
+    <string name="mosh_err_udp">mosh-server запущен, но ответа по UDP-порту %1$s нет. Скорее всего, файрвол блокирует UDP-диапазон Mosh 60000–61000. Mosh нужен прямой UDP-путь — через jump-хосты он не проходит.</string>
     <string name="mosh_err_bootstrap">mosh-server не смог запуститься на хосте: %1$s</string>
-    <string name="mosh_err_bootstrap_no_output">mosh-server не смог запуститься на хосте (без вывода). Проверьте, что Mosh установлен и запускается на сервере.</string>
+    <string name="mosh_err_bootstrap_no_output">mosh-server не запустился (без вывода). Проверьте, что Mosh установлен и запускается на сервере.</string>
     <string name="term_record_start">Записать сессию</string>
     <string name="term_record_stop">Остановить и сохранить запись</string>
     <string name="term_record_active">Идёт запись</string>

@@ -74,5 +74,5 @@
     <string name="sftp_edit_discard_body">В «%1$s» есть несохранённые изменения. Если закрыть сейчас, они пропадут.</string>
     <string name="sftp_edit_discard">Отменить</string>
     <string name="sftp_edit_conflict_q">Файл изменился в источнике?</string>
-    <string name="sftp_edit_conflict_body">«%1$s» изменился после того, как вы его открыли. Сохранение перезапишет эти изменения вашей версией.</string>
+    <string name="sftp_edit_conflict_body">«%1$s» изменился после того, как вы его открыли. Сохранение перезапишет его вашей версией.</string>
 </resources>
