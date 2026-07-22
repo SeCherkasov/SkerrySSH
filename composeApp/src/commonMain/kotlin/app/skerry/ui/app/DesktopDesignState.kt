@@ -157,6 +157,10 @@ class DesktopDesignState(
     private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
     initialShowTerminalTitleOnTabs: Boolean = false,
     private val onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
+    // Host-row click behavior (Settings → Terminal → Behavior): single click connects directly,
+    // double click requires a second click (protects against accidental connects). Desktop-only.
+    initialHostClickConnectMode: HostClickConnectMode = HostClickConnectMode.DEFAULT,
+    private val onHostClickConnectModeChange: (HostClickConnectMode) -> Unit = {},
     // Whether the server may write the system clipboard via OSC 52 (Terminal → "Allow server
     // clipboard write"). Off by default (like xterm/kitty). Snapshotted into new sessions via
     // [app.skerry.ui.terminal.TerminalSessionPrefs] and pushed live into open ones.
@@ -299,6 +303,7 @@ class DesktopDesignState(
 
     /** Whether to show the live OSC title on terminal tabs (Terminal → Show title on tabs). */
     var showTerminalTitleOnTabs: Boolean by mutableStateOf(initialShowTerminalTitleOnTabs); private set
+    var hostClickConnectMode: HostClickConnectMode by mutableStateOf(initialHostClickConnectMode); private set
 
     /**
      * Whether a server may write the system clipboard via OSC 52 (Terminal → Allow server clipboard
@@ -612,6 +617,13 @@ class DesktopDesignState(
     fun toggleShowTerminalTitleOnTabs() {
         showTerminalTitleOnTabs = !showTerminalTitleOnTabs
         onShowTerminalTitleOnTabsChange(showTerminalTitleOnTabs)
+    }
+
+    /** Choose how host rows connect (single/double click) and report outward (for persistence). */
+    fun chooseHostClickConnectMode(mode: HostClickConnectMode) {
+        if (mode == hostClickConnectMode) return
+        hostClickConnectMode = mode
+        onHostClickConnectModeChange(mode)
     }
 
     /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */
