@@ -143,7 +143,7 @@ private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibrarySta
             onSelect = { id -> selectedId = id; adding = false },
             onNew = { adding = true; selectedId = null },
             onInstallStarterPack = { manager.installStarterPack() },
-            onRenameTag = { oldTag, newTag -> manager.renameTag(oldTag, newTag) },
+            onRenameTag = { oldTag, newTag -> manager.renameTag(oldTag, newTag)?.let { library.onTagRenamed(oldTag, it) } },
         )
         VLine(D.line)
         Box(Modifier.weight(1f).fillMaxHeight().background(D.bg)) {

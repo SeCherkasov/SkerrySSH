@@ -25,9 +25,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.D
+import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_snippets_edit
 import app.skerry.ui.generated.resources.lib_snippets_no_matches
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.snippet.SnippetEntry
@@ -50,6 +52,7 @@ internal fun MobileSnippetLibrary(
     library: SnippetLibraryState,
     mono: FontFamily,
     onEdit: (SnippetEntry) -> Unit,
+    onRenameCategory: (String) -> Unit,
 ) {
     val grouped = hasCategories(all)
     val categories = library.categories(all)
@@ -74,6 +77,9 @@ internal fun MobileSnippetLibrary(
                     count = category.snippets.size,
                     collapsed = library.isCollapsed(category.name),
                     onToggle = { library.toggleCollapsed(category.name) },
+                    // The synthetic "uncategorized" bucket is not a real tag, so it carries no rename
+                    // pencil — mirrors the desktop sidebar (SnippetCategorySection).
+                    onRename = if (category.name != UNCATEGORIZED_KEY) ({ onRenameCategory(category.name) }) else null,
                 )
             }
             if (!grouped || !library.isCollapsed(category.name)) {
@@ -123,9 +129,15 @@ private fun MobileSnippetChips(chips: List<String>, active: String, onSelect: (S
     }
 }
 
-/** Category section header: collapse chevron + uppercase name + snippet count. */
+/** Category section header: collapse chevron + uppercase name + optional rename pencil + snippet count. */
 @Composable
-private fun MobileSnippetSectionHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
+private fun MobileSnippetSectionHeader(
+    name: String,
+    count: Int,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    onRename: (() -> Unit)?,
+) {
     Row(
         Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 12.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -141,6 +153,9 @@ private fun MobileSnippetSectionHeader(name: String, count: Int, collapsed: Bool
             Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = D.faint)
         }
         Txt(name.uppercase(), color = D.faint, size = 12.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.weight(1f))
+        if (onRename != null) {
+            IconBtn("edit", onClick = onRename, box = 30, icon = 16.sp, tint = D.faint, tooltip = stringResource(Res.string.lib_snippets_edit))
+        }
         Txt(count.toString(), color = D.faint, size = 11.5.sp)
     }
 }

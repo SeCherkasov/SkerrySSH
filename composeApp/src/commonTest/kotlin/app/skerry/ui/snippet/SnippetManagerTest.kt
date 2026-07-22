@@ -192,12 +192,27 @@ class SnippetManagerTest {
 
     @Test
     fun `renameTag merges into an existing tag without duplicating`() {
-        val manager = managerWith()
+        val store = FakeSnippetStore()
+        val manager = managerWith(store)
         val id = manager.save(draft(tags = listOf("db", "prod")))
 
         manager.renameTag("db", "prod")
 
         assertEquals(listOf("prod"), manager.find(id)!!.snippet.tags)
+        // The dedup must reach the store, not only the in-memory entry.
+        assertEquals(listOf("prod"), store.all().single().tags)
+    }
+
+    @Test
+    fun `renameTag to the same tag is a no-op`() {
+        val store = FakeSnippetStore()
+        val manager = managerWith(store)
+        val id = manager.save(draft(tags = listOf("db", "prod")))
+
+        manager.renameTag("db", "db")
+
+        assertEquals(listOf("db", "prod"), manager.find(id)!!.snippet.tags)
+        assertEquals(listOf("db", "prod"), store.all().single().tags)
     }
 
     @Test

@@ -76,4 +76,36 @@ class SnippetLibraryStateTest {
         s.toggleCollapsed("disk")
         assertFalse(s.isCollapsed("disk"))
     }
+
+    @Test
+    fun a_rename_carries_the_collapsed_state_to_the_new_name() {
+        val s = SnippetLibraryState()
+        s.toggleCollapsed("db")
+
+        s.onTagRenamed("db", "database")
+
+        assertFalse(s.isCollapsed("db")) // stale key dropped
+        assertTrue(s.isCollapsed("database")) // section stays collapsed under its new name
+    }
+
+    @Test
+    fun a_rename_moves_the_active_chip_instead_of_falling_back_to_all() {
+        val s = SnippetLibraryState()
+        s.activeChip = "db"
+
+        s.onTagRenamed("db", "database")
+
+        assertEquals("database", s.activeChip)
+    }
+
+    @Test
+    fun a_rename_leaves_an_expanded_section_and_an_unrelated_chip_untouched() {
+        val s = SnippetLibraryState()
+        s.activeChip = "net"
+
+        s.onTagRenamed("db", "database") // "db" was neither collapsed nor active
+
+        assertFalse(s.isCollapsed("database"))
+        assertEquals("net", s.activeChip)
+    }
 }
