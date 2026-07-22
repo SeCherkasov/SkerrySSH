@@ -13,7 +13,7 @@
     <string name="ports_tunnel_detail">Сведения о туннеле</string>
     <string name="ports_edit_tunnel">Изменить туннель</string>
     <string name="ports_field_name">Имя</string>
-    <string name="ports_ph_web_tunnel">веб-туннель</string>
+    <string name="ports_ph_web_tunnel">напр., Grafana</string>
     <string name="ports_field_type">Тип</string>
     <string name="ports_field_via_host">Через хост</string>
     <string name="ports_field_bind_address">Адрес привязки</string>
@@ -43,7 +43,7 @@
     <string name="ports_type_local_display">Локальный проброс (-L)</string>
     <string name="ports_type_remote_display">Обратный проброс (-R)</string>
     <string name="ports_type_socks_display">Динамический SOCKS (-D)</string>
-    <string name="ports_find_services">Найти сервисы</string>
+    <string name="ports_find_services">Сканировать порты</string>
     <string name="ports_services_title">Слушающие сервисы</string>
     <string name="ports_services_hint">Спросите хост, какие TCP-порты он слушает, и пробросьте нужный одним нажатием.</string>
     <string name="ports_scan">Сканировать</string>

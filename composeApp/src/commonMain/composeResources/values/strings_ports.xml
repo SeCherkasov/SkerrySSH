@@ -13,7 +13,7 @@
     <string name="ports_tunnel_detail">Tunnel detail</string>
     <string name="ports_edit_tunnel">Edit tunnel</string>
     <string name="ports_field_name">Name</string>
-    <string name="ports_ph_web_tunnel">web tunnel</string>
+    <string name="ports_ph_web_tunnel">e.g. Grafana</string>
     <string name="ports_field_type">Type</string>
     <string name="ports_field_via_host">Via host</string>
     <string name="ports_field_bind_address">Bind address</string>
@@ -43,7 +43,7 @@
     <string name="ports_type_local_display">Local forward (-L)</string>
     <string name="ports_type_remote_display">Remote forward (-R)</string>
     <string name="ports_type_socks_display">Dynamic SOCKS (-D)</string>
-    <string name="ports_find_services">Find services</string>
+    <string name="ports_find_services">Scan ports</string>
     <string name="ports_services_title">Listening services</string>
     <string name="ports_services_hint">Ask a host which TCP ports it listens on, then forward one in a tap.</string>
     <string name="ports_scan">Scan</string>
