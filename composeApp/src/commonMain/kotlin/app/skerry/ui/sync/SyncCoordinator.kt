@@ -16,6 +16,7 @@ import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSettingsStore
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.MasterKey
+import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
@@ -54,6 +55,14 @@ data class SyncConfig(
     val deviceId: String,
     val keepConnected: Boolean = false,
     val sealedRefreshToken: String? = null,
+    /**
+     * Durable "this device must rebuild from the server before pushing" marker for the revoked→reactivated
+     * flow. The server clears revocation on the SRP verify that reports `reactivated`, so it never reports
+     * it again; persisting the intent here (set before the vault is cleared, cleared only after the first
+     * sync succeeds) means an interrupted reconcile is retried on the next connect/restore instead of
+     * silently resurrecting a purged record. Default `false`; older config files without the key load as `false`.
+     */
+    val pendingReconcile: Boolean = false,
 )
 
 class InMemorySyncConfigStore : SyncConfigStore {
@@ -401,6 +410,10 @@ class SyncCoordinator(
             // vault salt; a rare user-initiated connect, so the extra derivation is acceptable.
             val matchesVault = vault.verifyPassword(masterPassword.copyOf())
             var adoptedKey = false
+            // Set when the server reports this device was revoked and this login reactivated it: the vault
+            // may still hold records the server purged while we were locked out, so we must re-mirror the
+            // server before the first push (see [activateSession]'s clearLocalRecords).
+            var reactivated = false
             val newSession: SyncSession = if (matchesVault) {
                 // Establish the account under the vault's own password: register a new one (publishes our
                 // dataKey), or on CONFLICT log into our existing account and adopt its key. Adopting here
@@ -410,6 +423,7 @@ class SyncCoordinator(
                 } catch (e: SyncException) {
                     if (e.kind != SyncException.Kind.CONFLICT) throw e
                     val s = syncClient.login(accountId, ak, device)
+                    reactivated = s.reactivated
                     // Same password on both sides: nothing to re-wrap, only a possible key change.
                     adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf()) == KeyAdoption.Adopted
                     s
@@ -442,6 +456,7 @@ class SyncCoordinator(
                 // Confirmed ([confirmPasswordReplace]): log into the existing account and adopt its key,
                 // re-keying this vault to the account password (the intended, consented password change).
                 val s = syncClient.login(accountId, ak, device)
+                reactivated = s.reactivated
                 when (adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())) {
                     KeyAdoption.Adopted -> adoptedKey = true
                     // The account key already IS ours (registered here, then the vault password was changed
@@ -478,11 +493,19 @@ class SyncCoordinator(
             // The cursor is now persistent ([FileSyncStateStore]), so a process restart also continues
             // incrementally; the reset path is doubly guarded — cursor reset in [disconnect]
             // (onVaultReset) and adoptedKey.
+            // A reactivated (formerly revoked) device forces a full re-pull like an adopted key, and first
+            // discards its pre-revocation records so a stale live copy can't re-push a server-purged record.
+            // The server reports `reactivated` only once (it clears revocation on this verify), so we also
+            // honor a durable pendingReconcile from a previously interrupted reconcile — otherwise a crash
+            // mid-reconcile would drop the signal and let the stale records push on the next connect.
+            val pendingReconcile = configStore.load()?.takeIf { it.accountId == accountId }?.pendingReconcile == true
+            val mustReconcile = reactivated || pendingReconcile
             activateSession(
                 syncClient,
                 newSession,
                 SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed),
-                resetCursor = adoptedKey,
+                resetCursor = adoptedKey || mustReconcile,
+                clearLocalRecords = mustReconcile,
             )
         } catch (e: CancellationException) {
             throw e // don't swallow cancellation — it would break structured concurrency
@@ -504,9 +527,10 @@ class SyncCoordinator(
 
     /**
      * Shared tail of activating a session (from [doConnect]/[doClaimPairing]/[restoreSession]):
-     * publish client/session, optionally reset the cursor ([resetCursor] — full re-pull cases: adopted
-     * account key, freshly paired device), save the link, point the health ping at its server, and
-     * start the initial sync + live subscriptions (watch/push).
+     * publish client/session, optionally drop pre-revocation records ([clearLocalRecords] — a reactivated
+     * device rebuilds from the server), reset the cursor ([resetCursor] — full re-pull cases: adopted
+     * account key, freshly paired device, reactivation), save the link, point the health ping at its
+     * server, and start the initial sync + live subscriptions (watch/push).
      *
      * Call only under [opMutex]: assigning client/session and cancel/join/replacing subscriptions race
      * with [disconnect] — the mutex serializes activation and teardown as a whole. For [restoreSession]
@@ -517,14 +541,42 @@ class SyncCoordinator(
         newSession: SyncSession,
         config: SyncConfig,
         resetCursor: Boolean,
+        clearLocalRecords: Boolean = false,
     ) {
         val superseded = client?.takeIf { it !== syncClient }
         client = syncClient
         session = newSession
-        if (resetCursor) syncState.setCursor(config.accountId, 0)
-        configStore.save(config)
+        // Reactivation reconcile: drop the local records BEFORE resetting the cursor and running the first
+        // sync, so the following full re-pull rebuilds them from the server snapshot and the subsequent
+        // push can't resurrect a record the server purged while this device was revoked.
+        //
+        // The drop set is EVERY sync-capable type, NOT the currently-enabled ones: the push after the
+        // reconciling pull filters by the SERVER's "what syncs" settings (the pull applies them), which can
+        // differ from this device's stale local settings. If we gated the clear by the local settings, a
+        // type disabled locally but enabled on the server would keep its stale record through the clear and
+        // then be pushed once the pull flips the filter on — resurrecting the purged record. Clearing by the
+        // maximal (everything-on) filter covers any server settings; only never-synced, device-local types
+        // (terminal history) are kept.
+        if (clearLocalRecords) {
+            // Persist the reconcile intent BEFORE mutating the vault: the server clears revocation on the
+            // verify that reported `reactivated` and never reports it again, so a crash between here and the
+            // first successful sync would otherwise lose the signal and let the stale records push. The
+            // marker is cleared only after runSync succeeds below, so an interrupted reconcile is retried.
+            configStore.save(config.copy(pendingReconcile = true))
+            val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
+            vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
+            syncState.setCursor(config.accountId, 0) // reactivation always full-pulls to rebuild from the server
+        } else {
+            if (resetCursor) syncState.setCursor(config.accountId, 0)
+            configStore.save(config)
+        }
         health.setTarget(config.serverUrl)
         runSync()
+        // The reconcile is complete only once the first full re-pull actually succeeded (status Online);
+        // until then keep the marker so an interrupted or failed reconcile is redone on the next connect.
+        if (clearLocalRecords && _status.value is SyncStatus.Online) {
+            configStore.save(config.copy(pendingReconcile = false))
+        }
         startWatch()
         startLocalPush()
         // Reconnecting over a live session (switching accounts, a confirmed password replace) leaves the
@@ -1093,12 +1145,17 @@ class SyncCoordinator(
                     }
                     val syncClient = clientFactory(cfg.serverUrl)
                     val newSession = syncClient.refresh(SyncSession(cfg.accountId, "", refreshToken))
+                    // A reconcile interrupted before it finished (pendingReconcile) must still run on this
+                    // silent restore — refresh carries no `reactivated` signal, so the durable marker is the
+                    // only thing that redoes it before the first push.
+                    val reconcile = cfg.pendingReconcile
                     // refresh rotates the token — re-save it sealed under the dataKey (inside activation).
                     activateSession(
                         syncClient,
                         newSession,
                         cfg.copy(sealedRefreshToken = tokens.seal(dataKey, newSession.refreshToken)),
-                        resetCursor = false,
+                        resetCursor = reconcile,
+                        clearLocalRecords = reconcile,
                     )
                 } catch (e: CancellationException) {
                     throw e

@@ -352,6 +352,19 @@ class FileVault(
         commit(currentMeta, updated)
     }
 
+    override fun clearRecords(types: Set<RecordType>): Unit = synchronized(lock) {
+        requireUnlocked()
+        if (types.isEmpty()) return@synchronized
+        val currentMeta = session()
+        // Keep records of other types (device-local or currently not synced): they never resurrect a
+        // purged record because they're not pushed, and dropping them would lose local-only data.
+        val kept = records.filterNot { it.type in types }
+        if (kept.size == records.size) return@synchronized // nothing of these types — leave the file untouched
+        // Hard drop, no tombstone (see [Vault.clearRecords]) and no _localChanges: the caller re-pulls
+        // the server snapshot, so records still on the server return and purged ones stay gone.
+        commit(currentMeta, kept)
+    }
+
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = synchronized(lock) {
         try {
             val currentMeta = meta
