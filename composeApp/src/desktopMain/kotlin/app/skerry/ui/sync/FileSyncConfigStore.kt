@@ -33,6 +33,7 @@ class FileSyncConfigStore(private val path: Path) : SyncConfigStore {
                 deviceId = device,
                 keepConnected = map["keepConnected"] == "true",
                 sealedRefreshToken = map["sealedRefreshToken"]?.takeIf { it.isNotEmpty() },
+                pendingReconcile = map["pendingReconcile"] == "true", // absent in older files → false
             )
         }.getOrNull()
     }
@@ -44,6 +45,7 @@ class FileSyncConfigStore(private val path: Path) : SyncConfigStore {
             appendLine("deviceId=${encode(config.deviceId)}")
             appendLine("keepConnected=${config.keepConnected}")
             config.sealedRefreshToken?.let { appendLine("sealedRefreshToken=${encode(it)}") }
+            if (config.pendingReconcile) appendLine("pendingReconcile=true")
         }
         PrivateConfig.atomicWrite(path, text.encodeToByteArray())
     }
