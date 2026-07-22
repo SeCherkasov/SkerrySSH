@@ -43,6 +43,7 @@ import app.skerry.ui.generated.resources.shell_not_stored_once
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_connect
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
@@ -116,10 +117,8 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
                     Sym("shield_lock", size = 14.sp, color = D.moss)
                     Txt(stringResource(Res.string.shell_not_stored_once), color = D.faint, size = 11.sp)
                 }
-                Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
-                }
-                PrimaryButton(stringResource(Res.string.shell_connect), onClick = submit, bg = if (password.isNotEmpty()) D.cyan else D.cyan.copy(alpha = 0.4f))
+                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
+                PrimaryButton(stringResource(Res.string.shell_connect), onClick = submit, enabled = password.isNotEmpty())
             }
         }
     }

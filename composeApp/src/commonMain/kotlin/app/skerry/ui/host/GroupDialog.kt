@@ -42,6 +42,7 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_save
 import app.skerry.ui.generated.resources.shell_create
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
@@ -128,9 +129,7 @@ fun GroupDialog(
                     }
                 }
                 Box(Modifier.weight(1f))
-                Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
-                }
+                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
                 PrimaryButton(if (editing) stringResource(Res.string.shell_save) else stringResource(Res.string.shell_create), onClick = save, enabled = canSave)
             }
         }

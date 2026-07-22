@@ -29,6 +29,7 @@ import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_ai_ask
@@ -168,7 +169,7 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
 
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        ChipButton(stringResource(Res.string.settings_save), color = D.cyan, onClick = { ai.save(key, model, baseUrl) })
+        PrimaryButton(stringResource(Res.string.settings_save), onClick = { ai.save(key, model, baseUrl) })
         if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = D.moss, size = 11.5.sp)
         else Txt(stringResource(Res.string.settings_ai_not_configured), color = D.faint, size = 11.5.sp)
     }

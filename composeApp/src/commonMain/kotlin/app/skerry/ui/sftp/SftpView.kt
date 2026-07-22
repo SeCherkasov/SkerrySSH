@@ -132,6 +132,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
@@ -1044,7 +1045,7 @@ internal fun NameDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                GhostButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
+                CancelButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
                 PrimaryButton(
                     confirmLabel,
                     onClick = submit,
@@ -1166,7 +1167,7 @@ internal fun ConfirmDangerDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                DialogButtonFocus(focused = !focusConfirm) { GhostButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss) }
+                DialogButtonFocus(focused = !focusConfirm) { CancelButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss) }
                 DialogButtonFocus(focused = focusConfirm) {
                     PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmBg, fg = confirmFg)
                 }
@@ -1230,7 +1231,7 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                GhostButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
+                CancelButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
                 PrimaryButton(stringResource(Res.string.sftp_delete), onClick = onConfirm, bg = D.sunset, fg = D.ink)
             }
     }
