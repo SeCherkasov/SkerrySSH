@@ -181,7 +181,7 @@ internal fun TerminalSection(state: DesktopDesignState) {
         Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_host_connect), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
         // No fixed-width Box: DropdownField sizes itself to the longest option, matching the
         // neighbouring CursorStylePicker.
-        HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode)
+        Box(Modifier.width(200.dp)) { HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode) }
     }
     HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from
