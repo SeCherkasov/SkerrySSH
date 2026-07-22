@@ -89,7 +89,7 @@
     <string name="settings_terminal_clipboard_write">Allow server clipboard writes (OSC 52)</string>
     <string name="settings_terminal_host_connect">Connect to host on</string>
     <string name="settings_terminal_host_connect_single">Single click</string>
-    <string name="settings_terminal_host_connect_double">Double click</string>
+    <string name="settings_terminal_host_connect_double">Double click (click selects)</string>
     <string name="settings_terminal_clipboard_write_desc">Let the connected shell replace your system clipboard (used by tmux/vim yank). Off by default — a malicious host could otherwise slip attacker-controlled text into what you paste.</string>
 
     <!-- Sync section (also covers the account card and linked devices — merged from the former Account tab) -->

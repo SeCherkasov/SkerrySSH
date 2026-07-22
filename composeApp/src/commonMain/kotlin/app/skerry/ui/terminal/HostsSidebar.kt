@@ -35,6 +35,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -107,12 +112,34 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * Host-row connect click behavior from Settings → Terminal → Behavior: single click connects
  * directly, double click requires a second click. Desktop-only (mobile always connects on tap).
+ *
+ * Double-click mode keeps two affordances:
+ * - A single mouse click still *does* something: [onSingleClick] runs when provided (live catalog
+ *   rows use it for selection highlight); otherwise combinedClickable's press feedback shows the
+ *   row isn't inert.
+ * - Keyboard activation (Enter/Space) connects directly — the double-click requirement applies to
+ *   the mouse only, so keyboard-only users can always connect.
  */
 @Composable
-private fun Modifier.hostConnectClick(onClick: () -> Unit): Modifier =
+private fun Modifier.hostConnectClick(
+    onClick: () -> Unit,
+    onSingleClick: (() -> Unit)? = null,
+): Modifier =
     when (LocalHostClickConnectMode.current) {
         HostClickConnectMode.SingleClick -> clickable(onClick = onClick)
-        HostClickConnectMode.DoubleClick -> combinedClickable(onClick = { }, onDoubleClick = onClick)
+        HostClickConnectMode.DoubleClick -> combinedClickable(
+            onClick = { onSingleClick?.invoke() },
+            onDoubleClick = onClick,
+        ).onKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown &&
+                (event.key == Key.Enter || event.key == Key.Spacebar)
+            ) {
+                onClick()
+                true
+            } else {
+                false
+            }
+        }
     }
 
 @Composable
@@ -121,6 +148,10 @@ internal fun HostsSidebar(state: DesktopDesignState) {
     val liveHosts = LocalHosts.current
     // Manual reorder (drag-and-drop) state for the live catalog; unused on the mock path.
     val dragState = remember { HostDragState() }
+    // Selected host in the live catalog — drives the single-click highlight in double-click
+    // connect mode (file-manager convention: click selects, double-click opens). Also updated on
+    // connect so the row that just opened reads as selected. Null = no selection.
+    var selectedHostId by remember { mutableStateOf<String?>(null) }
     // Active filter chip (tag); live catalog only, chips are static on the mock path.
     var activeChip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
     val chips = liveHosts?.let { remember(it.hosts) { hostTagChips(it.hosts) } } ?: emptyList()
@@ -218,7 +249,7 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 folders.forEach { folder ->
                     key(folder.name) {
                         if (folder.name == folderLineBefore) DropLine()
-                        LiveHostFolder(folder, state, mono, dragState, liveHosts) { foldersUpdated.value }
+                        LiveHostFolder(folder, state, mono, dragState, liveHosts, selectedHostId, { selectedHostId = it }) { foldersUpdated.value }
                     }
                 }
                 if (folderLineIndex != null && folderLineIndex == otherFolders.size) DropLine()
@@ -513,6 +544,8 @@ private fun LiveHostFolder(
     mono: FontFamily,
     dragState: HostDragState,
     controller: HostManagerController,
+    selectedHostId: String?,
+    onSelectHost: (String) -> Unit,
     foldersProvider: () -> List<HostFolder>,
 ) {
     val sessions = LocalSessions.current
@@ -562,6 +595,7 @@ private fun LiveHostFolder(
                     // Stabilizes lambdas on (host, ...): otherwise every folder recomposition would
                     // recreate them and force the row to redraw (nullable functions are unstable).
                     val onClick = remember(host, connect) { { connect(host) } }
+                    val onSelect = remember(host) { { onSelectHost(host.id) } }
                     val onEdit = remember(host, state) { { state.openEditModal(host) } }
                     val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
                     // Forgets the row's geometry once the host leaves the list (deleted/filtered out).
@@ -576,13 +610,14 @@ private fun LiveHostFolder(
                     ) {
                         HostEntryRow(
                             label = host.label,
-                            // Active-tab host highlight removed: with a split view two hosts can be
-                            // active, so highlighting one would mislead. The status dot on the right
-                            // still reflects live connection state.
-                            selected = false,
+                            // Selection highlight: marks the row clicked in double-click mode (and
+                            // the most recently connected one in single-click mode). Distinct from
+                            // the live-connection status dot on the right.
+                            selected = host.id == selectedHostId,
                             dot = sessionDotColor(sessions?.statusFor(host.id)),
                             badge = null,
                             onClick = onClick,
+                            onSelect = onSelect,
                             mono = mono,
                             icon = host.connectionType.icon,
                             // Host object, for the "Run snippet..." menu item (runs a snippet on this host).
@@ -647,6 +682,7 @@ private fun HostEntryRow(
     mono: FontFamily,
     icon: String,
     host: Host? = null,
+    onSelect: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
@@ -661,7 +697,15 @@ private fun HostEntryRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(5.dp))
             .background(if (selected) D.cyan10 else Color.Transparent)
-            .hostConnectClick(onClick)
+            .hostConnectClick(
+                onClick = {
+                    // Connecting also marks the row selected (single-click mode too — it reads as
+                    // "the host you just opened"), then opens the session.
+                    onSelect?.invoke()
+                    onClick()
+                },
+                onSingleClick = onSelect,
+            )
             .padding(start = 8.dp, end = 2.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

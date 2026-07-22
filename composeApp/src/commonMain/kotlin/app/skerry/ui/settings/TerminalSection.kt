@@ -179,7 +179,9 @@ internal fun TerminalSection(state: DesktopDesignState) {
     // click (protects against accidental connects when just browsing the catalog). Desktop-only.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_host_connect), color = D.text, size = 13.sp, weight = FontWeight.Medium) }
-        Box(Modifier.width(160.dp)) { HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode) }
+        // No fixed-width Box: DropdownField sizes itself to the longest option, matching the
+        // neighbouring CursorStylePicker.
+        HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode)
     }
     HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from
