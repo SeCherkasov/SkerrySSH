@@ -568,9 +568,17 @@ class SyncCoordinator(
         resetCursor: Boolean,
         clearLocalRecords: Boolean = false,
     ) {
-        val superseded = client?.takeIf { it !== syncClient }
-        client = syncClient
-        session = newSession
+        // Publish under [syncMutex]: the 401 recovery ([refreshSessionLocked]) rotates/nulls the
+        // session and rewrites the config while holding syncMutex only — without sharing the lock, a
+        // refresh in flight (a suspended network call) would resolve after this activation and clobber
+        // the just-published session and config (including the pendingReconcile marker saved below).
+        // Lock order holds: we're under opMutex, syncMutex nests inside it.
+        val superseded: SyncClient?
+        syncMutex.withLock {
+            superseded = client?.takeIf { it !== syncClient }
+            client = syncClient
+            session = newSession
+        }
         // Reactivation reconcile: drop the local records BEFORE resetting the cursor and running the first
         // sync, so the following full re-pull rebuilds them from the server snapshot and the subsequent
         // push can't resurrect a record the server purged while this device was revoked.
@@ -1040,21 +1048,150 @@ class SyncCoordinator(
     // Body of one sync cycle; called only with [syncMutex] already held (runSync/syncNow).
     private suspend fun runSyncLocked(c: SyncClient, s: SyncSession) {
         try {
-            val outcome = engineFactory(c).sync(s)
-            _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
-            // Pulled records from the server → refresh list managers, else synced data isn't visible until reopen.
-            if (outcome.pulled > 0) {
-                refreshSyncSettings() // another device may have changed "what to sync"
-                runCatching { onSynced() }
-            }
+            runSyncAttempt(c, s)
         } catch (e: CancellationException) {
             throw e // don't swallow cancellation — it would break structured concurrency
         } catch (e: SyncException) {
-            _status.value = syncFailure(e)
+            // 401 mid-session = the short-TTL access token expired (15 min by default) while the
+            // session stayed alive — the norm on mobile, where the process survives in background far
+            // past the TTL. The refresh token in [session] is still valid: rotate and retry once
+            // instead of surfacing Failed(Unauthorized), which the UI renders as "logged out".
+            if (e.kind == SyncException.Kind.UNAUTHORIZED) {
+                // The vault locked while this sync was in flight (pauseForLock doesn't track a manual
+                // syncNow, only the subscriptions): don't recover into a state the pause just parked —
+                // the retry would throw inside the locked vault and overwrite Configured with a failure.
+                if (lockPaused) {
+                    configStore.load()?.let { _status.value = SyncStatus.Configured(it.serverUrl, it.accountId) }
+                    return
+                }
+                when (val r = refreshSessionLocked(c, s)) {
+                    RefreshResult.Refreshed -> {
+                        val fresh = session ?: return
+                        try {
+                            runSyncAttempt(c, fresh)
+                        } catch (e2: CancellationException) {
+                            throw e2
+                        } catch (e2: SyncException) {
+                            _status.value = syncFailure(e2)
+                        } catch (e2: Exception) {
+                            _status.value = SyncStatus.Failed(SyncFailureReason.SyncFailed, e2.message)
+                        }
+                    }
+                    // Refresh itself was rejected: refreshSessionLocked already tore the dead session
+                    // down and parked the status on Configured (password reauth).
+                    RefreshResult.Dead -> {}
+                    // Session vanished or was replaced (disconnect/connect raced): its owner drives the
+                    // status, and retrying the NEW session over the OLD client would send its bearer
+                    // token to a possibly different server.
+                    RefreshResult.StandDown -> {}
+                    // The refresh attempt failed for a non-auth reason: report THAT cause, not the
+                    // original 401 — "Unauthorized" for a network blip during refresh would be exactly
+                    // the bogus "logged out" rendering this recovery exists to remove. The session
+                    // stays; the next sync retries the whole recovery.
+                    is RefreshResult.Failed ->
+                        _status.value = (r.cause as? SyncException)?.let { syncFailure(it) }
+                            ?: SyncStatus.Failed(SyncFailureReason.SyncFailed, r.cause.message)
+                }
+            } else {
+                _status.value = syncFailure(e)
+            }
         } catch (e: Exception) {
             // Unexpected (serialization, OOM, engine bug) — otherwise it would go silently to the
             // SupervisorJob and the status stuck on Busy (eternal spinner). syncNow/restoreSession call this.
             _status.value = SyncStatus.Failed(SyncFailureReason.SyncFailed, e.message)
+        }
+    }
+
+    // One sync attempt + the Online bookkeeping; exceptions propagate to runSyncLocked.
+    private suspend fun runSyncAttempt(c: SyncClient, s: SyncSession) {
+        val outcome = engineFactory(c).sync(s)
+        _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
+        // Pulled records from the server → refresh list managers, else synced data isn't visible until reopen.
+        if (outcome.pulled > 0) {
+            refreshSyncSettings() // another device may have changed "what to sync"
+            runCatching { onSynced() }
+        }
+    }
+
+    /** What [refreshSessionLocked] did with the expired session. */
+    private sealed interface RefreshResult {
+        /** Tokens rotated (or already rotated by the other recovery path): retry the failed call. */
+        data object Refreshed : RefreshResult
+
+        /** Refresh token rejected: session torn down, status parked on Configured (password reauth). */
+        data object Dead : RefreshResult
+
+        /** Session vanished or was replaced while we ran: its new owner drives status — do nothing. */
+        data object StandDown : RefreshResult
+
+        /** The refresh attempt itself failed (network/protocol); session kept for a later retry. */
+        data class Failed(val cause: Exception) : RefreshResult
+    }
+
+    /**
+     * Rotate the tokens of the live session via its refresh token ([SyncClient.refresh]) after a 401.
+     * Call with [syncMutex] held — every [session]/config writer shares it: [disconnect]'s null and
+     * [activateSession]'s publish take syncMutex too, so a suspended refresh can't clobber a session
+     * or config another path just wrote. [stale] is the session the caller failed with; if [session]
+     * moved on since (a parallel connect, or the other of the two 401-recovery paths — sync and
+     * watch — won the race), nothing is rotated ([RefreshResult.StandDown]). The identity is
+     * re-checked after the suspending refresh as defense-in-depth for any future writer that
+     * bypasses the mutex.
+     *
+     * A refresh rejected as UNAUTHORIZED/NOT_FOUND means the refresh token itself is dead (device
+     * revoked, 30-day expiry, account gone): tear the session down — cancel the live subscriptions
+     * (no join: the watch loop may be this very caller and exits on the nulled session by itself),
+     * close the client (disconnect's "no live client" hygiene), drop the known-dead sealed token so
+     * cold starts stop burning a refresh round trip on it — and park on [SyncStatus.Configured]: the
+     * link survives and the user reconnects with the password, mirroring [restoreSession]'s fallback.
+     */
+    private suspend fun refreshSessionLocked(c: SyncClient, stale: SyncSession): RefreshResult {
+        val current = session ?: return RefreshResult.StandDown
+        if (current !== stale) return RefreshResult.Refreshed
+        val fresh = try {
+            c.refresh(stale)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SyncException) {
+            if (e.kind == SyncException.Kind.UNAUTHORIZED || e.kind == SyncException.Kind.NOT_FOUND) {
+                if (session !== stale) return RefreshResult.StandDown
+                session = null
+                watchJob?.cancel() // cancel only — join/replace stay under opMutex (activateSession/disconnect)
+                pushJob?.cancel()
+                runCatching { c.close() }
+                client = null
+                val cfg = configStore.load()
+                if (cfg?.sealedRefreshToken != null) {
+                    runCatching { configStore.save(cfg.copy(sealedRefreshToken = null)) }
+                }
+                _status.value = cfg?.let { SyncStatus.Configured(it.serverUrl, it.accountId) }
+                    ?: SyncStatus.Disabled
+                return RefreshResult.Dead
+            }
+            return RefreshResult.Failed(e)
+        } catch (e: Exception) {
+            return RefreshResult.Failed(e)
+        }
+        if (session !== stale) return RefreshResult.StandDown
+        session = fresh
+        resealRefreshToken(fresh)
+        return RefreshResult.Refreshed
+    }
+
+    /**
+     * keep-connected: re-seal the rotated refresh token into the config, or the next cold-start
+     * [restoreSession] would run on a stale (eventually 30-day-expired) one. Best-effort: a locked
+     * vault or a config write failure must not fail the recovery — the old sealed token stays valid
+     * until its own expiry (the server's refresh tokens are stateless, not single-use).
+     */
+    private fun resealRefreshToken(fresh: SyncSession) {
+        val cfg = configStore.load() ?: return
+        if (!cfg.keepConnected) return
+        val dk = vault.exportDataKey() ?: return
+        try {
+            runCatching { configStore.save(cfg.copy(sealedRefreshToken = tokens.seal(dk, fresh.refreshToken))) }
+        } finally {
+            dk.zeroize()
         }
     }
 
@@ -1080,7 +1217,7 @@ class SyncCoordinator(
      */
     private suspend fun startWatch() {
         val c = client ?: return
-        val s = session ?: return
+        if (session == null) return
         // cancel + join the old subscription before starting a new one (reconnect without disconnect):
         // otherwise the old collect could run runSync with the new session under the old cursor.
         watchJob?.cancel()
@@ -1088,6 +1225,12 @@ class SyncCoordinator(
         watchJob = scope.launch {
             var backoff = WATCH_RETRY_MIN_MS
             while (true) {
+                // Re-read the live session on every attempt: a mid-session token rotation (the 401
+                // recovery in runSyncLocked, or the refresh below) must reach the next WS handshake —
+                // a captured copy would reconnect with the dead access token forever, live-pull
+                // silently gone while the status stays Online. A nulled session (dead refresh token,
+                // disconnect is a cancel and never reaches here) ends the loop.
+                val s = session ?: break
                 try {
                     c.changes(s).collect { signal ->
                         backoff = WATCH_RETRY_MIN_MS // a live signal — reset the delay to the minimum
@@ -1106,7 +1249,13 @@ class SyncCoordinator(
                 } catch (e: CancellationException) {
                     throw e // don't swallow cancellation (disconnect/reconnect)
                 } catch (e: Exception) {
-                    // WS dropped (network/server/expired token) — don't give up, wait backoff and reconnect.
+                    // WS dropped. A handshake 401 (access token expired while the socket was down)
+                    // surfaces as an untyped Ktor error, indistinguishable from a network blip — so
+                    // rotate the tokens best-effort before retrying. Cheap: rate-limited by the
+                    // backoff, a no-op when another path already rotated, and a healthy-token rotate
+                    // is harmless (server refresh tokens are stateless, the old one stays valid). A
+                    // dead refresh token nulls the session — the re-read above ends the loop.
+                    syncMutex.withLock { refreshSessionLocked(c, s) }
                 }
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(WATCH_RETRY_MAX_MS)
