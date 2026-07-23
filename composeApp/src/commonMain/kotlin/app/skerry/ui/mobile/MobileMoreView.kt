@@ -210,6 +210,13 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             // "Security" section: master password, biometrics, auto-lock, event log. Live path is
             // behind the gate (vault present); in preview the row is inert (nothing to configure without a vault).
             MoreRow("shield_lock", Skerry.colors.cyanBright, stringResource(Res.string.settings_security_title), null, Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
+            // Recording player: opens a .cast picker. Lives here because watching a recording needs no
+            // session — the terminal menu would hide it behind a live connection.
+            val playerScope = rememberCoroutineScope()
+            MoreRow(
+                "play_circle", Skerry.colors.cyanBright, stringResource(Res.string.term_player_open), null, Skerry.colors.dim,
+                onClick = { playerScope.launch { state.showCast(openCastFile()) } },
+            )
             // About: subtitle is the current version, or an amber "Update x.y.z" when a newer
             // release is known (the passive mobile counterpart of the desktop status-bar notice).
             val updateVersion = LocalUpdates.current?.available?.versionLabel
@@ -218,13 +225,6 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
                 updateVersion?.let { stringResource(Res.string.settings_update_status, it) } ?: AppVersion.VERSION,
                 if (updateVersion != null) Skerry.colors.amber else Skerry.colors.dim,
                 onClick = { state.push(MobileRoute.About) },
-            )
-            // Recording player: opens a .cast picker. Lives here because watching a recording needs no
-            // session — the terminal menu would hide it behind a live connection.
-            val playerScope = rememberCoroutineScope()
-            MoreRow(
-                "play_circle", Skerry.colors.cyanBright, stringResource(Res.string.term_player_open), null, Skerry.colors.dim,
-                onClick = { playerScope.launch { state.showCast(openCastFile()) } },
             )
             MoreRow("lock", Skerry.colors.sunset, stringResource(Res.string.more_lock), null, Skerry.colors.dim, labelColor = Skerry.colors.sunset, divider = false, onClick = onLock)
         }
