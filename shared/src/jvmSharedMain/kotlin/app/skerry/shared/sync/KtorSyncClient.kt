@@ -43,7 +43,9 @@ import app.skerry.sync.wire.TeamsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.timeout
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.bearerAuth
@@ -385,7 +387,11 @@ class KtorSyncClient(
     override suspend fun ping(): Boolean = try {
         // Open liveness endpoint (see server Plugins.kt `/healthz`). No bearer token — the ping
         // must succeed even without a session (vault locked). Any failure means unreachable (don't throw).
-        http.get("$serverUrl/healthz").status.isSuccess()
+        // Tight per-request timeout: after a device sleep the pooled connection is often dead (NAT
+        // mappings dropped), and waiting out CIO's default 15s on it keeps the indicator stale.
+        http.get("$serverUrl/healthz") {
+            timeout { requestTimeoutMillis = PING_TIMEOUT_MS }
+        }.status.isSuccess()
     } catch (e: CancellationException) {
         throw e // coroutine cancellation isn't "server unreachable" — the signal must reach the caller
     } catch (e: Exception) {
@@ -479,8 +485,14 @@ class KtorSyncClient(
          */
         const val WS_PING_INTERVAL_MS = 30_000L
 
+        /** Health-ping timeout (see [ping]) — /healthz answers in milliseconds, 5s is generous. */
+        const val PING_TIMEOUT_MS = 5_000L
+
         fun defaultHttpClient(): HttpClient = HttpClient(CIO) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            // No global values — only the per-request ping timeout applies; the sync/auth calls keep
+            // the engine defaults, and WebSockets stay exempt (see WS_PING_INTERVAL_MS above).
+            install(HttpTimeout)
             install(WebSockets) { pingIntervalMillis = WS_PING_INTERVAL_MS }
         }
     }

@@ -215,6 +215,8 @@ class SyncCoordinator(
      * [SyncRunner]). `null` (prod) — the real [SyncEngine] over vault/cursor/settings.
      */
     engineFactory: ((SyncClient) -> SyncRunner)? = null,
+    /** Health-ping poll period — test injection point (prod keeps [HEALTH_POLL_MS]). */
+    healthPollMs: Long = HEALTH_POLL_MS,
 ) {
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Disabled)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
@@ -303,7 +305,7 @@ class SyncCoordinator(
 
     // Server availability via health ping — a dedicated poller with its own client (see
     // [ServerHealthMonitor]); lives for the coordinator's lifetime, holds UNKNOWN while target is null.
-    private val health = ServerHealthMonitor(clientFactory, scope, initialTarget = configStore.load()?.serverUrl)
+    private val health = ServerHealthMonitor(clientFactory, scope, initialTarget = configStore.load()?.serverUrl, pollMs = healthPollMs)
 
     /**
      * Server availability via health ping (see [ServerReachable]). Updated by the [health] poller
@@ -324,6 +326,12 @@ class SyncCoordinator(
     // reconnect — also strictly under [opMutex].
     @Volatile
     private var pushJob: Job? = null
+
+    // Backoff retry after a sync that failed with NETWORK (see [scheduleNetworkRetry]). Not cancelled
+    // by pause/disconnect: every tick rechecks lockPaused/session/status and the loop exits by itself
+    // when the failure is gone or nothing is left to sync. Scheduled only under [syncMutex].
+    @Volatile
+    private var retryJob: Job? = null
 
     // Set by [pauseForLock], cleared by [resumeAfterUnlock]: which of the two the coordinator should end
     // up obeying when they queue up behind a long operation holding [opMutex], regardless of the order
@@ -355,6 +363,26 @@ class SyncCoordinator(
         // server/account as Configured — the UI offers "reconnect" with one password, no retyping.
         // Disconnect erases the config → back to Disabled.
         configStore.load()?.let { _status.value = SyncStatus.Configured(it.serverUrl, it.accountId) }
+        // Self-heal on the server coming back into reach. The first sync after a display unlock often
+        // races the radio waking up from Doze and fails with NETWORK; nothing else retries it (WS
+        // signals need a remote change, push needs a local edit), so the status would park on Failed
+        // ("Sync error") indefinitely. When the health ping transitions to REACHABLE: a live session
+        // with a network-failed status re-syncs; no session retries the silent keep-connected restore
+        // (its own network failure parks on Configured the same way — restoreSession no-ops unless it
+        // actually applies). Skipped while the vault lock has live sync paused.
+        scope.launch {
+            var previous = health.reachable.value
+            health.reachable.collect { now ->
+                val cameUp = now == ServerReachable.REACHABLE && previous != ServerReachable.REACHABLE
+                previous = now
+                if (!cameUp || lockPaused) return@collect
+                if (session != null) {
+                    if ((_status.value as? SyncStatus.Failed)?.reason == SyncFailureReason.Network) runSync()
+                } else {
+                    restoreSession()
+                }
+            }
+        }
     }
 
     val isConfigured: Boolean get() = configStore.load() != null
@@ -1100,6 +1128,33 @@ class SyncCoordinator(
             // SupervisorJob and the status stuck on Busy (eternal spinner). syncNow/restoreSession call this.
             _status.value = SyncStatus.Failed(SyncFailureReason.SyncFailed, e.message)
         }
+        // A network failure is transient by nature — retry with backoff instead of leaving the status
+        // parked on "Sync error" until a manual sync. One central hook: every sync cycle ends here.
+        if ((_status.value as? SyncStatus.Failed)?.reason == SyncFailureReason.Network) scheduleNetworkRetry()
+    }
+
+    /**
+     * Retry loop for a sync that failed with [SyncFailureReason.Network]: re-run with exponential
+     * backoff ([SYNC_RETRY_MIN_MS]…[SYNC_RETRY_MAX_MS]) until the status stops being that failure.
+     * Complements the reachability trigger (init): that one fires only on an UNREACHABLE→REACHABLE
+     * transition of the health ping, which never comes for a blip the ping didn't see (transient DNS
+     * failure, one dropped connection). Self-terminating — every tick rechecks the pause flag, the
+     * session, and the status, so lock/disconnect/success all end it without an explicit cancel; a
+     * successful retry sets Online inside [runSync] itself. Scheduled under [syncMutex] (the caller
+     * holds it), so the single-instance check doesn't race.
+     */
+    private fun scheduleNetworkRetry() {
+        if (retryJob?.isActive == true) return
+        retryJob = scope.launch {
+            var backoff = SYNC_RETRY_MIN_MS
+            while (true) {
+                delay(backoff)
+                backoff = (backoff * 2).coerceAtMost(SYNC_RETRY_MAX_MS)
+                if (lockPaused || session == null || client == null) return@launch
+                if ((_status.value as? SyncStatus.Failed)?.reason != SyncFailureReason.Network) return@launch
+                runSync()
+            }
+        }
     }
 
     // One sync attempt + the Online bookkeeping; exceptions propagate to runSyncLocked.
@@ -1385,6 +1440,9 @@ class SyncCoordinator(
      */
     fun resumeAfterUnlock() {
         lockPaused = false
+        // The reachability indicator may hold a value from before the device slept (on Android the
+        // process freezes with the screen off); don't leave it visibly stale for up to a poll period.
+        health.pingNow()
         if (session == null) {
             restoreSession()
             return
@@ -1492,6 +1550,14 @@ private const val PUSH_DEBOUNCE_MS = 1500L
  */
 private const val WATCH_RETRY_MIN_MS = 1_000L
 private const val WATCH_RETRY_MAX_MS = 60_000L
+
+/**
+ * Backoff for retrying a sync that failed with a network error ([SyncCoordinator.scheduleNetworkRetry]):
+ * the minimum is small enough that the post-unlock radio race on mobile heals within seconds, the
+ * ceiling caps the retry rate during a long outage (the reachability trigger usually recovers first).
+ */
+private const val SYNC_RETRY_MIN_MS = 5_000L
+private const val SYNC_RETRY_MAX_MS = 60_000L
 
 /**
  * Cryptographically random 128-bit deviceId as hex. 16 bytes from the libsodium CSPRNG via

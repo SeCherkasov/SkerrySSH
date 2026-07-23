@@ -51,7 +51,7 @@ class SyncCoordinatorHealthTest {
     }
 
     @Test
-    fun configured_but_down_server_reports_unreachable() = runBlocking {
+    fun configured_but_down_server_reports_unreachable() = runBlocking<Unit> {
         val client = FakePingClient(reachable = false)
         val sut = SyncCoordinator({ client }, StubCrypto(), StubVault(), configStore = configuredStore())
         withTimeout(3_000) { sut.serverReachable.first { it == ServerReachable.UNREACHABLE } }
@@ -67,12 +67,32 @@ class SyncCoordinatorHealthTest {
     }
 
     @Test
-    fun disconnect_returns_indicator_to_unknown() = runBlocking {
+    fun disconnect_returns_indicator_to_unknown() = runBlocking<Unit> {
         val client = FakePingClient(reachable = true)
         val sut = SyncCoordinator({ client }, StubCrypto(), StubVault(), configStore = configuredStore())
         withTimeout(3_000) { sut.serverReachable.first { it == ServerReachable.REACHABLE } }
         sut.disconnect()
         withTimeout(3_000) { sut.serverReachable.first { it == ServerReachable.UNKNOWN } }
+    }
+
+    @Test
+    fun resume_after_unlock_pings_immediately_instead_of_waiting_out_the_poll_interval() = runBlocking {
+        val client = FakePingClient(reachable = true)
+        // Poll interval far beyond the test: any second ping can only come from the resume nudge.
+        val sut = SyncCoordinator(
+            { client }, StubCrypto(), StubVault(),
+            configStore = configuredStore(), healthPollMs = 60_000,
+        )
+        try {
+            withTimeout(3_000) { sut.serverReachable.first { it == ServerReachable.REACHABLE } }
+            assertEquals(1, client.pings)
+            // After a display unlock the indicator may hold a value from before the device slept;
+            // waiting out the rest of a poll interval leaves it visibly stale.
+            sut.resumeAfterUnlock()
+            withTimeout(3_000) { while (client.pings < 2) delay(10) }
+        } finally {
+            sut.close()
+        }
     }
 
     @Test
