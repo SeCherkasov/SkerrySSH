@@ -1,22 +1,48 @@
 package app.skerry.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.design.Badge
+import app.skerry.ui.design.Dot
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.NumberStepper
+import app.skerry.ui.design.Txt
+import app.skerry.ui.generated.resources.appearance_badge_active
+import app.skerry.ui.theme.Skerry
+import app.skerry.ui.theme.palette
+import app.skerry.ui.theme.systemInDarkTheme
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_language
 import app.skerry.ui.generated.resources.appearance_recent_count
 import app.skerry.ui.generated.resources.appearance_recent_show
 import app.skerry.ui.generated.resources.appearance_recent_show_desc
 import app.skerry.ui.generated.resources.appearance_subtitle
-import app.skerry.ui.generated.resources.appearance_theme
+import app.skerry.ui.generated.resources.appearance_section_theme
 import app.skerry.ui.generated.resources.theme_blackwater
+import app.skerry.ui.generated.resources.theme_catppuccin_mocha
+import app.skerry.ui.generated.resources.theme_dracula
+import app.skerry.ui.generated.resources.theme_gruvbox_dark
+import app.skerry.ui.generated.resources.theme_solarized_light
+import app.skerry.ui.generated.resources.theme_tokyo_day
+import app.skerry.ui.generated.resources.theme_tokyo_night
 import app.skerry.ui.generated.resources.theme_dark
 import app.skerry.ui.generated.resources.theme_light
 import app.skerry.ui.generated.resources.theme_system
@@ -32,9 +58,6 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun AppearanceSection(state: DesktopDesignState) {
     SectionSubtitle(stringResource(Res.string.appearance_subtitle))
-    SettingRow(label = stringResource(Res.string.appearance_theme)) {
-        Box(Modifier.width(180.dp)) { ThemePicker(state.themeMode, onPick = state::chooseThemeMode) }
-    }
     SettingRow(label = stringResource(Res.string.appearance_language)) {
         Box(Modifier.width(180.dp)) { LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage) }
     }
@@ -65,6 +88,25 @@ internal fun AppearanceSection(state: DesktopDesignState) {
             )
         }
     }
+    // App theme cards in a 2×N grid, like the terminal theme cards: each renders a mini chrome
+    // mock in its own palette. The OS flag resolves the SYSTEM card's preview (and keeps it live).
+    SectionLabel(stringResource(Res.string.appearance_section_theme))
+    val systemDark = systemInDarkTheme(enabled = true)
+    ThemeMode.entries.chunked(2).forEachIndexed { rowIndex, rowModes ->
+        if (rowIndex > 0) Box(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (mode in rowModes) {
+                AppThemeCard(
+                    mode = mode,
+                    active = mode == state.themeMode,
+                    systemDark = systemDark,
+                    onClick = { state.chooseThemeMode(mode) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (rowModes.size == 1) Box(Modifier.weight(1f))
+        }
+    }
 }
 
 /** UI language dropdown (System / English / Russian). */
@@ -73,10 +115,50 @@ private fun LanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
     DropdownField(current, UiLanguage.entries, label = { it.label() }, onPick = onPick)
 }
 
-/** App theme dropdown (System / Light / Dark). */
+/**
+ * App theme card: a mini chrome mock (tab pills, a host row) rendered in the mode's actual
+ * palette, so the user sees the chrome before applying it — the counterpart of the terminal
+ * theme card. The SYSTEM card previews whatever the OS resolves to right now.
+ */
 @Composable
-private fun ThemePicker(current: ThemeMode, onPick: (ThemeMode) -> Unit) {
-    DropdownField(current, ThemeMode.entries, label = { it.label() }, onPick = onPick)
+private fun AppThemeCard(
+    mode: ThemeMode,
+    active: Boolean,
+    systemDark: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = mode.palette(systemDark)
+    Column(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, if (active) Skerry.colors.cyan else Skerry.colors.cyan08, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Column(Modifier.fillMaxWidth().background(p.bg).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(p.cyan).padding(horizontal = 7.dp, vertical = 2.dp)) {
+                    Txt("ssh", color = p.ink, size = 8.5.sp, weight = FontWeight.SemiBold)
+                }
+                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(p.surface2).padding(horizontal = 7.dp, vertical = 2.dp)) {
+                    Txt("sftp", color = p.dim, size = 8.5.sp)
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Dot(p.moss)
+                Txt("prod-web-01", color = p.text, size = 9.5.sp)
+                Txt(":22", color = p.faint, size = 9.5.sp)
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Txt(mode.label(), color = Skerry.colors.text, size = 11.5.sp, weight = FontWeight.Medium, maxLines = 1)
+            if (active) Badge(stringResource(Res.string.appearance_badge_active), bg = Skerry.colors.cyan14, fg = Skerry.colors.cyanBright, radius = 3, size = 9.sp)
+        }
+    }
 }
 
 /** Localized name for a theme mode. */
@@ -87,5 +169,11 @@ private fun ThemeMode.label(): String = stringResource(
         ThemeMode.LIGHT -> Res.string.theme_light
         ThemeMode.DARK -> Res.string.theme_dark
         ThemeMode.BLACKWATER -> Res.string.theme_blackwater
+        ThemeMode.TOKYO_NIGHT -> Res.string.theme_tokyo_night
+        ThemeMode.TOKYO_DAY -> Res.string.theme_tokyo_day
+        ThemeMode.CATPPUCCIN_MOCHA -> Res.string.theme_catppuccin_mocha
+        ThemeMode.GRUVBOX_DARK -> Res.string.theme_gruvbox_dark
+        ThemeMode.DRACULA -> Res.string.theme_dracula
+        ThemeMode.SOLARIZED_LIGHT -> Res.string.theme_solarized_light
     }
 )

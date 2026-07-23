@@ -47,12 +47,43 @@ enum class ThemeMode(val id: String) {
     SYSTEM("system"),
     LIGHT("light"),
     DARK("dark"),
-    BLACKWATER("blackwater");
+    BLACKWATER("blackwater"),
+    TOKYO_NIGHT("tokyo-night"),
+    TOKYO_DAY("tokyo-day"),
+    CATPPUCCIN_MOCHA("catppuccin-mocha"),
+    GRUVBOX_DARK("gruvbox-dark"),
+    DRACULA("dracula"),
+    SOLARIZED_LIGHT("solarized-light");
 
     companion object {
         val DEFAULT = DARK
         fun fromId(id: String): ThemeMode = entries.firstOrNull { it.id == id } ?: DEFAULT
     }
+}
+
+/**
+ * Static palette of this mode; [systemDark] resolves [ThemeMode.SYSTEM] (to the default pair only —
+ * named themes are an explicit choice). Non-composable, so preview cards can render every palette
+ * without touching the OS watcher.
+ */
+fun ThemeMode.palette(systemDark: Boolean): SkerryColors = when (this) {
+    ThemeMode.SYSTEM -> if (systemDark) nightSeaColors() else daybreakColors()
+    ThemeMode.LIGHT -> daybreakColors()
+    ThemeMode.DARK -> nightSeaColors()
+    ThemeMode.BLACKWATER -> blackwaterColors()
+    ThemeMode.TOKYO_NIGHT -> tokyoNightColors()
+    ThemeMode.TOKYO_DAY -> tokyoDayColors()
+    ThemeMode.CATPPUCCIN_MOCHA -> catppuccinMochaColors()
+    ThemeMode.GRUVBOX_DARK -> gruvboxDarkColors()
+    ThemeMode.DRACULA -> draculaColors()
+    ThemeMode.SOLARIZED_LIGHT -> solarizedLightColors()
+}
+
+/** Whether this mode renders dark; [systemDark] resolves [ThemeMode.SYSTEM]. */
+fun ThemeMode.isDark(systemDark: Boolean): Boolean = when (this) {
+    ThemeMode.LIGHT, ThemeMode.TOKYO_DAY, ThemeMode.SOLARIZED_LIGHT -> false
+    ThemeMode.SYSTEM -> systemDark
+    else -> true
 }
 
 /** Resolves a [ThemeMode] to its palette and dark flag, consulting the OS for [ThemeMode.SYSTEM]. */
@@ -62,13 +93,7 @@ fun ThemeMode.resolveColors(): Pair<SkerryColors, Boolean> {
     // call living inside one `when` branch shifts sibling slots when the mode changes (stale-slot
     // ClassCastException under hot reload). The OS watcher itself only runs for SYSTEM.
     val systemDark = systemInDarkTheme(enabled = this == ThemeMode.SYSTEM)
-    return when (this) {
-        ThemeMode.LIGHT -> daybreakColors() to false
-        ThemeMode.DARK -> nightSeaColors() to true
-        ThemeMode.BLACKWATER -> blackwaterColors() to true
-        // SYSTEM maps to the default pair only — named themes are an explicit choice.
-        ThemeMode.SYSTEM -> if (systemDark) nightSeaColors() to true else daybreakColors() to false
-    }
+    return palette(systemDark) to isDark(systemDark)
 }
 
 /**

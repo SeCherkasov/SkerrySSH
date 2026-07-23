@@ -30,6 +30,7 @@ import app.skerry.ui.design.NumberStepper
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_badge_active
+import app.skerry.ui.generated.resources.appearance_section_theme
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
 import app.skerry.ui.generated.resources.appearance_letter_spacing
@@ -74,23 +75,6 @@ import app.skerry.ui.theme.Skerry
 internal fun TerminalSection(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
     SectionSubtitle(stringResource(Res.string.settings_terminal_subtitle))
-    // Theme cards in a 2×N grid from the [TerminalThemes] catalog; selection applies to the terminal live.
-    TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
-        if (rowIndex > 0) Box(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            for (theme in rowThemes) {
-                ThemeCard(
-                    theme = theme,
-                    active = theme.id == state.terminalTheme.id,
-                    mono = mono,
-                    onClick = { state.chooseTerminalTheme(theme) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            // Odd tail: pad with an empty cell so the last card doesn't stretch to full width.
-            if (rowThemes.size == 1) Box(Modifier.weight(1f))
-        }
-    }
     // One setting per full-width row: label + default-value hint (with quick reset) on the left,
     // control on the right. Size/line-height/spacing are sub-settings of the font row (indented,
     // tighter spacing) — one block; they use a numeric stepper for precise input.
@@ -192,6 +176,25 @@ internal fun TerminalSection(state: DesktopDesignState) {
         on = state.allowServerClipboardWrite,
         onToggle = state::toggleAllowServerClipboardWrite,
     )
+    // Theme cards in a 2×N grid from the [TerminalThemes] catalog; selection applies to the
+    // terminal live. Placed after the settings rows so the frequently-tuned knobs stay on top.
+    SectionLabel(stringResource(Res.string.appearance_section_theme))
+    TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
+        if (rowIndex > 0) Box(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (theme in rowThemes) {
+                ThemeCard(
+                    theme = theme,
+                    active = theme.id == state.terminalTheme.id,
+                    mono = mono,
+                    onClick = { state.chooseTerminalTheme(theme) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            // Odd tail: pad with an empty cell so the last card doesn't stretch to full width.
+            if (rowThemes.size == 1) Box(Modifier.weight(1f))
+        }
+    }
 }
 
 /**

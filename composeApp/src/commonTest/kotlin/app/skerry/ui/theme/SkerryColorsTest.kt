@@ -3,6 +3,7 @@ package app.skerry.ui.theme
 import androidx.compose.ui.graphics.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -234,6 +235,68 @@ class SkerryColorsTest {
     fun `blackwater mode resolves by id and stays a distinct entry`() {
         assertEquals(ThemeMode.BLACKWATER, ThemeMode.fromId("blackwater"))
         assertEquals("blackwater", ThemeMode.BLACKWATER.id)
+    }
+
+    /**
+     * Pins the signature tokens of every catalog chrome theme (the terminal-theme counterparts).
+     * Each palette derives from its canonical upstream colors; full 40-token pins live only for
+     * the two stock themes — here the anchors are bg/text/accent/ink plus the dark/light ordering
+     * and the invariant brand teal.
+     */
+    @Test
+    fun `catalog chrome themes pin their signature tokens`() {
+        data class Pin(val name: String, val c: SkerryColors, val bg: Long, val text: Long, val accent: Long, val ink: Long, val dark: Boolean)
+        val pins = listOf(
+            Pin("tokyo-night", tokyoNightColors(), 0xFF1A1B26, 0xFFC0CAF5, 0xFF7AA2F7, 0xFF15161E, true),
+            Pin("tokyo-day", tokyoDayColors(), 0xFFE1E2E7, 0xFF2D3658, 0xFF2E7DE9, 0xFF14264E, false),
+            Pin("catppuccin-mocha", catppuccinMochaColors(), 0xFF1E1E2E, 0xFFCDD6F4, 0xFF89B4FA, 0xFF11111B, true),
+            Pin("gruvbox-dark", gruvboxDarkColors(), 0xFF282828, 0xFFEBDBB2, 0xFF83A598, 0xFF1D2021, true),
+            Pin("dracula", draculaColors(), 0xFF282A36, 0xFFF8F8F2, 0xFFBD93F9, 0xFF21222C, true),
+            Pin("solarized-light", solarizedLightColors(), 0xFFFDF6E3, 0xFF073642, 0xFF268BD2, 0xFF062F41, false),
+        )
+        for (p in pins) {
+            assertEquals(Color(p.bg), p.c.bg, "${p.name} bg")
+            assertEquals(Color(p.text), p.c.text, "${p.name} text")
+            assertEquals(Color(p.accent), p.c.cyan, "${p.name} accent")
+            assertEquals(Color(p.ink), p.c.ink, "${p.name} ink")
+            // Dark themes: bg darker than text; light themes: the reverse.
+            if (p.dark) assertTrue(p.c.bg.red < p.c.text.red, "${p.name} should be dark") else assertTrue(p.c.bg.red > p.c.text.red, "${p.name} should be light")
+            // The logo keeps its brand teal in every theme (light themes use the darkened trio).
+            val expectedTeal = if (p.dark) nightSeaColors().teal else daybreakColors().teal
+            assertEquals(expectedTeal, p.c.teal, "${p.name} teal")
+        }
+        // All catalog palettes are real palettes, not aliases of each other.
+        val bgs = pins.map { it.c.bg } + nightSeaColors().bg + daybreakColors().bg + blackwaterColors().bg
+        assertEquals(bgs.size, bgs.toSet().size)
+    }
+
+    /**
+     * [ThemeMode.palette]/[ThemeMode.isDark] are the static (non-composable) resolvers used by
+     * the theme-picker preview cards; SYSTEM follows the passed OS flag, named modes ignore it.
+     */
+    @Test
+    fun `palette and isDark resolve every mode statically`() {
+        assertEquals(nightSeaColors(), ThemeMode.DARK.palette(systemDark = false))
+        assertEquals(daybreakColors(), ThemeMode.LIGHT.palette(systemDark = true))
+        assertEquals(nightSeaColors(), ThemeMode.SYSTEM.palette(systemDark = true))
+        assertEquals(daybreakColors(), ThemeMode.SYSTEM.palette(systemDark = false))
+        assertEquals(blackwaterColors(), ThemeMode.BLACKWATER.palette(systemDark = false))
+        assertEquals(tokyoDayColors(), ThemeMode.TOKYO_DAY.palette(systemDark = true))
+        assertTrue(ThemeMode.DARK.isDark(systemDark = false))
+        assertTrue(ThemeMode.SYSTEM.isDark(systemDark = true))
+        assertFalse(ThemeMode.SYSTEM.isDark(systemDark = false))
+        assertFalse(ThemeMode.TOKYO_DAY.isDark(systemDark = true))
+        assertFalse(ThemeMode.SOLARIZED_LIGHT.isDark(systemDark = true))
+        assertTrue(ThemeMode.DRACULA.isDark(systemDark = false))
+    }
+
+    @Test
+    fun `theme mode catalog is complete and ids are stable`() {
+        assertEquals(10, ThemeMode.entries.size)
+        assertEquals(
+            listOf("system", "light", "dark", "blackwater", "tokyo-night", "tokyo-day", "catppuccin-mocha", "gruvbox-dark", "dracula", "solarized-light"),
+            ThemeMode.entries.map { it.id },
+        )
     }
 
     @Test
