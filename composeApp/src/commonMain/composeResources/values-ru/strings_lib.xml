@@ -59,6 +59,17 @@
     <string name="lib_snippets_run_in_terminal">Запустить в терминале</string>
     <string name="lib_snippets_save_snippet">Сохранить сниппет</string>
 
+    <!-- Dynamic snippet variables (run confirmation dialog) -->
+    <string name="lib_snippet_vars_preview">Предпросмотр команды</string>
+    <string name="lib_snippet_vars_clipboard">Буфер обмена</string>
+    <string name="lib_snippet_vars_clipboard_empty">(пусто)</string>
+    <string name="lib_snippet_vars_vault">Секреты хранилища</string>
+    <string name="lib_snippet_vars_vault_missing">В хранилище нет пароля с именем «%1$s»</string>
+    <string name="lib_snippet_vars_vault_not_password">Запись «%1$s» в хранилище — не пароль</string>
+    <string name="lib_snippet_vars_secret_note">Секреты вставляются открытым текстом — они видны на экране, в прокрутке и в истории shell.</string>
+    <string name="lib_snippet_vars_recording_note">Идёт запись: развёрнутая команда попадёт в каст.</string>
+    <string name="lib_snippet_vars_run">Запустить</string>
+
     <!-- Teams -->
     <string name="lib_teams_sidebar">КОМАНДЫ</string>
     <string name="lib_teams_invite">Пригласить</string>

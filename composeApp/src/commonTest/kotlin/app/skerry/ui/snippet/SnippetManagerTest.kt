@@ -1,20 +1,29 @@
 package app.skerry.ui.snippet
 
 import app.skerry.shared.snippet.Snippet
+import app.skerry.shared.snippet.SnippetMoment
+import app.skerry.shared.snippet.SnippetRunEnvironment
 import app.skerry.shared.snippet.SnippetStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SnippetManagerTest {
+
+    private val fixedEnvironment = SnippetRunEnvironment(
+        moment = SnippetMoment(year = 2026, month = 7, day = 3, hour = 9, minute = 5, second = 42, epochSeconds = 1_782_000_000L),
+        newUuid = { "fixed-uuid" },
+        randomChars = { n -> "r".repeat(n) },
+    )
 
     private fun managerWith(
         store: SnippetStore = FakeSnippetStore(),
         ids: List<String> = List(20) { "id-$it" },
     ): SnippetManager {
         val it = ids.iterator()
-        return SnippetManager(store) { it.next() }
+        return SnippetManager(store, newId = { it.next() }, environment = { fixedEnvironment })
     }
 
     private fun draft(label: String = "Disk usage", command: String = "df -h", tags: List<String> = emptyList()) =
@@ -69,6 +78,19 @@ class SnippetManagerTest {
     }
 
     @Test
+    fun `run strips bidi format characters from a plain command`() {
+        // Snippets can arrive via Teams sharing — the "user-saved text" trust assumption does not
+        // hold for the literal part either (Trojan Source in the palette row vs the PTY).
+        val manager = managerWith()
+        val id = manager.save(draft(command = "echo a\u202Eb"))
+        var sent: String? = null
+
+        manager.run(id) { sent = it }
+
+        assertEquals("echo ab\n", sent)
+    }
+
+    @Test
     fun `run with unknown id is a no-op`() {
         val manager = managerWith()
         var sent: String? = null
@@ -76,6 +98,90 @@ class SnippetManagerTest {
         manager.run("nope") { sent = it }
 
         assertNull(sent)
+    }
+
+    @Test
+    fun `run with variables opens a pending run instead of sending`() {
+        val manager = managerWith()
+        val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
+        var sent: String? = null
+
+        manager.run(id) { sent = it }
+
+        assertNull(sent)
+        val pending = assertNotNull(manager.pendingRun)
+        assertEquals(id, pending.snippet.id)
+        assertEquals(2026, pending.environment.moment.year) // environment captured at request time
+    }
+
+    @Test
+    fun `confirmRun sends the resolved line with a newline and clears the pending run`() {
+        val manager = managerWith()
+        val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
+        var sent: String? = null
+        manager.run(id) { sent = it }
+
+        manager.confirmRun("echo 2026-07-03", emptyMap())
+
+        assertEquals("echo 2026-07-03\n", sent)
+        assertNull(manager.pendingRun)
+    }
+
+    @Test
+    fun `dismissRun drops the pending run without sending`() {
+        val manager = managerWith()
+        val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
+        var sent: String? = null
+        manager.run(id) { sent = it }
+
+        manager.dismissRun()
+
+        assertNull(sent)
+        assertNull(manager.pendingRun)
+    }
+
+    @Test
+    fun `confirmRun remembers parameters and prefills the next run of the same snippet`() {
+        val manager = managerWith()
+        val id = manager.save(draft(command = "ping ${'$'}{{target_host}}"))
+        manager.run(id) { }
+        assertTrue(manager.pendingRun!!.initialParams.isEmpty())
+
+        manager.confirmRun("ping web1", mapOf("target_host" to "web1"))
+        manager.run(id) { }
+
+        assertEquals(mapOf("target_host" to "web1"), manager.pendingRun!!.initialParams)
+    }
+
+    @Test
+    fun `run captures the recording flag on the pending run`() {
+        val manager = managerWith()
+        val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
+
+        manager.run(id, recording = true) { }
+
+        assertTrue(manager.pendingRun!!.recording)
+    }
+
+    @Test
+    fun `confirmRun without a pending run is a no-op`() {
+        val manager = managerWith()
+
+        manager.confirmRun("ls", emptyMap()) // must not throw
+    }
+
+    @Test
+    fun `run while a pending run is open is ignored`() {
+        val manager = managerWith()
+        val first = manager.save(draft(label = "first", command = "echo ${'$'}{{date}}"))
+        val second = manager.save(draft(label = "second", command = "uptime"))
+        manager.run(first) { }
+        var sent: String? = null
+
+        manager.run(second) { sent = it } // hotkey/palette while the dialog is up
+
+        assertNull(sent) // not even the plain fast path — first request wins
+        assertEquals(first, manager.pendingRun!!.snippet.id)
     }
 
     @Test

@@ -32,6 +32,10 @@
     <!-- Secret card "used by" fragment, singular / plural (keys ready; wiring blocked by VaultPresentationTest). -->
     <string name="vtail_used_by_one">used by 1 host</string>
     <string name="vtail_used_by_other">used by %1$d hosts</string>
+    <string name="vtail_used_by_snippets_one">used by 1 snippet</string>
+    <string name="vtail_used_by_snippets_other">used by %1$d snippets</string>
+    <string name="vtail_snippets_frag_one">1 snippet</string>
+    <string name="vtail_snippets_frag_other">%1$d snippets</string>
 
     <!-- Vault sidebar category titles (keys ready; wiring blocked by field access in VaultView/MobileVaultView). -->
     <string name="vtail_category_ssh_keys">SSH keys</string>
