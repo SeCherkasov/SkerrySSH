@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
@@ -147,6 +149,36 @@ class HostRowClickJitterTest {
             sendPointerEvent(PointerEventType.Release, Offset(50f, 13f), timeMillis = 96)
         }
         assertEquals(0, connects, "⋮ click + row click must not count as a row double-click")
+    }
+
+    @Test
+    fun middleClickDoesNotCountTowardDoubleClick() {
+        // The press counter must only count the primary button: a left click chased by a middle
+        // click (X11 paste reflex), or two middle clicks, must not read as a row double-click —
+        // middle-click is its own gesture elsewhere (tab close), never a stand-in for primary.
+        var connects = 0
+        runRowScene(HostClickConnectMode.DoubleClick, onConnect = { connects++ }) {
+            sendPointerEvent(PointerEventType.Press, Offset(50f, 13f), timeMillis = 16)
+            sendPointerEvent(PointerEventType.Release, Offset(50f, 13f), timeMillis = 32)
+            middleClick(Offset(50f, 13f), timeMillis = 80)
+        }
+        assertEquals(0, connects, "left click + middle click must not count as a double-click")
+        runRowScene(HostClickConnectMode.DoubleClick, onConnect = { connects++ }) {
+            middleClick(Offset(50f, 13f), timeMillis = 16)
+            middleClick(Offset(50f, 13f), timeMillis = 80)
+        }
+        assertEquals(0, connects, "two middle clicks must not count as a double-click")
+    }
+
+    private fun ImageComposeScene.middleClick(at: Offset, timeMillis: Long) {
+        sendPointerEvent(
+            PointerEventType.Press, at, timeMillis = timeMillis,
+            buttons = PointerButtons(isTertiaryPressed = true), button = PointerButton.Tertiary,
+        )
+        sendPointerEvent(
+            PointerEventType.Release, at, timeMillis = timeMillis + 16,
+            buttons = PointerButtons(), button = PointerButton.Tertiary,
+        )
     }
 
     @Test

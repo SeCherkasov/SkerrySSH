@@ -45,7 +45,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -191,13 +193,17 @@ private fun Modifier.hostConnectClick(
                 // (uptimeMillis) — deterministic. Sits after clickable in the chain so it observes
                 // the Main pass before it; a press that arrives already consumed belongs to a
                 // descendant (the row's "⋮" menu button) and must not count toward a row
-                // double-click. RMB is skipped (the row has no right-click action).
+                // double-click. Only primary-button presses count: middle/right have no row action
+                // (and middle is its own gesture on session tabs), so a left+middle chord or two
+                // middle clicks must not connect.
                 .pointerInput(Unit) {
                     var lastDownMs = NO_PRESS
                     awaitPointerEventScope {
                         while (true) {
                             val e = awaitPointerEvent()
-                            if (e.type != PointerEventType.Press || e.buttons.isSecondaryPressed) continue
+                            if (e.type != PointerEventType.Press || !e.buttons.isPrimaryPressed ||
+                                e.buttons.isSecondaryPressed || e.buttons.isTertiaryPressed
+                            ) continue
                             val change = e.changes.first()
                             if (change.isConsumed) continue
                             val t = change.uptimeMillis
