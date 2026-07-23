@@ -1,7 +1,7 @@
 <resources>
     <string name="ptail_dynamic_proxy">динамический прокси</string>
-    <string name="ptail_ports_active">активно: %1$d</string>
-    <string name="ptail_all_verified">Все проверены</string>
+    <string name="ptail_ports_active">Активных: %1$d</string>
+    <string name="ptail_all_verified">Ключи подтверждены</string>
     <string name="ptail_changed">изменено: %1$d</string>
     <string name="ptail_type_local">LOCAL</string>
     <string name="ptail_type_remote">REMOTE</string>
