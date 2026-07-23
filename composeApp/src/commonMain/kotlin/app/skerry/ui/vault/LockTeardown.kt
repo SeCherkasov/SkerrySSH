@@ -1,6 +1,7 @@
 package app.skerry.ui.vault
 
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
 
@@ -20,13 +21,22 @@ import app.skerry.ui.tunnel.TunnelManager
  * the live subscriptions stop): behind a lock every sync cycle would throw inside the vault while the WS
  * kept retrying. [SyncCoordinator.resumeAfterUnlock] is the other half, wired to `onVaultUnlocked`.
  *
+ * The pending snippet-variable run is dismissed too: its dialog previews vault secrets, and after
+ * unlock the run must be re-initiated with a fresh user intent, not resumed.
+ *
  * Shared by desktop and Android so the two can't drift apart on which of these gets forgotten.
  */
-fun tearDownForLock(tunnels: TunnelManager?, sessions: SessionsController?, sync: SyncCoordinator?) {
+fun tearDownForLock(
+    tunnels: TunnelManager?,
+    sessions: SessionsController?,
+    sync: SyncCoordinator?,
+    snippets: SnippetManager?,
+) {
     tunnels?.closeAll()
     sessions?.sessions?.forEach { session ->
         session.controller.clearReconnectCredentials()
         session.splitSession?.controller?.clearReconnectCredentials()
     }
     sync?.pauseForLock()
+    snippets?.dismissRun()
 }

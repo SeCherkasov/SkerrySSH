@@ -1,6 +1,9 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Platform wrappers for CLIPBOARD <-> plain text over the Compose suspend clipboard
@@ -40,3 +43,15 @@ internal expect fun writeSystemClipboardDirect(text: String): Boolean
  * may block (resolving utilities) — call off the UI thread.
  */
 internal expect fun systemClipboardDirectHandlesReads(): Boolean
+
+/**
+ * System CLIPBOARD text (terminal paste, `${{clipboard}}` snippet variable). On Wayland the direct
+ * path takes over reading (wl-paste, bypassing AWT) and never falls back to Compose even on an
+ * empty result — a non-text clipboard would raise a noisy JDK trace. The subprocess and utility
+ * resolution stay off the UI thread (Default); `getClipEntry` (suspend, waits on the UI thread)
+ * runs on the caller context.
+ */
+internal suspend fun fetchSystemClipboardText(clipboard: Clipboard): String? =
+    withContext(Dispatchers.Default) {
+        if (systemClipboardDirectHandlesReads()) readSystemClipboardDirect() else null
+    } ?: if (systemClipboardDirectHandlesReads()) null else clipboard.getClipEntry()?.readPlainText()

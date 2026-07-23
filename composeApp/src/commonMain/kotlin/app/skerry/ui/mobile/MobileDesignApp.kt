@@ -74,6 +74,7 @@ import app.skerry.ui.app.LocalOpenSftp
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.snippet.SnippetRunDialog
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
@@ -296,7 +297,7 @@ fun MobileDesignApp(
                     autoLockIdleMs = state.autoLock.idleMs,
                     // Runs on EVERY lock, including the two automatic ones that bypass the lock
                     // action — Android had no teardown at all before (only onVaultReset did).
-                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync) },
+                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets) },
                     onReset = onVaultReset,
                     // onPairingComplete != null (sync present) — the create screen offers "I have a code":
                     // the coordinator creates the vault under the chosen password and accepts the account key.
@@ -464,6 +465,9 @@ private fun MobileChrome(
             if (state.sheetNewConn) {
                 MobileNewConnectionSheet(state)
             }
+            // Confirmation for a snippet with ${{…}} variables — every launch path (terminal
+            // palette, Snippets tab) parks such a run in SnippetManager.pendingRun. Desktop parity.
+            LocalSnippets.current?.let { SnippetRunDialog(it) }
             // Recording player: an overlay over whatever screen is up, so a recording can be watched
             // from More without an open session (desktop toolbar parity).
             state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }

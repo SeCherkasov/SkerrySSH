@@ -106,7 +106,9 @@ Building it yourself is also easy — see [Building from source](#building-from-
 - **Sync** — optional and self-hosted, zero-knowledge, live push over WebSocket, device
   pairing via QR. See [Sync server](#sync-server).
 - **Teams** — end-to-end encrypted sharing of hosts and snippets within a team.
-- **Snippets & AI** — command library with type-ahead in the terminal; AI assistant with
+- **Snippets & AI** — command library with type-ahead in the terminal; dynamic `${{…}}`
+  variables (date/time, uuid, random, clipboard, vault secrets, prompted parameters) resolved
+  at run time behind a confirmation preview; AI assistant with
   per-host policies — bring your own OpenAI key or run a local model.
   See [AI and privacy](#ai-and-privacy).
 - **Localization** — English and Russian UI; the assistant replies in the UI language.

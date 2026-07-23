@@ -102,6 +102,7 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
+import app.skerry.ui.snippet.SnippetRunDialog
 import app.skerry.ui.snippet.SnippetShortcut
 import androidx.compose.runtime.collectAsState
 import app.skerry.ui.sync.SyncCoordinator
@@ -499,7 +500,7 @@ fun DesktopDesignApp(
                 // and restarts the idle timer; Never (idleMs == null) turns it off.
                 autoLockIdleMs = state.autoLock.idleMs,
                 // Runs on EVERY lock, including the two automatic ones that bypass the lock action.
-                onBeforeLock = { tearDownForLock(tunnels, sessions, sync) },
+                onBeforeLock = { tearDownForLock(tunnels, sessions, sync, snippets) },
                 onReset = onVaultReset,
                 // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
                 // the coordinator creates the vault under the chosen password itself and accepts the account key.
@@ -574,7 +575,7 @@ private fun DesktopChrome(
             is PendingAuth.NewTab -> openHostSession(sessions, state, target.host, auth, jump)
             is PendingAuth.Split -> openSplitSession(sessions, state, target.parentId, target.host, auth, jump)
             is PendingAuth.Snippet ->
-                openHostSession(sessions, state, target.host, auth, jump) { it.send(target.command + "\n") }
+                openHostSession(sessions, state, target.host, auth, jump) { it.send(target.line) }
         }
     }
 
@@ -611,9 +612,11 @@ private fun DesktopChrome(
         }
     }
 
-    // Snippet's "Run on host": open a session to the host and run the command once connected.
+    // Snippet's "Run on host": open a session to the host and send the already-resolved command
+    // line (newline included) once connected. Dynamic variables were confirmed before this point —
+    // SnippetManager.run parks them in the dialog and only then hands the line over.
     val runSnippetOnHost = remember(sessions, credentials, hostManager, state) {
-        { host: Host, command: String -> connectOrAsk(PendingAuth.Snippet(host, command)) }
+        { host: Host, line: String -> connectOrAsk(PendingAuth.Snippet(host, line)) }
     }
 
     // Same resolution, but into the active tab's split pane (a new independent secondary session).
@@ -665,7 +668,10 @@ private fun DesktopChrome(
                 if (event.type != KeyEventType.KeyDown) false
                 else if (
                     state.appOverlay != null || state.modalOpen || state.settingsOpen ||
-                    state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null
+                    state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null ||
+                    // The snippet-variable confirmation dialog is modal too: a hotkey firing over it
+                    // would type into the terminal under the dialog or race the pending run.
+                    snippets?.pendingRun != null
                 ) false
                 else {
                     val shortcut = matchDesktopShortcut(
@@ -768,6 +774,9 @@ private fun DesktopChrome(
             jumpProblem?.let { problem ->
                 JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
             }
+            // Confirmation for a snippet with ${{…}} variables — every launch path (palette, hotkey,
+            // "Run on host", library) parks such a run in SnippetManager.pendingRun.
+            snippets?.let { SnippetRunDialog(it) }
             // Delete-host-profile confirmation (invoked from the sidebar's context menu). The keychain
             // secret itself stays in the vault (reusable, managed from the Vault tab).
             val hosts = LocalHosts.current
@@ -845,8 +854,12 @@ private sealed interface PendingAuth {
     /** Connect into the split pane of tab [parentId] (fixed at the moment the host was chosen). */
     data class Split(override val host: Host, val parentId: String?) : PendingAuth
 
-    /** Open a session to the host and run [command] once connected. */
-    data class Snippet(override val host: Host, val command: String) : PendingAuth
+    /**
+     * Open a session to the host and send [line] once connected — the fully resolved snippet
+     * command line, newline included ([app.skerry.ui.snippet.SnippetManager.run] built it, so
+     * dynamic variables are already confirmed and spliced in).
+     */
+    data class Snippet(override val host: Host, val line: String) : PendingAuth
 }
 
 /**
@@ -862,7 +875,7 @@ private fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, sessions
     ) ?: return false
     val entry = manager.forShortcut(combo) ?: return false
     val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
-    manager.run(entry.id) { terminal.sendUserInput(it) }
+    manager.run(entry.id, recording = terminal.recording) { terminal.sendUserInput(it) }
     return true
 }
 

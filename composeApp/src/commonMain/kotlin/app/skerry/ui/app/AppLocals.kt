@@ -172,8 +172,10 @@ val LocalSnippets: ProvidableCompositionLocal<SnippetManager?> = staticCompositi
 val LocalTerminalHistory: ProvidableCompositionLocal<TerminalHistoryStore?> = staticCompositionLocalOf { null }
 
 /**
- * Snippet "Run on host" action: open/reuse a session to [Host] and run the given command right after
- * connecting, rather than only in the active terminal. Resolves the secret the same way as
+ * Snippet "Run on host" action: open/reuse a session to [Host] and send the given command line
+ * right after connecting, rather than only in the active terminal. The line arrives fully resolved
+ * from [app.skerry.ui.snippet.SnippetManager.run] — dynamic variables already confirmed, trailing
+ * newline included — so it is sent verbatim. Resolves the secret the same way as
  * [LocalConnectHost] (keychain or password prompt). Supplied by [DesktopDesignApp]; default is a no-op
  * (mock path/preview).
  */

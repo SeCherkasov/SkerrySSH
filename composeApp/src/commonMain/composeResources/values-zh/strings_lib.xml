@@ -59,6 +59,17 @@
     <string name="lib_snippets_run_in_terminal">在终端中运行</string>
     <string name="lib_snippets_save_snippet">保存片段</string>
 
+    <!-- Dynamic snippet variables (run confirmation dialog) -->
+    <string name="lib_snippet_vars_preview">命令预览</string>
+    <string name="lib_snippet_vars_clipboard">剪贴板</string>
+    <string name="lib_snippet_vars_clipboard_empty">（空）</string>
+    <string name="lib_snippet_vars_vault">保险库密钥</string>
+    <string name="lib_snippet_vars_vault_missing">保险库中没有名为“%1$s”的密码</string>
+    <string name="lib_snippet_vars_vault_not_password">保险库条目“%1$s”不是密码</string>
+    <string name="lib_snippet_vars_secret_note">密钥以明文形式插入命令——会显示在屏幕、回滚缓冲区和 shell 历史中。</string>
+    <string name="lib_snippet_vars_recording_note">正在录制：解析后的命令将保存到录制文件中。</string>
+    <string name="lib_snippet_vars_run">运行</string>
+
     <!-- 团队（TeamsView） -->
     <string name="lib_teams_sidebar">团队</string>
     <string name="lib_teams_invite">邀请</string>

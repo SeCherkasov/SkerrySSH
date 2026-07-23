@@ -40,6 +40,8 @@
     <string name="vault_cancel">Отмена</string>
     <string name="vault_used_by_one">Используется · 1 хостом</string>
     <string name="vault_used_by">Используется · %1$d хостами</string>
+    <string name="vault_used_by_snippets_one">Используется · 1 сниппетом</string>
+    <string name="vault_used_by_snippets">Используется · %1$d сниппетами</string>
     <string name="vault_not_attached">Пока не привязан ни к одному хосту.</string>
     <string name="vault_cert_key_id">Идентификатор ключа: %1$s</string>
     <string name="vault_cert_unreadable">Не удалось прочитать сертификат</string>

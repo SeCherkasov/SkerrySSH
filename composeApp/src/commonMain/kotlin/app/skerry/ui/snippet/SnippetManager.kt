@@ -5,7 +5,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.snippet.Snippet
+import app.skerry.shared.snippet.SnippetRunEnvironment
+import app.skerry.shared.snippet.SnippetSegment
 import app.skerry.shared.snippet.SnippetStore
+import app.skerry.shared.snippet.SnippetTemplate
+import app.skerry.shared.snippet.captureSnippetRunEnvironment
+import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.shared.tag.normalizeTags
 
 /**
@@ -32,6 +37,25 @@ private fun Snippet.canonical(): Snippet {
     return if (canonical == tags) this else copy(tags = canonical)
 }
 
+/**
+ * A snippet run waiting for the dynamic-variable dialog ([SnippetManager.pendingRun]): the command
+ * contains `${{…}}` placeholders, so the resolved line must be previewed and confirmed before
+ * anything reaches the terminal. [environment] is captured when the run was initiated — the
+ * previewed date/uuid/random values are exactly the ones sent (TOCTOU rule, coding-guidelines §3).
+ * [initialParams] prefills prompted parameters with the values from this snippet's previous run.
+ * [recording] — the target terminal is recording a cast, so the dialog warns that the resolved
+ * line (secrets included) will be captured.
+ */
+@Stable
+class SnippetRunRequest internal constructor(
+    val snippet: Snippet,
+    val segments: List<SnippetSegment>,
+    val environment: SnippetRunEnvironment,
+    val recording: Boolean,
+    val initialParams: Map<String, String>,
+    internal val sendLine: (String) -> Unit,
+)
+
 /** One row of the snippet list: the saved [snippet], updated via [SnippetManager.save]. */
 @Stable
 class SnippetEntry internal constructor(snippet: Snippet) {
@@ -50,10 +74,18 @@ class SnippetEntry internal constructor(snippet: Snippet) {
 @Stable
 class SnippetManager(
     private val store: SnippetStore,
+    private val environment: () -> SnippetRunEnvironment = ::captureSnippetRunEnvironment,
     private val newId: () -> String,
 ) {
     var snippets: List<SnippetEntry> by mutableStateOf(store.all().map { SnippetEntry(it.canonical()) })
         private set
+
+    /** Run awaiting the variable dialog; the app shell renders [SnippetRunDialog] while non-null. */
+    var pendingRun: SnippetRunRequest? by mutableStateOf(null)
+        private set
+
+    /** Last confirmed prompted-parameter values per snippet id — session-only, never persisted. */
+    private val lastParams = mutableMapOf<String, Map<String, String>>()
 
     /**
      * Reload the list from the store. Needed after writes that bypass the manager and on vault unlock:
@@ -137,11 +169,48 @@ class SnippetManager(
 
     /**
      * Run a snippet: send its command plus a newline to [send] (the caller binds [send] to the active
-     * terminal). Unknown id is a no-op. The command runs as-is, unescaped — it's user-saved text, not
-     * untrusted input.
+     * terminal). Unknown id is a no-op. A plain command runs as-is, unescaped — it's user-saved text,
+     * not untrusted input. A command with `${{…}}` variables never runs directly: it parks in
+     * [pendingRun] until the dialog resolves and confirms it (variable values — clipboard, vault
+     * secrets, Teams-shared templates — ARE untrusted; see [SnippetTemplate.resolve]).
+     * [recording] — whether the target terminal is recording, for the dialog's warning.
      */
-    fun run(id: String, send: (String) -> Unit) {
+    fun run(id: String, recording: Boolean = false, send: (String) -> Unit) {
+        // A run initiated while the variable dialog is up would silently replace (or race) the
+        // request the user is looking at — first request wins until confirmed or dismissed.
+        if (pendingRun != null) return
         val snippet = find(id)?.snippet ?: return
-        send(snippet.command + "\n")
+        val segments = SnippetTemplate.parse(snippet.command)
+        if (segments.none { it is SnippetSegment.Variable }) {
+            // Strip bidi/format tricks from the literal text too (Teams-shared snippets are not
+            // "user-saved text"); an intentional multi-line script passes through unchanged.
+            send(stripUnsafeFormatChars(snippet.command) + "\n")
+            return
+        }
+        pendingRun = SnippetRunRequest(
+            snippet = snippet,
+            segments = segments,
+            environment = environment(),
+            recording = recording,
+            initialParams = lastParams[snippet.id].orEmpty(),
+            sendLine = send,
+        )
+    }
+
+    /**
+     * The dialog confirmed the previewed [line]: send it (plus the newline) to the pending run's
+     * terminal, remember [params] for the snippet's next run, close the dialog. No-op without a
+     * pending run (double-click after confirm).
+     */
+    fun confirmRun(line: String, params: Map<String, String>) {
+        val pending = pendingRun ?: return
+        pendingRun = null
+        if (params.isNotEmpty()) lastParams[pending.snippet.id] = params
+        pending.sendLine(line + "\n")
+    }
+
+    /** Close the variable dialog without running (Cancel/Esc/vault lock). */
+    fun dismissRun() {
+        pendingRun = null
     }
 }

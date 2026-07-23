@@ -495,15 +495,9 @@ fun TerminalScreen(
         }
     }
 
-    // System CLIPBOARD text. On Wayland (the direct path takes over reading) read via wl-paste, bypassing
-    // AWT — and don't fall back to Compose even on an empty result, else a non-text clipboard would raise
-    // a noisy JDK trace. The subprocess and utility resolution stay off the UI thread (Default).
-    suspend fun fetchClipboardText(): String? =
-        // Gate and subprocess in one pass on Default; getClipEntry (suspend, waits on the UI thread) on
-        // the returned caller context (Main). The direct path, once it takes reading, no longer falls to AWT.
-        withContext(Dispatchers.Default) {
-            if (systemClipboardDirectHandlesReads()) readSystemClipboardDirect() else null
-        } ?: if (systemClipboardDirectHandlesReads()) null else clipboard.getClipEntry()?.readPlainText()
+    // System CLIPBOARD text; the Wayland-direct vs Compose logic is shared with the snippet
+    // variable dialog (see ClipboardText.kt).
+    suspend fun fetchClipboardText(): String? = fetchSystemClipboardText(clipboard)
 
     // Paste from the system clipboard: read asynchronously and send text to the PTY (paste wraps
     // bracketed-paste itself if the app enabled it). Empty/non-text clipboard — no-op.

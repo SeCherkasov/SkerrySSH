@@ -40,6 +40,8 @@
     <string name="vault_cancel">取消</string>
     <string name="vault_used_by_one">被 1 台主机使用</string>
     <string name="vault_used_by">被 %1$d 台主机使用</string>
+    <string name="vault_used_by_snippets_one">被 1 个片段使用</string>
+    <string name="vault_used_by_snippets">被 %1$d 个片段使用</string>
     <string name="vault_not_attached">尚未附加到任何主机。</string>
     <string name="vault_cert_key_id">密钥 ID: %1$s</string>
     <string name="vault_cert_unreadable">无法读取证书</string>

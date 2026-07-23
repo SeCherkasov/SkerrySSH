@@ -183,7 +183,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                 onDelete = target?.let { e -> { manager.delete(e.id); adding = false; editing = null } },
                 onRun = run@{
                     val e = target ?: return@run
-                    manager.run(e.id) { text -> activeTerminal?.send(text) }
+                    manager.run(e.id, recording = activeTerminal?.recording == true) { text -> activeTerminal?.send(text) }
                     adding = false; editing = null
                     sessions?.active?.let { state.push(MobileRoute.Terminal) }
                 },
