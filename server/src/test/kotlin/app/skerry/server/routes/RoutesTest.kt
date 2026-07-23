@@ -6,6 +6,7 @@ import app.skerry.server.model.AdminActivityResponse
 import app.skerry.server.model.AdminDevicesResponse
 import app.skerry.server.model.AdminPurgeResponse
 import app.skerry.server.model.AdminRecordsResponse
+import app.skerry.server.model.HealthResponse
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
 import app.skerry.sync.wire.DevicesResponse
@@ -494,6 +495,18 @@ class RoutesTest {
             HttpStatusCode.NotFound,
             client.delete("/admin/accounts/$accountId") { header("X-Admin-Token", "s3cret") }.status,
         )
+    }
+
+    @Test
+    fun `health reports the build version`() = testApplication {
+        val services = testServices(adminToken = "s3cret")
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        // Gradle passes its project version via skerry.projectVersion; the endpoint must match it
+        // so the reported version can never drift from the release bump in build.gradle.kts.
+        val health: HealthResponse = client.get("/admin/health").body()
+        assertEquals(System.getProperty("skerry.projectVersion"), health.version)
     }
 
     @Test
