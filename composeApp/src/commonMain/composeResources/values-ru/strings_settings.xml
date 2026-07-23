@@ -70,7 +70,7 @@
     <string name="settings_ai_confirm_desc">Требовать клик перед выполнением любой предложенной AI команды. Снижает риск инъекции промпта со скомпрометированных серверов.</string>
 
     <!-- Раздел Terminal -->
-    <string name="settings_terminal_subtitle">Тема и шрифт; прокрутка и поведение шелла.</string>
+    <string name="settings_terminal_subtitle">Шрифт; прокрутка и поведение шелла.</string>
     <string name="settings_terminal_section_font">ШРИФТ</string>
     <string name="settings_terminal_section_behavior">ПОВЕДЕНИЕ</string>
     <string name="settings_terminal_scrollback">Буфер прокрутки</string>

@@ -70,7 +70,7 @@
     <string name="settings_ai_confirm_desc">Require a click before running any AI-suggested command. Mitigates prompt injection from compromised servers.</string>
 
     <!-- Terminal section -->
-    <string name="settings_terminal_subtitle">Pick a theme and font; tune scrollback and shell behaviour.</string>
+    <string name="settings_terminal_subtitle">Pick a font; tune scrollback and shell behaviour.</string>
     <string name="settings_terminal_section_font">FONT</string>
     <string name="settings_terminal_section_behavior">BEHAVIOUR</string>
     <string name="settings_terminal_scrollback">Scrollback buffer</string>

@@ -96,6 +96,10 @@ class MobileDesignState(
     // [app.skerry.ui.terminal.LocalTerminalTheme]; not yet persisted on mobile (in-memory only).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // Unified theming: by default the terminal follows the app theme's twin; this flag opts into
+    // a separately-picked terminal theme ([terminalTheme]).
+    initialCustomTerminalTheme: Boolean = false,
+    private val onCustomTerminalThemeChange: (Boolean) -> Unit = {},
     // App theme (More -> Appearance). Default (night-sea dark, no-op) preserves the prior look.
     initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
     private val onThemeModeChange: (ThemeMode) -> Unit = {},
@@ -273,6 +277,9 @@ class MobileDesignState(
     /** Terminal theme (More -> Appearance -> cards). Threaded via [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
+    /** Whether the terminal theme is picked separately instead of following the app theme. */
+    var customTerminalTheme: Boolean by mutableStateOf(initialCustomTerminalTheme); private set
+
     /** App theme (More -> Appearance). Threaded into [app.skerry.ui.theme.SkerryTheme] at the root. */
     var themeMode: ThemeMode by mutableStateOf(initialThemeMode); private set
 
@@ -313,6 +320,12 @@ class MobileDesignState(
         if (theme == terminalTheme) return
         terminalTheme = theme
         onTerminalThemeChange(theme)
+    }
+
+    /** Toggle the separately-picked terminal theme and report outward (for persistence). */
+    fun toggleCustomTerminalTheme() {
+        customTerminalTheme = !customTerminalTheme
+        onCustomTerminalThemeChange(customTerminalTheme)
     }
 
     /** Choose the app theme and report outward. Repeating the same value is a no-op. */

@@ -120,6 +120,8 @@ import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.theme.ThemeMode
+import app.skerry.ui.theme.systemInDarkTheme
+import app.skerry.ui.theme.terminalThemeId
 import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.terminal.TerminalSessionPrefs
 import app.skerry.ui.i18n.UiLanguage
@@ -273,6 +275,9 @@ fun DesktopDesignApp(
     // Terminal color theme (Appearance → theme cards) — persisted externally (desktop main).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // Separately-picked terminal theme flag (unified theming) — persisted externally (desktop main).
+    initialCustomTerminalTheme: Boolean = false,
+    onCustomTerminalThemeChange: (Boolean) -> Unit = {},
     // App theme (Settings → Appearance) — persisted externally (desktop main).
     initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
     onThemeModeChange: (ThemeMode) -> Unit = {},
@@ -297,6 +302,7 @@ fun DesktopDesignApp(
             initialHostClickConnectMode, onHostClickConnectModeChange,
             initialAllowServerClipboardWrite, onAllowServerClipboardWriteChange,
             initialTerminalTheme, onTerminalThemeChange,
+            initialCustomTerminalTheme, onCustomTerminalThemeChange,
             initialThemeMode, onThemeModeChange,
             initialAutoLock, onAutoLockChange,
             initialShowRecent, onShowRecentChange,
@@ -450,6 +456,12 @@ fun DesktopDesignApp(
     androidx.compose.runtime.SideEffect {
         ai?.uiLanguageProvider = { app.skerry.ui.i18n.aiResponseLanguageName(aiLocaleTag) }
     }
+    // Unified theming: unless the user opted into a separate terminal theme, the terminal follows
+    // the app theme's twin ([ThemeMode.terminalThemeId]); SYSTEM tracks the OS side live.
+    val termSystemDark = systemInDarkTheme(enabled = !state.customTerminalTheme && state.themeMode == ThemeMode.SYSTEM)
+    val effectiveTerminalTheme =
+        if (state.customTerminalTheme) state.terminalTheme
+        else TerminalThemes.fromId(state.themeMode.terminalThemeId(termSystemDark))
     CompositionLocalProvider(
         LocalFonts provides fonts,
         LocalHosts provides hosts,
@@ -466,8 +478,8 @@ fun DesktopDesignApp(
         LocalSftpPrefs provides sftpPrefs,
         // Terminal appearance from settings: font + size, read by [app.skerry.ui.terminal.TerminalScreen].
         LocalTerminalAppearance provides terminalAppearance,
-        // Terminal color theme (Appearance → cards): background/text/ANSI/cursor — same rendering.
-        LocalTerminalTheme provides state.terminalTheme,
+        // Terminal color theme: the app theme's twin, or the separately-picked one (Appearance → cards).
+        LocalTerminalTheme provides effectiveTerminalTheme,
         // The open vault + biometrics behind the gate — needed for re-authentication before copying
         // a password from the keychain (desktop has no biometrics, so the path reduces to the master password).
         LocalVault provides vault,

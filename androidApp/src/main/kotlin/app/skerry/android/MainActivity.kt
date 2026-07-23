@@ -168,6 +168,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
                     initialTerminalTheme = readTerminalTheme(dir),
                     onTerminalThemeChange = { writeTerminalTheme(dir, it) },
+                    initialCustomTerminalTheme = readCustomTerminalTheme(dir),
+                    onCustomTerminalThemeChange = { writeCustomTerminalTheme(dir, it) },
                     initialThemeMode = readThemeMode(dir),
                     onThemeModeChange = { writeThemeMode(dir, it) },
                 )
@@ -247,6 +249,17 @@ class MainActivity : FragmentActivity() {
     private fun writeClipboardWrite(dir: File, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_clipboard_write").writeText(enabled.toString()) }
+        }
+    }
+
+    /** Separately-picked terminal theme flag (unified theming): `custom_terminal_theme`, default off. */
+    private fun readCustomTerminalTheme(dir: File): Boolean = runCatching {
+        File(dir, "custom_terminal_theme").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeCustomTerminalTheme(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "custom_terminal_theme").writeText(enabled.toString()) }
         }
     }
 

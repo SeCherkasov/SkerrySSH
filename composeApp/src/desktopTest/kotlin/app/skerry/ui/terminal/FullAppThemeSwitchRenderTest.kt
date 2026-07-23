@@ -90,11 +90,28 @@ class FullAppThemeSwitchRenderTest {
                     "did not see a live terminal with SGR 44 fill in the Night Sea palette",
                 )
 
-                // Exact user path: open Settings -> Appearance over the terminal, click the theme
-                // card, close settings; the terminal stays in composition the whole time.
+                // Unified theming: switching the APP theme alone must recolor the terminal to the
+                // theme's twin (Blackwater's ANSI blue is unique to its terminal palette — the
+                // green-accent chrome never paints it).
+                state.chooseThemeMode(app.skerry.ui.theme.ThemeMode.BLACKWATER)
+                repeat(5) { pixels = frame() }
+                assertTrue(
+                    pixels.hasColor(BLACKWATER_ANSI_BLUE),
+                    "terminal should follow the app theme to its terminal twin",
+                )
+                if (pixels.hasColor(NIGHT_SEA_ANSI_BLUE)) {
+                    fail("Night Sea blue pixels remain after the app theme switch: the terminal did not follow")
+                }
+                state.chooseThemeMode(app.skerry.ui.theme.ThemeMode.DARK)
+                repeat(5) { pixels = frame() }
+
+                // Exact user path: open Settings -> Appearance over the terminal, opt into a
+                // separate terminal theme (unified theming follows the app theme otherwise),
+                // click the theme card, close settings; the terminal stays in composition.
                 state.openSettings()
                 state.showSettingsTab(app.skerry.ui.app.SettingsTab.Appearance)
                 repeat(3) { pixels = frame() }
+                state.toggleCustomTerminalTheme()
                 state.chooseTerminalTheme(TerminalThemes.SolarizedLight)
                 repeat(3) { pixels = frame() }
                 state.closeSettings()
@@ -176,6 +193,7 @@ class FullAppThemeSwitchRenderTest {
 
     private companion object {
         val NIGHT_SEA_ANSI_BLUE = 0xFF4A9EDB.toInt()
+        val BLACKWATER_ANSI_BLUE = 0xFF1E86CC.toInt()
         val SOLARIZED_BG = 0xFFFDF6E3.toInt()
         val SOLARIZED_ANSI_BLUE = 0xFF268BD2.toInt()
     }

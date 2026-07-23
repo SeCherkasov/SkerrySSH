@@ -450,6 +450,8 @@ fun main(args: Array<String>) {
                     onTerminalLetterSpacingChange = { prefs.set("terminal_letter_spacing", it.toString()) },
                     initialTerminalTheme = prefs.id("terminal_theme", TerminalThemes.DEFAULT, TerminalThemes::fromId),
                     onTerminalThemeChange = { prefs.set("terminal_theme", it.id) },
+                    initialCustomTerminalTheme = prefs.bool("custom_terminal_theme", false),
+                    onCustomTerminalThemeChange = { prefs.set("custom_terminal_theme", it) },
                     initialThemeMode = currentThemeMode.value,
                     onThemeModeChange = { prefs.set("app_theme", it.id); currentThemeMode.value = it },
                     initialUiLanguage = currentUiLanguage.value,

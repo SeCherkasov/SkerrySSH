@@ -30,7 +30,6 @@ import app.skerry.ui.design.NumberStepper
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_badge_active
-import app.skerry.ui.generated.resources.appearance_section_theme
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
 import app.skerry.ui.generated.resources.appearance_letter_spacing
@@ -63,7 +62,6 @@ import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
-import app.skerry.ui.terminal.TerminalThemes
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
@@ -73,7 +71,6 @@ import app.skerry.ui.theme.Skerry
 
 @Composable
 internal fun TerminalSection(state: DesktopDesignState) {
-    val mono = LocalFonts.current.mono
     SectionSubtitle(stringResource(Res.string.settings_terminal_subtitle))
     // One setting per full-width row: label + default-value hint (with quick reset) on the left,
     // control on the right. Size/line-height/spacing are sub-settings of the font row (indented,
@@ -176,25 +173,6 @@ internal fun TerminalSection(state: DesktopDesignState) {
         on = state.allowServerClipboardWrite,
         onToggle = state::toggleAllowServerClipboardWrite,
     )
-    // Theme cards in a 2×N grid from the [TerminalThemes] catalog; selection applies to the
-    // terminal live. Placed after the settings rows so the frequently-tuned knobs stay on top.
-    SectionLabel(stringResource(Res.string.appearance_section_theme))
-    TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
-        if (rowIndex > 0) Box(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            for (theme in rowThemes) {
-                ThemeCard(
-                    theme = theme,
-                    active = theme.id == state.terminalTheme.id,
-                    mono = mono,
-                    onClick = { state.chooseTerminalTheme(theme) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            // Odd tail: pad with an empty cell so the last card doesn't stretch to full width.
-            if (rowThemes.size == 1) Box(Modifier.weight(1f))
-        }
-    }
 }
 
 /**
@@ -222,7 +200,7 @@ private fun FontPicker(current: TerminalFont, onPick: (TerminalFont) -> Unit) {
  * theme; the active one gets a cyan border and badge.
  */
 @Composable
-private fun ThemeCard(
+internal fun ThemeCard(
     theme: TerminalTheme,
     active: Boolean,
     mono: FontFamily,
