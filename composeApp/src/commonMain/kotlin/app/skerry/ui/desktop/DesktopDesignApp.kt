@@ -45,6 +45,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -1123,7 +1125,7 @@ private fun SessionDot.tint(): Color = when (this) {
 }
 
 @Composable
-private fun SessionTabChip(
+internal fun SessionTabChip(
     name: String,
     dot: Color,
     active: Boolean,
@@ -1141,6 +1143,9 @@ private fun SessionTabChip(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val showClose = active || hovered
+    // pointerInput(Unit) below outlives recompositions; read the fresh onClose through state so a
+    // reordered tab list doesn't close via a stale lambda.
+    val close = rememberUpdatedState(onClose)
     // Accent tints: the same 10%/20% steps the cyan tokens use, so a non-default accent keeps the
     // chip's weight instead of turning into a solid block.
     val accentBg = accent.copy(alpha = 0.10f)
@@ -1169,6 +1174,17 @@ private fun SessionTabChip(
                 },
             )
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            // Middle-click closes the tab (browser-tab convention), active or not. Raw PRESS
+            // observation like HostsSidebar's double-click: clickable only reacts to the primary
+            // button, so the tertiary press is never consumed by it or by the ✕ IconBtn below.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        if (e.type == PointerEventType.Press && e.buttons.isTertiaryPressed) close.value()
+                    }
+                }
+            }
             .padding(start = 11.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
