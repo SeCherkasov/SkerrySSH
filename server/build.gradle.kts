@@ -53,8 +53,19 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+// Stamp the project version into version.properties so the runtime never drifts from this file.
+// Captured into a task-local val: referencing `version` (or a script-level val) inside
+// filesMatching would drag the script object into the closure and break the configuration cache.
+tasks.processResources {
+    val projectVersion = project.version.toString()
+    inputs.property("version", projectVersion)
+    filesMatching("version.properties") { expand("version" to projectVersion) }
+}
+
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Lets tests assert that the reported server version matches this build file's version.
+    systemProperty("skerry.projectVersion", version)
 }
 
 // Kover coverage — applied via pluginManager (classpath comes from the root buildscript) so the

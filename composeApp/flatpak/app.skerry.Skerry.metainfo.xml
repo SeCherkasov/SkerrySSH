@@ -78,9 +78,55 @@
   <content_rating type="oars-1.1" />
 
   <releases>
-    <release version="0.1.0" date="2026-07-11">
+    <release version="0.1.4" date="2026-07-23">
       <description>
-        <p>Pre first release.</p>
+        <p>Feature release:</p>
+        <ul>
+          <li>VNC remote desktop: built-in RFB client with clipboard, quality presets and resize-to-window</li>
+          <li>Themes: light theme (Daybreak), theme catalog, live System mode</li>
+          <li>Session recording and playback (asciinema v2), broadcast mode, command palette</li>
+          <li>Snippet categories and run-time variables; host monitor and service discovery</li>
+          <li>SFTP file viewer and editor; rename vault secrets; change account password</li>
+          <li>Simplified Chinese localization and a new UI font (IBM Plex Sans)</li>
+          <li>Sync hardening: single account/vault password, token refresh, self-healing retries</li>
+          <li>Local AI moved into an isolated process — no more native crashes during inference</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.1.3" date="2026-07-14">
+      <description>
+        <p>Security-focused release:</p>
+        <ul>
+          <li>Vault records fully authenticated: the AEAD tag now binds all record metadata</li>
+          <li>Host-key checks fail closed while the vault is locked</li>
+          <li>OSC 52 clipboard writes are opt-in; copied passwords clear after 30 seconds</li>
+          <li>Team key rotates on member removal; sync transport hardened</li>
+          <li>Android terminal settings on par with desktop (scrollback depth, cursor style)</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.1.2" date="2026-07-12">
+      <description>
+        <ul>
+          <li>Mosh support: native client, sessions survive network drops and roaming</li>
+          <li>SSH jump hosts (ProxyJump) with host-key verification per hop</li>
+          <li>Per-host keep-alive with auto-reconnect; passive update notifications</li>
+          <li>Custom window chrome on desktop; clickable URLs in the terminal</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.1.1" date="2026-07-11">
+      <description>
+        <ul>
+          <li>Linux AppImage and Flatpak packaging; fixed Windows MSI build</li>
+          <li>Type-to-jump path bar in SFTP and Files; smoother terminal rendering</li>
+          <li>Weak master passwords blocked at vault creation; modal dismissal fixes</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-07-10">
+      <description>
+        <p>First release.</p>
       </description>
     </release>
   </releases>
