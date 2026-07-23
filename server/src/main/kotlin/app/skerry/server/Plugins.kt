@@ -59,8 +59,13 @@ object RateLimits {
     val ADMIN = RateLimitName("admin")
 }
 
-/** Server version for /healthz and the admin console. */
-const val SERVER_VERSION = "0.1.0"
+/**
+ * Server version for /admin/health and the admin console. Stamped into version.properties by
+ * Gradle (processResources) from the version in build.gradle.kts — the single bump point.
+ */
+val SERVER_VERSION: String = RateLimits::class.java.getResource("/version.properties")
+    ?.readText()?.substringAfter("version=")?.trim()
+    ?: error("version.properties missing from server resources")
 
 val JWTPrincipal.accountId: String get() = payload.subject
 val JWTPrincipal.deviceId: String get() = payload.getClaim(TokenService.CLAIM_DEVICE).asString()
