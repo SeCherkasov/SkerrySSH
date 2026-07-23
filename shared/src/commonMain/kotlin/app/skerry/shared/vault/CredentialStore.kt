@@ -5,16 +5,21 @@ package app.skerry.shared.vault
  * record whose payload is a JSON serialization of [Credential] (label and secret inside the
  * encrypted blob). Pure common logic over the [Vault] contract — no platform part.
  *
- * Requires an unlocked vault: CRUD on a locked one throws from [Vault] itself. Records whose
- * payload fails to decrypt or parse (corruption/incompatible migration) are silently skipped —
- * one broken record must not break the whole list.
+ * Requires an unlocked vault for mutations: CRUD on a locked one throws from [Vault] itself.
+ * Reading [all] on a locked vault safely returns an empty list (like [app.skerry.shared.host.VaultHostStore]):
+ * sync-driven reloads may race a lock and must degrade, not crash. Records whose payload fails to
+ * decrypt or parse (corruption/incompatible migration) are silently skipped — one broken record
+ * must not break the whole list.
  */
 class CredentialStore(private val vault: Vault) {
 
     private val codec = VaultRecordCodec(vault, RecordType.CREDENTIAL, Credential.serializer())
 
-    /** All live secrets (tombstones and other record types excluded). */
-    fun all(): List<Credential> = codec.list()
+    /** All live secrets (tombstones and other record types excluded); empty on a locked vault. */
+    fun all(): List<Credential> {
+        if (!vault.isUnlocked) return emptyList()
+        return codec.list()
+    }
 
     /** Secret by [id], or `null` if missing, deleted, or unreadable. */
     fun get(id: String): Credential? = codec.get(id)
