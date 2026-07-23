@@ -1,6 +1,7 @@
 package app.skerry.ui.app
 
 import app.skerry.shared.host.Host
+import app.skerry.ui.settings.SETTINGS_NAV
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -28,12 +29,22 @@ class DesktopDesignStateTest {
         assertFalse(s.locked)
         assertFalse(s.modalOpen)
         assertFalse(s.settingsOpen)
-        assertEquals(SettingsTab.AI, s.settingsTab)
+        assertEquals(SettingsTab.Sync, s.settingsTab)
         assertEquals("prod-web-01", s.selectedHost)
         assertEquals(0, s.activeTab)
         assertEquals(4, s.tabs.size)
         assertTrue(s.infoPanel)
         assertTrue(s.sanitize && s.preview && s.confirm)
+    }
+
+    @Test
+    fun open_settings_resets_to_the_first_nav_tab() {
+        val s = DesktopDesignState()
+        s.openSettings()
+        s.showSettingsTab(SettingsTab.About)
+        s.closeSettings()
+        s.openSettings()
+        assertEquals(SETTINGS_NAV.first().tab, s.settingsTab)
     }
 
     @Test
