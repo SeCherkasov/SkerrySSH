@@ -4,9 +4,9 @@
     <string name="appearance_subtitle">Тема, язык интерфейса и боковая панель.</string>
     <string name="appearance_theme">Тема оформления</string>
     <string name="theme_system">Системная</string>
-    <string name="theme_light">Светлая</string>
-    <string name="theme_dark">Тёмная</string>
-    <string name="theme_blackwater">Чёрная вода</string>
+    <string name="theme_light">Skerry Светлая</string>
+    <string name="theme_dark">Skerry Тёмная</string>
+    <string name="theme_blackwater">Blackwater</string>
     <string name="appearance_badge_active">АКТИВНА</string>
     <string name="appearance_section_terminal">ТЕРМИНАЛ</string>
     <string name="appearance_section_interface">ИНТЕРФЕЙС</string>
