@@ -59,6 +59,17 @@
     <string name="lib_snippets_run_in_terminal">Run in terminal</string>
     <string name="lib_snippets_save_snippet">Save snippet</string>
 
+    <!-- Dynamic snippet variables (run confirmation dialog) -->
+    <string name="lib_snippet_vars_preview">Command preview</string>
+    <string name="lib_snippet_vars_clipboard">Clipboard</string>
+    <string name="lib_snippet_vars_clipboard_empty">(empty)</string>
+    <string name="lib_snippet_vars_vault">Vault secrets</string>
+    <string name="lib_snippet_vars_vault_missing">No password named “%1$s” in the vault</string>
+    <string name="lib_snippet_vars_vault_not_password">Vault entry “%1$s” is not a password</string>
+    <string name="lib_snippet_vars_secret_note">Secrets are inserted as plain text — visible on screen, in scrollback and in shell history.</string>
+    <string name="lib_snippet_vars_recording_note">Recording is on: the resolved command will be saved into the cast.</string>
+    <string name="lib_snippet_vars_run">Run</string>
+
     <!-- Teams (TeamsView) -->
     <string name="lib_teams_sidebar">TEAMS</string>
     <string name="lib_teams_invite">Invite</string>

@@ -134,6 +134,8 @@ import app.skerry.ui.generated.resources.vault_subtitle_password
 import app.skerry.ui.generated.resources.vault_subtitle_private_key
 import app.skerry.ui.generated.resources.vault_used_by
 import app.skerry.ui.generated.resources.vault_used_by_one
+import app.skerry.ui.generated.resources.vault_used_by_snippets
+import app.skerry.ui.generated.resources.vault_used_by_snippets_one
 import app.skerry.ui.generated.resources.vtail_meta_fingerprint
 import app.skerry.ui.generated.resources.vtail_meta_principals
 import app.skerry.ui.host.HostDraft
@@ -163,6 +165,7 @@ import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalVault
@@ -199,6 +202,8 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     val mono = LocalFonts.current.mono
     val hostsController = LocalHosts.current
     val hosts = hostsController?.hosts ?: emptyList()
+    // Snippet library — "used by" must count `${{vault:name}}` references next to host bindings.
+    val snippetList = LocalSnippets.current?.snippets?.map { it.snippet } ?: emptyList()
     val generator = LocalSshKeyGenerator.current
     val inspector = LocalSshCertificateInspector.current
     val scope = rememberCoroutineScope()
@@ -246,7 +251,10 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                                     active = credential.id == selectedCred?.id,
                                     generator = generator,
                                     inspector = inspector,
-                                    usedByCount = VaultPresentation.hostsUsing(credential.id, hosts).size,
+                                    usedBy = VaultPresentation.usedByLabel(
+                                        hostCount = VaultPresentation.hostsUsing(credential.id, hosts).size,
+                                        snippetCount = VaultPresentation.snippetsUsing(credential.label, snippetList).size,
+                                    ),
                                     mono = mono,
                                     onClick = { selectedId = credential.id },
                                 )
@@ -260,6 +268,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                             generator = generator,
                             inspector = inspector,
                             hosts = VaultPresentation.hostsUsing(credential.id, hosts),
+                            snippetLabels = VaultPresentation.snippetsUsing(credential.label, snippetList).map { it.label },
                             mono = mono,
                             onCopy = { copyTextToClipboard(it) },
                             onCopyPassword = { pwd -> copyAuth.authorize { copyPasswordToClipboard(pwd) } },
@@ -448,13 +457,12 @@ private fun LiveSecretCard(
     active: Boolean,
     generator: SshKeyGenerator?,
     inspector: SshCertificateInspector?,
-    usedByCount: Int,
+    usedBy: String?,
     mono: FontFamily,
     onClick: () -> Unit,
 ) {
     val border = if (active) Skerry.colors.cyan.copy(alpha = 0.18f) else Skerry.colors.cyan08
     val bg = if (active) Skerry.colors.cyan.copy(alpha = 0.04f) else Color.Transparent
-    val usedBy = VaultPresentation.usedByLabel(usedByCount)
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(bg).border(1.dp, border, RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -471,9 +479,12 @@ private fun LiveSecretCard(
                         if (info?.expired == true) Badge(stringResource(Res.string.vault_badge_expired), bg = Skerry.colors.sunset.copy(alpha = 0.16f), fg = Skerry.colors.sunset, radius = 3, size = 9.5.sp)
                     }
                     val meta = when {
-                        info == null -> stringResource(Res.string.vault_meta_certificate, usedBy)
-                        info.principals.isEmpty() -> stringResource(Res.string.vault_meta_any_principal, usedBy)
-                        else -> stringResource(Res.string.vtail_meta_principals, info.principals.joinToString(", "), usedBy)
+                        info == null -> usedBy?.let { stringResource(Res.string.vault_meta_certificate, it) }
+                            ?: stringResource(Res.string.vault_subtitle_certificate)
+                        info.principals.isEmpty() -> usedBy?.let { stringResource(Res.string.vault_meta_any_principal, it) }
+                            ?: stringResource(Res.string.vault_any_principal)
+                        else -> usedBy?.let { stringResource(Res.string.vtail_meta_principals, info.principals.joinToString(", "), it) }
+                            ?: info.principals.joinToString(", ")
                     }
                     Txt(meta, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
                 }
@@ -486,10 +497,11 @@ private fun LiveSecretCard(
                         Txt(credential.label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.SemiBold)
                         info?.keyTypeLabel?.let { Badge(it, bg = Skerry.colors.moss.copy(alpha = 0.16f), fg = Skerry.colors.moss, radius = 3, size = 9.5.sp) }
                     }
-                    val meta = if (info != null) {
-                        stringResource(Res.string.vtail_meta_fingerprint, shortFingerprint(info.fingerprintSha256), usedBy)
-                    } else {
-                        usedBy
+                    val meta = when {
+                        info != null && usedBy != null ->
+                            stringResource(Res.string.vtail_meta_fingerprint, shortFingerprint(info.fingerprintSha256), usedBy)
+                        info != null -> shortFingerprint(info.fingerprintSha256)
+                        else -> usedBy ?: stringResource(Res.string.vault_subtitle_private_key)
                     }
                     Txt(meta, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
                 }
@@ -498,7 +510,10 @@ private fun LiveSecretCard(
                 SecretIcon("password", tinted = false, color = Skerry.colors.dim)
                 Column(Modifier.weight(1f)) {
                     Txt(credential.label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-                    Txt(stringResource(Res.string.vault_meta_password, usedBy), color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
+                    Txt(
+                        usedBy?.let { stringResource(Res.string.vault_meta_password, it) } ?: stringResource(Res.string.vault_subtitle_password),
+                        color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
             }
         }
@@ -562,6 +577,7 @@ private fun LiveSecretDetail(
     generator: SshKeyGenerator?,
     inspector: SshCertificateInspector?,
     hosts: List<Host>,
+    snippetLabels: List<String>,
     mono: FontFamily,
     onCopy: (String) -> Unit,
     onCopyPassword: (String) -> Unit,
@@ -598,7 +614,7 @@ private fun LiveSecretDetail(
             }
             is CredentialSecret.Password -> Unit
         }
-        UsedByHosts(hosts, mono)
+        UsedByHosts(hosts, snippetLabels, mono)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Copy is type-specific (what's copyable differs); rename is universal and edits only the
             // label (see onRename); delete/export are type-specific again.
@@ -633,17 +649,31 @@ private fun LiveSecretDetail(
 /** "Used by · N hosts" block with host-name pills, for the secret detail panel. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun UsedByHosts(hosts: List<Host>, mono: FontFamily) {
-    // A single binding uses the singular form ("· 1 host"), otherwise the plural.
-    DetailLabel(
-        if (hosts.size == 1) stringResource(Res.string.vault_used_by_one)
-        else stringResource(Res.string.vault_used_by, hosts.size),
-    )
-    if (hosts.isEmpty()) {
+internal fun UsedByHosts(hosts: List<Host>, snippetLabels: List<String>, mono: FontFamily) {
+    if (hosts.isEmpty() && snippetLabels.isEmpty()) {
+        // Unused secret: just the hint, no noisy "used by 0 hosts" header.
         Txt(stringResource(Res.string.vault_not_attached), color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(bottom = 20.dp))
-    } else {
+        return
+    }
+    // A single binding uses the singular form ("· 1 host"), otherwise the plural.
+    if (hosts.isNotEmpty()) {
+        DetailLabel(
+            if (hosts.size == 1) stringResource(Res.string.vault_used_by_one)
+            else stringResource(Res.string.vault_used_by, hosts.size),
+        )
         FlowRow(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             hosts.forEach { HostPill(it.label, mono) }
+        }
+    }
+    // Snippets referencing this secret by name (${{vault:label}}) — a rename/delete breaks them,
+    // so they must be visible next to the host bindings.
+    if (snippetLabels.isNotEmpty()) {
+        DetailLabel(
+            if (snippetLabels.size == 1) stringResource(Res.string.vault_used_by_snippets_one)
+            else stringResource(Res.string.vault_used_by_snippets, snippetLabels.size),
+        )
+        FlowRow(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            snippetLabels.forEach { HostPill(it, mono) }
         }
     }
 }

@@ -803,7 +803,9 @@ private fun HostEntryRow(
                         properties = PopupProperties(focusable = true),
                     ) {
                         SnippetPalette(snippets) { entry ->
-                            runSnippetOnHost(host, entry.snippet.command)
+                            // Through the manager: a snippet with ${{…}} variables opens the confirm
+                            // dialog first; the resolved line (newline included) lands here after.
+                            snippets.run(entry.id) { line -> runSnippetOnHost(host, line) }
                             snippetPickerOpen = false
                         }
                     }

@@ -64,6 +64,7 @@ import app.skerry.ui.generated.resources.vault_rename
 import app.skerry.ui.generated.resources.vault_subtitle_certificate
 import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
 import app.skerry.ui.generated.resources.vault_subtitle_password
+import app.skerry.ui.generated.resources.vault_any_principal
 import app.skerry.ui.generated.resources.vault_subtitle_private_key
 import app.skerry.ui.generated.resources.vault_title
 import app.skerry.ui.generated.resources.vtail_meta_fingerprint
@@ -94,6 +95,7 @@ import app.skerry.ui.vault.ImportCertificateDialog
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalVault
@@ -136,6 +138,8 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     val inspector = LocalSshCertificateInspector.current
     val hostsController = LocalHosts.current
     val hosts = hostsController?.hosts ?: emptyList()
+    // Snippet library — "used by" must count `${{vault:name}}` references next to host bindings.
+    val snippetList = LocalSnippets.current?.snippets?.map { it.snippet } ?: emptyList()
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
     // Re-authentication before copying a password: biometrics if enabled, else the master password.
@@ -192,7 +196,10 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                     credItems.forEach { credential ->
                         MobileSecretCard(
                             credential = credential,
-                            usedByCount = VaultPresentation.hostsUsing(credential.id, hosts).size,
+                            usedBy = VaultPresentation.usedByLabel(
+                                hostCount = VaultPresentation.hostsUsing(credential.id, hosts).size,
+                                snippetCount = VaultPresentation.snippetsUsing(credential.label, snippetList).size,
+                            ),
                             mono = mono,
                             onClick = { selectedId = credential.id },
                         )
@@ -284,6 +291,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
             MobileSecretDetailSheet(
                 credential = credential,
                 hosts = VaultPresentation.hostsUsing(credential.id, hosts),
+                snippetLabels = VaultPresentation.snippetsUsing(credential.label, snippetList).map { it.label },
                 mono = mono,
                 onCopy = { copyTextToClipboard(it) },
                 onCopyPassword = { pwd -> copyAuth.authorize { copyPasswordToClipboard(pwd) } },
@@ -379,10 +387,9 @@ private fun MobileVaultAction(
 
 /** Keychain secret card (key/password/certificate) in the category list. */
 @Composable
-private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: FontFamily, onClick: () -> Unit) {
+private fun MobileSecretCard(credential: Credential, usedBy: String?, mono: FontFamily, onClick: () -> Unit) {
     val generator = LocalSshKeyGenerator.current
     val inspector = LocalSshCertificateInspector.current
-    val usedBy = VaultPresentation.usedByLabel(usedByCount)
     // Compute metadata once per card (each helper is a separate produceState slot, so a repeat call
     // would parse the same secret twice). null for a mismatched type — no work.
     val keyInfo = rememberKeyInfo(credential, generator)
@@ -414,18 +421,22 @@ private fun MobileSecretCard(credential: Credential, usedByCount: Int, mono: Fon
                 }
             }
             val meta = when (credential.secret) {
-                is CredentialSecret.PrivateKey ->
-                    if (keyInfo != null) {
+                is CredentialSecret.PrivateKey -> when {
+                    keyInfo != null && usedBy != null ->
                         stringResource(Res.string.vtail_meta_fingerprint, shortFingerprint(keyInfo.fingerprintSha256), usedBy)
-                    } else {
-                        usedBy
-                    }
-                is CredentialSecret.Certificate -> when {
-                    certInfo == null -> stringResource(Res.string.vault_meta_certificate, usedBy)
-                    certInfo.principals.isEmpty() -> stringResource(Res.string.vault_meta_any_principal, usedBy)
-                    else -> stringResource(Res.string.vtail_meta_principals, certInfo.principals.joinToString(", "), usedBy)
+                    keyInfo != null -> shortFingerprint(keyInfo.fingerprintSha256)
+                    else -> usedBy ?: stringResource(Res.string.vault_subtitle_private_key)
                 }
-                is CredentialSecret.Password -> stringResource(Res.string.vault_meta_password, usedBy)
+                is CredentialSecret.Certificate -> when {
+                    certInfo == null -> usedBy?.let { stringResource(Res.string.vault_meta_certificate, it) }
+                        ?: stringResource(Res.string.vault_subtitle_certificate)
+                    certInfo.principals.isEmpty() -> usedBy?.let { stringResource(Res.string.vault_meta_any_principal, it) }
+                        ?: stringResource(Res.string.vault_any_principal)
+                    else -> usedBy?.let { stringResource(Res.string.vtail_meta_principals, certInfo.principals.joinToString(", "), it) }
+                        ?: certInfo.principals.joinToString(", ")
+                }
+                is CredentialSecret.Password ->
+                    usedBy?.let { stringResource(Res.string.vault_meta_password, it) } ?: stringResource(Res.string.vault_subtitle_password)
             }
             Txt(meta, color = Skerry.colors.dim, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
         }
@@ -460,6 +471,7 @@ private fun MobileVaultEmpty(category: VaultCategoryKind) {
 private fun MobileSecretDetailSheet(
     credential: Credential,
     hosts: List<Host>,
+    snippetLabels: List<String>,
     mono: FontFamily,
     onCopy: (String) -> Unit,
     onCopyPassword: (String) -> Unit,
@@ -505,7 +517,7 @@ private fun MobileSecretDetailSheet(
                     }
                     is CredentialSecret.Password -> Unit
                 }
-                UsedByHosts(hosts, mono)
+                UsedByHosts(hosts, snippetLabels, mono)
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // Copy is type-specific (what's copyable differs); rename is universal and edits only
                     // the label; export/delete are type-specific again.

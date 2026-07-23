@@ -40,6 +40,8 @@
     <string name="vault_cancel">Cancel</string>
     <string name="vault_used_by_one">Used by · 1 host</string>
     <string name="vault_used_by">Used by · %1$d hosts</string>
+    <string name="vault_used_by_snippets_one">Used by · 1 snippet</string>
+    <string name="vault_used_by_snippets">Used by · %1$d snippets</string>
     <string name="vault_not_attached">Not attached to any host yet.</string>
     <string name="vault_cert_key_id">Key ID: %1$s</string>
     <string name="vault_cert_unreadable">Certificate could not be read</string>

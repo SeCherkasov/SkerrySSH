@@ -1,5 +1,7 @@
 package app.skerry.ui.ai
 
+import app.skerry.shared.terminal.isSafeTerminalInputChar
+
 /**
  * Pure parser turning the terminal AI bar's model reply ([TerminalAiController.commandPrompt]) into
  * a command suggestion or a message. Security-critical: [sanitizeCommand]/[isSafeInputChar] ensure
@@ -74,24 +76,10 @@ internal object AiReplyParser {
     }
 
     /**
-     * Whether a character is allowed in a command/description. Beyond control bytes (< 0x20 except
-     * tab), also strips Unicode bidi/format characters (RTL/LTR override and isolate, zero-width,
-     * BOM, soft hyphen) — otherwise a Trojan-Source string could render one way in the confirm bar
-     * and execute differently in the PTY.
+     * Whether a character is allowed in a command/description — the shared single-line terminal
+     * input predicate ([isSafeTerminalInputChar]), kept as a member for the security tests.
      */
-    fun isSafeInputChar(c: Char): Boolean {
-        if (c != '\t' && c.code < 0x20) return false
-        val code = c.code
-        val unsafeFormat = code == 0x00AD ||          // soft hyphen
-            code == 0x061C ||                          // arabic letter mark
-            code in 0x200B..0x200F ||                  // ZWSP/ZWNJ/ZWJ/LRM/RLM
-            code == 0x2028 || code == 0x2029 ||        // line/paragraph separator
-            code == 0x2060 ||                          // word joiner
-            code in 0x202A..0x202E ||                  // bidi embeddings/overrides
-            code in 0x2066..0x2069 ||                  // bidi isolates
-            code == 0xFEFF                             // ZWNBSP / BOM
-        return !unsafeFormat
-    }
+    fun isSafeInputChar(c: Char): Boolean = isSafeTerminalInputChar(c)
 
     /**
      * Second non-blank line of the reply: a short description of what the command does, with

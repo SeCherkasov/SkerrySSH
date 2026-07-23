@@ -3,14 +3,21 @@ package app.skerry.ui.vault
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
+import app.skerry.shared.snippet.Snippet
+import app.skerry.shared.snippet.SnippetTemplate
+import app.skerry.shared.snippet.SnippetVariableKind
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_category_certificates
 import app.skerry.ui.generated.resources.vtail_category_passwords
 import app.skerry.ui.generated.resources.vtail_category_ssh_keys
+import app.skerry.ui.generated.resources.vtail_snippets_frag_one
+import app.skerry.ui.generated.resources.vtail_snippets_frag_other
 import app.skerry.ui.generated.resources.vtail_used_by_one
 import app.skerry.ui.generated.resources.vtail_used_by_other
+import app.skerry.ui.generated.resources.vtail_used_by_snippets_one
+import app.skerry.ui.generated.resources.vtail_used_by_snippets_other
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.SkerryColors
 
@@ -82,9 +89,40 @@ object VaultPresentation {
     fun hostsUsing(credentialId: String, hosts: List<Host>): List<Host> =
         hosts.filter { it.credentialId == credentialId }
 
-    /** Localized "used by N host(s)" label for a secret card (desktop + mobile). */
+    /**
+     * Snippets whose command references this secret by name (`${{vault:label}}`, matched exactly —
+     * the same lookup the run dialog performs). Snippet references are by label, not id: this is
+     * what makes a rename break them, so "used by" must surface them next to hosts.
+     */
+    fun snippetsUsing(label: String, snippets: List<Snippet>): List<Snippet> =
+        snippets.filter { snippet ->
+            SnippetTemplate.variables(snippet.command)
+                .any { it.kind == SnippetVariableKind.VAULT && it.format == label }
+        }
+
+    /**
+     * Localized "used by N host(s) · M snippet(s)" label for a secret card (desktop + mobile).
+     * `null` when nothing references the secret — the card then shows only the type word instead
+     * of a noisy "used by 0 hosts".
+     */
     @Composable
-    fun usedByLabel(count: Int): String =
-        if (count == 1) stringResource(Res.string.vtail_used_by_one)
-        else stringResource(Res.string.vtail_used_by_other, count)
+    fun usedByLabel(hostCount: Int, snippetCount: Int): String? {
+        val hostsPart = when {
+            hostCount == 1 -> stringResource(Res.string.vtail_used_by_one)
+            hostCount > 1 -> stringResource(Res.string.vtail_used_by_other, hostCount)
+            else -> null
+        }
+        return when {
+            hostsPart != null && snippetCount > 0 -> {
+                val fragment =
+                    if (snippetCount == 1) stringResource(Res.string.vtail_snippets_frag_one)
+                    else stringResource(Res.string.vtail_snippets_frag_other, snippetCount)
+                "$hostsPart · $fragment"
+            }
+            hostsPart != null -> hostsPart
+            snippetCount == 1 -> stringResource(Res.string.vtail_used_by_snippets_one)
+            snippetCount > 1 -> stringResource(Res.string.vtail_used_by_snippets_other, snippetCount)
+            else -> null
+        }
+    }
 }
