@@ -199,8 +199,7 @@ fun DesktopResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
             stringResource(Res.string.shell_reset_permanently),
             onClick = { if (canConfirm) onConfirm(scope) },
             modifier = Modifier.fillMaxWidth(),
-            bg = if (canConfirm) Skerry.colors.storm else Skerry.colors.whiteFaint,
-            fg = if (canConfirm) Skerry.colors.ink else Skerry.colors.faint,
+            bg = Skerry.colors.storm,
             enabled = canConfirm,
         )
         Txt(
@@ -290,8 +289,6 @@ fun DesktopCreateScreen(
             stringResource(Res.string.shell_create_vault),
             onClick = submit,
             modifier = Modifier.fillMaxWidth(),
-            bg = if (canCreate) Skerry.colors.cyan else Skerry.colors.whiteFaint,
-            fg = if (canCreate) Skerry.colors.ink else Skerry.colors.faint,
             enabled = canCreate,
         )
         if (sync != null && onPairingComplete != null) {
