@@ -21,7 +21,12 @@ kotlin {
 
     jvm("desktop") {
         // kotlin("test") picks its backend from the Test task configuration: this enables JUnit 5
-        testRuns["test"].executionTask.configure { useJUnitPlatform() }
+        testRuns["test"].executionTask.configure {
+            useJUnitPlatform()
+            // A packaged app's JVM carries this jpackage restart marker; the tests prove it never
+            // leaks into a spawned inference host (see LlmHostCommandLine.scrubEnvironment).
+            environment("_JPACKAGE_LAUNCHER", "1")
+        }
     }
 
     androidLibrary {

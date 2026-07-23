@@ -16,6 +16,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.deleteIfExists
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Starts the desktop inference host: a second process running [LlmHostMain] — a plain JVM on this
@@ -66,11 +67,12 @@ class ProcessLlmHostLauncher(
     )
         .redirectOutput(ProcessBuilder.Redirect.INHERIT)
         .redirectError(ProcessBuilder.Redirect.INHERIT)
+        .also { LlmHostCommandLine.scrubEnvironment(it.environment()) }
         .start()
 
     /** Waits for the child to connect back; gives up early if it died instead. */
     private suspend fun accept(server: ServerSocketChannel, process: Process): SocketChannel? = coroutineScope {
-        withTimeoutOrNull(START_TIMEOUT_MILLIS) {
+        withTimeoutOrNull(START_TIMEOUT_MILLIS.milliseconds) {
             val watchdog = launch {
                 runInterruptible(Dispatchers.IO) { process.waitFor() }
                 runCatching { server.close() } // unblocks accept()

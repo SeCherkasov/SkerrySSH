@@ -48,6 +48,19 @@ object LlmHostCommandLine {
         ) + tail
     }
 
+    /**
+     * The jpackage launcher counts its libjli re-execs in this variable. A child launcher that
+     * inherits a non-zero count skips the cfg file and hands its argv to the JVM verbatim, so
+     * [HOST_FLAG] becomes an unknown JVM option and the host dies with "Could not create the
+     * Java Virtual Machine". Seen on Linux under Flatpak, where libjli always re-execs.
+     */
+    private const val JPACKAGE_RESTART_MARKER = "_JPACKAGE_LAUNCHER"
+
+    /** Must be applied to the child's environment whenever the packaged launcher is re-launched. */
+    fun scrubEnvironment(environment: MutableMap<String, String>) {
+        environment.remove(JPACKAGE_RESTART_MARKER)
+    }
+
     private fun fail(reason: String): Nothing =
         throw AiException(AiException.Kind.ENGINE_CRASHED, "Local inference host: $reason")
 }
