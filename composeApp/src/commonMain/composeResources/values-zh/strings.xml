@@ -6,6 +6,7 @@
     <string name="theme_system">跟随系统</string>
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
+    <string name="theme_blackwater">黑水</string>
     <string name="appearance_badge_active">活跃</string>
     <string name="appearance_section_terminal">终端</string>
     <string name="appearance_section_interface">界面</string>

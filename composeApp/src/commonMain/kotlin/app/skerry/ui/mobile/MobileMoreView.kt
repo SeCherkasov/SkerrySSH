@@ -45,6 +45,7 @@ import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
 import app.skerry.ui.generated.resources.appearance_language
 import app.skerry.ui.generated.resources.appearance_theme
+import app.skerry.ui.generated.resources.theme_blackwater
 import app.skerry.ui.generated.resources.theme_dark
 import app.skerry.ui.generated.resources.theme_light
 import app.skerry.ui.generated.resources.theme_system
@@ -674,6 +675,7 @@ private fun ThemeMode.themeLabel(): String = stringResource(
         ThemeMode.SYSTEM -> Res.string.theme_system
         ThemeMode.LIGHT -> Res.string.theme_light
         ThemeMode.DARK -> Res.string.theme_dark
+        ThemeMode.BLACKWATER -> Res.string.theme_blackwater
     }
 )
 

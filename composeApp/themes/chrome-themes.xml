@@ -118,4 +118,58 @@
         <color name="bannerScrim">#E6FBF1EE</color> <!-- warm high-key backdrop for the disconnect banner -->
     </chrome>
 
+    <!-- "Blackwater" — a second dark chrome: near-black indigo surfaces with a green accent.
+         The `cyan` token carries the accent ROLE (green here); borders are a neutral white tint
+         rather than the accent tint, so the grid doesn't wash the chrome green. The brand teal
+         stays untouched — the logo keeps its identity across themes. -->
+    <chrome id="blackwater" fn="blackwaterColors" dark="true">
+        <!-- Base backgrounds and surfaces -->
+        <color name="bg">#0E101D</color>
+        <color name="railBg">#0C0E1B</color>
+        <color name="titleTop">#151829</color>
+        <color name="titleBottom">#101221</color>
+        <color name="surface">#151728</color>
+        <color name="surface2">#181A2B</color>
+        <color name="surfaceDeep">#22263A</color>
+        <color name="panel">#0E111E</color>
+        <color name="terminalBg">#141527</color>
+        <!-- Text -->
+        <color name="text">#E9EAF1</color>
+        <color name="textBright">#C9CDDB</color>
+        <color name="textMid">#ABAFC2</color>
+        <color name="dim">#8D91A5</color>
+        <color name="faint">#5D6071</color>
+        <!-- Accents — the accent role is green -->
+        <color name="cyan">#20B668</color>
+        <color name="cyanBright">#2ED07E</color>
+        <color name="moss">#35C97F</color>
+        <color name="sunset">#D55B4C</color>
+        <color name="amber">#D9A23F</color>
+        <color name="amberBright">#E8BC5C</color>
+        <!-- Teal logo accent — brand, same as night-sea -->
+        <color name="teal">#34D3C0</color>
+        <color name="tealLight">#7FF0E2</color>
+        <color name="tealDeep">#22B3A4</color>
+        <!-- Fixed tones -->
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#E5484D</color>
+        <!-- Borders — neutral white tint (a green tint would color the whole chrome) -->
+        <color name="line" over="white" alpha="0.06"/>
+        <color name="lineStrong" over="white" alpha="0.14"/>
+        <!-- Shared surfaces / accents -->
+        <color name="strictFg">#E06A5A</color>
+        <color name="whiteFaint">#1AFFFFFF</color>
+        <color name="ink">#071A12</color>            <!-- deep green-black on the green accent buttons -->
+        <color name="card">#08FFFFFF</color>
+        <color name="scrim">#B3050816</color>
+        <color name="modalScrim">#B30C0E1B</color>
+        <color name="overlayFaint" over="white" alpha="0.02"/>
+        <color name="overlaySoft" over="white" alpha="0.04"/>
+        <color name="overlayMed" over="white" alpha="0.055"/>
+        <color name="overlayStrong" over="white" alpha="0.075"/>
+        <color name="hover" over="white" alpha="0.12"/>
+        <color name="sunsetInk">#1A0B07</color>
+        <color name="bannerScrim">#CC1A0E0E</color>
+    </chrome>
+
 </themes>

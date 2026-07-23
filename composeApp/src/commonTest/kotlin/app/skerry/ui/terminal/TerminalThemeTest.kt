@@ -10,9 +10,9 @@ import kotlin.test.assertTrue
 class TerminalThemeTest {
 
     @Test
-    fun catalog_has_seven_distinct_themes() {
+    fun catalog_has_eight_distinct_themes() {
         val all = TerminalThemes.all
-        assertEquals(7, all.size)
+        assertEquals(8, all.size)
         assertEquals(all.size, all.map { it.id }.toSet().size, "theme ids should be unique")
         assertEquals(all.size, all.map { it.displayName }.toSet().size, "theme names should be unique")
     }
@@ -142,6 +142,15 @@ class TerminalThemeTest {
                     0xFFBD93F9, 0xFFFF79C6, 0xFF8BE9FD, 0xFFF8F8F2,
                     0xFF6272A4, 0xFFFF6E6E, 0xFF69FF94, 0xFFFFFFA5,
                     0xFFD6ACFF, 0xFFFF92DF, 0xFFA4FFFF, 0xFFFFFFFF,
+                ),
+            ),
+            "blackwater" to Golden(
+                0xFF141527, 0xFFD6DAE6, 0xFF20B668,
+                listOf(
+                    0xFF22263A, 0xFFC14146, 0xFF20B668, 0xFFCFA243,
+                    0xFF1E86CC, 0xFFC13282, 0xFF10A17D, 0xFFB8BECF,
+                    0xFF5D6071, 0xFFE5606A, 0xFF2ED07E, 0xFFE3BC5F,
+                    0xFF4EA6E0, 0xFFDB58A4, 0xFF27C69C, 0xFFE9EAF1,
                 ),
             ),
             "solarized-light" to Golden(
