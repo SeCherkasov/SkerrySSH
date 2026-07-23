@@ -146,7 +146,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                     onRenameCategory = { tag -> renamingTag = tag },
                 )
             }
-            // Clears the tab bar and the FAB above it (bottom 104dp + 56dp size), so the last
+            // Clears the tab bar and the FAB above it (bottom 104dp + 56dp size + 16dp margin), so the last
             // snippet card can scroll out from under the "+" button.
             Spacer(Modifier.height(176.dp))
         }

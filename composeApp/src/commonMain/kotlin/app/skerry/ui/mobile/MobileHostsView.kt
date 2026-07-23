@@ -124,7 +124,7 @@ fun MobileHostsScreen(state: MobileDesignState) {
             if (query.isBlank() && chip == ALL_HOSTS_CHIP) {
                 MobileTeamHostsSections(hosts)
             }
-            // Room for the tab bar AND the FAB above it (bottom 104dp + 56dp size): anything less
+            // Room for the tab bar AND the FAB above it (bottom 104dp + 56dp size + 16dp margin): anything less
             // leaves the last rows permanently stuck under the "+" button at full scroll.
             Spacer(Modifier.height(176.dp))
         }
